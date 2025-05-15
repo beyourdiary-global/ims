@@ -1,0 +1,11 @@
+#addPinBtn {
+    background-color: #FF9B44;
+    box-shadow: 0 0 !important;
+    font-size: 18px;
+    text-transform: none !important;
+}
+
+#permission_table tr,#permission_table td,#permission_table th{
+    padding: 10px !important;
+    margin: 0 !important;
+}

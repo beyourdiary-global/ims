@@ -1,0 +1,27 @@
+#forgot-password_link {
+    color: #808080 !important;
+}
+
+.container {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+.icon {
+    padding: 10px;
+    min-width: 40px;
+}
+
+#forgot-password_link:hover {
+    text-decoration: underline;
+}
+
+#row-password-input i {
+    position: absolute;
+}
+
+#row-password-input i:hover {
+    cursor:pointer;
+}
