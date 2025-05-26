@@ -1,2 +1,3 @@
-<?php header("Location: ../cme");
+<?php
+include('../cme/index.php');
 exit;
