@@ -1,2 +1,2 @@
-<?php header("Location: public_html/cme");
+<?php header("Location: ../cme");
 exit;
