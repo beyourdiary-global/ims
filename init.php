@@ -1,10 +1,17 @@
 <?php
 session_start();
-// $livemode = false; // true = test link, false = live link
-$siteOrlocalMode = true;  //true = live site, false = localhost
+
+// Auto-detect environment based on the URL host
+$host = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : 'localhost';
+
+// If the URL contains 'localhost' or '127.0.0.1', it's local mode. Otherwise, it's live.
+if (strpos($host, 'localhost') !== false || strpos($host, '127.0.0.1') !== false) {
+    $siteOrlocalMode = false; // Local environment
+} else {
+    $siteOrlocalMode = true;  // Live site environment
+}
 
 date_default_timezone_set('Asia/Singapore');
-
 
 $dbUser = $siteOrlocalMode ? 'beyourdi_cms' : 'root';
 
@@ -13,7 +20,7 @@ define('dbpwd', $siteOrlocalMode ? 'Byd1234@Global' : '');
 define('dbhost', $siteOrlocalMode ? '127.0.0.1:3306' : 'localhost');
 define('dbname', 'beyourdi_cms-uat');
 define('dbFinance', 'beyourdi_financial-uat');
-define('SITEURL', $siteOrlocalMode ? 'https://cms.beyourdiary.com' : 'http://localhost/cms');
+define('SITEURL', $siteOrlocalMode ? 'https://cms.beyourdiary.com' : 'http://localhost:8000');
 $SITEURL = SITEURL;
 define('ROOT', dirname(__FILE__));
 define('email_cc', "report@beyourdiary.com	");
