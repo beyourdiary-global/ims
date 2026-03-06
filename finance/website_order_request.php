@@ -38,34 +38,27 @@ if (!($dataID) && !($act)) {
     </script>';
 }
 
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
-    $customer_id = $_POST['customer_id'];
-    $customer_name = $_POST['customer_name'];
-    $customer_email = $_POST['customer_email'];
-    $customer_birthday = $_POST['customer_birthday'];
-    $brand = $_POST['brand'];
-    $series = $_POST['series_hidden'];
-    $shipping_name = $_POST['shipping_name'];
-    $shipping_address = $_POST['shipping_address'];
-    $shipping_contact = $_POST['shipping_contact'];
-    
-    $duplicate_check_query = "SELECT * FROM customer_website_deals_transaction WHERE cust_id = '$customer_id'";
-    $duplicate_result = mysqli_query($connect, $duplicate_check_query);
-    
-    if (mysqli_num_rows($duplicate_result) > 0) {
-        echo "<script>alert('Error: Duplicate Customer ID found!');</script>";
-    } else {
-        $insert_query = "INSERT INTO customer_website_deals_transaction (cust_id, name, cust_email, cust_birthday, brand, series, ship_rec_name, ship_rec_add, ship_rec_contact) 
-                         VALUES ('$customer_id', '$customer_name', '$customer_email', '$customer_birthday', '$brand', '$series', '$shipping_name', '$shipping_address', '$shipping_contact')";
-    
-        if (mysqli_query($connect, $insert_query)) {
-            echo "<script>alert('New record created successfully');</script>";
-            generateDBData(WEB_CUST_RCD, $connect);
+    if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
+        $customer_id = postSpaceFilter('customer_id');
+        $customer_name = postSpaceFilter('customer_name');
+        $customer_email = postSpaceFilter('customer_email');
+        $customer_birthday = postSpaceFilter('customer_birthday');
+        $brand = postSpaceFilter('brand_hidden'); // Fixed: grabs the ID
+        $series = postSpaceFilter('series_hidden'); // Fixed: grabs the ID
+        $shipping_name = postSpaceFilter('shipping_name');
+        $shipping_address = postSpaceFilter('shipping_address');
+        $shipping_contact = postSpaceFilter('shipping_contact');
+
+        $query = "INSERT INTO " . WEB_CUST_RCD . " (cust_id,name,cust_email,cust_birthday,brand,series,ship_rec_name,ship_rec_add,ship_rec_contact,create_by,create_date,create_time) VALUES ('$customer_id','$customer_name','$customer_email','$customer_birthday','$brand','$series','$shipping_name','$shipping_address','$shipping_contact','" . USER_ID . "',curdate(),curtime())";
+        
+        $submit_result = mysqli_query($connect, $query);
+        if (!$submit_result) {
+            echo "<script>alert('Error: " . addslashes(mysqli_error($connect)) . "');</script>";
         } else {
-            echo "<script>alert('Error: " . $insert_query . "<br>" . mysqli_error($connect) . "');</script>";
+            generateDBData(WEB_CUST_RCD, $connect);
+            echo "<script>alert('New Customer Successfully Created!');</script>";
         }
     }
-}
 
 if (post('actionBtn')) {
     $action = post('actionBtn');
@@ -251,13 +244,19 @@ if (post('actionBtn')) {
                         array_push($newvalarr, $wor_remark);
                         array_push($datafield, 'remark');
                     }
-                    $tblName2 = WEB_CUST_RCD;
+
                     $query = "INSERT INTO " . $tblName . " (order_id,brand,series,pkg,country,currency,price,shipping,discount,total,pay_method,pic,cust_id,cust_name,cust_email,cust_birthday,shipping_name,shipping_address,shipping_contact,remark,create_by,create_date,create_time) VALUES ('$wor_order_id','$wor_brand','$wor_series','$wor_pkg','$wor_country','$wor_currency','$wor_price','$wor_shipping','$wor_discount','$wor_total','$wor_pay','$wor_pic','$wor_cust_id','$wor_cust_name','$wor_cust_email','$wor_cust_birthday','$wor_shipping_name','$wor_shipping_address','$wor_shipping_contact','$wor_remark','" . USER_ID . "',curdate(),curtime())";
-                    // Execute the query
-                    $query2 = "INSERT INTO " . $tblName2 . "(cust_id,name,contact,cust_email,cust_birthday,sales_pic,country,brand,series,ship_rec_name,ship_rec_add,ship_rec_contact,remark,create_by,create_date,create_time) VALUES ('$wor_cust_id','$wor_name','$wor_ctc','$wor_cust_email','$wor_cust_birthday','$wor_pic','$wor_country','$wor_brand','$wor_series','$wor_shipping_name','$wor_shipping_address','$wor_shipping_contact','$wor_remark','" . USER_ID . "',curdate(),curtime())";
                     $returnData = mysqli_query($finance_connect, $query);
-                    $returnData2 = mysqli_query($connect, $query2);
-                    generateDBData(WEB_CUST_RCD, $connect);
+                    if (!$returnData) { throw new Exception(mysqli_error($finance_connect)); }
+                    $dataID = $finance_connect->insert_id;
+                    // Automatically save new customer to CMS DB if selected
+                    if ($wor_cust_id == 'Create New Customer ID') {
+                        $tblName2 = WEB_CUST_RCD;
+                        $query2 = "INSERT INTO " . $tblName2 . " (name, cust_email, cust_birthday, sales_pic, country, brand, series, ship_rec_name, ship_rec_add, ship_rec_contact, remark, create_by, create_date, create_time) VALUES ('$wor_cust_name', '$wor_cust_email', '$wor_cust_birthday', '$wor_pic', '$wor_country', '$wor_brand', '$wor_series', '$wor_shipping_name', '$wor_shipping_address', '$wor_shipping_contact', '$wor_remark', '" . USER_ID . "', curdate(), curtime())";
+                        mysqli_query($connect, $query2);
+                        generateDBData(WEB_CUST_RCD, $connect);
+                    }
+
                     $_SESSION['tempValConfirmBox'] = true;
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
@@ -265,14 +264,6 @@ if (post('actionBtn')) {
                 }
             } else {
                 try {
-
-                    if (($wor_cust_id == 'Create New Customer ID') && !($isDuplicateCustID)) {
-                        try {
-                            $wor_cust_id = insertNewCustID($wor_customer_id, USER_ID, $finance_connect);
-                        } catch (Exception $e) {
-                            $errorMsg = $e->getMessage();
-                        }
-                    }
 
                     // take old value
                     $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $finance_connect);
@@ -395,7 +386,7 @@ if (post('actionBtn')) {
 
                     if ($row['remark'] != $wor_remark) {
                         array_push($oldvalarr, $row['remark'] == '' ? 'Empty Value' : $row['remark']);
-                        array_push($chgvalarr, $for_remark == '' ? 'Empty Value' : $wor_remark);
+                        array_push($chgvalarr, $wor_remark == '' ? 'Empty Value' : $wor_remark);
                         array_push($datafield, 'remark');
                     }
 
@@ -462,7 +453,7 @@ if (post('act') == 'D') {
             $dataID = $row['id'];
 
             //SET the record status to 'D'
-            deleteRecord($tblName, '', $dataID, $for_name, $finance_connect, $connect, $cdate, $ctime, $pageTitle);
+            deleteRecord($tblName, '', $dataID, $row['order_id'], $finance_connect, $connect, $cdate, $ctime, $pageTitle);
             $_SESSION['delChk'] = 1;
         } catch (Exception $e) {
             echo 'Message: ' . $e->getMessage();
@@ -504,10 +495,10 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 </head>
 
 <body>
-    <!-- <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div> -->
-    <!-- <div class="page-load-cover"> -->
+<form id="myForm" method="POST" action="">
+        <input type="hidden" name="act" value="<?php echo $act; ?>">
+        <input type="hidden" name="id" value="<?php echo $dataID; ?>">
+    </form>
     <div class="d-flex flex-column my-3 ms-3">
         <p><a href="<?= $redirect_page ?>">
                 <?= $pageTitle ?>
@@ -850,111 +841,69 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                 </div>
             </div>
         </div>
+        
         <?php if ($act != ''){ ?>
         <div class="col-md-4 mb-3">
-        <button type="button" onclick="toggleNewCustomerSection()">Create New Customer ID</button>
+            <button type="button" onclick="toggleNewCustomerSection()">Create New Customer ID</button>
         </div>
         
-        <form id="myForm" method="POST" action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>">
         <div id="new_customer_section" style="display: none;">
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label form_lbl" for="customer_id">Customer ID</label>
+                    <input class="form-control" type="text" id="customer_id" name="customer_id" form="myForm">
+                </div>
 
-        <div class="row">
-    <div class="col-md-4 mb-3">
-        <label class="form-label form_lbl" for="customer_id">Customer ID</label>
-        <input class="form-control" type="text" id="customer_id" name="customer_id">
-    </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label form_lbl" for="customer_name">Customer Name</label>
+                    <input class="form-control" type="text" id="customer_name" name="customer_name" form="myForm">
+                </div>
 
-    <div class="col-md-4 mb-3">
-        <label class="form-label form_lbl" for="customer_name">Customer Name</label>
-        <input class="form-control" type="text" id="customer_name" name="customer_name">
-    </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label form_lbl" for="customer_email">Customer Email</label>
+                    <input class="form-control" type="email" id="customer_email" name="customer_email" form="myForm">
+                </div>
+            </div>
 
-    <div class="col-md-4 mb-3">
-        <label class="form-label form_lbl" for="customer_email">Customer Email</label>
-        <input class="form-control" type="email" id="customer_email" name="customer_email">
-    </div>
-</div>
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label form_lbl" for="customer_birthday">Customer Birthday</label>
+                    <input class="form-control" type="date" id="customer_birthday" name="customer_birthday" form="myForm">
+                </div>
 
+                <div class="col-md-4 mb-3 autocomplete">
+                    <label class="form-label form_lbl" id="brand_lbl" for="brand">Brand<span class="requireRed">*</span></label>
+                    <input class="form-control" type="text" name="brand" id="brand" <?php if ($act == '') echo 'disabled' ?> value="" form="myForm">
+                    <input type="hidden" name="brand_hidden" id="brand_hidden" value="" form="myForm">
+                </div>
 
-<div class="row">
-    <div class="col-md-4 mb-3">
-        <label class="form-label form_lbl" for="customer_birthday">Customer Birthday</label>
-        <input class="form-control" type="date" id="customer_birthday" name="customer_birthday">
-    </div>
+                <div class="col-md-4 mb-3 autocomplete">
+                    <label class="form-label form_lbl" id="series_lbl" for="series">Series<span class="requireRed">*</span></label>
+                    <input class="form-control" type="text" name="series" id="series" <?php if ($act == '') echo 'disabled' ?> value="" form="myForm">
+                    <input type="hidden" name="series_hidden" id="series_hidden" value="" form="myForm">
+                </div>
+            </div>
 
-    <div class="col-md-4 mb-3 autocomplete">
-        <label class="form-label form_lbl" id="brand_lbl" for="brand">Brand<span class="requireRed">*</span></label>
-            <?php
-            unset($echoVal);
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label class="form-label form_lbl" for="shipping_name">Shipping Name</label>
+                    <input class="form-control" type="text" id="shipping_name" name="shipping_name" form="myForm">
+                </div>
 
-            if (isset($row['brand']))
-                $echoVal = $row['brand'];
+                <div class="col-md-4 mb-3">
+                    <label class="form-label form_lbl" for="shipping_address">Shipping Address</label>
+                    <input class="form-control" type="text" id="shipping_address" name="shipping_address" form="myForm">
+                </div>
 
-            if (isset($echoVal)) {
-                $pay_rst = getData('name', "id = '$echoVal'", '', BRAND, $connect);
-                if (!$pay_rst) {
-                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                }
-                $brand_row = $pay_rst->fetch_assoc();
-            }
-            ?>
-            <input class="form-control" type="text" name="brand" id="brand" <?php if ($act == '') echo 'disabled' ?> value="">
-    
+                <div class="col-md-4 mb-3">
+                    <label class="form-label form_lbl" for="shipping_contact">Shipping Contact</label>
+                    <input class="form-control" type="number" id="shipping_contact" name="shipping_contact" form="myForm">
+                </div>
+            </div>
             
-            <?php if (isset($brand_err)) { ?>
-                <div id="err_msg">
-                    <span class="mt-n1"><?php echo $brand_err; ?></span>
-                </div>
-            <?php } ?>
+            <input type="submit" name="submit" value="Submit" form="myForm">
         </div>
-
-    <div class="col-md-4 mb-3 autocomplete">
-        <label class="form-label form_lbl" id="series_lbl" for="brand">Series<span class="requireRed">*</span></label>
-            <?php
-            unset($echoVal);
-
-            if (isset($row['series']))
-                $echoVal = $row['series'];
-
-            if (isset($echoVal)) {
-                $pay_rst = getData('name', "id = '$echoVal'", '', BRD_SERIES, $connect);
-                if (!$pay_rst) {
-                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                }
-                $series_row = $pay_rst->fetch_assoc();
-            }
-            ?>
-            <input class="form-control" type="text" name="series" id="series" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $series_row['name'] : '' ?>">
-            <input type="hidden" name="series_hidden" id="series_hidden" value="<?php echo (isset($row['series'])) ? $row['series'] : ''; ?>">
-            <?php if (isset($series_err)) { ?>
-                <div id="err_msg">
-                    <span class="mt-n1"><?php echo $series_err; ?></span>
-                </div>
-            <?php } ?>
-        </div>
-</div>
-
-<div class="row">
-    <div class="col-md-4 mb-3">
-        <label class="form-label form_lbl" for="shipping_name">Shipping Name</label>
-        <input class="form-control" type="text" id="shipping_name" name="shipping_name">
-    </div>
-
-    <div class="col-md-4 mb-3">
-        <label class="form-label form_lbl" for="shipping_address">Shipping Address</label>
-        <input class="form-control" type="text" id="shipping_address" name="shipping_address">
-    </div>
-
-    <div class="col-md-4 mb-3">
-        <label class="form-label form_lbl" for="shipping_contact">Shipping Contact</label>
-        <input class="form-control" type="number" id="shipping_contact" name="shipping_contact">
-    </div>
-</div>
-<input type="submit" name="submit" value="Submit">
-    </form>
-     <?php }?>
+        <?php }?>
 </fieldset>
 
 <fieldset class="border p-2 mb-3" style="border-radius: 3px;">
@@ -1140,8 +1089,6 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
             </form>
         </div>
     </div>
-    <!-- </div> -->
-
     <?php
     /*
         oufei 20231014

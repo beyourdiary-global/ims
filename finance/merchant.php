@@ -31,7 +31,7 @@ if (!($dataID) && !($act) || !isActionAllowed($pageAction, $pinAccess))
 $rst = getData('*', "id = '$dataID'", '', $tblName,  $finance_connect);
 
 //Checking Data Error When Retrieved From Database
-if (!$rst || !($row = $rst->fetch_assoc()) && $act != 'I') {
+if ($act != 'I' && (!$rst || !($row = $rst->fetch_assoc()))) {
     $errorExist = 1;
     $_SESSION['tempValConfirmBox'] = true;
     $act = "F";
@@ -93,9 +93,21 @@ if (post('actionBtn')) {
                 $error = 1;
             }
 
-            if (isDuplicateRecord("name", $currentDataName, $tblName,  $finance_connect, $dataID)) {
-                $name_err = "Duplicate record found for " . $pageTitle . " name.";
-                $error = 1;
+            try {
+                $query = "SELECT COUNT(*) as count FROM `$tblName` WHERE `name` = '$currentDataName'";
+                if ($dataID) {
+                    $query .= " AND id != '$dataID'";
+                }
+                $result = mysqli_query($finance_connect, $query);
+                if ($result) {
+                    $rowDup = mysqli_fetch_assoc($result);
+                    if ($rowDup['count'] > 0) {
+                        $name_err = "Duplicate record found for " . $pageTitle . " name.";
+                        $error = 1;
+                    }
+                }
+            } catch (Exception $e) {
+                // Ignore or handle
             }
 
             if (isset($error)) {
