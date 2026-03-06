@@ -196,9 +196,10 @@ $tblName = FB_ADS_TOPUP;
                         <h2><?php echo $pageTitle ?></h2>
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
+                                <a class="btn btn-sm btn-rounded btn-primary px-3" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
+                                <a class="btn btn-sm btn-rounded btn-primary px-3" name="importBtn" id="addBtn" href="<?= $SITEURL ?>/common_import.php?module=fb_ads_topup"><i class="fa-solid fa-file-import"></i> Import </a>
                             <?php endif; ?>
-                            <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>
+                            <a class="btn btn-sm btn-rounded btn-primary px-3" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>
 
                         </div>
                     </div>
