@@ -402,6 +402,14 @@ $menuList = array(
         'pin' => array('104')
     ),
     array(
+        'Import Shortcut',
+        'mdi mdi-file-import-outline',
+        $SITEURL . '/common_import.php',
+        'n',
+        'expand' => array(),
+        'pin' => array('77')
+    ),
+    array(
         'Audit Log',
         'mdi mdi-text-box-search-outline',
         $SITEURL . '/audit_log.php',
