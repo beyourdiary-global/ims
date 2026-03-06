@@ -29,7 +29,7 @@ if (!($dataID) && !($act) || !isActionAllowed($pageAction, $pinAccess))
 $rst = getData('*', "id = '$dataID'", '', $tblName, $connect);
 
 //Checking Data Error When Retrieved From Database
-if (!$rst || !($row = $rst->fetch_assoc()) && $act != 'I') {
+if ($act != 'I' && (!$rst || !($row = $rst->fetch_assoc()))) {
     $errorExist = 1;
     $_SESSION['tempValConfirmBox'] = true;
     $act = "F";
@@ -315,22 +315,17 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                         <label class="form-label form_lbl" id='cusPhoneCode_lbl'for="cusPhoneCode">Phone Code<span
                                         class="requireRed">*</span></label>
                                         <?php
-                                            unset($echoVal);
-
-                                            if (isset($row['phone_country']))
-                                                $echoVal = $row['phone_country'];
-
-                                            if (isset($echoVal)) {
-                                                $resultPhoneCode = getData('*', "id = '$echoVal'", '', 'countries', $connect);
-
-                                                if (!$resultPhoneCode) {
-                                                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                                    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                                                }
-                                                $rowPhoneCode = $resultPhoneCode->fetch_assoc();
+                                        $phone_code_val = '';
+                                        if (!empty($row['phone_country'])) {
+                                            $resultPhoneCode = getData('phonecode', "id='" . $row['phone_country'] . "'", '', COUNTRIES, $connect);
+                                            if ($resultPhoneCode && $resultPhoneCode->num_rows > 0) {
+                                                $phone_code_val = $resultPhoneCode->fetch_assoc()['phonecode'];
+                                            } else {
+                                                $phone_code_val = $row['phone_country']; // Fallback
                                             }
-                                            ?>
-<input class="form-control" type="text" name="cusPhoneCode" id="cusPhoneCode" <?php if ($act == '') echo 'disabled' ?> placeholder="<?php echo ($act != '') ? '+' : '' ?>" value="<?php echo (!empty($echoVal) ? $rowPhoneCode['phonecode'] : '') ?>">
+                                        }
+                                        ?>
+                                        <input class="form-control" type="text" name="cusPhoneCode" id="cusPhoneCode" <?php if ($act == '') echo 'disabled' ?> placeholder="<?php echo ($act != '') ? '+' : '' ?>" value="<?php echo $phone_code_val; ?>">
 
                                 
                                             
@@ -397,25 +392,20 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                     <div class="col-sm-3 autocomplete">
                                         <label class="form-label" for="country">Country/Region</label>
                                         <?php
-                                            unset($echoVal);
-
-                                            if (isset($row['country']))
-                                                $echoVal = $row['country'];
-
-                                            if (isset($echoVal)) {
-                                                $country_rst = getData('name', "id = '$echoVal'", '', COUNTRIES, $connect);
-                                                if (!$country_rst) {
-                                                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                                    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                                                }
-                                                $country_row = $country_rst->fetch_assoc();
+                                        $country_name = '';
+                                        $country_val = isset($row['shipping_country_region']) ? $row['shipping_country_region'] : (isset($row['country']) ? $row['country'] : '');
+                                        
+                                        if (!empty($country_val)) {
+                                            $country_rst = getData('nicename', "id='" . $country_val . "'", '', COUNTRIES, $connect);
+                                            if ($country_rst && $country_rst->num_rows > 0) {
+                                                $country_name = $country_rst->fetch_assoc()['nicename'];
+                                            } else {
+                                                $country_name = $country_val;
                                             }
-                                            ?>
-
-                                            <input class="form-control" type="text" name="country" id="country" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $country_row['nicename'] : ''  ?>">
-
-                                            <input type="hidden" name="country_hidden" id="country_hidden" value="<?php echo (isset($row['shipping_country_region'])) ? $row['shipping_country_region'] : ''; ?>">
-
+                                        }
+                                        ?>
+                                        <input class="form-control" type="text" name="country" id="country" <?php if ($act == '') echo 'disabled' ?> value="<?php echo $country_name; ?>">
+                                        <input type="hidden" name="country_hidden" id="country_hidden" value="<?php echo $country_val; ?>">
                                             <?php if (isset($country_err)) { ?>
                                                 <div id="err_msg">
                                                     <span class="mt-n1"><?php echo $country_err; ?></span>
@@ -506,28 +496,22 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                             <input type="hidden" name="personIncharges_hidden" id="personIncharges_hidden" value="<?php echo $loggedInUserId ?>">
                                             <?php } ?>
                                             <?php
-                                             if(($act == 'E')){
-                                            unset($echoVal);
-
-                                            if (isset($row['person_in_charges']))
-                                                $echoVal = $row['person_in_charges'];
-            
-                                            if (isset($echoVal)) {
-                                           $pic_rst = getData('name', "id = '$echoVal'", '', USR_USER, $connect);
-
-                                            if (!$pic_rst) {
-                                                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                                echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                                            }
-                                            $pic_row = $pic_rst->fetch_assoc();
+                                        if (($act == 'E' || $act == '')) {
+                                            $pic_name = '';
+                                            $pic_val = isset($row['person_in_charges']) ? $row['person_in_charges'] : '';
+                                            
+                                            if (!empty($pic_val)) {
+                                                $pic_rst = getData('name', "id='" . $pic_val . "'", '', USR_USER, $connect);
+                                                if ($pic_rst && $pic_rst->num_rows > 0) {
+                                                    $pic_name = $pic_rst->fetch_assoc()['name'];
+                                                } else {
+                                                    $pic_name = $pic_val;
+                                                }
                                             }
                                             ?>
-                                        <input class="form-control" type="text" name="personIncharges" id="personIncharges" <?php if ($act == '')
-                                            echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $pic_row['name'] : '' ?>">
-
-                                        <input type="hidden" name="personIncharges_hidden" id="personIncharges_hidden"
-                                            value="<?php echo (isset($row['person_in_charges'])) ? $row['person_in_charges'] : ''; ?>">
-                                            <?php } ?>
+                                            <input class="form-control" type="text" name="personIncharges" id="personIncharges" <?php if ($act == '') echo 'disabled' ?> value="<?php echo $pic_name; ?>">
+                                            <input type="hidden" name="personIncharges_hidden" id="personIncharges_hidden" value="<?php echo $pic_val; ?>">
+                                        <?php } ?>
                                         <?php if (isset($pic_err)) { ?>
                                             <div id="err_msg">
                                                 <span class="mt-n1">

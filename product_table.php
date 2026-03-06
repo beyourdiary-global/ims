@@ -111,48 +111,37 @@ if (!$result) {
                                     <td scope="row"><?= $row['name'] ?></td>
                                     <td scope="row">
                                         <?php
-                                        if (isset($row['currency_unit'])) {
-
+                                        $currency_unit = '';
+                                        if (!empty($row['currency_unit'])) {
                                             $resultCurUnit = getData('unit', "id='" . $row['currency_unit'] . "'", '', CUR_UNIT, $connect);
-
-                                            if (!$resultCurUnit) {
-                                                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                                echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                            if ($resultCurUnit && $resultCurUnit->num_rows > 0) {
+                                                $currency_unit = $resultCurUnit->fetch_assoc()['unit'] . ' ';
                                             }
-                                            $rowCurUnit = $resultCurUnit->fetch_assoc();
-
-                                            echo $rowCurUnit['unit'] . ' ' . $row['cost'];
                                         }
+                                        echo $currency_unit . (isset($row['cost']) ? $row['cost'] : '');
                                         ?>
                                     </td>
                                     <td scope="row">
                                         <?php
-                                        if (isset($row['weight_unit'])) {
-
+                                        $weight_unit = '';
+                                        if (!empty($row['weight_unit'])) {
                                             $resultWeightUnit = getData('unit', "id='" . $row['weight_unit'] . "'", '', WGT_UNIT, $connect);
-
-                                            if (!$resultWeightUnit) {
-                                                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                                echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                            if ($resultWeightUnit && $resultWeightUnit->num_rows > 0) {
+                                                $weight_unit = ' ' . $resultWeightUnit->fetch_assoc()['unit'];
                                             }
-                                            $rowWeightUnit = $resultWeightUnit->fetch_assoc();
-
-                                            echo $row['weight'] . ' ' . $rowWeightUnit['unit'];
                                         }
+                                        echo (isset($row['weight']) ? $row['weight'] : '') . $weight_unit;
                                         ?>
                                     </td>
                                     <td scope="row">
                                         <?php
-                                        if ($row['parent_product']) {
+                                        if (!empty($row['parent_product'])) {
                                             $resultParentPrd = getData('name', "id='" . $row['parent_product'] . "'", '', $tblName, $connect);
-
-                                            if (!$resultParentPrd) {
-                                                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                                echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                            if ($resultParentPrd && $resultParentPrd->num_rows > 0) {
+                                                echo $resultParentPrd->fetch_assoc()['name'];
+                                            } else {
+                                                echo $row['parent_product']; // Fallback if name is missing but ID exists
                                             }
-                                            $rowParentPrd = $resultParentPrd->fetch_assoc();
-
-                                            echo $rowParentPrd['name'];
                                         }
                                         ?>
                                     </td>

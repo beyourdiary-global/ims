@@ -101,26 +101,33 @@ $result = getData('*', '', '', FB_CUST_DEALS, $connect);
                     </thead>
                     <tbody>
                         <?php while ($row = $result->fetch_assoc()) {
+                            $pic_name = $country_name = $brand_name = $series_name = $fb_page_name = $channel_name = '';
+
                             $q1 = getData('name', "id='" . $row['sales_pic'] . "'", '', USR_USER, $connect);
-                            $pic = $q1->fetch_assoc();
+                            $pic = $q1 ? $q1->fetch_assoc() : null;
+                            if ($pic) $pic_name = $pic['name'];
 
                             $q2 = getData('nicename', "id='" . $row['country'] . "'", '', COUNTRIES, $connect);
-                            $country = $q2->fetch_assoc();
+                            $country = $q2 ? $q2->fetch_assoc() : null;
+                            if ($country) $country_name = $country['nicename'];
 
                             $q3 = getData('name', "id='" . $row['brand'] . "'", '', BRAND, $connect);
-                            $brand = $q3->fetch_assoc();
+                            $brand = $q3 ? $q3->fetch_assoc() : null;
+                            if ($brand) $brand_name = $brand['name'];
 
                             $q4 = getData('name', "id='" . $row['series'] . "'", '', BRD_SERIES, $connect);
-                            $series = $q4->fetch_assoc();
-
+                            $series = $q4 ? $q4->fetch_assoc() : null;
+                            if ($series) $series_name = $series['name'];
 
                             //fb page
                             $q6 = getData('name', "id='" . $row['fb_page'] . "'", '', FB_PAGE_ACC, $finance_connect);
-                            $fb_page = $q6->fetch_assoc();
+                            $fb_page = $q6 ? $q6->fetch_assoc() : null;
+                            if ($fb_page) $fb_page_name = $fb_page['name'];
 
                             //channel
                             $q7 = getData('name', "id='" . $row['channel'] . "'", '', CHANEL_SC_MD, $finance_connect);
-                            $channel = $q7->fetch_assoc();
+                            $channel = $q7 ? $q7->fetch_assoc() : null;
+                            if ($channel) $channel_name = $channel['name'];
                             ?>
 
                             <tr>
@@ -140,10 +147,10 @@ $result = getData('*', '', '', FB_CUST_DEALS, $connect);
                                             <i class="fas fa-users"></i>
                                         </button>
                                         <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton">
-                                            <?php 
-                                         $member_exist = getData('name', "name='" . $row['id'] . "'", '', URBAN_CUST_REG, $connect); 
-                
-                                         if ($member_exist->fetch_assoc()) {
+                                            <?php
+                                         $member_exist = getData('name', "name='" . $row['id'] . "'", '', URBAN_CUST_REG, $connect);
+
+                                         if ($member_exist && $member_exist->fetch_assoc()) {
                                             $reg_url = $reg_member_page . "?id=" . $row['id'] . '&act=' . $act_2;
                                          } else {
                                             $reg_url = $reg_member_page . "?id=" . $row['id'] . '&act=' . $act_1;
@@ -165,22 +172,22 @@ $result = getData('*', '', '', FB_CUST_DEALS, $connect);
                                     <?= $row['contact'] ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $pic['name'] ?>
+                                    <?= $pic_name ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $country['nicename'] ?>
+                                    <?= $country_name ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $brand['name'] ?>
+                                    <?= $brand_name ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $fb_page['name'] ?>
+                                    <?= $fb_page_name ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $channel['name'] ?>
+                                    <?= $channel_name ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $series['name'] ?>
+                                    <?= $series_name ?>
                                 </td>
                                 <td scope="row">
                                     <?= $row['ship_rec_name'] ?>
