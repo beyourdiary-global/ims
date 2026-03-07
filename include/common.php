@@ -958,8 +958,14 @@ function renderDeleteButton($pinAccess, $rowId, $rowName, $rowRemark, $pageTitle
 }
 
 function getOrderStatusLabel($code) {
+	$normalized = strtolower(trim((string) $code));
+	$normalizedKey = preg_replace('/[^a-z]/', '', $normalized);
+	if ($normalizedKey === 'p' || $normalizedKey === 'pendingto' || $normalizedKey === 'pendingtopack') {
+		return 'Pending To Pack';
+	}
+
     $statuses = [
-        'P'  => 'Processing',
+		'P'  => 'Pending To Pack',
         'SP' => 'SHIP PROCESSING (Warehouse)',
         'WP' => 'Waiting Packing',
         'OC' => 'Order Received (admin checking)',

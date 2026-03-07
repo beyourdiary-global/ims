@@ -7,6 +7,8 @@ $module = input('module');
 $redirect_page = $SITEURL . '/common_import.php';
 $shopeeRedirectPage = $SITEURL . '/finance/shopee_ads_topup_trans_table.php';
 $facebookRedirectPage = $SITEURL . '/finance/fb_ads_topup_trans_table.php';
+$shopeeOrderRedirectPage = $SITEURL . '/finance/shopee_order_req_table.php'; // NEW
+
 $facebookAttachmentDir = img_server . 'finance/fb_ads_topup/';
 $tempImportRoot = img_server . 'temp/import_shortcut/';
 $action = post('actionBtn');
@@ -28,7 +30,10 @@ $currencyUnits = getImportOptionList(CUR_UNIT, 'unit', $connect);
 $paymentMethods = getImportOptionList(FIN_PAY_METH, 'name', $finance_connect);
 $metaAccounts = getMetaAdsAccountOptions($finance_connect);
 $userOptions = getImportOptionList(USR_USER, 'name', $connect);
-
+$shopeePayMethods = getImportOptionList(PAY_MTHD_SHOPEE, 'name', $finance_connect);
+$brandOptions = getImportOptionList(BRAND, 'name', $connect);
+$pkgOptions = getImportOptionList(PKG, 'name', $connect);
+$shopeeBuyers = getImportOptionList(SHOPEE_CUST_INFO, 'buyer_username', $finance_connect);
 if ($action === 'parseShopeeAdsTopup') {
     $module = 'shopee_ads_topup';
 
@@ -197,6 +202,175 @@ if ($action === 'parseShopeeAdsTopup') {
             $importErrors[] = $exception->getMessage();
         }
     }
+} else if ($action === 'parseShopeeOrderReq') { // NEW: Shopee Order HTML Parsing
+    $module = 'shopee_order_req';
+
+    if (!isset($_FILES['import_file'])) {
+        $importErrors[] = 'Please choose a Shopee Order HTML file.';
+    } else if ($_FILES['import_file']['error'] !== UPLOAD_ERR_OK) {
+        $importErrors[] = 'File upload failed. Error Code: ' . $_FILES['import_file']['error'];
+    } else {
+        $html = file_get_contents($_FILES['import_file']['tmp_name']);
+
+        if ($html === false || trim($html) === '') {
+            $importErrors[] = 'The uploaded file could not be read.';
+        } else {
+            $cleanText = normalizeImportText(strip_tags(str_replace(['<', '>'], [' <', '> '], $html)));
+
+            $order_id = preg_match('/(?:Order ID|Order SN|Order No)[^A-Z0-9]*([A-Z0-9]{12,24})/i', $cleanText, $m) ? strtoupper(trim($m[1])) : '';
+            if ($order_id === '') {
+                $order_id = preg_match('/sale\/order\/([A-Z0-9]{12,24})/i', $html, $m) ? strtoupper(trim($m[1])) : '';
+            }
+
+            $sku = preg_match('/(?:SKU|Item Code)[^A-Za-z0-9]*([A-Za-z0-9\-_]+)/i', $cleanText, $m) ? trim($m[1]) : '';
+
+            $product_price = parseShopeeOrderAmountByLabels($cleanText, ['Product Price', 'Deal Price']);
+            $voucher = parseShopeeOrderAmountByLabels($cleanText, ['Shopee Voucher', 'Seller Voucher']);
+            $actShippingFee = parseShopeeOrderAmountByLabels($cleanText, ['Estimated Shipping Subtotal', 'Estimated Shipping Fee Charged by Logistic Provider']);
+            $serviceFee = parseShopeeOrderAmountByLabels($cleanText, ['Service Fee']);
+            $transactionFee = parseShopeeOrderAmountByLabels($cleanText, ['Transaction Fee']);
+            $amsFee = parseShopeeOrderAmountByLabels($cleanText, ['Commission Fee']);
+            $fees = parseShopeeOrderAmountByLabels($cleanText, ['Fees & Charges']);
+            $finalAmt = parseShopeeOrderAmountByLabels($cleanText, ['Final Amount', 'Estimated Order Income']);
+
+            $detectedCurrency = detectShopeeOrderCurrency($cleanText);
+            $currencyFallbacks = $detectedCurrency === 'RM' ? ['MYR'] : [];
+            $currencyId = resolveImportOptionId($detectedCurrency, $currencyUnits, $currencyFallbacks);
+
+            $buyerUsername = extractShopeeBuyerUsername($html, $cleanText);
+            $buyerId = resolveImportOptionId($buyerUsername, $shopeeBuyers);
+
+            if ($order_id === '') {
+                $importErrors[] = 'Order ID could not be detected. Please ensure you uploaded the correct Shopee Order Details HTML file.';
+            }
+
+            $pkg_id = '';
+            $missing_sku = false;
+            
+            // Safely Validate the SKU from the CMS Package DB
+            if (!empty($sku)) {
+                // Search by item_code OR name (Removed 'barcode' as it does not exist in package table)
+                $pkgResult = getData('*', "item_code='$sku' OR name='$sku'", '', PKG, $connect); 
+                
+                if ($pkgResult && $pkgResult->num_rows > 0) {
+                    $pkg_row = $pkgResult->fetch_assoc();
+                    $pkg_id = $pkg_row['id'];
+                } else {
+                    $missing_sku = true;
+                }
+            } else {
+                $missing_sku = true;
+            }
+
+            $previewData = [
+                'order_id' => $order_id,
+                'sku' => $sku,
+                'package_id' => $pkg_id,
+                'product_price' => $product_price !== '' ? $product_price : '0.00',
+                'order_status' => 'Pending To Pack',
+                'order_status_val' => 'P',
+                'missing_sku' => $missing_sku,
+                'shopee_acc' => '',
+                'currency' => $currencyId,
+                'source_currency' => $detectedCurrency,
+                'brand' => '',
+                'buyer' => $buyerId,
+                'source_buyer_username' => $buyerUsername,
+                'buyer_pay_meth' => '',
+                'pic' => (string) USER_ID,
+                'voucher' => $voucher,
+                'act_shipping_fee' => $actShippingFee,
+                'service_fee' => $serviceFee,
+                'trans_fee' => $transactionFee,
+                'ams_fee' => $amsFee,
+                'fees' => $fees,
+                'final_amt' => $finalAmt,
+                'remark' => $order_id !== '' ? ('Imported from Shopee Order HTML (' . $order_id . ')') : 'Imported from Shopee Order HTML',
+            ];
+
+            if ($currencyId === '') {
+                $importWarnings[] = 'Currency could not be matched automatically. Please select the correct currency before inserting.';
+            }
+            if ($buyerUsername !== '' && $buyerId === '') {
+                $importWarnings[] = 'Buyer username was detected as ' . $buyerUsername . ' but not matched in Customer Info. Please select buyer manually.';
+            }
+        }
+    }
+} else if ($action === 'insertShopeeOrderReq') { // NEW: Shopee Order Insert
+    $module = 'shopee_order_req';
+    
+    $previewData = [
+        'order_id' => postSpaceFilter('order_id'),
+        'package_id' => postSpaceFilter('package_id'),
+        'product_price' => postSpaceFilter('product_price'),
+        'order_status' => 'P',
+        'order_status_val' => 'P',
+        'sku' => isset($_POST['sku']) ? $_POST['sku'] : '',
+        'missing_sku' => postSpaceFilter('package_id') === '',
+        'shopee_acc' => postSpaceFilter('shopee_acc'),
+        'currency' => postSpaceFilter('currency'),
+        'brand' => postSpaceFilter('brand'),
+        'buyer' => postSpaceFilter('buyer'),
+        'buyer_pay_meth' => postSpaceFilter('buyer_pay_meth'),
+        'pic' => postSpaceFilter('pic'),
+        'voucher' => postSpaceFilter('voucher'),
+        'act_shipping_fee' => postSpaceFilter('act_shipping_fee'),
+        'service_fee' => postSpaceFilter('service_fee'),
+        'trans_fee' => postSpaceFilter('trans_fee'),
+        'ams_fee' => postSpaceFilter('ams_fee'),
+        'fees' => postSpaceFilter('fees'),
+        'final_amt' => postSpaceFilter('final_amt'),
+        'remark' => postSpaceFilter('remark'),
+    ];
+
+    if ($previewData['package_id'] === '') $importErrors[] = 'Package ID is missing. Please add the package first.';
+    if ($previewData['order_id'] === '') $importErrors[] = 'Order ID is required.';
+    if ($previewData['shopee_acc'] === '') $importErrors[] = 'Shopee Account is required.';
+    if ($previewData['currency'] === '') $importErrors[] = 'Currency is required.';
+    if ($previewData['brand'] === '') $importErrors[] = 'Brand is required.';
+    if ($previewData['pic'] === '') $importErrors[] = 'Person In Charge is required.';
+
+    $previewData['voucher'] = $previewData['voucher'] !== '' ? $previewData['voucher'] : '0.00';
+    $previewData['act_shipping_fee'] = $previewData['act_shipping_fee'] !== '' ? $previewData['act_shipping_fee'] : '0.00';
+    $previewData['service_fee'] = $previewData['service_fee'] !== '' ? $previewData['service_fee'] : '0.00';
+    $previewData['trans_fee'] = $previewData['trans_fee'] !== '' ? $previewData['trans_fee'] : '0.00';
+    $previewData['ams_fee'] = $previewData['ams_fee'] !== '' ? $previewData['ams_fee'] : '0.00';
+    $previewData['fees'] = $previewData['fees'] !== '' ? $previewData['fees'] : '0.00';
+    $previewData['final_amt'] = $previewData['final_amt'] !== '' ? $previewData['final_amt'] : '0.00';
+
+    if (empty($importErrors)) {
+        $orderId = mysqli_real_escape_string($finance_connect, $previewData['order_id']);
+        $pkgId = mysqli_real_escape_string($connect, $previewData['package_id']);
+        $price = mysqli_real_escape_string($finance_connect, $previewData['product_price']);
+        $status = mysqli_real_escape_string($finance_connect, $previewData['order_status']);
+        $acc = mysqli_real_escape_string($finance_connect, $previewData['shopee_acc']);
+        $curr = mysqli_real_escape_string($connect, $previewData['currency']);
+        $brand = mysqli_real_escape_string($connect, $previewData['brand']);
+        $buyer = mysqli_real_escape_string($finance_connect, $previewData['buyer']);
+        $payMeth = mysqli_real_escape_string($finance_connect, $previewData['buyer_pay_meth']);
+        $pic = mysqli_real_escape_string($connect, $previewData['pic']);
+        $voucher = mysqli_real_escape_string($finance_connect, $previewData['voucher']);
+        $actShippingFee = mysqli_real_escape_string($finance_connect, $previewData['act_shipping_fee']);
+        $serviceFee = mysqli_real_escape_string($finance_connect, $previewData['service_fee']);
+        $transFee = mysqli_real_escape_string($finance_connect, $previewData['trans_fee']);
+        $amsFee = mysqli_real_escape_string($finance_connect, $previewData['ams_fee']);
+        $fees = mysqli_real_escape_string($finance_connect, $previewData['fees']);
+        $finalAmt = mysqli_real_escape_string($finance_connect, $previewData['final_amt']);
+        $remark = mysqli_real_escape_string($finance_connect, $previewData['remark']);
+        
+        $query = "INSERT INTO " . SHOPEE_SG_ORDER_REQ . " 
+            (orderID, package, price, voucher, act_shipping_fee, service_fee, trans_fee, ams_fee, fees, final_amt, order_status, shopee_acc, currency, brand, buyer, buyer_pay_meth, pic, remark, date, time, create_by, create_date, create_time) 
+            VALUES ('$orderId', '$pkgId', '$price', '$voucher', '$actShippingFee', '$serviceFee', '$transFee', '$amsFee', '$fees', '$finalAmt', '$status', '$acc', '$curr', '$brand', '$buyer', '$payMeth', '$pic', '$remark', curdate(), curtime(), '" . USER_ID . "', curdate(), curtime())";
+        
+        $returnData = mysqli_query($finance_connect, $query);
+
+        if ($returnData) {
+            echo '<script>alert("Shopee Order Request imported successfully.");window.location.href="' . $shopeeOrderRedirectPage . '";</script>';
+            exit;
+        } else {
+            $importErrors[] = 'Database Error: ' . mysqli_error($finance_connect);
+        }
+    }
 }
 
 function ensureImportDirectory($directory)
@@ -344,6 +518,76 @@ function formatDatetimeLocalValue($value)
 {
     $parsed = parseShopeeDatetime($value);
     return $parsed !== '' ? date('Y-m-d\TH:i', strtotime($parsed)) : date('Y-m-d\TH:i');
+}
+
+function normalizeImportAmount($rawAmount)
+{
+    $value = trim((string) $rawAmount);
+    if ($value === '') {
+        return '';
+    }
+
+    $value = str_replace([',', ' '], '', $value);
+    $value = str_replace(['RM', 'MYR', 'USD', 'SGD'], '', strtoupper($value));
+    $isNegative = strpos($value, '-') === 0;
+    $numeric = preg_replace('/[^0-9.]+/', '', $value);
+
+    if ($numeric === '' || !is_numeric($numeric)) {
+        return '';
+    }
+
+    $amount = (float) $numeric;
+    if ($isNegative) {
+        $amount *= -1;
+    }
+
+    return number_format(abs($amount), 2, '.', '');
+}
+
+function parseShopeeOrderAmountByLabels($text, $labels)
+{
+    foreach ($labels as $label) {
+        $pattern = '/' . preg_quote($label, '/') . '.{0,120}?(-?\s*(?:RM|MYR|SGD|USD)?\s*[0-9][0-9,]*\.?[0-9]*)/i';
+        if (preg_match($pattern, $text, $matches)) {
+            $amount = normalizeImportAmount($matches[1]);
+            if ($amount !== '') {
+                return $amount;
+            }
+        }
+    }
+
+    return '0.00';
+}
+
+function detectShopeeOrderCurrency($text)
+{
+    if (preg_match('/\bRM\s*[0-9]/i', $text)) {
+        return 'RM';
+    }
+    if (preg_match('/\bMYR\s*[0-9]/i', $text)) {
+        return 'MYR';
+    }
+    if (preg_match('/\bSGD\s*[0-9]/i', $text)) {
+        return 'SGD';
+    }
+    if (preg_match('/\bUSD\s*[0-9]/i', $text)) {
+        return 'USD';
+    }
+
+    return '';
+}
+
+function extractShopeeBuyerUsername($html, $text)
+{
+    if (preg_match('/class="username\s+text-overflow"[^>]*>([^<]+)/i', $html, $matches)) {
+        return normalizeImportText($matches[1]);
+    }
+
+    if (preg_match('/\bBuyer\s*Username\b[^A-Za-z0-9]*([A-Za-z0-9._\-]+)/i', $text, $matches)) {
+        return normalizeImportText($matches[1]);
+    }
+
+    return '';
 }
 
 function extractValueFromTableLabel($xpath, $labels)
@@ -1189,6 +1433,9 @@ function cleanupImportTempFile($filePath)
                         <?php } else if ($module === 'fb_ads_topup') { ?>
                             <i class="fa-solid fa-chevron-right fa-xs"></i>
                             Facebook Ads Top Up Import
+                        <?php } else if ($module === 'shopee_order_req') { ?>
+                            <i class="fa-solid fa-chevron-right fa-xs"></i>
+                            Shopee Order Request Import
                         <?php } ?>
                     </p>
                 </div>
@@ -1220,6 +1467,14 @@ function cleanupImportTempFile($filePath)
                         </div>
                     <?php } ?>
 
+                    <?php if (!empty($importWarnings)) { ?>
+                        <div class="alert alert-warning" role="alert">
+                            <?php foreach ($importWarnings as $warning) { ?>
+                                <div><?= htmlspecialchars($warning) ?></div>
+                            <?php } ?>
+                        </div>
+                    <?php } ?>
+
                     <div class="card mb-4 shadow-sm">
                         <div class="card-body">
                             <h5 class="card-title mb-3">Step 1: Upload Shopee HTML</h5>
@@ -1239,7 +1494,7 @@ function cleanupImportTempFile($filePath)
                         </div>
                     </div>
 
-                    <?php if (!empty($previewData)) { ?>
+                    <?php if (!empty($previewData) && !empty($previewData['order_id'])) { ?>
                         <div class="card mb-4 shadow-sm">
                             <div class="card-body">
                                 <h5 class="card-title mb-3">Step 2: Preview And Edit Before Insert</h5>
@@ -1251,79 +1506,61 @@ function cleanupImportTempFile($filePath)
 
                                     <div class="row mb-3">
                                         <div class="col-12 col-md-4">
-                                            <label class="form-label">Detected Shop Name</label>
-                                            <input class="form-control" type="text" value="<?= htmlspecialchars($previewData['source_shop_name']) ?>" readonly>
+                                            <label class="form-label" for="order_id">Order ID<span class="requireRed">*</span></label>
+                                            <input class="form-control" type="text" id="order_id" name="order_id" value="<?= htmlspecialchars($previewData['order_id']) ?>" required>
                                         </div>
                                         <div class="col-12 col-md-4">
-                                            <label class="form-label">Detected Currency</label>
-                                            <input class="form-control" type="text" value="<?= htmlspecialchars($previewData['source_currency']) ?>" readonly>
+                                            <label class="form-label" for="payment_date">Payment Date<span class="requireRed">*</span></label>
+                                            <input class="form-control" type="datetime-local" id="payment_date" name="payment_date" value="<?= htmlspecialchars(formatDatetimeLocalValue($previewData['payment_date'])) ?>" required>
                                         </div>
                                         <div class="col-12 col-md-4">
-                                            <label class="form-label">Detected Payment Method</label>
-                                            <input class="form-control" type="text" value="<?= htmlspecialchars($previewData['source_payment_method']) ?>" readonly>
-                                        </div>
-                                    </div>
-
-                                    <div class="row mb-3">
-                                        <div class="col-12 col-md-6">
                                             <label class="form-label" for="shopee_acc">Shopee Account<span class="requireRed">*</span></label>
-                                            <select class="form-select <?= $previewData['shopee_acc'] === '' ? 'warning_input' : '' ?>" id="shopee_acc" name="shopee_acc" required>
-                                                <option value="">Select Shopee Account</option>
+                                            <select class="form-select" id="shopee_acc" name="shopee_acc" required>
+                                                <option value="">Select Account</option>
                                                 <?php foreach ($shopeeAccounts as $id => $name) { ?>
                                                     <option value="<?= htmlspecialchars($id) ?>" <?= $previewData['shopee_acc'] == $id ? 'selected' : '' ?>><?= htmlspecialchars($name) ?></option>
                                                 <?php } ?>
                                             </select>
                                         </div>
-                                        <div class="col-12 col-md-6">
-                                            <label class="form-label" for="order_id">Order ID<span class="requireRed">*</span></label>
-                                            <input class="form-control" type="text" id="order_id" name="order_id" value="<?= htmlspecialchars($previewData['order_id']) ?>" required>
-                                        </div>
                                     </div>
 
                                     <div class="row mb-3">
-                                        <div class="col-12 col-md-6">
-                                            <label class="form-label" for="payment_date">Payment Date<span class="requireRed">*</span></label>
-                                            <input class="form-control" type="datetime-local" id="payment_date" name="payment_date" value="<?= htmlspecialchars(formatDatetimeLocalValue($previewData['payment_date'])) ?>" required>
-                                        </div>
-                                        <div class="col-12 col-md-6">
+                                        <div class="col-12 col-md-4">
                                             <label class="form-label" for="currency">Currency<span class="requireRed">*</span></label>
-                                            <select class="form-select <?= $previewData['currency'] === '' ? 'warning_input' : '' ?>" id="currency" name="currency" required>
+                                            <select class="form-select" id="currency" name="currency" required>
                                                 <option value="">Select Currency</option>
-                                                <?php foreach ($currencyUnits as $id => $unit) { ?>
-                                                    <option value="<?= htmlspecialchars($id) ?>" <?= $previewData['currency'] == $id ? 'selected' : '' ?>><?= htmlspecialchars($unit) ?></option>
+                                                <?php foreach ($currencyUnits as $id => $name) { ?>
+                                                    <option value="<?= htmlspecialchars($id) ?>" <?= $previewData['currency'] == $id ? 'selected' : '' ?>><?= htmlspecialchars($name) ?></option>
                                                 <?php } ?>
                                             </select>
                                         </div>
-                                    </div>
-
-                                    <div class="row mb-3">
                                         <div class="col-12 col-md-4">
-                                            <label class="form-label" for="topup_amt">Top-up Amount<span class="requireRed">*</span></label>
-                                            <input class="form-control" type="number" step="0.01" id="topup_amt" name="topup_amt" value="<?= htmlspecialchars($previewData['topup_amt']) ?>" required>
-                                        </div>
-                                        <div class="col-12 col-md-4">
-                                            <label class="form-label" for="subtotal">Subtotal<span class="requireRed">*</span></label>
-                                            <input class="form-control" type="number" step="0.01" id="subtotal" name="subtotal" value="<?= htmlspecialchars($previewData['subtotal']) ?>" required>
-                                        </div>
-                                        <div class="col-12 col-md-4">
-                                            <label class="form-label" for="gst">GST / Tax Amount<span class="requireRed">*</span></label>
-                                            <input class="form-control" type="number" step="0.01" id="gst" name="gst" value="<?= htmlspecialchars($previewData['gst']) ?>" required>
-                                        </div>
-                                    </div>
-
-                                    <div class="row mb-3">
-                                        <div class="col-12 col-md-6">
                                             <label class="form-label" for="pay_meth">Payment Method<span class="requireRed">*</span></label>
-                                            <select class="form-select <?= $previewData['pay_meth'] === '' ? 'warning_input' : '' ?>" id="pay_meth" name="pay_meth" required>
+                                            <select class="form-select" id="pay_meth" name="pay_meth" required>
                                                 <option value="">Select Payment Method</option>
                                                 <?php foreach ($paymentMethods as $id => $name) { ?>
                                                     <option value="<?= htmlspecialchars($id) ?>" <?= $previewData['pay_meth'] == $id ? 'selected' : '' ?>><?= htmlspecialchars($name) ?></option>
                                                 <?php } ?>
                                             </select>
                                         </div>
-                                        <div class="col-12 col-md-6">
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label" for="product_price">Product Price (RM)<span class="requireRed">*</span></label>
+                                            <input class="form-control" type="number" step="0.01" id="topup_amt" name="topup_amt" value="<?= htmlspecialchars($previewData['topup_amt']) ?>" required>
+                                        </div>
+                                    </div>
+
+                                    <div class="row mb-3">
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label" for="subtotal">Subtotal<span class="requireRed">*</span></label>
+                                            <input class="form-control" type="number" step="0.01" id="subtotal" name="subtotal" value="<?= htmlspecialchars($previewData['subtotal']) ?>" required>
+                                        </div>
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label" for="gst">GST / Tax<span class="requireRed">*</span></label>
+                                            <input class="form-control" type="number" step="0.01" id="gst" name="gst" value="<?= htmlspecialchars($previewData['gst']) ?>" required>
+                                        </div>
+                                        <div class="col-12 col-md-4">
                                             <label class="form-label" for="remark">Remark</label>
-                                            <textarea class="form-control" id="remark" name="remark" rows="3"><?= htmlspecialchars($previewData['remark']) ?></textarea>
+                                            <textarea class="form-control" id="remark" name="remark" rows="2"><?= htmlspecialchars($previewData['remark']) ?></textarea>
                                         </div>
                                     </div>
 
@@ -1485,6 +1722,209 @@ function cleanupImportTempFile($filePath)
                             </div>
                         </div>
                     <?php } ?>
+                
+                <?php } else if ($module === 'shopee_order_req') { ?>
+                    <div class="row mb-4">
+                        <div class="col-12 d-flex justify-content-between flex-wrap align-items-center gap-2">
+                            <h2>Shopee Order Request Import</h2>
+                            <div class="d-flex gap-2 flex-wrap">
+                                <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $shopeeOrderRedirectPage ?>">Back To Transaction Table</a>
+                                <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $redirect_page ?>">Back To Shortcuts</a>
+                            </div>
+                        </div>
+                    </div>
+
+                    <?php if (!empty($importErrors)) { ?>
+                        <div class="alert alert-danger" role="alert">
+                            <?php foreach ($importErrors as $error) { ?>
+                                <div><?= htmlspecialchars($error) ?></div>
+                            <?php } ?>
+                        </div>
+                    <?php } ?>
+
+                    <div class="card mb-4 shadow-sm">
+                        <div class="card-body">
+                            <h5 class="card-title mb-3">Step 1: Upload Shopee Order HTML</h5>
+                            <form method="post" enctype="multipart/form-data">
+                                <div class="row g-3 align-items-end">
+                                    <div class="col-12 col-md-8">
+                                        <label class="form-label" for="import_file">Shopee Order Details HTML File</label>
+                                        <input class="form-control" type="file" name="import_file" id="import_file" accept=".html,.htm" required>
+                                    </div>
+                                    <div class="col-12 col-md-4">
+                                        <button class="btn btn-lg btn-rounded btn-primary w-100 px-4" type="submit" name="actionBtn" value="parseShopeeOrderReq">
+                                            <i class="fa-solid fa-wand-magic-sparkles"></i> Load And Analyze
+                                        </button>
+                                    </div>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+
+                    <?php if (!empty($previewData) && !empty($previewData['order_id'])) { ?>
+                        <div class="card mb-4 shadow-sm">
+                            <div class="card-body">
+                                <h5 class="card-title mb-3">Step 2: Preview And Edit Before Insert</h5>
+                                <form method="post">
+                                    <div class="row mb-3">
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label" for="order_id">Order ID<span class="requireRed">*</span></label>
+                                            <input class="form-control" type="text" id="order_id" name="order_id" value="<?= htmlspecialchars($previewData['order_id']) ?>" required>
+                                        </div>
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label">Detected SKU / Item Code</label>
+                                            <input class="form-control" type="text" value="<?= htmlspecialchars($previewData['sku']) ?>" readonly>
+                                            <input type="hidden" name="sku" value="<?= htmlspecialchars($previewData['sku']) ?>">
+                                        </div>
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label" for="package_id">Package<span class="requireRed">*</span></label>
+                                            <?php if ($previewData['missing_sku']) { ?>
+                                                <div class="text-danger fw-bold mb-1" style="font-size:12px;"><i class="fa-solid fa-circle-exclamation"></i> Auto-match failed. Please select manually.</div>
+                                            <?php } ?>
+                                            <select class="form-select <?= $previewData['missing_sku'] ? 'border-danger' : '' ?>" id="package_id" name="package_id" required>
+                                                <option value="">Select Package</option>
+                                                <?php foreach ($pkgOptions as $id => $name) { ?>
+                                                    <option value="<?= htmlspecialchars($id) ?>" <?= $previewData['package_id'] == $id ? 'selected' : '' ?>><?= htmlspecialchars($name) ?></option>
+                                                <?php } ?>
+                                            </select>
+                                            <?php if ($previewData['missing_sku']) { ?>
+                                                <a href="<?= $SITEURL ?>/package.php?act=I" target="_blank" class="btn btn-sm btn-outline-danger mt-2">Add New Package</a>
+                                            <?php } ?>
+                                        </div>
+                                    </div>
+
+                                    <div class="row mb-3">
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label" for="shopee_acc">Shopee Account<span class="requireRed">*</span></label>
+                                            <select class="form-select" id="shopee_acc" name="shopee_acc" required>
+                                                <option value="">Select Account</option>
+                                                <?php foreach ($shopeeAccounts as $id => $name) { ?>
+                                                    <option value="<?= htmlspecialchars($id) ?>" <?= isset($previewData['shopee_acc']) && $previewData['shopee_acc'] == $id ? 'selected' : '' ?>><?= htmlspecialchars($name) ?></option>
+                                                <?php } ?>
+                                            </select>
+                                        </div>
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label" for="currency">Currency<span class="requireRed">*</span></label>
+                                            <select class="form-select" id="currency" name="currency" required>
+                                                <option value="">Select Currency</option>
+                                                <?php foreach ($currencyUnits as $id => $name) { ?>
+                                                    <option value="<?= htmlspecialchars($id) ?>" <?= isset($previewData['currency']) && $previewData['currency'] == $id ? 'selected' : '' ?>><?= htmlspecialchars($name) ?></option>
+                                                <?php } ?>
+                                            </select>
+                                            <?php if (!empty($previewData['source_currency'])) { ?>
+                                                <small class="text-muted">Detected: <?= htmlspecialchars($previewData['source_currency']) ?></small>
+                                            <?php } ?>
+                                        </div>
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label" for="brand">Brand<span class="requireRed">*</span></label>
+                                            <select class="form-select" id="brand" name="brand" required>
+                                                <option value="">Select Brand</option>
+                                                <?php foreach ($brandOptions as $id => $name) { ?>
+                                                    <option value="<?= htmlspecialchars($id) ?>" <?= isset($previewData['brand']) && $previewData['brand'] == $id ? 'selected' : '' ?>><?= htmlspecialchars($name) ?></option>
+                                                <?php } ?>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="row mb-3">
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label" for="buyer">Shopee Buyer Username</label>
+                                            <select class="form-select" id="buyer" name="buyer">
+                                                <option value="">Select Buyer (Optional)</option>
+                                                <?php foreach ($shopeeBuyers as $id => $name) { ?>
+                                                    <option value="<?= htmlspecialchars($id) ?>" <?= isset($previewData['buyer']) && $previewData['buyer'] == $id ? 'selected' : '' ?>><?= htmlspecialchars($name) ?></option>
+                                                <?php } ?>
+                                            </select>
+                                            <?php if (!empty($previewData['source_buyer_username'])) { ?>
+                                                <small class="text-muted">Detected: <?= htmlspecialchars($previewData['source_buyer_username']) ?></small>
+                                            <?php } ?>
+                                        </div>
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label" for="buyer_pay_meth">Buyer Payment Method</label>
+                                            <select class="form-select" id="buyer_pay_meth" name="buyer_pay_meth">
+                                                <option value="">Select Payment Method</option>
+                                                <?php foreach ($shopeePayMethods as $id => $name) { ?>
+                                                    <option value="<?= htmlspecialchars($id) ?>" <?= isset($previewData['buyer_pay_meth']) && $previewData['buyer_pay_meth'] == $id ? 'selected' : '' ?>><?= htmlspecialchars($name) ?></option>
+                                                <?php } ?>
+                                            </select>
+                                        </div>
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label" for="pic">Person In Charge<span class="requireRed">*</span></label>
+                                            <select class="form-select" id="pic" name="pic" required>
+                                                <option value="">Select PIC</option>
+                                                <?php foreach ($userOptions as $id => $name) { ?>
+                                                    <option value="<?= htmlspecialchars($id) ?>" <?= (isset($previewData['pic']) ? $previewData['pic'] : USER_ID) == $id ? 'selected' : '' ?>><?= htmlspecialchars($name) ?></option>
+                                                <?php } ?>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="row mb-3">
+                                        <div class="col-12 col-md-3">
+                                            <label class="form-label" for="product_price">Product Price (RM)<span class="requireRed">*</span></label>
+                                            <input class="form-control" type="number" step="0.01" id="product_price" name="product_price" value="<?= htmlspecialchars($previewData['product_price']) ?>" required>
+                                        </div>
+                                        <div class="col-12 col-md-3">
+                                            <label class="form-label" for="voucher">Voucher</label>
+                                            <input class="form-control" type="number" step="0.01" id="voucher" name="voucher" value="<?= htmlspecialchars(isset($previewData['voucher']) ? $previewData['voucher'] : '0.00') ?>">
+                                        </div>
+                                        <div class="col-12 col-md-3">
+                                            <label class="form-label" for="act_shipping_fee">Actual Shipping Fee</label>
+                                            <input class="form-control" type="number" step="0.01" id="act_shipping_fee" name="act_shipping_fee" value="<?= htmlspecialchars(isset($previewData['act_shipping_fee']) ? $previewData['act_shipping_fee'] : '0.00') ?>">
+                                        </div>
+                                        <div class="col-12 col-md-3">
+                                            <label class="form-label" for="service_fee">Service Fee</label>
+                                            <input class="form-control" type="number" step="0.01" id="service_fee" name="service_fee" value="<?= htmlspecialchars(isset($previewData['service_fee']) ? $previewData['service_fee'] : '0.00') ?>">
+                                        </div>
+                                    </div>
+
+                                    <div class="row mb-3">
+                                        <div class="col-12 col-md-3">
+                                            <label class="form-label" for="trans_fee">Transaction Fee</label>
+                                            <input class="form-control" type="number" step="0.01" id="trans_fee" name="trans_fee" value="<?= htmlspecialchars(isset($previewData['trans_fee']) ? $previewData['trans_fee'] : '0.00') ?>">
+                                        </div>
+                                        <div class="col-12 col-md-3">
+                                            <label class="form-label" for="ams_fee">AMS / Commission Fee</label>
+                                            <input class="form-control" type="number" step="0.01" id="ams_fee" name="ams_fee" value="<?= htmlspecialchars(isset($previewData['ams_fee']) ? $previewData['ams_fee'] : '0.00') ?>">
+                                        </div>
+                                        <div class="col-12 col-md-3">
+                                            <label class="form-label" for="fees">Fees & Charges</label>
+                                            <input class="form-control" type="number" step="0.01" id="fees" name="fees" value="<?= htmlspecialchars(isset($previewData['fees']) ? $previewData['fees'] : '0.00') ?>">
+                                        </div>
+                                        <div class="col-12 col-md-3">
+                                            <label class="form-label" for="final_amt">Final Amount</label>
+                                            <input class="form-control" type="number" step="0.01" id="final_amt" name="final_amt" value="<?= htmlspecialchars(isset($previewData['final_amt']) ? $previewData['final_amt'] : '0.00') ?>">
+                                        </div>
+                                    </div>
+
+                                    <div class="row mb-3">
+                                        <div class="col-12 col-md-8">
+                                            <label class="form-label" for="remark">Remark</label>
+                                            <input class="form-control" type="text" id="remark" name="remark" value="<?= htmlspecialchars(isset($previewData['remark']) ? $previewData['remark'] : '') ?>">
+                                        </div>
+                                        <div class="col-12 col-md-4">
+                                            <label class="form-label">Order Status</label>
+                                            <input class="form-control text-primary fw-bold" type="text" value="<?= htmlspecialchars(getOrderStatusLabel(isset($previewData['order_status_val']) ? $previewData['order_status_val'] : 'P')) ?>" readonly>
+                                            <input type="hidden" name="order_status_val" value="<?= htmlspecialchars($previewData['order_status_val']) ?>">
+                                        </div>
+                                    </div>
+
+                                    <div class="d-flex justify-content-center gap-2 flex-wrap mt-4">
+                                        <?php if ($previewData['missing_sku']) { ?>
+                                            <div class="alert alert-danger mb-0">
+                                                <i class="fa-solid fa-triangle-exclamation"></i> Cannot proceed. Please add the missing Package to the CMS, then re-upload the HTML file.
+                                            </div>
+                                        <?php } else { ?>
+                                            <button class="btn btn-lg btn-rounded btn-primary px-4" type="submit" name="actionBtn" value="insertShopeeOrderReq">
+                                                <i class="fa-solid fa-database"></i> Insert
+                                            </button>
+                                        <?php } ?>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    <?php } ?>
+
                 <?php } else { ?>
                     <div class="row mb-4">
                         <div class="col-12 d-flex justify-content-between flex-wrap align-items-center">
@@ -1514,6 +1954,20 @@ function cleanupImportTempFile($filePath)
                                     <p class="card-text">Upload a Facebook Ads PDF receipt or a ZIP of receipts, preview the parsed records, fix anything that needs adjustment, and insert only Paid transactions into the CMS.</p>
                                     <div class="mt-auto">
                                         <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $redirect_page ?>?module=fb_ads_topup">
+                                            <i class="fa-solid fa-file-import"></i> Open Import
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="col-12 col-md-6 col-lg-4">
+                            <div class="card h-100 shadow-sm">
+                                <div class="card-body d-flex flex-column">
+                                    <h5 class="card-title">Shopee Order Import</h5>
+                                    <p class="card-text">Upload a Shopee Order HTML page to automatically map Order details and SKU item codes. Edit parameters manually before confirming.</p>
+                                    <div class="mt-auto">
+                                        <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $redirect_page ?>?module=shopee_order_req">
                                             <i class="fa-solid fa-file-import"></i> Open Import
                                         </a>
                                     </div>

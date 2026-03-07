@@ -696,11 +696,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 
                             if (isset($echoVal)) {
                                 $curr_rst = getData('*', "id = '$echoVal'", '', CUR_UNIT, $connect);
-                                if (!$curr_rst) {
-                                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                                }
-                                $curr_row = $curr_rst->fetch_assoc();
+                                $curr_row = $curr_rst ? $curr_rst->fetch_assoc() : [];
                             }
                             ?>
                             <input class="form-control" type="text" name="sor_curr" id="sor_curr" disabled value="<?php echo !empty($echoVal) ? $curr_row['unit'] : '' ?>">
@@ -793,11 +789,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 
                             if (isset($echoVal)) {
                                 $pkg_rst = getData('*', "id = '$echoVal'", '', PKG, $connect);
-                                if (!$pkg_rst) {
-                                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                                }
-                                $pkg_row = $pkg_rst->fetch_assoc();
+                                $pkg_row = $pkg_rst ? $pkg_rst->fetch_assoc() : [];
                             }
                             ?>
                             <input class="form-control" type="text" name="sor_pkg" id="sor_pkg" <?php if ($act == '')
@@ -823,11 +815,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 
                             if (isset($echoVal)) {
                                 $brand_rst = getData('name', "id = '$echoVal'", '', BRAND, $connect);
-                                if (!$brand_rst) {
-                                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                                }
-                                $brand_row = $brand_rst->fetch_assoc();
+                                $brand_row = $brand_rst ? $brand_rst->fetch_assoc() : [];
                             }
                             ?>
                             <input class="form-control" type="text" name="sor_brand" id="sor_brand" <?php if ($act == '')
@@ -858,11 +846,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 
                             if (isset($echoVal)) {
                                 $user_rst = getData('*', "id = '$echoVal'", '', SHOPEE_CUST_INFO, $finance_connect);
-                                if (!$user_rst) {
-                                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                                }
-                                $user_row = $user_rst->fetch_assoc();
+                                $user_row = $user_rst ? $user_rst->fetch_assoc() : [];
                             }
                             ?>
                             <input class="form-control" type="text" name="sor_user" id="sor_user" <?php if ($act == '')
@@ -965,11 +949,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 
                             if (isset($echoVal)) {
                                 $user_rst = getData('name', "id = '$echoVal'", '', USR_USER, $connect);
-                                if (!$user_rst) {
-                                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                                }
-                                $user_row = $user_rst->fetch_assoc();
+                                $user_row = $user_rst ? $user_rst->fetch_assoc() : [];
                             }
                             ?>
                             <input class="form-control" type="text" name="sor_pic" id="sor_pic" <?php if ($act == '')
@@ -1194,18 +1174,15 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                            
                             if (isset($row['orderID']))
                             $echoVal = $row['orderID'];
+                            $echoVal2 = '';
                             $courier_rst2 = getData('courier_id', "order_id = '$echoVal'", '', OFFICIAL_PROCESS_ORDER, $connect);
 
-                            if (!$courier_rst2) {
-                                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                            }
-                            $courier_row2 = $courier_rst2->fetch_assoc();
-                            if ($courier_row2['courier_id'])
+                            $courier_row2 = $courier_rst2 ? $courier_rst2->fetch_assoc() : [];
+                            if (!empty($courier_row2['courier_id']))
                             $echoVal2 = $courier_row2['courier_id'];
                        
                             $courier_rst = getData('name', "id = '$echoVal2'", '', COURIER, $connect);
-                            $courier_row = $courier_rst->fetch_assoc();
+                            $courier_row = $courier_rst ? $courier_rst->fetch_assoc() : [];
                       
                             if (isset($courier_row['name'])) {
                                 $courier_name = $courier_row['name'];
@@ -1228,11 +1205,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                             
                             <?php
                              $tracking_rst = getData('tracking_id', "order_id = '$echoVal'", '', OFFICIAL_PROCESS_ORDER, $connect);
-                             if (!$tracking_rst) {
-                                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                            }
-                            $tracking_row = $tracking_rst->fetch_assoc();
+                            $tracking_row = $tracking_rst ? $tracking_rst->fetch_assoc() : [];
                             if (isset($tracking_row['tracking_id'])) {
                                 $tracking_id = $tracking_row['tracking_id'];
                             } else {
@@ -1253,11 +1226,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                             <?php
                    
                             $tracking_rst2 = getData('tracking_link', "id = '$echoVal2'", '', COURIER, $connect);
-                            if (!$tracking_rst2) {
-                                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                            }
-                            $track_row = $tracking_rst2->fetch_assoc();
+                            $track_row = $tracking_rst2 ? $tracking_rst2->fetch_assoc() : [];
                       
                             if (isset($track_row['tracking_link'])) {
                                 $tracking_link = $track_row['tracking_link'];
@@ -1276,7 +1245,9 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                 <?php }} ?>
                     <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
                         <?php
-                        echo $row['order_status'] == 'P' ? '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="actionOrderReceivedBtn" id="actionOrderReceivedBtn" value="updateOR">Update to Order Received</button>' :"";
+                        $statusKey = preg_replace('/[^a-z]/', '', strtolower(trim((string) $row['order_status'])));
+                        $isPendingToPack = ($statusKey === 'p' || $statusKey === 'pendingto' || $statusKey === 'pendingtopack');
+                        echo $isPendingToPack ? '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="actionOrderReceivedBtn" id="actionOrderReceivedBtn" value="updateOR">Update to Order Received</button>' :"";
                         
                         
                     switch ($act) {

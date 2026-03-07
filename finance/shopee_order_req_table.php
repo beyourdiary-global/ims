@@ -199,9 +199,10 @@ $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_con
                         <?php if ($result) { ?>
                             <div class="mt-auto mb-auto">
                                 <?php if (in_array(4, $accessActionKey)): ?>
-                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
-                                        Request </a>
+                                    <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="addBtn" id="addBtn"
+                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Request </a>
+                                    <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="importBtn" id="importBtn"
+                                        href="<?= $SITEURL ?>/common_import.php?module=shopee_order_req"><i class="fa-solid fa-file-import"></i> Import </a>
                                 <?php endif; ?>
                             </div>
                         <?php } ?>
@@ -401,6 +402,18 @@ $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_con
             } else {
                 ?>
                 <div class="table-responsive">
+                <?php
+                $total_price = 0;
+                $total_voucher = 0;
+                $total_shipping = 0;
+                $total_trans_fee = 0;
+                $total_ams_fee = 0;
+                $total_fees = 0;
+                $total_final_amt = 0;
+                $total_final_service_fee = 0;
+                $total_final_agentCostProfit = 0;
+                $total_final_companyCostProfit = 0;
+                ?>
                 <table class="table table-striped" id="shopee_order_req_table">
                     <thead>
                         <tr>
@@ -436,27 +449,27 @@ $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_con
                     <tbody>
                         <?php while ($row = $result->fetch_assoc()) {
                             $q1 = getData('*', "id='" . $row['shopee_acc'] . "'", '', SHOPEE_ACC, $finance_connect);
-                            $acc = $q1->fetch_assoc();
+                            $acc = $q1 ? $q1->fetch_assoc() : [];
                             $q7 = getData('*', "id='" . $row['currency'] . "'", '', CUR_UNIT, $connect);
-                            $curr = $q7->fetch_assoc();
+                            $curr = $q7 ? $q7->fetch_assoc() : [];
 
                             $q8 = getData('*', "default_currency_unit='" . $row['currency'] . "'", '', CURRENCIES, $connect);
-                            $currExcRate = $q8->fetch_assoc();
+                            $currExcRate = $q8 ? $q8->fetch_assoc() : [];
                             
                             $q2 = getData('name, agent_cost, cost', "id='" . $row['package'] . "'", '', PKG, $connect);
-                            $pkg = $q2->fetch_assoc();
+                            $pkg = $q2 ? $q2->fetch_assoc() : [];
 
                             $q3 = getData('name', "id='" . $row['brand'] ."'", '', BRAND, $connect);
-                            $brand = $q3->fetch_assoc();
+                            $brand = $q3 ? $q3->fetch_assoc() : [];
 
                             $q4 = getData('buyer_username', "id='" . $row['buyer'] . "'", '', SHOPEE_CUST_INFO, $finance_connect);
-                            $buyer = $q4->fetch_assoc();
+                            $buyer = $q4 ? $q4->fetch_assoc() : [];
 
                             $q6 = getData('*', "id='" . $row['buyer_pay_meth'] . "'", '', PAY_MTHD_SHOPEE, $finance_connect);
-                            $pay = $q6->fetch_assoc();
+                            $pay = $q6 ? $q6->fetch_assoc() : [];
 
                             $q5 = getData('name', "id='" . $row['pic'] . "'", '', USR_USER, $connect);
-                            $pic = $q5->fetch_assoc();
+                            $pic = $q5 ? $q5->fetch_assoc() : [];
                             
                             $price = (float) ($row['price'] ?? 0);
                             $voucher = (float) ($row['voucher'] ?? 0);
@@ -482,7 +495,7 @@ $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_con
                                     }
                                 }
                             }else{
-                                $final_amt = $final_amt;
+                                $final_amt = (float) ($row['final_amt'] ?? 0);
                                 $final_fees =$fees;
                                 $final_ams_fee = $ams_fee;
                                 $final_trans_fee = $trans_fee;
@@ -582,7 +595,7 @@ $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_con
                                 </td>
                                <?php  
                                 if (in_array(15, $accessActionKey)) { 
-                                    $clear_profit = ($final_amt - $pkg['cost']);
+                                    $clear_profit = ($final_amt - (float)($pkg['cost'] ?? 0));
                                     echo "<td scope=\"row\">" . ($agentCostProfit = ($clear_profit *0.4)). "</td>";
                                     
                                      $total_final_agentCostProfit += $agentCostProfit;

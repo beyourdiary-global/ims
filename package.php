@@ -32,9 +32,9 @@ $rst = getData('*', "id = '$dataID'", '', $tblName, $connect);
 
 
 //Checking Data Error When Retrieved From Database
-if (!$rst || !($row = $rst->fetch_assoc()) && $act != 'I') {
+if ($act != 'I' && (!$rst || !($row = $rst->fetch_assoc()))) {
     $errorExist = 1;
-    // $_SESSION['tempValConfirmBox'] = true;
+    $_SESSION['tempValConfirmBox'] = true;
     $act = "F";
 }
 //Delete Data
@@ -78,6 +78,8 @@ if (post('actionBtn')) {
         case 'updData':
 
             $currentDataName = postSpaceFilter('currentDataName');
+            $item_code = postSpaceFilter('item_code'); // NEW
+            $item_description = postSpaceFilter('item_description'); // NEW
             $pkg_price = postSpaceFilter('price');
             $cur_unit = postSpaceFilter('cur_unit_hidden');
             $brand = postSpaceFilter('brand_hidden');
@@ -108,6 +110,14 @@ if (post('actionBtn')) {
                     if ($currentDataName) {
                         array_push($newvalarr, $currentDataName);
                         array_push($datafield, 'name');
+                    }
+                    if ($item_code) {
+                        array_push($newvalarr, $item_code);
+                        array_push($datafield, 'item_code');
+                    }
+                    if ($item_description) {
+                        array_push($newvalarr, $item_description);
+                        array_push($datafield, 'item_description');
                     }
 
                     if ($pkg_price) {
@@ -150,7 +160,7 @@ if (post('actionBtn')) {
                         array_push($datafield, 'remark');
                     }
 
-                    $query = "INSERT INTO " . $tblName . "(name,brand,cost,cost_curr,agent_cost,price,currency_unit,product,barcode_slot_total,remark,create_by,create_date,create_time) VALUES ('$currentDataName','$brand','$cost', '$cost_curr','$agent_cost','$pkg_price','$cur_unit','$prod_list','$barcode_slot_total','$dataRemark','" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . "(name,item_code,item_description,brand,cost,cost_curr,agent_cost,price,currency_unit,product,barcode_slot_total,remark,create_by,create_date,create_time) VALUES ('$currentDataName','$item_code','$item_description','$brand','$cost', '$cost_curr','$agent_cost','$pkg_price','$cur_unit','$prod_list','$barcode_slot_total','$dataRemark','" . USER_ID . "',curdate(),curtime())";
                     $returnData = mysqli_query($connect, $query);
                     $dataID = $connect->insert_id;
                 } catch (Exception $e) {
@@ -163,6 +173,16 @@ if (post('actionBtn')) {
                         array_push($oldvalarr, $row['name']);
                         array_push($chgvalarr, $currentDataName);
                         array_push($datafield, 'name');
+                    }
+                    if ($row['item_code'] != $item_code) {
+                        array_push($oldvalarr, $row['item_code']);
+                        array_push($chgvalarr, $item_code);
+                        array_push($datafield, 'item_code');
+                    }
+                    if ($row['item_description'] != $item_description) {
+                        array_push($oldvalarr, $row['item_description']);
+                        array_push($chgvalarr, $item_description);
+                        array_push($datafield, 'item_description');
                     }
 
                     if ($row['brand'] != $brand) {
@@ -228,7 +248,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if ($oldvalarr && $chgvalarr) {
-                        $query = "UPDATE " . $tblName . " SET name ='$currentDataName',brand='$brand',cost='$cost',cost_curr='$cost_curr',agent_cost='$agent_cost',price ='$pkg_price', currency_unit ='$cur_unit', product ='$prod_list', barcode_slot_total ='$barcode_slot_total', remark ='$dataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
+                        $query = "UPDATE " . $tblName . " SET name ='$currentDataName', item_code='$item_code', item_description='$item_description', brand='$brand',cost='$cost',cost_curr='$cost_curr',agent_cost='$agent_cost',price ='$pkg_price', currency_unit ='$cur_unit', product ='$prod_list', barcode_slot_total ='$barcode_slot_total', remark ='$dataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
                         $returnData = mysqli_query($connect, $query);
                     } else {
                         $act = 'NC';
@@ -327,6 +347,24 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                             </div>
 
                         </div>
+
+                        <div class="col-12 col-md-4">
+                                    <div class="form-group mb-3">
+                                        <label class="form-label form_lbl" id="item_code_lbl" for="item_code">Item Code (SKU)<span class="requireRed">*</span></label>
+                                        <input class="form-control" type="text" name="item_code" id="item_code" 
+                                            value="<?php echo (isset($row['item_code'])) ? htmlspecialchars($row['item_code']) : ''; ?>" 
+                                            <?php if ($act == '') echo 'readonly' ?> required autocomplete="off">
+                                    </div>
+                                </div>
+
+                                <div class="col-12 col-md-4">
+                                    <div class="form-group mb-3">
+                                        <label class="form-label form_lbl" id="item_description_lbl" for="item_description">Item Description<span class="requireRed">*</span></label>
+                                        <input class="form-control" type="text" name="item_description" id="item_description" 
+                                            value="<?php echo (isset($row['item_description'])) ? htmlspecialchars($row['item_description']) : ''; ?>" 
+                                            <?php if ($act == '') echo 'readonly' ?> required autocomplete="off">
+                                    </div>
+                                </div>
 
                         <div class="col-12 col-md-4">
                             <div class="form-group mb-3">
