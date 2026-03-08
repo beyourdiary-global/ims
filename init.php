@@ -20,7 +20,7 @@ define('dbpwd', $siteOrlocalMode ? 'Byd1234@Global' : '');
 define('dbhost', $siteOrlocalMode ? '127.0.0.1:3306' : 'localhost');
 define('dbname', 'beyourdi_cms-uat');
 define('dbFinance', 'beyourdi_financial-uat');
-define('SITEURL', $siteOrlocalMode ? 'https://cms.beyourdiary.com' : 'http://localhost/cms');
+define('SITEURL', $siteOrlocalMode ? 'https://uatcms.beyourdiary.com' : 'http://localhost/cms');
 $SITEURL = SITEURL;
 define('ROOT', dirname(__FILE__));
 define('email_cc', "report@beyourdiary.com	");
