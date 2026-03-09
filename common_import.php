@@ -9,8 +9,6 @@ $shopeeRedirectPage = $SITEURL . '/finance/shopee_ads_topup_trans_table.php';
 $facebookRedirectPage = $SITEURL . '/finance/fb_ads_topup_trans_table.php';
 $shopeeOrderRedirectPage = $SITEURL . '/finance/shopee_order_req_table.php'; // NEW
 
-$facebookAttachmentDir = img_server . 'finance/fb_ads_topup/';
-$tempImportRoot = img_server . 'temp/import_shortcut/';
 $action = post('actionBtn');
 $importErrors = [];
 $importWarnings = [];
@@ -22,8 +20,6 @@ $facebookImportSummary = [
     'skipped_files' => 0,
 ];
 
-ensureImportDirectory($facebookAttachmentDir);
-ensureImportDirectory($tempImportRoot);
 
 $shopeeAccounts = getImportOptionList(SHOPEE_ACC, 'name', $finance_connect);
 $currencyUnits = getImportOptionList(CUR_UNIT, 'unit', $connect);
@@ -110,7 +106,7 @@ if ($action === 'parseShopeeAdsTopup') {
     if (!isset($_FILES['import_file']) || !is_uploaded_file($_FILES['import_file']['tmp_name'])) {
         $importErrors[] = 'Please choose a Facebook Ads PDF receipt or ZIP file.';
     } else {
-        $sourceFiles = collectFacebookImportSourceFiles($_FILES['import_file'], $tempImportRoot, $importErrors, $importWarnings);
+        $sourceFiles = collectFacebookImportSourceFiles($_FILES['import_file'], $importErrors, $importWarnings);
 
         if (!empty($sourceFiles)) {
             $parseResult = parseFacebookImportFiles($sourceFiles, $metaAccounts);
@@ -137,19 +133,15 @@ if ($action === 'parseShopeeAdsTopup') {
     }
 
     if (empty($importErrors)) {
-        $createdAttachments = [];
         $insertedCount = 0;
         mysqli_begin_transaction($finance_connect);
 
         try {
             foreach ($facebookPreviewRecords as $index => $record) {
-                $savedAttachment = saveFacebookAdsAttachment($record['attachment_temp_path'], $record['attachment_original_name'], $record['transaction_id'], $facebookAttachmentDir);
-                $createdAttachments[] = $savedAttachment;
-
                 $transactionId = mysqli_real_escape_string($finance_connect, $record['transaction_id']);
                 $paymentDate = formatImportDateOnly($record['payment_date']);
                 $remark = mysqli_real_escape_string($finance_connect, $record['remark']);
-                $query = "INSERT INTO " . FB_ADS_TOPUP . " (meta_acc, transactionID, payment_date, pic, topup_amt, attachment, remark, create_by, create_date, create_time) VALUES ('" . mysqli_real_escape_string($finance_connect, $record['meta_acc']) . "', '$transactionId', '$paymentDate', '" . mysqli_real_escape_string($finance_connect, $record['pic']) . "', '" . mysqli_real_escape_string($finance_connect, $record['topup_amt']) . "', '" . mysqli_real_escape_string($finance_connect, $savedAttachment) . "', '$remark', '" . USER_ID . "', curdate(), curtime())";
+                $query = "INSERT INTO " . FB_ADS_TOPUP . " (meta_acc, transactionID, payment_date, pic, topup_amt, attachment, remark, create_by, create_date, create_time) VALUES ('" . mysqli_real_escape_string($finance_connect, $record['meta_acc']) . "', '$transactionId', '$paymentDate', '" . mysqli_real_escape_string($finance_connect, $record['pic']) . "', '" . mysqli_real_escape_string($finance_connect, $record['topup_amt']) . "', '', '$remark', '" . USER_ID . "', curdate(), curtime())";
                 $returnData = mysqli_query($finance_connect, $query);
 
                 if (!$returnData) {
@@ -163,7 +155,7 @@ if ($action === 'parseShopeeAdsTopup') {
                     $paymentDate,
                     getImportLabelById($userOptions, $record['pic']),
                     $record['topup_amt'],
-                    $savedAttachment,
+                    'No Attachment (Import Preview Only)',
                     $record['remark'] === '' ? 'Empty Value' : $record['remark'],
                 ];
 
@@ -182,7 +174,6 @@ if ($action === 'parseShopeeAdsTopup') {
                 ];
                 audit_log($log);
 
-                cleanupImportTempFile($record['attachment_temp_path']);
                 $insertedCount++;
             }
 
@@ -191,14 +182,6 @@ if ($action === 'parseShopeeAdsTopup') {
             exit;
         } catch (Exception $exception) {
             mysqli_rollback($finance_connect);
-
-            foreach ($createdAttachments as $createdAttachment) {
-                $attachmentPath = $facebookAttachmentDir . $createdAttachment;
-                if (is_file($attachmentPath)) {
-                    unlink($attachmentPath);
-                }
-            }
-
             $importErrors[] = $exception->getMessage();
         }
     }
@@ -844,32 +827,22 @@ function sanitizeImportFilename($filename)
     return $filename !== '' ? $filename : ('import_' . uniqid() . '.pdf');
 }
 
-function createImportBatchDirectory($rootDirectory)
-{
-    $directory = rtrim($rootDirectory, '/\\') . DIRECTORY_SEPARATOR . 'batch_' . uniqid();
-    ensureImportDirectory($directory);
-    return $directory;
-}
-
-function collectFacebookImportSourceFiles($fileInfo, $tempRoot, &$errors, &$warnings)
+function collectFacebookImportSourceFiles($fileInfo, &$errors, &$warnings)
 {
     $sourceFiles = [];
     $originalName = isset($fileInfo['name']) ? $fileInfo['name'] : '';
     $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
-    $batchDirectory = createImportBatchDirectory($tempRoot);
 
     if ($extension === 'pdf') {
-        $targetName = sanitizeImportFilename($originalName);
-        $targetPath = $batchDirectory . DIRECTORY_SEPARATOR . $targetName;
-
-        if (!move_uploaded_file($fileInfo['tmp_name'], $targetPath)) {
-            $errors[] = 'Unable to save the uploaded Facebook Ads PDF file.';
+        $pdfContent = @file_get_contents($fileInfo['tmp_name']);
+        if ($pdfContent === false || $pdfContent === '') {
+            $errors[] = 'Unable to read the uploaded Facebook Ads PDF file.';
             return [];
         }
 
         $sourceFiles[] = [
-            'temp_path' => $targetPath,
-            'original_name' => $targetName,
+            'pdf_content' => $pdfContent,
+            'original_name' => sanitizeImportFilename($originalName),
         ];
         return $sourceFiles;
     }
@@ -879,15 +852,9 @@ function collectFacebookImportSourceFiles($fileInfo, $tempRoot, &$errors, &$warn
         return [];
     }
 
-    $zipPath = $batchDirectory . DIRECTORY_SEPARATOR . sanitizeImportFilename($originalName);
-    if (!move_uploaded_file($fileInfo['tmp_name'], $zipPath)) {
-        $errors[] = 'Unable to save the uploaded ZIP file.';
-        return [];
-    }
-
     if (class_exists('ZipArchive')) {
         $zip = new ZipArchive();
-        if ($zip->open($zipPath) !== true) {
+        if ($zip->open($fileInfo['tmp_name']) !== true) {
             $errors[] = 'The uploaded ZIP file could not be opened.';
             return [];
         }
@@ -902,36 +869,22 @@ function collectFacebookImportSourceFiles($fileInfo, $tempRoot, &$errors, &$warn
                 continue;
             }
 
-            $stream = $zip->getStream($entryName);
-            if (!$stream) {
+            $pdfContent = $zip->getFromIndex($index);
+            if ($pdfContent === false || $pdfContent === '') {
                 $warnings[] = 'Unable to read PDF entry from ZIP: ' . $entryName;
                 continue;
             }
 
-            $targetName = sanitizeImportFilename($entryName);
-            $targetPath = $batchDirectory . DIRECTORY_SEPARATOR . uniqid('pdf_') . '_' . $targetName;
-            $targetHandle = fopen($targetPath, 'w');
-
-            if (!$targetHandle) {
-                fclose($stream);
-                $warnings[] = 'Unable to prepare extracted PDF: ' . $entryName;
-                continue;
-            }
-
-            stream_copy_to_stream($stream, $targetHandle);
-            fclose($stream);
-            fclose($targetHandle);
-
             $sourceFiles[] = [
-                'temp_path' => $targetPath,
-                'original_name' => $targetName,
+                'pdf_content' => $pdfContent,
+                'original_name' => sanitizeImportFilename($entryName),
             ];
         }
 
         $zip->close();
     } else if (class_exists('PharData')) {
         try {
-            $zipArchive = new PharData($zipPath);
+            $zipArchive = new PharData($fileInfo['tmp_name']);
 
             foreach (new RecursiveIteratorIterator($zipArchive) as $entry) {
                 if (!($entry instanceof SplFileInfo) || !$entry->isFile()) {
@@ -943,22 +896,15 @@ function collectFacebookImportSourceFiles($fileInfo, $tempRoot, &$errors, &$warn
                     continue;
                 }
 
-                $entryContent = @file_get_contents($entry->getPathname());
-                if ($entryContent === false) {
+                $pdfContent = @file_get_contents($entry->getPathname());
+                if ($pdfContent === false || $pdfContent === '') {
                     $warnings[] = 'Unable to read PDF entry from ZIP: ' . $entryName;
                     continue;
                 }
 
-                $targetName = sanitizeImportFilename($entryName);
-                $targetPath = $batchDirectory . DIRECTORY_SEPARATOR . uniqid('pdf_') . '_' . $targetName;
-                if (@file_put_contents($targetPath, $entryContent) === false) {
-                    $warnings[] = 'Unable to prepare extracted PDF: ' . $entryName;
-                    continue;
-                }
-
                 $sourceFiles[] = [
-                    'temp_path' => $targetPath,
-                    'original_name' => $targetName,
+                    'pdf_content' => $pdfContent,
+                    'original_name' => sanitizeImportFilename($entryName),
                 ];
             }
         } catch (Exception $exception) {
@@ -966,7 +912,7 @@ function collectFacebookImportSourceFiles($fileInfo, $tempRoot, &$errors, &$warn
             return [];
         }
     } else {
-        $errors[] = 'ZIP import is not available because PHP ZIP support is missing on this server.';
+        $errors[] = 'ZIP import requires PHP ZipArchive support in the current web runtime.';
         return [];
     }
 
@@ -1013,10 +959,9 @@ function cleanPdfTextOperand($text)
     return normalizeImportText(preg_replace('/[^[:print:] ]/', ' ', $text));
 }
 
-function extractTextFromPdf($filePath)
+function extractTextFromPdfContent($content)
 {
-    $content = @file_get_contents($filePath);
-    if ($content === false || $content === '') {
+    if ($content === '') {
         return '';
     }
 
@@ -1158,14 +1103,12 @@ function parseFacebookReceiptPdf($fileInfo, $metaAccounts)
         'pic' => (string) USER_ID,
         'topup_amt' => '',
         'remark' => '',
-        'attachment_temp_path' => $fileInfo['temp_path'],
-        'attachment_original_name' => $fileInfo['original_name'],
     ];
     $errors = [];
     $warnings = [];
     $skip = false;
 
-    $text = extractTextFromPdf($fileInfo['temp_path']);
+    $text = extractTextFromPdfContent($fileInfo['pdf_content']);
 
     if ($text === '') {
         return [
@@ -1255,7 +1198,6 @@ function parseFacebookImportFiles($sourceFiles, $metaAccounts)
 
         if ($result['skip']) {
             $summary['skipped_files']++;
-            cleanupImportTempFile($fileInfo['temp_path']);
             continue;
         }
 
@@ -1291,8 +1233,6 @@ function getFacebookPreviewRecordsFromPost()
             'pic' => normalizeImportText(isset($record['pic']) ? $record['pic'] : ''),
             'topup_amt' => normalizeImportText(isset($record['topup_amt']) ? $record['topup_amt'] : ''),
             'remark' => normalizeImportText(isset($record['remark']) ? $record['remark'] : ''),
-            'attachment_temp_path' => isset($record['attachment_temp_path']) ? $record['attachment_temp_path'] : '',
-            'attachment_original_name' => normalizeImportText(isset($record['attachment_original_name']) ? $record['attachment_original_name'] : ''),
         ];
     }
 
@@ -1353,60 +1293,9 @@ function validateFacebookPreviewRecords($records, &$errors, $metaAccounts, $user
             $errors[] = $rowLabel . ': Amount must be a valid number.';
         }
 
-        if ($record['attachment_temp_path'] === '' || !is_file($record['attachment_temp_path'])) {
-            $errors[] = $rowLabel . ': Source attachment file is missing. Please upload again.';
-        }
     }
 }
 
-function saveFacebookAdsAttachment($tempPath, $originalName, $transactionId, $destinationDirectory)
-{
-    ensureImportDirectory($destinationDirectory);
-    $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
-    if ($extension === '') {
-        $extension = 'pdf';
-    }
-
-    $highestNumber = 0;
-    $files = glob($destinationDirectory . $transactionId . '_*.' . $extension);
-    if (is_array($files)) {
-        foreach ($files as $file) {
-            $filename = basename($file);
-            if (preg_match('/' . preg_quote($transactionId, '/') . '_(\d+)\.' . preg_quote($extension, '/') . '$/', $filename, $matches)) {
-                $highestNumber = max($highestNumber, (int) $matches[1]);
-            }
-        }
-    }
-
-    $newFilename = $transactionId . '_' . ($highestNumber + 1) . '.' . $extension;
-    $destinationPath = $destinationDirectory . $newFilename;
-
-    if (!copy($tempPath, $destinationPath)) {
-        throw new Exception('Unable to save imported Facebook Ads attachment.');
-    }
-
-    return $newFilename;
-}
-
-function cleanupImportTempFile($filePath)
-{
-    if (!is_file($filePath)) {
-        return;
-    }
-
-    $directory = dirname($filePath);
-    unlink($filePath);
-
-    while (is_dir($directory) && strpos($directory, 'import_shortcut') !== false) {
-        $items = array_diff(scandir($directory), ['.', '..']);
-        if (!empty($items)) {
-            break;
-        }
-
-        rmdir($directory);
-        $directory = dirname($directory);
-    }
-}
 ?>
 
 <!DOCTYPE html>
@@ -1643,8 +1532,6 @@ function cleanupImportTempFile($filePath)
                                             <input type="hidden" name="fb_records[<?= $index ?>][source_payment_method]" value="<?= htmlspecialchars($record['source_payment_method']) ?>">
                                             <input type="hidden" name="fb_records[<?= $index ?>][source_reference_number]" value="<?= htmlspecialchars($record['source_reference_number']) ?>">
                                             <input type="hidden" name="fb_records[<?= $index ?>][source_status]" value="<?= htmlspecialchars($record['source_status']) ?>">
-                                            <input type="hidden" name="fb_records[<?= $index ?>][attachment_temp_path]" value="<?= htmlspecialchars($record['attachment_temp_path']) ?>">
-                                            <input type="hidden" name="fb_records[<?= $index ?>][attachment_original_name]" value="<?= htmlspecialchars($record['attachment_original_name']) ?>">
 
                                             <div class="row mb-3">
                                                 <div class="col-12 col-md-4">
