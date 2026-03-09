@@ -249,9 +249,10 @@ if ($action === 'parseShopeeAdsTopup') {
             
             // Safely Validate the SKU from the CMS Package DB
             if (!empty($sku)) {
+                // Escape SKU to prevent SQL injection when building the condition string
+                $safeSku = mysqli_real_escape_string($connect, $sku);
                 // Search by item_code OR name (Removed 'barcode' as it does not exist in package table)
-                $pkgResult = getData('*', "item_code='$sku' OR name='$sku'", '', PKG, $connect); 
-                
+                $pkgResult = getData('*', "item_code='$safeSku' OR name='$safeSku'", '', PKG, $connect); 
                 if ($pkgResult && $pkgResult->num_rows > 0) {
                     $pkg_row = $pkgResult->fetch_assoc();
                     $pkg_id = $pkg_row['id'];
@@ -540,8 +541,8 @@ function normalizeImportAmount($rawAmount)
     if ($isNegative) {
         $amount *= -1;
     }
-
-    return number_format(abs($amount), 2, '.', '');
+    // Remove abs() so negative values are preserved
+    return number_format($amount, 2, '.', '');
 }
 
 function parseShopeeOrderAmountByLabels($text, $labels)
@@ -1467,14 +1468,6 @@ function cleanupImportTempFile($filePath)
                         </div>
                     <?php } ?>
 
-                    <?php if (!empty($importWarnings)) { ?>
-                        <div class="alert alert-warning" role="alert">
-                            <?php foreach ($importWarnings as $warning) { ?>
-                                <div><?= htmlspecialchars($warning) ?></div>
-                            <?php } ?>
-                        </div>
-                    <?php } ?>
-
                     <div class="card mb-4 shadow-sm">
                         <div class="card-body">
                             <h5 class="card-title mb-3">Step 1: Upload Shopee HTML</h5>
@@ -1544,7 +1537,7 @@ function cleanupImportTempFile($filePath)
                                             </select>
                                         </div>
                                         <div class="col-12 col-md-4">
-                                            <label class="form-label" for="product_price">Product Price (RM)<span class="requireRed">*</span></label>
+                                            <label class="form-label" for="topup_amt">Top-up Amount<span class="requireRed">*</span></label>
                                             <input class="form-control" type="number" step="0.01" id="topup_amt" name="topup_amt" value="<?= htmlspecialchars($previewData['topup_amt']) ?>" required>
                                         </div>
                                     </div>

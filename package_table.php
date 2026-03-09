@@ -183,7 +183,11 @@ if (!$result) {
                             <tr>
                                 <th class="hideColumn">ID</th>
                                 <th>S/N</th>
-                                
+                                <th>Action</th>
+                                <th>Name</th>
+                                <th>Item Code</th>
+                                <th>Item Description</th>
+                                <th>Price</th>
                                 <th>Brand</th>
                                 <th>Cost</th>
                                 <th>Agent Cost</th>
