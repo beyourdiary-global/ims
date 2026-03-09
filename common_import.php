@@ -1854,6 +1854,20 @@ function validateFacebookPreviewRecords($records, &$errors, $metaAccounts, $user
                                 </div>
                             </div>
                         </div>
+
+                        <div class="col-12 col-md-6 col-lg-4">
+                            <div class="card h-100 shadow-sm">
+                                <div class="card-body d-flex flex-column">
+                                    <h5 class="card-title">Stock Order Request PDF Import</h5>
+                                    <p class="card-text">Upload one invoice PDF or a ZIP of PDFs, auto-analyze invoice fields and package matches, review/edit all rows, then insert requests in bulk.</p>
+                                    <div class="mt-auto">
+                                        <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $SITEURL ?>/finance/stock_order_request_import.php">
+                                            <i class="fa-solid fa-file-import"></i> Open Import
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 <?php } ?>
             </div>
