@@ -442,16 +442,15 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                             <?php
                                             $resultCusSegmentation = getData('*', '', '', CUR_SEGMENTATION, $connect);
 
-                                            if (!$resultCusSegmentation) {
-                                                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                                echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                                            }
-
                                             echo "<option value='' disabled selected>Select customer sgementation</option>";
 
-                                            while ($rowCurSegmentation = $resultCusSegmentation->fetch_assoc()) {
-                                                $selected = isset($row['default_segmentation']) && $rowCurSegmentation['id'] == $row['default_segmentation'] ? "selected" : "";
-                                                echo "<option value='{$rowCurSegmentation['id']}' $selected>{$rowCurSegmentation['name']}</option>";
+                                            if (!$resultCusSegmentation) {
+                                                echo "<option value='' disabled>Unavailable now (please try later)</option>";
+                                            } else {
+                                                while ($rowCurSegmentation = $resultCusSegmentation->fetch_assoc()) {
+                                                    $selected = isset($row['default_segmentation']) && $rowCurSegmentation['id'] == $row['default_segmentation'] ? "selected" : "";
+                                                    echo "<option value='{$rowCurSegmentation['id']}' $selected>{$rowCurSegmentation['name']}</option>";
+                                                }
                                             }
                                             ?>
                                         </select>
@@ -463,16 +462,15 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                             <?php
                                             $resultTag = getData('*', '', '', TAG, $connect);
 
-                                            if (!$resultTag) {
-                                                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                                echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                                            }
-
                                             echo "<option value='' disabled selected>Select customer tags</option>";
 
-                                            while ($rowTag = $resultTag->fetch_assoc()) {
-                                                $selected = isset($row['tags']) && $rowTag['id'] == $row['tags'] ? "selected" : "";
-                                                echo "<option value='{$rowTag['id']}' $selected>{$rowTag['name']}</option>";
+                                            if (!$resultTag) {
+                                                echo "<option value='' disabled>Unavailable now (please try later)</option>";
+                                            } else {
+                                                while ($rowTag = $resultTag->fetch_assoc()) {
+                                                    $selected = isset($row['tags']) && $rowTag['id'] == $row['tags'] ? "selected" : "";
+                                                    echo "<option value='{$rowTag['id']}' $selected>{$rowTag['name']}</option>";
+                                                }
                                             }
                                             ?>
                                         </select>
