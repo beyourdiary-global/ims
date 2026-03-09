@@ -69,7 +69,15 @@ if (!$result) {
                     <div class="row">
                         <div class="col-12 d-flex justify-content-between flex-wrap">
                             <h2><?php echo $pageTitle ?></h2>
-                            <div class="mt-auto mb-auto">
+                            <div class="mt-auto mb-auto d-flex gap-2">
+                                <?php if (isActionAllowed("Add", $pinAccess)): ?>
+                                    <a class="btn btn-sm btn-rounded btn-info text-white" href="package_import.php">
+                                        <i class="fa-solid fa-file-import"></i> Import
+                                    </a>
+                                <?php endif; ?>
+                                <a class="btn btn-sm btn-rounded btn-success text-white" href="package_export.php">
+                                    <i class="fa-solid fa-file-export"></i> Export
+                                </a>
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
                                        href="<?= $redirect_page . "?act=" . $act_1 ?>">
@@ -91,6 +99,8 @@ if (!$result) {
                                 <th>S/N</th>
                                 <th id="action_col">Action</th>
                                 <th>Name</th>
+                                <th>Item Code</th>
+                                <th>Item Description</th>
                                 <th>Price</th>
                                 <th>Brand</th>
                                 <th>Cost</th>
@@ -129,6 +139,8 @@ if (!$result) {
                                         <?php endif; ?>
                                     </td>
                                     <td><?= htmlspecialchars($row['name']) ?></td>
+                                    <td><?= htmlspecialchars(isset($row['item_code']) ? $row['item_code'] : '') ?></td>
+                                    <td><?= htmlspecialchars(isset($row['item_description']) ? $row['item_description'] : '') ?></td>
                                     <td>
                                         <?php
                                         $resultCurUnit = getData('unit', "id='" . $row['currency_unit'] . "'", '', CUR_UNIT, $connect);
@@ -171,8 +183,10 @@ if (!$result) {
                             <tr>
                                 <th class="hideColumn">ID</th>
                                 <th>S/N</th>
-                                <th id="action_col">Action</th>
+                                <th>Action</th>
                                 <th>Name</th>
+                                <th>Item Code</th>
+                                <th>Item Description</th>
                                 <th>Price</th>
                                 <th>Brand</th>
                                 <th>Cost</th>

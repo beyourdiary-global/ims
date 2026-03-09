@@ -14,6 +14,25 @@ if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
 
+// 2.1 Update table structure for Package (Add Item Code and Description)
+$conn->select_db($db_cms);
+
+// Check if item_code already exists to prevent syntax errors
+$checkColumn = $conn->query("SHOW COLUMNS FROM `package` LIKE 'item_code'");
+if ($checkColumn && $checkColumn->num_rows == 0) {
+    $alterQuery = "ALTER TABLE `package` 
+                   ADD `item_code` varchar(255) DEFAULT NULL AFTER `name`,
+                   ADD `item_description` text DEFAULT NULL AFTER `item_code`";
+    
+    if ($conn->query($alterQuery)) {
+        echo "<p style='color:blue;'>Table 'package' structure updated successfully (Item Code & Description added).</p>";
+    } else {
+        echo "<p style='color:red;'>Error updating table structure: " . $conn->error . "</p>";
+    }
+} else {
+    echo "<p style='color:orange;'>Notice: Columns already exist in 'package' table. Skipping structure update.</p>";
+}
+
 // 3. Check if data already exists to prevent running multiple times
 if ($conn->select_db($db_cms)) {
     // Check a core table (like 'projects') to see if it already has rows
