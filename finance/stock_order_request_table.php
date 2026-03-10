@@ -18,11 +18,78 @@ $_SESSION['delChk'] = '';
 $redirect_page = $SITEURL . '/finance/stock_order_request.php';
 $deleteRedirectPage = $SITEURL . '/finance/stock_order_request_table.php';
 
-$sql = "SELECT *
-        FROM " . STOCK_ORDER_REQ . "
-        WHERE status = 'A'
-        ORDER BY id DESC";
+// 1. Refactored Main Query using a SUBQUERY (No JOINs)
+$sql = "SELECT r.*,
+        (SELECT GROUP_CONCAT(CONCAT(i.package_id, ':', i.qty) SEPARATOR '|')
+         FROM " . STOCK_ORDER_REQ_ITEM . " i
+         WHERE i.request_id = r.id AND i.status = 'A') AS item_data_raw
+        FROM " . STOCK_ORDER_REQ . " r
+        WHERE r.status = 'A'
+        ORDER BY r.id DESC";
 $result = mysqli_query($finance_connect, $sql);
+
+// 2. Setup Bulk Fetch Arrays for Cross-Database queries
+$rows = array();
+$whseIds = array();
+$courierIds = array();
+$pkgIds = array();
+
+if ($result && mysqli_num_rows($result) > 0) {
+    while ($row = mysqli_fetch_assoc($result)) {
+        $rows[] = $row;
+        if (!empty($row['warehouse_id'])) {
+            $whseIds[$row['warehouse_id']] = true;
+        }
+        if (!empty($row['courier_id'])) {
+            $courierIds[$row['courier_id']] = true;
+        }
+        if (!empty($row['item_data_raw'])) {
+            $items = explode('|', $row['item_data_raw']);
+            foreach ($items as $item) {
+                $parts = explode(':', $item);
+                if (isset($parts[0]) && !empty($parts[0])) {
+                    $pkgIds[$parts[0]] = true;
+                }
+            }
+        }
+    }
+}
+
+// 3. Execute 3 Bulk Queries to map cross-database relationships safely
+$warehouseMap = array();
+if (!empty($whseIds)) {
+    $idsStr = implode(',', array_keys($whseIds));
+    $wRst = mysqli_query($connect, "SELECT id, name FROM " . WHSE . " WHERE id IN ($idsStr)");
+    if ($wRst) {
+        while ($wRow = mysqli_fetch_assoc($wRst)) {
+            $warehouseMap[$wRow['id']] = $wRow['name'];
+        }
+    }
+}
+
+$courierMap = array();
+$courierLinkMap = array();
+if (!empty($courierIds)) {
+    $idsStr = implode(',', array_keys($courierIds));
+    $cRst = mysqli_query($connect, "SELECT id, name, tracking_link FROM " . COURIER . " WHERE id IN ($idsStr)");
+    if ($cRst) {
+        while ($cRow = mysqli_fetch_assoc($cRst)) {
+            $courierMap[$cRow['id']] = $cRow['name'];
+            $courierLinkMap[$cRow['id']] = $cRow['tracking_link'];
+        }
+    }
+}
+
+$packageMap = array();
+if (!empty($pkgIds)) {
+    $idsStr = implode(',', array_keys($pkgIds));
+    $pRst = mysqli_query($connect, "SELECT id, name FROM " . PKG . " WHERE id IN ($idsStr)");
+    if ($pRst) {
+        while ($pRow = mysqli_fetch_assoc($pRst)) {
+            $packageMap[$pRow['id']] = $pRow['name'];
+        }
+    }
+}
 
 function sorShortText($text, $limit = 70)
 {
@@ -30,17 +97,6 @@ function sorShortText($text, $limit = 70)
     if ($text === '') return '';
     if (strlen($text) <= $limit) return htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
     return htmlspecialchars(substr($text, 0, $limit) . '...', ENT_QUOTES, 'UTF-8');
-}
-
-function sorNameById($connect, $table, $id)
-{
-    $id = (int) $id;
-    if ($id <= 0) return '';
-    $rst = getData('name', "id='$id'", 'LIMIT 1', $table, $connect);
-    if ($rst && $row = $rst->fetch_assoc()) {
-        return isset($row['name']) ? (string) $row['name'] : '';
-    }
-    return '';
 }
 
 function sorQrHref($path, $siteUrl)
@@ -52,23 +108,7 @@ function sorQrHref($path, $siteUrl)
     }
     return rtrim((string) $siteUrl, '/') . '/' . ltrim($path, '/');
 }
-
-function sorPackageNameById($connect, $id)
-{
-    static $cache = array();
-    $id = (int) $id;
-    if ($id <= 0) return '';
-    if (isset($cache[$id])) return $cache[$id];
-
-    $rst = getData('name', "id='" . $id . "'", 'LIMIT 1', PKG, $connect);
-    if ($rst && $row = $rst->fetch_assoc()) {
-        $cache[$id] = isset($row['name']) ? (string) $row['name'] : '';
-        return $cache[$id];
-    }
-
-    $cache[$id] = '';
-    return '';
-}
+// Note: sorNameById and sorPackageNameById removed as N+1 logic is gone
 ?>
 <!DOCTYPE html>
 <html>
@@ -107,7 +147,7 @@ function sorPackageNameById($connect, $id)
                     </div>
                 </div>
 
-                <?php if (!$result || mysqli_num_rows($result) === 0) { ?>
+                <?php if (empty($rows)) { ?>
                     <div class="text-center"><h4>No Result!</h4></div>
                 <?php } else { ?>
                     <div class="table-responsive">
@@ -127,33 +167,33 @@ function sorPackageNameById($connect, $id)
                             </tr>
                         </thead>
                         <tbody>
-                            <?php $num = 1; while ($row = mysqli_fetch_assoc($result)) {
-                                $itemSummarySql = "SELECT i.package_id, i.qty
-                                                   FROM " . STOCK_ORDER_REQ_ITEM . " i
-                                                   WHERE i.request_id='" . (int) $row['id'] . "' AND i.status='A'";
-                                $itemSummaryRst = mysqli_query($finance_connect, $itemSummarySql);
+                            <?php 
+                            $num = 1; 
+                            foreach ($rows as $row) {
+                                // Deconstruct Subquery Data
                                 $itemSummary = '';
-                                if ($itemSummaryRst) {
+                                if (!empty($row['item_data_raw'])) {
                                     $itemParts = array();
-                                    while ($itemData = mysqli_fetch_assoc($itemSummaryRst)) {
-                                        $pkgName = sorPackageNameById($connect, isset($itemData['package_id']) ? $itemData['package_id'] : 0);
-                                        $qty = isset($itemData['qty']) ? (int) $itemData['qty'] : 0;
-                                        if ($pkgName !== '') {
-                                            $itemParts[] = $pkgName . ' x' . $qty;
+                                    $items = explode('|', $row['item_data_raw']);
+                                    foreach ($items as $item) {
+                                        $parts = explode(':', $item);
+                                        if (count($parts) >= 2) {
+                                            $pkgId = $parts[0];
+                                            $qty = $parts[1];
+                                            $pkgName = isset($packageMap[$pkgId]) ? $packageMap[$pkgId] : '';
+                                            if ($pkgName !== '') {
+                                                $itemParts[] = $pkgName . ' x' . $qty;
+                                            }
                                         }
                                     }
                                     $itemSummary = implode(', ', $itemParts);
                                 }
 
-                                $warehouseName = sorNameById($connect, WHSE, isset($row['warehouse_id']) ? $row['warehouse_id'] : 0);
-                                $courierName = sorNameById($connect, COURIER, isset($row['courier_id']) ? $row['courier_id'] : 0);
-                                $courierTrackingLink = '';
-                                if (!empty($row['courier_id'])) {
-                                    $linkRst = getData('tracking_link', "id='" . (int) $row['courier_id'] . "'", 'LIMIT 1', COURIER, $connect);
-                                    if ($linkRst && $linkRow = $linkRst->fetch_assoc()) {
-                                        $courierTrackingLink = isset($linkRow['tracking_link']) ? $linkRow['tracking_link'] : '';
-                                    }
-                                }
+                                // Apply Bulk Maps
+                                $warehouseName = isset($warehouseMap[$row['warehouse_id']]) ? $warehouseMap[$row['warehouse_id']] : '';
+                                $courierName = isset($courierMap[$row['courier_id']]) ? $courierMap[$row['courier_id']] : '';
+                                $courierTrackingLink = isset($courierLinkMap[$row['courier_id']]) ? $courierLinkMap[$row['courier_id']] : '';
+                                
                                 $trackingUrl = sorBuildTrackingUrl($courierTrackingLink, isset($row['tracking_no']) ? $row['tracking_no'] : '');
                                 $fullStatus = isset($row['tracking_status']) ? (string) $row['tracking_status'] : '';
                                 $modalId = 'statusModal_' . (int) $row['id'];

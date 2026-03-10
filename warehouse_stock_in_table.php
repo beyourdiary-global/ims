@@ -38,8 +38,13 @@ if (!is_array($pinAccess)) {
 
 if (input('act') === 'D' && input('item_id')) {
     $itemId = (int) input('item_id');
-    mysqli_query($finance_connect, "UPDATE `" . $stockInItemTable . "` SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $itemId . "'");
-    echo "<script>location.href='" . $tablePage . "?msg=" . urlencode('Row deleted successfully.') . "';</script>";
+    $deleteQuery = "UPDATE `" . $stockInItemTable . "` SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $itemId . "'";
+    
+    if (mysqli_query($finance_connect, $deleteQuery)) {
+        echo "<script>location.href='" . $tablePage . "?msg=" . urlencode('Row deleted successfully.') . "';</script>";
+    } else {
+        echo "<script>location.href='" . $tablePage . "?err=" . urlencode('Failed to delete row: ' . mysqli_error($finance_connect)) . "';</script>";
+    }
     exit;
 }
 

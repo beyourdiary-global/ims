@@ -76,11 +76,13 @@ if (post('actionBtn') === 'confirmImport') {
         mysqli_begin_transaction($finance_connect);
         $updated = 0;
         $inserted = 0;
+        $skippedError = 0; // NEW: Track skipped error rows
 
         try {
             foreach ($previewData['entries'] as $entry) {
                 $type = isset($entry['type']) ? $entry['type'] : '';
                 if ($type === 'error') {
+                    $skippedError++; // NEW: Increment skipped count
                     continue;
                 }
 
@@ -130,7 +132,14 @@ if (post('actionBtn') === 'confirmImport') {
 
             mysqli_commit($finance_connect);
             unset($_SESSION['si_import_preview']);
-            echo "<script>location.href='" . $tablePage . "?msg=" . urlencode('Import completed. Updated: ' . $updated . ', New Added: ' . $inserted) . "';</script>";
+            
+            // Build the final feedback message
+            $finalMsg = 'Import completed. Updated: ' . $updated . ', New Added: ' . $inserted;
+            if ($skippedError > 0) {
+                $finalMsg .= ', Skipped Errors: ' . $skippedError;
+            }
+            
+            echo "<script>location.href='" . $tablePage . "?msg=" . urlencode($finalMsg) . "';</script>";
             exit;
         } catch (Exception $ex) {
             mysqli_rollback($finance_connect);
@@ -144,8 +153,9 @@ if (post('actionBtn') === 'importPreview') {
         $err = 'Please choose an Excel file first.';
     } else {
         $name = strtolower((string) $_FILES['import_file']['name']);
-        if (!(substr($name, -5) === '.xlsx' || substr($name, -4) === '.xls' || substr($name, -5) === '.html' || substr($name, -4) === '.htm')) {
-            $err = 'Unsupported file type. Please upload .xlsx or .xls.';
+        // Strictly only allow .xlsx and .xls extensions
+        if (!(substr($name, -5) === '.xlsx' || substr($name, -4) === '.xls')) {
+            $err = 'Unsupported file type. Please upload a valid .xlsx or .xls Excel file.';
         } else {
             $importRows = siParseExcelLikeRows($_FILES['import_file']['tmp_name'], $_FILES['import_file']['name']);
             if (count($importRows) === 0) {
@@ -366,7 +376,7 @@ $previewData = isset($_SESSION['si_import_preview']) ? $_SESSION['si_import_prev
                     <form method="post" enctype="multipart/form-data" class="row g-3 align-items-end">
                         <div class="col-12 col-md-8">
                             <label class="form-label fw-bold">Select Excel File (.xlsx/.xls)</label>
-                            <input class="form-control form-control-lg" type="file" name="import_file" accept=".xlsx,.xls,.html,.htm" required>
+                            <input class="form-control form-control-lg" type="file" name="import_file" accept=".xlsx, .xls" required>
                         </div>
                         <div class="col-12 col-md-4">
                             <button class="btn btn-lg btn-rounded btn-primary w-100" name="actionBtn" value="importPreview"><i class="fa-solid fa-magnifying-glass"></i> Scan &amp; Preview File</button>

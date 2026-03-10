@@ -44,6 +44,8 @@ $warehouseDisabledAttr = $isViewMode ? ' disabled' : '';
 $inputReadonlyAttr = $isViewMode ? ' readonly' : '';
 $inputDisabledAttr = $isViewMode ? ' disabled' : '';
 
+$err = '';
+
 $itemById = array();
 foreach (siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTable) as $row) {
     $itemById[(int) $row['item_id']] = $row;
@@ -66,8 +68,6 @@ if (($isViewMode || $isEditMode) && $pageItemId > 0) {
         $formData['product_quantity'] = (int) $r['product_quantity'];
     }
 }
-
-$err = '';
 
 if (post('actionBtn') === 'save') {
     $warehouseId = (int) postSpaceFilter('warehouse_id');

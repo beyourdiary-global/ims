@@ -106,6 +106,29 @@ addColumnIfMissing($conn, $db_fin, 'stock_order_request', 'brand_id', "ALTER TAB
 addColumnIfMissing($conn, $db_fin, 'stock_order_request', 'company_id', "ALTER TABLE `stock_order_request` ADD COLUMN `company_id` INT DEFAULT NULL AFTER `brand_id`");
 addColumnIfMissing($conn, $db_fin, 'stock_order_request_item', 'product_id', "ALTER TABLE `stock_order_request_item` ADD COLUMN `product_id` INT DEFAULT NULL AFTER `request_id`");
 
+if ($conn->select_db($db_cms)) {
+    // 1. Insert new Pin Groups (125 & 126)
+    $sqlInsertPins = "INSERT IGNORE INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+    (125, 'Stock In', '1,2,3,4,5,6', 'Stock In Management', '1', CURDATE(), CURTIME(), 'A'),
+    (126, 'Stock Order Request', '1,2,3,4,5', 'Stock Order Request Management', '1', CURDATE(), CURTIME(), 'A')";
+    
+    if ($conn->query($sqlInsertPins)) {
+        echo "<p style='color:blue;'>Pin groups 125 & 126 ensured in CMS database.</p>";
+    }
+    // 2. Update Super Admin (id=1) safely
+    $sqlUpdateAdmin1 = "UPDATE `user_group` 
+    SET `pins` = CONCAT(`pins`, '+[125:1,2,3,4,5,6]+[126:1,2,3,4,5]') 
+    WHERE `id` = 1 AND `pins` NOT LIKE '%[125:%'";
+    $conn->query($sqlUpdateAdmin1);
+
+    // 3. Sync Admin Group (id=2) with Super Admin
+    $sqlUpdateAdmin2 = "UPDATE `user_group` 
+    SET `pins` = (SELECT t.pins FROM (SELECT `pins` FROM `user_group` WHERE `id` = 1 LIMIT 1) AS t) 
+    WHERE `id` = 2";
+    $conn->query($sqlUpdateAdmin2);
+} else {
+    echo "<p style='color:red;'>Failed to select CMS database to update pin groups.</p>";
+}
 echo "<h3>Stock Order Request financial schema setup complete.</h3>";
 
 $conn->close();

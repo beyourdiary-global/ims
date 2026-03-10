@@ -976,414 +976,438 @@ function getOrderStatusLabel($code) {
     return $statuses[$code] ?? $code; // fallback to code if not found
 }
 
-	if (!function_exists('sorEnsureSchema')) {
-		function sorEnsureSchema($connect)
-		{
-			$createMainTableSql = "CREATE TABLE IF NOT EXISTS stock_order_request (
-		    id INT AUTO_INCREMENT PRIMARY KEY,
-		    request_no VARCHAR(80) NOT NULL,
-		    warehouse_id INT NOT NULL,
-		    invoice_no TEXT DEFAULT NULL,
-		    invoice_date DATE DEFAULT NULL,
-		    request_date DATE NOT NULL,
-		    request_by INT DEFAULT NULL,
-		    courier_id INT DEFAULT NULL,
-		    tracking_no VARCHAR(120) DEFAULT NULL,
-		    total_price DECIMAL(12,2) NOT NULL DEFAULT 0.00,
-		    tracking_status TEXT DEFAULT NULL,
-		    tracking_last_sync DATETIME DEFAULT NULL,
-		    attachment VARCHAR(255) DEFAULT NULL,
-		    order_link_token VARCHAR(255) DEFAULT NULL,
-		    qr_image VARCHAR(255) DEFAULT NULL,
-		    remark TEXT DEFAULT NULL,
-		    create_by VARCHAR(30) DEFAULT NULL,
-		    create_date DATE DEFAULT NULL,
-		    create_time TIME DEFAULT NULL,
-		    update_by VARCHAR(30) DEFAULT NULL,
-		    update_date DATE DEFAULT NULL,
-		    update_time TIME DEFAULT NULL,
-		    status CHAR(1) NOT NULL DEFAULT 'A',
-		    UNIQUE KEY uq_sor_request_no (request_no)
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+if (!function_exists('sorEnsureSchema')) {
+    function sorEnsureSchema($connect)
+    {
+        $createMainTableSql = "CREATE TABLE IF NOT EXISTS stock_order_request (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            request_no VARCHAR(80) NOT NULL,
+            warehouse_id INT NOT NULL,
+            invoice_no TEXT DEFAULT NULL,
+            invoice_date DATE DEFAULT NULL,
+            request_date DATE NOT NULL,
+            request_by INT DEFAULT NULL,
+            courier_id INT DEFAULT NULL,
+            tracking_no VARCHAR(120) DEFAULT NULL,
+            total_price DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+            tracking_status TEXT DEFAULT NULL,
+            tracking_last_sync DATETIME DEFAULT NULL,
+            attachment VARCHAR(255) DEFAULT NULL,
+            order_link_token VARCHAR(255) DEFAULT NULL,
+            qr_image VARCHAR(255) DEFAULT NULL,
+            remark TEXT DEFAULT NULL,
+            create_by VARCHAR(30) DEFAULT NULL,
+            create_date DATE DEFAULT NULL,
+            create_time TIME DEFAULT NULL,
+            update_by VARCHAR(30) DEFAULT NULL,
+            update_date DATE DEFAULT NULL,
+            update_time TIME DEFAULT NULL,
+            status CHAR(1) NOT NULL DEFAULT 'A',
+            UNIQUE KEY uq_sor_request_no (request_no)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
-			$createItemTableSql = "CREATE TABLE IF NOT EXISTS stock_order_request_item (
-		    id INT AUTO_INCREMENT PRIMARY KEY,
-		    request_id INT NOT NULL,
-		    package_id INT NOT NULL,
-		    package_desc TEXT DEFAULT NULL,
-		    qty INT NOT NULL DEFAULT 1,
-		    create_by VARCHAR(30) DEFAULT NULL,
-		    create_date DATE DEFAULT NULL,
-		    create_time TIME DEFAULT NULL,
-		    update_by VARCHAR(30) DEFAULT NULL,
-		    update_date DATE DEFAULT NULL,
-		    update_time TIME DEFAULT NULL,
-		    status CHAR(1) NOT NULL DEFAULT 'A',
-		    KEY idx_sor_item_request_id (request_id)
-		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+        $createItemTableSql = "CREATE TABLE IF NOT EXISTS stock_order_request_item (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            request_id INT NOT NULL,
+            package_id INT NOT NULL,
+            package_desc TEXT DEFAULT NULL,
+            qty INT NOT NULL DEFAULT 1,
+            create_by VARCHAR(30) DEFAULT NULL,
+            create_date DATE DEFAULT NULL,
+            create_time TIME DEFAULT NULL,
+            update_by VARCHAR(30) DEFAULT NULL,
+            update_date DATE DEFAULT NULL,
+            update_time TIME DEFAULT NULL,
+            status CHAR(1) NOT NULL DEFAULT 'A',
+            KEY idx_sor_item_request_id (request_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
-			mysqli_query($connect, $createMainTableSql);
-			mysqli_query($connect, $createItemTableSql);
+        mysqli_query($connect, $createMainTableSql);
+        mysqli_query($connect, $createItemTableSql);
 
-			// Keep existing deployments backward compatible without duplicate-column errors.
-			$hasInvoiceNo = mysqli_query($connect, "SHOW COLUMNS FROM stock_order_request LIKE 'invoice_no'");
-			if (!$hasInvoiceNo || mysqli_num_rows($hasInvoiceNo) === 0) {
-				mysqli_query($connect, "ALTER TABLE stock_order_request ADD COLUMN invoice_no TEXT DEFAULT NULL AFTER warehouse_id");
-			}
+        // Keep existing deployments backward compatible without duplicate-column errors.
+        $hasInvoiceNo = mysqli_query($connect, "SHOW COLUMNS FROM stock_order_request LIKE 'invoice_no'");
+        if (!$hasInvoiceNo || mysqli_num_rows($hasInvoiceNo) === 0) {
+            mysqli_query($connect, "ALTER TABLE stock_order_request ADD COLUMN invoice_no TEXT DEFAULT NULL AFTER warehouse_id");
+        }
 
-			$hasInvoiceDate = mysqli_query($connect, "SHOW COLUMNS FROM stock_order_request LIKE 'invoice_date'");
-			if (!$hasInvoiceDate || mysqli_num_rows($hasInvoiceDate) === 0) {
-				mysqli_query($connect, "ALTER TABLE stock_order_request ADD COLUMN invoice_date DATE DEFAULT NULL AFTER invoice_no");
-			}
+        $hasInvoiceDate = mysqli_query($connect, "SHOW COLUMNS FROM stock_order_request LIKE 'invoice_date'");
+        if (!$hasInvoiceDate || mysqli_num_rows($hasInvoiceDate) === 0) {
+            mysqli_query($connect, "ALTER TABLE stock_order_request ADD COLUMN invoice_date DATE DEFAULT NULL AFTER invoice_no");
+        }
 
-			$hasTotalPrice = mysqli_query($connect, "SHOW COLUMNS FROM stock_order_request LIKE 'total_price'");
-			if (!$hasTotalPrice || mysqli_num_rows($hasTotalPrice) === 0) {
-				mysqli_query($connect, "ALTER TABLE stock_order_request ADD COLUMN total_price DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER tracking_no");
-			}
+        $hasTotalPrice = mysqli_query($connect, "SHOW COLUMNS FROM stock_order_request LIKE 'total_price'");
+        if (!$hasTotalPrice || mysqli_num_rows($hasTotalPrice) === 0) {
+            mysqli_query($connect, "ALTER TABLE stock_order_request ADD COLUMN total_price DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER tracking_no");
+        }
 
-			$hasBrandId = mysqli_query($connect, "SHOW COLUMNS FROM stock_order_request LIKE 'brand_id'");
-			if (!$hasBrandId || mysqli_num_rows($hasBrandId) === 0) {
-				mysqli_query($connect, "ALTER TABLE stock_order_request ADD COLUMN brand_id INT DEFAULT NULL AFTER total_price");
-			}
+        $hasBrandId = mysqli_query($connect, "SHOW COLUMNS FROM stock_order_request LIKE 'brand_id'");
+        if (!$hasBrandId || mysqli_num_rows($hasBrandId) === 0) {
+            mysqli_query($connect, "ALTER TABLE stock_order_request ADD COLUMN brand_id INT DEFAULT NULL AFTER total_price");
+        }
 
-			$hasCompanyId = mysqli_query($connect, "SHOW COLUMNS FROM stock_order_request LIKE 'company_id'");
-			if (!$hasCompanyId || mysqli_num_rows($hasCompanyId) === 0) {
-				mysqli_query($connect, "ALTER TABLE stock_order_request ADD COLUMN company_id INT DEFAULT NULL AFTER brand_id");
-			}
+        $hasCompanyId = mysqli_query($connect, "SHOW COLUMNS FROM stock_order_request LIKE 'company_id'");
+        if (!$hasCompanyId || mysqli_num_rows($hasCompanyId) === 0) {
+            mysqli_query($connect, "ALTER TABLE stock_order_request ADD COLUMN company_id INT DEFAULT NULL AFTER brand_id");
+        }
 
-			$hasProductId = mysqli_query($connect, "SHOW COLUMNS FROM stock_order_request_item LIKE 'product_id'");
-			if (!$hasProductId || mysqli_num_rows($hasProductId) === 0) {
-				mysqli_query($connect, "ALTER TABLE stock_order_request_item ADD COLUMN product_id INT DEFAULT NULL AFTER request_id");
-			}
-		}
-	}
+        $hasProductId = mysqli_query($connect, "SHOW COLUMNS FROM stock_order_request_item LIKE 'product_id'");
+        if (!$hasProductId || mysqli_num_rows($hasProductId) === 0) {
+            mysqli_query($connect, "ALTER TABLE stock_order_request_item ADD COLUMN product_id INT DEFAULT NULL AFTER request_id");
+        }
+    }
+}
 
-	if (!function_exists('sorGenerateRequestNo')) {
-		function sorGenerateRequestNo($connect)
-		{
-			$prefix = 'SOR' . date('Ymd');
-			$sequence = 1;
+if (!function_exists('sorGenerateRequestNo')) {
+    function sorGenerateRequestNo($connect)
+    {
+        $prefix = 'SOR' . date('Ymd');
+        $sequence = 1;
 
-			$result = mysqli_query($connect, "SELECT request_no FROM stock_order_request WHERE request_no LIKE '" . $prefix . "%' ORDER BY id DESC LIMIT 1");
-			if ($result && $row = mysqli_fetch_assoc($result)) {
-				$last = $row['request_no'];
-				$lastSeq = (int) substr($last, -4);
-				$sequence = $lastSeq + 1;
-			}
+        $result = mysqli_query($connect, "SELECT request_no FROM stock_order_request WHERE request_no LIKE '" . $prefix . "%' ORDER BY id DESC LIMIT 1");
+        if ($result && $row = mysqli_fetch_assoc($result)) {
+            $last = $row['request_no'];
+            $lastSeq = (int) substr($last, -4);
+            $sequence = $lastSeq + 1;
+        }
 
-			return $prefix . str_pad((string) $sequence, 4, '0', STR_PAD_LEFT);
-		}
-	}
+        return $prefix . str_pad((string) $sequence, 4, '0', STR_PAD_LEFT);
+    }
+}
 
-	if (!function_exists('sorBase64UrlEncode')) {
-		function sorBase64UrlEncode($data)
-		{
-			return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
-		}
-	}
+if (!function_exists('sorBase64UrlEncode')) {
+    function sorBase64UrlEncode($data)
+    {
+        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+    }
+}
 
-	if (!function_exists('sorBase64UrlDecode')) {
-		function sorBase64UrlDecode($data)
-		{
-			$padding = strlen($data) % 4;
-			if ($padding > 0) {
-				$data .= str_repeat('=', 4 - $padding);
-			}
-			return base64_decode(strtr($data, '-_', '+/'));
-		}
-	}
+if (!function_exists('sorBase64UrlDecode')) {
+    function sorBase64UrlDecode($data)
+    {
+        $padding = strlen($data) % 4;
+        if ($padding > 0) {
+            $data .= str_repeat('=', 4 - $padding);
+        }
+        return base64_decode(strtr($data, '-_', '+/'));
+    }
+}
 
-	if (!function_exists('sorEncodeToken')) {
-		function sorEncodeToken($requestId)
-		{
-			$payload = $requestId . '|' . time();
-			$key = hash('sha256', SITEURL . '|stock_order_request', true);
+if (!function_exists('sorEncodeToken')) {
+    function sorEncodeToken($requestId)
+    {
+        $payload = $requestId . '|' . time();
+        $key = hash('sha256', SITEURL . '|stock_order_request', true);
 
-			if (function_exists('openssl_encrypt')) {
-				$iv = substr(hash('sha256', 'sor-iv|' . SITEURL), 0, 16);
-				$encrypted = openssl_encrypt($payload, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
-				if ($encrypted !== false) {
-					return sorBase64UrlEncode($encrypted);
-				}
-			}
+        if (function_exists('openssl_encrypt')) {
+            // 1. Generate a secure, random IV
+            $ivLength = openssl_cipher_iv_length('AES-256-CBC');
+            $iv = openssl_random_pseudo_bytes($ivLength);
+            
+            $encrypted = openssl_encrypt($payload, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
+            if ($encrypted !== false) {
+                // 2. Prepend the random IV to the encrypted data so it can be extracted later
+                return sorBase64UrlEncode($iv . $encrypted);
+            }
+        }
 
-			return sorBase64UrlEncode($payload);
-		}
-	}
+        return sorBase64UrlEncode($payload);
+    }
+}
 
-	if (!function_exists('sorDecodeToken')) {
-		function sorDecodeToken($token)
-		{
-			$key = hash('sha256', SITEURL . '|stock_order_request', true);
-			$decoded = sorBase64UrlDecode($token);
+if (!function_exists('sorDecodeToken')) {
+    // Added an expiry window (86400 seconds = 24 hours)
+    function sorDecodeToken($token, $expirySeconds = 86400)
+    {
+        $key = hash('sha256', SITEURL . '|stock_order_request', true);
+        $decoded = sorBase64UrlDecode($token);
 
-			if ($decoded === false || $decoded === null) {
-				return 0;
-			}
+        if ($decoded === false || $decoded === null || $decoded === '') {
+            return 0;
+        }
 
-			if (function_exists('openssl_decrypt')) {
-				$iv = substr(hash('sha256', 'sor-iv|' . SITEURL), 0, 16);
-				$plain = openssl_decrypt($decoded, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
-				if ($plain !== false && strpos($plain, '|') !== false) {
-					$parts = explode('|', $plain);
-					return (int) $parts[0];
-				}
-			}
+        $plain = '';
 
-			if (strpos($decoded, '|') !== false) {
-				$parts = explode('|', $decoded);
-				return (int) $parts[0];
-			}
+        if (function_exists('openssl_decrypt')) {
+            $ivLength = openssl_cipher_iv_length('AES-256-CBC');
+            // Ensure the decoded string is at least as long as the IV
+            if (strlen($decoded) > $ivLength) {
+                // 3. Extract the random IV from the front, and the ciphertext from the back
+                $iv = substr($decoded, 0, $ivLength);
+                $ciphertext = substr($decoded, $ivLength);
+                
+                $decrypted = openssl_decrypt($ciphertext, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
+                if ($decrypted !== false) {
+                    $plain = $decrypted;
+                }
+            }
+        }
 
-			return 0;
-		}
-	}
+        // Fallback for unencrypted payloads (if openssl fails)
+        if ($plain === '') {
+            $plain = $decoded;
+        }
 
-	if (!function_exists('sorBuildTrackingUrl')) {
-		function sorBuildTrackingUrl($trackingLink, $trackingNo)
-		{
-			$trackingLink = trim((string) $trackingLink);
-			$trackingNo = trim((string) $trackingNo);
+        if (strpos($plain, '|') !== false) {
+            $parts = explode('|', $plain);
+            $requestId = (int) $parts[0];
+            $timestamp = isset($parts[1]) ? (int) $parts[1] : 0;
+            
+            // 4. Validate Expiration (Check if current time minus creation time is within the allowed window)
+            if ($timestamp > 0 && (time() - $timestamp) <= $expirySeconds) {
+                return $requestId;
+            }
+        }
 
-			if ($trackingLink === '' || $trackingNo === '') {
-				return '';
-			}
+        return 0; // Token is invalid, tampered with, or expired
+    }
+}
 
-			if (strpos($trackingLink, '{tracking}') !== false) {
-				return str_replace('{tracking}', rawurlencode($trackingNo), $trackingLink);
-			}
+if (!function_exists('sorBuildTrackingUrl')) {
+    function sorBuildTrackingUrl($trackingLink, $trackingNo)
+    {
+        $trackingLink = trim((string) $trackingLink);
+        $trackingNo = trim((string) $trackingNo);
 
-			$lastChar = substr($trackingLink, -1);
-			if ($lastChar === '=' || $lastChar === '/' || $lastChar === '?') {
-				return $trackingLink . rawurlencode($trackingNo);
-			}
+        if ($trackingLink === '' || $trackingNo === '') {
+            return '';
+        }
 
-			if (strpos($trackingLink, '?') !== false) {
-				return $trackingLink . '&tracking=' . rawurlencode($trackingNo);
-			}
+        if (strpos($trackingLink, '{tracking}') !== false) {
+            return str_replace('{tracking}', rawurlencode($trackingNo), $trackingLink);
+        }
 
-			return $trackingLink . '?tracking=' . rawurlencode($trackingNo);
-		}
-	}
+        $lastChar = substr($trackingLink, -1);
+        if ($lastChar === '=' || $lastChar === '/' || $lastChar === '?') {
+            return $trackingLink . rawurlencode($trackingNo);
+        }
 
-	if (!function_exists('sorFetchTrackingStatus')) {
-		function sorFetchTrackingStatus($trackingUrl)
-		{
-			if ($trackingUrl === '') {
-				return '';
-			}
+        if (strpos($trackingLink, '?') !== false) {
+            return $trackingLink . '&tracking=' . rawurlencode($trackingNo);
+        }
 
-			$ch = curl_init();
-			curl_setopt($ch, CURLOPT_URL, $trackingUrl);
-			curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-			curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-			curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
-			curl_setopt($ch, CURLOPT_TIMEOUT, 12);
-			curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 StockOrderTrackingBot');
+        return $trackingLink . '?tracking=' . rawurlencode($trackingNo);
+    }
+}
 
-			$body = curl_exec($ch);
-			$httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-			$curlErr = curl_error($ch);
-			curl_close($ch);
+if (!function_exists('sorFetchTrackingStatus')) {
+    function sorFetchTrackingStatus($trackingUrl)
+    {
+        if ($trackingUrl === '') {
+            return '';
+        }
 
-			$timestamp = date('Y-m-d H:i:s');
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $trackingUrl);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 5);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 12);
+        curl_setopt($ch, CURLOPT_USERAGENT, 'Mozilla/5.0 StockOrderTrackingBot');
 
-			if ($body === false || $body === null || $body === '') {
-				return "Unable to retrieve tracking status (HTTP $httpCode). $curlErr [$timestamp]";
-			}
+        $body = curl_exec($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        $curlErr = curl_error($ch);
+        curl_close($ch);
 
-			$title = '';
-			if (preg_match('/<title[^>]*>(.*?)<\\/title>/is', $body, $matches)) {
-				$title = trim(html_entity_decode(strip_tags($matches[1])));
-			}
+        $timestamp = date('Y-m-d H:i:s');
 
-			$plain = strtolower(strip_tags($body));
-			$keywords = array('delivered', 'out for delivery', 'in transit', 'exception', 'picked up', 'shipment information received');
-			$found = '';
-			foreach ($keywords as $keyword) {
-				if (strpos($plain, $keyword) !== false) {
-					$found = $keyword;
-					break;
-				}
-			}
+        if ($body === false || $body === null || $body === '') {
+            return "Unable to retrieve tracking status (HTTP $httpCode). $curlErr [$timestamp]";
+        }
 
-			$parts = array();
-			$parts[] = "HTTP $httpCode";
-			if ($title !== '') {
-				$parts[] = 'Title: ' . $title;
-			}
-			if ($found !== '') {
-				$parts[] = 'Detected: ' . ucwords($found);
-			}
-			$parts[] = 'Synced: ' . $timestamp;
+        $title = '';
+        if (preg_match('/<title[^>]*>(.*?)<\/title>/is', $body, $matches)) {
+            $title = trim(html_entity_decode(strip_tags($matches[1])));
+        }
 
-			return implode(' | ', $parts);
-		}
-	}
+        $plain = strtolower(strip_tags($body));
+        $keywords = array('delivered', 'out for delivery', 'in transit', 'exception', 'picked up', 'shipment information received');
+        $found = '';
+        foreach ($keywords as $keyword) {
+            if (strpos($plain, $keyword) !== false) {
+                $found = $keyword;
+                break;
+            }
+        }
 
-	if (!function_exists('sorGetEasyParcelConfig')) {
-		function sorGetEasyParcelConfig($countryCode)
-		{
-			$countryCode = strtoupper(trim((string) $countryCode));
-			if ($countryCode === 'SG') {
-				return array(
-					'domain' => EASYPARCEL_DOMAIN_SG,
-					'auth' => EASYPARCEL_AUTH_SG,
-					'api' => EASYPARCEL_API_SG,
-				);
-			}
+        $parts = array();
+        $parts[] = "HTTP $httpCode";
+        if ($title !== '') {
+            $parts[] = 'Title: ' . $title;
+        }
+        if ($found !== '') {
+            $parts[] = 'Detected: ' . ucwords($found);
+        }
+        $parts[] = 'Synced: ' . $timestamp;
 
-			return array(
-				'domain' => EASYPARCEL_DOMAIN_MY,
-				'auth' => EASYPARCEL_AUTH_MY,
-				'api' => EASYPARCEL_API_MY,
-			);
-		}
-	}
+        return implode(' | ', $parts);
+    }
+}
 
-	if (!function_exists('sorFetchTrackingStatusEasyParcel')) {
-		function sorFetchTrackingStatusEasyParcel($trackingNo, $countryCode)
-		{
-			$trackingNo = trim((string) $trackingNo);
-			if ($trackingNo === '') {
-				return '';
-			}
+if (!function_exists('sorGetEasyParcelConfig')) {
+    function sorGetEasyParcelConfig($countryCode)
+    {
+        $countryCode = strtoupper(trim((string) $countryCode));
+        if ($countryCode === 'SG') {
+            return array(
+                'domain' => EASYPARCEL_DOMAIN_SG,
+                'auth' => EASYPARCEL_AUTH_SG,
+                'api' => EASYPARCEL_API_SG,
+            );
+        }
 
-			$cfg = sorGetEasyParcelConfig($countryCode);
-			$url = $cfg['domain'] . 'EPTrackingBulk';
-			$postparam = array(
-				'authentication' => $cfg['auth'],
-				'api' => $cfg['api'],
-				'bulk' => array(
-					array('awb' => $trackingNo),
-				),
-			);
+        return array(
+            'domain' => EASYPARCEL_DOMAIN_MY,
+            'auth' => EASYPARCEL_AUTH_MY,
+            'api' => EASYPARCEL_API_MY,
+        );
+    }
+}
 
-			$ch = curl_init();
-			curl_setopt($ch, CURLOPT_URL, $url);
-			curl_setopt($ch, CURLOPT_POST, 1);
-			curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($postparam));
-			curl_setopt($ch, CURLOPT_HEADER, 0);
-			curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-			curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 8);
-			curl_setopt($ch, CURLOPT_TIMEOUT, 15);
+if (!function_exists('sorFetchTrackingStatusEasyParcel')) {
+    function sorFetchTrackingStatusEasyParcel($trackingNo, $countryCode)
+    {
+        $trackingNo = trim((string) $trackingNo);
+        if ($trackingNo === '') {
+            return '';
+        }
 
-			$response = curl_exec($ch);
-			$curlErr = curl_error($ch);
-			curl_close($ch);
+        $cfg = sorGetEasyParcelConfig($countryCode);
+        $url = $cfg['domain'] . 'EPTrackingBulk';
+        $postparam = array(
+            'authentication' => $cfg['auth'],
+            'api' => $cfg['api'],
+            'bulk' => array(
+                array('awb' => $trackingNo),
+            ),
+        );
 
-			if ($response === false || $response === null || $response === '') {
-				return 'EasyParcel tracking unavailable: ' . $curlErr;
-			}
+        $ch = curl_init();
+        curl_setopt($ch, CURLOPT_URL, $url);
+        curl_setopt($ch, CURLOPT_POST, 1);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($postparam));
+        curl_setopt($ch, CURLOPT_HEADER, 0);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 8);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 15);
 
-			$json = json_decode($response, true);
-			if (!is_array($json)) {
-				return 'EasyParcel tracking response invalid.';
-			}
+        $response = curl_exec($ch);
+        $curlErr = curl_error($ch);
+        curl_close($ch);
 
-			// Typical EasyParcel success code is 0.
-			$apiStatus = isset($json['api_status']) ? (string) $json['api_status'] : '';
-			if ($apiStatus !== '' && $apiStatus !== '0') {
-				$msg = isset($json['error']) ? (string) $json['error'] : 'Unknown EasyParcel error';
-				return 'EasyParcel tracking failed: ' . $msg;
-			}
+        if ($response === false || $response === null || $response === '') {
+            return 'EasyParcel tracking unavailable: ' . $curlErr;
+        }
 
-			$status = '';
-			if (isset($json['result'][0]['latest_status'])) {
-				$status = (string) $json['result'][0]['latest_status'];
-			} else if (isset($json['result'][0]['status'])) {
-				$status = (string) $json['result'][0]['status'];
-			} else if (isset($json['result'][0]['detail'][0]['content'])) {
-				$status = (string) $json['result'][0]['detail'][0]['content'];
-			} else if (isset($json['result'][0]['detail'][0]['status'])) {
-				$status = (string) $json['result'][0]['detail'][0]['status'];
-			}
+        $json = json_decode($response, true);
+        if (!is_array($json)) {
+            return 'EasyParcel tracking response invalid.';
+        }
 
-			$status = trim($status);
-			if ($status === '') {
-				return 'EasyParcel tracking returned no status.';
-			}
+        // Typical EasyParcel success code is 0.
+        $apiStatus = isset($json['api_status']) ? (string) $json['api_status'] : '';
+        if ($apiStatus !== '' && $apiStatus !== '0') {
+            $msg = isset($json['error']) ? (string) $json['error'] : 'Unknown EasyParcel error';
+            return 'EasyParcel tracking failed: ' . $msg;
+        }
 
-			return $status . ' | Synced: ' . date('Y-m-d H:i:s') . ' | Source: EasyParcel';
-		}
-	}
+        $status = '';
+        if (isset($json['result'][0]['latest_status'])) {
+            $status = (string) $json['result'][0]['latest_status'];
+        } else if (isset($json['result'][0]['status'])) {
+            $status = (string) $json['result'][0]['status'];
+        } else if (isset($json['result'][0]['detail'][0]['content'])) {
+            $status = (string) $json['result'][0]['detail'][0]['content'];
+        } else if (isset($json['result'][0]['detail'][0]['status'])) {
+            $status = (string) $json['result'][0]['detail'][0]['status'];
+        }
 
-	if (!function_exists('sorRefreshTrackingStatus')) {
-		function sorRefreshTrackingStatus($financeConnect, $requestId, &$message = '', $cmsConnect = null)
-		{
-			$requestId = (int) $requestId;
-			if ($requestId <= 0) {
-				$message = 'Invalid request id.';
-				return false;
-			}
+        $status = trim($status);
+        if ($status === '') {
+            return 'EasyParcel tracking returned no status.';
+        }
 
-			$requestSql = "SELECT id, tracking_no, courier_id
-			       FROM stock_order_request
-			       WHERE id = '$requestId' AND status = 'A'";
+        return $status . ' | Synced: ' . date('Y-m-d H:i:s') . ' | Source: EasyParcel';
+    }
+}
 
-			$requestRst = mysqli_query($financeConnect, $requestSql);
-			if (!$requestRst || !($row = mysqli_fetch_assoc($requestRst))) {
-				$message = 'Order request not found.';
-				return false;
-			}
+if (!function_exists('sorRefreshTrackingStatus')) {
+    function sorRefreshTrackingStatus($financeConnect, $requestId, &$message = '', $cmsConnect = null)
+    {
+        $requestId = (int) $requestId;
+        if ($requestId <= 0) {
+            $message = 'Invalid request id.';
+            return false;
+        }
 
-			$trackingNo = isset($row['tracking_no']) ? trim((string) $row['tracking_no']) : '';
-			$courierId = isset($row['courier_id']) ? (int) $row['courier_id'] : 0;
+        $requestSql = "SELECT id, tracking_no, courier_id
+               FROM stock_order_request
+               WHERE id = '$requestId' AND status = 'A'";
 
-			$trackingLink = '';
-			$courierCountryCode = 'MY';
-			$lookupConnect = $cmsConnect ? $cmsConnect : $financeConnect;
-			if ($courierId > 0) {
-				$courierSql = "SELECT tracking_link, country FROM " . COURIER . " WHERE id = '$courierId' LIMIT 1";
-				$courierRst = mysqli_query($lookupConnect, $courierSql);
-				if ($courierRst && ($courierRow = mysqli_fetch_assoc($courierRst))) {
-					$trackingLink = isset($courierRow['tracking_link']) ? trim((string) $courierRow['tracking_link']) : '';
-					$courierCountryId = isset($courierRow['country']) ? (int) $courierRow['country'] : 0;
-					if ($courierCountryId > 0) {
-						$countrySql = "SELECT code FROM " . COUNTRIES . " WHERE id = '$courierCountryId' LIMIT 1";
-						$countryRst = mysqli_query($lookupConnect, $countrySql);
-						if ($countryRst && ($countryRow = mysqli_fetch_assoc($countryRst))) {
-							$courierCountryCode = isset($countryRow['code']) ? strtoupper(trim((string) $countryRow['code'])) : 'MY';
-						}
-					}
-				}
-			}
+        $requestRst = mysqli_query($financeConnect, $requestSql);
+        if (!$requestRst || !($row = mysqli_fetch_assoc($requestRst))) {
+            $message = 'Order request not found.';
+            return false;
+        }
 
-			if ($trackingNo === '') {
-				$message = 'Missing tracking number.';
-				return false;
-			}
+        $trackingNo = isset($row['tracking_no']) ? trim((string) $row['tracking_no']) : '';
+        $courierId = isset($row['courier_id']) ? (int) $row['courier_id'] : 0;
 
-			$statusText = sorFetchTrackingStatusEasyParcel($trackingNo, $courierCountryCode);
-			$trackingUrl = sorBuildTrackingUrl($trackingLink, $trackingNo);
+        $trackingLink = '';
+        $courierCountryCode = 'MY';
+        $lookupConnect = $cmsConnect ? $cmsConnect : $financeConnect;
+        if ($courierId > 0) {
+            $courierSql = "SELECT tracking_link, country FROM " . COURIER . " WHERE id = '$courierId' LIMIT 1";
+            $courierRst = mysqli_query($lookupConnect, $courierSql);
+            if ($courierRst && ($courierRow = mysqli_fetch_assoc($courierRst))) {
+                $trackingLink = isset($courierRow['tracking_link']) ? trim((string) $courierRow['tracking_link']) : '';
+                $courierCountryId = isset($courierRow['country']) ? (int) $courierRow['country'] : 0;
+                if ($courierCountryId > 0) {
+                    $countrySql = "SELECT code FROM " . COUNTRIES . " WHERE id = '$courierCountryId' LIMIT 1";
+                    $countryRst = mysqli_query($lookupConnect, $countrySql);
+                    if ($countryRst && ($countryRow = mysqli_fetch_assoc($countryRst))) {
+                        $courierCountryCode = isset($countryRow['code']) ? strtoupper(trim((string) $countryRow['code'])) : 'MY';
+                    }
+                }
+            }
+        }
 
-			// Fallback to courier tracking page scrape when API cannot provide a usable status.
-			if ($statusText === '' || stripos($statusText, 'failed:') !== false || stripos($statusText, 'unavailable') !== false || stripos($statusText, 'no status') !== false) {
-				if ($trackingUrl !== '') {
-					$statusText = sorFetchTrackingStatus($trackingUrl);
-				}
-			}
+        if ($trackingNo === '') {
+            $message = 'Missing tracking number.';
+            return false;
+        }
 
-			$safeStatus = mysqli_real_escape_string($financeConnect, $statusText);
-			$safeUrl = mysqli_real_escape_string($financeConnect, $trackingUrl);
+        $statusText = sorFetchTrackingStatusEasyParcel($trackingNo, $courierCountryCode);
+        $trackingUrl = sorBuildTrackingUrl($trackingLink, $trackingNo);
 
-			$updateSql = "UPDATE stock_order_request
-			      SET tracking_status = '$safeStatus',
-				  tracking_last_sync = NOW(),
-				  update_by = '" . USER_ID . "',
-				  update_date = CURDATE(),
-				  update_time = CURTIME()
-			      WHERE id = '$requestId'";
+        // Fallback to courier tracking page scrape when API cannot provide a usable status.
+        if ($statusText === '' || stripos($statusText, 'failed:') !== false || stripos($statusText, 'unavailable') !== false || stripos($statusText, 'no status') !== false) {
+            if ($trackingUrl !== '') {
+                $statusText = sorFetchTrackingStatus($trackingUrl);
+            }
+        }
 
-			if (!mysqli_query($financeConnect, $updateSql)) {
-				$message = 'Failed to update tracking status.';
-				return false;
-			}
+        $safeStatus = mysqli_real_escape_string($financeConnect, $statusText);
+        $safeUrl = mysqli_real_escape_string($financeConnect, $trackingUrl);
 
-			$message = "Tracking refreshed successfully.";
-			return true;
-		}
-	}
+        $updateSql = "UPDATE stock_order_request
+              SET tracking_status = '$safeStatus',
+              tracking_last_sync = NOW(),
+              update_by = '" . USER_ID . "',
+              update_date = CURDATE(),
+              update_time = CURTIME()
+              WHERE id = '$requestId'";
+
+        if (!mysqli_query($financeConnect, $updateSql)) {
+            $message = 'Failed to update tracking status.';
+            return false;
+        }
+
+        $message = "Tracking refreshed successfully.";
+        return true;
+    }
+}
 
 // Stock In shared helpers (moved from include/warehouse_stock_in_common.php).
 if (!function_exists('siEnsureSchema')) {

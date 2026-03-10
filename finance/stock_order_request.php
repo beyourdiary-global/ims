@@ -25,6 +25,7 @@ $redirectLink = "<script>location.href = '$redirect_page';</script>";
 
 if ((!$dataID && !$act) || ($act && !isActionAllowed($pageAction, is_array($pinAccess) ? $pinAccess : array()))) {
     echo $redirectLink;
+    exit;
 }
 
 $warehouses = array();
