@@ -101,6 +101,8 @@ define('PROD', 'product');
 define('PKG', 'package');
 define('PROJ', 'projects');
 define('STK_REC', 'stock_record');
+define('STOCK_ORDER_REQ', 'stock_order_request');
+define('STOCK_ORDER_REQ_ITEM', 'stock_order_request_item');
 define('L_TYPE', 'leave_type');
 define('CUR_SEGMENTATION', 'customer_segmentation');
 define('RACE', 'race');

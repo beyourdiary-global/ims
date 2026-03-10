@@ -89,7 +89,6 @@ $result = getData('*', '', '', $tblName, $connect);
                                 <th scope="col" width="60px">S/N</th>
                                 <th scope="col" id="action_col" width="100px">Action</th>
                                 <th scope="col">Name</th>
-                                <th scope="col">Remark</th>
                             </tr>
                         </thead>
 
@@ -103,11 +102,9 @@ $result = getData('*', '', '', $tblName, $connect);
                                         <td scope="row" class="btn-container">
                                             <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
                                             <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                            <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                            <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], '', $pageTitle, $redirect_page, $deleteRedirectPage); ?>
                                         </td>
                                         <td scope="row"><?= $row['name'] ?></td>
-                                        <td scope="row"><?php if (isset($row['remark']))
-                                            echo $row['remark'] ?></td>
                                         </tr>
                                     <?php
                                 }
@@ -121,7 +118,6 @@ $result = getData('*', '', '', $tblName, $connect);
                                 <th scope="col" width="60px">S/N</th>
                                 <th scope="col" id="action_col" width="100px">Action</th>
                                 <th scope="col">Name</th>
-                                <th scope="col">Remark</th>
                             </tr>
                         </tfoot>
                     </table><?php } ?>

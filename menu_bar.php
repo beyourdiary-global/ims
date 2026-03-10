@@ -77,9 +77,10 @@ $menuList = array(
             array('Shopee Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/finance/shopee_order_req_table.php', '86'),
             array('Website Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/finance/website_order_request_table.php', '92'),
             array('Lazada Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/lazada_order_req_table.php', '93'),
+            array('Stock Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/finance/stock_order_request_table.php', '126'),
             array('Order Process List', 'mdi mdi-note-text-outline', $SITEURL . '/finance/order_process_list.php', '95'),
         ),
-        'pin' => array('69', '86', '92', '93', '95')
+        'pin' => array('69', '86', '92', '93', '126', '95')
     ),
     array(
         'Distributor',
@@ -395,11 +396,13 @@ $menuList = array(
         'javascript:void(0)',
         'y',
         'expand' => array(
+            array('Warehouse', 'mdi mdi-warehouse', $SITEURL . '/warehouse_table.php', '16'),
+            array('Stock In', 'mdi mdi-tray-arrow-down', $SITEURL . '/warehouse_stock_in_table.php', '125'),
             array('Stock List', 'mdi mdi-package-variant', $SITEURL . '/stock_list_table.php', '104'),
             array('Stock Costing Setting', 'mdi mdi-package-variant', $SITEURL . '/stockCosting.php?act=I', '106'),
 
         ),
-        'pin' => array('104')
+        'pin' => array('16', '125', '106')
     ),
     array(
         'Import Shortcut',
