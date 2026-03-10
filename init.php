@@ -85,6 +85,7 @@ define('DESIG', 'designation');
 define('DEPT', 'department');
 define('HOLIDAY', 'holiday');
 define('BRAND', 'brand');
+define('COMPANY', 'company');
 define('PLTF', 'platform');
 define('PROD_STATUS', 'product_status');
 define('WHSE', 'warehouse');

@@ -1,26 +1,27 @@
 <?php
-$pageTitle = "Brand";
+$pageTitle = "Company";
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
 
-$tblName = BRAND;
+$tblName = COMPANY;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 
 $_SESSION['act'] = '';
 $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
-$num = 1;   // numbering
+$num = 1;
 
-$redirect_page = $SITEURL . '/brand.php';
-$deleteRedirectPage = $SITEURL . '/brand_table.php';
+$redirect_page = $SITEURL . '/company.php';
+$deleteRedirectPage = $SITEURL . '/company_table.php';
 
-$result = getData('*', '', '', $tblName, $connect);
+$result = mysqli_query($connect, "SELECT * FROM " . $tblName . " WHERE status = 'A' ORDER BY id DESC");
 
 if (!$result) {
-    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+    echo "<script type='text/javascript'>alert('Unable to load Company records. Please try again later.');</script>";
     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
 }
+
 ?>
 
 <!DOCTYPE html>
@@ -29,6 +30,7 @@ if (!$result) {
 <head>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
 </head>
+
 <script>
     preloader(300);
 
@@ -43,6 +45,7 @@ if (!$result) {
         font-size: 0.75rem;
         margin: 3px;
     }
+
     .btn-container {
         white-space: nowrap;
     }
@@ -55,7 +58,6 @@ if (!$result) {
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
-
             <div class="col-12 col-md-11">
 
                 <div class="d-flex flex-column mb-3">
@@ -81,8 +83,9 @@ if (!$result) {
                             <th class="hideColumn" scope="col">ID</th>
                             <th scope="col" width="60px">S/N</th>
                             <th scope="col" id="action_col" width="100px">Action</th>
-                            <th scope="col">Name</th>
-                            <th scope="col">Company</th>
+                            <th scope="col">Company Name</th>
+                            <th scope="col">Company Code</th>
+                            <th scope="col">Reg.No</th>
                             <th scope="col">Remark</th>
                         </tr>
                     </thead>
@@ -90,20 +93,19 @@ if (!$result) {
                     <tbody>
                         <?php
                         while ($row = $result->fetch_assoc()) {
-                            if (isset($row['name'],$row['id']) && !empty($row['name'])) {
-                                $companyResult = getData('name', "id='" . $row['company'] . "'", '', COMPANY, $connect);
-                                $companyRow = $companyResult ? $companyResult->fetch_assoc() : null;
-                                ?>
+                            if (isset($row['name'], $row['id']) && !empty($row['name'])) {
+                        ?>
                                 <tr>
                                     <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
                                     <th scope="row"><?= $num++; ?></th>
                                     <td scope="row" class="btn-container">
-                                    <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                    <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                    <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
-                                        </td>
+                                        <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
+                                        <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
+                                        <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                    </td>
                                     <td scope="row"><?= $row['name'] ?></td>
-                                    <td scope="row"><?php if (isset($companyRow['name'])) echo $companyRow['name'] ?></td>
+                                    <td scope="row"><?php if (isset($row['code'])) echo $row['code'] ?></td>
+                                    <td scope="row"><?php if (isset($row['reg_no'])) echo $row['reg_no'] ?></td>
                                     <td scope="row"><?php if (isset($row['remark'])) echo $row['remark'] ?></td>
                                 </tr>
                         <?php
@@ -117,8 +119,9 @@ if (!$result) {
                             <th class="hideColumn" scope="col">ID</th>
                             <th scope="col" width="60px">S/N</th>
                             <th scope="col" id="action_col" width="100px">Action</th>
-                            <th scope="col">Name</th>
-                            <th scope="col">Company</th>
+                            <th scope="col">Company Name</th>
+                            <th scope="col">Company Code</th>
+                            <th scope="col">Reg.No</th>
                             <th scope="col">Remark</th>
                         </tr>
                     </tfoot>
@@ -128,17 +131,15 @@ if (!$result) {
     </div>
 
     <script>
-        //Initial Page And Action Value
         var page = "<?= $pageTitle ?>";
         var action = "<?php echo isset($act) ? $act : ' '; ?>";
 
         checkCurrentPage(page, action);
-        //to solve the issue of dropdown menu displaying inside the table when table class include table-responsive
         dropdownMenuDispFix();
-        //to resize table with bootstrap 5 classes
         datatableAlignment('table');
         setButtonColor();
     </script>
+
 </body>
 
 </html>

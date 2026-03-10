@@ -20,7 +20,7 @@ $deleteRedirectPage = $SITEURL . '/finance/stock_order_request_table.php';
 
 // 1. Refactored Main Query using a SUBQUERY (No JOINs)
 $sql = "SELECT r.*,
-        (SELECT GROUP_CONCAT(CONCAT(i.package_id, ':', i.qty) SEPARATOR '|')
+    (SELECT GROUP_CONCAT(CONCAT(i.package_id, ':', i.qty, ':', IFNULL(i.company_id, 0), ':', IFNULL(i.product_id, 0), ':', IFNULL(i.brand_id, 0)) SEPARATOR '|')
          FROM " . STOCK_ORDER_REQ_ITEM . " i
          WHERE i.request_id = r.id AND i.status = 'A') AS item_data_raw
         FROM " . STOCK_ORDER_REQ . " r
@@ -30,15 +30,20 @@ $result = mysqli_query($finance_connect, $sql);
 
 // 2. Setup Bulk Fetch Arrays for Cross-Database queries
 $rows = array();
-$whseIds = array();
+$companyIds = array();
 $courierIds = array();
 $pkgIds = array();
+$productIds = array();
+$brandIds = array();
 
 if ($result && mysqli_num_rows($result) > 0) {
     while ($row = mysqli_fetch_assoc($result)) {
         $rows[] = $row;
-        if (!empty($row['warehouse_id'])) {
-            $whseIds[$row['warehouse_id']] = true;
+        if (!empty($row['brand_id'])) {
+            $brandIds[(int) $row['brand_id']] = true;
+        }
+        if (!empty($row['company_id'])) {
+            $companyIds[$row['company_id']] = true;
         }
         if (!empty($row['courier_id'])) {
             $courierIds[$row['courier_id']] = true;
@@ -50,19 +55,28 @@ if ($result && mysqli_num_rows($result) > 0) {
                 if (isset($parts[0]) && !empty($parts[0])) {
                     $pkgIds[$parts[0]] = true;
                 }
+                if (isset($parts[2]) && (int) $parts[2] > 0) {
+                    $companyIds[(int) $parts[2]] = true;
+                }
+                if (isset($parts[3]) && (int) $parts[3] > 0) {
+                    $productIds[(int) $parts[3]] = true;
+                }
+                if (isset($parts[4]) && (int) $parts[4] > 0) {
+                    $brandIds[(int) $parts[4]] = true;
+                }
             }
         }
     }
 }
 
 // 3. Execute 3 Bulk Queries to map cross-database relationships safely
-$warehouseMap = array();
-if (!empty($whseIds)) {
-    $idsStr = implode(',', array_keys($whseIds));
-    $wRst = mysqli_query($connect, "SELECT id, name FROM " . WHSE . " WHERE id IN ($idsStr)");
-    if ($wRst) {
-        while ($wRow = mysqli_fetch_assoc($wRst)) {
-            $warehouseMap[$wRow['id']] = $wRow['name'];
+$companyMap = array();
+if (!empty($companyIds)) {
+    $idsStr = implode(',', array_keys($companyIds));
+    $cmyRst = mysqli_query($connect, "SELECT id, name FROM " . COMPANY . " WHERE id IN ($idsStr)");
+    if ($cmyRst) {
+        while ($cmyRow = mysqli_fetch_assoc($cmyRst)) {
+            $companyMap[$cmyRow['id']] = $cmyRow['name'];
         }
     }
 }
@@ -81,12 +95,65 @@ if (!empty($courierIds)) {
 }
 
 $packageMap = array();
+$packageProductMap = array();
 if (!empty($pkgIds)) {
     $idsStr = implode(',', array_keys($pkgIds));
-    $pRst = mysqli_query($connect, "SELECT id, name FROM " . PKG . " WHERE id IN ($idsStr)");
+    $pRst = mysqli_query($connect, "SELECT id, name, product FROM " . PKG . " WHERE id IN ($idsStr)");
     if ($pRst) {
         while ($pRow = mysqli_fetch_assoc($pRst)) {
             $packageMap[$pRow['id']] = $pRow['name'];
+
+            $pkgId = (int) $pRow['id'];
+            $pkgProductIds = array();
+            $productCsv = isset($pRow['product']) ? trim((string) $pRow['product']) : '';
+            if ($productCsv !== '') {
+                foreach (explode(',', $productCsv) as $prodRaw) {
+                    $prodId = (int) trim((string) $prodRaw);
+                    if ($prodId > 0) {
+                        $pkgProductIds[] = $prodId;
+                        $productIds[$prodId] = true;
+                    }
+                }
+            }
+            $packageProductMap[$pkgId] = array_values(array_unique($pkgProductIds));
+        }
+    }
+}
+
+$productBrandMap = array();
+if (!empty($productIds)) {
+    $idsStr = implode(',', array_keys($productIds));
+    $prdRst = mysqli_query($connect, "SELECT id, brand FROM " . PROD . " WHERE id IN ($idsStr)");
+    if ($prdRst) {
+        while ($prdRow = mysqli_fetch_assoc($prdRst)) {
+            $productBrandMap[(int) $prdRow['id']] = isset($prdRow['brand']) ? (int) $prdRow['brand'] : 0;
+            if (!empty($prdRow['brand'])) {
+                $brandIds[(int) $prdRow['brand']] = true;
+            }
+        }
+    }
+}
+
+$brandCompanyMap = array();
+if (!empty($brandIds)) {
+    $idsStr = implode(',', array_keys($brandIds));
+    $brRst = mysqli_query($connect, "SELECT id, company FROM " . BRAND . " WHERE id IN ($idsStr)");
+    if ($brRst) {
+        while ($brRow = mysqli_fetch_assoc($brRst)) {
+            $brandCompanyMap[(int) $brRow['id']] = isset($brRow['company']) ? (int) $brRow['company'] : 0;
+            if (!empty($brRow['company'])) {
+                $companyIds[(int) $brRow['company']] = true;
+            }
+        }
+    }
+}
+
+if (!empty($companyIds)) {
+    $idsStr = implode(',', array_keys($companyIds));
+    $cmyRst = mysqli_query($connect, "SELECT id, name FROM " . COMPANY . " WHERE id IN ($idsStr)");
+    if ($cmyRst) {
+        while ($cmyRow = mysqli_fetch_assoc($cmyRst)) {
+            $companyMap[$cmyRow['id']] = $cmyRow['name'];
         }
     }
 }
@@ -175,22 +242,60 @@ function sorQrHref($path, $siteUrl)
                                 if (!empty($row['item_data_raw'])) {
                                     $itemParts = array();
                                     $items = explode('|', $row['item_data_raw']);
+                                    $companyNames = array();
                                     foreach ($items as $item) {
                                         $parts = explode(':', $item);
                                         if (count($parts) >= 2) {
                                             $pkgId = $parts[0];
                                             $qty = $parts[1];
+                                            $itemCompanyId = isset($parts[2]) ? (int) $parts[2] : 0;
+                                            $itemProductId = isset($parts[3]) ? (int) $parts[3] : 0;
+                                            $itemBrandId = isset($parts[4]) ? (int) $parts[4] : 0;
                                             $pkgName = isset($packageMap[$pkgId]) ? $packageMap[$pkgId] : '';
                                             if ($pkgName !== '') {
                                                 $itemParts[] = $pkgName . ' x' . $qty;
                                             }
+
+                                            $resolvedCompanyId = $itemCompanyId;
+                                            if ($resolvedCompanyId <= 0) {
+                                                $resolvedBrandId = $itemBrandId;
+                                                if ($resolvedBrandId <= 0 && $itemProductId > 0 && isset($productBrandMap[$itemProductId])) {
+                                                    $resolvedBrandId = (int) $productBrandMap[$itemProductId];
+                                                }
+                                                if ($resolvedBrandId <= 0 && isset($packageProductMap[(int) $pkgId]) && !empty($packageProductMap[(int) $pkgId])) {
+                                                    foreach ($packageProductMap[(int) $pkgId] as $pkgProdId) {
+                                                        if (isset($productBrandMap[(int) $pkgProdId]) && (int) $productBrandMap[(int) $pkgProdId] > 0) {
+                                                            $resolvedBrandId = (int) $productBrandMap[(int) $pkgProdId];
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                                if ($resolvedBrandId > 0 && isset($brandCompanyMap[$resolvedBrandId])) {
+                                                    $resolvedCompanyId = (int) $brandCompanyMap[$resolvedBrandId];
+                                                }
+                                            }
+
+                                            if ($resolvedCompanyId > 0 && isset($companyMap[$resolvedCompanyId])) {
+                                                $companyNames[$resolvedCompanyId] = $companyMap[$resolvedCompanyId];
+                                            }
                                         }
                                     }
                                     $itemSummary = implode(', ', $itemParts);
+                                } else {
+                                    $companyNames = array();
+                                }
+
+                                if (!empty($row['company_id']) && isset($companyMap[$row['company_id']])) {
+                                    $companyNames[(int) $row['company_id']] = $companyMap[$row['company_id']];
+                                } else if (!empty($row['brand_id']) && isset($brandCompanyMap[(int) $row['brand_id']])) {
+                                    $fallbackCompanyId = (int) $brandCompanyMap[(int) $row['brand_id']];
+                                    if ($fallbackCompanyId > 0 && isset($companyMap[$fallbackCompanyId])) {
+                                        $companyNames[$fallbackCompanyId] = $companyMap[$fallbackCompanyId];
+                                    }
                                 }
 
                                 // Apply Bulk Maps
-                                $warehouseName = isset($warehouseMap[$row['warehouse_id']]) ? $warehouseMap[$row['warehouse_id']] : '';
+                                $companyName = implode(', ', array_values($companyNames));
                                 $courierName = isset($courierMap[$row['courier_id']]) ? $courierMap[$row['courier_id']] : '';
                                 $courierTrackingLink = isset($courierLinkMap[$row['courier_id']]) ? $courierLinkMap[$row['courier_id']] : '';
                                 
@@ -214,7 +319,7 @@ function sorQrHref($path, $siteUrl)
                                         <i class="fa-solid fa-rotate"></i>
                                     </button>
                                 </td>
-                                <td><?= htmlspecialchars($warehouseName, ENT_QUOTES, 'UTF-8') ?></td>
+                                <td><?= htmlspecialchars((string) $companyName, ENT_QUOTES, 'UTF-8') ?></td>
                                 <td><?= htmlspecialchars((string) $itemSummary, ENT_QUOTES, 'UTF-8') ?></td>
                                 <td>
                                     <?= sorShortText($fullStatus) ?>

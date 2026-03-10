@@ -30,7 +30,6 @@ $itemSql = "SELECT i.package_desc, i.qty
 $itemRst = mysqli_query($finance_connect, $itemSql);
 
 $warehouse_name = '';
-$request_by_name = '';
 $courier_name = '';
 $courier_tracking_link = '';
 
@@ -38,13 +37,6 @@ if (!empty($row['warehouse_id'])) {
     $wRst = getData('name', "id='" . (int) $row['warehouse_id'] . "'", 'LIMIT 1', WHSE, $connect);
     if ($wRst && ($wRow = $wRst->fetch_assoc())) {
         $warehouse_name = isset($wRow['name']) ? $wRow['name'] : '';
-    }
-}
-
-if (!empty($row['request_by'])) {
-    $uRst = getData('name', "id='" . (int) $row['request_by'] . "'", 'LIMIT 1', USR_USER, $connect);
-    if ($uRst && ($uRow = $uRst->fetch_assoc())) {
-        $request_by_name = isset($uRow['name']) ? $uRow['name'] : '';
     }
 }
 
@@ -67,7 +59,7 @@ function e($value)
 <html>
 <head>
     <meta charset="UTF-8">
-    <title>Stock Order Request <?= e($row['request_no']) ?></title>
+    <title>Stock Order Request</title>
     <link rel="stylesheet" href="<?= SITEURL ?>/header/bootstrap-5.0.2-dist/css/bootstrap.min.css">
 </head>
 <body class="bg-light">

@@ -981,12 +981,10 @@ if (!function_exists('sorEnsureSchema')) {
     {
         $createMainTableSql = "CREATE TABLE IF NOT EXISTS stock_order_request (
             id INT AUTO_INCREMENT PRIMARY KEY,
-            request_no VARCHAR(80) NOT NULL,
             warehouse_id INT NOT NULL,
             invoice_no TEXT DEFAULT NULL,
             invoice_date DATE DEFAULT NULL,
             request_date DATE NOT NULL,
-            request_by INT DEFAULT NULL,
             courier_id INT DEFAULT NULL,
             tracking_no VARCHAR(120) DEFAULT NULL,
             total_price DECIMAL(12,2) NOT NULL DEFAULT 0.00,
@@ -1002,8 +1000,7 @@ if (!function_exists('sorEnsureSchema')) {
             update_by VARCHAR(30) DEFAULT NULL,
             update_date DATE DEFAULT NULL,
             update_time TIME DEFAULT NULL,
-            status CHAR(1) NOT NULL DEFAULT 'A',
-            UNIQUE KEY uq_sor_request_no (request_no)
+            status CHAR(1) NOT NULL DEFAULT 'A'
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
         $createItemTableSql = "CREATE TABLE IF NOT EXISTS stock_order_request_item (
@@ -1055,23 +1052,48 @@ if (!function_exists('sorEnsureSchema')) {
         if (!$hasProductId || mysqli_num_rows($hasProductId) === 0) {
             mysqli_query($connect, "ALTER TABLE stock_order_request_item ADD COLUMN product_id INT DEFAULT NULL AFTER request_id");
         }
+
+        $hasItemBrandId = mysqli_query($connect, "SHOW COLUMNS FROM stock_order_request_item LIKE 'brand_id'");
+        if (!$hasItemBrandId || mysqli_num_rows($hasItemBrandId) === 0) {
+            mysqli_query($connect, "ALTER TABLE stock_order_request_item ADD COLUMN brand_id INT DEFAULT NULL AFTER product_id");
+        }
+
+        $hasItemCompanyId = mysqli_query($connect, "SHOW COLUMNS FROM stock_order_request_item LIKE 'company_id'");
+        if (!$hasItemCompanyId || mysqli_num_rows($hasItemCompanyId) === 0) {
+            mysqli_query($connect, "ALTER TABLE stock_order_request_item ADD COLUMN company_id INT DEFAULT NULL AFTER brand_id");
+        }
+
+        $hasRequestNo = mysqli_query($connect, "SHOW COLUMNS FROM stock_order_request LIKE 'request_no'");
+        if ($hasRequestNo && mysqli_num_rows($hasRequestNo) > 0) {
+            mysqli_query($connect, "ALTER TABLE stock_order_request DROP COLUMN request_no");
+        }
+
+        $hasRequestBy = mysqli_query($connect, "SHOW COLUMNS FROM stock_order_request LIKE 'request_by'");
+        if ($hasRequestBy && mysqli_num_rows($hasRequestBy) > 0) {
+            mysqli_query($connect, "ALTER TABLE stock_order_request DROP COLUMN request_by");
+        }
+
+        $hasItemRequestNo = mysqli_query($connect, "SHOW COLUMNS FROM stock_order_request_item LIKE 'request_no'");
+        if ($hasItemRequestNo && mysqli_num_rows($hasItemRequestNo) > 0) {
+            mysqli_query($connect, "ALTER TABLE stock_order_request_item DROP COLUMN request_no");
+        }
+
+        $hasItemRequestBy = mysqli_query($connect, "SHOW COLUMNS FROM stock_order_request_item LIKE 'request_by'");
+        if ($hasItemRequestBy && mysqli_num_rows($hasItemRequestBy) > 0) {
+            mysqli_query($connect, "ALTER TABLE stock_order_request_item DROP COLUMN request_by");
+        }
+
+        $hasRequestNoIndex = mysqli_query($connect, "SHOW INDEX FROM stock_order_request WHERE Key_name = 'uq_sor_request_no'");
+        if ($hasRequestNoIndex && mysqli_num_rows($hasRequestNoIndex) > 0) {
+            mysqli_query($connect, "ALTER TABLE stock_order_request DROP INDEX uq_sor_request_no");
+        }
     }
 }
 
 if (!function_exists('sorGenerateRequestNo')) {
     function sorGenerateRequestNo($connect)
     {
-        $prefix = 'SOR' . date('Ymd');
-        $sequence = 1;
-
-        $result = mysqli_query($connect, "SELECT request_no FROM stock_order_request WHERE request_no LIKE '" . $prefix . "%' ORDER BY id DESC LIMIT 1");
-        if ($result && $row = mysqli_fetch_assoc($result)) {
-            $last = $row['request_no'];
-            $lastSeq = (int) substr($last, -4);
-            $sequence = $lastSeq + 1;
-        }
-
-        return $prefix . str_pad((string) $sequence, 4, '0', STR_PAD_LEFT);
+        return 'SOR' . date('YmdHis') . mt_rand(1000, 9999);
     }
 }
 

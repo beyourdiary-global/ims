@@ -64,8 +64,17 @@ $packageNameMap = array();
 $packageDescMap = array();
 $packageNameToId = array();
 $packageProductMap = array();
+$packageBrandMap = array();
+$brandCompanyMap = array();
 $productHasPackageMap = array();
-$packageRst = mysqli_query($connect, "SELECT id,name,item_description,price,product FROM " . PKG . " WHERE status='A' ORDER BY name ASC");
+$brandRst = mysqli_query($connect, "SELECT id, company FROM " . BRAND . " WHERE status='A'");
+if ($brandRst) {
+    while ($brandRow = mysqli_fetch_assoc($brandRst)) {
+        $brandCompanyMap[(int) $brandRow['id']] = isset($brandRow['company']) ? (int) $brandRow['company'] : 0;
+    }
+}
+
+$packageRst = mysqli_query($connect, "SELECT id,name,item_description,price,product,brand FROM " . PKG . " WHERE status='A' ORDER BY name ASC");
 if ($packageRst) {
     while ($packageRow = $packageRst->fetch_assoc()) {
         $pkgId = (int) $packageRow['id'];
@@ -89,12 +98,14 @@ if ($packageRst) {
             'item_description' => $pkgDesc,
             'price' => $pkgPrice,
             'product_ids' => $pkgProductIds,
+            'brand_id' => isset($packageRow['brand']) ? (int) $packageRow['brand'] : 0,
         );
         $packageMap[$pkgId] = $pkgPrice;
         $packageNameMap[$pkgId] = $pkgName;
         $packageDescMap[$pkgId] = $pkgDesc;
         $packageNameToId[strtolower(trim($pkgName))] = $pkgId;
         $packageProductMap[$pkgId] = $pkgProductIds;
+        $packageBrandMap[$pkgId] = isset($packageRow['brand']) ? (int) $packageRow['brand'] : 0;
     }
 }
 
@@ -182,7 +193,6 @@ if (post('actionBtn')) {
     }
 
     if ($action === 'addRecord' || $action === 'updRecord') {
-        $sor_request_no = postSpaceFilter('sor_request_no');
         $sor_warehouse = postSpaceFilter('sor_warehouse');
         $sor_warehouse_name = postSpaceFilter('sor_warehouse_name');
         $sor_invoice_no = postSpaceFilter('sor_invoice_no');
@@ -228,6 +238,8 @@ if (post('actionBtn')) {
         $productsWithoutPackage = array();
         $mismatchItems = array();
         $computedTotal = 0.00;
+        $resolvedBrandIds = array();
+        $resolvedCompanyIds = array();
         $maxCount = max(count($prodIdArr), count($prodNameArr), count($pkgIdArr), count($pkgNameArr), count($pkgDescArr), count($pkgQtyArr));
         for ($i = 0; $i < $maxCount; $i++) {
             $prodId = isset($prodIdArr[$i]) ? (int) $prodIdArr[$i] : 0;
@@ -282,17 +294,32 @@ if (post('actionBtn')) {
             }
 
             $pkgPrice = isset($packageMap[$pkgId]) ? (float) $packageMap[$pkgId] : 0.00;
+            $pkgBrandId = isset($packageBrandMap[$pkgId]) ? (int) $packageBrandMap[$pkgId] : 0;
+            $pkgCompanyId = ($pkgBrandId > 0 && isset($brandCompanyMap[$pkgBrandId])) ? (int) $brandCompanyMap[$pkgBrandId] : 0;
             if ($pkgDesc === '' && isset($packageDescMap[$pkgId])) {
                 $pkgDesc = (string) $packageDescMap[$pkgId];
             }
             $computedTotal += ($pkgPrice * $qty);
+
+            if ($pkgBrandId > 0) {
+                $resolvedBrandIds[$pkgBrandId] = true;
+            }
+            if ($pkgCompanyId > 0) {
+                $resolvedCompanyIds[$pkgCompanyId] = true;
+            }
+
             $items[] = array(
                 'product_id' => $prodId,
+                'brand_id' => $pkgBrandId,
+                'company_id' => $pkgCompanyId,
                 'package_id' => $pkgId,
                 'package_desc' => $pkgDesc,
                 'qty' => $qty,
             );
         }
+
+        $requestBrandId = count($resolvedBrandIds) === 1 ? (int) array_key_first($resolvedBrandIds) : 0;
+        $requestCompanyId = count($resolvedCompanyIds) === 1 ? (int) array_key_first($resolvedCompanyIds) : 0;
 
         if (!$sor_warehouse) {
             $err = 'Warehouse cannot be empty.';
@@ -321,7 +348,7 @@ if (post('actionBtn')) {
             $sor_attachment = $existingAttachment;
 
             if (isset($_FILES['sor_attachment']) && $_FILES['sor_attachment']['error'] === UPLOAD_ERR_OK) {
-                $requestNoForPath = $sor_request_no ? $sor_request_no : sorGenerateRequestNo($finance_connect);
+                $requestNoForPath = sorGenerateRequestNo($finance_connect);
                 $targetRelativeDir = 'attachment/' . date('Y') . '/' . date('m') . '/beyourdiary/' . $requestNoForPath . '/';
                 $targetFsDir = ROOT . img_server . $targetRelativeDir;
 
@@ -347,7 +374,6 @@ if (post('actionBtn')) {
             }
 
             if (!isset($err)) {
-                $safeRequestNo = mysqli_real_escape_string($finance_connect, $sor_request_no ? $sor_request_no : sorGenerateRequestNo($finance_connect));
                 $safeWarehouse = mysqli_real_escape_string($finance_connect, $sor_warehouse);
                 $safeInvoiceNo = mysqli_real_escape_string($finance_connect, $sor_invoice_no);
                 $safeInvoiceDate = mysqli_real_escape_string($finance_connect, $sor_invoice_date);
@@ -360,18 +386,19 @@ if (post('actionBtn')) {
 
                 if ($action === 'addRecord') {
                     $query = "INSERT INTO " . STOCK_ORDER_REQ . "
-                                (request_no, warehouse_id, invoice_no, invoice_date, request_date, request_by, courier_id, tracking_no, total_price, attachment, remark, create_by, create_date, create_time)
+                                                                (warehouse_id, company_id, brand_id, invoice_no, invoice_date, request_date, courier_id, tracking_no, total_price, attachment, remark, create_by, create_date, create_time)
                               VALUES
-                                ('$safeRequestNo', '$safeWarehouse', '$safeInvoiceNo', '$safeInvoiceDate', '$safeRequestDate', '" . USER_ID . "', '" . ($safeCourier === '' ? 0 : $safeCourier) . "', '$safeTrackingNo', '$safeTotalPrice', '$safeAttachment', '$safeRemark', '" . USER_ID . "', CURDATE(), CURTIME())";
+                                                                ('$safeWarehouse', '" . $requestCompanyId . "', '" . $requestBrandId . "', '$safeInvoiceNo', '$safeInvoiceDate', '$safeRequestDate', '" . ($safeCourier === '' ? 0 : $safeCourier) . "', '$safeTrackingNo', '$safeTotalPrice', '$safeAttachment', '$safeRemark', '" . USER_ID . "', CURDATE(), CURTIME())";
                     $returnData = mysqli_query($finance_connect, $query);
                     $dataID = $finance_connect->insert_id;
                 } else {
                     $query = "UPDATE " . STOCK_ORDER_REQ . "
                               SET warehouse_id = '$safeWarehouse',
+                                                                    company_id = '" . $requestCompanyId . "',
+                                                                    brand_id = '" . $requestBrandId . "',
                                   invoice_no = '$safeInvoiceNo',
                                   invoice_date = '$safeInvoiceDate',
                                   request_date = '$safeRequestDate',
-                                  request_by = '" . USER_ID . "',
                                   courier_id = '" . ($safeCourier === '' ? 0 : $safeCourier) . "',
                                   tracking_no = '$safeTrackingNo',
                                   total_price = '$safeTotalPrice',
@@ -389,13 +416,15 @@ if (post('actionBtn')) {
 
                     foreach ($items as $item) {
                         $safeProdId = isset($item['product_id']) ? (int) $item['product_id'] : 0;
+                        $safeBrandId = isset($item['brand_id']) ? (int) $item['brand_id'] : 0;
+                        $safeCompanyId = isset($item['company_id']) ? (int) $item['company_id'] : 0;
                         $safePkgId = mysqli_real_escape_string($finance_connect, $item['package_id']);
                         $safeDesc = mysqli_real_escape_string($finance_connect, $item['package_desc']);
                         $safeQty = (int) $item['qty'];
                         $insertItemSql = "INSERT INTO " . STOCK_ORDER_REQ_ITEM . "
-                                          (request_id, product_id, package_id, package_desc, qty, create_by, create_date, create_time)
+                                          (request_id, product_id, brand_id, company_id, package_id, package_desc, qty, create_by, create_date, create_time)
                                           VALUES
-                                          ('" . (int) $dataID . "', '" . $safeProdId . "', '$safePkgId', '$safeDesc', '$safeQty', '" . USER_ID . "', CURDATE(), CURTIME())";
+                                          ('" . (int) $dataID . "', '" . $safeProdId . "', '" . $safeBrandId . "', '" . $safeCompanyId . "', '$safePkgId', '$safeDesc', '$safeQty', '" . USER_ID . "', CURDATE(), CURTIME())";
                         mysqli_query($finance_connect, $insertItemSql);
                     }
 
@@ -466,7 +495,6 @@ function sorQrSrc($path, $siteUrl)
                 <form id="sorForm" method="post" enctype="multipart/form-data">
                     <input type="hidden" name="id" value="<?= sorEcho($dataID) ?>">
                     <input type="hidden" name="act" value="<?= sorEcho($act) ?>">
-                    <input type="hidden" name="sor_request_no" value="<?= sorEcho(isset($row['request_no']) ? $row['request_no'] : '') ?>">
 
                     <div class="form-group mb-4">
                         <h2><?= $pageActionTitle ?></h2>
