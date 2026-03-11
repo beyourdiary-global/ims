@@ -1062,31 +1062,6 @@ if (!function_exists('sorEnsureSchema')) {
         if (!$hasItemCompanyId || mysqli_num_rows($hasItemCompanyId) === 0) {
             mysqli_query($connect, "ALTER TABLE stock_order_request_item ADD COLUMN company_id INT DEFAULT NULL AFTER brand_id");
         }
-
-        $hasRequestNo = mysqli_query($connect, "SHOW COLUMNS FROM stock_order_request LIKE 'request_no'");
-        if ($hasRequestNo && mysqli_num_rows($hasRequestNo) > 0) {
-            mysqli_query($connect, "ALTER TABLE stock_order_request DROP COLUMN request_no");
-        }
-
-        $hasRequestBy = mysqli_query($connect, "SHOW COLUMNS FROM stock_order_request LIKE 'request_by'");
-        if ($hasRequestBy && mysqli_num_rows($hasRequestBy) > 0) {
-            mysqli_query($connect, "ALTER TABLE stock_order_request DROP COLUMN request_by");
-        }
-
-        $hasItemRequestNo = mysqli_query($connect, "SHOW COLUMNS FROM stock_order_request_item LIKE 'request_no'");
-        if ($hasItemRequestNo && mysqli_num_rows($hasItemRequestNo) > 0) {
-            mysqli_query($connect, "ALTER TABLE stock_order_request_item DROP COLUMN request_no");
-        }
-
-        $hasItemRequestBy = mysqli_query($connect, "SHOW COLUMNS FROM stock_order_request_item LIKE 'request_by'");
-        if ($hasItemRequestBy && mysqli_num_rows($hasItemRequestBy) > 0) {
-            mysqli_query($connect, "ALTER TABLE stock_order_request_item DROP COLUMN request_by");
-        }
-
-        $hasRequestNoIndex = mysqli_query($connect, "SHOW INDEX FROM stock_order_request WHERE Key_name = 'uq_sor_request_no'");
-        if ($hasRequestNoIndex && mysqli_num_rows($hasRequestNoIndex) > 0) {
-            mysqli_query($connect, "ALTER TABLE stock_order_request DROP INDEX uq_sor_request_no");
-        }
     }
 }
 

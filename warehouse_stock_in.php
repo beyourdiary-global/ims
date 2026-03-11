@@ -203,7 +203,10 @@ $token = input('t');
 if ($token) {
     $requestId = sorDecodeToken($token);
     if ($requestId > 0) {
-        $reqSql = "SELECT id, request_no, warehouse_id, request_date
+        $reqSql = "SELECT id,
+                          COALESCE(NULLIF(TRIM(invoice_no), ''), CONCAT('SOR-', id)) AS order_number,
+                          warehouse_id,
+                          request_date
                    FROM " . STOCK_ORDER_REQ . "
                    WHERE id='" . (int) $requestId . "' AND status='A' LIMIT 1";
         $reqRst = mysqli_query($finance_connect, $reqSql);
@@ -237,7 +240,7 @@ if ($token) {
                 $stockInItemTable,
                 (int) $req['warehouse_id'],
                 (string) $req['request_date'],
-                (string) $req['request_no'],
+                (string) $req['order_number'],
                 $items,
                 (int) $requestId
             );

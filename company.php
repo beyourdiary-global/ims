@@ -120,7 +120,13 @@ if (post('actionBtn')) {
                         array_push($datafield, 'remark');
                     }
 
-                    $query = "INSERT INTO " . $tblName . "(name,code,reg_no,remark,create_by,create_date,create_time) VALUES ('$currentDataName','$currentDataCode','$currentRegNo','$dataRemark','" . USER_ID . "',curdate(),curtime())";
+                    // Escape strings for SQL to prevent injection
+                    $safeName = mysqli_real_escape_string($connect, $currentDataName);
+                    $safeCode = mysqli_real_escape_string($connect, $currentDataCode);
+                    $safeRegNo = mysqli_real_escape_string($connect, $currentRegNo);
+                    $safeRemark = mysqli_real_escape_string($connect, $dataRemark);
+
+                    $query = "INSERT INTO " . $tblName . "(name,code,reg_no,remark,create_by,create_date,create_time) VALUES ('$safeName','$safeCode','$safeRegNo','$safeRemark','" . USER_ID . "',curdate(),curtime())";
                     $returnData = mysqli_query($connect, $query);
                     $dataID = $connect->insert_id;
                 } catch (Exception $e) {
@@ -156,7 +162,14 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if ($oldvalarr && $chgvalarr) {
-                        $query = "UPDATE " . $tblName . " SET name ='$currentDataName', code ='$currentDataCode', reg_no ='$currentRegNo', remark ='$dataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
+                        // Escape strings for SQL to prevent injection
+                        $safeName = mysqli_real_escape_string($connect, $currentDataName);
+                        $safeCode = mysqli_real_escape_string($connect, $currentDataCode);
+                        $safeRegNo = mysqli_real_escape_string($connect, $currentRegNo);
+                        $safeRemark = mysqli_real_escape_string($connect, $dataRemark);
+                        $safeID = (int)$dataID; // Cast ID to int for safety
+
+                        $query = "UPDATE " . $tblName . " SET name ='$safeName', code ='$safeCode', reg_no ='$safeRegNo', remark ='$safeRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$safeID'";
                         $returnData = mysqli_query($connect, $query);
                     } else {
                         $act = 'NC';

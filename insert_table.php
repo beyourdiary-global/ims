@@ -184,7 +184,7 @@ if ($conn->select_db($db_cms)) {
 
     // 2. Update Super Admin (id=1) safely
     $sqlUpdateAdmin1 = "UPDATE `user_group` 
-    SET `pins` = CONCAT(`pins`, '+[125:1,2,3,4,5,6]+[126:1,2,3,4,5]+[127:1,2,3,4]') 
+    SET `pins` = CONCAT(`pins`, '+[125:1,2,3,4,5,6]+[126:1,2,3,4,5]+[127:1,2,3,4,5,6]') 
     WHERE `id` = 1 AND `pins` NOT LIKE '%[125:%'";
     $conn->query($sqlUpdateAdmin1);
 

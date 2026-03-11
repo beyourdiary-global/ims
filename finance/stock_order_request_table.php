@@ -71,12 +71,19 @@ if ($result && mysqli_num_rows($result) > 0) {
 
 // 3. Execute 3 Bulk Queries to map cross-database relationships safely
 $companyMap = array();
+if (!isset($companyMap) || !is_array($companyMap)) {
+    $companyMap = array();
+}
 if (!empty($companyIds)) {
-    $idsStr = implode(',', array_keys($companyIds));
-    $cmyRst = mysqli_query($connect, "SELECT id, name FROM " . COMPANY . " WHERE id IN ($idsStr)");
-    if ($cmyRst) {
-        while ($cmyRow = mysqli_fetch_assoc($cmyRst)) {
-            $companyMap[$cmyRow['id']] = $cmyRow['name'];
+    // Only query companies that are not already present in $companyMap
+    $newCompanyIds = array_diff_key($companyIds, $companyMap);
+    if (!empty($newCompanyIds)) {
+        $idsStr = implode(',', array_keys($newCompanyIds));
+        $cmyRst = mysqli_query($connect, "SELECT id, name FROM " . COMPANY . " WHERE id IN ($idsStr)");
+        if ($cmyRst) {
+            while ($cmyRow = mysqli_fetch_assoc($cmyRst)) {
+                $companyMap[$cmyRow['id']] = $cmyRow['name'];
+            }
         }
     }
 }

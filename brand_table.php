@@ -89,22 +89,34 @@ if (!$result) {
 
                     <tbody>
                         <?php
+                        // PRE-FETCH COMPANIES TO FIX N+1 QUERY ISSUE
+                        // This fetches all companies once and stores them in a fast $companyMap array
+                        $companyMap = array();
+                        $allCompaniesResult = getData('id, name', '', '', COMPANY, $connect);
+                        if ($allCompaniesResult) {
+                            while ($comp = $allCompaniesResult->fetch_assoc()) {
+                                $companyMap[$comp['id']] = $comp['name'];
+                            }
+                        }
+
+                        // Loop through brands
                         while ($row = $result->fetch_assoc()) {
-                            if (isset($row['name'],$row['id']) && !empty($row['name'])) {
-                                $companyResult = getData('name', "id='" . $row['company'] . "'", '', COMPANY, $connect);
-                                $companyRow = $companyResult ? $companyResult->fetch_assoc() : null;
+                            if (isset($row['name'], $row['id']) && !empty($row['name'])) {
+                                // Instantly look up the company name from the map (No DB query required!)
+                                $companyName = isset($companyMap[$row['company']]) ? $companyMap[$row['company']] : '';
                                 ?>
                                 <tr>
                                     <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
                                     <th scope="row"><?= $num++; ?></th>
                                     <td scope="row" class="btn-container">
-                                    <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                    <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                    <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
-                                        </td>
-                                    <td scope="row"><?= $row['name'] ?></td>
-                                    <td scope="row"><?php if (isset($companyRow['name'])) echo $companyRow['name'] ?></td>
-                                    <td scope="row"><?php if (isset($row['remark'])) echo $row['remark'] ?></td>
+                                        <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
+                                        <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
+                                        <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                    </td>
+                                    
+                                    <td scope="row"><?= isset($row['name']) ? htmlspecialchars($row['name'], ENT_QUOTES, 'UTF-8') : '' ?></td>
+                                    <td scope="row"><?= htmlspecialchars($companyName, ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?= isset($row['remark']) ? htmlspecialchars($row['remark'], ENT_QUOTES, 'UTF-8') : '' ?></td>
                                 </tr>
                         <?php
                             }

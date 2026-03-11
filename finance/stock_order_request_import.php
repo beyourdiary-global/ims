@@ -1577,13 +1577,12 @@ foreach ($previewRows as $idx => $rowCheck) {
                                                             </td>
                                                             <td>
                                                                 <button type="button" class="btn btn-sm btn-rounded btn-primary remove-preview-row">Remove</button>
+                                                             <input type="hidden" name="rows[<?= $idx ?>][brand_id]" id="brand_hidden_<?= $idx ?>" value="<?= (int) $brandId ?>">
+                                                                <input type="hidden" name="rows[<?= $idx ?>][company_id]" id="company_hidden_<?= $idx ?>" value="<?= (int) $companyId ?>">
+                                                                <input type="hidden" id="brand_<?= $idx ?>" value="<?= (int) $brandId ?>">
+                                                                <input type="hidden" id="company_<?= $idx ?>" value="<?= (int) $companyId ?>">
                                                             </td>
                                                         </tr>
-
-                                                        <input type="hidden" name="rows[<?= $idx ?>][brand_id]" id="brand_hidden_<?= $idx ?>" value="<?= (int) $brandId ?>">
-                                                        <input type="hidden" name="rows[<?= $idx ?>][company_id]" id="company_hidden_<?= $idx ?>" value="<?= (int) $companyId ?>">
-                                                        <input type="hidden" id="brand_<?= $idx ?>" value="<?= (int) $brandId ?>">
-                                                        <input type="hidden" id="company_<?= $idx ?>" value="<?= (int) $companyId ?>">
                                                     <?php } ?>
                                                 </tbody>
                                             </table>

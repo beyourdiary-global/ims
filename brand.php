@@ -133,7 +133,12 @@ if (post('actionBtn')) {
                         array_push($datafield, 'remark');
                     }
 
-                    $query = "INSERT INTO " . $tblName . "(name,company,remark,create_by,create_date,create_time) VALUES ('$currentDataName','$company','$dataRemark','" . USER_ID . "',curdate(),curtime())";
+                    // Escape strings for SQL to prevent injection
+                    $safeName = mysqli_real_escape_string($connect, $currentDataName);
+                    $safeCompany = mysqli_real_escape_string($connect, $company);
+                    $safeRemark = mysqli_real_escape_string($connect, $dataRemark);
+
+                    $query = "INSERT INTO " . $tblName . "(name,company,remark,create_by,create_date,create_time) VALUES ('$safeName','$safeCompany','$safeRemark','" . USER_ID . "',curdate(),curtime())";
                     $returnData = mysqli_query($connect, $query);
                     $dataID = $connect->insert_id;
                 } catch (Exception $e) {
@@ -163,7 +168,13 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if ($oldvalarr && $chgvalarr) {
-                        $query = "UPDATE " . $tblName . " SET name ='$currentDataName', company ='$company', remark ='$dataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
+                        // Escape strings for SQL to prevent injection
+                        $safeName = mysqli_real_escape_string($connect, $currentDataName);
+                        $safeCompany = mysqli_real_escape_string($connect, $company);
+                        $safeRemark = mysqli_real_escape_string($connect, $dataRemark);
+                        $safeID = (int)$dataID; // Cast ID to int for safety
+
+                        $query = "UPDATE " . $tblName . " SET name ='$safeName', company ='$safeCompany', remark ='$safeRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$safeID'";
                         $returnData = mysqli_query($connect, $query);
                     } else {
                         $act = 'NC';

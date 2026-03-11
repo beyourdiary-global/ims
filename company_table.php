@@ -103,10 +103,10 @@ if (!$result) {
                                         <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
                                         <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
                                     </td>
-                                    <td scope="row"><?= $row['name'] ?></td>
-                                    <td scope="row"><?php if (isset($row['code'])) echo $row['code'] ?></td>
-                                    <td scope="row"><?php if (isset($row['reg_no'])) echo $row['reg_no'] ?></td>
-                                    <td scope="row"><?php if (isset($row['remark'])) echo $row['remark'] ?></td>
+                                    <td scope="row"><?= isset($row['name']) ? htmlspecialchars($row['name'], ENT_QUOTES, 'UTF-8') : '' ?></td>
+                                    <td scope="row"><?= isset($row['code']) ? htmlspecialchars($row['code'], ENT_QUOTES, 'UTF-8') : '' ?></td>
+                                    <td scope="row"><?= isset($row['reg_no']) ? htmlspecialchars($row['reg_no'], ENT_QUOTES, 'UTF-8') : '' ?></td>
+                                    <td scope="row"><?= isset($row['remark']) ? htmlspecialchars($row['remark'], ENT_QUOTES, 'UTF-8') : '' ?></td>
                                 </tr>
                         <?php
                             }
