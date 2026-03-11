@@ -216,8 +216,8 @@ $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 $tblName = SHOPEE_SG_ORDER_REQ;
 
-$redirect_page = $SITEURL . '/finance/shopee_order_req.php';
-$deleteRedirectPage = $SITEURL . '/finance/shopee_order_req_table.php';
+$redirect_page = $SITEURL . '/shopee/shopee_order_req.php';
+$deleteRedirectPage = $SITEURL . '/shopee/shopee_order_req_table.php';
  
  
 $groupOption = isset($_GET['group']) ? $_GET['group'] : ''; 
@@ -360,7 +360,7 @@ $result = getData('*', '', '', SHOPEE_SG_ORDER_REQ, $finance_connect);
                         </select>
                     </div>
                     <div class="col-md-2 d-flex align-items-center justify-content-center">
-                    <a id='resetButton' href="../reset.php?redirect=finance/shopee_order_req_income_table.php" class="btn btn-sm btn-rounded btn-primary"> <i class="fa fa-refresh"></i> Reset </a>
+                    <a id='resetButton' href="../reset.php?redirect=shopee/shopee_order_req_income_table.php" class="btn btn-sm btn-rounded btn-primary"> <i class="fa fa-refresh"></i> Reset </a>
                     </div>
                 </div>
                 <table class="table table-striped" id="shopee_order_req_table">

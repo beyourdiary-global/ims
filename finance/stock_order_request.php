@@ -653,9 +653,9 @@ function sorQrSrc($path, $siteUrl)
 
                     <div class="form-group mt-4 d-flex justify-content-center flex-md-row flex-column">
                         <?php if ($act) { ?>
-                            <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2" name="actionBtn" value="<?= $actionBtnValue ?>"><?= $pageActionTitle ?></button>
+                            <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="addBtn" value="<?= $actionBtnValue ?>"><?= $pageActionTitle ?></button>
                         <?php } ?>
-                        <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2" name="actionBtn" value="back">Back</button>
+                        <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="actionBtn" value="back">Back</button>
                     </div>
                 </form>
             </div>

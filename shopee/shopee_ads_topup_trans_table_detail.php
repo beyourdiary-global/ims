@@ -158,7 +158,7 @@ $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 $deleteRedirectPage = $SITEURL . '/shopee_ads_topup_trans_table.php';
-$redirect_page = $SITEURL . '/finance/shopee_ads_topup_trans.php';
+$redirect_page = $SITEURL . '/shopee/shopee_ads_topup_trans.php';
 $result = getData('*', '', '', SHOPEE_ADS_TOPUP, $finance_connect);
 ?>
 

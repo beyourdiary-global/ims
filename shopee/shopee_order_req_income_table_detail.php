@@ -216,8 +216,8 @@ $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 $tblName = SHOPEE_SG_ORDER_REQ;
 
-$redirect_page = $SITEURL . '/finance/shopee_order_req.php';
-$deleteRedirectPage = $SITEURL . '/finance/shopee_order_req_table.php';
+$redirect_page = $SITEURL . '/shopee/shopee_order_req.php';
+$deleteRedirectPage = $SITEURL . '/shopee/shopee_order_req_table.php';
 $result = getData('*', '', '', SHOPEE_SG_ORDER_REQ, $finance_connect);
 ?>
 

@@ -263,7 +263,7 @@ if (post('order_status')) {
                                    
                                     case 'result':
                                         $tableKey = SHOPEE_SG_ORDER_REQ;
-                                        $redirect_page = $SITEURL . '/finance/shopee_order_req.php';
+                                        $redirect_page = $SITEURL . '/shopee/shopee_order_req.php';
                                        
                                         break;
                                     case 'result2':

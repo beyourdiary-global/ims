@@ -213,8 +213,8 @@ function sorQrHref($path, $siteUrl)
                             <h2><?= $pageTitle ?></h2>
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed('Add', is_array($pinAccess) ? $pinAccess : array())) { ?>
-                                    <a class="btn btn-sm btn-rounded btn-primary" href="<?= $redirect_page . '?act=' . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Request</a>
-                                    <a class="btn btn-sm btn-rounded btn-primary" href="<?= $SITEURL ?>/finance/stock_order_request_import.php"><i class="fa-solid fa-file-import"></i> Import</a>
+                                    <a class="btn btn-sm btn-rounded btn-primary" id="addBtn" href="<?= $redirect_page . '?act=' . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Request</a>
+                                    <a class="btn btn-sm btn-rounded btn-primary" id="addBtn" href="<?= $SITEURL ?>/finance/stock_order_request_import.php"><i class="fa-solid fa-file-import"></i> Import</a>
                                 <?php } ?>
                             </div>
                         </div>

@@ -71,11 +71,11 @@ if (!$result) {
                             <h2><?php echo $pageTitle ?></h2>
                             <div class="mt-auto mb-auto d-flex gap-2">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
-                                    <a class="btn btn-sm btn-rounded btn-info text-white" href="package_import.php">
+                                    <a class="btn btn-sm btn-rounded btn-info text-white" id="addBtn" href="package_import.php">
                                         <i class="fa-solid fa-file-import"></i> Import
                                     </a>
                                 <?php endif; ?>
-                                <a class="btn btn-sm btn-rounded btn-success text-white" href="package_export.php">
+                                <a class="btn btn-sm btn-rounded btn-success text-white" id="addBtn" href="package_export.php">
                                     <i class="fa-solid fa-file-export"></i> Export
                                 </a>
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>

@@ -273,7 +273,7 @@ if ($token) {
                     <div class="col-12 d-flex justify-content-between flex-wrap">
                         <h2><?= $isViewMode ? 'View Stock In' : ($isEditMode ? 'Edit Stock In' : 'Add Stock In') ?></h2>
                         <div class="mt-auto mb-auto">
-                            <a class="btn btn-sm btn-rounded btn-primary" href="<?= $redirectTable ?>">Back To Table</a>
+                            <a class="btn btn-sm btn-rounded btn-primary" id="actionBtn" href="<?= $redirectTable ?>">Back To Table</a>
                         </div>
                     </div>
                 </div>
