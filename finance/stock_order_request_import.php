@@ -128,129 +128,6 @@ if (!function_exists('sorImpLookup')) {
 }
 
 // ============================================================
-//  PDF IMAGE EXTRACTION  (for image-based / scanned PDFs)
-// ============================================================
-
-if (!function_exists('sorImpExtractImagesFromPdf')) {
-    /**
-     * Extract JPEG images embedded in a PDF binary by scanning for JPEG
-     * start (FFD8FF) and end (FFD9) markers. Works for PDFs that render
-     * pages as full-page JPEG images (common with screenshot/scan invoices).
-     */
-    function sorImpExtractImagesFromPdf($pdfContent)
-    {
-        $images = array();
-        $len = strlen($pdfContent);
-        $offset = 0;
-
-        while ($offset < $len - 3) {
-            $pos = strpos($pdfContent, "\xFF\xD8\xFF", $offset);
-            if ($pos === false) break;
-
-            $endPos = strpos($pdfContent, "\xFF\xD9", $pos + 3);
-            if ($endPos === false) break;
-
-            $jpegData = substr($pdfContent, $pos, $endPos - $pos + 2);
-            // Only keep images larger than 5 KB (skip tiny thumbnails)
-            if (strlen($jpegData) > 5120) {
-                $images[] = $jpegData;
-            }
-            $offset = $endPos + 2;
-        }
-
-        return $images;
-    }
-}
-
-// ============================================================
-//  TESSERACT OCR
-// ============================================================
-
-if (!function_exists('sorImpFindTesseract')) {
-    /**
-     * Locate the Tesseract OCR executable on the system.
-     * Checks common Windows install paths, then falls back to PATH lookup.
-     */
-    function sorImpFindTesseract()
-    {
-        // Common Windows install paths
-        $candidates = array(
-            'C:\\Program Files\\Tesseract-OCR\\tesseract.exe',
-            'C:\\Program Files (x86)\\Tesseract-OCR\\tesseract.exe',
-        );
-        foreach ($candidates as $path) {
-            if (@file_exists($path)) return $path;
-        }
-
-        // Try PATH lookup
-        $isWin = (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN');
-        $cmd = $isWin ? 'where tesseract 2>NUL' : 'which tesseract 2>/dev/null';
-        $output = array();
-        $code = 0;
-        @exec($cmd, $output, $code);
-        if ($code === 0 && !empty($output)) {
-            $found = trim((string) $output[0]);
-            if ($found !== '' && @file_exists($found)) return $found;
-        }
-
-        return '';
-    }
-}
-
-if (!function_exists('sorImpOcrPdfImages')) {
-    /**
-     * Extract JPEG images from PDF binary and OCR each page with Tesseract.
-     * Returns the combined OCR text from all pages, or empty string on failure.
-     */
-    function sorImpOcrPdfImages($pdfContent, &$ocrWarnings)
-    {
-        $tesseract = sorImpFindTesseract();
-        if ($tesseract === '') {
-            $ocrWarnings[] = 'Tesseract OCR is not installed. Image-based PDFs require Tesseract. '
-                . 'Download from: https://github.com/UB-Mannheim/tesseract/wiki — install and restart your web server.';
-            return '';
-        }
-
-        $images = sorImpExtractImagesFromPdf($pdfContent);
-        if (empty($images)) {
-            $ocrWarnings[] = 'No embedded images found in PDF for OCR.';
-            return '';
-        }
-
-        $isWin = (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN');
-        $nullDev = $isWin ? 'NUL' : '/dev/null';
-        $tmpDir = sys_get_temp_dir();
-        $allText = '';
-
-        foreach ($images as $i => $jpegData) {
-            $tmpBase = $tmpDir . DIRECTORY_SEPARATOR . 'sor_ocr_' . uniqid('', true);
-            $tmpImage = $tmpBase . '.jpg';
-            @file_put_contents($tmpImage, $jpegData);
-
-            $output = array();
-            $code = 0;
-            $cmd = escapeshellarg($tesseract) . ' '
-                . escapeshellarg($tmpImage) . ' stdout'
-                . ' --psm 3 --oem 3'
-                . ' 2>' . $nullDev;
-            @exec($cmd, $output, $code);
-
-            @unlink($tmpImage);
-
-            if ($code === 0 && !empty($output)) {
-                $allText .= implode("\n", $output) . "\n";
-            }
-        }
-
-        $allText = trim($allText);
-        if ($allText === '') {
-            $ocrWarnings[] = 'Tesseract OCR returned no text. The PDF images may be unreadable.';
-        }
-        return $allText;
-    }
-}
-
-// ============================================================
 //  NATIVE PDF TEXT EXTRACTION  (for text-based PDFs)
 // ============================================================
 
@@ -351,33 +228,23 @@ if (!function_exists('sorImpExtractPdfTextNative')) {
 }
 
 // ============================================================
-//  COMBINED TEXT EXTRACTION  (native first, OCR fallback)
+//  TEXT EXTRACTION  (native text + browser OCR text)
 // ============================================================
 
 if (!function_exists('sorImpExtractPdfText')) {
-    function sorImpExtractPdfText($pdfContent, &$ocrWarnings)
+    function sorImpExtractPdfText($pdfContent, &$warnings, $clientOcrText = '')
     {
-        // 1. Try native text extraction
         $text = sorImpExtractPdfTextNative($pdfContent);
-
-        // Consider native extraction successful only if it has meaningful content
-        $stripped = preg_replace('/[^a-zA-Z0-9]/', '', $text);
-        if (strlen($stripped) > 30) {
+        if (preg_replace('/[^a-zA-Z0-9]/', '', $text) !== '') {
             return $text;
         }
 
-        // 2. Fallback to OCR for image-based PDFs
-        $ocrText = sorImpOcrPdfImages($pdfContent, $ocrWarnings);
-        if ($ocrText !== '') {
-            return $ocrText;
+        $clientOcrText = trim((string) $clientOcrText);
+        if ($clientOcrText !== '' && strlen(preg_replace('/[^a-zA-Z0-9]/', '', $clientOcrText)) > 20) {
+            return $clientOcrText;
         }
 
-        // 3. Last resort: try stripping binary from raw content
-        $raw = preg_replace('/[^[:print:]\r\n\t ]/', ' ', (string) $pdfContent);
-        if (preg_match('/[a-zA-Z]{4,}/', $raw)) {
-            return sorImpNorm($raw);
-        }
-
+        $warnings[] = 'Unable to extract text from this PDF. For image-based PDFs, please wait a moment after selecting the file before clicking Load And Analyze.';
         return '';
     }
 }
@@ -773,12 +640,12 @@ if (!function_exists('sorImpIsCustomerInfoLine')) {
 // ============================================================
 
 if (!function_exists('sorImpParsePdfToRows')) {
-    function sorImpParsePdfToRows($pdfFile, $packages, $packageMap, $productNameMap, $productNameToId, $brandCompanyMap)
+    function sorImpParsePdfToRows($pdfFile, $packages, $packageMap, $productNameMap, $productNameToId, $brandCompanyMap, $clientOcrText = '')
     {
         $warnings = array();
         $ocrWarnings = array();
 
-        $text = sorImpExtractPdfText($pdfFile['content'], $ocrWarnings);
+        $text = sorImpExtractPdfText($pdfFile['content'], $ocrWarnings, $clientOcrText);
         $warnings = array_merge($warnings, $ocrWarnings);
 
         if ($text === '') {
@@ -1143,6 +1010,16 @@ if ($action === 'cancelImport') {
 }
 
 if ($action === 'parseStockOrderPdf') {
+    $clientOcrText = isset($_POST['client_ocr_text']) ? trim((string) $_POST['client_ocr_text']) : '';
+    $clientOcrMapJson = isset($_POST['client_ocr_map']) ? trim((string) $_POST['client_ocr_map']) : '';
+    $clientOcrMap = array();
+    if ($clientOcrMapJson !== '') {
+        $decodedMap = @json_decode($clientOcrMapJson, true);
+        if (is_array($decodedMap)) {
+            $clientOcrMap = $decodedMap;
+        }
+    }
+
     if (!isset($_FILES['import_file']) || $_FILES['import_file']['error'] !== UPLOAD_ERR_OK) {
         $importErrors[] = 'Please choose a PDF or ZIP file.';
     } else {
@@ -1150,7 +1027,18 @@ if ($action === 'parseStockOrderPdf') {
         $previewRows = array();
 
         foreach ($sourceFiles as $src) {
-            $parsed = sorImpParsePdfToRows($src, $packages, $packageMap, $productNameMap, $productNameToId, $brandCompanyMap);
+            $srcName = isset($src['name']) ? (string) $src['name'] : '';
+            $srcNameKey = strtolower($srcName);
+            $srcBaseKey = strtolower((string) basename($srcName));
+
+            $ocrTextForSrc = $clientOcrText;
+            if (isset($clientOcrMap[$srcNameKey]) && is_string($clientOcrMap[$srcNameKey])) {
+                $ocrTextForSrc = (string) $clientOcrMap[$srcNameKey];
+            } else if (isset($clientOcrMap[$srcBaseKey]) && is_string($clientOcrMap[$srcBaseKey])) {
+                $ocrTextForSrc = (string) $clientOcrMap[$srcBaseKey];
+            }
+
+            $parsed = sorImpParsePdfToRows($src, $packages, $packageMap, $productNameMap, $productNameToId, $brandCompanyMap, $ocrTextForSrc);
             if (!empty($parsed['warnings'])) {
                 $importWarnings = array_merge($importWarnings, $parsed['warnings']);
             }
@@ -1352,6 +1240,9 @@ foreach ($previewRows as $idx => $rowCheck) {
 <html>
 <head>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <style>
         .sor-import .card { border: 0; box-shadow: 0 .125rem .5rem rgba(0,0,0,.08); }
         .sor-import .preview-file-card { border: 1px solid #d1d5db; border-radius: .5rem; padding: 1rem; margin-bottom: 1rem; background: #fff; }
@@ -1407,14 +1298,16 @@ foreach ($previewRows as $idx => $rowCheck) {
             <div class="card mb-4">
                 <div class="card-body">
                     <h5 class="card-title mb-3">Step 1: Upload PDF Or ZIP</h5>
-                    <form method="post" enctype="multipart/form-data">
+                    <form method="post" enctype="multipart/form-data" id="sorUploadForm">
+                        <input type="hidden" name="client_ocr_text" id="client_ocr_text" value="">
+                        <input type="hidden" name="client_ocr_map" id="client_ocr_map" value="">
                         <div class="row g-3 align-items-end">
                             <div class="col-12 col-md-8">
                                 <label class="form-label" for="import_file">Invoice PDF File (or ZIP for bulk import)</label>
                                 <input class="form-control" type="file" name="import_file" id="import_file" accept=".pdf,.zip" required>
                             </div>
                             <div class="col-12 col-md-4">
-                                <button class="btn btn-lg btn-rounded btn-primary w-100 px-4" type="submit" name="actionBtn" value="parseStockOrderPdf">
+                                <button class="btn btn-lg btn-rounded btn-primary w-100 px-4" type="submit" name="actionBtn" value="parseStockOrderPdf" id="sorSubmitBtn">
                                     <i class="fa-solid fa-wand-magic-sparkles"></i> Load And Analyze
                                 </button>
                             </div>
@@ -1693,6 +1586,163 @@ foreach ($previewRows as $idx => $rowCheck) {
             }
         });
     });
+
+    // Browser OCR (no server setup, no API key). No progress bar UI.
+    (function() {
+        if (typeof pdfjsLib === 'undefined' || typeof Tesseract === 'undefined') return;
+
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+        var fileInput = document.getElementById('import_file');
+        var form = document.getElementById('sorUploadForm');
+        var ocrField = document.getElementById('client_ocr_text');
+        var ocrMapField = document.getElementById('client_ocr_map');
+        var submitBtn = document.getElementById('sorSubmitBtn');
+        if (!fileInput || !form || !ocrField || !ocrMapField || !submitBtn) return;
+
+        var ocrRunning = false;
+
+        function setProcessingState(isProcessing, label) {
+            ocrRunning = isProcessing;
+            submitBtn.disabled = isProcessing;
+            submitBtn.innerHTML = isProcessing
+                ? '<i class="fa-solid fa-spinner fa-spin"></i> ' + label
+                : '<i class="fa-solid fa-wand-magic-sparkles"></i> Load And Analyze';
+        }
+
+        function readAsArrayBuffer(file) {
+            return new Promise(function(resolve, reject) {
+                var reader = new FileReader();
+                reader.onload = function(e) { resolve(e.target.result); };
+                reader.onerror = reject;
+                reader.readAsArrayBuffer(file);
+            });
+        }
+
+        function basenameLower(path) {
+            return String(path || '').split('/').pop().split('\\\\').pop().toLowerCase();
+        }
+
+        function extractTextFromPdfBytes(pdfBytes) {
+            return pdfjsLib.getDocument({ data: pdfBytes }).promise.then(function(pdfDoc) {
+                var tasks = [];
+                for (var i = 1; i <= pdfDoc.numPages; i++) {
+                    tasks.push(
+                        pdfDoc.getPage(i).then(function(page) {
+                            var viewport = page.getViewport({ scale: 2.0 });
+                            var canvas = document.createElement('canvas');
+                            canvas.width = viewport.width;
+                            canvas.height = viewport.height;
+                            var ctx = canvas.getContext('2d');
+
+                            return page.render({ canvasContext: ctx, viewport: viewport }).promise.then(function() {
+                                return Tesseract.recognize(canvas, 'eng').then(function(result) {
+                                    return result && result.data && result.data.text ? result.data.text : '';
+                                }).catch(function() {
+                                    return '';
+                                });
+                            });
+                        })
+                    );
+                }
+
+                return Promise.all(tasks).then(function(texts) {
+                    return texts.join('\n').trim();
+                });
+            }).catch(function() {
+                return '';
+            });
+        }
+
+        function processSinglePdf(file) {
+            setProcessingState(true, 'Processing PDF...');
+            readAsArrayBuffer(file)
+                .then(function(buffer) {
+                    return extractTextFromPdfBytes(new Uint8Array(buffer));
+                })
+                .then(function(text) {
+                    ocrField.value = text;
+                    ocrMapField.value = '';
+                    setProcessingState(false, '');
+                })
+                .catch(function() {
+                    ocrField.value = '';
+                    ocrMapField.value = '';
+                    setProcessingState(false, '');
+                });
+        }
+
+        function processZip(file) {
+            if (typeof JSZip === 'undefined') {
+                ocrField.value = '';
+                ocrMapField.value = '';
+                return;
+            }
+
+            setProcessingState(true, 'Processing ZIP...');
+            readAsArrayBuffer(file)
+                .then(function(buffer) { return JSZip.loadAsync(buffer); })
+                .then(function(zip) {
+                    var entryNames = Object.keys(zip.files).filter(function(name) {
+                        var zf = zip.files[name];
+                        return zf && !zf.dir && /\.pdf$/i.test(name);
+                    });
+
+                    var ocrMap = {};
+                    var chain = Promise.resolve();
+
+                    entryNames.forEach(function(name, idx) {
+                        chain = chain.then(function() {
+                            setProcessingState(true, 'Processing ZIP (' + (idx + 1) + '/' + entryNames.length + ')...');
+                            return zip.files[name].async('uint8array').then(function(pdfBytes) {
+                                return extractTextFromPdfBytes(pdfBytes).then(function(text) {
+                                    ocrMap[name.toLowerCase()] = text;
+                                    ocrMap[basenameLower(name)] = text;
+                                });
+                            });
+                        });
+                    });
+
+                    return chain.then(function() {
+                        ocrField.value = '';
+                        ocrMapField.value = JSON.stringify(ocrMap);
+                        setProcessingState(false, '');
+                    });
+                })
+                .catch(function() {
+                    ocrField.value = '';
+                    ocrMapField.value = '';
+                    setProcessingState(false, '');
+                });
+        }
+
+        fileInput.addEventListener('change', function() {
+            ocrField.value = '';
+            ocrMapField.value = '';
+            setProcessingState(false, '');
+
+            if (!fileInput.files || !fileInput.files[0]) return;
+
+            var file = fileInput.files[0];
+            var ext = (file.name || '').split('.').pop().toLowerCase();
+
+            if (ext === 'pdf') {
+                processSinglePdf(file);
+                return;
+            }
+
+            if (ext === 'zip') {
+                processZip(file);
+            }
+        });
+
+        form.addEventListener('submit', function(e) {
+            if (!ocrRunning) return;
+            e.preventDefault();
+            alert('Please wait. PDF text extraction is still processing.');
+        });
+    })();
+
 </script>
 </body>
 </html>

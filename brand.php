@@ -280,7 +280,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 
                     <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
                         <?php echo ($act) ? '<button class="btn btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="actionBtn" value="' . $actionBtnValue . '">' . $pageActionTitle . '</button>' : ''; ?>
-                        <button class="btn btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="actionBtn" value="back">Back</button>
+                        <button class="btn btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="actionBtn" value="back" formnovalidate>Back</button>
                     </div>
                 </form>
             </div>
@@ -380,6 +380,10 @@ if (isset($_SESSION['tempValConfirmBox'])) {
     const form = document.getElementById('form');
     if (form && action) {
         form.addEventListener('submit', function(event) {
+            if (event.submitter && event.submitter.value === 'back') {
+                return;
+            }
+
             syncCompanyIdByName();
             if (!companyIdInput.value) {
                 event.preventDefault();
