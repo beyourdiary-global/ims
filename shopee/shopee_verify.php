@@ -36,13 +36,19 @@ $accessActionKey = array_values(array_unique(array_map('intval', $accessActionKe
 $num = $default_currency_id = 1; 
 
 if (isset($_GET['verify_id'])) {
+    // SECURITY FIX: Explicitly check if the user has the Verify action permission (14)
+    if (!in_array(14, $accessActionKey)) {
+        echo "<script>alert('Security Error: You do not have permission to verify orders.'); location.replace('shopee_verify.php');</script>";
+        exit;
+    }
+
     $orderId = intval($_GET['verify_id']);
     $verifyMessageText = '';
     $checkSql = "SELECT order_status FROM " . SHOPEE_SG_ORDER_REQ . " WHERE id = $orderId";
     $checkResult = mysqli_query($finance_connect, $checkSql);
     if ($checkResult && $row = mysqli_fetch_assoc($checkResult)) {
         if ($row['order_status'] === 'OC') {
-            $updateSql = "UPDATE " . SHOPEE_SG_ORDER_REQ . " SET order_status = 'C' WHERE id = $orderId";
+            $updateSql = "UPDATE " . SHOPEE_SG_ORDER_REQ . " SET order_status = 'V' WHERE id = $orderId";
             $updateResult = mysqli_query($finance_connect, $updateSql);
             if ($updateResult) {
                 $auditData = array(
@@ -51,9 +57,9 @@ if (isset($_GET['verify_id'])) {
                     'query_rec'   => $orderId,
                     'query_table' => SHOPEE_SG_ORDER_REQ,
                     'oldval'      => 'order_status: OC',
-                    'changes'     => 'order_status: C',
+                    'changes'     => 'order_status: V',
                     'uid'         => USER_ID,
-                    'act_msg'     => "Verified order #$orderId (status changed from OC to C)",
+                    'act_msg'     => "Verified order #$orderId (status changed from OC to V)",
                     'cdate'       => date('Y-m-d'),
                     'ctime'       => date('H:i:s'),
                     'cby'         => USER_NAME,
@@ -84,12 +90,13 @@ $accFilter = isset($_GET['acc']) ? $_GET['acc'] : '';
 $whereConditions = [];
 
 // ROLE FILTER: Admins only see Verified and Order Received ('C', 'OC')
-$whereConditions[] = "order_status IN ('Verified', 'Order Received', 'C', 'OC')";
+$whereConditions[] = "order_status IN ('Verified', 'Order Received', 'V', 'OC')";
 
 if (!empty($monthFilter)) { $whereConditions[] = "DATE_FORMAT(date, '%Y-%m') = '" . mysqli_real_escape_string($finance_connect, $monthFilter) . "'"; }
 if (!empty($statusFilter)) { $whereConditions[] = "order_status = '" . mysqli_real_escape_string($finance_connect, $statusFilter) . "'"; }
-if (!empty($brandFilter)) { $whereConditions[] = "brand = '" . mysqli_real_escape_string($finance_connect, $brandFilter) . "'"; }
-if (!empty($pkgFilter)) { $whereConditions[] = "package = '" . mysqli_real_escape_string($finance_connect, $pkgFilter) . "'"; }
+// Use FIND_IN_SET to correctly search inside comma-separated IDs
+if (!empty($brandFilter)) { $whereConditions[] = "FIND_IN_SET('" . mysqli_real_escape_string($finance_connect, $brandFilter) . "', brand) > 0"; }
+if (!empty($pkgFilter)) { $whereConditions[] = "FIND_IN_SET('" . mysqli_real_escape_string($finance_connect, $pkgFilter) . "', package) > 0"; }
 if (!empty($accFilter)) { $whereConditions[] = "shopee_acc = '" . mysqli_real_escape_string($finance_connect, $accFilter) . "'"; }
 
 $monthGroup = isset($_GET['month_gb']) ? $_GET['month_gb'] : '';
@@ -368,6 +375,26 @@ $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_con
                            } ?>
                         </tr>
                     </thead>
+                    
+                    <?php
+                    // --- PREFETCH DATA TO FIX N+1 QUERY ISSUE ---
+                    $packageMap = array();
+                    $pkgResult = mysqli_query($connect, "SELECT id, name, agent_cost, cost FROM " . PKG);
+                    if ($pkgResult) {
+                        while ($p = mysqli_fetch_assoc($pkgResult)) {
+                            $packageMap[$p['id']] = $p;
+                        }
+                    }
+
+                    $brandMap = array();
+                    $brandResult = mysqli_query($connect, "SELECT id, name FROM " . BRAND);
+                    if ($brandResult) {
+                        while ($b = mysqli_fetch_assoc($brandResult)) {
+                            $brandMap[$b['id']] = $b['name'];
+                        }
+                    }
+                    ?>
+
                     <tbody>
                         <?php while ($row = $result->fetch_assoc()) {
                             $q1 = getData('*', "id='" . $row['shopee_acc'] . "'", '', SHOPEE_ACC, $finance_connect);
@@ -378,32 +405,35 @@ $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_con
                             $q8 = getData('*', "default_currency_unit='" . $row['currency'] . "'", '', CURRENCIES, $connect);
                             $currExcRate = $q8 ? $q8->fetch_assoc() : [];
                             
+                            // Fetch Packages from fast memory map instead of DB query
                             $packageIds = array_values(array_filter(array_map('trim', explode(',', (string) ($row['package'] ?? ''))), 'strlen'));
                             $pkg = array();
                             $pkgNames = array();
                             if (count($packageIds) > 0) {
-                                $firstPkgRst = getData('name, agent_cost, cost', "id='" . $packageIds[0] . "'", '', PKG, $connect);
-                                $pkg = $firstPkgRst ? $firstPkgRst->fetch_assoc() : array();
+                                $firstPkgId = $packageIds[0];
+                                if (isset($packageMap[$firstPkgId])) {
+                                    $pkg['agent_cost'] = $packageMap[$firstPkgId]['agent_cost'];
+                                    $pkg['cost'] = $packageMap[$firstPkgId]['cost'];
+                                }
                                 foreach ($packageIds as $pkgId) {
-                                    $pkgNameRst = getData('name', "id='" . $pkgId . "'", '', PKG, $connect);
-                                    if ($pkgNameRst && $pkgNameRow = $pkgNameRst->fetch_assoc()) {
-                                        $pkgNames[] = $pkgNameRow['name'];
+                                    if (isset($packageMap[$pkgId])) {
+                                        $pkgNames[] = $packageMap[$pkgId]['name'];
                                     }
                                 }
                             }
-
-                            $brandIds = array_values(array_filter(array_map('trim', explode(',', (string) ($row['brand'] ?? ''))), 'strlen'));
-                            $brandNames = array();
-                            foreach ($brandIds as $brandId) {
-                                $brandNameRst = getData('name', "id='" . $brandId . "'", '', BRAND, $connect);
-                                if ($brandNameRst && $brandNameRow = $brandNameRst->fetch_assoc()) {
-                                    $brandNames[] = $brandNameRow['name'];
-                                }
-                            }
-                            $brand = array('name' => implode(', ', $brandNames));
                             if (!empty($pkgNames)) {
                                 $pkg['name'] = implode(', ', $pkgNames);
                             }
+
+                            // Fetch Brands from fast memory map instead of DB query
+                            $brandIds = array_values(array_filter(array_map('trim', explode(',', (string) ($row['brand'] ?? ''))), 'strlen'));
+                            $brandNames = array();
+                            foreach ($brandIds as $brandId) {
+                                if (isset($brandMap[$brandId])) {
+                                    $brandNames[] = $brandMap[$brandId];
+                                }
+                            }
+                            $brand = array('name' => implode(', ', $brandNames));
 
                             $q4 = getData('buyer_username', "id='" . $row['buyer'] . "'", '', SHOPEE_CUST_INFO, $finance_connect);
                             $buyer = $q4 ? $q4->fetch_assoc() : [];

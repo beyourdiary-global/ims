@@ -111,73 +111,62 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
         }
     }
 }
-if (post('actionOrderReceivedBtn')) {
+
+if (post('updateStatusBtn')) {
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
+    $newStatus = post('updateStatusBtn'); // Will receive 'SP' (Processing) or 'OC' (Order Received)
 
-    try {
-        // 1. Get old data before update
-        $getOldQuery = "SELECT order_status FROM " . $tblName . " WHERE id = " . intval($dataID);
-        $oldResult = mysqli_query($finance_connect, $getOldQuery);
-        $oldRow = mysqli_fetch_assoc($oldResult);
+    if (in_array($newStatus, ['SP', 'OC'])) {
+        try {
+            // 1. Get old data before update
+            $getOldQuery = "SELECT order_status FROM " . $tblName . " WHERE id = " . intval($dataID);
+            $oldResult = mysqli_query($finance_connect, $getOldQuery);
+            $oldRow = mysqli_fetch_assoc($oldResult);
 
-        $oldStatus = $oldRow['order_status'];
+            $oldStatus = $oldRow['order_status'];
 
-        // 2. Perform update
-        $queryOrderReceived = "UPDATE " . $tblName . " SET order_status='OC' WHERE id = " . intval($dataID);
-        $returnData = mysqli_query($finance_connect, $queryOrderReceived);
+            // 2. Perform update
+            $queryStatusUpdate = "UPDATE " . $tblName . " SET order_status='$newStatus' WHERE id = " . intval($dataID);
+            $returnData = mysqli_query($finance_connect, $queryStatusUpdate);
 
-        // 3. Only log if update was successful
-        if ($returnData) {
-            // Prepare audit log details
-            array_push($datafield, 'order_status');
-            array_push($oldvalarr, $oldStatus);
-            array_push($chgvalarr, 'OC');
+            // 3. Only log if update was successful
+            if ($returnData) {
+                // Prepare audit log details
+                array_push($datafield, 'order_status');
+                array_push($oldvalarr, $oldStatus);
+                array_push($chgvalarr, $newStatus);
 
-            $log = [
-                'log_act'      => $pageAction,
-                'cdate'        => $cdate,
-                'ctime'        => $ctime,
-                'uid'          => USER_ID,
-                'cby'          => USER_ID,
-                'query_rec'    => $queryOrderReceived,
-                'query_table'  => $tblName,
-                'page'         => $pageTitle,
-                'connect'      => $connect,
-                'oldval'       => implodeWithComma($oldvalarr),
-                'changes'      => implodeWithComma($chgvalarr),
-                'act_msg'      => actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, '')
-            ];
+                $statusLabel = ($newStatus === 'SP') ? "Processing" : "Order Received";
 
-            audit_log($log);
+                $log = [
+                    'log_act'      => 'edit',
+                    'cdate'        => $cdate,
+                    'ctime'        => $ctime,
+                    'uid'          => USER_ID,
+                    'cby'          => USER_ID,
+                    'query_rec'    => $queryStatusUpdate,
+                    'query_table'  => $tblName,
+                    'page'         => $pageTitle,
+                    'connect'      => $connect,
+                    'oldval'       => implodeWithComma($oldvalarr),
+                    'changes'      => implodeWithComma($chgvalarr),
+                    'act_msg'      => actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, 'edit', '')
+                ];
 
-            echo '<script>
-                alert("Order status updated.");
-                window.location.replace("' . $redirect_page . '");
-            </script>';
-        } else {
-            throw new Exception("Failed to update order status.");
+                audit_log($log);
+
+                echo '<script>
+                    alert("Order status updated to ' . $statusLabel . '.");
+                    window.location.replace("' . $redirect_page . '");
+                </script>';
+                exit; // Stop executing the rest of the page so it redirects cleanly
+            } else {
+                throw new Exception("Failed to update order status.");
+            }
+        } catch (Exception $e) {
+            $errorMsg = $e->getMessage();
+            echo '<script>alert("Error: ' . addslashes($errorMsg) . '");</script>';
         }
-    } catch (Exception $e) {
-        // Optional: log failed action
-        $errorMsg = $e->getMessage();
-
-        $log = [
-            'log_act'     => $pageAction,
-            'cdate'       => $cdate,
-            'ctime'       => $ctime,
-            'uid'         => USER_ID,
-            'cby'         => USER_ID,
-            'query_rec'   => $queryOrderReceived ?? '',
-            'query_table' => $tblName,
-            'page'        => $pageTitle,
-            'connect'     => $connect,
-            'oldval'      => '',
-            'changes'     => '',
-            'act_msg'     => "Error: " . $errorMsg
-        ];
-        audit_log($log);
-
-        echo '<script>alert("Error: ' . addslashes($errorMsg) . '");</script>';
     }
 }
 
@@ -1355,10 +1344,22 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                 <?php }} ?>
                     <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
                         <?php
-                        $statusKey = preg_replace('/[^a-z]/', '', strtolower(trim((string) $row['order_status'])));
-                        $isPendingToPack = ($statusKey === 'p' || $statusKey === 'pendingto' || $statusKey === 'pendingtopack');
-                        echo $isPendingToPack ? '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="actionOrderReceivedBtn" id="actionOrderReceivedBtn" value="updateOR">Update to Order Received</button>' :"";
-                        
+                        if (isset($row['order_status'])) {
+                            // Clean the status string for matching
+                            $statusKey = preg_replace('/[^a-z]/', '', strtolower(trim((string) $row['order_status'])));
+                            
+                            $isPendingToPack = ($statusKey === 'p' || $statusKey === 'pendingto' || $statusKey === 'pendingtopack');
+                            $isProcessing = ($statusKey === 'sp' || $statusKey === 'processing');
+
+                            // If status is 'P', show "UPDATE TO PROCESSING" and pass 'SP'
+                            if ($isPendingToPack) {
+                                echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" id="updateStatusBtn" value="SP" formnovalidate>UPDATE TO PROCESSING</button>';
+                            } 
+                            // If status is 'SP', show "UPDATE TO ORDER RECEIVED" and pass 'OC'
+                            else if ($isProcessing) {
+                                echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" id="updateStatusBtn" value="OC" formnovalidate>UPDATE TO ORDER RECEIVED</button>';
+                            }
+                        }
                         
                     switch ($act) {
                         case 'I':

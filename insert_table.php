@@ -4,8 +4,6 @@ $dbhost     = '127.0.0.1';
 $dbport     = 3306;
 $dbUser     = 'beyourdi_cms';
 $dbpwd      = 'Byd1234@Global';
-$dbUser     = 'root';
-$dbpwd      = '';
 
 $db_cms     = 'beyourdi_cms-uat';
 $db_fin     = 'beyourdi_financial-uat';

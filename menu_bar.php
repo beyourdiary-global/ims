@@ -297,12 +297,13 @@ $menuList = array(
                 'expand' => array(
                     array('Product Status', 'mdi mdi-package-variant-closed', $SITEURL . '/prod_status_table.php', '15'),
                     array('Brand', 'mdi mdi-label-outline', $SITEURL . '/brand_table.php', '9'),
+                    array('Company', 'mdi mdi-office-building-outline', $SITEURL . '/company_table.php', '127'),
                     array('Courier Account', 'mdi mdi-label-outline', $SITEURL . '/courier_table.php', '50'),
                     array('Category', 'mdi mdi-label-outline', $SITEURL . '/product_category_table.php', '56'),
                     array('Brand Series', 'mdi mdi-label-outline', $SITEURL . '/brand_series_table.php', '74'),
                 ),
 
-                'pin' => array('15', '9', '50', '56', '74'),
+                'pin' => array('15', '9', '127', '50', '56', '74'),
 
             ),
             array(
