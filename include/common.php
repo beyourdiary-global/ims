@@ -936,25 +936,36 @@ function renderViewEditButtonByPin($action, $redirect_page, $row, $pinAccess, $a
 }
 function renderDeleteButtonByPin($pinAccess, $rowId, $rowName, $rowRemark, $pageTitle, $redirectPage, $deleteRedirectPage)
 {
-	// Check if Delete action is allowed
-	if (isActionAllowed("3", $pinAccess)) {
-		// Generate JavaScript onclick function for confirmation dialog with specific parameters
-		$onclick = 'confirmationDialog(\'' . $rowId . '\',[\'' . $rowName . '\',\'' . $rowRemark . '\'],\'' . $pageTitle . '\',\'' . $redirectPage . '\',\'' . $deleteRedirectPage . '\',\'D\')';
+    // Check if Delete action is allowed
+    if (isActionAllowed("3", $pinAccess)) {
+        
+        // 1. Sanitize for both JavaScript and HTML output globally
+        $safeName = htmlspecialchars(addslashes($rowName ?? ''), ENT_QUOTES, 'UTF-8');
+        $safeRemark = htmlspecialchars(addslashes($rowRemark ?? ''), ENT_QUOTES, 'UTF-8');
 
-		// Output Delete button
-		echo '<a class="btn btn-danger" onclick="' . $onclick . '"><i class="fas fa-trash-alt"></i></a>';
-	}
+        // Generate JavaScript onclick function for confirmation dialog with specific parameters
+        $onclick = 'confirmationDialog(\'' . $rowId . '\',[\'' . $safeName . '\',\'' . $safeRemark . '\'],\'' . $pageTitle . '\',\'' . $redirectPage . '\',\'' . $deleteRedirectPage . '\',\'D\')';
+
+        // Output Delete button
+        echo '<a class="btn btn-danger" onclick="' . $onclick . '"><i class="fas fa-trash-alt"></i></a>';
+    }
 }
+
 function renderDeleteButton($pinAccess, $rowId, $rowName, $rowRemark, $pageTitle, $redirectPage, $deleteRedirectPage)
 {
-	// Check if Delete action is allowed
-	if (isActionAllowed("Delete", $pinAccess)) {
-		// Generate JavaScript onclick function for confirmation dialog with specific parameters
-		$onclick = 'confirmationDialog(\'' . $rowId . '\',[\'' . $rowName . '\',\'' . $rowRemark . '\'],\'' . $pageTitle . '\',\'' . $redirectPage . '\',\'' . $deleteRedirectPage . '\',\'D\')';
+    // Check if Delete action is allowed
+    if (isActionAllowed("Delete", $pinAccess)) {
+        
+        // 1. Sanitize for both JavaScript and HTML output globally
+        $safeName = htmlspecialchars(addslashes($rowName ?? ''), ENT_QUOTES, 'UTF-8');
+        $safeRemark = htmlspecialchars(addslashes($rowRemark ?? ''), ENT_QUOTES, 'UTF-8');
 
-		// Output Delete button
-		echo '<a class="btn btn-danger" onclick="' . $onclick . '"><i class="fas fa-trash-alt"></i></a>';
-	}
+        // Generate JavaScript onclick function for confirmation dialog with specific parameters
+        $onclick = 'confirmationDialog(\'' . $rowId . '\',[\'' . $safeName . '\',\'' . $safeRemark . '\'],\'' . $pageTitle . '\',\'' . $redirectPage . '\',\'' . $deleteRedirectPage . '\',\'D\')';
+
+        // Output Delete button
+        echo '<a class="btn btn-danger" onclick="' . $onclick . '"><i class="fas fa-trash-alt"></i></a>';
+    }
 }
 
 function getOrderStatusLabel($code) {

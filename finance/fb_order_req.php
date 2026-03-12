@@ -966,7 +966,15 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 <input class="form-control" type="file" name="for_attach" id="for_attach" <?php if ($act == '')
                         echo 'disabled' ?>>
 
-                            <?php if (isset($row['attachment']) && $row['attachment']) { ?>
+                            <?php if (isset($for_attach) && $for_attach) { ?>
+                                <div class="text-success mt-1">
+                                    <span class="mt-n1">
+                                        <?php echo "Uploaded Attachment: " . htmlspecialchars($for_attach); ?>
+                                    </span>
+                                </div>
+                                <input type="hidden" name="existing_attachment"
+                                    value="<?php echo htmlspecialchars($for_attach); ?>">
+                            <?php } else if (isset($row['attachment']) && $row['attachment']) { ?>
                                 <div id="err_msg">
                                     <span class="mt-n1">
                                         <?php echo "Current Attachment: " . htmlspecialchars($row['attachment']); ?>

@@ -1,5 +1,5 @@
 <?php
-$pageTitle = "Department";
+$pageTitle = "Departments";
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
@@ -15,9 +15,12 @@ $num = 1;   // numbering
 $redirect_page = $SITEURL . '/department.php';
 $deleteRedirectPage = $SITEURL . '/department_table.php';
 
-$result = getData('*', '', '', $tblName, $connect);
+// Use direct query here so an empty table is not treated as a DB/network failure.
+$query = "SELECT * FROM $tblName WHERE status = 'A' ORDER BY id DESC";
+$result = mysqli_query($connect, $query);
 
-if (!$result) {
+if ($result === false) {
+    error_log("Department table query failed: " . mysqli_error($connect));
     echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
 }
@@ -57,7 +60,7 @@ if (!$result) {
                             <h2><?php echo $pageTitle ?></h2>
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add <?php echo $pageTitle ?> </a>
+                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=I" ?>"><i class="fa-solid fa-plus"></i> Add <?php echo $pageTitle ?> </a>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -97,12 +100,17 @@ if (!$result) {
                                                 </li>
                                                 <li>
                                                     <?php if (isActionAllowed("Edit", $pinAccess)) : ?>
-                                                        <a class="dropdown-item" href="<?= $redirect_page . "?id=" . $row['id'] . '&act=' . $act_2 ?>">Edit</a>
+                                                        <a class="dropdown-item" href="<?= $redirect_page . "?id=" . $row['id'] . '&act=E' ?>">Edit</a>
                                                     <?php endif; ?>
                                                 </li>
                                                 <li>
                                                     <?php if (isActionAllowed("Delete", $pinAccess)) : ?>
-                                                        <a class="dropdown-item" onclick="confirmationDialog('<?= $row['id'] ?>',['<?= $row['name'] ?>','<?= $row['remark'] ?>'],'<?php echo $pageTitle ?>','<?= $redirect_page ?>','<?= $deleteRedirectPage ?>','D')">Delete</a>
+                                                        <?php 
+                                                            // Safely escape quotes for both JavaScript and HTML
+                                                            $safeName = htmlspecialchars(addslashes($row['name'] ?? ''), ENT_QUOTES, 'UTF-8');
+                                                            $safeRemark = htmlspecialchars(addslashes($row['remark'] ?? ''), ENT_QUOTES, 'UTF-8');
+                                                        ?>
+                                                        <a class="dropdown-item" onclick="confirmationDialog('<?= $row['id'] ?>',['<?= $safeName ?>','<?= $safeRemark ?>'],'<?php echo $pageTitle ?>','<?= $redirect_page ?>','<?= $deleteRedirectPage ?>','D')">Delete</a>
                                                     <?php endif; ?>
                                                 </li>
                                             </ul>

@@ -76,16 +76,14 @@ if (!$result) {
                                         <i class="fa-solid fa-plus"></i> Add <?php echo $pageTitle ?>
                                     </a>
                                 <?php endif; ?>
-                                <?php if (isActionAllowed("Import", $pinAccess)): ?>
-                                    <a class="btn btn-sm btn-rounded btn-info text-white" id="addBtn" href="package_import.php">
-                                        <i class="fa-solid fa-file-import"></i> Import
-                                    </a>
-                                <?php endif; ?>
-                                <?php if (isActionAllowed("Export", $pinAccess)): ?>
-                                    <a class="btn btn-sm btn-rounded btn-success text-white" id="addBtn" href="package_export.php">
-                                        <i class="fa-solid fa-file-export"></i> Export
-                                    </a>
-                                <?php endif; ?>
+                                
+                                <a class="btn btn-sm btn-rounded btn-info text-white" id="addBtn" href="package_import.php">
+                                    <i class="fa-solid fa-file-import"></i> Import
+                                </a>
+                                
+                                <a class="btn btn-sm btn-rounded btn-success text-white" id="addBtn" href="package_export.php">
+                                    <i class="fa-solid fa-file-export"></i> Export
+                                </a>
                             </div>
                         </div>
                     </div>

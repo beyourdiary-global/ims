@@ -142,12 +142,13 @@ $result = getData('*', '', '', FB_ORDER_REQ, $finance_connect);
                                             <?php 
                                          $member_exist = getData('name', "name='" . $row['id'] . "'", '', URBAN_CUST_REG, $connect); 
                 
-                                         if ($member_exist->fetch_assoc()) {
+                                         if ($member_exist && $member_exist->fetch_assoc()) {
                                             $reg_url = $reg_member_page . "?id=" . $row['id'] . '&act=' . $act_2;
                                          } else {
                                             $reg_url = $reg_member_page . "?id=" . $row['id'] . '&act=' . $act_1;
                                         }
                                         ?>
+                                        </ul>
                                     </div>
                                     </td>
                                 <td>
