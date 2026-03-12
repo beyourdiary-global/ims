@@ -124,7 +124,7 @@ if (!$result) {
                         </select>
                     </div>
                     <div class="col-md-2 d-flex align-items-center justify-content-center">
-                    <a id='resetButton' href="../reset.php?redirect=finance/shopee_ads_topup_trans_table.php" class="btn btn-sm btn-rounded btn-primary"> <i class="fa fa-refresh"></i> Reset </a>
+                    <a id='resetButton' href="../reset.php?redirect=shopee/shopee_ads_topup_trans_table.php" class="btn btn-sm btn-rounded btn-primary"> <i class="fa fa-refresh"></i> Reset </a>
                     </div>
                 </div>
                 <table class="table table-striped" id="stock_report_table">

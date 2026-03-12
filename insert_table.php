@@ -14,10 +14,14 @@ if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
 
-// 2.1 Update table structure for Package (Add Item Code and Description)
+// 2.1 Select Financial Database
 if (!$conn->select_db($db_fin)) {
     die('Unable to select database `' . $db_fin . '`: ' . $conn->error);
 }
+
+// ==========================================
+// HELPER FUNCTIONS (FIXED)
+// ==========================================
 
 function columnExists($conn, $dbName, $tableName, $columnName)
 {
@@ -51,6 +55,41 @@ function dropColumnIfExists($conn, $dbName, $tableName, $columnName, $alterSql)
     }
 }
 
+function alterColumnToVarcharIfInt($conn, $dbName, $tableName, $columnName, $varcharLen = 255)
+{
+    $safeDb = $conn->real_escape_string($dbName);
+    $safeTable = $conn->real_escape_string($tableName);
+    $safeColumn = $conn->real_escape_string($columnName);
+    
+    // Explicitly select DATA_TYPE
+    $sql = "SELECT DATA_TYPE FROM information_schema.columns WHERE table_schema='$safeDb' AND table_name='$safeTable' AND column_name='$safeColumn' LIMIT 1";
+    $rst = $conn->query($sql);
+
+    if (!$rst || $rst->num_rows === 0) {
+        return;
+    }
+
+    $row = $rst->fetch_assoc();
+    
+    // Force all keys to lowercase to guarantee safe access regardless of MySQL configuration
+    if ($row) {
+        $row = array_change_key_case($row, CASE_LOWER);
+    }
+    
+    // Safely check if the key exists before reading
+    if (isset($row['data_type'])) {
+        $dataType = strtolower((string) $row['data_type']);
+        if (strpos($dataType, 'int') !== false) {
+            $alterSql = "ALTER TABLE `$tableName` MODIFY COLUMN `$columnName` VARCHAR(" . (int) $varcharLen . ") NULL";
+            if ($conn->query($alterSql)) {
+                echo "<p style='color:blue;'>Updated `$tableName`.`$columnName` to VARCHAR(" . (int) $varcharLen . ").</p>";
+            } else {
+                echo "<p style='color:red;'>Failed updating `$tableName`.`$columnName`: " . $conn->error . "</p>";
+            }
+        }
+    }
+}
+
 function indexExists($conn, $dbName, $tableName, $indexName)
 {
     $safeDb = $conn->real_escape_string($dbName);
@@ -71,6 +110,33 @@ function dropIndexIfExists($conn, $dbName, $tableName, $indexName, $alterSql)
         }
     }
 }
+
+function normalizeShopeePins($pinStr)
+{
+    $cleanPins = preg_replace('/\+?\[(128|129|130):[^\]]*\]/', '', (string) $pinStr);
+    $cleanPins = preg_replace('/\+{2,}/', '+', $cleanPins);
+    return trim($cleanPins, '+');
+}
+
+function ensureSingleShopeePinForGroup($conn, $groupId, $shopeePinBlock)
+{
+    $groupId = (int) $groupId;
+    $query = "SELECT `pins` FROM `user_group` WHERE `id` = {$groupId} LIMIT 1";
+    $result = $conn->query($query);
+    if (!$result || $result->num_rows === 0) {
+        return;
+    }
+
+    $row = $result->fetch_assoc();
+    $basePins = normalizeShopeePins($row['pins']);
+    $updatedPins = $basePins === '' ? $shopeePinBlock : ($basePins . '+' . $shopeePinBlock);
+    $safePins = $conn->real_escape_string($updatedPins);
+    $conn->query("UPDATE `user_group` SET `pins` = '{$safePins}' WHERE `id` = {$groupId}");
+}
+
+// ==========================================
+// STOCK ORDER REQUEST TABLE CREATION
+// ==========================================
 
 $createStockOrderRequestTableSql = "CREATE TABLE IF NOT EXISTS `stock_order_request` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -143,6 +209,14 @@ dropColumnIfExists($conn, $db_fin, 'stock_order_request_item', 'request_no', "AL
 dropColumnIfExists($conn, $db_fin, 'stock_order_request_item', 'request_by', "ALTER TABLE `stock_order_request_item` DROP COLUMN `request_by`");
 dropIndexIfExists($conn, $db_fin, 'stock_order_request', 'uq_sor_request_no', "ALTER TABLE `stock_order_request` DROP INDEX `uq_sor_request_no`");
 
+// Ensure Shopee Order Request supports storing multiple package/brand IDs as CSV.
+alterColumnToVarcharIfInt($conn, $db_fin, 'shopee_sg_order_request', 'package', 255);
+alterColumnToVarcharIfInt($conn, $db_fin, 'shopee_sg_order_request', 'brand', 255);
+
+// ==========================================
+// PIN GROUPS & CMS DATABASE UPDATE
+// ==========================================
+
 if ($conn->select_db($db_cms)) {
     $createCompanyTableSql = "CREATE TABLE IF NOT EXISTS `company` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -196,6 +270,31 @@ if ($conn->select_db($db_cms)) {
 } else {
     echo "<p style='color:red;'>Failed to select CMS database to update pin groups.</p>";
 }
+
+// --- START: SHOPEE ROLE-BASED PIN GROUPS ---
+if ($conn->select_db($db_cms)) {
+    // 1. Insert new Shopee Pin Groups (128, 129, 130)
+    $sqlInsertShopeePins = "INSERT INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+    (128, 'Shopee Processing Order', '1,2,3,4,5,6', 'Basic User Shopee View', '1', CURDATE(), CURTIME(), 'A'),
+    (129, 'Shopee Verify Order', '1,2,3,4,5,6,14', 'Admin Shopee View', '1', CURDATE(), CURTIME(), 'A'),
+    (130, 'Shopee All Orders', '1,2,3,4,5,6,14,15', 'Superadmin Shopee View', '1', CURDATE(), CURTIME(), 'A')
+    ON DUPLICATE KEY UPDATE
+        `name` = VALUES(`name`),
+        `pins` = VALUES(`pins`),
+        `remark` = VALUES(`remark`),
+        `status` = 'A'";
+    
+    if ($conn->query($sqlInsertShopeePins)) {
+        echo "<p style='color:blue;'>Shopee Role Pins (128, 129, 130) ensured in CMS database.</p>";
+    }
+
+    // 2. Enforce one Shopee role pin per user group.
+    ensureSingleShopeePinForGroup($conn, 1, '[130:1,2,3,4,5,6,14,15]');
+    ensureSingleShopeePinForGroup($conn, 2, '[129:1,2,3,4,5,6,14]');
+    ensureSingleShopeePinForGroup($conn, 3, '[128:1,2,3,4,5,6]');
+}
+// --- END: SHOPEE ROLE-BASED PIN GROUPS ---
+
 echo "<h3>Stock Order Request financial schema setup complete.</h3>";
 
 $conn->close();

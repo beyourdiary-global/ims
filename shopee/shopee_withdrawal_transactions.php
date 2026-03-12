@@ -18,7 +18,7 @@ $pinAccess = checkCurrentPin($connect, $pageTitle);
 $allowed_ext = array("png", "jpg", "jpeg", "svg", "pdf");
 
 
-$redirect_page = $SITEURL . '/finance/shopee_withdrawal_transactions_table.php';
+$redirect_page = $SITEURL . '/shopee/shopee_withdrawal_transactions_table.php';
 $redirectLink = ("<script>location.href = '$redirect_page';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 

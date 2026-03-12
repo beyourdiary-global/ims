@@ -161,8 +161,8 @@ unset($_SESSION['resetChk']);
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 
-$redirect_page = $SITEURL . '/finance/shopee_withdrawal_transactions.php';
-$deleteRedirectPage = $SITEURL . '/finance/shopee_withdrawal_transactions_table.php';
+$redirect_page = $SITEURL . '/shopee/shopee_withdrawal_transactions.php';
+$deleteRedirectPage = $SITEURL . '/shopee/shopee_withdrawal_transactions_table.php';
 $result = getData('*', '', '', SHOPEE_WDL_TRANS, $finance_connect);
 $tblName = SHOPEE_WDL_TRANS;
 ?>
@@ -250,7 +250,7 @@ $tblName = SHOPEE_WDL_TRANS;
                         </select>
                     </div>
                     <div class="col-md-2 d-flex align-items-center justify-content-center">
-                    <a id='resetButton' href="../reset.php?redirect=finance/shopee_withdrawal_transactions_table.php" class="btn btn-sm btn-rounded btn-primary"> <i class="fa fa-refresh"></i> Reset </a>
+                    <a id='resetButton' href="../reset.php?redirect=shopee/shopee_withdrawal_transactions_table.php" class="btn btn-sm btn-rounded btn-primary"> <i class="fa fa-refresh"></i> Reset </a>
                     </div>
                 </div>
                 <table class="table table-striped" id="swt_table">

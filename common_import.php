@@ -5,9 +5,14 @@ include_once 'menuHeader.php';
 
 $module = input('module');
 $redirect_page = $SITEURL . '/common_import.php';
-$shopeeRedirectPage = $SITEURL . '/finance/shopee_ads_topup_trans_table.php';
+$shopeeRedirectPage = $SITEURL . '/shopee/shopee_ads_topup_trans_table.php';
 $facebookRedirectPage = $SITEURL . '/finance/fb_ads_topup_trans_table.php';
-$shopeeOrderRedirectPage = $SITEURL . '/finance/shopee_order_req_table.php'; // NEW
+$shopeeOrderRedirectPage = $SITEURL . '/shopee/shopee_processing_order.php';
+if (in_array('130', GlobalPin)) {
+    $shopeeOrderRedirectPage = $SITEURL . '/shopee/shopee_order_req_table.php';
+} else if (in_array('129', GlobalPin)) {
+    $shopeeOrderRedirectPage = $SITEURL . '/shopee/shopee_verify.php';
+}
 
 $action = post('actionBtn');
 $importErrors = [];
@@ -282,18 +287,54 @@ if ($action === 'parseShopeeAdsTopup') {
     }
 } else if ($action === 'insertShopeeOrderReq') { // NEW: Shopee Order Insert
     $module = 'shopee_order_req';
+
+    $resolveMultiIds = function ($hiddenInput, $nameInput, $tableName) use ($connect) {
+        $resolved = array();
+        if (!is_array($hiddenInput)) $hiddenInput = explode(',', (string) $hiddenInput);
+        foreach ($hiddenInput as $idVal) {
+            $idVal = trim((string) $idVal);
+            if ($idVal !== '' && ctype_digit($idVal) && (int) $idVal > 0) {
+                $resolved[] = (string) ((int) $idVal);
+            }
+        }
+        if (!is_array($nameInput)) $nameInput = array($nameInput);
+        foreach ($nameInput as $nameVal) {
+            $nameVal = trim((string) $nameVal);
+            if ($nameVal === '') continue;
+            $escapedName = mysqli_real_escape_string($connect, $nameVal);
+            $nameRst = getData('id', "name = '$escapedName'", 'LIMIT 1', $tableName, $connect);
+            if ($nameRst && $nameRst->num_rows > 0) {
+                $nameRow = $nameRst->fetch_assoc();
+                $resolvedId = (int) $nameRow['id'];
+                if ($resolvedId > 0) $resolved[] = (string) $resolvedId;
+            }
+        }
+        return implode(',', array_values(array_unique($resolved)));
+    };
+
+    $packageIdsStr = $resolveMultiIds(
+        isset($_POST['sor_pkg_hidden']) ? $_POST['sor_pkg_hidden'] : array(),
+        isset($_POST['sor_pkg']) ? $_POST['sor_pkg'] : array(),
+        PKG
+    );
+
+    $brandIdsStr = $resolveMultiIds(
+        isset($_POST['sor_brand_hidden']) ? $_POST['sor_brand_hidden'] : array(),
+        isset($_POST['sor_brand']) ? $_POST['sor_brand'] : array(),
+        BRAND
+    );
     
     $previewData = [
         'order_id' => postSpaceFilter('order_id'),
-        'package_id' => postSpaceFilter('package_id'),
+        'package_id' => $packageIdsStr,
         'product_price' => postSpaceFilter('product_price'),
         'order_status' => 'P',
         'order_status_val' => 'P',
         'sku' => isset($_POST['sku']) ? $_POST['sku'] : '',
-        'missing_sku' => postSpaceFilter('package_id') === '',
+        'missing_sku' => empty($packageIdsStr),
         'shopee_acc' => postSpaceFilter('shopee_acc'),
         'currency' => postSpaceFilter('currency'),
-        'brand' => postSpaceFilter('brand'),
+        'brand' => $brandIdsStr,
         'buyer' => postSpaceFilter('buyer'),
         'buyer_pay_meth' => postSpaceFilter('buyer_pay_meth'),
         'pic' => postSpaceFilter('pic'),
@@ -349,7 +390,7 @@ if ($action === 'parseShopeeAdsTopup') {
         $returnData = mysqli_query($finance_connect, $query);
 
         if ($returnData) {
-            echo '<script>alert("Shopee Order Request imported successfully.");window.location.href="' . $shopeeOrderRedirectPage . '";</script>';
+            echo '<script>alert("Shopee Order Request imported successfully.");window.location.replace("' . $shopeeOrderRedirectPage . '");</script>';
             exit;
         } else {
             $importErrors[] = 'Database Error: ' . mysqli_error($finance_connect);
@@ -1657,18 +1698,43 @@ function validateFacebookPreviewRecords($records, &$errors, $metaAccounts, $user
                                             <input type="hidden" name="sku" value="<?= htmlspecialchars($previewData['sku']) ?>">
                                         </div>
                                         <div class="col-12 col-md-4">
-                                            <label class="form-label" for="package_id">Package<span class="requireRed">*</span></label>
+                                            <label class="form-label" id="sor_pkg_lbl">Package<span class="requireRed">*</span></label>
                                             <?php if ($previewData['missing_sku']) { ?>
-                                                <div class="text-danger fw-bold mb-1" style="font-size:12px;"><i class="fa-solid fa-circle-exclamation"></i> Auto-match failed. Please select manually.</div>
+                                                <div class="text-danger fw-bold mb-1" style="font-size:12px;"><i class="fa-solid fa-circle-exclamation"></i> Auto-match failed. Please add / select manually.</div>
                                             <?php } ?>
-                                            <select class="form-select <?= $previewData['missing_sku'] ? 'border-danger' : '' ?>" id="package_id" name="package_id" required>
-                                                <option value="">Select Package</option>
-                                                <?php foreach ($pkgOptions as $id => $name) { ?>
-                                                    <option value="<?= htmlspecialchars($id) ?>" <?= $previewData['package_id'] == $id ? 'selected' : '' ?>><?= htmlspecialchars($name) ?></option>
+                                            <?php
+                                            $selectedPkgIds = array_filter(array_map('trim', explode(',', (string) $previewData['package_id'])), 'strlen');
+                                            $pkgRows = array();
+                                            if (!empty($selectedPkgIds)) {
+                                                foreach ($selectedPkgIds as $pkgId) {
+                                                    $pkgIdInt = (int) $pkgId;
+                                                    $pkgName = '';
+                                                    if ($pkgIdInt > 0 && isset($pkgOptions[$pkgIdInt])) {
+                                                        $pkgName = $pkgOptions[$pkgIdInt];
+                                                    }
+                                                    $pkgRows[] = array('id' => $pkgIdInt, 'name' => $pkgName);
+                                                }
+                                            }
+                                            if (empty($pkgRows)) {
+                                                $pkgRows[] = array('id' => '', 'name' => '');
+                                            }
+                                            ?>
+                                            <div id="sor_pkg_container">
+                                                <?php foreach ($pkgRows as $pkgIndex => $pkgRow) { ?>
+                                                    <div class="input-group mb-2 sor-pkg-row autocomplete">
+                                                        <input class="form-control sor-pkg-input <?= $previewData['missing_sku'] ? 'border-danger' : '' ?>" type="text" name="sor_pkg[]"
+                                                            id="sor_pkg_<?php echo $pkgIndex; ?>"
+                                                            data-hidden-target="sor_pkg_hidden_<?php echo $pkgIndex; ?>"
+                                                            value="<?php echo htmlspecialchars($pkgRow['name']); ?>" required>
+                                                        <input type="hidden" class="sor-pkg-hidden" name="sor_pkg_hidden[]"
+                                                            id="sor_pkg_hidden_<?php echo $pkgIndex; ?>"
+                                                            value="<?php echo htmlspecialchars((string) $pkgRow['id']); ?>">
+                                                    </div>
                                                 <?php } ?>
-                                            </select>
+                                            </div>
+                                            <button type="button" class="btn btn-outline-primary btn-sm mt-1" id="add_pkg_btn">+ Add Package</button>
                                             <?php if ($previewData['missing_sku']) { ?>
-                                                <a href="<?= $SITEURL ?>/package.php?act=I" target="_blank" class="btn btn-sm btn-outline-danger mt-2">Add New Package</a>
+                                                <a href="<?= $SITEURL ?>/package.php?act=I" target="_blank" class="btn btn-sm btn-outline-danger mt-1">Add New Package</a>
                                             <?php } ?>
                                         </div>
                                     </div>
@@ -1696,13 +1762,38 @@ function validateFacebookPreviewRecords($records, &$errors, $metaAccounts, $user
                                             <?php } ?>
                                         </div>
                                         <div class="col-12 col-md-4">
-                                            <label class="form-label" for="brand">Brand<span class="requireRed">*</span></label>
-                                            <select class="form-select" id="brand" name="brand" required>
-                                                <option value="">Select Brand</option>
-                                                <?php foreach ($brandOptions as $id => $name) { ?>
-                                                    <option value="<?= htmlspecialchars($id) ?>" <?= isset($previewData['brand']) && $previewData['brand'] == $id ? 'selected' : '' ?>><?= htmlspecialchars($name) ?></option>
+                                            <label class="form-label" id="sor_brand_lbl">Brand<span class="requireRed">*</span></label>
+                                            <?php
+                                            $selectedBrandIds = array_filter(array_map('trim', explode(',', (string) $previewData['brand'])), 'strlen');
+                                            $brandRows = array();
+                                            if (!empty($selectedBrandIds)) {
+                                                foreach ($selectedBrandIds as $brandId) {
+                                                    $brandIdInt = (int) $brandId;
+                                                    $brandName = '';
+                                                    if ($brandIdInt > 0 && isset($brandOptions[$brandIdInt])) {
+                                                        $brandName = $brandOptions[$brandIdInt];
+                                                    }
+                                                    $brandRows[] = array('id' => $brandIdInt, 'name' => $brandName);
+                                                }
+                                            }
+                                            if (empty($brandRows)) {
+                                                $brandRows[] = array('id' => '', 'name' => '');
+                                            }
+                                            ?>
+                                            <div id="sor_brand_container">
+                                                <?php foreach ($brandRows as $brandIndex => $brandRow) { ?>
+                                                    <div class="input-group mb-2 sor-brand-row autocomplete">
+                                                        <input class="form-control sor-brand-input" type="text" name="sor_brand[]"
+                                                            id="sor_brand_<?php echo $brandIndex; ?>"
+                                                            data-hidden-target="sor_brand_hidden_<?php echo $brandIndex; ?>"
+                                                            value="<?php echo htmlspecialchars($brandRow['name']); ?>" required>
+                                                        <input type="hidden" class="sor-brand-hidden" name="sor_brand_hidden[]"
+                                                            id="sor_brand_hidden_<?php echo $brandIndex; ?>"
+                                                            value="<?php echo htmlspecialchars((string) $brandRow['id']); ?>">
+                                                    </div>
                                                 <?php } ?>
-                                            </select>
+                                            </div>
+                                            <button type="button" class="btn btn-outline-primary btn-sm mt-1" id="add_brand_btn">+ Add Brand</button>
                                         </div>
                                     </div>
 
@@ -1878,6 +1969,10 @@ function validateFacebookPreviewRecords($records, &$errors, $metaAccounts, $user
 <script>
     preloader(0, '');
     setButtonColor();
+    <?php if ($module === 'shopee_order_req') { ?>
+        var action = 'I'; // Fake action to satisfy the JS script's logic
+        <?php include "js/shopee_order_req.js"; ?>
+    <?php } ?>
 </script>
 
 </html>

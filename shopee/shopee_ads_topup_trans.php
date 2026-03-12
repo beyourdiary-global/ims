@@ -12,7 +12,7 @@ $act = input('act');
 $pageAction = getPageAction($act);
 
 
-$redirect_page = $SITEURL . '/finance/shopee_ads_topup_trans_table.php';
+$redirect_page = $SITEURL . '/shopee/shopee_ads_topup_trans_table.php';
 $redirectLink = ("<script>location.href = '$redirect_page';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 

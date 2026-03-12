@@ -68,9 +68,9 @@ $listRows = siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTa
                     <div class="col-12 d-flex justify-content-between flex-wrap">
                         <h2><?= siEsc($pageTitle) ?></h2>
                         <div class="mt-auto mb-auto d-flex flex-wrap gap-2">
-                            <a class="btn btn-sm btn-rounded btn-primary" href="<?= $formPage ?>">Add Stock In</a>
-                            <a class="btn btn-sm btn-rounded btn-primary" href="<?= $importPage ?>">Import Excel</a>
-                            <a class="btn btn-sm btn-rounded btn-primary" href="<?= $tablePage ?>?export=excel">Export Excel</a>
+                            <a class="btn btn-sm btn-rounded btn-primary" id="addBtn" href="<?= $formPage ?>">Add Stock In</a>
+                            <a class="btn btn-sm btn-rounded btn-primary" id="addBtn" href="<?= $importPage ?>">Import</a>
+                            <a class="btn btn-sm btn-rounded btn-primary" id="addBtn" href="<?= $tablePage ?>?export=excel">Export</a>
                         </div>
                     </div>
                 </div>

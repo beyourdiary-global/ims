@@ -159,8 +159,8 @@ $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 
-$redirect_page = $SITEURL . '/finance/shopee_withdrawal_transactions.php';
-$deleteRedirectPage = $SITEURL . '/finance/shopee_withdrawal_transactions_table.php';
+$redirect_page = $SITEURL . '/shopee/shopee_withdrawal_transactions.php';
+$deleteRedirectPage = $SITEURL . '/shopee/shopee_withdrawal_transactions_table.php';
 $result = getData('*', '', '', SHOPEE_WDL_TRANS, $finance_connect);
 ?>
 

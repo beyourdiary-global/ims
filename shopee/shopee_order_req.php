@@ -12,9 +12,14 @@ $act = input('act');
 $pageAction = getPageAction($act);
 $allowed_ext = array("png", "jpg", "jpeg", "svg", "pdf");
 
-
-$redirect_page = $SITEURL . '/finance/shopee_order_req_table.php';
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+// Redirect directly to role page to avoid extra router history entries.
+$redirect_page = $SITEURL . '/shopee/shopee_processing_order.php';
+if (in_array('130', GlobalPin)) {
+    $redirect_page = $SITEURL . '/shopee/shopee_order_req_table.php';
+} else if (in_array('129', GlobalPin)) {
+    $redirect_page = $SITEURL . '/shopee/shopee_verify.php';
+}
+$redirectLink = ("<script>location.replace('$redirect_page');</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
 // to display data to input
@@ -35,7 +40,7 @@ if ($dataID) { //edit/remove/view
 if (!($dataID) && !($act)) {
     echo '<script>
     alert("Invalid action.");
-    window.location.href = "' . $redirect_page . '"; // Redirect to previous page
+    window.location.replace("' . $redirect_page . '");
     </script>';
 }
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
@@ -93,7 +98,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
                     'ctime' => $ctime,
                     'uid' => USER_ID,
                     'cby' => USER_ID,
-                    'query_rec' => $query,
+                    'query_rec' => $insert_query,
                     'query_table' => $tblName,
                     'page' => $pageTitle,
                     'connect' => $connect,
@@ -106,86 +111,123 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
         }
     }
 }
-if (post('actionOrderReceivedBtn')) {
+
+if (post('updateStatusBtn')) {
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
+    $newStatus = post('updateStatusBtn'); // Will receive 'SP' (Processing) or 'OC' (Order Received)
 
-    try {
-        // 1. Get old data before update
-        $getOldQuery = "SELECT order_status FROM " . $tblName . " WHERE id = " . intval($dataID);
-        $oldResult = mysqli_query($finance_connect, $getOldQuery);
-        $oldRow = mysqli_fetch_assoc($oldResult);
+    if (in_array($newStatus, ['SP', 'OC'])) {
+        try {
+            // 1. Get old data before update
+            $getOldQuery = "SELECT order_status FROM " . $tblName . " WHERE id = " . intval($dataID);
+            $oldResult = mysqli_query($finance_connect, $getOldQuery);
+            $oldRow = mysqli_fetch_assoc($oldResult);
 
-        $oldStatus = $oldRow['order_status'];
+            $oldStatus = $oldRow['order_status'];
 
-        // 2. Perform update
-        $queryOrderReceived = "UPDATE " . $tblName . " SET order_status='OC' WHERE id = " . intval($dataID);
-        $returnData = mysqli_query($finance_connect, $queryOrderReceived);
+            // 2. Perform update
+            $queryStatusUpdate = "UPDATE " . $tblName . " SET order_status='$newStatus' WHERE id = " . intval($dataID);
+            $returnData = mysqli_query($finance_connect, $queryStatusUpdate);
 
-        // 3. Only log if update was successful
-        if ($returnData) {
-            // Prepare audit log details
-            array_push($datafield, 'order_status');
-            array_push($oldvalarr, $oldStatus);
-            array_push($chgvalarr, 'OC');
+            // 3. Only log if update was successful
+            if ($returnData) {
+                // Prepare audit log details
+                array_push($datafield, 'order_status');
+                array_push($oldvalarr, $oldStatus);
+                array_push($chgvalarr, $newStatus);
 
-            $log = [
-                'log_act'      => $pageAction,
-                'cdate'        => $cdate,
-                'ctime'        => $ctime,
-                'uid'          => USER_ID,
-                'cby'          => USER_ID,
-                'query_rec'    => $queryOrderReceived,
-                'query_table'  => $tblName,
-                'page'         => $pageTitle,
-                'connect'      => $finance_connect,
-                'oldval'       => implodeWithComma($oldvalarr),
-                'changes'      => implodeWithComma($chgvalarr),
-                'act_msg'      => actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, '')
-            ];
+                $statusLabel = ($newStatus === 'SP') ? "Processing" : "Order Received";
 
-            audit_log($log);
+                $log = [
+                    'log_act'      => 'edit',
+                    'cdate'        => $cdate,
+                    'ctime'        => $ctime,
+                    'uid'          => USER_ID,
+                    'cby'          => USER_ID,
+                    'query_rec'    => $queryStatusUpdate,
+                    'query_table'  => $tblName,
+                    'page'         => $pageTitle,
+                    'connect'      => $connect,
+                    'oldval'       => implodeWithComma($oldvalarr),
+                    'changes'      => implodeWithComma($chgvalarr),
+                    'act_msg'      => actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, 'edit', '')
+                ];
 
-            echo '<script>
-                alert("Order status updated.");
-                window.location.href = "' . $redirect_page . '";
-            </script>';
-        } else {
-            throw new Exception("Failed to update order status.");
+                audit_log($log);
+
+                echo '<script>
+                    alert("Order status updated to ' . $statusLabel . '.");
+                    window.location.replace("' . $redirect_page . '");
+                </script>';
+                exit; // Stop executing the rest of the page so it redirects cleanly
+            } else {
+                throw new Exception("Failed to update order status.");
+            }
+        } catch (Exception $e) {
+            $errorMsg = $e->getMessage();
+            echo '<script>alert("Error: ' . addslashes($errorMsg) . '");</script>';
         }
-    } catch (Exception $e) {
-        // Optional: log failed action
-        $errorMsg = $e->getMessage();
-
-        $log = [
-            'log_act'     => $pageAction,
-            'cdate'       => $cdate,
-            'ctime'       => $ctime,
-            'uid'         => USER_ID,
-            'cby'         => USER_ID,
-            'query_rec'   => $queryOrderReceived ?? '',
-            'query_table' => $tblName,
-            'page'        => $pageTitle,
-            'connect'     => $finance_connect,
-            'oldval'      => '',
-            'changes'     => '',
-            'act_msg'     => "Error: " . $errorMsg
-        ];
-        audit_log($log);
-
-        echo '<script>alert("Error: ' . addslashes($errorMsg) . '");</script>';
     }
 }
 
 if (post('actionBtn')) {
     $action = post('actionBtn');
 
+    $resolveMultiIds = function ($hiddenInput, $nameInput, $tableName) use ($connect) {
+        $resolved = array();
+
+        if (!is_array($hiddenInput)) {
+            $hiddenInput = explode(',', (string) $hiddenInput);
+        }
+
+        foreach ($hiddenInput as $idVal) {
+            $idVal = trim((string) $idVal);
+            if ($idVal !== '' && ctype_digit($idVal) && (int) $idVal > 0) {
+                $resolved[] = (string) ((int) $idVal);
+            }
+        }
+
+        if (!is_array($nameInput)) {
+            $nameInput = array($nameInput);
+        }
+
+        foreach ($nameInput as $nameVal) {
+            $nameVal = trim((string) $nameVal);
+            if ($nameVal === '') {
+                continue;
+            }
+
+            $escapedName = mysqli_real_escape_string($connect, $nameVal);
+            $nameRst = getData('id', "name = '$escapedName'", 'LIMIT 1', $tableName, $connect);
+            if ($nameRst && $nameRst->num_rows > 0) {
+                $nameRow = $nameRst->fetch_assoc();
+                $resolvedId = (int) $nameRow['id'];
+                if ($resolvedId > 0) {
+                    $resolved[] = (string) $resolvedId;
+                }
+            }
+        }
+
+        $resolved = array_values(array_unique($resolved));
+        return implode(',', $resolved);
+    };
+
     $sor_acc = postSpaceFilter('sor_acc');
     $sor_curr = postSpaceFilter('sor_curr_hidden');
     $sor_order = postSpaceFilter('sor_order');
     $sor_date = postSpaceFilter('sor_date');
     $sor_time = postSpaceFilter('sor_time');
-    $sor_pkg = postSpaceFilter('sor_pkg_hidden');
-    $sor_brand = postSpaceFilter('sor_brand_hidden');
+    $sor_pkg = $resolveMultiIds(
+        isset($_POST['sor_pkg_hidden']) ? $_POST['sor_pkg_hidden'] : array(),
+        isset($_POST['sor_pkg']) ? $_POST['sor_pkg'] : array(),
+        PKG
+    );
+
+    $sor_brand = $resolveMultiIds(
+        isset($_POST['sor_brand_hidden']) ? $_POST['sor_brand_hidden'] : array(),
+        isset($_POST['sor_brand']) ? $_POST['sor_brand'] : array(),
+        BRAND
+    );
     $sor_user = postSpaceFilter('sor_user_hidden');
     $sor_pay = postSpaceFilter('sor_pay');
     $sor_pic = postSpaceFilter('sor_pic_hidden');
@@ -606,10 +648,6 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 </head>
 
 <body>
-    <!-- <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div> -->
-    <!-- <div class="page-load-cover"> -->
     <div class="d-flex flex-column my-3 ms-3">
         <p><a href="<?= $redirect_page ?>">
                 <?= $pageTitle ?>
@@ -779,56 +817,117 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                 </div>
                 <div class="form-group">
                     <div class="row">
-                        <div class="col-md-6 mb-3 autocomplete">
-                            <label class="form-label form_lbl" id="sor_pkg_lbl" for="sor_pkg">Package<span
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label form_lbl" id="sor_pkg_lbl" for="sor_pkg_hidden">Package<span
                                     class="requireRed">*</span></label>
                             <?php
-                            unset($echoVal);
-                            if (isset($row['package']))
-                                $echoVal = $row['package'];
+                            $selectedPkgIds = array();
+                            $postedPkgNames = (isset($_POST['sor_pkg']) && is_array($_POST['sor_pkg'])) ? $_POST['sor_pkg'] : array();
+                            if (isset($sor_pkg) && $sor_pkg !== '') {
+                                $selectedPkgIds = array_filter(array_map('trim', explode(',', $sor_pkg)), 'strlen');
+                            } else if (isset($row['package']) && $row['package'] !== '') {
+                                $selectedPkgIds = array_filter(array_map('trim', explode(',', $row['package'])), 'strlen');
+                            }
 
-                            if (isset($echoVal)) {
-                                $pkg_rst = getData('*', "id = '$echoVal'", '', PKG, $connect);
-                                $pkg_row = $pkg_rst ? $pkg_rst->fetch_assoc() : [];
+                            $pkgRows = array();
+                            if (!empty($selectedPkgIds)) {
+                                foreach ($selectedPkgIds as $pkgId) {
+                                    $pkgIdInt = (int) $pkgId;
+                                    $pkgName = '';
+                                    if ($pkgIdInt > 0) {
+                                        $pkgRst = getData('name', "id = '$pkgIdInt'", 'LIMIT 1', PKG, $connect);
+                                        if ($pkgRst && $pkgRst->num_rows > 0) {
+                                            $pkgData = $pkgRst->fetch_assoc();
+                                            $pkgName = $pkgData['name'];
+                                        }
+                                    }
+                                    $pkgRows[] = array('id' => $pkgIdInt, 'name' => $pkgName);
+                                }
+                            } else if (!empty($postedPkgNames)) {
+                                foreach ($postedPkgNames as $idx => $pkgName) {
+                                    $postedPkgId = (isset($_POST['sor_pkg_hidden'][$idx])) ? (int) $_POST['sor_pkg_hidden'][$idx] : 0;
+                                    $pkgRows[] = array('id' => $postedPkgId, 'name' => trim((string) $pkgName));
+                                }
+                            }
+
+                            if (empty($pkgRows)) {
+                                $pkgRows[] = array('id' => '', 'name' => '');
                             }
                             ?>
-                            <input class="form-control" type="text" name="sor_pkg" id="sor_pkg" <?php if ($act == '')
-                                echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $pkg_row['name'] : '' ?>">
-                            <input type="hidden" name="sor_pkg_hidden" id="sor_pkg_hidden"
-                                value="<?php echo (isset($row['package'])) ? $row['package'] : ''; ?>">
+                            <div id="sor_pkg_container">
+                                <?php foreach ($pkgRows as $pkgIndex => $pkgRow) { ?>
+                                    <div class="input-group mb-2 sor-pkg-row autocomplete">
+                                        <input class="form-control sor-pkg-input" type="text" name="sor_pkg[]"
+                                            id="sor_pkg_<?php echo $pkgIndex; ?>"
+                                            data-hidden-target="sor_pkg_hidden_<?php echo $pkgIndex; ?>"
+                                            value="<?php echo htmlspecialchars($pkgRow['name']); ?>" <?php if ($act == '') echo 'disabled'; ?>>
+                                        <input type="hidden" class="sor-pkg-hidden" name="sor_pkg_hidden[]"
+                                            id="sor_pkg_hidden_<?php echo $pkgIndex; ?>"
+                                            value="<?php echo htmlspecialchars((string) $pkgRow['id']); ?>">
+                                    </div>
+                                <?php } ?>
+                            </div>
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="add_pkg_btn" <?php if ($act == '') echo 'disabled'; ?>>+ Add Package</button>
                             <?php if (isset($pkg_err)) { ?>
                                 <div id="err_msg">
-                                    <span class="mt-n1">
-                                        <?php echo $pkg_err; ?>
-                                    </span>
+                                    <span class="mt-n1"><?php echo $pkg_err; ?></span>
                                 </div>
                             <?php } ?>
                         </div>
-                        <div class="col-md-6 mb-3 autocomplete">
-                            <label class="form-label form_lbl" id="sor_brand_lbl" for="sor_brand">Brand<span
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label form_lbl" id="sor_brand_lbl" for="sor_brand_hidden">Brand<span
                                     class="requireRed">*</span></label>
                             <?php
-                            unset($echoVal);
+                            $selectedBrandIds = array();
+                            $postedBrandNames = (isset($_POST['sor_brand']) && is_array($_POST['sor_brand'])) ? $_POST['sor_brand'] : array();
+                            if (isset($sor_brand) && $sor_brand !== '') {
+                                $selectedBrandIds = array_filter(array_map('trim', explode(',', $sor_brand)), 'strlen');
+                            } else if (isset($row['brand']) && $row['brand'] !== '') {
+                                $selectedBrandIds = array_filter(array_map('trim', explode(',', $row['brand'])), 'strlen');
+                            }
 
-                            if (isset($row['brand']))
-                                $echoVal = $row['brand'];
+                            $brandRows = array();
+                            if (!empty($selectedBrandIds)) {
+                                foreach ($selectedBrandIds as $brandId) {
+                                    $brandIdInt = (int) $brandId;
+                                    $brandName = '';
+                                    if ($brandIdInt > 0) {
+                                        $brandRst = getData('name', "id = '$brandIdInt'", 'LIMIT 1', BRAND, $connect);
+                                        if ($brandRst && $brandRst->num_rows > 0) {
+                                            $brandData = $brandRst->fetch_assoc();
+                                            $brandName = $brandData['name'];
+                                        }
+                                    }
+                                    $brandRows[] = array('id' => $brandIdInt, 'name' => $brandName);
+                                }
+                            } else if (!empty($postedBrandNames)) {
+                                foreach ($postedBrandNames as $idx => $brandName) {
+                                    $postedBrandId = (isset($_POST['sor_brand_hidden'][$idx])) ? (int) $_POST['sor_brand_hidden'][$idx] : 0;
+                                    $brandRows[] = array('id' => $postedBrandId, 'name' => trim((string) $brandName));
+                                }
+                            }
 
-                            if (isset($echoVal)) {
-                                $brand_rst = getData('name', "id = '$echoVal'", '', BRAND, $connect);
-                                $brand_row = $brand_rst ? $brand_rst->fetch_assoc() : [];
+                            if (empty($brandRows)) {
+                                $brandRows[] = array('id' => '', 'name' => '');
                             }
                             ?>
-                            <input class="form-control" type="text" name="sor_brand" id="sor_brand" <?php if ($act == '')
-                                echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $brand_row['name'] : '' ?>">
-                            <input type="hidden" name="sor_brand_hidden" id="sor_brand_hidden"
-                                value="<?php echo (isset($row['brand'])) ? $row['brand'] : ''; ?>">
-
-
+                            <div id="sor_brand_container">
+                                <?php foreach ($brandRows as $brandIndex => $brandRow) { ?>
+                                    <div class="input-group mb-2 sor-brand-row autocomplete">
+                                        <input class="form-control sor-brand-input" type="text" name="sor_brand[]"
+                                            id="sor_brand_<?php echo $brandIndex; ?>"
+                                            data-hidden-target="sor_brand_hidden_<?php echo $brandIndex; ?>"
+                                            value="<?php echo htmlspecialchars($brandRow['name']); ?>" <?php if ($act == '') echo 'disabled'; ?>>
+                                        <input type="hidden" class="sor-brand-hidden" name="sor_brand_hidden[]"
+                                            id="sor_brand_hidden_<?php echo $brandIndex; ?>"
+                                            value="<?php echo htmlspecialchars((string) $brandRow['id']); ?>">
+                                    </div>
+                                <?php } ?>
+                            </div>
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="add_brand_btn" <?php if ($act == '') echo 'disabled'; ?>>+ Add Brand</button>
                             <?php if (isset($brand_err)) { ?>
                                 <div id="err_msg">
-                                    <span class="mt-n1">
-                                        <?php echo $brand_err; ?>
-                                    </span>
+                                    <span class="mt-n1"><?php echo $brand_err; ?></span>
                                 </div>
                             <?php } ?>
                         </div>
@@ -1245,10 +1344,22 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                 <?php }} ?>
                     <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
                         <?php
-                        $statusKey = preg_replace('/[^a-z]/', '', strtolower(trim((string) $row['order_status'])));
-                        $isPendingToPack = ($statusKey === 'p' || $statusKey === 'pendingto' || $statusKey === 'pendingtopack');
-                        echo $isPendingToPack ? '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="actionOrderReceivedBtn" id="actionOrderReceivedBtn" value="updateOR">Update to Order Received</button>' :"";
-                        
+                        if (isset($row['order_status'])) {
+                            // Clean the status string for matching
+                            $statusKey = preg_replace('/[^a-z]/', '', strtolower(trim((string) $row['order_status'])));
+                            
+                            $isPendingToPack = ($statusKey === 'p' || $statusKey === 'pendingto' || $statusKey === 'pendingtopack');
+                            $isProcessing = ($statusKey === 'sp' || $statusKey === 'processing');
+
+                            // If status is 'P', show "UPDATE TO PROCESSING" and pass 'SP'
+                            if ($isPendingToPack) {
+                                echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" id="updateStatusBtn" value="SP" formnovalidate>UPDATE TO PROCESSING</button>';
+                            } 
+                            // If status is 'SP', show "UPDATE TO ORDER RECEIVED" and pass 'OC'
+                            else if ($isProcessing) {
+                                echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" id="updateStatusBtn" value="OC" formnovalidate>UPDATE TO ORDER RECEIVED</button>';
+                            }
+                        }
                         
                     switch ($act) {
                         case 'I':
@@ -1265,8 +1376,6 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
             </form>
         </div>
     </div>
-    <!-- </div> -->
-
     <?php
     
     /*

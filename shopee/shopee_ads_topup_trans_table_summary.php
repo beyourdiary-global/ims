@@ -1,15 +1,14 @@
 <?php
 ob_start();
-$pageTitle = "Shopee Withdrawal Transactions";
+$pageTitle = "Shopee Ads Top Up Transaction";
 $isFinance = 1;
-
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
 
 
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . "_list.xlsx";
-$img_path = '../' . img_server . 'finance/stock_credit_top_up_request/';
+$img_path = '../' . img_server . 'finance/shopee_ads_topup_trans/';
 
 
 $tempDir = '../' . img_server . "temp/";
@@ -28,9 +27,9 @@ if (!empty($checkboxValues)) {
     setcookie('rowID', '', time() - 3600, '/');
     // Defining column names
     $excelData = array(
-        array('S/N', 'WITHDRAWAL DATE', 'WITHDRAWAL ID', 'CURRENCY UNIT', 'WITHDRAWAL AMOUNT','PERSON IN CHARGE','ATTACHMENT','REMARK','CREATE BY', 'CREATE DATE', 'CREATE TIME', 'UPDATE BY', 'UPDATE DATE', 'UPDATE TIME')
+        array('S/N', 'SHOPEE ACCOUNT','ORDER ID','DATETIME','CURRENCY UNIT', 'SUBTOTAL','GST(%)','PAYMENT METHOD','REMARK','CREATE BY', 'CREATE DATE', 'CREATE TIME', 'UPDATE BY', 'UPDATE DATE', 'UPDATE TIME')
     );    // Get the data from the database using the WHERE clause
-    $query2 = $finance_connect->query("SELECT * FROM " . SHOPEE_WDL_TRANS . " WHERE status = 'A' AND id IN ($checkboxValues) ORDER BY date ASC, swt_id ASC, currency_unit ASC, amount ASC, pic ASC");
+    $query2 = $finance_connect->query("SELECT * FROM " . SHOPEE_ADS_TOPUP . " WHERE status = 'A' AND id IN ($checkboxValues) ORDER BY shopee_acc ASC, orderID ASC, payment_date ASC, currency ASC, topup_amt ASC,subtotal ASC,gst ASC, pay_meth ASC");
    
     $excelRowNum = 1;
     if ($query2->num_rows > 0) {
@@ -54,7 +53,7 @@ if (!empty($checkboxValues)) {
 
 
             // Define the column names in the same order as in your database query
-            $columnNames = array('date', 'swt_id', 'currency_unit', 'amount','pic','attachment','remark','create_by', 'create_date', 'create_time', 'update_by', 'update_date', 'update_time');
+            $columnNames = array('shopee_acc' , 'orderID' , 'payment_date' , 'currency' , 'topup_amt' ,'subtotal' ,'gst' , 'pay_meth' ,'remark','create_by', 'create_date', 'create_time', 'update_by', 'update_date', 'update_time');
 
             foreach ($columnNames as $columnName) {
                 // Check if the value is null, if so, replace it with an empty string
@@ -158,22 +157,21 @@ $_SESSION['act'] = '';
 $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
-
-$redirect_page = $SITEURL . '/finance/shopee_withdrawal_transactions.php';
-$deleteRedirectPage = $SITEURL . '/finance/shopee_withdrawal_transactions_table.php';
-$result = getData('*', '', '', SHOPEE_WDL_TRANS, $finance_connect);
+$deleteRedirectPage = $SITEURL . '/shopee_ads_topup_trans_table.php';
+$redirect_page = $SITEURL . '/shopee/shopee_ads_topup_trans.php';
+$result = getData('*', '', '', SHOPEE_ADS_TOPUP, $finance_connect);
 ?>
 
 <!DOCTYPE html>
 <html>
 
 <head>
-      <link rel="stylesheet" href="../css/main.css">
+    <link rel="stylesheet" href="../css/main.css">
 </head>
 
 <script>
     $(document).ready(() => {
-        createSortingTable('swt_table');
+        createSortingTable('shopee_ads_topup_trans_table');
     });
 </script>
 
@@ -185,7 +183,7 @@ $result = getData('*', '', '', SHOPEE_WDL_TRANS, $finance_connect);
 
             <div class="d-flex flex-column mb-3">
                 <div class="row">
-                    <p><a href="<?= $SITEURL ?>/dashboard.php">Dashboard</a> <i class="fa-solid fa-chevron-right fa-xs"></i><?php echo $pageTitle . " Summary"; ?></p>
+                    <p><a href="<?= $SITEURL ?>/dashboard.php">Dashboard</a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?php echo $pageTitle . " Summary"; ?></p>
                 </div>
 
                 <div class="row">
@@ -200,77 +198,88 @@ $result = getData('*', '', '', SHOPEE_WDL_TRANS, $finance_connect);
                     </div>
                 </div>
             </div>
-         
-                    <table class="table table-striped" id="swt_table">
-                    <thead>
+            <table class="table table-striped" id="shopee_ads_topup_trans_table">
+                <thead>
                         <tr>
                             <th class="hideColumn" scope="col">ID</th>
                             <th class="text-center">
                             <input type="checkbox" class="exportAll">
                             </th>
                             <th scope="col" width="60px">S/N</th>
-                            <th scope="col">Currency Unit</th>
-                            <th scope="col">Person In Charge</th>
-                            <th scope="col">Total Withdrawal Amount</th>
+                            <th scope="col">Shopee Account</th>
+                            <th scope="col">Currency</th>
+                            <th scope="col">Payment Method</th>
+                            <th scope="col">Total</th>
                         </tr>
-                    </thead>
-
-                    <tbody>
-
-                        <?php while ($row = $result->fetch_assoc()) {
-                            if (isset($_GET['ids'])) {
+                </thead>
+                <tbody>
+                    <?php while ($row = $result->fetch_assoc()) {
+                         if (isset($_GET['ids'])) {
                             $ids = explode(',', $_GET['ids']);
-                            foreach ($ids as $id) {
-                            $decodedId = urldecode($id);  
-                            if (isset($row['id']) && !empty($row['id']&& $row['id'] == $id)) {
-                           $currency = getData('unit', "id='" . $row['currency_unit'] . "'", '', CUR_UNIT, $connect);
-                           $row2 = $currency->fetch_assoc();
+                           foreach ($ids as $id) {
+                           $decodedId = urldecode($id);
+                        if (isset($row['orderID'], $row['id']) && !empty($row['orderID'] && $row['id'] == $id)) {
+                            $q1 = getData('*', "id='" . $row['shopee_acc'] . "'", 'LIMIT 1', SHOPEE_ACC, $finance_connect);
+                            $shopee_acc = $q1->fetch_assoc();
+                            $q2 = getData('unit', "id='" . $row['currency'] . "'", 'LIMIT 1', CUR_UNIT, $connect);
+                            $curr = $q2->fetch_assoc();
+                            $q3 = getData('name', "id='" . $row['pay_meth'] . "'", 'LIMIT 1', FIN_PAY_METH, $finance_connect);
+                            $pay = $q3->fetch_assoc();
+                    ?>
+                            <tr onclick="window.location='shopee_ads_topup_trans_table_detail.php?ids=<?= urlencode($row['id']) ?>';" style="cursor:pointer;">
+                                <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                <th class="text-center"><input type="checkbox" class="export" value="<?= $row['id'] ?>"></th>
+                                <th scope="row"><?= $num++; ?></th>
+                                <td scope="row"><?php if (isset($shopee_acc['name'])) echo  $shopee_acc['name'] ?></td>
+                                <td scope="row"><?php if (isset($curr['unit'])) echo $curr['unit'] ?></td>
+                                <td scope="row"><?php if (isset($row['topup_amt'])) echo  $row['topup_amt'] ?></td>
+                                <td scope="row"><?php if (isset($pay['name'])) echo  $pay['name'] ?></td>
 
-                           $pic = getData('name', "id='" . $row['pic'] . "'", '', USR_USER, $connect);
-                           $usr = $pic->fetch_assoc();                        
-                                ?>
-                                   <tr onclick="window.location='shopee_withdrawal_transactions_table_detail.php?ids=<?= urlencode($row['id']) ?>';" style="cursor:pointer;">
-                                    <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
-                                    <th class="text-center"><input type="checkbox" class="export" value="<?= $row['id'] ?>"></th>
-                                    <th scope="row"><?= $num++; ?></th>
-                                    <td scope="row"><?php if (isset($row2['unit'])) echo $row2['unit'] ?></td>
-                                    <td scope="row"><?php if (isset($usr['name'])) echo $usr['name'] ?></td>
-                                    <td scope="row"><?php if (isset($row['amount'])) echo $row['amount'] ?></td>
-                                  
-                                </tr>
-                    <?php }
-                        }
-                    }
-                }
-                     ?>
+                            </tr>
+                            <?php }
+                                }
+                            }
+                        } ?>
                 </tbody>
-                        <tfoot>
-                        <tr>
-                            <th class="hideColumn" scope="col">ID</th>
-                            <th class="text-center">
+                <tfoot>
+                    <tr>
+                        <th class="hideColumn" scope="col">ID</th>
+                        <th class="text-center">
                             <input type="checkbox" class="exportAll">
-                            </th>
-                            <th scope="col" width="60px">S/N</th>
-                            <th scope="col">Currency Unit</th>
-                            <th scope="col">Person In Charge</th>
-                            <th scope="col">Total Withdrawal Amount</th>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
+                        </th>
+                        <th scope="col" width="60px">S/N</th>
+                        <th scope="col">Shopee Account</th>
+                        <th scope="col">Currency</th>
+                        <th scope="col">Payment Method</th>
+                        <th scope="col">Total</th>
+                    </tr>
+                </tfoot>
+            </table>
         </div>
-        </body>
 
-    <script>
-        <?php include "../js/fb_ads_topup_table.js" ?>
-        <?php include "../js/shopee_withdrawal_transactions_table.js" ?>
-        //to solve the issue of dropdown menu displaying inside the table when table class include table-responsive
-        dropdownMenuDispFix();
-        //to resize table with bootstrap 5 classes
-        datatableAlignment('swt_table');
-        setButtonColor();
-    </script>
+    </div>
 
 </body>
+
+<script>
+<?php include "../js/fb_ads_topup_table.js" ?>
+<?php include "../js/shopee_ads_topup_trans_table.js" ?>
+
+    /**
+  oufei 20231014
+  common.fun.js
+  function(void)
+  to solve the issue of dropdown menu displaying inside the table when table class include table-responsive
+*/
+    dropdownMenuDispFix();
+
+    /**
+      oufei 20231014
+      common.fun.js
+      function(id)
+      to resize table with bootstrap 5 classes
+    */
+    datatableAlignment('shopee_ads_topup_trans_table');
+</script>
 
 </html>

@@ -11,8 +11,8 @@ $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 
-$redirect_page = $SITEURL . '/finance/shopee_order_req.php';
-$deleteRedirectPage = $SITEURL . '/finance/shopee_order_req_table.php';
+$redirect_page = $SITEURL . '/shopee/shopee_order_req.php';
+$deleteRedirectPage = $SITEURL . '/shopee/shopee_order_req_table.php';
 $result = getData('*', 'order_status ="OC"', '', SHOPEE_SG_ORDER_REQ, $finance_connect);
 ?>
 

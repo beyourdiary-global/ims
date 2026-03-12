@@ -12,7 +12,7 @@ $dataID = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addAccount' : 'updAccount';
 
-$redirect_page = $SITEURL . '/finance/shopee_acc_table.php';
+$redirect_page = $SITEURL . '/shopee/shopee_acc_table.php';
 $redirectLink = ("<script>location.href = '$redirect_page';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 

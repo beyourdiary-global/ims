@@ -6,9 +6,9 @@ $currentPagePin = 123;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
-include_once 'submodel/filterDateFunction.php';
-include_once 'submodel/convertDBnaming.php';
-include_once 'submodel/generateGroupByDropdown.php';
+include_once '../finance/submodel/filterDateFunction.php';
+include_once '../finance/submodel/convertDBnaming.php';
+include_once '../finance/submodel/generateGroupByDropdown.php';
 include ROOT.'/include/access.php';
 
 
@@ -16,8 +16,8 @@ require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . "_list.xlsx";
 $img_path = '../' . img_server . 'finance/shopee_order_req/';
 $total = 0;
-$currentpageRedirect = SITEURL . "/finance/shopeeOrder_request_income.php";
-$detailPage = SITEURL . "/finance/shopee_order_req_income_table_detail.php";
+$currentpageRedirect = SITEURL . "/shopee/shopeeOrder_request_income.php";
+$detailPage = SITEURL . "/shopee/shopee_order_req_income_table_detail.php";
 
 $tempDir = '../' . img_server . "temp/";
 $tempAttachDir = $tempDir . "attachment/";
@@ -261,8 +261,8 @@ $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 $tblName = SHOPEE_SG_ORDER_REQ;
 // echo "<br><br><br><br><br><br>";
-$redirect_page = $SITEURL . '/finance/shopee_order_req.php';
-$deleteRedirectPage = $SITEURL . '/finance/shopee_order_req_table.php';
+$redirect_page = $SITEURL . '/shopee/shopee_order_req.php';
+$deleteRedirectPage = $SITEURL . '/shopee/shopee_order_req_table.php';
 
 $selectFields = "$groupbyValue, SUM(price) as price, id, GROUP_CONCAT(id) AS combined_ids";
 
@@ -323,8 +323,8 @@ $result = getData(
             </div>
             <div class="row mb-3">
                 <?php
-                include_once 'submodel/filter.php';
-                include_once 'submodel/filterDate.php';
+                include_once '../finance/submodel/filter.php';
+                include_once '../finance/submodel/filterDate.php';
                 $group1DropdownOption = [
                     "brand" => "Brand",
                     "status" => "Order Status",

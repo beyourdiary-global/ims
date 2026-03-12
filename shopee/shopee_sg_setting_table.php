@@ -10,8 +10,8 @@ $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 
-$redirect_page = $SITEURL . '/finance/shopee_sg_setting.php';
-$deleteRedirectPage = $SITEURL . '/finance/shopee_sg_setting_table.php';
+$redirect_page = $SITEURL . '/shopee/shopee_sg_setting.php';
+$deleteRedirectPage = $SITEURL . '/shopee/shopee_sg_setting_table.php';
 $result = getData('*', '', '', SHOPEE_SG_SETT, $finance_connect);
 
 ?>

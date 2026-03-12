@@ -13,7 +13,7 @@ $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
 
 //Page Redirect Link , Clean LocalStorage , Error Alert Msg 
-$redirect_page = $SITEURL . '/finance/shopee_sg_setting_table.php';
+$redirect_page = $SITEURL . '/shopee/shopee_sg_setting_table.php';
 $redirectLink = ("<script>location.href = '$redirect_page';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
