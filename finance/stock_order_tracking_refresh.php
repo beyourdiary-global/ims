@@ -11,8 +11,6 @@ if (!isset($_SESSION['userid'])) {
     exit;
 }
 
-sorEnsureSchema($finance_connect);
-
 $requestId = input('id');
 $message = '';
 $ok = sorRefreshTrackingStatus($finance_connect, $requestId, $message, $connect);

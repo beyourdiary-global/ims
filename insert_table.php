@@ -176,7 +176,8 @@ $createStockOrderRequestItemTableSql = "CREATE TABLE IF NOT EXISTS `stock_order_
     `product_id` INT DEFAULT NULL,
     `package_id` INT NOT NULL,
     `package_desc` TEXT DEFAULT NULL,
-    `qty` INT NOT NULL DEFAULT 1,
+    `packageQty` INT NOT NULL DEFAULT 1,
+    `productQty` INT NOT NULL DEFAULT 1,
     `create_by` VARCHAR(30) DEFAULT NULL,
     `create_date` DATE DEFAULT NULL,
     `create_time` TIME DEFAULT NULL,
@@ -202,6 +203,16 @@ addColumnIfMissing($conn, $db_fin, 'stock_order_request', 'company_id', "ALTER T
 addColumnIfMissing($conn, $db_fin, 'stock_order_request_item', 'product_id', "ALTER TABLE `stock_order_request_item` ADD COLUMN `product_id` INT DEFAULT NULL AFTER `request_id`");
 addColumnIfMissing($conn, $db_fin, 'stock_order_request_item', 'brand_id', "ALTER TABLE `stock_order_request_item` ADD COLUMN `brand_id` INT DEFAULT NULL AFTER `product_id`");
 addColumnIfMissing($conn, $db_fin, 'stock_order_request_item', 'company_id', "ALTER TABLE `stock_order_request_item` ADD COLUMN `company_id` INT DEFAULT NULL AFTER `brand_id`");
+
+if (!columnExists($conn, $db_fin, 'stock_order_request_item', 'packageQty')) {
+    if (columnExists($conn, $db_fin, 'stock_order_request_item', 'qty')) {
+        $conn->query("ALTER TABLE `stock_order_request_item` CHANGE COLUMN `qty` `packageQty` INT NOT NULL DEFAULT 1");
+    } else {
+        addColumnIfMissing($conn, $db_fin, 'stock_order_request_item', 'packageQty', "ALTER TABLE `stock_order_request_item` ADD COLUMN `packageQty` INT NOT NULL DEFAULT 1 AFTER `package_desc`");
+    }
+}
+addColumnIfMissing($conn, $db_fin, 'stock_order_request_item', 'productQty', "ALTER TABLE `stock_order_request_item` ADD COLUMN `productQty` INT NOT NULL DEFAULT 1 AFTER `packageQty`");
+$conn->query("UPDATE `stock_order_request_item` SET `productQty`=`packageQty` WHERE IFNULL(`productQty`,0)<=0");
 
 dropColumnIfExists($conn, $db_fin, 'stock_order_request', 'request_no', "ALTER TABLE `stock_order_request` DROP COLUMN `request_no`");
 dropColumnIfExists($conn, $db_fin, 'stock_order_request', 'request_by', "ALTER TABLE `stock_order_request` DROP COLUMN `request_by`");

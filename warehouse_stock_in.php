@@ -141,7 +141,7 @@ if (post('actionBtn') === 'save') {
         );
 
         if ($saved[0]) {
-            echo "<script>location.href='" . $redirectTable . "?msg=" . urlencode($saved[1]) . "';</script>";
+            echo "<script>alert('" . addslashes($saved[1]) . "'); location.href='" . $redirectTable . "';</script>";
             exit;
         }
 
@@ -190,7 +190,7 @@ if (post('actionBtn') === 'update') {
             mysqli_query($finance_connect, $uOrder);
             mysqli_query($finance_connect, $uItem);
             mysqli_commit($finance_connect);
-            echo "<script>location.href='" . $redirectTable . "?msg=" . urlencode('Stock In updated successfully.') . "';</script>";
+            echo "<script>alert('Stock In updated successfully.'); location.href='" . $redirectTable . "';</script>";
             exit;
         } catch (Exception $ex) {
             mysqli_rollback($finance_connect);
@@ -211,7 +211,9 @@ if ($token) {
                    WHERE id='" . (int) $requestId . "' AND status='A' LIMIT 1";
         $reqRst = mysqli_query($finance_connect, $reqSql);
         if ($reqRst && ($req = mysqli_fetch_assoc($reqRst))) {
-            $itemSql = "SELECT product_id, package_id, qty
+            $itemSql = "SELECT product_id,
+                               package_id,
+                           IFNULL(productQty, IFNULL(packageQty, 1)) AS qty
                         FROM " . STOCK_ORDER_REQ_ITEM . "
                         WHERE request_id='" . (int) $requestId . "' AND status='A'";
             $itemRst = mysqli_query($finance_connect, $itemSql);
@@ -245,8 +247,8 @@ if ($token) {
                 (int) $requestId
             );
 
-            $q = $saved[0] ? 'msg' : 'err';
-            echo "<script>location.href='" . $redirectTable . "?" . $q . "=" . urlencode($saved[1]) . "';</script>";
+            // FIX: Use JS Alert and drop the URL query parameter
+            echo "<script>alert('" . addslashes($saved[1]) . "'); location.href='" . $redirectTable . "';</script>";
             exit;
         }
         $err = 'Invalid or inactive stock order request token.';

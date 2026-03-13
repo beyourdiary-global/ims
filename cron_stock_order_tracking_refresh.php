@@ -5,8 +5,6 @@
 include 'init.php';
 include ROOT . '/include/common.php';
 
-sorEnsureSchema($finance_connect);
-
 $query = "SELECT id FROM " . STOCK_ORDER_REQ . " WHERE status='A' AND tracking_no IS NOT NULL AND tracking_no <> '' ORDER BY id DESC";
 $rst = mysqli_query($finance_connect, $query);
 
