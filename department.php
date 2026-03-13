@@ -1,5 +1,5 @@
 <?php
-$pageTitle = "Department";
+$pageTitle = "Departments";
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
@@ -26,13 +26,17 @@ if (!($dataID) && !($act) || !isActionAllowed($pageAction, $pinAccess))
     echo $redirectLink;
 
 //Get The Data From Database
-$rst = getData('*', "id = '$dataID'", '', $tblName, $connect);
+if ($act != 'I') {
+    // Use native query to prevent the live server from failing
+    $query = "SELECT * FROM " . $tblName . " WHERE id = '" . mysqli_real_escape_string($connect, $dataID) . "'";
+    $rst = mysqli_query($connect, $query);
 
-//Checking Data Error When Retrieved From Database
-if (!$rst || !($row = $rst->fetch_assoc()) && $act != 'I') {
-    $errorExist = 1;
-    $_SESSION['tempValConfirmBox'] = true;
-    $act = "F";
+    //Checking Data Error When Retrieved From Database
+    if (!$rst || !($row = mysqli_fetch_assoc($rst))) {
+        $errorExist = 1;
+        $_SESSION['tempValConfirmBox'] = true;
+        $act = "F";
+    }
 }
 
 //Delete Data

@@ -18,11 +18,14 @@ $redirect_page = $SITEURL . '/employeeDetails.php';
 $ownRedirectPage = $SITEURL . '/employeeDetailsTable.php';
 $errorRedirectLink = "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script><script>location.href ='$SITEURL/dashboard.php';</script>";
 
-//Get All Employee Result 
-$result  = getData('*', '', '', $tblName, $connect);
+// Get all employee rows. Empty result is valid; only query failure should redirect.
+$resultQuery = "SELECT * FROM $tblName WHERE status = 'A' ORDER BY id DESC";
+$result = mysqli_query($connect, $resultQuery);
 
-if (!$result) {
+if ($result === false) {
+    error_log("Employee details query failed: " . mysqli_error($connect));
     echo $errorRedirectLink;
+    exit;
 }
 
 //Get Leave Application ID and action
@@ -58,19 +61,27 @@ if ($dataID) {
 //Current Employee ID 
 if (isRecordExist($tblName, 'id', USER_ID, $connect))
     $currEmpID = USER_ID;
-else
+else {
     $empIDExistError = true;
+    $currEmpID = 0; // FIX: Gives a default value so strict mode doesn't crash!
+}
 
 if (isset($currEmpID)) {
 
     //Manager Approver
-    $resultManagerApprover = getData('managers_for_leave_approval', 'employee_id="' . $currEmpID . '"', '', 'employee_info', $connect);
+    $managerApprover = '';
+    $managerQuery = "SELECT managers_for_leave_approval FROM employee_info WHERE employee_id='" . mysqli_real_escape_string($connect, (string) $currEmpID) . "' ORDER BY id DESC LIMIT 1";
+    $resultManagerApprover = mysqli_query($connect, $managerQuery);
 
-    if (!$resultManagerApprover) {
+    if ($resultManagerApprover === false) {
+        error_log("Employee manager approver query failed: " . mysqli_error($connect));
         echo $errorRedirectLink;
+    } else {
+        $rowManagerApprover = mysqli_fetch_assoc($resultManagerApprover);
+        if ($rowManagerApprover && isset($rowManagerApprover['managers_for_leave_approval'])) {
+            $managerApprover = (string) $rowManagerApprover['managers_for_leave_approval'];
+        }
     }
-    $rowManagerApprover = $resultManagerApprover->fetch_assoc();
-    $managerApprover = $rowManagerApprover['managers_for_leave_approval'];
 }
 
 //Leave Application Edit,Delete,Add
@@ -499,7 +510,6 @@ if (isset($_COOKIE['assignType'], $_COOKIE['employeeID'], $_COOKIE['leaveTypeSel
                         'oldval'       => implodeWithComma($oldvalarr),
                         'changes'      => implodeWithComma($chgvalarr),
                         'act_msg'      => actMsgLog($empArr[$i], $datafield, '', $oldvalarr, $chgvalarr, EMPLEAVE, 'edit', (isset($returnData) ? '' : $errorMsg)),
-                        'act_msg'      => actMsgLog($empArr[$i], $datafield, '', $oldvalarr, $chgvalarr, EMPLEAVE, 'edit', (isset($returnData) ? '' : $errorMsg)),
                         'query_rec'    => $query,
                         'query_table'  => EMPLEAVE,
                         'page'         => $pageTitle,
@@ -758,7 +768,8 @@ if (isset($_COOKIE['assignType'], $_COOKIE['employeeID'], $_COOKIE['leaveTypeSel
 
                                         <tbody>
                                             <?php
-                                            $currentEmpLeaveApplicationResult = getData('*', 'applicant="' . $currEmpID . '"', '', $leavePendingTblName, $connect);
+                                            $queryLeaveApp = "SELECT * FROM $leavePendingTblName WHERE applicant='$currEmpID'";
+                                            $currentEmpLeaveApplicationResult = mysqli_query($connect, $queryLeaveApp);
 
                                             if (!$currentEmpLeaveApplicationResult) {
                                                 echo $errorRedirectLink;
@@ -770,7 +781,8 @@ if (isset($_COOKIE['assignType'], $_COOKIE['employeeID'], $_COOKIE['leaveTypeSel
                                             while ($rowCurrentEmpLeaveApplication = $currentEmpLeaveApplicationResult->fetch_assoc()) {
                                                 if (isset($rowCurrentEmpLeaveApplication['id']) && !empty($rowCurrentEmpLeaveApplication['id'])) {
 
-                                                    $resultLeaveType = getData('name', "id='" . $rowCurrentEmpLeaveApplication['leave_type'] . "'", '', L_TYPE, $connect);
+                                                    $queryLeaveType = "SELECT name FROM " . L_TYPE . " WHERE id='" . $rowCurrentEmpLeaveApplication['leave_type'] . "'";
+                                                    $resultLeaveType = mysqli_query($connect, $queryLeaveType);
 
                                                     if (!$resultLeaveType) {
                                                         echo $errorRedirectLink;
@@ -886,13 +898,16 @@ if (isset($_COOKIE['assignType'], $_COOKIE['employeeID'], $_COOKIE['leaveTypeSel
 
                                                     $queryEmpLeave = "SHOW COLUMNS FROM " . EMPLEAVE;
                                                     $resultEmpLeave_1 = mysqli_query($connect, $queryEmpLeave);
-                                                    $resultEmpLeave_2 = getData('*', 'employeeID="' . $currEmpID . '"', '', EMPLEAVE, $connect);
+
+                                                    $queryEmpLeave2 = "SELECT * FROM " . EMPLEAVE . " WHERE employeeID='$currEmpID'";
+                                                    $resultEmpLeave_2 = mysqli_query($connect, $queryEmpLeave2);
+
                                                     $resultEmpLeave_3 = mysqli_query($connect, $querySumOfCurrEmpLeave);
 
-                                                    if (!$resultEmpLeave_1 || !$resultEmpLeave_2 || !$resultEmpLeave_3) {
+                                                    if ($resultEmpLeave_1 === false || $resultEmpLeave_2 === false || $resultEmpLeave_3 === false) {
                                                         echo $errorRedirectLink;
+                                                        exit; // FIX: Stop PHP execution immediately to prevent fatals
                                                     } else {
-
                                                         $columns = $resultEmpLeave_1->fetch_all(MYSQLI_ASSOC);
 
                                                         foreach ($columns as $column) {
@@ -923,7 +938,10 @@ if (isset($_COOKIE['assignType'], $_COOKIE['employeeID'], $_COOKIE['leaveTypeSel
 
                                                     $leaveTypeID = implodeWithComma($leaveTypeArr);
 
-                                                    $resultLeave = getData('*', 'id IN (' . $leaveTypeID . ')', '', L_TYPE, $connect);
+                                                    if (empty($leaveTypeID)) { $leaveTypeID = '0'; }
+
+                                                    $queryLeave = "SELECT * FROM " . L_TYPE . " WHERE id IN (" . $leaveTypeID . ")";
+                                                    $resultLeave = mysqli_query($connect, $queryLeave);
 
                                                     if (!$resultLeave) {
                                                         echo $errorRedirectLink;
@@ -1161,7 +1179,13 @@ if (isset($_COOKIE['assignType'], $_COOKIE['employeeID'], $_COOKIE['leaveTypeSel
                                         </li>
                                         <li>
                                             <?php if (isActionAllowed("Delete", $pinAccess)) : ?>
-                                                <a class="dropdown-item" onclick="confirmationDialog('<?= $row['id'] ?>',['<?= $row['name'] ?>','<?= $row['id_number'] ?>','<?= $row['email'] ?>'],'<?php echo $pageTitle ?>','<?= $redirect_page ?>','<?= $SITEURL ?>/employeeDetailsTable.php','D')">Delete</a>
+                                                <?php 
+                                                    // Safely escape quotes for both JavaScript and HTML
+                                                    $safeName = htmlspecialchars(addslashes($row['name'] ?? ''), ENT_QUOTES, 'UTF-8');
+                                                    $safeIdNum = htmlspecialchars(addslashes($row['id_number'] ?? ''), ENT_QUOTES, 'UTF-8');
+                                                    $safeEmail = htmlspecialchars(addslashes($row['email'] ?? ''), ENT_QUOTES, 'UTF-8');
+                                                ?>
+                                                <a class="dropdown-item" onclick="confirmationDialog('<?= $row['id'] ?>',['<?= $safeName ?>','<?= $safeIdNum ?>','<?= $safeEmail ?>'],'<?php echo $pageTitle ?>','<?= $redirect_page ?>','<?= $SITEURL ?>/employeeDetailsTable.php','D')">Delete</a>
                                             <?php endif; ?>
                                         </li>
                                     </ul>

@@ -84,18 +84,27 @@ if (post('actionBtn')) {
                 $img_ext_lc = strtolower($img_ext);
 
                 if (in_array($img_ext_lc, $allowed_ext)) {
+                    // Get the original file name without the extension
+                    $base_name = pathinfo($for_file_name, PATHINFO_FILENAME);
                     $highestNumber = 0;
-                    $files = glob($img_path . $for_link . '_*.' . $img_ext);
+                    
+                    // Check if files with this exact name already exist
+                    $files = glob($img_path . $base_name . '_*.' . $img_ext);
                     foreach ($files as $file) {
                         $filename = basename($file);
-                        if (preg_match('/' . preg_quote($for_link, '/') . '_(\d+)\.' . preg_quote($img_ext, '/') . '$/', $filename, $matches)) {
+                        if (preg_match('/^' . preg_quote($base_name, '/') . '_(\d+)\.' . preg_quote($img_ext, '/') . '$/', $filename, $matches)) {
                             $number = (int) $matches[1];
                             $highestNumber = max($highestNumber, $number);
                         }
                     }
 
-                    $unique_id = $highestNumber + 1;
-                    $new_file_name = $for_link . '_' . $unique_id . '.' . $img_ext_lc;
+                    // Use the original name, but append _1, _2 etc. only if it already exists
+                    if (file_exists($img_path . $for_file_name) || $highestNumber > 0) {
+                        $unique_id = $highestNumber + 1;
+                        $new_file_name = $base_name . '_' . $unique_id . '.' . $img_ext_lc;
+                    } else {
+                        $new_file_name = $for_file_name;
+                    }
 
                     // Move the uploaded file
                     if (move_uploaded_file($for_file_tmp_name, $img_path . $new_file_name)) {
@@ -377,6 +386,14 @@ if (post('actionBtn')) {
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
                         $query = "UPDATE " . $tblName . " SET name = '$for_name', fb_link = '$for_link', contact = '$for_ctc', sales_pic = '$for_pic', country = '$for_country', brand = '$for_brand', series = '$for_series', package = '$for_pkg', fb_page = '$for_fbpage', channel = '$for_channel', price = '$for_price', pay_method = '$for_pay', ship_rec_name = '$for_rec_name', ship_rec_add = '$for_rec_add', ship_rec_contact = '$for_rec_ctc', remark ='$for_remark', attachment ='$for_attach', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
                         $returnData = mysqli_query($finance_connect, $query);
+
+                        // --- FIX: Delete the old attachment from the folder ---
+                        if ($returnData && isset($row['attachment']) && $row['attachment'] != '' && $row['attachment'] != $for_attach) {
+                            $old_file_path = $img_path . $row['attachment'];
+                            if (file_exists($old_file_path)) {
+                                unlink($old_file_path); // Physically removes the file from the server
+                            }
+                        }
 
                     } else {
                         $act = 'NC';
@@ -966,7 +983,15 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 <input class="form-control" type="file" name="for_attach" id="for_attach" <?php if ($act == '')
                         echo 'disabled' ?>>
 
-                            <?php if (isset($row['attachment']) && $row['attachment']) { ?>
+                            <?php if (isset($for_attach) && $for_attach) { ?>
+                                <div class="text-success mt-1">
+                                    <span class="mt-n1">
+                                        <?php echo "Uploaded Attachment: " . htmlspecialchars($for_attach); ?>
+                                    </span>
+                                </div>
+                                <input type="hidden" name="existing_attachment"
+                                    value="<?php echo htmlspecialchars($for_attach); ?>">
+                            <?php } else if (isset($row['attachment']) && $row['attachment']) { ?>
                                 <div id="err_msg">
                                     <span class="mt-n1">
                                         <?php echo "Current Attachment: " . htmlspecialchars($row['attachment']); ?>

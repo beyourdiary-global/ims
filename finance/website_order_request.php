@@ -96,52 +96,90 @@ if (post('actionBtn')) {
         case 'addRecord':
         case 'updRecord':
 
+            $error = 0;
 
             if (!$wor_order_id) {
-                $order_id_err = "Order ID cannot be empty.";
-                break;
-            } else if (!$wor_brand) {
-                $brand_err = "Brand cannot be empty.";
-                break;
-            } else if (!$wor_series) {
-                $series_err = "Series cannot be empty.";
-                break;
-            } else if (!$wor_pkg && $wor_pkg < 1) {
-                $pkg_err = "Package cannot be empty.";
-                break;
-            } else if (!$wor_country && $wor_country < 1) {
-                $country_err = "Country cannot be empty.";
-                break;
-            } else if (!$wor_currency && $wor_currency < 1) {
-                $currency_err = "Currency cannot be empty.";
-                break;
-            } else if (!$wor_price) {
-                $price_err = "Price cannot be empty.";
-                break;
-            }  else if (!$wor_pic) {
-                $pic_err = "Person In Charge cannot be empty.";
-                break;
+                $order_id_err = "Order ID is required!";
+                $error = 1;
+            }
+            if (!$wor_brand) {
+                $brand_err = "Brand is required!";
+                $error = 1;
+            }
+            if (!$wor_series) {
+                $series_err = "Series is required!";
+                $error = 1;
+            }
+            if (empty($wor_pkg) || $wor_pkg < 1) {
+                $pkg_err = "Package is required!";
+                $error = 1;
+            }
+            if (empty($wor_country) || $wor_country < 1) {
+                $country_err = "Country is required!";
+                $error = 1;
+            }
+            if (empty($wor_currency) || $wor_currency < 1) {
+                $currency_err = "Currency is required!";
+                $error = 1;
+            }
+            if ($wor_price == '' && $wor_price !== '0') {
+                $price_err = "Price is required!";
+                $error = 1;
+            }
+            if ($wor_shipping == '' && $wor_shipping !== '0') {
+                $shipping_err = "Shipping is required!";
+                $error = 1;
+            }
+            if ($wor_discount == '' && $wor_discount !== '0') {
+                $discount_err = "Discount Price is required!";
+                $error = 1;
+            }
+            if ($wor_total == '' && $wor_total !== '0') {
+                $total_err = "Total is required!";
+                $error = 1;
+            }
+            if (!$wor_pay) {
+                $pay_err = "Payment Method is required!";
+                $error = 1;
+            }
+            if (!$wor_pic) {
+                $pic_err = "Person In Charge is required!";
+                $error = 1;
+            }
+            if (!$wor_cust_id) {
+                $cust_id_err = "Customer ID is required!";
+                $error = 1;
+            }
+            if (!$wor_cust_name) {
+                $cust_name_err = "Customer Name is required!";
+                $error = 1;
+            }
+            if (!$wor_cust_email) {
+                $cust_email_err = "Customer Email is required!";
+                $error = 1;
+            }
+            if (!$wor_cust_birthday) {
+                $cust_birthday_err = "Customer Birthday is required!";
+                $error = 1;
+            }
+            if (!$wor_shipping_name) {
+                $shipping_name_err = "Shipping Name is required!";
+                $error = 1;
+            }
+            if (!$wor_shipping_address) {
+                $shipping_address_err = "Shipping Address is required!";
+                $error = 1;
+            }
+            if (!$wor_shipping_contact) {
+                $shipping_contact_err = "Shipping Contact is required!";
+                $error = 1;
+            }
 
-            } else if (!$wor_cust_name) {
-                $cust_name_err = "Customer Name cannot be empty.";
+            if ($error) {
                 break;
-            } else if (!$wor_cust_email) {
-                $cust_email_err = "Customer Email cannot be empty.";
-                break;
-            } else if (!$wor_cust_birthday) {
-                $cust_birthday_err = "Customer Birthday cannot be empty.";
-                break;
-            } else if (!$wor_shipping_name) {
-                $shipping_name_err = "Customer Name cannot be empty.";
-                break;
-            } else if (!$wor_shipping_address) {
-                $shipping_address_err = "Customer Address cannot be empty.";
-                break;
-            } else if (!$wor_shipping_contact) {
-                $shipping_contact_err = "Customer Contact cannot be empty.";
-                break;
-               
-            } else if ($action == 'addRecord') {
+            }
+
+            if ($action == 'addRecord') {
                 try {
                     //check values
 
@@ -1103,8 +1141,6 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
     }
     ?>
     <script>
-      
-
         var page = "<?= $pageTitle ?>";
         var action = "<?php echo isset($act) ? $act : ' '; ?>";
 
@@ -1113,9 +1149,37 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         setButtonColor();
         preloader(300, action);
 
-        <?php
-        include "../js/website_order_request.js"
-            ?>
+        <?php include "../js/website_order_request.js" ?>
+
+        // FIX: Add missing frontend validation for Shipping, Discount, and Total
+        $(document).ready(function() {
+            $('.submitBtn').on('click', function(e) {
+                var extraFields = ['wor_shipping', 'wor_discount', 'wor_total'];
+                var formHasError = false;
+
+                extraFields.forEach(function(field) {
+                    var inputVal = $('#' + field).val();
+                    
+                    // If the field is empty, trigger the error
+                    if (inputVal === '') {
+                        // Check if error msg already exists to avoid duplicates
+                        if ($('#' + field).siblings('#err_msg').length === 0) {
+                            var labelText = $('#' + field + '_lbl').text().replace('*', '').trim();
+                            $('#' + field).after('<div id="err_msg"><span class="mt-n1">' + labelText + ' is required!</span></div>');
+                        }
+                        formHasError = true;
+                    } else {
+                        // Remove error if the user filled it in
+                        $('#' + field).siblings('#err_msg').remove();
+                    }
+                });
+
+                // Stop the form from submitting if these fields are empty
+                if (formHasError) {
+                    e.preventDefault();
+                }
+            });
+        });
     </script>
 
 </body>

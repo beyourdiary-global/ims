@@ -93,6 +93,16 @@ if (post('actionBtn')) {
                 $error = 1;
             }
 
+            if ($mrcht_contact && !preg_match('/^[0-9]+$/', $mrcht_contact)) {
+                $contact_err = "Contact must contain numbers only. Please remove any dashes or special characters.";
+                $error = 1;
+            }
+
+            if ($mrcht_pic_contact && !preg_match('/^[0-9]+$/', $mrcht_pic_contact)) {
+                $pic_contact_err = "Person In Charge Contact must contain numbers only. Please remove any dashes or special characters.";
+                $error = 1;
+            }
+
             try {
                 $query = "SELECT COUNT(*) as count FROM `$tblName` WHERE `name` = '$currentDataName'";
                 if ($dataID) {
@@ -333,14 +343,19 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                             <div class="col-md-6 mb-3">
 
                                 <label class="form-label form_lbl" id="mrcht_contact_lbl" for="mrcht_contact"><?php echo $pageTitle ?> Contact</label>
-                                <input class="form-control" type="number" step="any" name="mrcht_contact" id="mrcht_contact" value="<?php
-                                                                                                                                    if (isset($dataExisted) && isset($row['contact']) && !isset($mrcht_contact)) {
-                                                                                                                                        echo $row['contact'];
-                                                                                                                                    } else if (isset($dataExisted) && isset($row['contact']) && isset($mrcht_contact)) {
-                                                                                                                                        echo $mrcht_contact;
+                                <input class="form-control" type="text" name="mrcht_contact" id="mrcht_contact" value="<?php
+                                                                                                                                    if (isset($mrcht_contact)) {
+                                                                                                                                        echo htmlspecialchars($mrcht_contact, ENT_QUOTES, 'UTF-8');
+                                                                                                                                    } else if (isset($dataExisted) && isset($row['contact'])) {
+                                                                                                                                        echo htmlspecialchars($row['contact'], ENT_QUOTES, 'UTF-8');
                                                                                                                                     } else {
                                                                                                                                         echo '';
-                                                                                                                                    } ?>" <?php if ($act == '') echo 'readonly' ?>>
+                                                                                                                                    } ?>" <?php if ($act == '') echo 'readonly' ?> autocomplete="off">
+                                <?php if (isset($contact_err)) { ?>
+                                    <div id="err_msg">
+                                        <span class="mt-n1"><?php echo $contact_err; ?></span>
+                                    </div>
+                                <?php } ?>
                             </div>
                             <div class="col-md-6">
                             <label class="form-label form_lbl" id="mrcht_email_lbl" for="mrcht_email"><?php echo $pageTitle ?> Email<span class="required-dot">*</span></label>
@@ -390,15 +405,20 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label form_lbl" id="mrcht_pic_contact_lbl" for="mrcht_pic_contact">Person In Charge Contact</label>
-                                <input class="form-control" type="number" step="any" name="mrcht_pic_contact" id="mrcht_pic_contact" value="<?php
-                                                                                                                                            if (isset($dataExisted) && isset($row['person_in_charges_contact']) && !isset($mrcht_pic_contact)) {
-                                                                                                                                                echo $row['person_in_charges_contact'];
-                                                                                                                                            } else if (isset($dataExisted) && isset($row['person_in_charges_contact']) && isset($mrcht_pic_contact)) {
-                                                                                                                                                echo $mrcht_pic_contact;
+                                <input class="form-control" type="text" name="mrcht_pic_contact" id="mrcht_pic_contact" value="<?php
+                                                                                                                                            if (isset($mrcht_pic_contact)) {
+                                                                                                                                                echo htmlspecialchars($mrcht_pic_contact, ENT_QUOTES, 'UTF-8');
+                                                                                                                                            } else if (isset($dataExisted) && isset($row['person_in_charges_contact'])) {
+                                                                                                                                                echo htmlspecialchars($row['person_in_charges_contact'], ENT_QUOTES, 'UTF-8');
                                                                                                                                             } else {
                                                                                                                                                 echo '';
                                                                                                                                             }
-                                                                                                                                            ?>" <?php if ($act == '') echo 'readonly' ?>>
+                                                                                                                                            ?>" <?php if ($act == '') echo 'readonly' ?> autocomplete="off">
+                                <?php if (isset($pic_contact_err)) { ?>
+                                    <div id="err_msg">
+                                        <span class="mt-n1"><?php echo $pic_contact_err; ?></span>
+                                    </div>
+                                <?php } ?>
                             </div>
                         </div>
                     </div>

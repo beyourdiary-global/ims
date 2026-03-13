@@ -82,7 +82,46 @@ if (post('actionBtn')) {
             $item_description = postSpaceFilter('item_description'); // NEW
             $pkg_price = postSpaceFilter('price');
             $cur_unit = postSpaceFilter('cur_unit_hidden');
+            
             $brand = postSpaceFilter('brand_hidden');
+            $brand_text = postSpaceFilter('brand'); 
+            $brand_exists = false;
+
+            // 1. Check if the hidden ID exists in the BRAND table
+            if (!empty($brand) && ctype_digit($brand)) {
+                $safe_brand_id = (int)$brand;
+                $check_brand = getData('id', "id = $safe_brand_id", '', BRAND, $connect);
+                if ($check_brand && $check_brand->num_rows > 0) {
+                    $brand_exists = true;
+                }
+            }
+
+            // 2. If ID is empty but they typed text, verify if the exact text exists in the database
+            if (!$brand_exists && !empty($brand_text)) {
+                $safe_brand_text = mysqli_real_escape_string($connect, $brand_text);
+                $check_brand_text = getData('id', "name = '$safe_brand_text'", '', BRAND, $connect);
+                if ($check_brand_text && $check_brand_text->num_rows > 0) {
+                    $brand_exists = true;
+                    // It exists! Automatically grab the correct ID for the database
+                    $brand_row_data = $check_brand_text->fetch_assoc();
+                    $brand = $brand_row_data['id']; 
+                }
+            }
+
+            // 3. Block submission if brand is empty or not found
+            $error = 0;
+            if (empty($brand_text)) {
+                $brand_err = "Brand is required!";
+                $error = 1;
+            } else if (!$brand_exists) {
+                $brand_err = "Brand does not exist! Please select a valid brand from the list.";
+                $error = 1;
+            }
+            
+            if ($error == 1) {
+                break; // Stops the save but allows specific errors to display below fields
+            }
+            
             $cost = postSpaceFilter('package_cost');
             $cost_curr = postSpaceFilter('cost_curr_hidden');
             $agent_cost = postSpaceFilter('agent_cost');
@@ -429,15 +468,23 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                         $brandName = $brand_row['name'];
                                     }
                                 }
+                                
+                                // --- FIX: Retain user input if validation fails ---
+                                if (isset($_POST['brand'])) {
+                                    $brandName = $_POST['brand'];
+                                }
                                 ?>
                                 <input class="form-control" type="text" name="brand" id="brand"
-                                    value="<?php echo htmlspecialchars($brandName); ?>"
+                                    value="<?php echo htmlspecialchars($brandName, ENT_QUOTES, 'UTF-8'); ?>"
                                     <?php if ($act == '') echo 'readonly'; ?> required>
                                 <input type="hidden" name="brand_hidden" id="brand_hidden"
-                                    value="<?php echo isset($row['brand']) ? htmlspecialchars($row['brand']) : ''; ?>">
-                                <div id="err_msg">
-                                    <span class="mt-n1"><?php if (isset($brand_err)) echo $brand_err; ?></span>
-                                </div>
+                                    value="<?php echo isset($_POST['brand_hidden']) ? htmlspecialchars($_POST['brand_hidden'], ENT_QUOTES, 'UTF-8') : (isset($row['brand']) ? htmlspecialchars($row['brand'], ENT_QUOTES, 'UTF-8') : ''); ?>">
+                                
+                                <?php if (isset($brand_err)) { ?>
+                                    <div id="err_msg">
+                                        <span class="mt-n1"><?php echo $brand_err; ?></span>
+                                    </div>
+                                <?php } ?>
                             </div>
                         </div>
 

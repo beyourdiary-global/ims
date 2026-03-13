@@ -205,6 +205,13 @@ if ($action === 'parseShopeeAdsTopup') {
         } else {
             $cleanText = normalizeImportText(strip_tags(str_replace(['<', '>'], [' <', '> '], $html)));
 
+            // Use DOM parsing for better extraction
+            libxml_use_internal_errors(true);
+            $dom = new DOMDocument();
+            $dom->loadHTML($html, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING);
+            libxml_clear_errors();
+            $xpath = new DOMXPath($dom);
+
             $order_id = preg_match('/(?:Order ID|Order SN|Order No)[^A-Z0-9]*([A-Z0-9]{12,24})/i', $cleanText, $m) ? strtoupper(trim($m[1])) : '';
             if ($order_id === '') {
                 $order_id = preg_match('/sale\/order\/([A-Z0-9]{12,24})/i', $html, $m) ? strtoupper(trim($m[1])) : '';
@@ -212,14 +219,83 @@ if ($action === 'parseShopeeAdsTopup') {
 
             $sku = preg_match('/(?:SKU|Item Code)[^A-Za-z0-9]*([A-Za-z0-9\-_]+)/i', $cleanText, $m) ? trim($m[1]) : '';
 
-            $product_price = parseShopeeOrderAmountByLabels($cleanText, ['Product Price', 'Deal Price']);
-            $voucher = parseShopeeOrderAmountByLabels($cleanText, ['Shopee Voucher', 'Seller Voucher']);
-            $actShippingFee = parseShopeeOrderAmountByLabels($cleanText, ['Estimated Shipping Subtotal', 'Estimated Shipping Fee Charged by Logistic Provider']);
-            $serviceFee = parseShopeeOrderAmountByLabels($cleanText, ['Service Fee']);
-            $transactionFee = parseShopeeOrderAmountByLabels($cleanText, ['Transaction Fee']);
-            $amsFee = parseShopeeOrderAmountByLabels($cleanText, ['Commission Fee']);
-            $fees = parseShopeeOrderAmountByLabels($cleanText, ['Fees & Charges']);
-            $finalAmt = parseShopeeOrderAmountByLabels($cleanText, ['Final Amount', 'Estimated Order Income']);
+            // Extract product name from HTML for better package matching
+            $productName = '';
+            // Try to get product name from product title elements common in Shopee order pages
+            $productNameNode = getNodeText($xpath, "//*[contains(@class,'product-name') or contains(@class,'item-name') or contains(@class,'product-title')]");
+            if ($productNameNode === '') {
+                // Fallback: try to extract from text near SKU
+                if (preg_match('/Product\(s\)[^:]*:?\s*(.+?)(?:SKU|Item Code|Variation)/is', $cleanText, $pnm)) {
+                    $productName = normalizeImportText($pnm[1]);
+                }
+            } else {
+                $productName = $productNameNode;
+            }
+
+            $paymentInfoPairs = collectShopeeOrderAmountPairsFromDom($xpath, "//*[@data-testid='odp-order-payment']//*[contains(@class,'income-item')]");
+            $buyerPaymentPairs = collectShopeeOrderAmountPairsFromDom($xpath, "//*[@data-testid='odp-buyer-payment']//*[contains(@class,'income-item')]");
+
+            // Fallback to full-page scan if section-specific selectors are not available.
+            if (empty($paymentInfoPairs)) {
+                $paymentInfoPairs = collectShopeeOrderAmountPairsFromDom($xpath);
+            }
+            if (empty($buyerPaymentPairs)) {
+                $buyerPaymentPairs = $paymentInfoPairs;
+            }
+
+            $product_price = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Product Price', 'Deal Price', 'Merchandise Subtotal']);
+            if ($product_price === '') {
+                $product_price = parseShopeeOrderAmountFromPairs($buyerPaymentPairs, ['Product Price', 'Merchandise Subtotal']);
+            }
+            if ($product_price === '') {
+                $product_price = parseShopeeOrderAmountByLabels($cleanText, ['Product Price', 'Deal Price', 'Merchandise Subtotal']);
+            }
+
+            $voucher = parseShopeeOrderAmountFromPairs($buyerPaymentPairs, ['Vouchers & Rebates', 'Shopee Voucher', 'Seller Voucher', 'Shop voucher']);
+            if ($voucher === '') {
+                $voucher = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Vouchers & Rebates', 'Shopee Voucher', 'Seller Voucher', 'Shop voucher']);
+            }
+            if ($voucher === '') {
+                $voucher = parseShopeeOrderAmountByLabels($cleanText, ['Vouchers & Rebates', 'Shopee Voucher', 'Seller Voucher', 'Shop voucher']);
+            }
+
+            $actShippingFee = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Estimated Shipping Subtotal', 'Shipping Subtotal', 'Estimated Shipping Fee Charged by Logistic Provider', 'Shipping Fee Paid by Buyer']);
+            if ($actShippingFee === '') {
+                $actShippingFee = parseShopeeOrderAmountByLabels($cleanText, ['Shipping Subtotal', 'Estimated Shipping Subtotal', 'Estimated Shipping Fee Charged by Logistic Provider', 'Shipping Fee Paid by Buyer']);
+            }
+
+            // CMS mapping requirement:
+            // service_fee <- Commission Fee (Incl.SST)
+            $serviceFee = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Commission Fee', 'Service Fee']);
+            if ($serviceFee === '') {
+                $serviceFee = parseShopeeOrderAmountByLabels($cleanText, ['Commission Fee', 'Service Fee']);
+            }
+
+            // CMS mapping requirement:
+            // trans_fee <- Service Fee
+            $transactionFee = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Service Fee', 'Transaction Fee']);
+            if ($transactionFee === '') {
+                $transactionFee = parseShopeeOrderAmountByLabels($cleanText, ['Service Fee', 'Transaction Fee']);
+            }
+
+            // CMS mapping requirement:
+            // ams_fee <- Fees & Charges
+            $amsFee = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Fees & Charges', 'Commission Fee', 'Saver Programme Fee']);
+            if ($amsFee === '') {
+                $amsFee = parseShopeeOrderAmountByLabels($cleanText, ['Fees & Charges', 'Commission Fee', 'Saver Programme Fee']);
+            }
+
+            // CMS mapping requirement:
+            // fees <- Seller Paid Shipping Fee SST
+            $fees = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Seller Paid Shipping Fee SST', 'Fees & Charges']);
+            if ($fees === '') {
+                $fees = parseShopeeOrderAmountByLabels($cleanText, ['Seller Paid Shipping Fee SST', 'Fees & Charges']);
+            }
+
+            $finalAmt = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Estimated Order Income', 'Order Income', 'Final Amount']);
+            if ($finalAmt === '') {
+                $finalAmt = parseShopeeOrderAmountByLabels($cleanText, ['Order Income', 'Estimated Order Income', 'Final Amount']);
+            }
 
             $detectedCurrency = detectShopeeOrderCurrency($cleanText);
             $currencyFallbacks = $detectedCurrency === 'RM' ? ['MYR'] : [];
@@ -227,6 +303,66 @@ if ($action === 'parseShopeeAdsTopup') {
 
             $buyerUsername = extractShopeeBuyerUsername($html, $cleanText);
             $buyerId = resolveImportOptionId($buyerUsername, $shopeeBuyers);
+
+            // Extract buyer payment method from HTML
+            $detectedPayMethod = '';
+            $payMethodNode = extractValueFromTableLabel($xpath, ['Payment Method']);
+            if ($payMethodNode === '') {
+                // Fallback: regex from clean text
+                if (preg_match('/Payment\s*Method\s*[:\s]*([A-Za-z0-9\s\-\.\/]+?)(?:\s*(?:Shipping|Voucher|Fees|Order|Merchandise|$))/i', $cleanText, $pm)) {
+                    $detectedPayMethod = normalizeImportText($pm[1]);
+                }
+            } else {
+                $detectedPayMethod = $payMethodNode;
+            }
+            $payMethodId = '';
+            if ($detectedPayMethod !== '') {
+                $payMethodId = resolveImportOptionId($detectedPayMethod, $shopeePayMethods);
+            }
+
+            // Extract shop name / Shopee account from HTML
+            $detectedShopName = '';
+            $shopHeaderNode = getNodeText($xpath, "//div[contains(@class,'order-detail-info')]//div[contains(@class,'header')]");
+            if ($shopHeaderNode !== '') {
+                $detectedShopName = extractValueAfterColon($shopHeaderNode);
+            }
+            if ($detectedShopName === '') {
+                // Fallback: try to find shop name in text
+                if (preg_match('/Shop\s*(?:Name)?\s*[:\s]+([^\n,]+)/i', $cleanText, $sn)) {
+                    $detectedShopName = normalizeImportText($sn[1]);
+                }
+            }
+            $shopeeAccId = '';
+            if ($detectedShopName !== '') {
+                $shopeeAccId = resolveImportOptionId($detectedShopName, $shopeeAccounts);
+            }
+
+            // Detect order status from HTML (completed orders should show as Completed)
+            $detectedOrderStatus = 'P'; // Default: Pending To Pack
+            $detectedOrderStatusLabel = 'Pending To Pack';
+            // Check for Completed timeline
+            $completedNode = getNodeText($xpath, "//div[contains(@class,'timeline-item')][.//div[contains(@class,'title') and normalize-space()='Completed']]");
+            if ($completedNode !== '') {
+                $detectedOrderStatus = 'C';
+                $detectedOrderStatusLabel = 'Completed';
+            } else {
+                // Fallback: check text for status indicators
+                if (preg_match('/\bOrder\s+Status\s*[:\s]*(Completed|Shipped|Delivered|To\s*Ship|To\s*Receive|Processing)/i', $cleanText, $osm)) {
+                    $statusText = strtolower(trim($osm[1]));
+                    if ($statusText === 'completed' || $statusText === 'delivered') {
+                        $detectedOrderStatus = 'C';
+                        $detectedOrderStatusLabel = 'Completed';
+                    } else if ($statusText === 'shipped' || $statusText === 'to receive') {
+                        $detectedOrderStatus = 'SP';
+                        $detectedOrderStatusLabel = 'SHIP PROCESSING (Warehouse)';
+                    }
+                }
+                // Also check for "Order Income" label which indicates a completed order
+                if ($detectedOrderStatus === 'P' && preg_match('/\bOrder\s+Income\b/i', $cleanText)) {
+                    $detectedOrderStatus = 'C';
+                    $detectedOrderStatusLabel = 'Completed';
+                }
+            }
 
             if ($order_id === '') {
                 $importErrors[] = 'Order ID could not be detected. Please ensure you uploaded the correct Shopee Order Details HTML file.';
@@ -239,16 +375,34 @@ if ($action === 'parseShopeeAdsTopup') {
             if (!empty($sku)) {
                 // Escape SKU to prevent SQL injection when building the condition string
                 $safeSku = mysqli_real_escape_string($connect, $sku);
-                // Search by item_code OR name (Removed 'barcode' as it does not exist in package table)
+                // Search by item_code OR name
                 $pkgResult = getData('*', "item_code='$safeSku' OR name='$safeSku'", '', PKG, $connect); 
                 if ($pkgResult && $pkgResult->num_rows > 0) {
                     $pkg_row = $pkgResult->fetch_assoc();
                     $pkg_id = $pkg_row['id'];
                 } else {
-                    $missing_sku = true;
+                    // Try partial/fuzzy match: item_code LIKE or name LIKE
+                    $pkgResult = getData('*', "item_code LIKE '%$safeSku%' OR name LIKE '%$safeSku%'", 'LIMIT 1', PKG, $connect);
+                    if ($pkgResult && $pkgResult->num_rows > 0) {
+                        $pkg_row = $pkgResult->fetch_assoc();
+                        $pkg_id = $pkg_row['id'];
+                    } else {
+                        $missing_sku = true;
+                    }
                 }
             } else {
                 $missing_sku = true;
+            }
+
+            // If still missing, try matching using product name
+            if ($missing_sku && !empty($productName)) {
+                $safeProductName = mysqli_real_escape_string($connect, $productName);
+                $pkgResult = getData('*', "name LIKE '%$safeProductName%'", 'LIMIT 1', PKG, $connect);
+                if ($pkgResult && $pkgResult->num_rows > 0) {
+                    $pkg_row = $pkgResult->fetch_assoc();
+                    $pkg_id = $pkg_row['id'];
+                    $missing_sku = false;
+                }
             }
 
             $previewData = [
@@ -256,16 +410,18 @@ if ($action === 'parseShopeeAdsTopup') {
                 'sku' => $sku,
                 'package_id' => $pkg_id,
                 'product_price' => $product_price !== '' ? $product_price : '0.00',
-                'order_status' => 'Pending To Pack',
-                'order_status_val' => 'P',
+                'order_status' => $detectedOrderStatusLabel,
+                'order_status_val' => $detectedOrderStatus,
                 'missing_sku' => $missing_sku,
-                'shopee_acc' => '',
+                'shopee_acc' => $shopeeAccId,
+                'source_shopee_acc' => $detectedShopName,
                 'currency' => $currencyId,
                 'source_currency' => $detectedCurrency,
                 'brand' => '',
                 'buyer' => $buyerId,
                 'source_buyer_username' => $buyerUsername,
-                'buyer_pay_meth' => '',
+                'buyer_pay_meth' => $payMethodId,
+                'source_buyer_pay_meth' => $detectedPayMethod,
                 'pic' => (string) USER_ID,
                 'voucher' => $voucher,
                 'act_shipping_fee' => $actShippingFee,
@@ -282,6 +438,12 @@ if ($action === 'parseShopeeAdsTopup') {
             }
             if ($buyerUsername !== '' && $buyerId === '') {
                 $importWarnings[] = 'Buyer username was detected as ' . $buyerUsername . ' but not matched in Customer Info. Please select buyer manually.';
+            }
+            if ($detectedShopName !== '' && $shopeeAccId === '') {
+                $importWarnings[] = 'Shopee Account detected as "' . $detectedShopName . '" but not matched. Please select manually.';
+            }
+            if ($detectedPayMethod !== '' && $payMethodId === '') {
+                $importWarnings[] = 'Buyer Payment Method detected as "' . $detectedPayMethod . '" but not matched. Please select manually.';
             }
         }
     }
@@ -324,12 +486,15 @@ if ($action === 'parseShopeeAdsTopup') {
         BRAND
     );
     
+    $orderStatusVal = postSpaceFilter('order_status_val');
+    if ($orderStatusVal === '') $orderStatusVal = 'P';
+    
     $previewData = [
         'order_id' => postSpaceFilter('order_id'),
         'package_id' => $packageIdsStr,
         'product_price' => postSpaceFilter('product_price'),
-        'order_status' => 'P',
-        'order_status_val' => 'P',
+        'order_status' => $orderStatusVal,
+        'order_status_val' => $orderStatusVal,
         'sku' => isset($_POST['sku']) ? $_POST['sku'] : '',
         'missing_sku' => empty($packageIdsStr),
         'shopee_acc' => postSpaceFilter('shopee_acc'),
@@ -348,7 +513,6 @@ if ($action === 'parseShopeeAdsTopup') {
         'remark' => postSpaceFilter('remark'),
     ];
 
-    if ($previewData['package_id'] === '') $importErrors[] = 'Package ID is missing. Please add the package first.';
     if ($previewData['order_id'] === '') $importErrors[] = 'Order ID is required.';
     if ($previewData['shopee_acc'] === '') $importErrors[] = 'Shopee Account is required.';
     if ($previewData['currency'] === '') $importErrors[] = 'Currency is required.';
@@ -572,8 +736,16 @@ function normalizeImportAmount($rawAmount)
 function parseShopeeOrderAmountByLabels($text, $labels)
 {
     foreach ($labels as $label) {
-        $pattern = '/' . preg_quote($label, '/') . '.{0,120}?(-?\s*(?:RM|MYR|SGD|USD)?\s*[0-9][0-9,]*\.?[0-9]*)/i';
-        if (preg_match($pattern, $text, $matches)) {
+        $currencyPattern = '/' . preg_quote($label, '/') . '.{0,220}?(-?\s*(?:RM|MYR|SGD|USD)\s*[0-9][0-9,]*\.?[0-9]*)(?!\s*%)/i';
+        if (preg_match($currencyPattern, $text, $matches)) {
+            $amount = normalizeImportAmount($matches[1]);
+            if ($amount !== '') {
+                return $amount;
+            }
+        }
+
+        $numericPattern = '/' . preg_quote($label, '/') . '.{0,220}?(-?\s*[0-9][0-9,]*\.?[0-9]*)(?!\s*%)/i';
+        if (preg_match($numericPattern, $text, $matches)) {
             $amount = normalizeImportAmount($matches[1]);
             if ($amount !== '') {
                 return $amount;
@@ -582,6 +754,92 @@ function parseShopeeOrderAmountByLabels($text, $labels)
     }
 
     return '0.00';
+}
+
+function parseShopeeOrderAmountToken($text)
+{
+    $normalized = normalizeImportText($text);
+    if ($normalized === '') {
+        return '';
+    }
+
+    if (preg_match_all('/-?\s*(?:RM|MYR|SGD|USD)\s*[0-9][0-9,]*\.?[0-9]*(?!\s*%)/i', $normalized, $matches) && !empty($matches[0])) {
+        $candidate = end($matches[0]);
+        $amount = normalizeImportAmount($candidate);
+        if ($amount !== '') {
+            return $amount;
+        }
+    }
+
+    if (preg_match_all('/-?\s*[0-9][0-9,]*\.?[0-9]*(?!\s*%)/', $normalized, $matches) && !empty($matches[0])) {
+        $candidate = end($matches[0]);
+        $amount = normalizeImportAmount($candidate);
+        if ($amount !== '') {
+            return $amount;
+        }
+    }
+
+    return '';
+}
+
+function collectShopeeOrderAmountPairsFromDom($xpath, $itemQuery = "//*[contains(@class,'income-item')]")
+{
+    $pairs = [];
+    $items = $xpath->query($itemQuery);
+
+    if (!$items) {
+        return $pairs;
+    }
+
+    foreach ($items as $item) {
+        $label = getNodeText($xpath, ".//*[contains(@class,'income-label-text')]", $item);
+        if ($label === '') {
+            continue;
+        }
+
+        $value = getNodeText($xpath, ".//*[contains(@class,'income-value')]", $item);
+        $amount = parseShopeeOrderAmountToken($value);
+
+        if ($amount === '') {
+            $amount = parseShopeeOrderAmountToken($item->textContent);
+        }
+
+        if ($amount !== '') {
+            $pairs[] = [
+                'label' => $label,
+                'amount' => $amount,
+            ];
+        }
+    }
+
+    return $pairs;
+}
+
+function parseShopeeOrderAmountFromPairs($pairs, $labels)
+{
+    if (empty($pairs) || empty($labels)) {
+        return '';
+    }
+
+    foreach ($labels as $targetLabel) {
+        $normalizedTarget = normalizeImportLookup($targetLabel);
+        if ($normalizedTarget === '') {
+            continue;
+        }
+
+        foreach ($pairs as $pair) {
+            $normalizedLabel = normalizeImportLookup(isset($pair['label']) ? $pair['label'] : '');
+            if ($normalizedLabel === '') {
+                continue;
+            }
+
+            if ($normalizedLabel === $normalizedTarget || strpos($normalizedLabel, $normalizedTarget) === 0) {
+                return isset($pair['amount']) ? $pair['amount'] : '';
+            }
+        }
+    }
+
+    return '';
 }
 
 function detectShopeeOrderCurrency($text)
@@ -710,7 +968,7 @@ function parseShopeeAdsTopupHtml($html, $shopeeAccounts, $currencyUnits, $paymen
 
     libxml_use_internal_errors(true);
     $dom = new DOMDocument();
-    $loaded = $dom->loadHTML($html);
+    $loaded = $dom->loadHTML($html, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING);
     libxml_clear_errors();
 
     if (!$loaded) {
@@ -1742,12 +2000,17 @@ function validateFacebookPreviewRecords($records, &$errors, $metaAccounts, $user
                                     <div class="row mb-3">
                                         <div class="col-12 col-md-4">
                                             <label class="form-label" for="shopee_acc">Shopee Account<span class="requireRed">*</span></label>
-                                            <select class="form-select" id="shopee_acc" name="shopee_acc" required>
+                                            <select class="form-select <?= (isset($previewData['source_shopee_acc']) && $previewData['source_shopee_acc'] !== '' && (empty($previewData['shopee_acc']))) ? 'border-warning' : '' ?>" id="shopee_acc" name="shopee_acc" required>
                                                 <option value="">Select Account</option>
                                                 <?php foreach ($shopeeAccounts as $id => $name) { ?>
                                                     <option value="<?= htmlspecialchars($id) ?>" <?= isset($previewData['shopee_acc']) && $previewData['shopee_acc'] == $id ? 'selected' : '' ?>><?= htmlspecialchars($name) ?></option>
                                                 <?php } ?>
                                             </select>
+                                            <?php if (isset($previewData['source_shopee_acc']) && $previewData['source_shopee_acc'] !== '' && empty($previewData['shopee_acc'])) { ?>
+                                                <small class="text-danger fw-bold"><i class="fa-solid fa-circle-exclamation"></i> Not Match (Detected: <?= htmlspecialchars($previewData['source_shopee_acc']) ?>). Please select manually.</small>
+                                            <?php } else if (isset($previewData['source_shopee_acc']) && $previewData['source_shopee_acc'] !== '') { ?>
+                                                <small class="text-muted">Detected: <?= htmlspecialchars($previewData['source_shopee_acc']) ?></small>
+                                            <?php } ?>
                                         </div>
                                         <div class="col-12 col-md-4">
                                             <label class="form-label" for="currency">Currency<span class="requireRed">*</span></label>
@@ -1812,12 +2075,20 @@ function validateFacebookPreviewRecords($records, &$errors, $metaAccounts, $user
                                         </div>
                                         <div class="col-12 col-md-4">
                                             <label class="form-label" for="buyer_pay_meth">Buyer Payment Method</label>
-                                            <select class="form-select" id="buyer_pay_meth" name="buyer_pay_meth">
+                                            <?php $payMethodNotMatched = empty($previewData['buyer_pay_meth']); ?>
+                                            <select class="form-select <?= $payMethodNotMatched ? 'border-warning' : '' ?>" id="buyer_pay_meth" name="buyer_pay_meth">
                                                 <option value="">Select Payment Method</option>
                                                 <?php foreach ($shopeePayMethods as $id => $name) { ?>
                                                     <option value="<?= htmlspecialchars($id) ?>" <?= isset($previewData['buyer_pay_meth']) && $previewData['buyer_pay_meth'] == $id ? 'selected' : '' ?>><?= htmlspecialchars($name) ?></option>
                                                 <?php } ?>
                                             </select>
+                                            <?php if ($payMethodNotMatched && isset($previewData['source_buyer_pay_meth']) && $previewData['source_buyer_pay_meth'] !== '') { ?>
+                                                <small class="text-danger fw-bold"><i class="fa-solid fa-circle-exclamation"></i> Not Match (Detected: <?= htmlspecialchars($previewData['source_buyer_pay_meth']) ?>). Please select manually.</small>
+                                            <?php } else if ($payMethodNotMatched) { ?>
+                                                <small class="text-danger fw-bold"><i class="fa-solid fa-circle-exclamation"></i> Not Match (Detected: Not detected). Please select manually.</small>
+                                            <?php } else if (isset($previewData['source_buyer_pay_meth']) && $previewData['source_buyer_pay_meth'] !== '') { ?>
+                                                <small class="text-muted">Detected: <?= htmlspecialchars($previewData['source_buyer_pay_meth']) ?></small>
+                                            <?php } ?>
                                         </div>
                                         <div class="col-12 col-md-4">
                                             <label class="form-label" for="pic">Person In Charge<span class="requireRed">*</span></label>
@@ -1882,14 +2153,13 @@ function validateFacebookPreviewRecords($records, &$errors, $metaAccounts, $user
 
                                     <div class="d-flex justify-content-center gap-2 flex-wrap mt-4">
                                         <?php if ($previewData['missing_sku']) { ?>
-                                            <div class="alert alert-danger mb-0">
-                                                <i class="fa-solid fa-triangle-exclamation"></i> Cannot proceed. Please add the missing Package to the CMS, then re-upload the HTML file.
+                                            <div class="alert alert-warning mb-0">
+                                                <i class="fa-solid fa-triangle-exclamation"></i> Package was not matched automatically. Please select the correct package manually before inserting.
                                             </div>
-                                        <?php } else { ?>
-                                            <button class="btn btn-lg btn-rounded btn-primary px-4" type="submit" name="actionBtn" value="insertShopeeOrderReq">
-                                                <i class="fa-solid fa-database"></i> Insert
-                                            </button>
                                         <?php } ?>
+                                        <button class="btn btn-lg btn-rounded btn-primary px-4" type="submit" name="actionBtn" value="insertShopeeOrderReq">
+                                            <i class="fa-solid fa-database"></i> Insert
+                                        </button>
                                     </div>
                                 </form>
                             </div>
