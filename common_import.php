@@ -208,7 +208,7 @@ if ($action === 'parseShopeeAdsTopup') {
             // Use DOM parsing for better extraction
             libxml_use_internal_errors(true);
             $dom = new DOMDocument();
-            $dom->loadHTML($html);
+            $dom->loadHTML($html, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING);
             libxml_clear_errors();
             $xpath = new DOMXPath($dom);
 
@@ -968,7 +968,7 @@ function parseShopeeAdsTopupHtml($html, $shopeeAccounts, $currencyUnits, $paymen
 
     libxml_use_internal_errors(true);
     $dom = new DOMDocument();
-    $loaded = $dom->loadHTML($html);
+    $loaded = $dom->loadHTML($html, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING);
     libxml_clear_errors();
 
     if (!$loaded) {

@@ -939,15 +939,25 @@ function renderDeleteButtonByPin($pinAccess, $rowId, $rowName, $rowRemark, $page
     // Check if Delete action is allowed
     if (isActionAllowed("3", $pinAccess)) {
         
-        // 1. Sanitize for both JavaScript and HTML output globally
-        $safeName = htmlspecialchars(addslashes($rowName ?? ''), ENT_QUOTES, 'UTF-8');
-        $safeRemark = htmlspecialchars(addslashes($rowRemark ?? ''), ENT_QUOTES, 'UTF-8');
+    // 1. Prepare all arguments in a PHP array
+        $args = [
+            (string)$rowId,
+            [(string)($rowName ?? ''), (string)($rowRemark ?? '')],
+            (string)$pageTitle,
+            (string)$redirectPage,
+            (string)$deleteRedirectPage,
+            'D'
+        ];
 
-        // Generate JavaScript onclick function for confirmation dialog with specific parameters
-        $onclick = 'confirmationDialog(\'' . $rowId . '\',[\'' . $safeName . '\',\'' . $safeRemark . '\'],\'' . $pageTitle . '\',\'' . $redirectPage . '\',\'' . $deleteRedirectPage . '\',\'D\')';
+        // 2. Use json_encode to perfectly format the arguments for JavaScript
+        // This correctly escapes everything, including single/double quotes and newlines
+        $jsCall = "confirmationDialog(" . implode(', ', array_map('json_encode', $args)) . ")";
+
+        // 3. Escape the assembled JavaScript string so it is perfectly safe inside an HTML attribute
+        $safeOnclick = htmlspecialchars($jsCall, ENT_QUOTES, 'UTF-8');
 
         // Output Delete button
-        echo '<a class="btn btn-danger" onclick="' . $onclick . '"><i class="fas fa-trash-alt"></i></a>';
+        echo '<a class="btn btn-danger" onclick="' . $safeOnclick . '"><i class="fas fa-trash-alt"></i></a>';    
     }
 }
 
@@ -956,15 +966,25 @@ function renderDeleteButton($pinAccess, $rowId, $rowName, $rowRemark, $pageTitle
     // Check if Delete action is allowed
     if (isActionAllowed("Delete", $pinAccess)) {
         
-        // 1. Sanitize for both JavaScript and HTML output globally
-        $safeName = htmlspecialchars(addslashes($rowName ?? ''), ENT_QUOTES, 'UTF-8');
-        $safeRemark = htmlspecialchars(addslashes($rowRemark ?? ''), ENT_QUOTES, 'UTF-8');
+       // 1. Prepare all arguments in a PHP array
+        $args = [
+            (string)$rowId,
+            [(string)($rowName ?? ''), (string)($rowRemark ?? '')],
+            (string)$pageTitle,
+            (string)$redirectPage,
+            (string)$deleteRedirectPage,
+            'D'
+        ];
 
-        // Generate JavaScript onclick function for confirmation dialog with specific parameters
-        $onclick = 'confirmationDialog(\'' . $rowId . '\',[\'' . $safeName . '\',\'' . $safeRemark . '\'],\'' . $pageTitle . '\',\'' . $redirectPage . '\',\'' . $deleteRedirectPage . '\',\'D\')';
+        // 2. Use json_encode to perfectly format the arguments for JavaScript
+        // This correctly escapes everything, including single/double quotes and newlines
+        $jsCall = "confirmationDialog(" . implode(', ', array_map('json_encode', $args)) . ")";
+
+        // 3. Escape the assembled JavaScript string so it is perfectly safe inside an HTML attribute
+        $safeOnclick = htmlspecialchars($jsCall, ENT_QUOTES, 'UTF-8');
 
         // Output Delete button
-        echo '<a class="btn btn-danger" onclick="' . $onclick . '"><i class="fas fa-trash-alt"></i></a>';
+        echo '<a class="btn btn-danger" onclick="' . $safeOnclick . '"><i class="fas fa-trash-alt"></i></a>';
     }
 }
 

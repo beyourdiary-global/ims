@@ -25,6 +25,7 @@ $result = mysqli_query($connect, $resultQuery);
 if ($result === false) {
     error_log("Employee details query failed: " . mysqli_error($connect));
     echo $errorRedirectLink;
+    exit;
 }
 
 //Get Leave Application ID and action
@@ -905,6 +906,7 @@ if (isset($_COOKIE['assignType'], $_COOKIE['employeeID'], $_COOKIE['leaveTypeSel
 
                                                     if ($resultEmpLeave_1 === false || $resultEmpLeave_2 === false || $resultEmpLeave_3 === false) {
                                                         echo $errorRedirectLink;
+                                                        exit; // FIX: Stop PHP execution immediately to prevent fatals
                                                     } else {
                                                         $columns = $resultEmpLeave_1->fetch_all(MYSQLI_ASSOC);
 
@@ -1185,7 +1187,7 @@ if (isset($_COOKIE['assignType'], $_COOKIE['employeeID'], $_COOKIE['leaveTypeSel
                                                 ?>
                                                 <a class="dropdown-item" onclick="confirmationDialog('<?= $row['id'] ?>',['<?= $safeName ?>','<?= $safeIdNum ?>','<?= $safeEmail ?>'],'<?php echo $pageTitle ?>','<?= $redirect_page ?>','<?= $SITEURL ?>/employeeDetailsTable.php','D')">Delete</a>
                                             <?php endif; ?>
-                                        </li></tr>
+                                        </li>
                                     </ul>
                                 </div>
                             </td>

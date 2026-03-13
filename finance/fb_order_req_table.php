@@ -140,14 +140,24 @@ $result = getData('*', '', '', FB_ORDER_REQ, $finance_connect);
                                         </button>
                                         <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton">
                                             <?php 
-                                         $member_exist = getData('name', "name='" . $row['id'] . "'", '', URBAN_CUST_REG, $connect); 
-                
-                                         if ($member_exist && $member_exist->fetch_assoc()) {
-                                            $reg_url = $reg_member_page . "?id=" . $row['id'] . '&act=' . $act_2;
-                                         } else {
-                                            $reg_url = $reg_member_page . "?id=" . $row['id'] . '&act=' . $act_1;
-                                        }
-                                        ?>
+                                            $member_exist = getData('name', "name='" . $row['id'] . "'", '', URBAN_CUST_REG, $connect); 
+                    
+                                            // Fallback in case $reg_member_page isn't defined at the top of your file
+                                            $base_url = isset($reg_member_page) ? $reg_member_page : '';
+
+                                            if ($member_exist && $member_exist->fetch_assoc()) {
+                                                $reg_url = $base_url . "?id=" . $row['id'] . '&act=' . (isset($act_2) ? $act_2 : 'E');
+                                                $menu_label = "Edit Member";
+                                            } else {
+                                                $reg_url = $base_url . "?id=" . $row['id'] . '&act=' . (isset($act_1) ? $act_1 : 'I');
+                                                $menu_label = "Register Member";
+                                            }
+                                            ?>
+                                            <li>
+                                                <a class="dropdown-item" href="<?= htmlspecialchars($reg_url, ENT_QUOTES, 'UTF-8') ?>">
+                                                    <?= $menu_label ?>
+                                                </a>
+                                            </li>
                                         </ul>
                                     </div>
                                     </td>

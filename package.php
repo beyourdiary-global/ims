@@ -88,12 +88,13 @@ if (post('actionBtn')) {
             $brand_exists = false;
 
             // 1. Check if the hidden ID exists in the BRAND table
-            if (!empty($brand)) {
-                $check_brand = getData('id', "id = '$brand'", '', BRAND, $connect);
+            if (!empty($brand) && ctype_digit($brand)) {
+                $safe_brand_id = (int)$brand;
+                $check_brand = getData('id', "id = $safe_brand_id", '', BRAND, $connect);
                 if ($check_brand && $check_brand->num_rows > 0) {
                     $brand_exists = true;
                 }
-            } 
+            }
 
             // 2. If ID is empty but they typed text, verify if the exact text exists in the database
             if (!$brand_exists && !empty($brand_text)) {

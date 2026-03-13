@@ -345,9 +345,9 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                 <label class="form-label form_lbl" id="mrcht_contact_lbl" for="mrcht_contact"><?php echo $pageTitle ?> Contact</label>
                                 <input class="form-control" type="text" name="mrcht_contact" id="mrcht_contact" value="<?php
                                                                                                                                     if (isset($mrcht_contact)) {
-                                                                                                                                        echo htmlspecialchars($mrcht_contact);
+                                                                                                                                        echo htmlspecialchars($mrcht_contact, ENT_QUOTES, 'UTF-8');
                                                                                                                                     } else if (isset($dataExisted) && isset($row['contact'])) {
-                                                                                                                                        echo htmlspecialchars($row['contact']);
+                                                                                                                                        echo htmlspecialchars($row['contact'], ENT_QUOTES, 'UTF-8');
                                                                                                                                     } else {
                                                                                                                                         echo '';
                                                                                                                                     } ?>" <?php if ($act == '') echo 'readonly' ?> autocomplete="off">
@@ -407,9 +407,9 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                 <label class="form-label form_lbl" id="mrcht_pic_contact_lbl" for="mrcht_pic_contact">Person In Charge Contact</label>
                                 <input class="form-control" type="text" name="mrcht_pic_contact" id="mrcht_pic_contact" value="<?php
                                                                                                                                             if (isset($mrcht_pic_contact)) {
-                                                                                                                                                echo htmlspecialchars($mrcht_pic_contact);
+                                                                                                                                                echo htmlspecialchars($mrcht_pic_contact, ENT_QUOTES, 'UTF-8');
                                                                                                                                             } else if (isset($dataExisted) && isset($row['person_in_charges_contact'])) {
-                                                                                                                                                echo htmlspecialchars($row['person_in_charges_contact']);
+                                                                                                                                                echo htmlspecialchars($row['person_in_charges_contact'], ENT_QUOTES, 'UTF-8');
                                                                                                                                             } else {
                                                                                                                                                 echo '';
                                                                                                                                             }

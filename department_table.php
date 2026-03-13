@@ -23,6 +23,7 @@ if ($result === false) {
     error_log("Department table query failed: " . mysqli_error($connect));
     echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+    exit;
 }
 ?>
 
