@@ -5,6 +5,8 @@ $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
 
+$pinAccess = checkPin($connect, $pageTitle);
+
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d_H-i-s') . "_list.xlsx";
 $img_path = '../' . img_server . 'finance/shopee_ads_topup_trans/';
@@ -27,6 +29,11 @@ if (isset($_GET['export_ids'])) {
 
 // Check if any checkboxes are checked
 if (!empty($checkboxValues)) {
+    if (!isActionAllowed("Export", $pinAccess)) {
+        echo "<script>alert('You do not have permission to export this page.'); location.href='" . $SITEURL . "/shopee/shopee_ads_topup_trans_table.php';</script>";
+        exit;
+    }
+
     setcookie('rowID', '', time() - 3600, '/');
     // Defining column names
     $excelData = array(
@@ -171,7 +178,6 @@ function deleteDir($dirPath) {
     rmdir($dirPath);
 }
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
 $_SESSION['act'] = '';
 $_SESSION['viewChk'] = '';
 $_SESSION['searchChk'] = '';
@@ -219,9 +225,13 @@ $totalGST = 0;
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)) : ?>
                                 <a class="btn btn-sm btn-rounded btn-primary px-3" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
-                                <a class="btn btn-sm btn-rounded btn-primary px-3" name="importBtn" id="addBtn" href="<?= $SITEURL ?>/common_import.php?module=shopee_ads_topup"><i class="fa-solid fa-file-import"></i> Import </a>
                             <?php endif; ?>
-                            <a class="btn btn-sm btn-rounded btn-primary px-3" name="exportBtnShopee" id="addBtn" href="#" onclick="return shopeeTopupExportFallback(event)"><i class="fa-solid fa-file-export"></i> Export</a>
+                            <?php if (isActionAllowed("Import", $pinAccess)) : ?>
+                                <a class="btn btn-sm btn-rounded btn-primary px-3" name="importBtn" id="addBtn" href="<?= $SITEURL ?>/shopee_ads_topup_import.php"><i class="fa-solid fa-file-import"></i> Import </a>
+                            <?php endif; ?>
+                            <?php if (isActionAllowed("Export", $pinAccess)) : ?>
+                                <a class="btn btn-sm btn-rounded btn-primary px-3" name="exportBtnShopee" id="addBtn" href="#" onclick="return shopeeTopupExportFallback(event)"><i class="fa-solid fa-file-export"></i> Export</a>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>

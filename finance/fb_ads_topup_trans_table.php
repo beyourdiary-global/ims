@@ -5,6 +5,8 @@ $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
 
+$pinAccess = checkPin($connect, $pageTitle);
+
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . "_list.xlsx";
 $img_path = '../' . img_server . 'finance/fb_ads_topup_trans/';
@@ -22,6 +24,11 @@ $checkboxValues = isset($_COOKIE['rowID']) ? $_COOKIE['rowID'] : '';
 
 // Check if any checkboxes are checked
 if (!empty($checkboxValues)) {
+    if (!isActionAllowed("Export", $pinAccess)) {
+        echo "<script>alert('You do not have permission to export this page.'); location.href='" . $SITEURL . "/finance/fb_ads_topup_trans_table.php';</script>";
+        exit;
+    }
+
     setcookie('rowID', '', time() - 3600, '/');
     // Defining column names
     $excelData = array(
@@ -155,7 +162,6 @@ function deleteDir($dirPath) {
     rmdir($dirPath);
 }
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
 $_SESSION['searchChk'] = '';
 unset($_SESSION['resetChk']);
 $_SESSION['act'] = '';
@@ -197,9 +203,13 @@ $tblName = FB_ADS_TOPUP;
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)) : ?>
                                 <a class="btn btn-sm btn-rounded btn-primary px-3" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
-                                <a class="btn btn-sm btn-rounded btn-primary px-3" name="importBtn" id="addBtn" href="<?= $SITEURL ?>/common_import.php?module=fb_ads_topup"><i class="fa-solid fa-file-import"></i> Import </a>
                             <?php endif; ?>
-                            <a class="btn btn-sm btn-rounded btn-primary px-3" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>
+                            <?php if (isActionAllowed("Import", $pinAccess)) : ?>
+                                <a class="btn btn-sm btn-rounded btn-primary px-3" name="importBtn" id="addBtn" href="<?= $SITEURL ?>/facebook_ads_topup_import.php"><i class="fa-solid fa-file-import"></i> Import </a>
+                            <?php endif; ?>
+                            <?php if (isActionAllowed("Export", $pinAccess)) : ?>
+                                <a class="btn btn-sm btn-rounded btn-primary px-3" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>
+                            <?php endif; ?>
 
                         </div>
                     </div>

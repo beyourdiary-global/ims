@@ -406,10 +406,11 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
             <label class="form-label form_lbl" id="lcr_name_lbl" for="lcr_name">Name<span class="requireRed">*</span></label>
             <?php 
             unset($echoVal);
-            if (isset($row['lcr_name']))
-            $echoVal = $row['lcr_name'];
+            // FIX: Changed $row['lcr_name'] to $row['name'] to match the database column
+            if (isset($row['name']))
+            $echoVal = $row['name'];
             ?>
-            <input class="form-control" type="text" name="lcr_name" id="lcr_name" value="<?php echo !empty($echoVal) ? $row['lcr_name'] : '' ?>" <?php if ($act == '')echo 'disabled' ?>>       
+            <input class="form-control" type="text" name="lcr_name" id="lcr_name" value="<?php echo !empty($echoVal) ? $row['name'] : '' ?>" <?php if ($act == '')echo 'disabled' ?>>       
             <?php if (isset($name_err)) { ?>
                 <div id="err_msg">
                     <span class="mt-n1"><?php echo $name_err; ?></span>

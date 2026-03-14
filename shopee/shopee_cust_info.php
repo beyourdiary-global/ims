@@ -21,6 +21,38 @@ $pageAction = getPageAction($act);
 $pageActionTitle = $pageAction . " " . $pageTitle;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 
+if (!function_exists('resolveLookupValue')) {
+    function resolveLookupValue($tableName, $rawValue, $displayField, $connect, $altDisplayField = '')
+    {
+        $resolved = [
+            'id' => $rawValue,
+            'display' => $rawValue,
+        ];
+
+        if ($rawValue === null || $rawValue === '') {
+            return $resolved;
+        }
+
+        $rst = getData("id,$displayField", "id = '$rawValue'", 'LIMIT 1', $tableName, $connect);
+
+        if ((!$rst || $rst->num_rows === 0) && $altDisplayField !== '') {
+            $rst = getData("id,$displayField", "$altDisplayField = '$rawValue'", 'LIMIT 1', $tableName, $connect);
+        }
+
+        if ((!$rst || $rst->num_rows === 0) && $displayField !== $altDisplayField) {
+            $rst = getData("id,$displayField", "$displayField = '$rawValue'", 'LIMIT 1', $tableName, $connect);
+        }
+
+        if ($rst && $rst->num_rows > 0) {
+            $lookupRow = $rst->fetch_assoc();
+            $resolved['id'] = $lookupRow['id'];
+            $resolved['display'] = $lookupRow[$displayField];
+        }
+
+        return $resolved;
+    }
+}
+
 // to display data to input
 if ($dataID) { //edit/remove/view
     $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $finance_connect);
@@ -45,7 +77,7 @@ if (!($dataID) && !($act)) {
 
 //Delete Data
 if ($act == 'D') {
-    deleteRecord($tblName, '', $dataID, $row['name'], $finance_connect, $connect, $cdate, $ctime, $pageTitle);
+    deleteRecord($tblName, '', $dataID, (isset($row['buyer_username']) ? $row['buyer_username'] : ''), $finance_connect, $connect, $cdate, $ctime, $pageTitle);
     $_SESSION['delChk'] = 1;
 }
 
@@ -66,7 +98,7 @@ if (post('actionBtn')) {
             $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
             if (!$scr_username) {
-                $name_err = "Shopee Buyer Username cannot be empty";
+                $username_err = "Shopee Buyer Username cannot be empty";
                 break;
             } else if (!$scr_pic) {
                 $pic_err = "Sales Person In Charge cannot be empty";
@@ -87,7 +119,7 @@ if (post('actionBtn')) {
 
                     if ($scr_username) {
                         array_push($newvalarr, $scr_username);
-                        array_push($datafield, 'name');
+                        array_push($datafield, 'buyer_username');
                     }
 
                     if ($scr_pic) {
@@ -242,7 +274,7 @@ if (post('act') == 'D') {
 
 //view
 if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
-    $acc_name = isset($dataExisted) ? $row['name'] : '';
+    $acc_name = isset($dataExisted) ? $row['buyer_username'] : '';
     $_SESSION['viewChk'] = 1;
 
     if (isset($errorExist)) {
@@ -357,26 +389,17 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 <?php } ?>
                                 <?php
                                  if(($act == 'E' || $act == '')){
-                                unset($echoVal);
-
-                                if (isset($row['pic']))
-                                    $echoVal = $row['pic'];
-
-                                if (isset($echoVal)) {
-                                    $pic_rst = getData('name', "id = '$echoVal'", '', USR_USER, $connect);
-                                    if (!$pic_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                        echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                                    }
-                                    $pic_row = $pic_rst->fetch_assoc();
+                                $picData = ['id' => '', 'display' => ''];
+                                if (isset($row['pic']) && $row['pic'] !== '') {
+                                    $picData = resolveLookupValue(USR_USER, $row['pic'], 'name', $connect);
                                 }
                                 ?>
 
                                 <input class="form-control" type="text" name="scr_pic" id="scr_pic" <?php if ($act == '')
-                                    echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $pic_row['name'] : '' ?>">
+                                    echo 'disabled' ?> value="<?php echo $picData['display']; ?>">
 
                                 <input type="hidden" name="scr_pic_hidden" id="scr_pic_hidden"
-                                    value="<?php echo (isset($row['pic'])) ? $row['pic'] : ''; ?>">
+                                    value="<?php echo $picData['id']; ?>">
                                 <?php } ?>
                                 <?php if (isset($pic_err)) { ?>
                                     <div id="err_msg">
@@ -390,27 +413,18 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 <label class="form-label form_lbl" id="scr_country_lbl" for="scr_country">Country<span
                                         class="requireRed">*</span></label>
                                 <?php
-                                unset($echoVal);
-
-                                if (isset($row['country']))
-                                    $echoVal = $row['country'];
-
-                                if (isset($echoVal)) {
-                                    $country_rst = getData('nicename', "id = '$echoVal'", '', COUNTRIES, $connect);
-                                    if (!$country_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                        echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                                    }
-                                    $country_row = $country_rst->fetch_assoc();
+                                $countryData = ['id' => '', 'display' => ''];
+                                if (isset($row['country']) && $row['country'] !== '') {
+                                    $countryData = resolveLookupValue(COUNTRIES, $row['country'], 'nicename', $connect, 'name');
                                 }
                                 ?>
 
                                 <input class="form-control" type="text" name="scr_country" id="scr_country" <?php if ($act == '')
                                     echo 'disabled' ?>
-                                        value="<?php echo !empty($echoVal) ? $country_row['nicename'] : '' ?>">
+                                        value="<?php echo $countryData['display']; ?>">
 
                                 <input type="hidden" name="scr_country_hidden" id="scr_country_hidden"
-                                    value="<?php echo (isset($row['country'])) ? $row['country'] : ''; ?>">
+                                    value="<?php echo $countryData['id']; ?>">
 
                                 <?php if (isset($country_err)) { ?>
                                     <div id="err_msg">
@@ -427,27 +441,18 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 <label class="form-label form_lbl" id="scr_brand_lbl" for="scr_brand">Brand<span
                                         class="requireRed">*</span></label>
                                 <?php
-                                unset($echoVal);
-
-                                if (isset($row['brand']))
-                                    $echoVal = $row['brand'];
-
-                                if (isset($echoVal)) {
-                                    $brand_rst = getData('name', "id = '$echoVal'", '', BRAND, $connect);
-                                    if (!$brand_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                        echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                                    }
-                                    $brand_row = $brand_rst->fetch_assoc();
+                                $brandData = ['id' => '', 'display' => ''];
+                                if (isset($row['brand']) && $row['brand'] !== '') {
+                                    $brandData = resolveLookupValue(BRAND, $row['brand'], 'name', $connect);
                                 }
                                 ?>
 
                                 <input class="form-control" type="text" name="scr_brand" id="scr_brand" <?php if ($act == '')
                                     echo 'disabled' ?>
-                                        value="<?php echo !empty($echoVal) ? $brand_row['name'] : '' ?>">
+                                        value="<?php echo $brandData['display']; ?>">
 
                                 <input type="hidden" name="scr_brand_hidden" id="scr_brand_hidden"
-                                    value="<?php echo (isset($row['brand'])) ? $row['brand'] : ''; ?>">
+                                    value="<?php echo $brandData['id']; ?>">
 
                                 <?php if (isset($brand_err)) { ?>
                                     <div id="err_msg">
@@ -461,27 +466,18 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 <label class="form-label form_lbl" id="scr_series_lbl" for="scr_series">Series<span
                                         class="requireRed">*</span></label>
                                 <?php
-                                unset($echoVal);
-
-                                if (isset($row['series']))
-                                    $echoVal = $row['series'];
-
-                                if (isset($echoVal)) {
-                                    $series_rst = getData('name', "id = '$echoVal'", '', BRD_SERIES, $connect);
-                                    if (!$series_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                        echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                                    }
-                                    $series_row = $series_rst->fetch_assoc();
+                                $seriesData = ['id' => '', 'display' => ''];
+                                if (isset($row['series']) && $row['series'] !== '') {
+                                    $seriesData = resolveLookupValue(BRD_SERIES, $row['series'], 'name', $connect);
                                 }
                                 ?>
 
                                 <input class="form-control" type="text" name="scr_series" id="scr_series" <?php if ($act == '')
                                     echo 'disabled' ?>
-                                        value="<?php echo !empty($echoVal) ? $series_row['name'] : '' ?>">
+                                        value="<?php echo $seriesData['display']; ?>">
 
                                 <input type="hidden" name="scr_series_hidden" id="scr_series_hidden"
-                                    value="<?php echo (isset($row['series'])) ? $row['series'] : ''; ?>">
+                                    value="<?php echo $seriesData['id']; ?>">
 
                                 <?php if (isset($series_err)) { ?>
                                     <div id="err_msg">
