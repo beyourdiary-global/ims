@@ -44,8 +44,9 @@ if (input('act') === 'D' && input('item_id')) {
         // FIX: Add JS alert and remove ?msg from URL
         echo "<script>alert('Row deleted successfully.'); location.href='" . $tablePage . "';</script>";
     } else {
-        // FIX: Add JS alert and remove ?err from URL
-        echo "<script>alert('Failed to delete row: " . addslashes(mysqli_error($finance_connect)) . "'); location.href='" . $tablePage . "';</script>";
+        // Log detailed database error server-side and show a generic message to the user
+         error_log('Stock in delete failed for item ID ' . $itemId . ': ' . mysqli_error($finance_connect));
+         echo "<script>alert('Failed to delete row. Please try again later.'); location.href='" . $tablePage . "';</script>";
     }
     exit;
 }
@@ -79,10 +80,10 @@ $listRows = siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTa
             </div>
 
             <?php if ($msg !== '') { ?>
-                <script>alert("<?= siEsc($msg) ?>");</script>
+                <script>alert(<?= json_encode($msg) ?>);</script>
             <?php } ?>
             <?php if ($err !== '') { ?>
-                <script>alert("<?= siEsc($err) ?>");</script>
+                <script>alert(<?= json_encode($err) ?>);</script>
             <?php } ?>
 
             <div class="table-responsive">

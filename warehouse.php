@@ -25,25 +25,52 @@ if ($isStockBalanceView) {
     }
     $warehouseRow = $warehouseRst->fetch_assoc();
 
-    // Detect available product price-like column across different DB structures.
-    $priceColumn = '';
-    $priceCandidates = array('price', 'selling_price', 'sale_price', 'unit_price', 'cost', 'cost_price');
-    $colRst = mysqli_query($connect, "SHOW COLUMNS FROM " . PROD);
-    if ($colRst) {
-        $availableCols = array();
-        while ($col = mysqli_fetch_assoc($colRst)) {
-            $field = isset($col['Field']) ? strtolower(trim((string) $col['Field'])) : '';
-            if ($field !== '') {
-                $availableCols[$field] = true;
+    // To avoid running "SHOW COLUMNS" on every request, cache the detected column
+    // in a static variable and, when possible, in the session.
+    if (!function_exists('detectProductPriceColumn')) {
+        function detectProductPriceColumn($connect)
+        {
+            // In-process cache for the current PHP execution context.
+            static $cachedPriceColumn = null;
+            if ($cachedPriceColumn !== null) {
+                return $cachedPriceColumn;
             }
-        }
-        foreach ($priceCandidates as $candidate) {
-            if (isset($availableCols[$candidate])) {
-                $priceColumn = $candidate;
-                break;
+
+            // Session cache
+            if (function_exists('session_status') && session_status() === PHP_SESSION_ACTIVE && isset($_SESSION['prod_price_column'])) {
+                $cachedPriceColumn = (string) $_SESSION['prod_price_column'];
+                return $cachedPriceColumn;
             }
+
+            $priceColumn = '';
+            $priceCandidates = array('price', 'selling_price', 'sale_price', 'unit_price', 'cost', 'cost_price');
+            $colRst = mysqli_query($connect, "SHOW COLUMNS FROM " . PROD);
+            if ($colRst) {
+                $availableCols = array();
+                while ($col = mysqli_fetch_assoc($colRst)) {
+                    $field = isset($col['Field']) ? strtolower(trim((string) $col['Field'])) : '';
+                    if ($field !== '') {
+                        $availableCols[$field] = true;
+                    }
+                }
+                foreach ($priceCandidates as $candidate) {
+                    if (isset($availableCols[$candidate])) {
+                        $priceColumn = $candidate;
+                        break;
+                    }
+                }
+            }
+            
+            if (function_exists('session_status') && session_status() === PHP_SESSION_ACTIVE) {
+                $_SESSION['prod_price_column'] = $priceColumn;
+            }
+            
+            $cachedPriceColumn = $priceColumn;
+            return $cachedPriceColumn;
         }
     }
+    
+    $priceColumn = detectProductPriceColumn($connect);
 
     $productMap = array();
     $productSql = "SELECT id, name";

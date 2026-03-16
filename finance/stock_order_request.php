@@ -330,10 +330,24 @@ if (post('actionBtn')) {
             if ($pkgDesc === '' && isset($packageDescMap[$pkgId])) {
                 $pkgDesc = (string) $packageDescMap[$pkgId];
             }
-            $packageChargeKey = $pkgId . '|' . $packageQty;
-            if (!isset($countedPackageTotals[$packageChargeKey])) {
+
+            // Use a per-group identifier for de-duplication when available, falling back to pkgId|packageQty.
+            $packageGroupKey = null;
+            if (isset($_POST['package_group']) && is_array($_POST['package_group'])) {
+                // $index is expected to be the current row index from the surrounding loop.
+                if (isset($index) && array_key_exists($index, $_POST['package_group'])) {
+                    $groupKey = (string) $_POST['package_group'][$index];
+                    if ($groupKey !== '') {
+                        $packageGroupKey = $groupKey;
+                    }
+                }
+            }
+            if ($packageGroupKey === null) {
+                $packageGroupKey = $pkgId . '|' . $packageQty;
+            }
+            if (!isset($countedPackageTotals[$packageGroupKey])) {
                 $computedTotal += ($pkgPrice * $packageQty);
-                $countedPackageTotals[$packageChargeKey] = true;
+                $countedPackageTotals[$packageGroupKey] = true;
             }
 
             if ($pkgBrandId > 0) {
@@ -422,8 +436,10 @@ if (post('actionBtn')) {
             $err = 'Please select a valid warehouse from the list.';
         } else if (!$sor_invoice_no) {
             $invoice_no_err = 'Invoice cannot be empty.';
+            $err = $invoice_no_err;
         } else if ($isDuplicateInvoice) {
             $invoice_no_err = 'Invoice number (' . htmlspecialchars($sor_invoice_no) . ') already exists. Please use a different invoice number.';
+            $err = $invoice_no_err;
         } else if (!$sor_invoice_date) {
             $err = 'Invoice date cannot be empty.';
         } else if (!$sor_request_date) {

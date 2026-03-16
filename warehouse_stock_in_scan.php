@@ -53,42 +53,69 @@ if (!function_exists('scanLookupCountryCode')) {
             return '';
         }
 
-        $url = 'https://ipapi.co/' . rawurlencode($ip) . '/country/';
-        $context = stream_context_create(array(
-            'http' => array(
-                'method' => 'GET',
-                'timeout' => 3,
-                'ignore_errors' => true,
-            ),
-            'ssl' => array(
-                'verify_peer' => true,
-                'verify_peer_name' => true,
-            ),
-        ));
-
-        $resp = @file_get_contents($url, false, $context);
-        if ($resp === false) {
+        // Do not attempt lookups for private or reserved IP ranges.
+        if (scanIsPrivateOrReservedIp($ip)) {
             return '';
         }
 
-        $code = strtoupper(trim((string) $resp));
-        if (preg_match('/^[A-Z]{2}$/', $code)) {
-            return $code;
+        // Simple per-request cache to avoid repeated lookups for the same IP.
+        static $cache = array();
+        if (array_key_exists($ip, $cache)) {
+            return $cache[$ip];
         }
-        return '';
+
+        $code = '';
+
+        // Prefer a local GeoIP database if available to avoid external calls.
+        if (function_exists('geoip_country_code_by_name')) {
+            $geoipCode = @geoip_country_code_by_name($ip);
+            if (is_string($geoipCode)) {
+                $geoipCode = strtoupper(trim($geoipCode));
+                if (preg_match('/^[A-Z]{2}$/', $geoipCode)) {
+                    $code = $geoipCode;
+                }
+            }
+        }
+
+        // Fallback to external service only if local lookup failed.
+        if ($code === '') {
+            $url = 'https://ipapi.co/' . rawurlencode($ip) . '/country/';
+            $context = stream_context_create(array(
+                'http' => array(
+                    'method' => 'GET',
+                    'timeout' => 3,
+                    'ignore_errors' => true,
+                ),
+                'ssl' => array(
+                    'verify_peer' => true,
+                    'verify_peer_name' => true,
+                ),
+            ));
+
+            $resp = @file_get_contents($url, false, $context);
+            if ($resp !== false) {
+                $respCode = strtoupper(trim((string) $resp));
+                if (preg_match('/^[A-Z]{2}$/', $respCode)) {
+                    $code = $respCode;
+                }
+            }
+        }
+
+        // Cache even empty result to avoid repeated external lookups.
+        $cache[$ip] = $code;
+        return $code;
     }
 }
 
 if (!function_exists('scanSaveOrderSecure')) {
-    function scanSaveOrderSecure($db, $orderTable, $itemTable, $warehouseId, $stockInDate, $orderNumber, $items, $stockOrderRequestId, $actor)
+    function scanSaveOrderSecure($db, $orderTable, $itemTable, $warehouseId, $orderNumber, $items, $stockOrderRequestId, $actor)
     {
         $warehouseId = (int) $warehouseId;
         $stockOrderRequestId = (int) $stockOrderRequestId;
         $orderNumber = trim((string) $orderNumber);
-        $stockInDate = trim((string) $stockInDate);
         $actor = trim((string) $actor);
 
-        if ($warehouseId <= 0 || $stockOrderRequestId <= 0 || $orderNumber === '' || $stockInDate === '' || count($items) === 0) {
+        if ($warehouseId <= 0 || $stockOrderRequestId <= 0 || $orderNumber === '' || count($items) === 0) {
             return array(false, 'Missing required stock in data.', 0, false);
         }
 
@@ -134,18 +161,29 @@ if (!function_exists('scanSaveOrderSecure')) {
                 }
 
                 // Repair mode: existing order found without items.
+                $touchOrderSql = "UPDATE `" . $orderTable . "` SET stock_in_date=NOW() WHERE id=? LIMIT 1";
+                $touchOrderStmt = mysqli_prepare($db, $touchOrderSql);
+                if (!$touchOrderStmt) {
+                    throw new Exception('Failed to prepare stock in order timestamp update.');
+                }
+                mysqli_stmt_bind_param($touchOrderStmt, 'i', $stockInOrderId);
+                if (!mysqli_stmt_execute($touchOrderStmt)) {
+                    mysqli_stmt_close($touchOrderStmt);
+                    throw new Exception('Failed to update stock in date time.');
+                }
+                mysqli_stmt_close($touchOrderStmt);
             } else {
                 mysqli_stmt_close($checkStmt);
 
                 $insertOrderSql = "INSERT INTO `" . $orderTable . "`
                     (stock_order_request_id, warehouse_id, order_number, stock_in_date, create_by, create_date, create_time, status)
                     VALUES
-                    (?, ?, ?, ?, ?, CURDATE(), CURTIME(), 'A')";
+                    (?, ?, ?, NOW(), ?, CURDATE(), CURTIME(), 'A')";
                 $insertOrderStmt = mysqli_prepare($db, $insertOrderSql);
                 if (!$insertOrderStmt) {
                     throw new Exception('Failed to prepare stock in order insert.');
                 }
-                mysqli_stmt_bind_param($insertOrderStmt, 'iisss', $stockOrderRequestId, $warehouseId, $orderNumber, $stockInDate, $actor);
+                mysqli_stmt_bind_param($insertOrderStmt, 'iiss', $stockOrderRequestId, $warehouseId, $orderNumber, $actor);
                 if (!mysqli_stmt_execute($insertOrderStmt)) {
                     mysqli_stmt_close($insertOrderStmt);
                     throw new Exception('Failed to save stock in order.');
@@ -346,7 +384,7 @@ if ($token === '') {
 
                             $requestItems[] = array(
                                 'product_id' => $prodId,
-                                'package_id' => 0,
+                                'package_id' => $pkgId,
                                 'qty' => $qty,
                                 'product_name' => isset($productNameMap[$prodId]) ? $productNameMap[$prodId] : ('Product #' . $prodId),
                             );
@@ -364,7 +402,8 @@ if ($token === '') {
                     $ipAllowed = false;
                     if ($clientIp !== '') {
                         if (scanIsPrivateOrReservedIp($clientIp)) {
-                            $ipAllowed = true;
+                            // Treat private/reserved IPs as "unknown" for location policy purposes.
+                            // Do not auto-allow; rely on explicit country checks for non-private IPs.
                             $countryCode = 'PRIVATE';
                         } else {
                             $countryCode = scanLookupCountryCode($clientIp);
@@ -394,7 +433,6 @@ if ($token === '') {
                             $stockInOrderTable,
                             $stockInItemTable,
                             (int) $requestInfo['warehouse_id'],
-                            (string) $requestInfo['request_date'],
                             (string) $requestInfo['order_number'],
                             $requestItems,
                             (int) $requestInfo['id'],
