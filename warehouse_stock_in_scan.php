@@ -28,11 +28,55 @@ if (!function_exists('scanGetAllowedCountries')) {
 if (!function_exists('scanGetClientIp')) {
     function scanGetClientIp()
     {
-        $ip = isset($_SERVER['REMOTE_ADDR']) ? trim((string) $_SERVER['REMOTE_ADDR']) : '';
-        if ($ip === '') {
-            return '';
+        $candidates = array();
+        $headerKeys = array(
+            'HTTP_CF_CONNECTING_IP',
+            'HTTP_X_FORWARDED_FOR',
+            'HTTP_X_REAL_IP',
+            'HTTP_CLIENT_IP',
+            'REMOTE_ADDR',
+        );
+
+        foreach ($headerKeys as $key) {
+            if (!isset($_SERVER[$key])) {
+                continue;
+            }
+            $raw = trim((string) $_SERVER[$key]);
+            if ($raw === '') {
+                continue;
+            }
+
+            $parts = explode(',', $raw);
+            foreach ($parts as $part) {
+                $ip = trim((string) $part);
+                if ($ip !== '') {
+                    $candidates[] = $ip;
+                }
+            }
         }
-        return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : '';
+
+        $firstValid = '';
+        foreach ($candidates as $candidate) {
+            if (!filter_var($candidate, FILTER_VALIDATE_IP)) {
+                continue;
+            }
+            if ($firstValid === '') {
+                $firstValid = $candidate;
+            }
+            if (!scanIsPrivateOrReservedIp($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return $firstValid;
+    }
+}
+
+if (!function_exists('scanAllowPrivateIpFallback')) {
+    function scanAllowPrivateIpFallback()
+    {
+        $raw = strtolower(trim((string) getenv('SOR_QR_ALLOW_PRIVATE_IP')));
+        return in_array($raw, array('1', 'true', 'yes', 'on'), true);
     }
 }
 
@@ -402,9 +446,11 @@ if ($token === '') {
                     $ipAllowed = false;
                     if ($clientIp !== '') {
                         if (scanIsPrivateOrReservedIp($clientIp)) {
-                            // Treat private/reserved IPs as "unknown" for location policy purposes.
-                            // Do not auto-allow; rely on explicit country checks for non-private IPs.
+                            // Private/reserved IP often indicates reverse proxy or internal network.
                             $countryCode = 'PRIVATE';
+                            if (scanAllowPrivateIpFallback()) {
+                                $ipAllowed = true;
+                            }
                         } else {
                             $countryCode = scanLookupCountryCode($clientIp);
                             if ($countryCode !== '' && in_array($countryCode, $allowedCountries, true)) {

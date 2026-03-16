@@ -144,7 +144,7 @@ $createStockOrderRequestTableSql = "CREATE TABLE IF NOT EXISTS `stock_order_requ
     `invoice_no` TEXT DEFAULT NULL,
     `invoice_date` DATE DEFAULT NULL,
     `request_date` DATE NOT NULL,
-    `courier_id` INT DEFAULT NULL,
+    `courier_id` VARCHAR(100) DEFAULT NULL,
     `tracking_no` VARCHAR(120) DEFAULT NULL,
     `total_price` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
     `brand_id` INT DEFAULT NULL,
@@ -219,6 +219,9 @@ dropColumnIfExists($conn, $db_fin, 'stock_order_request', 'request_by', "ALTER T
 dropColumnIfExists($conn, $db_fin, 'stock_order_request_item', 'request_no', "ALTER TABLE `stock_order_request_item` DROP COLUMN `request_no`");
 dropColumnIfExists($conn, $db_fin, 'stock_order_request_item', 'request_by', "ALTER TABLE `stock_order_request_item` DROP COLUMN `request_by`");
 dropIndexIfExists($conn, $db_fin, 'stock_order_request', 'uq_sor_request_no', "ALTER TABLE `stock_order_request` DROP INDEX `uq_sor_request_no`");
+
+// Ensure courier_id type is consistent with CMS courier.id (varchar).
+alterColumnToVarcharIfInt($conn, $db_fin, 'stock_order_request', 'courier_id', 100);
 
 // Ensure Shopee Order Request supports storing multiple package/brand IDs as CSV.
 alterColumnToVarcharIfInt($conn, $db_fin, 'shopee_sg_order_request', 'package', 255);

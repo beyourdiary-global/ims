@@ -89,7 +89,11 @@ if (!empty($companyIds)) {
 $courierMap = array();
 $courierLinkMap = array();
 if (!empty($courierIds)) {
-    $idsStr = implode(',', array_keys($courierIds));
+    $courierIdSqlParts = array();
+    foreach (array_keys($courierIds) as $cid) {
+        $courierIdSqlParts[] = "'" . mysqli_real_escape_string($connect, (string) $cid) . "'";
+    }
+    $idsStr = implode(',', $courierIdSqlParts);
     $cRst = mysqli_query($connect, "SELECT id, name, tracking_link FROM " . COURIER . " WHERE id IN ($idsStr)");
     if ($cRst) {
         while ($cRow = mysqli_fetch_assoc($cRst)) {
@@ -126,11 +130,13 @@ if (!empty($pkgIds)) {
 }
 
 $productBrandMap = array();
+$productNameMap = array();
 if (!empty($productIds)) {
     $idsStr = implode(',', array_keys($productIds));
-    $prdRst = mysqli_query($connect, "SELECT id, brand FROM " . PROD . " WHERE id IN ($idsStr)");
+    $prdRst = mysqli_query($connect, "SELECT id, name, brand FROM " . PROD . " WHERE id IN ($idsStr)");
     if ($prdRst) {
         while ($prdRow = mysqli_fetch_assoc($prdRst)) {
+            $productNameMap[(int) $prdRow['id']] = isset($prdRow['name']) ? (string) $prdRow['name'] : '';
             $productBrandMap[(int) $prdRow['id']] = isset($prdRow['brand']) ? (int) $prdRow['brand'] : 0;
             if (!empty($prdRow['brand'])) {
                 $brandIds[(int) $prdRow['brand']] = true;
@@ -230,7 +236,7 @@ function sorQrHref($path, $siteUrl)
                                 <th>S/N</th>
                                 <th id="action_col">Action</th>
                                 <th>Company</th>
-                                <th>Package</th>
+                                <th>Package/Product</th>
                                 <th>Tracking Status</th>
                                 <th>Tracking Number</th>
                                 <th>Invoice</th>
@@ -256,9 +262,23 @@ function sorQrHref($path, $siteUrl)
                                             $itemCompanyId = isset($parts[2]) ? (int) $parts[2] : 0;
                                             $itemProductId = isset($parts[3]) ? (int) $parts[3] : 0;
                                             $itemBrandId = isset($parts[4]) ? (int) $parts[4] : 0;
-                                            $pkgName = isset($packageMap[$pkgId]) ? $packageMap[$pkgId] : '';
+                                            $pkgName = isset($packageMap[$pkgId]) ? (string) $packageMap[$pkgId] : '';
+
+                                            $resolvedProductId = $itemProductId;
+                                            if ($resolvedProductId <= 0 && isset($packageProductMap[(int) $pkgId]) && count($packageProductMap[(int) $pkgId]) === 1) {
+                                                $resolvedProductId = (int) $packageProductMap[(int) $pkgId][0];
+                                            }
+                                            $productName = ($resolvedProductId > 0 && isset($productNameMap[$resolvedProductId])) ? (string) $productNameMap[$resolvedProductId] : '';
+
+                                            $displayName = '';
                                             if ($pkgName !== '') {
-                                                $itemParts[] = $pkgName . ' x' . $qty;
+                                                $displayName = $pkgName;
+                                            } else if ($productName !== '') {
+                                                $displayName = $productName;
+                                            }
+
+                                            if ($displayName !== '') {
+                                                $itemParts[] = $displayName . ' x' . $qty;
                                             }
 
                                             $resolvedCompanyId = $itemCompanyId;
