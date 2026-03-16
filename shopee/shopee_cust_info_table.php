@@ -87,38 +87,59 @@ $result = getData('*', '', '', SHOPEE_CUST_INFO, $finance_connect);
                         </thead>
                         <tbody>
                             <?php
+                            // Caches to avoid repeated DB lookups for the same PIC and Country values
+                            $picCache = [];
+                            $countryCache = [];
+                            
                             while ($row = $result->fetch_assoc()) {
                                 if (isset($row['buyer_username'], $row['id']) && !empty($row['buyer_username'])) {
+
                                     $picName = $countryName = $brandName = $seriesName = '';
 
                                     $picValue = isset($row['pic']) ? trim((string) $row['pic']) : '';
                                     if ($picValue !== '') {
-                                        $pic = getData('name', "id='" . $picValue . "'", 'LIMIT 1', USR_USER, $connect);
-                                        if (!$pic || $pic->num_rows === 0) {
-                                            $pic = getData('name', "name='" . $picValue . "'", 'LIMIT 1', USR_USER, $connect);
-                                        }
-                                        if ($pic && $pic->num_rows > 0) {
-                                            $picRow = $pic->fetch_assoc();
-                                            $picName = $picRow['name'];
+                                        if (isset($picCache[$picValue])) {
+                                            // Use cached PIC display name
+                                            $picName = $picCache[$picValue];
                                         } else {
-                                            $picName = $picValue;
+                                            // Perform lookup once for this PIC value and cache the result
+                                            $resolvedPicName = $picValue;
+                                            $pic = getData('name', "id='" . $picValue . "'", 'LIMIT 1', USR_USER, $connect);
+                                            if (!$pic || $pic->num_rows === 0) {
+                                                $pic = getData('name', "name='" . $picValue . "'", 'LIMIT 1', USR_USER, $connect);
+                                            }
+
+                                            if ($pic && $pic->num_rows > 0) {
+                                                $picRow = $pic->fetch_assoc();
+                                                $resolvedPicName = $picRow['name'];
+                                            }
+                                            $picCache[$picValue] = $resolvedPicName;
+                                            $picName = $resolvedPicName;
                                         }
                                     }
 
                                     $countryValue = isset($row['country']) ? trim((string) $row['country']) : '';
                                     if ($countryValue !== '') {
-                                        $country = getData('nicename', "id='" . $countryValue . "'", 'LIMIT 1', COUNTRIES, $connect);
-                                        if (!$country || $country->num_rows === 0) {
-                                            $country = getData('nicename', "nicename='" . $countryValue . "'", 'LIMIT 1', COUNTRIES, $connect);
-                                        }
-                                        if (!$country || $country->num_rows === 0) {
-                                            $country = getData('nicename', "name='" . $countryValue . "'", 'LIMIT 1', COUNTRIES, $connect);
-                                        }
-                                        if ($country && $country->num_rows > 0) {
-                                            $countryRow = $country->fetch_assoc();
-                                            $countryName = $countryRow['nicename'];
+                                        if (isset($countryCache[$countryValue])) {
+                                            // Use cached Country display name
+                                            $countryName = $countryCache[$countryValue];
                                         } else {
-                                            $countryName = $countryValue;
+                                            // Perform lookup once for this Country value and cache the result
+                                            $resolvedCountryName = $countryValue;
+                                            $country = getData('nicename', "id='" . $countryValue . "'", 'LIMIT 1', COUNTRIES, $connect);
+                                            if (!$country || $country->num_rows === 0) {
+                                                $country = getData('nicename', "nicename='" . $countryValue . "'", 'LIMIT 1', COUNTRIES, $connect);
+                                            }
+                                            if (!$country || $country->num_rows === 0) {
+                                                $country = getData('nicename', "name='" . $countryValue . "'", 'LIMIT 1', COUNTRIES, $connect);
+                                            }
+
+                                            if ($country && $country->num_rows > 0) {
+                                                $countryRow = $country->fetch_assoc();
+                                                $resolvedCountryName = $countryRow['nicename'];
+                                            }
+                                            $countryCache[$countryValue] = $resolvedCountryName;
+                                            $countryName = $resolvedCountryName;
                                         }
                                     }
 

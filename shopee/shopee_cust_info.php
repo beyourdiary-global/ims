@@ -33,14 +33,17 @@ if (!function_exists('resolveLookupValue')) {
             return $resolved;
         }
 
-        $rst = getData("id,$displayField", "id = '$rawValue'", 'LIMIT 1', $tableName, $connect);
+        // Escape the raw value before using it in SQL conditions to prevent SQL injection
+        $escapedValue = mysqli_real_escape_string($connect, (string) $rawValue);
+
+        $rst = getData("id,$displayField", "id = '$escapedValue'", 'LIMIT 1', $tableName, $connect);
 
         if ((!$rst || $rst->num_rows === 0) && $altDisplayField !== '') {
-            $rst = getData("id,$displayField", "$altDisplayField = '$rawValue'", 'LIMIT 1', $tableName, $connect);
+            $rst = getData("id,$displayField", "$altDisplayField = '$escapedValue'", 'LIMIT 1', $tableName, $connect);
         }
 
         if ((!$rst || $rst->num_rows === 0) && $displayField !== $altDisplayField) {
-            $rst = getData("id,$displayField", "$displayField = '$rawValue'", 'LIMIT 1', $tableName, $connect);
+            $rst = getData("id,$displayField", "$displayField = '$escapedValue'", 'LIMIT 1', $tableName, $connect);
         }
 
         if ($rst && $rst->num_rows > 0) {

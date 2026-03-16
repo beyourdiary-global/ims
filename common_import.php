@@ -4,6 +4,13 @@ $pageTitle = "Import Shortcut";
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
 
+ // Enforce page-level pin access for the Import Shortcut page itself
+ $pagePinAccess = checkCurrentPin($connect, $pageTitle);
+ if (empty($pagePinAccess) || !isActionAllowed('View', $pagePinAccess)) {
+     echo '<script>alert("No permission.");location.href = "' . $SITEURL . '/dashboard.php";</script>';
+     exit;
+ }
+ 
 $shopeeAdsPinAccess = checkPin($connect, 'Shopee Ads Top Up Transaction');
 $facebookAdsPinAccess = checkPin($connect, 'Facebook Ads Top Up Transaction');
 $shopeeOrderPinAccess = checkPin($connect, 'Shopee All Orders');
@@ -11,11 +18,6 @@ $shopeeOrderPinAccess = checkPin($connect, 'Shopee All Orders');
 $canShopeeAdsImport = is_array($shopeeAdsPinAccess) && isActionAllowed('Import', $shopeeAdsPinAccess);
 $canFacebookAdsImport = is_array($facebookAdsPinAccess) && isActionAllowed('Import', $facebookAdsPinAccess);
 $canShopeeOrderImport = is_array($shopeeOrderPinAccess) && isActionAllowed('Import', $shopeeOrderPinAccess);
-
-if (!$canShopeeAdsImport && !$canFacebookAdsImport && !$canShopeeOrderImport) {
-    echo '<script>alert("No permission.");location.href = "' . $SITEURL . '/dashboard.php";</script>';
-    exit;
-}
 
 $shopeeAdsImportPage = $SITEURL . '/shopee_ads_topup_import.php';
 $facebookAdsImportPage = $SITEURL . '/facebook_ads_topup_import.php';
