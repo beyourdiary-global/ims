@@ -1,8 +1,14 @@
 <?php
+ob_start();
 $pageTitle = "Package";
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+
+$libPath = 'header/PhpXlsxGenerator/PhpXlsxGenerator.php';
+if (file_exists($libPath)) {
+    require_once $libPath;
+}
 
 $tblName = PKG;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
@@ -14,6 +20,71 @@ $num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/package.php';
 $deleteRedirectPage = $SITEURL . '/package_table.php';
+
+$checkboxValues = isset($_COOKIE['rowID']) ? $_COOKIE['rowID'] : '';
+if (!empty($checkboxValues)) {
+    $checkboxValues = preg_replace('/[^0-9,]/', '', (string) $checkboxValues);
+    $ids = array_filter(explode(',', $checkboxValues), 'strlen');
+    $ids = array_map('intval', $ids);
+    $ids = array_filter($ids, function ($v) {
+        return $v > 0;
+    });
+    $checkboxValues = implode(',', $ids);
+}
+
+if (!empty($checkboxValues)) {
+    if (!isActionAllowed("Export", $pinAccess)) {
+        setcookie('rowID', '', time() - 3600, '/');
+        ob_end_clean();
+        echo "<script>alert('You do not have permission to export this page.'); location.href='" . $SITEURL . "/package_table.php';</script>";
+        exit;
+    }
+
+    $excelData = array();
+    $query = "SELECT * FROM " . PKG . " WHERE status='A' AND id IN ($checkboxValues) ORDER BY id ASC";
+    $exportRst = mysqli_query($connect, $query);
+    if ($exportRst) {
+        $fields = mysqli_fetch_fields($exportRst);
+        $exportKeys = array();
+        $header = array();
+        foreach ($fields as $field) {
+            $fieldName = (string) $field->name;
+            if (strtolower($fieldName) === 'status') {
+                continue;
+            }
+            $exportKeys[] = $fieldName;
+            if (strtolower($fieldName) === 'id') {
+                $header[] = 'S/N';
+            } else {
+                $header[] = strtoupper(str_replace('_', ' ', $fieldName));
+            }
+        }
+        $excelData[] = $header;
+
+        while ($row = mysqli_fetch_assoc($exportRst)) {
+            $line = array();
+            foreach ($exportKeys as $key) {
+                $line[] = isset($row[$key]) && $row[$key] !== null ? (string) $row[$key] : '';
+            }
+            $excelData[] = $line;
+        }
+    }
+
+    setcookie('rowID', '', time() - 3600, '/');
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+
+    if (count($excelData) <= 1) {
+        echo "<script>alert('No selected package data found to export.');window.location.href='package_table.php';</script>";
+        exit;
+    }
+
+    $filename = 'package_data_' . date('Y-m-d') . '.xlsx';
+    $xlsx = \CodexWorld\PhpXlsxGenerator::fromArray($excelData);
+    $xlsx->downloadAs($filename);
+    exit;
+}
 
 $result = getData('*', '', '', $tblName, $connect);
 
@@ -83,7 +154,7 @@ if (!$result) {
                                     </a>
                                 <?php endif; ?>
                                 <?php if (isActionAllowed("Export", $pinAccess)): ?>
-                                    <a class="btn btn-sm btn-rounded btn-success text-white" id="addBtn" href="package_export.php">
+                                    <a class="btn btn-sm btn-rounded btn-success text-white" id="addBtn" name="exportBtn" href="package_table.php">
                                         <i class="fa-solid fa-file-export"></i> Export
                                     </a>
                                 <?php endif; ?>
@@ -99,6 +170,7 @@ if (!$result) {
                         <thead>
                             <tr>
                                 <th class="hideColumn">ID</th>
+                                <th class="text-center"><input type="checkbox" class="exportAll"></th>
                                 <th>S/N</th>
                                 <th id="action_col">Action</th>
                                 <th>Name</th>
@@ -122,6 +194,7 @@ if (!$result) {
                                 ?>
                                 <tr>
                                     <th class="hideColumn"><?= $row['id'] ?></th>
+                                    <td class="text-center"><input type="checkbox" class="export" value="<?= (int) $row['id'] ?>"></td>
                                     <th><?= $num++ ?></th>
                                     <td class="btn-container">
                                         <?php if (isActionAllowed("View", $pinAccess)): ?>
@@ -185,6 +258,7 @@ if (!$result) {
                         <tfoot>
                             <tr>
                                 <th class="hideColumn">ID</th>
+                                <th class="text-center"><input type="checkbox" class="exportAll"></th>
                                 <th>S/N</th>
                                 <th>Action</th>
                                 <th>Name</th>
@@ -212,5 +286,6 @@ if (!$result) {
         datatableAlignment('table');
         setButtonColor();
     </script>
+    <script src="<?= $SITEURL ?>/js/package_table.js"></script>
 </body>
 </html>

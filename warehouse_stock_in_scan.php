@@ -443,19 +443,14 @@ if ($token === '') {
                 }
 
                 if ($message === '') {
-                    $ipAllowed = false;
+                    // QR stock-in must be accessible from any scanner network.
+                    // Keep IP/country only for audit diagnostics; do not block submission.
+                    $ipAllowed = true;
                     if ($clientIp !== '') {
                         if (scanIsPrivateOrReservedIp($clientIp)) {
-                            // Private/reserved IP often indicates reverse proxy or internal network.
                             $countryCode = 'PRIVATE';
-                            if (scanAllowPrivateIpFallback()) {
-                                $ipAllowed = true;
-                            }
                         } else {
                             $countryCode = scanLookupCountryCode($clientIp);
-                            if ($countryCode !== '' && in_array($countryCode, $allowedCountries, true)) {
-                                $ipAllowed = true;
-                            }
                         }
                     }
 

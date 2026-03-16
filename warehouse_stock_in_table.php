@@ -1,4 +1,5 @@
 <?php
+ob_start();
 $pageTitle = 'Stock In';
 
 include_once 'include/connection.php';
@@ -17,23 +18,173 @@ $products = siLoadProducts($connect);
 list($warehouseNameMap, $warehouseNameToId) = siBuildNameMaps($warehouses);
 list($productNameMap, $productNameToId) = siBuildNameMaps($products);
 
-$msg = isset($_GET['msg']) ? trim((string) $_GET['msg']) : '';
-$err = isset($_GET['err']) ? trim((string) $_GET['err']) : '';
-
-if (input('export') === 'excel') {
-    $rows = siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTable);
-    while (ob_get_level() > 0) {
-        ob_end_clean();
-    }
-    siExportExcel($rows, $warehouseNameMap, $productNameMap);
-}
-
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
 
 $pinAccess = checkCurrentPin($connect, 'Stock In');
 if (!is_array($pinAccess)) {
     $pinAccess = array();
+}
+
+$msg = isset($_GET['msg']) ? trim((string) $_GET['msg']) : '';
+$err = isset($_GET['err']) ? trim((string) $_GET['err']) : '';
+
+if (!function_exists('siFetchAssocRows')) {
+    function siFetchAssocRows($financeConnect, $orderTable, $itemTable, $selectedItemIds = array())
+    {
+        $orderCols = array();
+        $itemCols = array();
+
+        $rstOrderCols = mysqli_query($financeConnect, "SHOW COLUMNS FROM `" . $orderTable . "`");
+        if ($rstOrderCols) {
+            while ($row = mysqli_fetch_assoc($rstOrderCols)) {
+                $orderCols[] = (string) $row['Field'];
+            }
+        }
+
+        $rstItemCols = mysqli_query($financeConnect, "SHOW COLUMNS FROM `" . $itemTable . "`");
+        if ($rstItemCols) {
+            while ($row = mysqli_fetch_assoc($rstItemCols)) {
+                $itemCols[] = (string) $row['Field'];
+            }
+        }
+
+        $selectParts = array();
+        foreach ($orderCols as $col) {
+            $selectParts[] = "o.`" . $col . "` AS `order_" . $col . "`";
+        }
+        foreach ($itemCols as $col) {
+            $selectParts[] = "i.`" . $col . "` AS `item_" . $col . "`";
+        }
+
+        if (empty($selectParts)) {
+            return array();
+        }
+
+        $where = "WHERE o.status='A' AND i.status='A'";
+        if (!empty($selectedItemIds)) {
+            $ids = array_filter(array_map('intval', $selectedItemIds), function ($v) {
+                return $v > 0;
+            });
+            if (!empty($ids)) {
+                $where .= " AND i.id IN (" . implode(',', $ids) . ")";
+            }
+        }
+
+        $sql = "SELECT " . implode(', ', $selectParts) . "
+                FROM `" . $orderTable . "` o
+                INNER JOIN `" . $itemTable . "` i ON i.stock_in_order_id=o.id
+                " . $where . "
+                ORDER BY o.id DESC, i.id ASC";
+
+        $rows = array();
+        $rst = mysqli_query($financeConnect, $sql);
+        if ($rst) {
+            while ($row = mysqli_fetch_assoc($rst)) {
+                $rows[] = $row;
+            }
+        }
+
+        return $rows;
+    }
+}
+
+if (!function_exists('siExportAssocExcel')) {
+    function siExportAssocExcel($rows, $filePrefix)
+    {
+        if (!class_exists('CodexWorld\\PhpXlsxGenerator')) {
+            include_once ROOT . '/header/PhpXlsxGenerator/PhpXlsxGenerator.php';
+        }
+
+        if (empty($rows)) {
+            return false;
+        }
+
+        $headers = array_keys($rows[0]);
+        $exportHeaders = array();
+        $displayHeaders = array();
+
+        foreach ($headers as $header) {
+            $headerLower = strtolower((string) $header);
+            if (substr($headerLower, -7) === '_status') {
+                continue;
+            }
+
+            $exportHeaders[] = $header;
+            if ($headerLower === 'order_id') {
+                $displayHeaders[] = 'ORDER S/N';
+            } elseif ($headerLower === 'item_id') {
+                $displayHeaders[] = 'S/N';
+            } else {
+                $displayHeaders[] = strtoupper(str_replace('_', ' ', (string) $header));
+            }
+        }
+
+        $excelData = array();
+        $excelData[] = $displayHeaders;
+
+        foreach ($rows as $row) {
+            $line = array();
+            foreach ($exportHeaders as $header) {
+                $line[] = isset($row[$header]) && $row[$header] !== null ? (string) $row[$header] : '';
+            }
+            $excelData[] = $line;
+        }
+
+        $fileName = $filePrefix . '_' . date('Ymd_His') . '.xlsx';
+        $xlsx = \CodexWorld\PhpXlsxGenerator::fromArray($excelData, 'Stock In');
+        $xlsx->downloadAs($fileName);
+        exit;
+    }
+}
+
+$checkboxValues = isset($_COOKIE['rowID']) ? $_COOKIE['rowID'] : '';
+if (!empty($checkboxValues)) {
+    $checkboxValues = preg_replace('/[^0-9,]/', '', (string) $checkboxValues);
+    $ids = array_filter(explode(',', $checkboxValues), 'strlen');
+    $ids = array_map('intval', $ids);
+    $ids = array_filter($ids, function ($v) {
+        return $v > 0;
+    });
+    $checkboxValues = implode(',', $ids);
+}
+
+if (input('export') === 'excel') {
+    if (!isActionAllowed("Export", $pinAccess)) {
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+        echo "<script>alert('You do not have permission to export this page.'); location.href='" . $tablePage . "';</script>";
+        exit;
+    }
+    $rows = siFetchAssocRows($finance_connect, $stockInOrderTable, $stockInItemTable);
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    siExportAssocExcel($rows, 'stock_in_export');
+}
+
+if (!empty($checkboxValues)) {
+    if (!isActionAllowed("Export", $pinAccess)) {
+        setcookie('rowID', '', time() - 3600, '/');
+        ob_end_clean();
+        echo "<script>alert('You do not have permission to export this page.'); location.href='" . $tablePage . "';</script>";
+        exit;
+    }
+
+    $rows = siFetchAssocRows($finance_connect, $stockInOrderTable, $stockInItemTable, explode(',', $checkboxValues));
+
+    setcookie('rowID', '', time() - 3600, '/');
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+
+    if (empty($rows)) {
+        echo "<script>alert('No selected stock-in rows found to export.'); location.href='" . $tablePage . "';</script>";
+        exit;
+    }
+
+    siExportAssocExcel($rows, 'stock_in_export');
 }
 
 if (input('act') === 'D' && input('item_id')) {
@@ -72,8 +223,12 @@ $listRows = siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTa
                         <h2><?= siEsc($pageTitle) ?></h2>
                         <div class="mt-auto mb-auto d-flex flex-wrap gap-2">
                             <a class="btn btn-sm btn-rounded btn-primary" id="addBtn" href="<?= $formPage ?>">Add Stock In</a>
-                            <a class="btn btn-sm btn-rounded btn-primary" id="addBtn" href="<?= $importPage ?>">Import</a>
-                            <a class="btn btn-sm btn-rounded btn-primary" id="addBtn" href="<?= $tablePage ?>?export=excel">Export</a>
+                            <?php if (isActionAllowed("Import", $pinAccess)): ?>
+                                <a class="btn btn-sm btn-rounded btn-primary" id="addBtn" href="<?= $importPage ?>">Import</a>
+                            <?php endif; ?>
+                            <?php if (isActionAllowed("Export", $pinAccess)): ?>
+                                <a class="btn btn-sm btn-rounded btn-primary" id="addBtn" name="exportBtn" href="<?= $tablePage ?>">Export</a>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
@@ -90,6 +245,8 @@ $listRows = siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTa
                 <table class="table table-striped" id="stockInListTable">
                     <thead>
                         <tr>
+                            <th class="hideColumn">ID</th>
+                            <th class="text-center"><input type="checkbox" class="exportAll"></th>
                             <th>S/N</th>
                             <th>Action</th>
                             <th>Warehouse</th>
@@ -105,6 +262,8 @@ $listRows = siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTa
                             $productName = isset($productNameMap[(int) $row['product_id']]) ? $productNameMap[(int) $row['product_id']] : '';
                         ?>
                             <tr>
+                                <td class="hideColumn"><?= (int) $row['item_id'] ?></td>
+                                <td class="text-center"><input type="checkbox" class="export" value="<?= (int) $row['item_id'] ?>"></td>
                                 <td><?= $sn++ ?></td>
                                 <td class="btn-container">
                                     <a class="btn btn-sm btn-rounded btn-primary" href="<?= $formPage ?>?act=V&item_id=<?= (int) $row['item_id'] ?>" title="View"><i class="fa-solid fa-eye"></i></a>
@@ -119,6 +278,19 @@ $listRows = siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTa
                             </tr>
                         <?php } ?>
                     </tbody>
+                    <tfoot>
+                        <tr>
+                            <th class="hideColumn">ID</th>
+                            <th class="text-center"><input type="checkbox" class="exportAll"></th>
+                            <th>S/N</th>
+                            <th>Action</th>
+                            <th>Warehouse</th>
+                            <th>Product Name</th>
+                            <th>Product Quantity</th>
+                            <th>Stock In Date</th>
+                            <th>Order Number</th>
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
         </div>
@@ -134,5 +306,6 @@ $listRows = siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTa
     setButtonColor();
     preloader(300);
 </script>
+<script src="<?= $SITEURL ?>/js/warehouse_stock_in_table.js"></script>
 </body>
 </html>

@@ -745,7 +745,7 @@ function validateFacebookPreviewRecords($records, &$errors, $metaAccounts, $user
                         <div class="col-12 d-flex justify-content-between flex-wrap align-items-center gap-2">
                             <h2>Facebook Ads Top Up Import</h2>
                             <div class="d-flex gap-2 flex-wrap">
-                                <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $facebookRedirectPage ?>">Back To Transaction Table</a>
+                                <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $facebookRedirectPage ?>">Back To Facebook Ads Page</a>
                                 <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $redirect_page ?>">Back To Shortcuts</a>
                             </div>
                         </div>
