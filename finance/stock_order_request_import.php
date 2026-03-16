@@ -29,6 +29,28 @@ if ($warehouseRst) {
     }
 }
 
+$couriers = array();
+$courierRst = mysqli_query($connect, "SELECT id, name FROM " . COURIER . " WHERE status='A' ORDER BY name ASC");
+if ($courierRst) {
+    while ($c = mysqli_fetch_assoc($courierRst)) {
+        $couriers[] = array('id' => (string) $c['id'], 'name' => (string) $c['name']);
+    }
+}
+
+$courierIdSet = array();
+$courierNameToId = array();
+foreach ($couriers as $c) {
+    $cidRaw = trim((string) (isset($c['id']) ? $c['id'] : ''));
+    if ($cidRaw !== '') {
+        $courierIdSet[$cidRaw] = true;
+    }
+
+    $cname = trim((string) (isset($c['name']) ? $c['name'] : ''));
+    if ($cname !== '' && $cidRaw !== '') {
+        $courierNameToId[strtolower($cname)] = $cidRaw;
+    }
+}
+
 $warehouseNameMap = array();
 foreach ($warehouses as $w) {
     $warehouseNameMap[(int) $w['id']] = (string) $w['name'];
@@ -1141,6 +1163,17 @@ if ($action === 'insertStockOrderPdf') {
             $lineType = isset($r['line_type']) ? trim((string) $r['line_type']) : 'package';
             $isStandalone = ($lineType === 'standalone_product');
             $warehouseId = isset($r['warehouse_id']) ? (int) $r['warehouse_id'] : 0;
+            $courierIdRaw = isset($r['courier_id']) ? trim((string) $r['courier_id']) : '';
+            $courierId = $courierIdRaw;
+            if ($courierId === '') {
+                $courierNameRaw = isset($r['courier_name']) ? trim((string) $r['courier_name']) : '';
+                if ($courierNameRaw !== '') {
+                    $courierKey = strtolower($courierNameRaw);
+                    if (isset($courierNameToId[$courierKey])) {
+                        $courierId = (string) $courierNameToId[$courierKey];
+                    }
+                }
+            }
             $invoiceNo = trim((string) (isset($r['invoice_no']) ? $r['invoice_no'] : ''));
             $invoiceDate = sorImpDateToYmd(isset($r['invoice_date']) ? $r['invoice_date'] : '');
             $productName = trim((string) (isset($r['product_name']) ? $r['product_name'] : ''));
@@ -1165,6 +1198,11 @@ if ($action === 'insertStockOrderPdf') {
             }
 
             if ($warehouseId <= 0) $importErrors[] = 'Row #' . $rowNo . ': Warehouse is required.';
+            if ($courierId === '') {
+                $importErrors[] = 'Row #' . $rowNo . ': Courier is required.';
+            } else if (!isset($courierIdSet[$courierId])) {
+                $importErrors[] = 'Row #' . $rowNo . ': Invalid courier selected.';
+            }
             if ($invoiceNo === '') $importErrors[] = 'Row #' . $rowNo . ': Invoice is required.';
             if ($invoiceDate === '') $importErrors[] = 'Row #' . $rowNo . ': Invoice Date is required.';
             if (!$isStandalone && ($packageId <= 0 || !isset($packageMap[$packageId]))) $importErrors[] = 'Row #' . $rowNo . ': Valid package is required.';
@@ -1201,11 +1239,18 @@ if ($action === 'insertStockOrderPdf') {
                 $importWarnings[] = 'Row #' . $rowNo . ': Company could not be resolved from brand — it will be left blank. Please set the brand on the package or product.';
             }
 
-            $groupKey = $warehouseId . '|' . $invoiceNo . '|' . $invoiceDate . '|' . $rowCompanyId;
+            $invoiceKey = strtolower(preg_replace('/\s+/', '', $invoiceNo));
+            $groupKey = $warehouseId . '|' . $invoiceDate . '|' . $invoiceKey;
             if (!isset($grouped[$groupKey])) {
+                $companyIds = array();
+                if ($rowCompanyId > 0) {
+                    $companyIds[$rowCompanyId] = true;
+                }
                 $grouped[$groupKey] = array(
                     'warehouse_id' => $warehouseId,
+                    'courier_id' => $courierId,
                     'company_id' => $rowCompanyId,
+                    'company_ids' => $companyIds,
                     'invoice_no' => $invoiceNo,
                     'invoice_date' => $invoiceDate,
                     'request_date' => $invoiceDate,
@@ -1216,6 +1261,13 @@ if ($action === 'insertStockOrderPdf') {
                 );
             } else if ($totalPrice > 0) {
                 $grouped[$groupKey]['extracted_total_price'] = $totalPrice;
+                if ($grouped[$groupKey]['company_id'] <= 0 && $rowCompanyId > 0) {
+                    $grouped[$groupKey]['company_id'] = $rowCompanyId;
+                }
+            }
+
+            if ($rowCompanyId > 0) {
+                $grouped[$groupKey]['company_ids'][$rowCompanyId] = true;
             }
 
             $brandId = (int) $rowBrandId;
@@ -1249,6 +1301,20 @@ if ($action === 'insertStockOrderPdf') {
             }
         }
 
+        if (count($importErrors) > 0) {
+            $existingSummary = (isset($_SESSION['sor_pdf_import_preview']['summary']) && is_array($_SESSION['sor_pdf_import_preview']['summary']))
+                ? $_SESSION['sor_pdf_import_preview']['summary']
+                : array('file_count' => 1, 'row_count' => count($postedRows));
+
+            $_SESSION['sor_pdf_import_preview'] = array(
+                'rows' => $postedRows,
+                'summary' => array(
+                    'file_count' => isset($existingSummary['file_count']) ? (int) $existingSummary['file_count'] : 1,
+                    'row_count' => count($postedRows),
+                ),
+            );
+        }
+
         if (count($importErrors) === 0) {
             mysqli_begin_transaction($finance_connect);
             $inserted = 0;
@@ -1259,17 +1325,32 @@ if ($action === 'insertStockOrderPdf') {
 
                     $resolvedBrandIds = array_keys(isset($g['brand_ids']) ? $g['brand_ids'] : array());
                     $mainBrandId = count($resolvedBrandIds) === 1 ? (int) $resolvedBrandIds[0] : 0;
+                    $resolvedCompanyIds = array_keys(isset($g['company_ids']) ? $g['company_ids'] : array());
+                    $mainCompanyId = isset($g['company_id']) ? (int) $g['company_id'] : 0;
+                    if ($mainCompanyId <= 0 && count($resolvedCompanyIds) > 0) {
+                        $mainCompanyId = (int) $resolvedCompanyIds[0];
+                    }
+                    if ($mainCompanyId <= 0 && $mainBrandId > 0 && isset($brandCompanyMap[$mainBrandId])) {
+                        $mainCompanyId = (int) $brandCompanyMap[$mainBrandId];
+                    }
 
                     $safeInvoiceNo = mysqli_real_escape_string($finance_connect, $g['invoice_no']);
                     $safeInvoiceDate = mysqli_real_escape_string($finance_connect, $g['invoice_date']);
                     $safeRequestDate = mysqli_real_escape_string($finance_connect, $g['request_date']);
+                    $safeCourierId = mysqli_real_escape_string($finance_connect, (string) $g['courier_id']);
                     $safeRemark = mysqli_real_escape_string($finance_connect, 'Imported from PDF: ' . $g['source_file']);
                     $finalTotalPrice = (float) (isset($g['extracted_total_price']) ? $g['extracted_total_price'] : 0);
                     if ($finalTotalPrice <= 0) {
                         throw new Exception('Extracted total price is missing for invoice: ' . $g['invoice_no']);
                     }
 
-                    $qMain = "INSERT INTO " . STOCK_ORDER_REQ . " (warehouse_id, company_id, brand_id, invoice_no, invoice_date, request_date, total_price, remark, create_by, create_date, create_time, status) VALUES ('" . (int) $g['warehouse_id'] . "', '" . (int) $g['company_id'] . "', '" . $mainBrandId . "', '" . $safeInvoiceNo . "', '" . $safeInvoiceDate . "', '" . $safeRequestDate . "', '" . number_format($finalTotalPrice, 2, '.', '') . "', '" . $safeRemark . "', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
+                    $dupSql = "SELECT id FROM " . STOCK_ORDER_REQ . " WHERE status='A' AND LOWER(TRIM(invoice_no)) = LOWER('" . $safeInvoiceNo . "') LIMIT 1";
+                    $dupRst = mysqli_query($finance_connect, $dupSql);
+                    if ($dupRst && mysqli_num_rows($dupRst) > 0) {
+                        throw new Exception('Invoice number (' . $g['invoice_no'] . ') already exists. Import aborted.');
+                    }
+
+                    $qMain = "INSERT INTO " . STOCK_ORDER_REQ . " (warehouse_id, courier_id, company_id, brand_id, invoice_no, invoice_date, request_date, total_price, remark, create_by, create_date, create_time, status) VALUES ('" . (int) $g['warehouse_id'] . "', '" . $safeCourierId . "', '" . $mainCompanyId . "', '" . $mainBrandId . "', '" . $safeInvoiceNo . "', '" . $safeInvoiceDate . "', '" . $safeRequestDate . "', '" . number_format($finalTotalPrice, 2, '.', '') . "', '" . $safeRemark . "', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
 
                     if (!mysqli_query($finance_connect, $qMain)) {
                         throw new Exception('Failed to insert request: ' . mysqli_error($finance_connect));
@@ -1320,6 +1401,18 @@ if ($action === 'insertStockOrderPdf') {
             } catch (Exception $ex) {
                 mysqli_rollback($finance_connect);
                 $importErrors[] = $ex->getMessage();
+
+                $existingSummary = (isset($_SESSION['sor_pdf_import_preview']['summary']) && is_array($_SESSION['sor_pdf_import_preview']['summary']))
+                    ? $_SESSION['sor_pdf_import_preview']['summary']
+                    : array('file_count' => 1, 'row_count' => count($postedRows));
+
+                $_SESSION['sor_pdf_import_preview'] = array(
+                    'rows' => $postedRows,
+                    'summary' => array(
+                        'file_count' => isset($existingSummary['file_count']) ? (int) $existingSummary['file_count'] : 1,
+                        'row_count' => count($postedRows),
+                    ),
+                );
             }
         }
     }
@@ -1414,7 +1507,7 @@ foreach ($previewRows as $idx => $rowCheck) {
             <div class="card mb-4">
                 <div class="card-body">
                     <h5 class="card-title mb-3">Step 1: Upload PDF Or ZIP</h5>
-                    <form method="post" enctype="multipart/form-data" id="sorUploadForm">
+                    <form method="post" enctype="multipart/form-data" id="sorUploadForm" autocomplete="off">
                         <input type="hidden" name="client_ocr_text" id="client_ocr_text" value="">
                         <input type="hidden" name="client_ocr_map" id="client_ocr_map" value="">
                         <div class="row g-3 align-items-end">
@@ -1449,13 +1542,14 @@ foreach ($previewRows as $idx => $rowCheck) {
                             </div>
                         <?php } ?>
 
-                        <form method="post" id="sorImportPreviewForm">
+                        <form method="post" id="sorImportPreviewForm" autocomplete="off">
                             <?php $sourceNo = 1; foreach ($rowsBySource as $sourceFile => $rowSet) {
                                 $firstRow = $rowSet[0]['row'];
                                 $receiptKey = 'r' . (int) $sourceNo;
                                 $invoiceVal = isset($firstRow['invoice_no']) ? (string) $firstRow['invoice_no'] : '';
                                 $invoiceDateVal = sorImpDateToYmd(isset($firstRow['invoice_date']) ? (string) $firstRow['invoice_date'] : '');
                                 $warehouseVal = isset($firstRow['warehouse_id']) ? (int) $firstRow['warehouse_id'] : 0;
+                                $courierVal = isset($firstRow['courier_id']) ? trim((string) $firstRow['courier_id']) : '';
                                 $totalVal = isset($firstRow['total_price']) ? (string) $firstRow['total_price'] : '0.00';
                                 $totalValNum = (float) $totalVal;
                             ?>
@@ -1466,12 +1560,21 @@ foreach ($previewRows as $idx => $rowCheck) {
                                     </div>
 
                                     <div class="row mb-3">
-                                        <div class="col-md-3 mb-3">
+                                        <div class="col-md-2 mb-3">
                                             <label class="form-label form_lbl required">Warehouse</label>
                                             <select class="form-select receipt-sync" data-receipt="<?= $receiptKey ?>" data-field="warehouse_id" required>
                                                 <option value="">Select Warehouse</option>
                                                 <?php foreach ($warehouses as $w) { ?>
                                                     <option value="<?= (int) $w['id'] ?>" <?= ($warehouseVal === (int) $w['id']) ? 'selected' : '' ?>><?= htmlspecialchars((string) $w['name'], ENT_QUOTES, 'UTF-8') ?></option>
+                                                <?php } ?>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-2 mb-3">
+                                            <label class="form-label form_lbl required">Courier</label>
+                                            <select class="form-select receipt-sync" data-receipt="<?= $receiptKey ?>" data-field="courier_id" required autocomplete="off">
+                                                <option value="" <?= ($courierVal === '') ? 'selected' : '' ?>>Select Courier</option>
+                                                <?php foreach ($couriers as $c) { ?>
+                                                    <option value="<?= htmlspecialchars((string) $c['id'], ENT_QUOTES, 'UTF-8') ?>" <?= ($courierVal !== '' && (string) $courierVal === (string) $c['id']) ? 'selected' : '' ?>><?= htmlspecialchars((string) $c['name'], ENT_QUOTES, 'UTF-8') ?></option>
                                                 <?php } ?>
                                             </select>
                                         </div>
@@ -1486,7 +1589,7 @@ foreach ($previewRows as $idx => $rowCheck) {
                                                 <div class="err-missing">Unable to extract invoices date from PDF. Please fill manually.</div>
                                             <?php } ?>
                                         </div>
-                                        <div class="col-md-3 mb-3">
+                                        <div class="col-md-2 mb-3">
                                             <label class="form-label form_lbl required">Total Price</label>
                                             <input class="form-control receipt-sync" type="number" step="0.01" min="0" data-receipt="<?= $receiptKey ?>" data-field="total_price" value="<?= htmlspecialchars($totalVal, ENT_QUOTES, 'UTF-8') ?>" required>
                                             <?php if ($totalValNum <= 0) { ?>
@@ -1612,6 +1715,8 @@ foreach ($previewRows as $idx => $rowCheck) {
                                                                 <input type="hidden" class="receipt-hidden-invoice_no-<?= $receiptKey ?>" name="rows[<?= $idx ?>][invoice_no]" value="<?= htmlspecialchars($invoiceVal, ENT_QUOTES, 'UTF-8') ?>">
                                                                 <input type="hidden" class="receipt-hidden-invoice_date-<?= $receiptKey ?>" name="rows[<?= $idx ?>][invoice_date]" value="<?= htmlspecialchars($invoiceDateVal, ENT_QUOTES, 'UTF-8') ?>">
                                                                 <input type="hidden" class="receipt-hidden-warehouse_id-<?= $receiptKey ?>" name="rows[<?= $idx ?>][warehouse_id]" value="<?= (int) $warehouseVal ?>">
+                                                                <input type="hidden" class="receipt-hidden-courier_id-<?= $receiptKey ?>" name="rows[<?= $idx ?>][courier_id]" value="<?= htmlspecialchars((string) $courierVal, ENT_QUOTES, 'UTF-8') ?>">
+                                                                <input type="hidden" class="receipt-hidden-courier_name-<?= $receiptKey ?>" name="rows[<?= $idx ?>][courier_name]" value="">
                                                                 <input type="hidden" class="receipt-hidden-total_price-<?= $receiptKey ?>" name="rows[<?= $idx ?>][total_price]" value="<?= htmlspecialchars($totalVal, ENT_QUOTES, 'UTF-8') ?>">
                                                                 <input type="hidden" name="rows[<?= $idx ?>][product_id]" value="<?= (int) (isset($row['product_id']) ? $row['product_id'] : 0) ?>">
                                                                 <input type="hidden" name="rows[<?= $idx ?>][line_type]" value="<?= htmlspecialchars($lineType, ENT_QUOTES, 'UTF-8') ?>">

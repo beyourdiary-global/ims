@@ -130,7 +130,8 @@ foreach ($warehouses as $wh) {
 $courierNameMap = array();
 $courierNameToId = array();
 foreach ($couriers as $cr) {
-    $crId = (int) $cr['id'];
+    $crId = trim((string) $cr['id']);
+    if ($crId === '') continue;
     $crName = (string) $cr['name'];
     $courierNameMap[$crId] = $crName;
     $courierNameToId[strtolower(trim($crName))] = $crId;
@@ -253,7 +254,7 @@ if (post('actionBtn')) {
             }
         }
 
-        if ((int) $sor_courier <= 0 && trim((string) $sor_courier_name) !== '') {
+        if ($sor_courier === '' && trim((string) $sor_courier_name) !== '') {
             $crKey = strtolower(trim((string) $sor_courier_name));
             if (isset($courierNameToId[$crKey])) {
                 $sor_courier = (string) $courierNameToId[$crKey];
@@ -454,7 +455,7 @@ if (post('actionBtn')) {
             $err = 'Selected package does not match the selected product.';
         } else if (!empty($invalidStandaloneProducts)) {
             $err = 'Please select valid standalone product name from the list.';
-        } else if ($sor_courier !== '' && (int) $sor_courier > 0 && !isset($courierNameMap[(int) $sor_courier])) {
+        } else if ($sor_courier !== '' && !isset($courierNameMap[(string) $sor_courier])) {
             $err = 'Please select a valid courier from the list.';
         } else if (count($items) === 0) {
             $err = 'Please add at least one package item or standalone product with quantity.';
@@ -498,12 +499,13 @@ if (post('actionBtn')) {
                 $safeTotalPrice = number_format((float) $computedTotal, 2, '.', '');
                 $safeAttachment = mysqli_real_escape_string($finance_connect, (string) $sor_attachment);
                 $safeRemark = mysqli_real_escape_string($finance_connect, $sor_remark);
+                $courierSqlValue = ($safeCourier === '' ? "NULL" : "'" . $safeCourier . "'");
 
                 if ($action === 'addRecord') {
                     $query = "INSERT INTO " . STOCK_ORDER_REQ . "
                                                                 (warehouse_id, company_id, brand_id, invoice_no, invoice_date, request_date, courier_id, tracking_no, total_price, attachment, remark, create_by, create_date, create_time)
                               VALUES
-                                                                ('$safeWarehouse', '" . $requestCompanyId . "', '" . $requestBrandId . "', '$safeInvoiceNo', '$safeInvoiceDate', '$safeRequestDate', '" . ($safeCourier === '' ? 0 : $safeCourier) . "', '$safeTrackingNo', '$safeTotalPrice', '$safeAttachment', '$safeRemark', '" . USER_ID . "', CURDATE(), CURTIME())";
+                                                                ('$safeWarehouse', '" . $requestCompanyId . "', '" . $requestBrandId . "', '$safeInvoiceNo', '$safeInvoiceDate', '$safeRequestDate', " . $courierSqlValue . ", '$safeTrackingNo', '$safeTotalPrice', '$safeAttachment', '$safeRemark', '" . USER_ID . "', CURDATE(), CURTIME())";
                     $returnData = mysqli_query($finance_connect, $query);
                     $dataID = $finance_connect->insert_id;
                 } else {
@@ -514,7 +516,7 @@ if (post('actionBtn')) {
                                   invoice_no = '$safeInvoiceNo',
                                   invoice_date = '$safeInvoiceDate',
                                   request_date = '$safeRequestDate',
-                                  courier_id = '" . ($safeCourier === '' ? 0 : $safeCourier) . "',
+                                  courier_id = " . $courierSqlValue . ",
                                   tracking_no = '$safeTrackingNo',
                                   total_price = '$safeTotalPrice',
                                   attachment = '$safeAttachment',
@@ -619,7 +621,7 @@ function sorQrSrc($path, $siteUrl)
 
         <div id="formContainer" class="container d-flex justify-content-center">
             <div class="col-11 col-md-10 formWidthAdjust">
-                <form id="sorForm" method="post" enctype="multipart/form-data">
+                <form id="sorForm" method="post" enctype="multipart/form-data" autocomplete="off">
                     <input type="hidden" name="id" value="<?= sorEcho($dataID) ?>">
                     <input type="hidden" name="act" value="<?= sorEcho($act) ?>">
 
@@ -675,8 +677,8 @@ function sorQrSrc($path, $siteUrl)
                         <div class="col-md-4 mb-3">
                             <label class="form-label form_lbl" for="sor_warehouse">Warehouse<span class="requireRed">*</span></label>
                             <div class="autocomplete">
-                                <input class="form-control" type="text" id="sor_warehouse_name" name="sor_warehouse_name" value="<?= sorEcho(isset($warehouseNameMap[(int) (isset($row['warehouse_id']) ? $row['warehouse_id'] : 0)]) ? $warehouseNameMap[(int) $row['warehouse_id']] : '') ?>" placeholder="Select Warehouse" <?= ($act == '') ? 'readonly' : '' ?>>
-                                <input type="hidden" id="sor_warehouse" name="sor_warehouse" value="<?= sorEcho(isset($row['warehouse_id']) ? $row['warehouse_id'] : '') ?>">
+                                <input class="form-control" type="text" id="sor_warehouse_name" name="sor_warehouse_name" value="<?= sorEcho(isset($_POST['sor_warehouse_name']) ? $_POST['sor_warehouse_name'] : (isset($warehouseNameMap[(int) (isset($row['warehouse_id']) ? $row['warehouse_id'] : 0)]) ? $warehouseNameMap[(int) $row['warehouse_id']] : '')) ?>" placeholder="Select Warehouse" <?= ($act == '') ? 'readonly' : '' ?>>
+                                <input type="hidden" id="sor_warehouse" name="sor_warehouse" value="<?= sorEcho(isset($_POST['sor_warehouse']) ? $_POST['sor_warehouse'] : (isset($row['warehouse_id']) ? $row['warehouse_id'] : '')) ?>">
                             </div>
                         </div>
                         <div class="col-md-4 mb-3">
@@ -690,25 +692,25 @@ function sorQrSrc($path, $siteUrl)
                         </div>
                         <div class="col-md-4 mb-3">
                             <label class="form-label form_lbl" for="sor_invoice_date">Invoices Date<span class="requireRed">*</span></label>
-                            <input class="form-control" type="date" id="sor_invoice_date" name="sor_invoice_date" value="<?= sorEcho(isset($row['invoice_date']) ? $row['invoice_date'] : date('Y-m-d')) ?>" <?= ($act == '') ? 'readonly' : '' ?>>
+                            <input class="form-control" type="date" id="sor_invoice_date" name="sor_invoice_date" value="<?= sorEcho(isset($_POST['sor_invoice_date']) ? $_POST['sor_invoice_date'] : (isset($row['invoice_date']) ? $row['invoice_date'] : date('Y-m-d'))) ?>" <?= ($act == '') ? 'readonly' : '' ?>>
                         </div>
                     </div>
 
                     <div class="row">
                         <div class="col-md-4 mb-3">
                             <label class="form-label form_lbl" for="sor_request_date">Request Date<span class="requireRed">*</span></label>
-                            <input class="form-control" type="date" id="sor_request_date" name="sor_request_date" value="<?= sorEcho(isset($row['request_date']) ? $row['request_date'] : date('Y-m-d')) ?>" <?= ($act == '') ? 'readonly' : '' ?>>
+                            <input class="form-control" type="date" id="sor_request_date" name="sor_request_date" value="<?= sorEcho(isset($_POST['sor_request_date']) ? $_POST['sor_request_date'] : (isset($row['request_date']) ? $row['request_date'] : date('Y-m-d'))) ?>" <?= ($act == '') ? 'readonly' : '' ?>>
                         </div>
                         <div class="col-md-4 mb-3">
                             <label class="form-label form_lbl" for="sor_courier">Courier</label>
                             <div class="autocomplete">
-                                <input class="form-control" type="text" id="sor_courier_name" name="sor_courier_name" value="<?= sorEcho(isset($courierNameMap[(int) (isset($row['courier_id']) ? $row['courier_id'] : 0)]) ? $courierNameMap[(int) $row['courier_id']] : '') ?>" placeholder="Select Courier" <?= ($act == '') ? 'readonly' : '' ?>>
-                                <input type="hidden" id="sor_courier" name="sor_courier" value="<?= sorEcho(isset($row['courier_id']) ? $row['courier_id'] : '') ?>">
+                                <input class="form-control" type="text" id="sor_courier_name" name="sor_courier_name" value="<?= sorEcho(isset($_POST['sor_courier_name']) ? $_POST['sor_courier_name'] : (($act === 'I') ? '' : (isset($courierNameMap[(string) (isset($row['courier_id']) ? $row['courier_id'] : '')]) ? $courierNameMap[(string) $row['courier_id']] : ''))) ?>" placeholder="Select Courier" <?= ($act == '') ? 'readonly' : '' ?> autocomplete="off">
+                                <input type="hidden" id="sor_courier" name="sor_courier" value="<?= sorEcho(isset($_POST['sor_courier']) ? $_POST['sor_courier'] : (($act === 'I') ? '' : (isset($row['courier_id']) ? $row['courier_id'] : ''))) ?>">
                             </div>
                         </div>
                         <div class="col-md-4 mb-3">
                             <label class="form-label form_lbl" for="sor_tracking_no">Tracking Number</label>
-                            <input class="form-control" type="text" id="sor_tracking_no" name="sor_tracking_no" value="<?= sorEcho(isset($row['tracking_no']) ? $row['tracking_no'] : '') ?>" <?= ($act == '') ? 'readonly' : '' ?>>
+                            <input class="form-control" type="text" id="sor_tracking_no" name="sor_tracking_no" value="<?= sorEcho(isset($_POST['sor_tracking_no']) ? $_POST['sor_tracking_no'] : (($act === 'I') ? '' : (isset($row['tracking_no']) ? $row['tracking_no'] : ''))) ?>" <?= ($act == '') ? 'readonly' : '' ?> autocomplete="off">
                         </div>
                     </div>
 
@@ -871,7 +873,7 @@ function sorQrSrc($path, $siteUrl)
                         </div>
                         <div class="col-md-4 mb-3">
                             <label class="form-label form_lbl" for="sor_remark">Remark</label>
-                            <textarea class="form-control" id="sor_remark" name="sor_remark" rows="3" <?= ($act == '') ? 'readonly' : '' ?>><?= sorEcho(isset($row['remark']) ? $row['remark'] : '') ?></textarea>
+                            <textarea class="form-control" id="sor_remark" name="sor_remark" rows="3" <?= ($act == '') ? 'readonly' : '' ?> autocomplete="off"><?= sorEcho(isset($_POST['sor_remark']) ? $_POST['sor_remark'] : (($act === 'I') ? '' : (isset($row['remark']) ? $row['remark'] : ''))) ?></textarea>
                         </div>
                     </div>
 

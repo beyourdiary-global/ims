@@ -114,7 +114,7 @@
     return { id: parseInt(w.id, 10), name: String(w.name || "") };
   });
   var courierOptions = (config.couriers || []).map(function (c) {
-    return { id: parseInt(c.id, 10), name: String(c.name || "") };
+    return { id: String(c.id || "").trim(), name: String(c.name || "") };
   });
   var productOptions = (config.products || []).map(function (p) {
     return { id: parseInt(p.id, 10), name: String(p.name || "") };
@@ -763,11 +763,12 @@
 
   if (
     courierIdInput &&
-    parseInt(courierIdInput.value || "0", 10) > 0 &&
+    String(courierIdInput.value || "").trim() !== "" &&
     courierNameInput &&
     courierNameInput.value.trim() === ""
   ) {
-    var cr = courierLookupById[parseInt(courierIdInput.value, 10)] || null;
+    var cr =
+      courierLookupById[String(courierIdInput.value || "").trim()] || null;
     if (cr) courierNameInput.value = cr.name;
   }
 
