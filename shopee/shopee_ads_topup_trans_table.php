@@ -5,6 +5,7 @@ $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
 
+checkCurrentPin($connect, $pageTitle);
 $pinAccess = checkPin($connect, $pageTitle);
 
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';

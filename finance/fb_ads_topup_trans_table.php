@@ -5,7 +5,7 @@ $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
 
-$pinAccess = checkPin($connect, $pageTitle);
+$pinAccess = checkCurrentPin($connect, $pageTitle);
 
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . "_list.xlsx";
@@ -22,6 +22,16 @@ if (!file_exists($tempAttachDir)) {
 
 $checkboxValues = isset($_COOKIE['rowID']) ? $_COOKIE['rowID'] : '';
 
+// Sanitize to a comma-separated list of integer IDs
+ if (!empty($checkboxValues)) {
+     // Remove any character that is not a digit or a comma
+     $checkboxValues = preg_replace('/[^0-9,]/', '', $checkboxValues);
+     // Split, filter out empty values, cast to integers, and re-join
+     $ids = array_filter(explode(',', $checkboxValues), 'strlen');
+     $ids = array_map('intval', $ids);
+     $checkboxValues = implode(',', $ids);
+ }
+ 
 // Check if any checkboxes are checked
 if (!empty($checkboxValues)) {
     if (!isActionAllowed("Export", $pinAccess)) {
