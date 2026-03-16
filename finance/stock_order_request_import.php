@@ -4,8 +4,7 @@ $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
-
-sorEnsureSchema($finance_connect);
+include_once ROOT . '/header/phpqrcode/qrlib.php';
 
 $permissionPage = 'Stock Order Request';
 $pinAccess = checkPin($connect, $permissionPage);
@@ -561,6 +560,62 @@ if (!function_exists('sorImpResolveProductFromText')) {
     }
 }
 
+if (!function_exists('sorImpParseNumberedInvoiceRow')) {
+    /**
+     * Parse numbered invoice row and extract item text + row qty + row total.
+     * Example: "2 CNY2026D - Carb Zero x 2 RM 336.00 RM 0.00 1 RM168.00"
+     */
+    function sorImpParseNumberedInvoiceRow($line)
+    {
+        $line = trim((string) $line);
+        if ($line === '') return null;
+
+        if (preg_match('/^\s*(\d{1,3})\s+(.+?)\s+(\d{1,4})\s+(?:RM|MYR|SGD|USD)?\s*([\d,]+(?:\.\d{1,2})?)\s*$/i', $line, $m)) {
+            return array(
+                'index' => (int) $m[1],
+                'text' => trim((string) $m[2]),
+                'qty' => (int) $m[3],
+                'line_total' => (float) str_replace(',', '', (string) $m[4]),
+            );
+        }
+
+        if (preg_match('/^\s*(\d{1,3})\s+(.+?)(?:\s+RM\s|\s+MYR\s|\s+SGD\s|\s+USD\s|\s+\d{1,3}(?:,\d{3})*\.\d{2})/i', $line, $m)) {
+            return array(
+                'index' => (int) $m[1],
+                'text' => trim((string) $m[2]),
+                'qty' => 1,
+                'line_total' => 0.00,
+            );
+        }
+
+        if (preg_match('/^\s*(\d{1,3})\s+([A-Za-z].{2,})$/', $line, $m)) {
+            return array(
+                'index' => (int) $m[1],
+                'text' => trim((string) $m[2]),
+                'qty' => 1,
+                'line_total' => 0.00,
+            );
+        }
+
+        return null;
+    }
+}
+
+if (!function_exists('sorImpSanitizeExtractedName')) {
+    function sorImpSanitizeExtractedName($text)
+    {
+        $text = trim((string) $text);
+        if ($text === '') return '';
+
+        // Remove OCR marker symbols often attached to names.
+        $text = str_replace(array('*', '+', '•', '·'), '', $text);
+        // Remove dangling currency tokens at end: "... RM" / "... RM RM".
+        $text = preg_replace('/(?:\s+(?:RM|MYR|SGD|USD))+\s*$/i', '', $text);
+        $text = preg_replace('/\s+/', ' ', (string) $text);
+        return trim((string) $text);
+    }
+}
+
 // ============================================================
 //  NOISE LINE DETECTION
 // ============================================================
@@ -640,7 +695,7 @@ if (!function_exists('sorImpIsCustomerInfoLine')) {
 // ============================================================
 
 if (!function_exists('sorImpParsePdfToRows')) {
-    function sorImpParsePdfToRows($pdfFile, $packages, $packageMap, $productNameMap, $productNameToId, $brandCompanyMap, $clientOcrText = '')
+    function sorImpParsePdfToRows($pdfFile, $packages, $packageMap, $productNameMap, $productNameToId, $productBrandMap, $brandCompanyMap, $clientOcrText = '')
     {
         $warnings = array();
         $ocrWarnings = array();
@@ -723,38 +778,31 @@ if (!function_exists('sorImpParsePdfToRows')) {
             // Skip customer info lines that leaked through
             if (sorImpIsCustomerInfoLine($line)) continue;
 
-            // Detect numbered line item (package row):
-            // Pattern: "1 Mix & Match C3 RM 580.00 RM 0.00 1 RM300.00"
-            // or: "2 CNY2026D - Carb Zero x 2 RM 336.00 RM 0.00 1 RM168.00"
-            if (preg_match('/^\s*(\d{1,3})\s+(.+?)(?:\s+RM\s|\s+MYR\s|\s+SGD\s|\s+USD\s|\s+\d{1,3}(?:,\d{3})*\.\d{2})/i', $line, $m)) {
+            // Detect numbered invoice row and capture row qty/line total from the row itself.
+            $rowHeader = sorImpParseNumberedInvoiceRow($line);
+            if ($rowHeader !== null) {
                 if ($currentItem !== null) {
                     $lineItems[] = $currentItem;
                 }
-                $pkgName = trim((string) $m[2]);
+                $pkgName = trim((string) $rowHeader['text']);
                 // Remove trailing price fragments that OCR might have joined
                 $pkgName = preg_replace('/\s+RM\s*[\d,.]*$/', '', $pkgName);
                 $pkgName = preg_replace('/\s+\d+\.\d{2}$/', '', $pkgName);
-                $pkgName = trim($pkgName);
+                $pkgName = sorImpSanitizeExtractedName($pkgName);
 
                 $currentItem = array(
-                    'index' => (int) $m[1],
+                    'index' => (int) $rowHeader['index'],
                     'package_text' => $pkgName,
                     'products' => array(),
+                    'row_qty' => max(1, (int) $rowHeader['qty']),
+                    'line_total_price' => isset($rowHeader['line_total']) ? (float) $rowHeader['line_total'] : 0.00,
+                    'has_section_marker' => false,
                 );
                 continue;
             }
 
-            // Also detect a simpler numbered line without prices right after the name
-            if ($currentItem === null && preg_match('/^\s*(\d{1,3})\s+([A-Za-z].{2,})$/', $line, $m)) {
-                $candidate = trim((string) $m[2]);
-                if (!sorImpIsNoiseLine($candidate) && !preg_match('/^\d+$/', $candidate)) {
-                    $currentItem = array(
-                        'index' => (int) $m[1],
-                        'package_text' => $candidate,
-                        'products' => array(),
-                    );
-                    continue;
-                }
+            if ($currentItem !== null && preg_match('/^(choose\s+any|free\s+item)\b/i', trim((string) $line))) {
+                $currentItem['has_section_marker'] = true;
             }
 
             // Skip noise lines
@@ -800,6 +848,7 @@ if (!function_exists('sorImpParsePdfToRows')) {
                 }
 
                 if ($prodName !== '' && $qty > 0) {
+                    $prodName = sorImpSanitizeExtractedName($prodName);
                     // Skip if the "product name" is actually noise
                     if (sorImpIsNoiseLine($prodName)) continue;
                     // Skip if it looks like a price line
@@ -819,52 +868,15 @@ if (!function_exists('sorImpParsePdfToRows')) {
             $lineItems[] = $currentItem;
         }
 
-        // Step 3: Merge duplicate packages (same package name) and sum product quantities.
-        // e.g., "Mix & Match C3" appears as item #1 and item #3 → combine their products.
-        $mergedItems = array();
-        foreach ($lineItems as $item) {
-            $pkgKey = sorImpLookup($item['package_text']);
-            if ($pkgKey === '') {
-                $mergedItems[] = $item;
-                continue;
-            }
-
-            $foundIdx = -1;
-            foreach ($mergedItems as $mi => $existing) {
-                if (sorImpLookup($existing['package_text']) === $pkgKey) {
-                    $foundIdx = $mi;
-                    break;
-                }
-            }
-
-            if ($foundIdx >= 0) {
-                // Merge products: sum quantities for same product name
-                foreach ($item['products'] as $newProd) {
-                    $prodKey = sorImpLookup($newProd['name']);
-                    $matched = false;
-                    foreach ($mergedItems[$foundIdx]['products'] as &$existingProd) {
-                        if (sorImpLookup($existingProd['name']) === $prodKey) {
-                            $existingProd['qty'] += $newProd['qty'];
-                            $matched = true;
-                            break;
-                        }
-                    }
-                    unset($existingProd);
-                    if (!$matched) {
-                        $mergedItems[$foundIdx]['products'][] = $newProd;
-                    }
-                }
-            } else {
-                $mergedItems[] = $item;
-            }
-        }
-        $lineItems = $mergedItems;
+        // Keep each numbered package line independent, even if package names repeat.
+        $lineItems = array_values($lineItems);
 
         // ---- Build output rows ----
         $rows = array();
 
-        foreach ($lineItems as $item) {
+        foreach ($lineItems as $itemIdx => $item) {
             $packageText = $item['package_text'];
+            $itemGroupKey = 'pkg_line_' . (int) ($itemIdx + 1);
 
             // Try to match package in DB
             $pkgHit = sorImpResolvePackageFromText($packageText, $packages, $pkgNameMap, $pkgDescMap);
@@ -873,7 +885,40 @@ if (!function_exists('sorImpParsePdfToRows')) {
             $pkgItemDesc = ($pkgHit && isset($pkgHit['item_description'])) ? (string) $pkgHit['item_description'] : '';
             $pkgCompanyId = ($pkgBrandId > 0 && isset($brandCompanyMap[$pkgBrandId])) ? (int) $brandCompanyMap[$pkgBrandId] : 0;
 
-            if (count($item['products']) > 0) {
+            $lineTotalPrice = isset($item['line_total_price']) ? (float) $item['line_total_price'] : 0.00;
+            $rowQty = isset($item['row_qty']) ? (int) $item['row_qty'] : 1;
+            $hasSectionMarker = !empty($item['has_section_marker']);
+            $isStandalone = (count($item['products']) === 0 && !$hasSectionMarker);
+
+            if ($isStandalone) {
+                $standaloneName = sorImpSanitizeExtractedName($packageText);
+                $standaloneProductId = sorImpResolveProductFromText($standaloneName, $productKeyToId);
+                $standaloneBrandId = ($standaloneProductId > 0 && isset($productBrandMap[$standaloneProductId])) ? (int) $productBrandMap[$standaloneProductId] : 0;
+                $standaloneCompanyId = ($standaloneBrandId > 0 && isset($brandCompanyMap[$standaloneBrandId])) ? (int) $brandCompanyMap[$standaloneBrandId] : 0;
+
+                $rows[] = array(
+                    'source_file' => (string) $pdfFile['name'],
+                    'invoice_no' => $invoiceNo,
+                    'invoice_date' => $invoiceDate,
+                    'total_price' => $totalPrice,
+                    'warehouse_id' => '',
+                    'product_id' => $standaloneProductId,
+                    'product_name' => $standaloneName,
+                    'pdf_product_name' => $standaloneName,
+                    'package_id' => 0,
+                    'package_name' => '',
+                    'pdf_package_name' => '',
+                    'package_group_key' => $itemGroupKey,
+                    'line_type' => 'standalone_product',
+                    'line_total_price' => $lineTotalPrice,
+                    'package_qty' => max(1, $rowQty),
+                    'item_description' => $standaloneName,
+                    'qty' => max(1, $rowQty),
+                    'brand_id' => $standaloneBrandId,
+                    'company_id' => $standaloneCompanyId,
+                    'warning' => '',
+                );
+            } else if (count($item['products']) > 0) {
                 // This package has product sub-items in the PDF
                 foreach ($item['products'] as $prod) {
                     $productId = sorImpResolveProductFromText($prod['name'], $productKeyToId);
@@ -890,6 +935,10 @@ if (!function_exists('sorImpParsePdfToRows')) {
                         'package_id' => $pkgId,
                         'package_name' => $packageText,
                         'pdf_package_name' => $packageText,
+                        'package_group_key' => $itemGroupKey,
+                        'line_type' => 'package',
+                        'line_total_price' => $lineTotalPrice,
+                        'package_qty' => max(1, $rowQty),
                         'item_description' => $pkgItemDesc,
                         'qty' => max(1, $prod['qty']),
                         'brand_id' => $pkgBrandId,
@@ -917,6 +966,10 @@ if (!function_exists('sorImpParsePdfToRows')) {
                                 'package_id' => $pkgId,
                                 'package_name' => $packageText,
                                 'pdf_package_name' => $packageText,
+                                'package_group_key' => $itemGroupKey,
+                                'line_type' => 'package',
+                                'line_total_price' => $lineTotalPrice,
+                                'package_qty' => max(1, $rowQty),
                                 'item_description' => $pkgItemDesc,
                                 'qty' => 1,
                                 'brand_id' => $pkgBrandId,
@@ -938,6 +991,10 @@ if (!function_exists('sorImpParsePdfToRows')) {
                             'package_id' => $pkgId,
                             'package_name' => $packageText,
                             'pdf_package_name' => $packageText,
+                            'package_group_key' => $itemGroupKey,
+                            'line_type' => 'package',
+                            'line_total_price' => $lineTotalPrice,
+                            'package_qty' => max(1, $rowQty),
                             'item_description' => $pkgItemDesc,
                             'qty' => 1,
                             'brand_id' => $pkgBrandId,
@@ -959,6 +1016,10 @@ if (!function_exists('sorImpParsePdfToRows')) {
                         'package_id' => 0,
                         'package_name' => $packageText,
                         'pdf_package_name' => $packageText,
+                        'package_group_key' => $itemGroupKey,
+                        'line_type' => 'package',
+                        'line_total_price' => $lineTotalPrice,
+                        'package_qty' => max(1, $rowQty),
                         'item_description' => '',
                         'qty' => 1,
                         'brand_id' => 0,
@@ -983,6 +1044,10 @@ if (!function_exists('sorImpParsePdfToRows')) {
                 'package_id' => 0,
                 'package_name' => '',
                 'pdf_package_name' => '',
+                'package_group_key' => 'pkg_line_1',
+                'line_type' => 'standalone_product',
+                'line_total_price' => 0.00,
+                'package_qty' => 1,
                 'item_description' => '',
                 'qty' => 1,
                 'brand_id' => 0,
@@ -1038,7 +1103,7 @@ if ($action === 'parseStockOrderPdf') {
                 $ocrTextForSrc = (string) $clientOcrMap[$srcBaseKey];
             }
 
-            $parsed = sorImpParsePdfToRows($src, $packages, $packageMap, $productNameMap, $productNameToId, $brandCompanyMap, $ocrTextForSrc);
+            $parsed = sorImpParsePdfToRows($src, $packages, $packageMap, $productNameMap, $productNameToId, $productBrandMap, $brandCompanyMap, $ocrTextForSrc);
             if (!empty($parsed['warnings'])) {
                 $importWarnings = array_merge($importWarnings, $parsed['warnings']);
             }
@@ -1073,6 +1138,8 @@ if ($action === 'insertStockOrderPdf') {
 
         foreach ($postedRows as $idx => $r) {
             $rowNo = $idx + 1;
+            $lineType = isset($r['line_type']) ? trim((string) $r['line_type']) : 'package';
+            $isStandalone = ($lineType === 'standalone_product');
             $warehouseId = isset($r['warehouse_id']) ? (int) $r['warehouse_id'] : 0;
             $invoiceNo = trim((string) (isset($r['invoice_no']) ? $r['invoice_no'] : ''));
             $invoiceDate = sorImpDateToYmd(isset($r['invoice_date']) ? $r['invoice_date'] : '');
@@ -1080,10 +1147,15 @@ if ($action === 'insertStockOrderPdf') {
             $productId = isset($r['product_id']) ? (int) $r['product_id'] : 0;
             $packageId = isset($r['package_id']) ? (int) $r['package_id'] : 0;
             $itemDescription = trim((string) (isset($r['item_description']) ? $r['item_description'] : ''));
-            $qty = isset($r['qty']) ? (int) $r['qty'] : 0;
+            $packageQty = isset($r['package_qty']) ? (int) $r['package_qty'] : 0;
+            $productQty = isset($r['product_qty']) ? (int) $r['product_qty'] : (isset($r['qty']) ? (int) $r['qty'] : 0);
             $totalPrice = isset($r['total_price']) ? (float) $r['total_price'] : 0;
             $rowBrandId = isset($r['brand_id']) ? (int) $r['brand_id'] : 0;
             $rowCompanyId = isset($r['company_id']) ? (int) $r['company_id'] : 0;
+
+            if ($isStandalone && $packageQty <= 0) {
+                $packageQty = 1;
+            }
 
             if ($productId <= 0 && $productName !== '') {
                 $key = sorImpLookup($productName);
@@ -1095,11 +1167,12 @@ if ($action === 'insertStockOrderPdf') {
             if ($warehouseId <= 0) $importErrors[] = 'Row #' . $rowNo . ': Warehouse is required.';
             if ($invoiceNo === '') $importErrors[] = 'Row #' . $rowNo . ': Invoice is required.';
             if ($invoiceDate === '') $importErrors[] = 'Row #' . $rowNo . ': Invoice Date is required.';
-            if ($packageId <= 0 || !isset($packageMap[$packageId])) $importErrors[] = 'Row #' . $rowNo . ': Valid package is required.';
+            if (!$isStandalone && ($packageId <= 0 || !isset($packageMap[$packageId]))) $importErrors[] = 'Row #' . $rowNo . ': Valid package is required.';
             if ($productId <= 0) $importErrors[] = 'Row #' . $rowNo . ': Valid product is required.';
-            if ($qty <= 0) $importErrors[] = 'Row #' . $rowNo . ': Quantity must be more than 0.';
+            if ($packageQty <= 0) $importErrors[] = 'Row #' . $rowNo . ': Package quantity must be more than 0.';
+            if ($productQty <= 0) $importErrors[] = 'Row #' . $rowNo . ': Product quantity must be more than 0.';
 
-            if ($packageId > 0 && isset($packageMap[$packageId])) {
+            if (!$isStandalone && $packageId > 0 && isset($packageMap[$packageId])) {
                 $pkg = $packageMap[$packageId];
                 $productIds = isset($pkg['product_ids']) ? $pkg['product_ids'] : array();
                 if (is_array($productIds) && count($productIds) > 0 && $productId > 0 && !in_array($productId, $productIds, true)) {
@@ -1107,7 +1180,7 @@ if ($action === 'insertStockOrderPdf') {
                 }
             }
 
-            if ($packageId > 0 && isset($packageMap[$packageId])) {
+            if (!$isStandalone && $packageId > 0 && isset($packageMap[$packageId])) {
                 $pkg = $packageMap[$packageId];
                 $pkgBrandId = isset($pkg['brand_id']) ? (int) $pkg['brand_id'] : 0;
                 if ($pkgBrandId > 0) {
@@ -1145,17 +1218,31 @@ if ($action === 'insertStockOrderPdf') {
                 $grouped[$groupKey]['extracted_total_price'] = $totalPrice;
             }
 
-            if ($packageId > 0 && isset($packageMap[$packageId])) {
+            $brandId = (int) $rowBrandId;
+            if ($brandId > 0) {
+                $grouped[$groupKey]['brand_ids'][$brandId] = true;
+            }
+
+            if (!$isStandalone && $packageId > 0 && isset($packageMap[$packageId])) {
                 $pkg = $packageMap[$packageId];
-                $brandId = (int) $rowBrandId;
-                if ($brandId > 0) {
-                    $grouped[$groupKey]['brand_ids'][$brandId] = true;
-                }
+                $resolvedDesc = $itemDescription !== '' ? $itemDescription : (isset($pkg['item_description']) && trim((string) $pkg['item_description']) !== '' ? (string) $pkg['item_description'] : $productName);
                 $grouped[$groupKey]['items'][] = array(
                     'product_id' => $productId,
                     'package_id' => $packageId,
-                    'package_desc' => $itemDescription !== '' ? $itemDescription : (isset($pkg['item_description']) && trim((string) $pkg['item_description']) !== '' ? (string) $pkg['item_description'] : $productName),
-                    'qty' => $qty,
+                    'package_desc' => $resolvedDesc,
+                    'packageQty' => $packageQty,
+                    'productQty' => $productQty,
+                    'brand_id' => $brandId,
+                    'company_id' => $rowCompanyId,
+                );
+            } else {
+                $resolvedDesc = $itemDescription !== '' ? $itemDescription : $productName;
+                $grouped[$groupKey]['items'][] = array(
+                    'product_id' => $productId,
+                    'package_id' => 0,
+                    'package_desc' => $resolvedDesc,
+                    'packageQty' => 1,
+                    'productQty' => $productQty,
                     'brand_id' => $brandId,
                     'company_id' => $rowCompanyId,
                 );
@@ -1192,11 +1279,36 @@ if ($action === 'insertStockOrderPdf') {
 
                     foreach ($g['items'] as $it) {
                         $safeDesc = mysqli_real_escape_string($finance_connect, (string) $it['package_desc']);
-                        $qItem = "INSERT INTO " . STOCK_ORDER_REQ_ITEM . " (request_id, product_id, brand_id, company_id, package_id, package_desc, qty, create_by, create_date, create_time, status) VALUES ('" . $requestId . "', '" . (int) $it['product_id'] . "', '" . (int) $it['brand_id'] . "', '" . (int) $it['company_id'] . "', '" . (int) $it['package_id'] . "', '" . $safeDesc . "', '" . (int) $it['qty'] . "', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
+                        $qItem = "INSERT INTO " . STOCK_ORDER_REQ_ITEM . " (request_id, product_id, brand_id, company_id, package_id, package_desc, packageQty, productQty, create_by, create_date, create_time, status) VALUES ('" . $requestId . "', '" . (int) $it['product_id'] . "', '" . (int) $it['brand_id'] . "', '" . (int) $it['company_id'] . "', '" . (int) $it['package_id'] . "', '" . $safeDesc . "', '" . (int) $it['packageQty'] . "', '" . (int) $it['productQty'] . "', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
                         if (!mysqli_query($finance_connect, $qItem)) {
                             throw new Exception('Failed to insert item: ' . mysqli_error($finance_connect));
                         }
                     }
+
+                    // Generate QR/token same as manual Add Request flow.
+                    $token = sorEncodeToken($requestId);
+                    $orderLink = $SITEURL . '/warehouse_stock_in_scan.php?t=' . urlencode($token);
+
+                    $qrDir = ROOT . DIRECTORY_SEPARATOR . 'temp' . DIRECTORY_SEPARATOR . 'stock_order_request' . DIRECTORY_SEPARATOR;
+                    if (!file_exists($qrDir)) {
+                        mkdir($qrDir, 0777, true);
+                    }
+                    $qrFileName = 'sor_' . (int) $requestId . '.png';
+                    $qrFsPath = $qrDir . $qrFileName;
+                    $qrWebPath = '';
+                    if (function_exists('imagecreate')) {
+                        QRcode::png($orderLink, $qrFsPath, 'H', 6, 2);
+                        if (file_exists($qrFsPath)) {
+                            $qrWebPath = 'temp/stock_order_request/' . $qrFileName;
+                        }
+                    }
+                    if ($qrWebPath === '') {
+                        $qrWebPath = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=' . rawurlencode($orderLink);
+                    }
+
+                    $safeToken = mysqli_real_escape_string($finance_connect, $token);
+                    $safeQr = mysqli_real_escape_string($finance_connect, $qrWebPath);
+                    mysqli_query($finance_connect, "UPDATE " . STOCK_ORDER_REQ . " SET order_link_token='$safeToken', qr_image='$safeQr' WHERE id='" . (int) $requestId . "'");
 
                     $inserted++;
                 }
@@ -1226,8 +1338,9 @@ $rowsBySource = array();
 foreach ($previewRows as $idx => $rowCheck) {
     $rid = isset($rowCheck['product_id']) ? (int) $rowCheck['product_id'] : 0;
     $pid = isset($rowCheck['package_id']) ? (int) $rowCheck['package_id'] : 0;
+    $lineType = isset($rowCheck['line_type']) ? (string) $rowCheck['line_type'] : 'package';
     if ($rid <= 0) $previewHasMissingProduct = true;
-    if ($pid <= 0) $previewHasMissingPackage = true;
+    if ($lineType !== 'standalone_product' && $pid <= 0) $previewHasMissingPackage = true;
 
     $source = isset($rowCheck['source_file']) && trim((string) $rowCheck['source_file']) !== '' ? (string) $rowCheck['source_file'] : 'Unknown Source';
     if (!isset($rowsBySource[$source])) {
@@ -1252,6 +1365,9 @@ foreach ($previewRows as $idx => $rowCheck) {
         .sor-import .meta-muted { color: #6b7280; font-size: .9rem; }
         .sor-import .err-missing { color: #dc2626; font-size: .82rem; margin-top: .25rem; }
         .sor-import .err-missing a { color: #dc2626; text-decoration: underline; font-weight: 600; }
+        .sor-import .preview-package-row .package-product-placeholder { background: #f3f4f6; }
+        .sor-import .preview-product-row .product-desc-placeholder,
+        .sor-import .preview-product-row .product-total-placeholder { background: #f8fafc; }
     </style>
 </head>
 <body>
@@ -1385,16 +1501,20 @@ foreach ($previewRows as $idx => $rowCheck) {
                                                 <thead>
                                                     <tr>
                                                         <th width="50">#</th>
-                                                        <th>Product Name (from PDF)</th>
-                                                        <th>Package (from PDF)</th>
-                                                        <th>Package (DB)</th>
+                                                        <th>Package Name</th>
+                                                        <th>Product Name</th>
                                                         <th>Item Description</th>
                                                         <th width="120">Quantity</th>
+                                                        <th width="140">Total Price</th>
                                                         <th width="100">Action</th>
                                                     </tr>
                                                 </thead>
                                                 <tbody>
-                                                    <?php $rowNo = 1; foreach ($rowSet as $rowMeta) {
+                                                    <?php
+                                                    $pkgPrevKey = '__none__';
+                                                    $pkgGroupNo = 0;
+                                                    $groupItemNo = 0;
+                                                    foreach ($rowSet as $rowMeta) {
                                                         $idx = (int) $rowMeta['idx'];
                                                         $row = $rowMeta['row'];
                                                         $pkgId = isset($row['package_id']) ? (int) $row['package_id'] : 0;
@@ -1404,50 +1524,52 @@ foreach ($previewRows as $idx => $rowCheck) {
                                                         $packageNameText = isset($row['package_name']) ? (string) $row['package_name'] : (($pkgId > 0 && isset($packageMap[$pkgId])) ? (string) $packageMap[$pkgId]['name'] : '');
 
                                                         $isMissingProduct = ((int) (isset($row['product_id']) ? $row['product_id'] : 0) <= 0);
-                                                        $isMissingPackage = ($pkgId <= 0);
+                                                        $lineType = isset($row['line_type']) ? (string) $row['line_type'] : 'package';
+                                                        $isStandaloneRow = ($lineType === 'standalone_product');
+                                                        $isMissingPackage = (!$isStandaloneRow && $pkgId <= 0);
 
                                                         $pdfProductName = isset($row['pdf_product_name']) ? (string) $row['pdf_product_name'] : (isset($row['product_name']) ? (string) $row['product_name'] : '');
                                                         $pdfPackageName = isset($row['pdf_package_name']) ? (string) $row['pdf_package_name'] : $packageNameText;
                                                         $displayProductName = $pdfProductName !== '' ? $pdfProductName : (isset($row['product_name']) ? (string) $row['product_name'] : '');
-                                                    ?>
-                                                        <tr class="preview-product-row" data-receipt="<?= $receiptKey ?>">
-                                                            <td class="row-no"><?= (int) $rowNo++ ?></td>
-                                                            <td>
-                                                                <input type="hidden" name="rows[<?= $idx ?>][source_file]" value="<?= htmlspecialchars((string) (isset($row['source_file']) ? $row['source_file'] : ''), ENT_QUOTES, 'UTF-8') ?>">
-                                                                <input type="hidden" class="receipt-hidden-invoice_no-<?= $receiptKey ?>" name="rows[<?= $idx ?>][invoice_no]" value="<?= htmlspecialchars($invoiceVal, ENT_QUOTES, 'UTF-8') ?>">
-                                                                <input type="hidden" class="receipt-hidden-invoice_date-<?= $receiptKey ?>" name="rows[<?= $idx ?>][invoice_date]" value="<?= htmlspecialchars($invoiceDateVal, ENT_QUOTES, 'UTF-8') ?>">
-                                                                <input type="hidden" class="receipt-hidden-warehouse_id-<?= $receiptKey ?>" name="rows[<?= $idx ?>][warehouse_id]" value="<?= (int) $warehouseVal ?>">
-                                                                <input type="hidden" class="receipt-hidden-total_price-<?= $receiptKey ?>" name="rows[<?= $idx ?>][total_price]" value="<?= htmlspecialchars($totalVal, ENT_QUOTES, 'UTF-8') ?>">
-                                                                <input type="hidden" name="rows[<?= $idx ?>][product_id]" value="<?= (int) (isset($row['product_id']) ? $row['product_id'] : 0) ?>">
+                                                        $lineTotalPrice = isset($row['line_total_price']) ? (float) $row['line_total_price'] : 0;
+                                                        $rowPackageQty = (int) (isset($row['package_qty']) ? $row['package_qty'] : (isset($row['qty']) ? $row['qty'] : 1));
+                                                        if ($rowPackageQty <= 0) $rowPackageQty = 1;
+                                                        $rowProductQty = (int) (isset($row['product_qty']) ? $row['product_qty'] : (isset($row['qty']) ? $row['qty'] : $rowPackageQty));
+                                                        if ($rowProductQty <= 0) $rowProductQty = $rowPackageQty;
+                                                        $rowProductBaseQty = (int) max(1, round($rowProductQty / max(1, $rowPackageQty)));
 
-                                                                <input class="form-control" type="text" name="rows[<?= $idx ?>][product_name]" value="<?= htmlspecialchars($displayProductName, ENT_QUOTES, 'UTF-8') ?>" placeholder="Product Name" required>
-                                                                <?php if ($isMissingProduct && $displayProductName !== '') { ?>
-                                                                    <div class="err-missing">
-                                                                        Product "<strong><?= htmlspecialchars($displayProductName, ENT_QUOTES, 'UTF-8') ?></strong>" does not exist in DB.
-                                                                        Please <a href="<?= $productPage ?>" target="_blank">add product</a> and <a href="<?= $packagePage ?>" target="_blank">add package</a> first.
-                                                                    </div>
-                                                                <?php } else if ($isMissingProduct) { ?>
-                                                                    <div class="err-missing">
-                                                                        No product detected. Please <a href="<?= $productPage ?>" target="_blank">add product</a> and <a href="<?= $packagePage ?>" target="_blank">add package</a> first.
-                                                                    </div>
+                                                        $pkgKey = isset($row['package_group_key']) && trim((string) $row['package_group_key']) !== ''
+                                                            ? trim((string) $row['package_group_key'])
+                                                            : ('pkg_fallback_' . (int) $idx);
+                                                        $isGroupFirstRow = ($pkgKey !== $pkgPrevKey);
+                                                        if ($isGroupFirstRow) {
+                                                            $pkgGroupNo++;
+                                                            $pkgPrevKey = $pkgKey;
+                                                            $groupItemNo = 0;
+                                                        }
+                                                        $pkgGroupKey = 'receipt_' . $receiptKey . '_pkg_' . preg_replace('/[^a-zA-Z0-9_-]/', '_', (string) $pkgKey);
+
+                                                        if ($isGroupFirstRow && !$isStandaloneRow) {
+                                                    ?>
+                                                        <tr class="preview-row preview-package-row" data-receipt="<?= $receiptKey ?>" data-package-group="<?= htmlspecialchars($pkgGroupKey, ENT_QUOTES, 'UTF-8') ?>">
+                                                            <td class="row-no"></td>
+                                                            <td>
+                                                                <input class="form-control mb-2" type="text" value="<?= htmlspecialchars($pdfPackageName, ENT_QUOTES, 'UTF-8') ?>" readonly disabled style="background:#f3f4f6;">
+
+                                                                <?php if ($isMissingPackage) { ?>
+                                                                    <select class="form-select sor-pkg-select" data-group="<?= htmlspecialchars($pkgGroupKey, ENT_QUOTES, 'UTF-8') ?>" data-brand-target="brand_<?= $idx ?>" data-desc-target="desc_<?= $idx ?>" required>
+                                                                        <option value="">Select Package</option>
+                                                                        <?php foreach ($packages as $pkg) {
+                                                                            $optLabel = (string) $pkg['name'];
+                                                                            if (trim((string) $pkg['item_description']) !== '') {
+                                                                                $optLabel .= ' - ' . (string) $pkg['item_description'];
+                                                                            }
+                                                                        ?>
+                                                                            <option value="<?= (int) $pkg['id'] ?>" data-brand-id="<?= (int) $pkg['brand_id'] ?>" data-item-desc="<?= htmlspecialchars((string) $pkg['item_description'], ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($optLabel, ENT_QUOTES, 'UTF-8') ?></option>
+                                                                        <?php } ?>
+                                                                    </select>
                                                                 <?php } ?>
-                                                            </td>
-                                                            <td>
-                                                                <input class="form-control" type="text" value="<?= htmlspecialchars($pdfPackageName, ENT_QUOTES, 'UTF-8') ?>" readonly disabled style="background:#f3f4f6;">
-                                                                <input type="hidden" name="rows[<?= $idx ?>][package_name]" value="<?= htmlspecialchars($pdfPackageName, ENT_QUOTES, 'UTF-8') ?>">
-                                                            </td>
-                                                            <td>
-                                                                <select class="form-select sor-pkg-select" name="rows[<?= $idx ?>][package_id]" data-brand-target="brand_<?= $idx ?>" data-desc-target="desc_<?= $idx ?>" required>
-                                                                    <option value="">Select Package</option>
-                                                                    <?php foreach ($packages as $pkg) {
-                                                                        $optLabel = (string) $pkg['name'];
-                                                                        if (trim((string) $pkg['item_description']) !== '') {
-                                                                            $optLabel .= ' - ' . (string) $pkg['item_description'];
-                                                                        }
-                                                                    ?>
-                                                                        <option value="<?= (int) $pkg['id'] ?>" data-brand-id="<?= (int) $pkg['brand_id'] ?>" data-item-desc="<?= htmlspecialchars((string) $pkg['item_description'], ENT_QUOTES, 'UTF-8') ?>" <?= $pkgId === (int) $pkg['id'] ? 'selected' : '' ?>><?= htmlspecialchars($optLabel, ENT_QUOTES, 'UTF-8') ?></option>
-                                                                    <?php } ?>
-                                                                </select>
+
                                                                 <?php if ($isMissingPackage && $pdfPackageName !== '') { ?>
                                                                     <div class="err-missing">
                                                                         Package "<strong><?= htmlspecialchars($pdfPackageName, ENT_QUOTES, 'UTF-8') ?></strong>" does not exist in DB.
@@ -1463,15 +1585,81 @@ foreach ($previewRows as $idx => $rowCheck) {
                                                                 <?php } ?>
                                                             </td>
                                                             <td>
-                                                                <input class="form-control" type="text" id="desc_<?= $idx ?>" name="rows[<?= $idx ?>][item_description]" value="<?= htmlspecialchars((string) $itemDescription, ENT_QUOTES, 'UTF-8') ?>" readonly>
+                                                                <input class="form-control package-product-placeholder" type="text" value="" readonly disabled>
                                                             </td>
                                                             <td>
-                                                                <input class="form-control" type="number" min="1" name="rows[<?= $idx ?>][qty]" value="<?= (int) (isset($row['qty']) ? $row['qty'] : 1) ?>" required>
+                                                                <input class="form-control group-desc-field" type="text" id="desc_<?= $idx ?>" data-group="<?= htmlspecialchars($pkgGroupKey, ENT_QUOTES, 'UTF-8') ?>" value="<?= htmlspecialchars((string) $itemDescription, ENT_QUOTES, 'UTF-8') ?>" readonly>
                                                             </td>
                                                             <td>
-                                                                <button type="button" class="btn btn-sm btn-rounded btn-primary remove-preview-row">Remove</button>
-                                                             <input type="hidden" name="rows[<?= $idx ?>][brand_id]" id="brand_hidden_<?= $idx ?>" value="<?= (int) $brandId ?>">
-                                                                <input type="hidden" name="rows[<?= $idx ?>][company_id]" id="company_hidden_<?= $idx ?>" value="<?= (int) $companyId ?>">
+                                                                <input class="form-control group-qty-field" type="number" min="1" data-group="<?= htmlspecialchars($pkgGroupKey, ENT_QUOTES, 'UTF-8') ?>" value="<?= (int) $rowPackageQty ?>" required>
+                                                            </td>
+                                                            <td>
+                                                                <input class="form-control" type="text" value="<?= $lineTotalPrice > 0 ? htmlspecialchars(number_format($lineTotalPrice, 2, '.', ''), ENT_QUOTES, 'UTF-8') : '' ?>" readonly disabled style="background:#f3f4f6;">
+                                                            </td>
+                                                            <td>
+                                                                <button type="button" class="btn btn-sm btn-rounded btn-primary remove-preview-row" data-remove-scope="package">Remove Package</button>
+                                                            </td>
+                                                        </tr>
+                                                    <?php
+                                                        }
+
+                                                        $displayRowNo = $isStandaloneRow ? 1 : (++$groupItemNo);
+                                                    ?>
+                                                        <tr class="preview-row preview-product-row" data-receipt="<?= $receiptKey ?>" data-package-group="<?= htmlspecialchars($pkgGroupKey, ENT_QUOTES, 'UTF-8') ?>">
+                                                            <td class="row-no"><?= (int) $displayRowNo ?></td>
+                                                            <td>
+                                                                <input type="hidden" name="rows[<?= $idx ?>][source_file]" value="<?= htmlspecialchars((string) (isset($row['source_file']) ? $row['source_file'] : ''), ENT_QUOTES, 'UTF-8') ?>">
+                                                                <input type="hidden" class="receipt-hidden-invoice_no-<?= $receiptKey ?>" name="rows[<?= $idx ?>][invoice_no]" value="<?= htmlspecialchars($invoiceVal, ENT_QUOTES, 'UTF-8') ?>">
+                                                                <input type="hidden" class="receipt-hidden-invoice_date-<?= $receiptKey ?>" name="rows[<?= $idx ?>][invoice_date]" value="<?= htmlspecialchars($invoiceDateVal, ENT_QUOTES, 'UTF-8') ?>">
+                                                                <input type="hidden" class="receipt-hidden-warehouse_id-<?= $receiptKey ?>" name="rows[<?= $idx ?>][warehouse_id]" value="<?= (int) $warehouseVal ?>">
+                                                                <input type="hidden" class="receipt-hidden-total_price-<?= $receiptKey ?>" name="rows[<?= $idx ?>][total_price]" value="<?= htmlspecialchars($totalVal, ENT_QUOTES, 'UTF-8') ?>">
+                                                                <input type="hidden" name="rows[<?= $idx ?>][product_id]" value="<?= (int) (isset($row['product_id']) ? $row['product_id'] : 0) ?>">
+                                                                <input type="hidden" name="rows[<?= $idx ?>][line_type]" value="<?= htmlspecialchars($lineType, ENT_QUOTES, 'UTF-8') ?>">
+                                                                <input type="hidden" class="pkg-hidden-id" data-group="<?= htmlspecialchars($pkgGroupKey, ENT_QUOTES, 'UTF-8') ?>" name="rows[<?= $idx ?>][package_id]" value="<?= (int) $pkgId ?>">
+                                                                <input type="hidden" class="pkg-hidden-name" data-group="<?= htmlspecialchars($pkgGroupKey, ENT_QUOTES, 'UTF-8') ?>" name="rows[<?= $idx ?>][package_name]" value="<?= htmlspecialchars($pdfPackageName, ENT_QUOTES, 'UTF-8') ?>">
+
+                                                                <?php if ($isStandaloneRow) { ?>
+                                                                    <input class="form-control" type="text" value="<?= htmlspecialchars($pdfPackageName, ENT_QUOTES, 'UTF-8') ?>" readonly disabled style="background:#f3f4f6;">
+                                                                <?php } ?>
+                                                            </td>
+                                                            <td>
+                                                                <input class="form-control" type="text" name="rows[<?= $idx ?>][product_name]" value="<?= htmlspecialchars($displayProductName, ENT_QUOTES, 'UTF-8') ?>" placeholder="Product Name" required>
+                                                                <?php if ($isMissingProduct && $displayProductName !== '') { ?>
+                                                                    <div class="err-missing">
+                                                                        Product "<strong><?= htmlspecialchars($displayProductName, ENT_QUOTES, 'UTF-8') ?></strong>" does not exist in DB.
+                                                                        Please <a href="<?= $productPage ?>" target="_blank">add product</a><?= $isStandaloneRow ? '' : ' and <a href="' . $packagePage . '" target="_blank">add package</a>' ?> first.
+                                                                    </div>
+                                                                <?php } else if ($isMissingProduct) { ?>
+                                                                    <div class="err-missing">
+                                                                        No product detected. Please <a href="<?= $productPage ?>" target="_blank">add product</a><?= $isStandaloneRow ? '' : ' and <a href="' . $packagePage . '" target="_blank">add package</a>' ?> first.
+                                                                    </div>
+                                                                <?php } ?>
+                                                            </td>
+                                                            <td>
+                                                                <input type="hidden" class="pkg-hidden-desc" data-group="<?= htmlspecialchars($pkgGroupKey, ENT_QUOTES, 'UTF-8') ?>" name="rows[<?= $idx ?>][item_description]" value="<?= htmlspecialchars((string) $itemDescription, ENT_QUOTES, 'UTF-8') ?>">
+                                                                <?php if ($isStandaloneRow) { ?>
+                                                                    <input class="form-control" type="text" value="<?= htmlspecialchars((string) $itemDescription, ENT_QUOTES, 'UTF-8') ?>" readonly>
+                                                                <?php } else { ?>
+                                                                    <input class="form-control product-desc-placeholder" type="text" value="" readonly disabled>
+                                                                <?php } ?>
+                                                            </td>
+                                                            <td>
+                                                                <input type="hidden" class="group-package-qty" data-group="<?= htmlspecialchars($pkgGroupKey, ENT_QUOTES, 'UTF-8') ?>" name="rows[<?= $idx ?>][package_qty]" value="<?= (int) ($isStandaloneRow ? 1 : $rowPackageQty) ?>">
+                                                                <input type="hidden" class="group-product-base-qty" data-group="<?= htmlspecialchars($pkgGroupKey, ENT_QUOTES, 'UTF-8') ?>" name="rows[<?= $idx ?>][product_base_qty]" value="<?= (int) ($isStandaloneRow ? $rowProductQty : $rowProductBaseQty) ?>">
+                                                                <input class="form-control <?= $isStandaloneRow ? '' : 'group-product-qty' ?>" type="number" min="1" <?= $isStandaloneRow ? '' : 'data-group="' . htmlspecialchars($pkgGroupKey, ENT_QUOTES, 'UTF-8') . '"' ?> name="rows[<?= $idx ?>][product_qty]" value="<?= (int) $rowProductQty ?>" required>
+                                                            </td>
+                                                            <td>
+                                                                <?php if ($isStandaloneRow) { ?>
+                                                                    <input class="form-control" type="text" value="<?= $lineTotalPrice > 0 ? htmlspecialchars(number_format($lineTotalPrice, 2, '.', ''), ENT_QUOTES, 'UTF-8') : '' ?>" readonly disabled style="background:#f3f4f6;">
+                                                                <?php } else { ?>
+                                                                    <input class="form-control product-total-placeholder" type="text" value="" readonly disabled>
+                                                                <?php } ?>
+                                                            </td>
+                                                            <td>
+                                                                <button type="button" class="btn btn-sm btn-rounded btn-primary remove-preview-row" data-remove-scope="product">Remove Product</button>
+
+                                                                <input type="hidden" class="pkg-brand-hidden" data-group="<?= htmlspecialchars($pkgGroupKey, ENT_QUOTES, 'UTF-8') ?>" name="rows[<?= $idx ?>][brand_id]" id="brand_hidden_<?= $idx ?>" value="<?= (int) $brandId ?>">
+                                                                <input type="hidden" class="pkg-company-hidden" data-group="<?= htmlspecialchars($pkgGroupKey, ENT_QUOTES, 'UTF-8') ?>" name="rows[<?= $idx ?>][company_id]" id="company_hidden_<?= $idx ?>" value="<?= (int) $companyId ?>">
                                                                 <input type="hidden" id="brand_<?= $idx ?>" value="<?= (int) $brandId ?>">
                                                                 <input type="hidden" id="company_<?= $idx ?>" value="<?= (int) $companyId ?>">
                                                             </td>
@@ -1531,24 +1719,120 @@ foreach ($previewRows as $idx => $rowCheck) {
         pushValue();
     });
 
+    function reindexPreviewRows(tbody) {
+        if (!tbody) return;
+        var groupCounter = {};
+        tbody.querySelectorAll('tr.preview-row').forEach(function(row) {
+            var groupKey = row.getAttribute('data-package-group') || '';
+            var isPackageRow = row.classList.contains('preview-package-row');
+            var rowNoCell = row.querySelector('.row-no');
+            if (!rowNoCell) return;
+
+            if (isPackageRow) {
+                rowNoCell.textContent = '';
+                groupCounter[groupKey] = 0;
+                return;
+            }
+
+            if (!groupCounter.hasOwnProperty(groupKey)) {
+                groupCounter[groupKey] = 0;
+            }
+            groupCounter[groupKey] += 1;
+            rowNoCell.textContent = String(groupCounter[groupKey]);
+        });
+    }
+
+    function applyGroupQty(groupKey) {
+        if (!groupKey) return;
+        var qtyField = document.querySelector('.group-qty-field[data-group="' + groupKey + '"]');
+        if (!qtyField) return;
+
+        var packageQty = parseInt(qtyField.value || '0', 10);
+        if (isNaN(packageQty) || packageQty <= 0) {
+            packageQty = 1;
+            qtyField.value = '1';
+        }
+
+        document.querySelectorAll('.group-package-qty[data-group="' + groupKey + '"]').forEach(function(el) {
+            el.value = String(packageQty);
+        });
+
+        document.querySelectorAll('.group-product-qty[data-group="' + groupKey + '"]').forEach(function(qtyInput) {
+            var row = qtyInput.closest('tr.preview-product-row');
+            if (!row) return;
+            var baseInput = row.querySelector('.group-product-base-qty[data-group="' + groupKey + '"]');
+            var baseQty = baseInput ? parseInt(baseInput.value || '0', 10) : 1;
+            if (isNaN(baseQty) || baseQty <= 0) baseQty = 1;
+            qtyInput.value = String(baseQty * packageQty);
+        });
+    }
+
+    document.querySelectorAll('.group-qty-field').forEach(function(el) {
+        var groupKey = el.getAttribute('data-group') || '';
+        var sync = function() {
+            applyGroupQty(groupKey);
+        };
+        el.addEventListener('input', sync);
+        el.addEventListener('change', sync);
+        sync();
+    });
+
+    document.querySelectorAll('.group-product-qty').forEach(function(el) {
+        var groupKey = el.getAttribute('data-group') || '';
+        var updateBaseQty = function() {
+            var packageQtyField = document.querySelector('.group-qty-field[data-group="' + groupKey + '"]');
+            var packageQty = packageQtyField ? parseInt(packageQtyField.value || '0', 10) : 1;
+            if (isNaN(packageQty) || packageQty <= 0) packageQty = 1;
+
+            var productQty = parseInt(el.value || '0', 10);
+            if (isNaN(productQty) || productQty <= 0) productQty = packageQty;
+
+            var row = el.closest('tr.preview-product-row');
+            if (!row) return;
+            var baseInput = row.querySelector('.group-product-base-qty[data-group="' + groupKey + '"]');
+            if (baseInput) {
+                baseInput.value = String(Math.max(1, Math.round(productQty / packageQty)));
+            }
+        };
+        el.addEventListener('input', updateBaseQty);
+        el.addEventListener('change', updateBaseQty);
+    });
+
     document.querySelectorAll('.remove-preview-row').forEach(function(btn) {
         btn.addEventListener('click', function() {
-            var row = btn.closest('tr.preview-product-row');
+            var row = btn.closest('tr.preview-row');
             if (!row) return;
             var tbody = row.parentElement;
-            row.remove();
+            var removeScope = btn.getAttribute('data-remove-scope') || 'product';
+            var groupKey = row.getAttribute('data-package-group') || '';
 
-            if (tbody) {
-                var num = 1;
-                tbody.querySelectorAll('tr.preview-product-row .row-no').forEach(function(cell) {
-                    cell.textContent = String(num++);
-                });
+            if (removeScope === 'package') {
+                if (groupKey !== '') {
+                    tbody.querySelectorAll('tr.preview-row[data-package-group="' + groupKey + '"]').forEach(function(gr) {
+                        gr.remove();
+                    });
+                } else {
+                    row.remove();
+                }
+            } else {
+                row.remove();
+                if (groupKey !== '') {
+                    var remainingProducts = tbody.querySelectorAll('tr.preview-product-row[data-package-group="' + groupKey + '"]');
+                    if (remainingProducts.length === 0) {
+                        tbody.querySelectorAll('tr.preview-package-row[data-package-group="' + groupKey + '"]').forEach(function(headerRow) {
+                            headerRow.remove();
+                        });
+                    }
+                }
             }
+
+            reindexPreviewRows(tbody);
         });
     });
 
     document.querySelectorAll('.sor-pkg-select').forEach(function(sel) {
         sel.addEventListener('change', function() {
+            var groupKey = sel.getAttribute('data-group') || '';
             var targetId = sel.getAttribute('data-brand-target');
             var target = targetId ? document.getElementById(targetId) : null;
             if (!target) return;
@@ -1583,6 +1867,34 @@ foreach ($previewRows as $idx => $rowCheck) {
             if (descField) {
                 var itemDesc = option ? (option.getAttribute('data-item-desc') || '') : '';
                 descField.value = itemDesc;
+
+                if (groupKey !== '') {
+                    document.querySelectorAll('.group-desc-field[data-group="' + groupKey + '"]').forEach(function(el) {
+                        el.value = itemDesc;
+                    });
+                }
+            }
+
+            if (groupKey !== '') {
+                var selectedPkgId = sel.value || '';
+                var selectedPkgName = option ? (option.textContent || '').split(' - ')[0] : '';
+                var selectedDesc = option ? (option.getAttribute('data-item-desc') || '') : '';
+
+                document.querySelectorAll('.pkg-hidden-id[data-group="' + groupKey + '"]').forEach(function(el) {
+                    el.value = selectedPkgId;
+                });
+                document.querySelectorAll('.pkg-hidden-name[data-group="' + groupKey + '"]').forEach(function(el) {
+                    el.value = selectedPkgName;
+                });
+                document.querySelectorAll('.pkg-hidden-desc[data-group="' + groupKey + '"]').forEach(function(el) {
+                    el.value = selectedDesc;
+                });
+                document.querySelectorAll('.pkg-brand-hidden[data-group="' + groupKey + '"]').forEach(function(el) {
+                    el.value = brandId !== '' ? brandId : '0';
+                });
+                document.querySelectorAll('.pkg-company-hidden[data-group="' + groupKey + '"]').forEach(function(el) {
+                    el.value = companyId !== '' ? companyId : '0';
+                });
             }
         });
     });

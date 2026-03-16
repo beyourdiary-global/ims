@@ -6,8 +6,6 @@ include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
 include_once ROOT . '/header/phpqrcode/qrlib.php';
 
-sorEnsureSchema($finance_connect);
-
 $permissionPage = 'Stock Order Request';
 $pinAccess = checkPin($connect, $permissionPage);
 if (!is_array($pinAccess) || count($pinAccess) === 0) {
@@ -47,7 +45,8 @@ if ($courierRst) {
 $products = array();
 $productNameMap = array();
 $productNameToId = array();
-$productRst = mysqli_query($connect, "SELECT id,name FROM " . PROD . " WHERE status='A' ORDER BY name ASC");
+$productBrandDirectMap = array();
+$productRst = mysqli_query($connect, "SELECT id,name,brand FROM " . PROD . " WHERE status='A' ORDER BY name ASC");
 if ($productRst) {
     while ($productRow = $productRst->fetch_assoc()) {
         $prodId = (int) $productRow['id'];
@@ -55,6 +54,7 @@ if ($productRst) {
         $products[] = array('id' => $prodId, 'name' => $prodName);
         $productNameMap[$prodId] = $prodName;
         $productNameToId[strtolower(trim($prodName))] = $prodId;
+        $productBrandDirectMap[$prodId] = isset($productRow['brand']) ? (int) $productRow['brand'] : 0;
     }
 }
 
@@ -138,6 +138,8 @@ foreach ($couriers as $cr) {
 
 $row = array();
 $itemRows = array();
+$packageItemRows = array();
+$standaloneItemRows = array();
 
 if ($dataID) {
     $rst = getData('*', "id = '$dataID'", 'LIMIT 1', STOCK_ORDER_REQ, $finance_connect);
@@ -165,11 +167,29 @@ if ($dataID) {
                         }
                     }
                 }
+                $legacyQty = isset($item['qty']) ? (int) $item['qty'] : 0;
+                $itemPackageQty = isset($item['packageQty']) ? (int) $item['packageQty'] : $legacyQty;
+                $itemProductQty = isset($item['productQty']) ? (int) $item['productQty'] : $itemPackageQty;
+                if ($itemPackageQty <= 0) $itemPackageQty = 1;
+                if ($itemProductQty <= 0) $itemProductQty = $itemPackageQty;
+                $item['packageQty'] = $itemPackageQty;
+                $item['productQty'] = $itemProductQty;
                 $itemRows[] = $item;
             }
         }
     } else {
         $act = 'F';
+    }
+}
+
+if (!empty($itemRows)) {
+    foreach ($itemRows as $it) {
+        $pkgIdTmp = isset($it['package_id']) ? (int) $it['package_id'] : 0;
+        if ($pkgIdTmp > 0) {
+            $packageItemRows[] = $it;
+        } else {
+            $standaloneItemRows[] = $it;
+        }
     }
 }
 
@@ -209,7 +229,11 @@ if (post('actionBtn')) {
         $pkgIdArr = isset($_POST['sor_item_pkg_id']) ? postSpaceFilter('sor_item_pkg_id') : array();
         $pkgNameArr = isset($_POST['sor_item_pkg_name']) ? postSpaceFilter('sor_item_pkg_name') : array();
         $pkgDescArr = isset($_POST['sor_item_desc']) ? postSpaceFilter('sor_item_desc') : array();
-        $pkgQtyArr = isset($_POST['sor_item_qty']) ? postSpaceFilter('sor_item_qty') : array();
+        $pkgQtyArr = isset($_POST['sor_item_package_qty']) ? postSpaceFilter('sor_item_package_qty') : array();
+        $productQtyArr = isset($_POST['sor_item_product_qty']) ? postSpaceFilter('sor_item_product_qty') : array();
+        $standaloneProdIdArr = isset($_POST['sor_standalone_prod_id']) ? postSpaceFilter('sor_standalone_prod_id') : array();
+        $standaloneProdNameArr = isset($_POST['sor_standalone_prod_name']) ? postSpaceFilter('sor_standalone_prod_name') : array();
+        $standaloneQtyArr = isset($_POST['sor_standalone_qty']) ? postSpaceFilter('sor_standalone_qty') : array();
 
         if (!is_array($prodIdArr)) $prodIdArr = array();
         if (!is_array($prodNameArr)) $prodNameArr = array();
@@ -217,6 +241,10 @@ if (post('actionBtn')) {
         if (!is_array($pkgNameArr)) $pkgNameArr = array();
         if (!is_array($pkgDescArr)) $pkgDescArr = array();
         if (!is_array($pkgQtyArr)) $pkgQtyArr = array();
+        if (!is_array($productQtyArr)) $productQtyArr = array();
+        if (!is_array($standaloneProdIdArr)) $standaloneProdIdArr = array();
+        if (!is_array($standaloneProdNameArr)) $standaloneProdNameArr = array();
+        if (!is_array($standaloneQtyArr)) $standaloneQtyArr = array();
 
         if ((int) $sor_warehouse <= 0 && trim((string) $sor_warehouse_name) !== '') {
             $whKey = strtolower(trim((string) $sor_warehouse_name));
@@ -237,17 +265,20 @@ if (post('actionBtn')) {
         $invalidPackages = array();
         $productsWithoutPackage = array();
         $mismatchItems = array();
+        $invalidStandaloneProducts = array();
         $computedTotal = 0.00;
+        $countedPackageTotals = array();
         $resolvedBrandIds = array();
         $resolvedCompanyIds = array();
-        $maxCount = max(count($prodIdArr), count($prodNameArr), count($pkgIdArr), count($pkgNameArr), count($pkgDescArr), count($pkgQtyArr));
+        $maxCount = max(count($prodIdArr), count($prodNameArr), count($pkgIdArr), count($pkgNameArr), count($pkgDescArr), count($pkgQtyArr), count($productQtyArr));
         for ($i = 0; $i < $maxCount; $i++) {
             $prodId = isset($prodIdArr[$i]) ? (int) $prodIdArr[$i] : 0;
             $prodName = isset($prodNameArr[$i]) ? trim((string) $prodNameArr[$i]) : '';
             $pkgId = isset($pkgIdArr[$i]) ? (int) $pkgIdArr[$i] : 0;
             $pkgName = isset($pkgNameArr[$i]) ? trim((string) $pkgNameArr[$i]) : '';
             $pkgDesc = isset($pkgDescArr[$i]) ? trim((string) $pkgDescArr[$i]) : '';
-            $qty = isset($pkgQtyArr[$i]) ? (int) $pkgQtyArr[$i] : 0;
+            $packageQty = isset($pkgQtyArr[$i]) ? (int) $pkgQtyArr[$i] : 0;
+            $productQty = isset($productQtyArr[$i]) ? (int) $productQtyArr[$i] : 0;
 
             if ($prodId <= 0 && $prodName !== '') {
                 $prodKey = strtolower(trim($prodName));
@@ -263,7 +294,7 @@ if (post('actionBtn')) {
                 }
             }
 
-            $hasAnyValue = ($prodName !== '' || $pkgName !== '' || $qty > 0 || $prodId > 0 || $pkgId > 0 || $pkgDesc !== '');
+            $hasAnyValue = ($prodName !== '' || $pkgName !== '' || $packageQty > 0 || $productQty > 0 || $prodId > 0 || $pkgId > 0 || $pkgDesc !== '');
             if (!$hasAnyValue) {
                 continue;
             }
@@ -283,7 +314,7 @@ if (post('actionBtn')) {
                 continue;
             }
 
-            if ($prodId <= 0 || $pkgId <= 0 || $qty <= 0) {
+            if ($prodId <= 0 || $pkgId <= 0 || $packageQty <= 0 || $productQty <= 0) {
                 continue;
             }
 
@@ -299,7 +330,25 @@ if (post('actionBtn')) {
             if ($pkgDesc === '' && isset($packageDescMap[$pkgId])) {
                 $pkgDesc = (string) $packageDescMap[$pkgId];
             }
-            $computedTotal += ($pkgPrice * $qty);
+
+            // Use a per-group identifier for de-duplication when available, falling back to pkgId|packageQty.
+            $packageGroupKey = null;
+            if (isset($_POST['package_group']) && is_array($_POST['package_group'])) {
+                // $index is expected to be the current row index from the surrounding loop.
+                if (isset($index) && array_key_exists($index, $_POST['package_group'])) {
+                    $groupKey = (string) $_POST['package_group'][$index];
+                    if ($groupKey !== '') {
+                        $packageGroupKey = $groupKey;
+                    }
+                }
+            }
+            if ($packageGroupKey === null) {
+                $packageGroupKey = $pkgId . '|' . $packageQty;
+            }
+            if (!isset($countedPackageTotals[$packageGroupKey])) {
+                $computedTotal += ($pkgPrice * $packageQty);
+                $countedPackageTotals[$packageGroupKey] = true;
+            }
 
             if ($pkgBrandId > 0) {
                 $resolvedBrandIds[$pkgBrandId] = true;
@@ -314,19 +363,83 @@ if (post('actionBtn')) {
                 'company_id' => $pkgCompanyId,
                 'package_id' => $pkgId,
                 'package_desc' => $pkgDesc,
-                'qty' => $qty,
+                'packageQty' => $packageQty,
+                'productQty' => $productQty,
+            );
+        }
+
+        $standaloneMaxCount = max(count($standaloneProdIdArr), count($standaloneProdNameArr), count($standaloneQtyArr));
+        for ($i = 0; $i < $standaloneMaxCount; $i++) {
+            $prodId = isset($standaloneProdIdArr[$i]) ? (int) $standaloneProdIdArr[$i] : 0;
+            $prodName = isset($standaloneProdNameArr[$i]) ? trim((string) $standaloneProdNameArr[$i]) : '';
+            $qty = isset($standaloneQtyArr[$i]) ? (int) $standaloneQtyArr[$i] : 0;
+
+            $hasAnyValue = ($prodName !== '' || $prodId > 0 || $qty > 0);
+            if (!$hasAnyValue) {
+                continue;
+            }
+
+            if ($prodId <= 0 && $prodName !== '') {
+                $prodKey = strtolower(trim($prodName));
+                if (isset($productNameToId[$prodKey])) {
+                    $prodId = (int) $productNameToId[$prodKey];
+                }
+            }
+
+            if ($prodName !== '' && $prodId <= 0) {
+                $invalidStandaloneProducts[] = $prodName;
+                continue;
+            }
+
+            if ($prodId <= 0 || $qty <= 0) {
+                continue;
+            }
+
+            $standaloneBrandId = isset($productBrandDirectMap[$prodId]) ? (int) $productBrandDirectMap[$prodId] : 0;
+            $standaloneCompanyId = ($standaloneBrandId > 0 && isset($brandCompanyMap[$standaloneBrandId])) ? (int) $brandCompanyMap[$standaloneBrandId] : 0;
+
+            if ($standaloneBrandId > 0) {
+                $resolvedBrandIds[$standaloneBrandId] = true;
+            }
+            if ($standaloneCompanyId > 0) {
+                $resolvedCompanyIds[$standaloneCompanyId] = true;
+            }
+
+            $resolvedStandaloneName = $prodName !== '' ? $prodName : (isset($productNameMap[$prodId]) ? (string) $productNameMap[$prodId] : '');
+            $items[] = array(
+                'product_id' => $prodId,
+                'brand_id' => $standaloneBrandId,
+                'company_id' => $standaloneCompanyId,
+                'package_id' => 0,
+                'package_desc' => $resolvedStandaloneName,
+                'packageQty' => 1,
+                'productQty' => $qty,
             );
         }
 
         $requestBrandId = count($resolvedBrandIds) === 1 ? (int) array_key_first($resolvedBrandIds) : 0;
         $requestCompanyId = count($resolvedCompanyIds) === 1 ? (int) array_key_first($resolvedCompanyIds) : 0;
 
+        // --- FIX: Check for duplicate invoice numbers in the database ---
+        $safeInvoiceNoCheck = mysqli_real_escape_string($finance_connect, $sor_invoice_no);
+        $invCheckQuery = "SELECT id FROM " . STOCK_ORDER_REQ . " WHERE invoice_no = '$safeInvoiceNoCheck' AND status = 'A'";
+        if ($action === 'updRecord' && $dataID) {
+            $invCheckQuery .= " AND id != '" . (int)$dataID . "'"; // Ignore itself when editing
+        }
+        $invCheckRst = mysqli_query($finance_connect, $invCheckQuery);
+        $isDuplicateInvoice = ($invCheckRst && $invCheckRst->num_rows > 0);
+        // -----------------------------------------------------------------
+
         if (!$sor_warehouse) {
             $err = 'Warehouse cannot be empty.';
         } else if (!isset($warehouseNameMap[(int) $sor_warehouse])) {
             $err = 'Please select a valid warehouse from the list.';
         } else if (!$sor_invoice_no) {
-            $err = 'Invoice cannot be empty.';
+            $invoice_no_err = 'Invoice cannot be empty.';
+            $err = $invoice_no_err;
+        } else if ($isDuplicateInvoice) {
+            $invoice_no_err = 'Invoice number (' . htmlspecialchars($sor_invoice_no) . ') already exists. Please use a different invoice number.';
+            $err = $invoice_no_err;
         } else if (!$sor_invoice_date) {
             $err = 'Invoice date cannot be empty.';
         } else if (!$sor_request_date) {
@@ -339,10 +452,12 @@ if (post('actionBtn')) {
             $err = 'Please select valid package name from the list.';
         } else if (!empty($mismatchItems)) {
             $err = 'Selected package does not match the selected product.';
+        } else if (!empty($invalidStandaloneProducts)) {
+            $err = 'Please select valid standalone product name from the list.';
         } else if ($sor_courier !== '' && (int) $sor_courier > 0 && !isset($courierNameMap[(int) $sor_courier])) {
             $err = 'Please select a valid courier from the list.';
         } else if (count($items) === 0) {
-            $err = 'Please add at least one product and package item with quantity.';
+            $err = 'Please add at least one package item or standalone product with quantity.';
         } else {
             $existingAttachment = postSpaceFilter('existing_attachment');
             $sor_attachment = $existingAttachment;
@@ -420,16 +535,17 @@ if (post('actionBtn')) {
                         $safeCompanyId = isset($item['company_id']) ? (int) $item['company_id'] : 0;
                         $safePkgId = mysqli_real_escape_string($finance_connect, $item['package_id']);
                         $safeDesc = mysqli_real_escape_string($finance_connect, $item['package_desc']);
-                        $safeQty = (int) $item['qty'];
+                        $safePackageQty = isset($item['packageQty']) ? (int) $item['packageQty'] : 1;
+                        $safeProductQty = isset($item['productQty']) ? (int) $item['productQty'] : $safePackageQty;
                         $insertItemSql = "INSERT INTO " . STOCK_ORDER_REQ_ITEM . "
-                                          (request_id, product_id, brand_id, company_id, package_id, package_desc, qty, create_by, create_date, create_time)
+                                          (request_id, product_id, brand_id, company_id, package_id, package_desc, packageQty, productQty, create_by, create_date, create_time)
                                           VALUES
-                                          ('" . (int) $dataID . "', '" . $safeProdId . "', '" . $safeBrandId . "', '" . $safeCompanyId . "', '$safePkgId', '$safeDesc', '$safeQty', '" . USER_ID . "', CURDATE(), CURTIME())";
+                                          ('" . (int) $dataID . "', '" . $safeProdId . "', '" . $safeBrandId . "', '" . $safeCompanyId . "', '$safePkgId', '$safeDesc', '$safePackageQty', '$safeProductQty', '" . USER_ID . "', CURDATE(), CURTIME())";
                         mysqli_query($finance_connect, $insertItemSql);
                     }
 
                     $token = sorEncodeToken($dataID);
-                    $orderLink = $SITEURL . '/warehouse_stock_in.php?t=' . urlencode($token);
+                    $orderLink = $SITEURL . '/warehouse_stock_in_scan.php?t=' . urlencode($token);
 
                     $qrDir = ROOT . DIRECTORY_SEPARATOR . 'temp' . DIRECTORY_SEPARATOR . 'stock_order_request' . DIRECTORY_SEPARATOR;
                     if (!file_exists($qrDir)) {
@@ -482,6 +598,17 @@ function sorQrSrc($path, $siteUrl)
 <html>
 <head>
     <link rel="stylesheet" href="../css/main.css">
+    <style>
+        .sor-group-product-row .pkg-main-fields,
+        .sor-group-product-row .desc-main-field,
+        .sor-group-product-row .total-main-field {
+            display: none;
+        }
+
+        .sor-group-package-row .sor-item-prod-name {
+            background: #f3f4f6;
+        }
+    </style>
 </head>
 <body>
     <div class="pre-load-center"><div class="preloader"></div></div>
@@ -505,7 +632,20 @@ function sorQrSrc($path, $siteUrl)
                     <?php } ?>
 
                     <?php if ($showQrPanel) { ?>
-                        <div class="alert alert-success d-flex justify-content-between align-items-center mb-3">
+                        <script>
+                            if ('scrollRestoration' in history) {
+                                history.scrollRestoration = 'manual';
+                            }
+                            $(document).ready(function() {
+                                setTimeout(function() {
+                                    $('html, body').animate({
+                                        scrollTop: $("#qr_success_panel").offset().top - 120
+                                    }, 600); // Smoothly glides up to the panel
+                                }, 200); 
+                            });
+                        </script>
+                        
+                        <div id="qr_success_panel" class="alert alert-success d-flex justify-content-between align-items-center mb-3">
                             <span>Stock Order saved. Redirecting to table in <strong><span id="countdownSec">15</span>s</strong>.</span>
                             <button type="button" class="btn btn-sm btn-rounded btn-primary" id="goNowBtn">Go To Table Now</button>
                         </div>
@@ -541,7 +681,12 @@ function sorQrSrc($path, $siteUrl)
                         </div>
                         <div class="col-md-4 mb-3">
                             <label class="form-label form_lbl" for="sor_invoice_no">Invoice<span class="requireRed">*</span></label>
-                            <textarea class="form-control" id="sor_invoice_no" name="sor_invoice_no" rows="1" <?= ($act == '') ? 'readonly' : '' ?>><?= sorEcho(isset($row['invoice_no']) ? $row['invoice_no'] : '') ?></textarea>
+                            <textarea class="form-control" id="sor_invoice_no" name="sor_invoice_no" rows="1" <?= ($act == '') ? 'readonly' : '' ?>><?= sorEcho(isset($_POST['sor_invoice_no']) ? $_POST['sor_invoice_no'] : (isset($row['invoice_no']) ? $row['invoice_no'] : '')) ?></textarea>
+                            <?php if (isset($invoice_no_err)) { ?>
+                                <div id="err_msg">
+                                    <span class="mt-n1"><?= $invoice_no_err ?></span>
+                                </div>
+                            <?php } ?>
                         </div>
                         <div class="col-md-4 mb-3">
                             <label class="form-label form_lbl" for="sor_invoice_date">Invoices Date<span class="requireRed">*</span></label>
@@ -568,52 +713,80 @@ function sorQrSrc($path, $siteUrl)
                     </div>
 
                     <div class="mb-3">
-                        <label class="form-label form_lbl">Product Name<span class="requireRed">*</span></label>
+                        <label class="form-label form_lbl">Package Items<span class="requireRed">*</span></label>
                         <div class="table-responsive">
                             <table class="table table-bordered" id="sorItemTable">
                                 <thead>
                                     <tr>
                                         <th width="60">#</th>
+                                        <th>Package Name</th>
                                         <th>Product Name</th>
-                                        <th>Package</th>
                                         <th>Item Description</th>
                                         <th width="140">Quantity</th>
+                                        <th width="140">Total Price</th>
                                         <th width="120">Action</th>
                                     </tr>
                                 </thead>
                                 <tbody id="sorItemBody">
                                 <?php
-                                if (count($itemRows) === 0) {
-                                    $itemRows[] = array('product_id' => '', 'package_id' => '', 'package_desc' => '', 'qty' => 1);
+                                if (count($packageItemRows) === 0) {
+                                    $packageItemRows[] = array('product_id' => '', 'package_id' => '', 'package_desc' => '', 'packageQty' => 1, 'productQty' => 1);
                                 }
                                 $idx = 1;
-                                foreach ($itemRows as $item) {
+                                $prevPkgKey = '__none__';
+                                $pkgBlockNo = 0;
+                                foreach ($packageItemRows as $item) {
                                     $prodId = isset($item['product_id']) ? (int) $item['product_id'] : 0;
                                     $prodName = isset($productNameMap[$prodId]) ? $productNameMap[$prodId] : '';
                                     $pkgId = isset($item['package_id']) ? (int) $item['package_id'] : 0;
                                     $pkgName = isset($packageNameMap[$pkgId]) ? $packageNameMap[$pkgId] : '';
                                     $desc = isset($item['package_desc']) ? $item['package_desc'] : '';
+                                    $pkgPrice = ($pkgId > 0 && isset($packageMap[$pkgId])) ? (float) $packageMap[$pkgId] : 0.00;
+                                    $packageQty = isset($item['packageQty']) ? (int) $item['packageQty'] : (isset($item['qty']) ? (int) $item['qty'] : 1);
+                                    $productQty = isset($item['productQty']) ? (int) $item['productQty'] : (isset($item['qty']) ? (int) $item['qty'] : $packageQty);
+                                    if ($packageQty <= 0) $packageQty = 1;
+                                    if ($productQty <= 0) $productQty = $packageQty;
+                                    $baseQty = (int) max(1, round($productQty / max(1, $packageQty)));
                                     $rowKey = $idx;
+                                    $curPkgKey = ($pkgId > 0 ? (string) $pkgId : '__empty__') . '|' . strtolower(trim((string) $pkgName));
+                                    if ($curPkgKey !== $prevPkgKey) {
+                                        $pkgBlockNo++;
+                                        $prevPkgKey = $curPkgKey;
+                                    }
+                                    $groupKey = 'pkg_block_' . (int) $pkgBlockNo;
                                 ?>
-                                    <tr data-row-key="<?= (int) $rowKey ?>">
+                                    <tr data-row-key="<?= (int) $rowKey ?>" data-package-group="<?= sorEcho($groupKey) ?>">
                                         <td class="row-no"><?= $idx++ ?></td>
+                                        <td class="cell-package">
+                                            <div class="pkg-main-fields">
+                                                <div class="autocomplete">
+                                                    <input class="form-control sor-item-pkg-name" type="text" id="sor_item_pkg_name_<?= (int) $rowKey ?>" name="sor_item_pkg_name[]" value="<?= sorEcho($pkgName) ?>" placeholder="Type Package" <?= ($act == '') ? 'readonly' : '' ?>>
+                                                    <input type="hidden" class="sor-item-pkg-id" id="sor_item_pkg_id_<?= (int) $rowKey ?>" name="sor_item_pkg_id[]" value="<?= (int) $pkgId ?>">
+                                                </div>
+                                            </div>
+                                        </td>
                                         <td>
                                             <div class="autocomplete">
-                                                <input class="form-control sor-item-prod-name" type="text" id="sor_item_prod_name_<?= (int) $rowKey ?>" name="sor_item_prod_name[]" value="<?= sorEcho($prodName) ?>" placeholder="Type Product Name" <?= ($act == '') ? 'readonly' : '' ?>>
+                                                <input class="form-control sor-item-prod-name" type="text" id="sor_item_prod_name_<?= (int) $rowKey ?>" name="sor_item_prod_name[]" value="<?= sorEcho($prodName) ?>" <?= ($act == '') ? 'readonly' : '' ?>>
                                                 <input type="hidden" class="sor-item-prod-id" id="sor_item_prod_id_<?= (int) $rowKey ?>" name="sor_item_prod_id[]" value="<?= (int) $prodId ?>">
                                             </div>
                                         </td>
-                                        <td>
-                                            <div class="autocomplete">
-                                                <input class="form-control sor-item-pkg-name" type="text" id="sor_item_pkg_name_<?= (int) $rowKey ?>" name="sor_item_pkg_name[]" value="<?= sorEcho($pkgName) ?>" placeholder="Type Package" <?= ($act == '') ? 'readonly' : '' ?>>
-                                                <input type="hidden" class="sor-item-pkg-id" id="sor_item_pkg_id_<?= (int) $rowKey ?>" name="sor_item_pkg_id[]" value="<?= (int) $pkgId ?>">
+                                        <td class="cell-desc">
+                                            <div class="desc-main-field">
+                                                <input class="form-control sor-item-desc" type="text" name="sor_item_desc[]" value="<?= sorEcho($desc) ?>" readonly>
                                             </div>
                                         </td>
                                         <td>
-                                            <input class="form-control sor-item-desc" type="text" name="sor_item_desc[]" value="<?= sorEcho($desc) ?>" readonly>
+                                            <div class="qty-main-field">
+                                                <input class="form-control sor-item-qty" type="number" min="1" name="sor_item_product_qty[]" value="<?= sorEcho($productQty) ?>" <?= ($act == '') ? 'readonly' : '' ?>>
+                                                <input class="sor-item-package-qty" type="hidden" name="sor_item_package_qty[]" value="<?= sorEcho($packageQty) ?>">
+                                                <input class="sor-item-base-qty" type="hidden" name="sor_item_base_qty[]" value="<?= sorEcho($baseQty) ?>">
+                                            </div>
                                         </td>
-                                        <td>
-                                            <input class="form-control sor-item-qty" type="number" min="1" name="sor_item_qty[]" value="<?= sorEcho(isset($item['qty']) ? $item['qty'] : 1) ?>" <?= ($act == '') ? 'readonly' : '' ?>>
+                                        <td class="cell-total">
+                                            <div class="total-main-field">
+                                                <input class="form-control sor-item-total" type="text" value="<?= sorEcho(number_format($pkgPrice, 2, '.', '')) ?>" readonly>
+                                            </div>
                                         </td>
                                         <td>
                                             <?php if ($act != '') { ?>
@@ -626,7 +799,58 @@ function sorQrSrc($path, $siteUrl)
                             </table>
                         </div>
                         <?php if ($act != '') { ?>
-                            <button type="button" id="addItemRowBtn" class="btn btn-sm btn-rounded btn-primary">+ Add Item</button>
+                            <button type="button" id="addItemRowBtn" class="btn btn-sm btn-rounded btn-primary">+ Add Package</button>
+                        <?php } ?>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label form_lbl">Standalone Products</label>
+                        <div class="table-responsive">
+                            <table class="table table-bordered" id="sorStandaloneTable">
+                                <thead>
+                                    <tr>
+                                        <th width="60">#</th>
+                                        <th>Product Name</th>
+                                        <th width="140">Quantity</th>
+                                        <th width="120">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="sorStandaloneBody">
+                                <?php
+                                if (count($standaloneItemRows) === 0) {
+                                    $standaloneItemRows[] = array('product_id' => '', 'productQty' => 1);
+                                }
+                                $stIdx = 1;
+                                foreach ($standaloneItemRows as $stItem) {
+                                    $stProdId = isset($stItem['product_id']) ? (int) $stItem['product_id'] : 0;
+                                    $stProdName = isset($productNameMap[$stProdId]) ? $productNameMap[$stProdId] : '';
+                                    $stQty = isset($stItem['productQty']) ? (int) $stItem['productQty'] : (isset($stItem['qty']) ? (int) $stItem['qty'] : 1);
+                                    if ($stQty <= 0) $stQty = 1;
+                                    $stRowKey = 'st_' . $stIdx;
+                                ?>
+                                    <tr data-row-key="<?= sorEcho($stRowKey) ?>">
+                                        <td class="row-no"><?= $stIdx++ ?></td>
+                                        <td>
+                                            <div class="autocomplete">
+                                                <input class="form-control sor-standalone-prod-name" type="text" id="sor_standalone_prod_name_<?= sorEcho($stRowKey) ?>" name="sor_standalone_prod_name[]" value="<?= sorEcho($stProdName) ?>" <?= ($act == '') ? 'readonly' : '' ?>>
+                                                <input type="hidden" class="sor-standalone-prod-id" id="sor_standalone_prod_id_<?= sorEcho($stRowKey) ?>" name="sor_standalone_prod_id[]" value="<?= (int) $stProdId ?>">
+                                            </div>
+                                        </td>
+                                        <td>
+                                            <input class="form-control sor-standalone-qty" type="number" min="1" name="sor_standalone_qty[]" value="<?= sorEcho($stQty) ?>" <?= ($act == '') ? 'readonly' : '' ?>>
+                                        </td>
+                                        <td>
+                                            <?php if ($act != '') { ?>
+                                                <button type="button" class="btn btn-sm btn-rounded btn-primary remove-standalone-btn">Remove</button>
+                                            <?php } ?>
+                                        </td>
+                                    </tr>
+                                <?php } ?>
+                                </tbody>
+                            </table>
+                        </div>
+                        <?php if ($act != '') { ?>
+                            <button type="button" id="addStandaloneRowBtn" class="btn btn-sm btn-rounded btn-primary">+ Add Product</button>
                         <?php } ?>
                     </div>
 

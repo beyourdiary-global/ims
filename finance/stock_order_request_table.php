@@ -5,8 +5,6 @@ $isFinance = 1;
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
 
-sorEnsureSchema($finance_connect);
-
 $pinAccess = checkPin($connect, 'Stock Order Request');
 if (!is_array($pinAccess) || count($pinAccess) === 0) {
     $pinAccess = checkPin($connect, 'Stock List');
@@ -20,7 +18,7 @@ $deleteRedirectPage = $SITEURL . '/finance/stock_order_request_table.php';
 
 // 1. Refactored Main Query using a SUBQUERY (No JOINs)
 $sql = "SELECT r.*,
-    (SELECT GROUP_CONCAT(CONCAT(i.package_id, ':', i.qty, ':', IFNULL(i.company_id, 0), ':', IFNULL(i.product_id, 0), ':', IFNULL(i.brand_id, 0)) SEPARATOR '|')
+    (SELECT GROUP_CONCAT(CONCAT(i.package_id, ':', IFNULL(i.packageQty, 1), ':', IFNULL(i.company_id, 0), ':', IFNULL(i.product_id, 0), ':', IFNULL(i.brand_id, 0)) SEPARATOR '|')
          FROM " . STOCK_ORDER_REQ_ITEM . " i
          WHERE i.request_id = r.id AND i.status = 'A') AS item_data_raw
         FROM " . STOCK_ORDER_REQ . " r

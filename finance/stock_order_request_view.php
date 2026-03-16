@@ -4,8 +4,6 @@ include '../init.php';
 include ROOT . '/include/connection.php';
 include ROOT . '/include/common.php';
 
-sorEnsureSchema($finance_connect);
-
 $token = input('t');
 $requestId = sorDecodeToken($token);
 
@@ -23,7 +21,9 @@ if (!$rst || !($row = mysqli_fetch_assoc($rst))) {
     exit;
 }
 
-$itemSql = "SELECT i.package_desc, i.qty
+$itemSql = "SELECT i.package_desc,
+                   IFNULL(i.packageQty, 1) AS packageQty,
+                   IFNULL(i.productQty, IFNULL(i.packageQty, 1)) AS productQty
             FROM " . STOCK_ORDER_REQ_ITEM . " i
             WHERE i.request_id='" . (int) $requestId . "' AND i.status='A'
             ORDER BY i.id ASC";
@@ -88,13 +88,14 @@ function e($value)
                 <div class="mt-3">
                     <h5>Package Items</h5>
                     <table class="table table-bordered">
-                        <thead><tr><th>#</th><th>Description</th><th>Qty</th></tr></thead>
+                        <thead><tr><th>#</th><th>Description</th><th>Package Qty</th><th>Product Qty</th></tr></thead>
                         <tbody>
                             <?php $i = 1; if ($itemRst) { while ($item = mysqli_fetch_assoc($itemRst)) { ?>
                                 <tr>
                                     <td><?= $i++ ?></td>
                                     <td><?= e($item['package_desc']) ?></td>
-                                    <td><?= e($item['qty']) ?></td>
+                                    <td><?= e($item['packageQty']) ?></td>
+                                    <td><?= e($item['productQty']) ?></td>
                                 </tr>
                             <?php }} ?>
                         </tbody>

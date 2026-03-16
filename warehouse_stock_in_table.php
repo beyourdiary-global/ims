@@ -41,9 +41,12 @@ if (input('act') === 'D' && input('item_id')) {
     $deleteQuery = "UPDATE `" . $stockInItemTable . "` SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $itemId . "'";
     
     if (mysqli_query($finance_connect, $deleteQuery)) {
-        echo "<script>location.href='" . $tablePage . "?msg=" . urlencode('Row deleted successfully.') . "';</script>";
+        // FIX: Add JS alert and remove ?msg from URL
+        echo "<script>alert('Row deleted successfully.'); location.href='" . $tablePage . "';</script>";
     } else {
-        echo "<script>location.href='" . $tablePage . "?err=" . urlencode('Failed to delete row: ' . mysqli_error($finance_connect)) . "';</script>";
+        // Log detailed database error server-side and show a generic message to the user
+         error_log('Stock in delete failed for item ID ' . $itemId . ': ' . mysqli_error($finance_connect));
+         echo "<script>alert('Failed to delete row. Please try again later.'); location.href='" . $tablePage . "';</script>";
     }
     exit;
 }
@@ -77,10 +80,10 @@ $listRows = siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTa
             </div>
 
             <?php if ($msg !== '') { ?>
-                <div class="alert alert-success"><?= siEsc($msg) ?></div>
+                <script>alert(<?= json_encode($msg) ?>);</script>
             <?php } ?>
             <?php if ($err !== '') { ?>
-                <div class="alert alert-danger"><?= siEsc($err) ?></div>
+                <script>alert(<?= json_encode($err) ?>);</script>
             <?php } ?>
 
             <div class="table-responsive">
