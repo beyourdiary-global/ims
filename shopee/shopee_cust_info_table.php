@@ -5,6 +5,7 @@ include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);
+
 $_SESSION['act'] = '';
 $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
@@ -88,23 +89,66 @@ $result = getData('*', '', '', SHOPEE_CUST_INFO, $finance_connect);
                             <?php
                             while ($row = $result->fetch_assoc()) {
                                 if (isset($row['buyer_username'], $row['id']) && !empty($row['buyer_username'])) {
-                                    $pic = $country = $brand = $series = '';
+                                    $picName = $countryName = $brandName = $seriesName = '';
 
-                                    $pic = getData('name', "id='" . $row['pic'] . "'", '', USR_USER, $connect);
-                                    if ($pic)
-                                        $row2 = $pic->fetch_assoc();
+                                    $picValue = isset($row['pic']) ? trim((string) $row['pic']) : '';
+                                    if ($picValue !== '') {
+                                        $pic = getData('name', "id='" . $picValue . "'", 'LIMIT 1', USR_USER, $connect);
+                                        if (!$pic || $pic->num_rows === 0) {
+                                            $pic = getData('name', "name='" . $picValue . "'", 'LIMIT 1', USR_USER, $connect);
+                                        }
+                                        if ($pic && $pic->num_rows > 0) {
+                                            $picRow = $pic->fetch_assoc();
+                                            $picName = $picRow['name'];
+                                        } else {
+                                            $picName = $picValue;
+                                        }
+                                    }
 
-                                    $country = getData('nicename', "id='" . $row['country'] . "'", '', COUNTRIES, $connect);
-                                    if ($country)
-                                        $row3 = $country->fetch_assoc();
+                                    $countryValue = isset($row['country']) ? trim((string) $row['country']) : '';
+                                    if ($countryValue !== '') {
+                                        $country = getData('nicename', "id='" . $countryValue . "'", 'LIMIT 1', COUNTRIES, $connect);
+                                        if (!$country || $country->num_rows === 0) {
+                                            $country = getData('nicename', "nicename='" . $countryValue . "'", 'LIMIT 1', COUNTRIES, $connect);
+                                        }
+                                        if (!$country || $country->num_rows === 0) {
+                                            $country = getData('nicename', "name='" . $countryValue . "'", 'LIMIT 1', COUNTRIES, $connect);
+                                        }
+                                        if ($country && $country->num_rows > 0) {
+                                            $countryRow = $country->fetch_assoc();
+                                            $countryName = $countryRow['nicename'];
+                                        } else {
+                                            $countryName = $countryValue;
+                                        }
+                                    }
 
-                                    $brand = getData('name', "id='" . $row['brand'] . "'", '', BRAND, $connect);
-                                    if ($brand)
-                                        $row4 = $brand->fetch_assoc();
+                                    $brandValue = isset($row['brand']) ? trim((string) $row['brand']) : '';
+                                    if ($brandValue !== '') {
+                                        $brand = getData('name', "id='" . $brandValue . "'", 'LIMIT 1', BRAND, $connect);
+                                        if (!$brand || $brand->num_rows === 0) {
+                                            $brand = getData('name', "name='" . $brandValue . "'", 'LIMIT 1', BRAND, $connect);
+                                        }
+                                        if ($brand && $brand->num_rows > 0) {
+                                            $brandRow = $brand->fetch_assoc();
+                                            $brandName = $brandRow['name'];
+                                        } else {
+                                            $brandName = $brandValue;
+                                        }
+                                    }
 
-                                    $series = getData('name', "id='" . $row['series'] . "'", '', BRD_SERIES, $connect);
-                                    if ($series)
-                                        $row5 = $series->fetch_assoc();
+                                    $seriesValue = isset($row['series']) ? trim((string) $row['series']) : '';
+                                    if ($seriesValue !== '') {
+                                        $series = getData('name', "id='" . $seriesValue . "'", 'LIMIT 1', BRD_SERIES, $connect);
+                                        if (!$series || $series->num_rows === 0) {
+                                            $series = getData('name', "name='" . $seriesValue . "'", 'LIMIT 1', BRD_SERIES, $connect);
+                                        }
+                                        if ($series && $series->num_rows > 0) {
+                                            $seriesRow = $series->fetch_assoc();
+                                            $seriesName = $seriesRow['name'];
+                                        } else {
+                                            $seriesName = $seriesValue;
+                                        }
+                                    }
                                     ?>
 
                                     <tr>
@@ -116,10 +160,10 @@ $result = getData('*', '', '', SHOPEE_CUST_INFO, $finance_connect);
                                             <?php renderDeleteButton($pinAccess, $row['id'], $row['buyer_username'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
                                         </td>
                                         <td scope="row"><?= isset($row['buyer_username']) ? $row['buyer_username'] : '' ?></td>
-                                        <td scope="row"><?= isset($row2['name']) ? $row2['name'] : '' ?></td>
-                                        <td scope="row"><?= isset($row3['nicename']) ? $row3['nicename'] : '' ?></td>
-                                        <td scope="row"><?= isset($row4['name']) ? $row4['name'] : '' ?></td>
-                                        <td scope="row"><?= isset($row5['name']) ? $row5['name'] : '' ?></td>
+                                        <td scope="row"><?= $picName ?></td>
+                                        <td scope="row"><?= $countryName ?></td>
+                                        <td scope="row"><?= $brandName ?></td>
+                                        <td scope="row"><?= $seriesName ?></td>
                                         <td scope="row"><?= isset($row['remark']) ? $row['remark'] : '' ?></td>
                                     </tr>
                                 <?php }

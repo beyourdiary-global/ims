@@ -161,9 +161,9 @@ $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_con
                         <h2><?php echo $pageTitle ?></h2>
                         <?php if ($result) { ?>
                             <div class="mt-auto mb-auto">
-                                <?php if (in_array(4, $accessActionKey)): ?>
+                                <?php if (isActionAllowed("Add", $pinAccess) && isActionAllowed("Import", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Request </a>
-                                    <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="importBtn" id="importBtn" href="<?= $SITEURL ?>/common_import.php?module=shopee_order_req"><i class="fa-solid fa-file-import"></i> Import </a>
+                                    <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="importBtn" id="importBtn" href="<?= $SITEURL ?>/shopee_order_import.php"><i class="fa-solid fa-file-import"></i> Import </a>
                                 <?php endif; ?>
                             </div>
                         <?php } ?>

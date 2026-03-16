@@ -413,7 +413,7 @@ $menuList = array(
         $SITEURL . '/common_import.php',
         'n',
         'expand' => array(),
-        'pin' => array('77')
+        'pin' => array('131')
     ),
     array(
         'Audit Log',
@@ -571,7 +571,6 @@ $menuList = array(
     var sidebar_toggleBtn = $("#sidebarCollapse"); // variable from menuHeader
     var opacityBackground = $('div#filter_screen');
 
-    (function ($) {
         sidebar_toggleBtn.on("click", function () {
             if (sidebar.hasClass("active")) {
                 sidebar.toggleClass("close", true);
@@ -585,7 +584,11 @@ $menuList = array(
             } else {
                 sidebar.toggleClass("active", true);
                 sidebar.toggleClass("close", false);
-                opacityBackground.show();
+                if (isMobileViewport()) {
+                    opacityBackground.show();
+                } else {
+                    opacityBackground.hide();
+                }
             }
         });
 

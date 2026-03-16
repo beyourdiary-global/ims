@@ -54,21 +54,15 @@ $result = getData('*', '', '', LAZADA_CUST_RCD, $connect);
                 </div>
 
                 <div class="row">
-                    <div class="col-12 d-flex justify-content-between flex-wrap">
-                        <h2>
-                            <?php echo $pageTitle ?>
-                        </h2>
-                        <?php if ($result) { ?>
+                        <div class="col-12 d-flex justify-content-between flex-wrap">
+                            <h2><?php echo $pageTitle ?></h2>
                             <div class="mt-auto mb-auto">
-                                <?php if (isActionAllowed("Add", $pinAccess)): ?>
-                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
-                                        Record </a>
+                                <?php if (isActionAllowed("Add", $pinAccess)) : ?>
+                                    <a class="btn btn-sm btn-rounded btn-primary" name="addNewBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Record </a>
                                 <?php endif; ?>
                             </div>
-                        <?php } ?>
+                        </div>
                     </div>
-                </div>
             </div>
             <?php
             if (!$result) {
