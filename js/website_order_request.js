@@ -432,7 +432,7 @@ $(".submitBtn").on("click", () => {
     $("#wor_shipping").val() === null ||
     $("#wor_shipping").val() === undefined
   ) {
-    $("#wor_shipping").val() == 0;
+    $("#wor_shipping").val("0");
     shipping_chk = 1;
   } else {
     $(".wor-shipping-err").remove();
@@ -444,7 +444,7 @@ $(".submitBtn").on("click", () => {
     $("#wor_discount").val() === null ||
     $("#wor_discount").val() === undefined
   ) {
-    $("#wor_discount").val() == 0;
+    $("#wor_discount").val("0");
     discount_chk = 1;
   } else {
     $(".wor-discount-err").remove();

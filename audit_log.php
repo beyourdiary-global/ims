@@ -170,7 +170,7 @@ if (!$result) {
                                             $displayUsername = (string) $rowUser['username'];
                                         }
                                     } else {
-                                        $displayUsername = 'Public User Scanning Stock Order QR Code(' . htmlspecialchars($userId, ENT_QUOTES, 'UTF-8') . ')';
+                                        $displayUsername = 'Public User Scanning Stock Order QR Code (' . htmlspecialchars($userId, ENT_QUOTES, 'UTF-8') . ')';
                                     }
                                 }
 

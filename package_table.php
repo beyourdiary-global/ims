@@ -5,8 +5,8 @@ $pageTitle = "Package";
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
 
-$libPath = 'header/PhpXlsxGenerator/PhpXlsxGenerator.php';
-if (file_exists($libPath)) {
+$libPath = __DIR__ . '/header/PhpXlsxGenerator/PhpXlsxGenerator.php';
+if (is_readable($libPath)) {
     require_once $libPath;
 }
 
@@ -79,6 +79,11 @@ if (!empty($checkboxValues)) {
         echo "<script>alert('No selected package data found to export.');window.location.href='package_table.php';</script>";
         exit;
     }
+
+    if (!class_exists('\CodexWorld\PhpXlsxGenerator')) {
+         echo "<script>alert('The export library is not available. Please contact the administrator.');window.location.href='package_table.php';</script>";
+         exit;
+     }
 
     $filename = 'package_data_' . date('Y-m-d') . '.xlsx';
     $xlsx = \CodexWorld\PhpXlsxGenerator::fromArray($excelData);

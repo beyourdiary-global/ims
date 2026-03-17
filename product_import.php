@@ -20,6 +20,24 @@ $previewData = array();
 if (!function_exists('parse_xlsx')) {
     function parse_xlsx($filepath)
     {
+        // Helper to safely load XML without allowing external entity expansion or network access
+        $loadXmlSafely = function ($xmlString) {
+            if ($xmlString === false || $xmlString === null || $xmlString === '') {
+                return false;
+            }
+            $prevUseInternalErrors = libxml_use_internal_errors(true);
+            $prevDisableEntityLoader = null;
+            if (function_exists('libxml_disable_entity_loader')) {
+                $prevDisableEntityLoader = libxml_disable_entity_loader(true);
+            }
+            $xml = simplexml_load_string($xmlString, 'SimpleXMLElement', LIBXML_NONET);
+            if (function_exists('libxml_disable_entity_loader') && $prevDisableEntityLoader !== null) {
+                libxml_disable_entity_loader($prevDisableEntityLoader);
+            }
+            libxml_use_internal_errors($prevUseInternalErrors);
+            return $xml;
+        };
+
         $ssXml = false;
         $sheetXml = false;
         $sharedStrings = array();
@@ -41,47 +59,10 @@ if (!function_exists('parse_xlsx')) {
         }
 
         if (!$sheetXml) {
-            $tempDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'xlsx_' . uniqid();
-            if (mkdir($tempDir)) {
-                $cmd = 'tar -xf ' . escapeshellarg($filepath) . ' -C ' . escapeshellarg($tempDir) . ' 2>&1';
-                shell_exec($cmd);
-
-                $ssPath = $tempDir . DIRECTORY_SEPARATOR . 'xl' . DIRECTORY_SEPARATOR . 'sharedStrings.xml';
-                if (file_exists($ssPath)) {
-                    $ssXml = file_get_contents($ssPath);
-                }
-
-                $worksheetsDir = $tempDir . DIRECTORY_SEPARATOR . 'xl' . DIRECTORY_SEPARATOR . 'worksheets' . DIRECTORY_SEPARATOR;
-                if (is_dir($worksheetsDir)) {
-                    $files = scandir($worksheetsDir);
-                    foreach ($files as $file) {
-                        if (preg_match('/^sheet\d+\.xml$/i', $file)) {
-                            $sheetXml = file_get_contents($worksheetsDir . $file);
-                            break;
-                        }
-                    }
-                }
-
-                $deleteDir = function ($dir) use (&$deleteDir) {
-                    if (!is_dir($dir)) {
-                        return;
-                    }
-                    $items = scandir($dir);
-                    foreach ($items as $item) {
-                        if ($item == '.' || $item == '..') {
-                            continue;
-                        }
-                        $path = $dir . DIRECTORY_SEPARATOR . $item;
-                        if (is_dir($path)) {
-                            $deleteDir($path);
-                        } else {
-                            @unlink($path);
-                        }
-                    }
-                    @rmdir($dir);
-                };
-                $deleteDir($tempDir);
-            }
+            // Unable to read worksheet XML via ZipArchive; return empty result.
+             // This avoids falling back to shelling out to external tools like `tar`,
+             // which is unsafe for processing uploaded files.
+             return $rows;
         }
 
         if (!$sheetXml) {
@@ -89,7 +70,7 @@ if (!function_exists('parse_xlsx')) {
         }
 
         if ($ssXml !== false) {
-            $xml = simplexml_load_string($ssXml);
+            $xml = $loadXmlSafely($ssXml);
             if ($xml && isset($xml->si)) {
                 foreach ($xml->si as $val) {
                     $str = '';
@@ -107,7 +88,7 @@ if (!function_exists('parse_xlsx')) {
             }
         }
 
-        $xml = simplexml_load_string($sheetXml);
+        $xml = $loadXmlSafely($sheetXml);
         if (!$xml || !isset($xml->sheetData->row)) {
             return array('error' => 'Worksheet data is empty or corrupted.');
         }
