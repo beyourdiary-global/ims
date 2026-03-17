@@ -405,7 +405,7 @@ $menuList = array(
             array('Stock Costing Setting', 'mdi mdi-package-variant', $SITEURL . '/stockCosting.php?act=I', '106'),
 
         ),
-        'pin' => array('16', '125', '106')
+        'pin' => array('16', '104','125', '106')
     ),
     array(
         'Import Shortcut',

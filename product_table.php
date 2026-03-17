@@ -1,4 +1,5 @@
 <?php
+ob_start();
 $pageTitle = "Product";
 
 include 'menuHeader.php';
@@ -14,6 +15,75 @@ $num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/product.php';
 $deleteRedirectPage = $SITEURL . '/product_table.php';
+
+$checkboxValues = isset($_COOKIE['rowID']) ? $_COOKIE['rowID'] : '';
+if (!empty($checkboxValues)) {
+    $checkboxValues = preg_replace('/[^0-9,]/', '', (string) $checkboxValues);
+    $ids = array_filter(explode(',', $checkboxValues), 'strlen');
+    $ids = array_map('intval', $ids);
+    $ids = array_filter($ids, function ($v) {
+        return $v > 0;
+    });
+    $checkboxValues = implode(',', $ids);
+}
+
+if (!empty($checkboxValues)) {
+    if (!isActionAllowed("Export", $pinAccess)) {
+        setcookie('rowID', '', time() - 3600, '/');
+        ob_end_clean();
+        echo "<script>alert('You do not have permission to export this page.'); location.href='" . $SITEURL . "/product_table.php';</script>";
+        exit;
+    }
+
+    if (!class_exists('CodexWorld\\PhpXlsxGenerator')) {
+        include_once ROOT . '/header/PhpXlsxGenerator/PhpXlsxGenerator.php';
+    }
+
+    $excelData = array();
+    $query = "SELECT * FROM " . PROD . " WHERE status='A' AND id IN ($checkboxValues) ORDER BY id ASC";
+    $exportRst = mysqli_query($connect, $query);
+    if ($exportRst) {
+        $fields = mysqli_fetch_fields($exportRst);
+        $exportKeys = array();
+        $header = array();
+        foreach ($fields as $field) {
+            $fieldName = (string) $field->name;
+            if (strtolower($fieldName) === 'status') {
+                continue;
+            }
+            $exportKeys[] = $fieldName;
+            if (strtolower($fieldName) === 'id') {
+                $header[] = 'S/N';
+            } else {
+                $header[] = strtoupper(str_replace('_', ' ', $fieldName));
+            }
+        }
+        $excelData[] = $header;
+
+        while ($row = mysqli_fetch_assoc($exportRst)) {
+            $line = array();
+            foreach ($exportKeys as $key) {
+                $line[] = isset($row[$key]) && $row[$key] !== null ? (string) $row[$key] : '';
+            }
+            $excelData[] = $line;
+        }
+    }
+
+    setcookie('rowID', '', time() - 3600, '/');
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+
+    if (count($excelData) <= 1) {
+        echo "<script>alert('No selected product data found to export.');window.location.href='product_table.php';</script>";
+        exit;
+    }
+
+    $filename = 'product_data_' . date('Y-m-d') . '.xlsx';
+    $xlsx = \CodexWorld\PhpXlsxGenerator::fromArray($excelData);
+    $xlsx->downloadAs($filename);
+    exit;
+}
 
 $result = getData('*', '', '', $tblName, $connect);
 
@@ -68,9 +138,15 @@ if (!$result) {
                     <div class="row">
                         <div class="col-12 d-flex justify-content-between flex-wrap">
                             <h2><?php echo $pageTitle ?></h2>
-                            <div class="mt-auto mb-auto">
+                            <div class="mt-auto mb-auto d-flex gap-2">
                                 <?php if (isActionAllowed("Add", $pinAccess)) : ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add <?php echo $pageTitle ?> </a>
+                                <?php endif; ?>
+                                <?php if (isActionAllowed("Import", $pinAccess)) : ?>
+                                    <a class="btn btn-sm btn-rounded btn-info text-white" id="addBtn" href="product_import.php"><i class="fa-solid fa-file-import"></i> Import</a>
+                                <?php endif; ?>
+                                <?php if (isActionAllowed("Export", $pinAccess)) : ?>
+                                    <a class="btn btn-sm btn-rounded btn-success text-white" id="addBtn" name="exportBtn" href="product_table.php"><i class="fa-solid fa-file-export"></i> Export</a>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -81,6 +157,7 @@ if (!$result) {
                     <thead>
                         <tr>
                             <th class="hideColumn" scope="col">ID</th>
+                            <th class="text-center" scope="col"><input type="checkbox" class="exportAll"></th>
                             <th scope="col">S/N</th>
                             <th scope="col" id="action_col">Action</th>
                             <th scope="col">Name</th>
@@ -96,6 +173,7 @@ if (!$result) {
                             if (isset($row['name'], $row['id']) && !empty($row['name'])) { ?>
                                 <tr>
                                     <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                    <td class="text-center"><input type="checkbox" class="export" value="<?= (int) $row['id'] ?>"></td>
                                     <th scope="row"><?= $num++; ?></th>
                                     <td scope="row" class="btn-container">
                                         <?php if (isActionAllowed("View", $pinAccess)) : ?>
@@ -155,6 +233,7 @@ if (!$result) {
                     <tfoot>
                         <tr>
                             <th class="hideColumn" scope="col">ID</th>
+                            <th class="text-center" scope="col"><input type="checkbox" class="exportAll"></th>
                             <th scope="col">S/N</th>
                             <th scope="col" id="action_col">Action</th>
                             <th scope="col">Name</th>
@@ -180,6 +259,7 @@ if (!$result) {
         datatableAlignment('table');
         setButtonColor();
     </script>
+    <script src="<?= $SITEURL ?>/js/product_table.js"></script>
 </body>
 
 </html>

@@ -90,6 +90,12 @@ if (post('actionBtn')) {
     $wor_shipping_contact = postSpaceFilter('wor_shipping_contact');
     $wor_remark = postSpaceFilter('wor_remark');
 
+    $wor_pkg_text = postSpaceFilter('wor_pkg');
+    $wor_country_text = postSpaceFilter('wor_country');
+    $wor_currency_text = postSpaceFilter('wor_currency');
+    $wor_pay_text = postSpaceFilter('wor_pay');
+    $wor_cust_id_text = postSpaceFilter('wor_cust_id');
+
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
     switch ($action) {
@@ -110,13 +116,22 @@ if (post('actionBtn')) {
                 $series_err = "Series is required!";
                 $error = 1;
             }
+            if ($wor_pkg_text === '') {
+                $wor_pkg = '';
+            }
             if (empty($wor_pkg) || $wor_pkg < 1) {
                 $pkg_err = "Package is required!";
                 $error = 1;
             }
+            if ($wor_country_text === '') {
+                $wor_country = '';
+            }
             if (empty($wor_country) || $wor_country < 1) {
                 $country_err = "Country is required!";
                 $error = 1;
+            }
+            if ($wor_currency_text === '') {
+                $wor_currency = '';
             }
             if (empty($wor_currency) || $wor_currency < 1) {
                 $currency_err = "Currency is required!";
@@ -138,6 +153,9 @@ if (post('actionBtn')) {
                 $total_err = "Total is required!";
                 $error = 1;
             }
+            if ($wor_pay_text === '') {
+                $wor_pay = '';
+            }
             if (!$wor_pay) {
                 $pay_err = "Payment Method is required!";
                 $error = 1;
@@ -145,6 +163,9 @@ if (post('actionBtn')) {
             if (!$wor_pic) {
                 $pic_err = "Person In Charge is required!";
                 $error = 1;
+            }
+            if ($wor_cust_id_text === '') {
+                $wor_cust_id = '';
             }
             if (!$wor_cust_id) {
                 $cust_id_err = "Customer ID is required!";

@@ -11,6 +11,15 @@ siEnsureSchema($finance_connect, $stockInOrderTable, $stockInItemTable);
 
 $tablePage = $SITEURL . '/warehouse_stock_in_table.php';
 
+$pinAccess = checkCurrentPin($connect, 'Stock In');
+if (!is_array($pinAccess)) {
+    $pinAccess = array();
+}
+if (!isActionAllowed('Import', $pinAccess)) {
+    echo "<script>alert('You do not have permission to import this page.');location.href='" . $tablePage . "';</script>";
+    exit;
+}
+
 $warehouses = siLoadWarehouses($connect);
 $products = siLoadProducts($connect);
 list($warehouseNameMap, $warehouseNameToId) = siBuildNameMaps($warehouses);

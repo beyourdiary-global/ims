@@ -4,6 +4,15 @@ include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
 
 $redirect_page = $SITEURL . '/package_table.php';
+$pinAccess = checkCurrentPin($connect, 'Package');
+if (!is_array($pinAccess)) {
+    $pinAccess = array();
+}
+if (!isActionAllowed('Import', $pinAccess)) {
+    echo '<script>alert("You do not have permission to import this page.");location.href = "' . $redirect_page . '";</script>';
+    exit;
+}
+
 $action = post('actionBtn');
 $importErrors = [];
 $previewData = [];
