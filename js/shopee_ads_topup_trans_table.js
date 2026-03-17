@@ -12,6 +12,13 @@ function showExportNotification() {
   alert("Export successful!");
 }
 
+function auditExport(ids, tblName) {
+  var xhr = new XMLHttpRequest();
+  xhr.open("POST", "../export.php", true);
+  xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+  xhr.send("ids=" + ids.join(",") + "&tblName=" + encodeURIComponent(tblName));
+}
+
 function captureAndExport(tblName) {
   var checkboxValues = [];
   $("#shopee_ads_topup_trans_table")
@@ -28,7 +35,7 @@ function captureAndExport(tblName) {
 
   if (checkboxValues.length > 0) {
     setCookie("rowID", checkboxValues.join(","), 1);
-    auditExport(checkboxValues, tblName);
+    auditExport(checkboxValues, tblName || "shopee_ads_topup");
     alert("Export successful!");
     window.location.href =
       "shopee_ads_topup_trans_table.php?export_ids=" +
@@ -66,6 +73,7 @@ $(document).ready(function ($) {
       console.log("[shopee_ads_topup_export] selected_ids:", checkboxValues);
 
       if (checkboxValues.length > 0) {
+        auditExport(checkboxValues, "shopee_ads_topup");
         //uncheck checkboxes
         var checkboxes = document.querySelectorAll(".export");
         checkboxes.forEach(function (checkbox) {

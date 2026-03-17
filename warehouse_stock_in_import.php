@@ -7,7 +7,6 @@ include_once ROOT . '/include/common.php';
 
 $stockInOrderTable = 'stock_in_order';
 $stockInItemTable = 'stock_in_order_item';
-siEnsureSchema($finance_connect, $stockInOrderTable, $stockInItemTable);
 
 $tablePage = $SITEURL . '/warehouse_stock_in_table.php';
 
@@ -24,9 +23,12 @@ $warehouses = siLoadWarehouses($connect);
 $products = siLoadProducts($connect);
 list($warehouseNameMap, $warehouseNameToId) = siBuildNameMaps($warehouses);
 list($productNameMap, $productNameToId) = siBuildNameMaps($products);
+$warehouseOptions = array_values($warehouseNameMap);
+$productOptions = array_values($productNameMap);
 
 $msg = '';
 $err = '';
+
 
 if (!function_exists('siNormalizeImportedDate')) {
     function siNormalizeImportedDate($value)
@@ -78,38 +80,66 @@ if (post('actionBtn') === 'cancelImport') {
 }
 
 if (post('actionBtn') === 'confirmImport') {
-    $previewData = isset($_SESSION['si_import_preview']) ? $_SESSION['si_import_preview'] : null;
-    if (!$previewData || !isset($previewData['entries']) || !is_array($previewData['entries'])) {
+    $postedRows = isset($_POST['rows']) ? postSpaceFilter('rows') : array();
+    if (!is_array($postedRows) || count($postedRows) === 0) {
         $err = 'No import preview to confirm.';
     } else {
         mysqli_begin_transaction($finance_connect);
         $updated = 0;
         $inserted = 0;
-        $skippedError = 0; // NEW: Track skipped error rows
+        $skippedError = 0;
+
+        $currentRows = siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTable);
+        $currentByItemId = array();
+        foreach ($currentRows as $r) {
+            $currentByItemId[(int) $r['item_id']] = $r;
+        }
 
         try {
-            foreach ($previewData['entries'] as $entry) {
-                $type = isset($entry['type']) ? $entry['type'] : '';
-                if ($type === 'error') {
-                    $skippedError++; // NEW: Increment skipped count
-                    continue;
+            foreach ($postedRows as $row) {
+                $itemId = isset($row['item_id']) ? (int) $row['item_id'] : 0;
+                $orderId = isset($row['order_id']) ? (int) $row['order_id'] : 0;
+
+                $warehouseRaw = trim((string) (isset($row['warehouse']) ? $row['warehouse'] : ''));
+                $stockInDate = siNormalizeImportedDate(isset($row['stock_in_date']) ? $row['stock_in_date'] : '');
+                $orderNumber = trim((string) (isset($row['order_number']) ? $row['order_number'] : ''));
+                $productRaw = trim((string) (isset($row['product_name']) ? $row['product_name'] : ''));
+                $qty = isset($row['product_quantity']) ? (int) $row['product_quantity'] : 0;
+                $packageId = isset($row['package_id']) ? (int) $row['package_id'] : 0;
+
+                $warehouseId = 0;
+                if ($warehouseRaw !== '' && ctype_digit($warehouseRaw) && isset($warehouseNameMap[(int) $warehouseRaw])) {
+                    $warehouseId = (int) $warehouseRaw;
+                } else if (isset($warehouseNameToId[strtolower($warehouseRaw)])) {
+                    $warehouseId = (int) $warehouseNameToId[strtolower($warehouseRaw)];
                 }
 
-                $after = isset($entry['after']) && is_array($entry['after']) ? $entry['after'] : array();
-                $warehouseId = isset($after['warehouse_id']) ? (int) $after['warehouse_id'] : 0;
-                $stockInDate = isset($after['stock_in_date']) ? trim((string) $after['stock_in_date']) : '';
-                $orderNumber = isset($after['order_number']) ? trim((string) $after['order_number']) : '';
-                $productId = isset($after['product_id']) ? (int) $after['product_id'] : 0;
-                $qty = isset($after['product_quantity']) ? (int) $after['product_quantity'] : 0;
+                $productId = 0;
+                if ($productRaw !== '' && ctype_digit($productRaw) && isset($productNameMap[(int) $productRaw])) {
+                    $productId = (int) $productRaw;
+                } else if (isset($productNameToId[strtolower($productRaw)])) {
+                    $productId = (int) $productNameToId[strtolower($productRaw)];
+                }
 
                 if ($warehouseId <= 0 || $stockInDate === '' || $orderNumber === '' || $productId <= 0 || $qty <= 0) {
+                    $skippedError++;
                     continue;
                 }
 
-                if ($type === 'modified') {
-                    $itemId = isset($entry['item_id']) ? (int) $entry['item_id'] : 0;
-                    $orderId = isset($entry['order_id']) ? (int) $entry['order_id'] : 0;
-                    if ($itemId <= 0 || $orderId <= 0) {
+                if ($itemId > 0 && isset($currentByItemId[$itemId])) {
+                    $old = $currentByItemId[$itemId];
+                    $oldStockInDate = siNormalizeImportedDate(isset($old['stock_in_date']) ? $old['stock_in_date'] : '');
+
+                    $changed = (
+                        (int) $old['warehouse_id'] !== (int) $warehouseId ||
+                        (string) $oldStockInDate !== (string) $stockInDate ||
+                        (string) $old['order_number'] !== (string) $orderNumber ||
+                        (int) $old['product_id'] !== (int) $productId ||
+                        (int) $old['product_quantity'] !== (int) $qty ||
+                        (int) $old['package_id'] !== (int) $packageId
+                    );
+
+                    if (!$changed) {
                         continue;
                     }
 
@@ -118,12 +148,10 @@ if (post('actionBtn') === 'confirmImport') {
                     $uOrder = "UPDATE `" . $stockInOrderTable . "` SET warehouse_id='" . $warehouseId . "', stock_in_date='" . $safeDate . "', order_number='" . $safeOrderNo . "', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $orderId . "'";
                     mysqli_query($finance_connect, $uOrder);
 
-                    $uItem = "UPDATE `" . $stockInItemTable . "` SET product_id='" . $productId . "', package_id='0', product_quantity='" . $qty . "', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $itemId . "'";
+                    $uItem = "UPDATE `" . $stockInItemTable . "` SET product_id='" . $productId . "', package_id='" . $packageId . "', product_quantity='" . $qty . "', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $itemId . "'";
                     mysqli_query($finance_connect, $uItem);
                     $updated++;
-                }
-
-                if ($type === 'new') {
+                } else {
                     $orderId = siFindOrderIdByFields($finance_connect, $stockInOrderTable, $warehouseId, $stockInDate, $orderNumber);
                     if ($orderId <= 0) {
                         $safeDate = mysqli_real_escape_string($finance_connect, $stockInDate);
@@ -133,7 +161,7 @@ if (post('actionBtn') === 'confirmImport') {
                         $orderId = (int) mysqli_insert_id($finance_connect);
                     }
 
-                    $iItem = "INSERT INTO `" . $stockInItemTable . "` (stock_in_order_id, product_id, package_id, product_quantity, create_by, create_date, create_time, status) VALUES ('" . $orderId . "', '" . $productId . "', '0', '" . $qty . "', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
+                    $iItem = "INSERT INTO `" . $stockInItemTable . "` (stock_in_order_id, product_id, package_id, product_quantity, create_by, create_date, create_time, status) VALUES ('" . $orderId . "', '" . $productId . "', '" . $packageId . "', '" . $qty . "', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
                     mysqli_query($finance_connect, $iItem);
                     $inserted++;
                 }
@@ -141,6 +169,21 @@ if (post('actionBtn') === 'confirmImport') {
 
             mysqli_commit($finance_connect);
             unset($_SESSION['si_import_preview']);
+
+            $log = [
+                'log_act' => 'Import',
+                'cdate' => $cdate,
+                'ctime' => $ctime,
+                'uid' => USER_ID,
+                'cby' => USER_ID,
+                'query_rec' => 'Updated=' . (int) $updated . '; New=' . (int) $inserted . '; SkippedError=' . (int) $skippedError,
+                'query_table' => 'stock_in_order_item',
+                'newval' => 'Import preview confirmed',
+                'act_msg' => USER_NAME . " imported stock in data [ <b>Updated = " . (int) $updated . ", New Added = " . (int) $inserted . ", Skipped Error = " . (int) $skippedError . "</b> ] into <b><i>stock_in_order_item Table</i></b>.",
+                'page' => $pageTitle,
+                'connect' => $connect,
+            ];
+            audit_log($log);
             
             // Build the final feedback message
             $finalMsg = 'Import completed. Updated: ' . $updated . ', New Added: ' . $inserted;
@@ -183,36 +226,76 @@ if (post('actionBtn') === 'importPreview') {
                 $errorCount = 0;
 
                 foreach ($importRows as $r) {
-                    $itemId = isset($r['item id']) ? (int) $r['item id'] : (isset($r['item_id']) ? (int) $r['item_id'] : 0);
-                    $warehouseName = trim((string) (isset($r['warehouse']) ? $r['warehouse'] : ''));
-                    $stockInDateRaw = trim((string) (isset($r['stock in date']) ? $r['stock in date'] : (isset($r['stock_in_date']) ? $r['stock_in_date'] : '')));
+                    $itemId = isset($r['item id']) ? (int) $r['item id'] : (isset($r['item_id']) ? (int) $r['item_id'] : (isset($r['item_item_id']) ? (int) $r['item_item_id'] : 0));
+                    $orderId = isset($r['order id']) ? (int) $r['order id'] : (isset($r['order_id']) ? (int) $r['order_id'] : (isset($r['order_order_id']) ? (int) $r['order_order_id'] : (isset($r['s/n']) ? (int) $r['s/n'] : 0)));
+                    $warehouseRaw = trim((string) (isset($r['warehouse']) ? $r['warehouse'] : (isset($r['warehouse id']) ? $r['warehouse id'] : (isset($r['order_warehouse_id']) ? $r['order_warehouse_id'] : ''))));
+                    $stockInDateRaw = trim((string) (isset($r['stock in date']) ? $r['stock in date'] : (isset($r['stock_in_date']) ? $r['stock_in_date'] : (isset($r['order_stock_in_date']) ? $r['order_stock_in_date'] : ''))));
                     $stockInDate = siNormalizeImportedDate($stockInDateRaw);
-                    $orderNumber = trim((string) (isset($r['order number']) ? $r['order number'] : (isset($r['order_number']) ? $r['order_number'] : '')));
-                    $productName = trim((string) (isset($r['product name']) ? $r['product name'] : (isset($r['product_name']) ? $r['product_name'] : '')));
-                    $qty = (int) (isset($r['product quantity']) ? $r['product quantity'] : (isset($r['product_quantity']) ? $r['product_quantity'] : 0));
+                    $orderNumber = trim((string) (isset($r['order number']) ? $r['order number'] : (isset($r['number']) ? $r['number'] : (isset($r['order_number']) ? $r['order_number'] : (isset($r['order_order_number']) ? $r['order_order_number'] : '')))));
+                    $productRaw = trim((string) (isset($r['product name']) ? $r['product name'] : (isset($r['product_name']) ? $r['product_name'] : (isset($r['product id']) ? $r['product id'] : (isset($r['item_product_id']) ? $r['item_product_id'] : '')))));
+                    $packageRaw = trim((string) (isset($r['package id']) ? $r['package id'] : (isset($r['item_package_id']) ? $r['item_package_id'] : '0')));
+                    $qtyRaw = trim((string) (isset($r['product quantity']) ? $r['product quantity'] : (isset($r['product_quantity']) ? $r['product_quantity'] : (isset($r['item_product_quantity']) ? $r['item_product_quantity'] : '0'))));
+                    $qty = (int) round((float) str_replace(',', '', $qtyRaw));
+                    $packageId = (int) round((float) str_replace(',', '', $packageRaw));
 
-                    if ($warehouseName === '' && $stockInDate === '' && $orderNumber === '' && $productName === '' && $qty <= 0) {
+                    if ($warehouseRaw === '' && $stockInDate === '' && $orderNumber === '' && $productRaw === '' && $qty <= 0) {
                         continue;
                     }
 
-                    $warehouseId = isset($warehouseNameToId[strtolower($warehouseName)]) ? (int) $warehouseNameToId[strtolower($warehouseName)] : 0;
-                    $productId = isset($productNameToId[strtolower($productName)]) ? (int) $productNameToId[strtolower($productName)] : 0;
+                    $warehouseId = 0;
+                    if ($warehouseRaw !== '' && ctype_digit($warehouseRaw) && isset($warehouseNameMap[(int) $warehouseRaw])) {
+                        $warehouseId = (int) $warehouseRaw;
+                    } else if (isset($warehouseNameToId[strtolower($warehouseRaw)])) {
+                        $warehouseId = (int) $warehouseNameToId[strtolower($warehouseRaw)];
+                    }
+
+                    $productId = 0;
+                    if ($productRaw !== '' && ctype_digit($productRaw) && isset($productNameMap[(int) $productRaw])) {
+                        $productId = (int) $productRaw;
+                    } else if (isset($productNameToId[strtolower($productRaw)])) {
+                        $productId = (int) $productNameToId[strtolower($productRaw)];
+                    }
 
                     $notes = array();
-                    if ($warehouseId <= 0) $notes[] = 'Invalid warehouse';
-                    if ($productId <= 0) $notes[] = 'Invalid product';
-                    if ($qty <= 0) $notes[] = 'Invalid quantity';
-                    if ($stockInDate === '') $notes[] = 'Missing stock in date';
-                    if ($orderNumber === '') $notes[] = 'Missing order number';
+                    $fieldErrors = array();
+                    if ($warehouseId <= 0) {
+                        $notes[] = 'Invalid warehouse';
+                        $fieldErrors['warehouse'] = 'Warehouse not found in database.';
+                    }
+                    if ($productId <= 0) {
+                        $notes[] = 'Invalid product';
+                        $fieldErrors['product_name'] = 'Product not found in database.';
+                    }
+                    if ($qty <= 0) {
+                        $notes[] = 'Invalid quantity';
+                        $fieldErrors['product_quantity'] = 'Quantity must be greater than 0.';
+                    }
+                    if ($stockInDate === '') {
+                        $notes[] = 'Missing stock in date';
+                        $fieldErrors['stock_in_date'] = 'Stock in date is required.';
+                    }
+                    if ($orderNumber === '') {
+                        $notes[] = 'Missing order number';
+                        $fieldErrors['order_number'] = 'Order number is required.';
+                    }
 
                     $after = array(
                         'warehouse_id' => $warehouseId,
                         'stock_in_date' => $stockInDate,
                         'order_number' => $orderNumber,
                         'product_id' => $productId,
-                        'package_id' => 0,
+                        'package_id' => $packageId,
                         'product_quantity' => $qty,
                     );
+
+                    if ($itemId <= 0 && $orderId > 0) {
+                        foreach ($currentRows as $scanRow) {
+                            if ((int) $scanRow['order_id'] === $orderId) {
+                                $itemId = (int) $scanRow['item_id'];
+                                break;
+                            }
+                        }
+                    }
 
                     if ($itemId > 0 && isset($currentByItemId[$itemId])) {
                         $old = $currentByItemId[$itemId];
@@ -223,7 +306,8 @@ if (post('actionBtn') === 'importPreview') {
                             (string) $oldStockInDate !== (string) $after['stock_in_date'] ||
                             (string) $old['order_number'] !== (string) $after['order_number'] ||
                             (int) $old['product_id'] !== (int) $after['product_id'] ||
-                            (int) $old['product_quantity'] !== (int) $after['product_quantity']
+                            (int) $old['product_quantity'] !== (int) $after['product_quantity'] ||
+                            (int) $old['package_id'] !== (int) $after['package_id']
                         );
 
                         if (count($notes) > 0) {
@@ -233,6 +317,7 @@ if (post('actionBtn') === 'importPreview') {
                                 'order_id' => (int) $old['order_id'],
                                 'before' => $old,
                                 'after' => $after,
+                                'field_errors' => $fieldErrors,
                                 'notes' => $notes,
                             );
                             $errorCount++;
@@ -243,6 +328,7 @@ if (post('actionBtn') === 'importPreview') {
                                 'order_id' => (int) $old['order_id'],
                                 'before' => $old,
                                 'after' => $after,
+                                'field_errors' => $fieldErrors,
                                 'notes' => array('Modified data'),
                             );
                             $changedCount++;
@@ -257,6 +343,7 @@ if (post('actionBtn') === 'importPreview') {
                                 'order_id' => 0,
                                 'before' => null,
                                 'after' => $after,
+                                'field_errors' => $fieldErrors,
                                 'notes' => $notes,
                             );
                             $errorCount++;
@@ -267,6 +354,7 @@ if (post('actionBtn') === 'importPreview') {
                                 'order_id' => 0,
                                 'before' => null,
                                 'after' => $after,
+                                'field_errors' => $fieldErrors,
                                 'notes' => array('New added'),
                             );
                             $newCount++;
@@ -340,7 +428,6 @@ $previewData = isset($_SESSION['si_import_preview']) ? $_SESSION['si_import_prev
             border-left: 4px solid #f0b429;
         }
         .si-import-wrap .row-error {
-            background: #f8d7da;
             border-left: 4px solid #dc3545;
         }
         .si-import-wrap .changed-cell {
@@ -350,6 +437,14 @@ $previewData = isset($_SESSION['si_import_preview']) ? $_SESSION['si_import_prev
         }
         .si-import-wrap .stats-line {
             font-size: 1.05rem;
+        }
+        .si-import-wrap .lookup-input {
+            min-width: 180px;
+        }
+        .si-import-wrap .field-error {
+            font-size: 12px;
+            color: #dc3545;
+            margin-top: 4px;
         }
     </style>
 </head>
@@ -405,26 +500,13 @@ $previewData = isset($_SESSION['si_import_preview']) ? $_SESSION['si_import_prev
                             Unchanged: <strong><?= (int) (isset($stats['unchanged']) ? $stats['unchanged'] : 0) ?></strong> |
                             Error: <strong><?= (int) (isset($stats['error']) ? $stats['error'] : 0) ?></strong>
                         </p>
-                        <div class="table-responsive">
-                            <table class="table table-bordered align-middle preview-table">
-                                <thead>
-                                    <tr>
-                                        <th>Status</th>
-                                        <th>Item ID</th>
-                                        <th>Warehouse</th>
-                                        <th>Stock In Date</th>
-                                        <th>Order Number</th>
-                                        <th>Product Name</th>
-                                        <th>Product Quantity</th>
-                                        <th>Notes</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                <?php foreach ($previewData['entries'] as $entry) {
+                        <form method="post">
+                                <?php foreach ($previewData['entries'] as $idx => $entry) {
                                     $type = isset($entry['type']) ? $entry['type'] : '';
                                     $before = isset($entry['before']) ? $entry['before'] : null;
                                     $after = isset($entry['after']) ? $entry['after'] : array();
                                     $notes = isset($entry['notes']) && is_array($entry['notes']) ? implode(', ', $entry['notes']) : '';
+                                    $fieldErrors = isset($entry['field_errors']) && is_array($entry['field_errors']) ? $entry['field_errors'] : array();
 
                                     $wBefore = $before ? (isset($warehouseNameMap[(int) $before['warehouse_id']]) ? $warehouseNameMap[(int) $before['warehouse_id']] : '') : '';
                                     $wAfter = isset($warehouseNameMap[(int) $after['warehouse_id']]) ? $warehouseNameMap[(int) $after['warehouse_id']] : '';
@@ -440,6 +522,8 @@ $previewData = isset($_SESSION['si_import_preview']) ? $_SESSION['si_import_prev
 
                                     $qBefore = $before ? (int) $before['product_quantity'] : 0;
                                     $qAfter = isset($after['product_quantity']) ? (int) $after['product_quantity'] : 0;
+                                    $pkgBefore = $before ? (int) $before['package_id'] : 0;
+                                    $pkgAfter = isset($after['package_id']) ? (int) $after['package_id'] : 0;
 
                                     $isModified = ($type === 'modified');
                                     $isNew = ($type === 'new');
@@ -459,34 +543,83 @@ $previewData = isset($_SESSION['si_import_preview']) ? $_SESSION['si_import_prev
                                     $chgOrderNo = ($before && (string) $before['order_number'] !== (string) $after['order_number']);
                                     $chgProduct = ($before && (int) $before['product_id'] !== (int) $after['product_id']);
                                     $chgQty = ($before && (int) $before['product_quantity'] !== (int) $after['product_quantity']);
+                                    $chgPkg = ($before && (int) $before['package_id'] !== (int) $after['package_id']);
                                 ?>
-                                    <tr class="<?= siEsc($rowClass) ?>">
-                                        <td>
-                                            <?php if ($isModified) { ?>
-                                                <span class="badge-status badge-modified">MODIFIED</span>
-                                            <?php } else if ($isNew) { ?>
-                                                <span class="badge-status badge-new">NEW</span>
-                                            <?php } else if ($isError) { ?>
-                                                <span class="badge-status badge-error">ERROR</span>
-                                            <?php } else { ?>
-                                                <span class="badge-status bg-secondary text-white"><?= siEsc(strtoupper($type)) ?></span>
-                                            <?php } ?>
-                                        </td>
-                                        <td><?= (int) (isset($entry['item_id']) ? $entry['item_id'] : 0) ?></td>
-                                        <td class="<?= $chgWarehouse ? 'changed-cell' : '' ?>"><?= siEsc($before ? ($wBefore . ' -> ' . $wAfter) : $wAfter) ?></td>
-                                        <td class="<?= $chgDate ? 'changed-cell' : '' ?>"><?= siEsc($before ? ($dBefore . ' -> ' . $dAfter) : $dAfter) ?></td>
-                                        <td class="<?= $chgOrderNo ? 'changed-cell' : '' ?>"><?= siEsc($before ? ($oBefore . ' -> ' . $oAfter) : $oAfter) ?></td>
-                                        <td class="<?= $chgProduct ? 'changed-cell' : '' ?>"><?= siEsc($before ? ($pBefore . ' -> ' . $pAfter) : $pAfter) ?></td>
-                                        <td class="<?= $chgQty ? 'changed-cell' : '' ?>"><?= siEsc($before ? ($qBefore . ' -> ' . $qAfter) : $qAfter) ?></td>
-                                        <td><?= siEsc($notes) ?></td>
-                                    </tr>
+                                    <div class="card mb-3 <?= siEsc($rowClass) ?>">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between mb-3">
+                                                <h6 class="mb-0">Record #<?= $idx + 1 ?></h6>
+                                                <?php if ($isModified) { ?>
+                                                    <span class="badge-status badge-modified">MODIFIED</span>
+                                                <?php } else if ($isNew) { ?>
+                                                    <span class="badge-status badge-new">NEW</span>
+                                                <?php } else if ($isError) { ?>
+                                                    <span class="badge-status badge-error">ERROR</span>
+                                                <?php } else { ?>
+                                                    <span class="badge-status bg-secondary text-white"><?= siEsc(strtoupper($type)) ?></span>
+                                                <?php } ?>
+                                            </div>
+                                            <div class="row g-3">
+                                                <div class="col-md-2">
+                                                    <label class="form-label">Order ID</label>
+                                                    <input type="text" class="form-control" value="<?= (int) (isset($entry['order_id']) ? $entry['order_id'] : 0) ?>" readonly>
+                                                    <input type="hidden" name="rows[<?= $idx ?>][order_id]" value="<?= (int) (isset($entry['order_id']) ? $entry['order_id'] : 0) ?>">
+                                                    <input type="hidden" name="rows[<?= $idx ?>][type]" value="<?= siEsc($type) ?>">
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <label class="form-label">Item ID</label>
+                                                    <input type="text" class="form-control" value="<?= (int) (isset($entry['item_id']) ? $entry['item_id'] : 0) ?>" readonly>
+                                                    <input type="hidden" name="rows[<?= $idx ?>][item_id]" value="<?= (int) (isset($entry['item_id']) ? $entry['item_id'] : 0) ?>">
+                                                </div>
+                                                <div class="col-md-4 <?= $chgWarehouse ? 'changed-cell' : '' ?>">
+                                                    <label class="form-label">Warehouse*</label>
+                                                    <div class="autocomplete">
+                                                        <input id="si_warehouse_<?= $idx ?>" class="form-control lookup-input js-stock-live-search" data-search-type="name" data-db-table="<?= WHSE ?>" data-lookup-field="warehouse" name="rows[<?= $idx ?>][warehouse]" value="<?= siEsc($wAfter) ?>" required>
+                                                        <input type="hidden" id="si_warehouse_<?= $idx ?>_hidden" value="">
+                                                    </div>
+                                                    <?php if (isset($fieldErrors['warehouse'])) { ?><div class="field-error"><?= siEsc($fieldErrors['warehouse']) ?></div><?php } ?>
+                                                </div>
+                                                <div class="col-md-4 <?= $chgDate ? 'changed-cell' : '' ?>">
+                                                    <label class="form-label">Stock In Date*</label>
+                                                    <input type="date" class="form-control" name="rows[<?= $idx ?>][stock_in_date]" value="<?= siEsc($after['stock_in_date']) ?>" required>
+                                                    <?php if (isset($fieldErrors['stock_in_date'])) { ?><div class="field-error"><?= siEsc($fieldErrors['stock_in_date']) ?></div><?php } ?>
+                                                </div>
+
+                                                <div class="col-md-4 <?= $chgOrderNo ? 'changed-cell' : '' ?>">
+                                                    <label class="form-label">Order Number*</label>
+                                                    <input type="text" class="form-control" name="rows[<?= $idx ?>][order_number]" value="<?= siEsc($oAfter) ?>" required>
+                                                    <?php if (isset($fieldErrors['order_number'])) { ?><div class="field-error"><?= siEsc($fieldErrors['order_number']) ?></div><?php } ?>
+                                                </div>
+                                                <div class="col-md-4 <?= $chgProduct ? 'changed-cell' : '' ?>">
+                                                    <label class="form-label">Product Name*</label>
+                                                    <div class="autocomplete">
+                                                        <input id="si_product_<?= $idx ?>" class="form-control lookup-input js-stock-live-search" data-search-type="name" data-db-table="<?= PROD ?>" data-lookup-field="product_name" name="rows[<?= $idx ?>][product_name]" value="<?= siEsc($pAfter) ?>" required>
+                                                        <input type="hidden" id="si_product_<?= $idx ?>_hidden" value="">
+                                                    </div>
+                                                    <?php if (isset($fieldErrors['product_name'])) { ?><div class="field-error"><?= siEsc($fieldErrors['product_name']) ?></div><?php } ?>
+                                                </div>
+                                                <div class="col-md-2 <?= $chgQty ? 'changed-cell' : '' ?>">
+                                                    <label class="form-label">Product Quantity*</label>
+                                                    <input type="number" class="form-control" min="1" name="rows[<?= $idx ?>][product_quantity]" value="<?= (int) $qAfter ?>" required>
+                                                    <?php if (isset($fieldErrors['product_quantity'])) { ?><div class="field-error"><?= siEsc($fieldErrors['product_quantity']) ?></div><?php } ?>
+                                                </div>
+                                                <div class="col-md-2 <?= $chgPkg ? 'changed-cell' : '' ?>">
+                                                    <label class="form-label">Package ID</label>
+                                                    <input type="number" class="form-control" min="0" name="rows[<?= $idx ?>][package_id]" value="<?= (int) $pkgAfter ?>">
+                                                </div>
+
+                                                <div class="col-md-12">
+                                                    <label class="form-label">Notes</label>
+                                                    <input type="text" class="form-control" value="<?= siEsc($notes) ?>" readonly>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                 <?php } ?>
-                                </tbody>
-                            </table>
-                        </div>
-                        <form method="post" class="d-flex justify-content-center gap-2 flex-wrap mt-3">
+                        <div class="d-flex justify-content-center gap-2 flex-wrap mt-3">
                             <button class="btn btn-lg btn-rounded btn-primary px-4" name="actionBtn" value="confirmImport">Confirm Update</button>
                             <button class="btn btn-lg btn-rounded btn-secondary px-4" name="actionBtn" value="cancelImport">Cancel</button>
+                        </div>
                         </form>
                     </div>
                 </div>
@@ -502,6 +635,82 @@ $previewData = isset($_SESSION['si_import_preview']) ? $_SESSION['si_import_prev
     dropdownMenuDispFix();
     setButtonColor();
     preloader(300);
+
+    (function () {
+        var siteUrl = <?= json_encode($SITEURL) ?>;
+
+        function clearSearchList(inputId) {
+            var list = document.getElementById('searchResult_' + inputId);
+            if (list) list.remove();
+            var clear = document.getElementById('clear_' + inputId);
+            if (clear) clear.remove();
+        }
+
+        document.querySelectorAll('.js-stock-live-search[data-search-type][data-db-table]').forEach(function (el) {
+            var hidden = document.getElementById(el.id + '_hidden');
+            if (!hidden) return;
+
+            el.addEventListener('keyup', function () {
+                hidden.value = '';
+                searchInput({
+                    search: el.value,
+                    searchType: el.getAttribute('data-search-type'),
+                    elementID: el.id,
+                    hiddenElementID: hidden.id,
+                    dbTable: el.getAttribute('data-db-table')
+                }, siteUrl);
+                hideFieldError(el, el.getAttribute('data-lookup-field'));
+            });
+
+            el.addEventListener('change', function () {
+                if (el.value.trim() === '') {
+                    hidden.value = '';
+                    clearSearchList(el.id);
+                }
+                hideFieldError(el, el.getAttribute('data-lookup-field'));
+            });
+
+            el.addEventListener('blur', function () {
+                setTimeout(function () { clearSearchList(el.id); }, 120);
+            });
+
+            hidden.addEventListener('input', function () {
+                hideFieldError(el, el.getAttribute('data-lookup-field'));
+            });
+            hidden.addEventListener('change', function () {
+                hideFieldError(el, el.getAttribute('data-lookup-field'));
+            });
+        });
+
+        function norm(v) {
+            return String(v || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        }
+
+        var warehouseSet = {};
+        var productSet = {};
+        <?= json_encode(array_values($warehouseOptions)) ?>.forEach(function (v) { warehouseSet[norm(v)] = true; });
+        <?= json_encode(array_values($productOptions)) ?>.forEach(function (v) { productSet[norm(v)] = true; });
+
+        function hideFieldError(input, key) {
+            var row = input.closest('.col-md-4, .col-md-2, .col-md-3, .col-md-6, .col-md-12') || input.parentElement;
+            if (!row) return;
+            var err = row.querySelector('.field-error');
+            if (!err) return;
+            var val = norm(input.value);
+            if (val === '') return;
+            if (key === 'warehouse' && warehouseSet[val]) err.style.display = 'none';
+            if (key === 'product_name' && productSet[val]) err.style.display = 'none';
+        }
+
+        document.querySelectorAll('input[name*="[warehouse]"]').forEach(function (el) {
+            el.addEventListener('input', function () { hideFieldError(el, 'warehouse'); });
+            el.addEventListener('change', function () { hideFieldError(el, 'warehouse'); });
+        });
+        document.querySelectorAll('input[name*="[product_name]"]').forEach(function (el) {
+            el.addEventListener('input', function () { hideFieldError(el, 'product_name'); });
+            el.addEventListener('change', function () { hideFieldError(el, 'product_name'); });
+        });
+    })();
 </script>
 </body>
 </html>

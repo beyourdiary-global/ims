@@ -4,7 +4,6 @@ include_once ROOT . '/include/common.php';
 
 $stockInOrderTable = 'stock_in_order';
 $stockInItemTable = 'stock_in_order_item';
-siEnsureSchema($finance_connect, $stockInOrderTable, $stockInItemTable);
 
 if (!function_exists('scanGetAllowedCountries')) {
     function scanGetAllowedCountries()
@@ -152,14 +151,13 @@ if (!function_exists('scanLookupCountryCode')) {
 }
 
 if (!function_exists('scanSaveOrderSecure')) {
-    function scanSaveOrderSecure($db, $orderTable, $itemTable, $warehouseId, $orderNumber, $items, $stockOrderRequestId, $actor)
+    function scanSaveOrderSecure($db, $orderTable, $itemTable, $warehouseId, $orderNumber, $items, $actor)
     {
         $warehouseId = (int) $warehouseId;
-        $stockOrderRequestId = (int) $stockOrderRequestId;
         $orderNumber = trim((string) $orderNumber);
         $actor = trim((string) $actor);
 
-        if ($warehouseId <= 0 || $stockOrderRequestId <= 0 || $orderNumber === '' || count($items) === 0) {
+        if ($warehouseId <= 0 || $orderNumber === '' || count($items) === 0) {
             return array(false, 'Missing required stock in data.', 0, false);
         }
 
@@ -173,12 +171,12 @@ if (!function_exists('scanSaveOrderSecure')) {
         $createdNewOrder = false;
 
         try {
-            $checkSql = "SELECT id FROM `" . $orderTable . "` WHERE stock_order_request_id=? AND status='A' LIMIT 1";
+            $checkSql = "SELECT id FROM `" . $orderTable . "` WHERE warehouse_id=? AND order_number=? AND status='A' LIMIT 1";
             $checkStmt = mysqli_prepare($db, $checkSql);
             if (!$checkStmt) {
                 throw new Exception('Failed to prepare duplicate check.');
             }
-            mysqli_stmt_bind_param($checkStmt, 'i', $stockOrderRequestId);
+            mysqli_stmt_bind_param($checkStmt, 'is', $warehouseId, $orderNumber);
             mysqli_stmt_execute($checkStmt);
             $checkRst = mysqli_stmt_get_result($checkStmt);
             if ($checkRst && ($existing = mysqli_fetch_assoc($checkRst))) {
@@ -201,7 +199,7 @@ if (!function_exists('scanSaveOrderSecure')) {
 
                 if ($existingItemCount > 0) {
                     mysqli_commit($db);
-                    return array(true, 'Stock In already exists for this stock order request.', $stockInOrderId, true);
+                    return array(true, 'Stock In already exists for this order number.', $stockInOrderId, true);
                 }
 
                 // Repair mode: existing order found without items.
@@ -220,14 +218,14 @@ if (!function_exists('scanSaveOrderSecure')) {
                 mysqli_stmt_close($checkStmt);
 
                 $insertOrderSql = "INSERT INTO `" . $orderTable . "`
-                    (stock_order_request_id, warehouse_id, order_number, stock_in_date, create_by, create_date, create_time, status)
+                    (warehouse_id, order_number, stock_in_date, create_by, create_date, create_time, status)
                     VALUES
-                    (?, ?, ?, NOW(), ?, CURDATE(), CURTIME(), 'A')";
+                    (?, ?, NOW(), ?, CURDATE(), CURTIME(), 'A')";
                 $insertOrderStmt = mysqli_prepare($db, $insertOrderSql);
                 if (!$insertOrderStmt) {
                     throw new Exception('Failed to prepare stock in order insert.');
                 }
-                mysqli_stmt_bind_param($insertOrderStmt, 'iiss', $stockOrderRequestId, $warehouseId, $orderNumber, $actor);
+                mysqli_stmt_bind_param($insertOrderStmt, 'iss', $warehouseId, $orderNumber, $actor);
                 if (!mysqli_stmt_execute($insertOrderStmt)) {
                     mysqli_stmt_close($insertOrderStmt);
                     throw new Exception('Failed to save stock in order.');
@@ -476,7 +474,6 @@ if ($token === '') {
                             (int) $requestInfo['warehouse_id'],
                             (string) $requestInfo['order_number'],
                             $requestItems,
-                            (int) $requestInfo['id'],
                             (string) (USER_ID !== '' ? USER_ID : 'QR_PUBLIC')
                         );
 

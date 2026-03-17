@@ -194,6 +194,49 @@ if ($conn->query($createStockOrderRequestItemTableSql)) {
     echo "<p style='color:red;'>Error creating `stock_order_request_item`: " . $conn->error . "</p>";
 }
 
+$createStockInOrderTableSql = "CREATE TABLE IF NOT EXISTS `stock_in_order` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `warehouse_id` INT NOT NULL,
+    `order_number` VARCHAR(120) NOT NULL,
+    `stock_in_date` DATE NOT NULL,
+    `create_by` VARCHAR(30) DEFAULT NULL,
+    `create_date` DATE DEFAULT NULL,
+    `create_time` TIME DEFAULT NULL,
+    `update_by` VARCHAR(30) DEFAULT NULL,
+    `update_date` DATE DEFAULT NULL,
+    `update_time` TIME DEFAULT NULL,
+    `status` CHAR(1) NOT NULL DEFAULT 'A',
+    KEY `idx_order_number` (`order_number`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+if ($conn->query($createStockInOrderTableSql)) {
+    echo "<p style='color:blue;'>Table `stock_in_order` is ready.</p>";
+} else {
+    echo "<p style='color:red;'>Error creating `stock_in_order`: " . $conn->error . "</p>";
+}
+
+$createStockInItemTableSql = "CREATE TABLE IF NOT EXISTS `stock_in_order_item` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `stock_in_order_id` INT NOT NULL,
+    `product_id` VARCHAR(100) DEFAULT NULL,
+    `package_id` INT NOT NULL DEFAULT 0,
+    `product_quantity` VARCHAR(255) NOT NULL DEFAULT '1',
+    `create_by` VARCHAR(30) DEFAULT NULL,
+    `create_date` DATE DEFAULT NULL,
+    `create_time` TIME DEFAULT NULL,
+    `update_by` VARCHAR(30) DEFAULT NULL,
+    `update_date` DATE DEFAULT NULL,
+    `update_time` TIME DEFAULT NULL,
+    `status` CHAR(1) NOT NULL DEFAULT 'A',
+    KEY `idx_stock_in_order_id` (`stock_in_order_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+if ($conn->query($createStockInItemTableSql)) {
+    echo "<p style='color:blue;'>Table `stock_in_order_item` is ready.</p>";
+} else {
+    echo "<p style='color:red;'>Error creating `stock_in_order_item`: " . $conn->error . "</p>";
+}
+
 // Backward-compatible ALTERs.
 addColumnIfMissing($conn, $db_fin, 'stock_order_request', 'invoice_no', "ALTER TABLE `stock_order_request` ADD COLUMN `invoice_no` TEXT DEFAULT NULL AFTER `warehouse_id`");
 addColumnIfMissing($conn, $db_fin, 'stock_order_request', 'invoice_date', "ALTER TABLE `stock_order_request` ADD COLUMN `invoice_date` DATE DEFAULT NULL AFTER `invoice_no`");
@@ -220,12 +263,25 @@ dropColumnIfExists($conn, $db_fin, 'stock_order_request_item', 'request_no', "AL
 dropColumnIfExists($conn, $db_fin, 'stock_order_request_item', 'request_by', "ALTER TABLE `stock_order_request_item` DROP COLUMN `request_by`");
 dropIndexIfExists($conn, $db_fin, 'stock_order_request', 'uq_sor_request_no', "ALTER TABLE `stock_order_request` DROP INDEX `uq_sor_request_no`");
 
+dropColumnIfExists($conn, $db_fin, 'stock_in_order', 'stock_order_request_id', "ALTER TABLE `stock_in_order` DROP COLUMN `stock_order_request_id`");
+dropIndexIfExists($conn, $db_fin, 'stock_in_order', 'uq_stock_order_request_id', "ALTER TABLE `stock_in_order` DROP INDEX `uq_stock_order_request_id`");
+if (!columnExists($conn, $db_fin, 'stock_in_order', 'stock_order_request_id')) {
+    echo "<p style='color:blue;'>Verified `stock_in_order`.`stock_order_request_id` is removed.</p>";
+}
+if (!indexExists($conn, $db_fin, 'stock_in_order', 'uq_stock_order_request_id')) {
+    echo "<p style='color:blue;'>Verified index `uq_stock_order_request_id` is removed from `stock_in_order`.</p>";
+}
+
 // Ensure courier_id type is consistent with CMS courier.id (varchar).
 alterColumnToVarcharIfInt($conn, $db_fin, 'stock_order_request', 'courier_id', 100);
 
 // Ensure Shopee Order Request supports storing multiple package/brand IDs as CSV.
 alterColumnToVarcharIfInt($conn, $db_fin, 'shopee_sg_order_request', 'package', 255);
 alterColumnToVarcharIfInt($conn, $db_fin, 'shopee_sg_order_request', 'brand', 255);
+
+// Ensure Stock In item supports CSV products and quantities.
+alterColumnToVarcharIfInt($conn, $db_fin, 'stock_in_order_item', 'product_id', 100);
+alterColumnToVarcharIfInt($conn, $db_fin, 'stock_in_order_item', 'product_quantity', 255);
 
 // ==========================================
 // PIN GROUPS & CMS DATABASE UPDATE

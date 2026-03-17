@@ -409,6 +409,22 @@ if ($action === 'parseShopeeOrderReq') { // NEW: Shopee Order HTML Parsing
         $returnData = mysqli_query($finance_connect, $query);
 
         if ($returnData) {
+            $dataID = mysqli_insert_id($finance_connect);
+            $log = [
+                'log_act' => 'Import',
+                'cdate' => $cdate,
+                'ctime' => $ctime,
+                'uid' => USER_ID,
+                'cby' => USER_ID,
+                'query_rec' => $query,
+                'query_table' => SHOPEE_SG_ORDER_REQ,
+                'newval' => 'OrderID=' . $previewData['order_id'],
+                'act_msg' => USER_NAME . " imported the data [ <b> ID = " . (int) $dataID . " </b> ] from <b><i>" . SHOPEE_SG_ORDER_REQ . " Table</i></b>.",
+                'page' => $pageTitle,
+                'connect' => $connect,
+            ];
+            audit_log($log);
+
             echo '<script>alert("Shopee Order Request imported successfully.");window.location.replace("' . $shopeeOrderRedirectPage . '");</script>';
             exit;
         } else {

@@ -934,6 +934,7 @@ function renderViewEditButtonByPin($action, $redirect_page, $row, $pinAccess, $a
 	}
 
 }
+
 function renderDeleteButtonByPin($pinAccess, $rowId, $rowName, $rowRemark, $pageTitle, $redirectPage, $deleteRedirectPage)
 {
     // Check if Delete action is allowed
@@ -949,11 +950,17 @@ function renderDeleteButtonByPin($pinAccess, $rowId, $rowName, $rowRemark, $page
             'D'
         ];
 
-        // 2. Use json_encode to perfectly format the arguments for JavaScript
-        // This correctly escapes everything, including single/double quotes and newlines
-        $jsCall = "confirmationDialog(" . implode(', ', array_map('json_encode', $args)) . ")";
+        // 2. Encode JS arguments safely, including quotes and symbols in text fields.
+        $payloadJson = json_encode(
+            $args,
+            JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
+        );
+        if ($payloadJson === false) {
+            $payloadJson = '["",["",""],"","","","D"]';
+        }
 
-        // 3. Escape the assembled JavaScript string so it is perfectly safe inside an HTML attribute
+        $payloadB64 = base64_encode($payloadJson);
+        $jsCall = "(function(){var a=JSON.parse(atob('" . $payloadB64 . "'));confirmationDialog(a[0],a[1],a[2],a[3],a[4],a[5]);})();";
         $safeOnclick = htmlspecialchars($jsCall, ENT_QUOTES, 'UTF-8');
 
         // Output Delete button
@@ -976,11 +983,17 @@ function renderDeleteButton($pinAccess, $rowId, $rowName, $rowRemark, $pageTitle
             'D'
         ];
 
-        // 2. Use json_encode to perfectly format the arguments for JavaScript
-        // This correctly escapes everything, including single/double quotes and newlines
-        $jsCall = "confirmationDialog(" . implode(', ', array_map('json_encode', $args)) . ")";
+        // 2. Encode JS arguments safely, including quotes and symbols in text fields.
+        $payloadJson = json_encode(
+            $args,
+            JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
+        );
+        if ($payloadJson === false) {
+            $payloadJson = '["",["",""],"","","","D"]';
+        }
 
-        // 3. Escape the assembled JavaScript string so it is perfectly safe inside an HTML attribute
+        $payloadB64 = base64_encode($payloadJson);
+        $jsCall = "(function(){var a=JSON.parse(atob('" . $payloadB64 . "'));confirmationDialog(a[0],a[1],a[2],a[3],a[4],a[5]);})();";
         $safeOnclick = htmlspecialchars($jsCall, ENT_QUOTES, 'UTF-8');
 
         // Output Delete button
@@ -1348,53 +1361,6 @@ if (!function_exists('sorRefreshTrackingStatus')) {
     }
 }
 
-// Stock In shared helpers (moved from include/warehouse_stock_in_common.php).
-if (!function_exists('siEnsureSchema')) {
-    function siEnsureSchema($db, $orderTable, $itemTable)
-    {
-        $createOrderSql = "CREATE TABLE IF NOT EXISTS `" . $orderTable . "` (
-            `id` INT AUTO_INCREMENT PRIMARY KEY,
-            `stock_order_request_id` INT DEFAULT NULL,
-            `warehouse_id` INT NOT NULL,
-            `order_number` VARCHAR(120) NOT NULL,
-            `stock_in_date` DATE NOT NULL,
-            `create_by` VARCHAR(30) DEFAULT NULL,
-            `create_date` DATE DEFAULT NULL,
-            `create_time` TIME DEFAULT NULL,
-            `update_by` VARCHAR(30) DEFAULT NULL,
-            `update_date` DATE DEFAULT NULL,
-            `update_time` TIME DEFAULT NULL,
-            `status` CHAR(1) NOT NULL DEFAULT 'A',
-            UNIQUE KEY `uq_stock_order_request_id` (`stock_order_request_id`),
-            KEY `idx_order_number` (`order_number`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
-
-        $createItemSql = "CREATE TABLE IF NOT EXISTS `" . $itemTable . "` (
-            `id` INT AUTO_INCREMENT PRIMARY KEY,
-            `stock_in_order_id` INT NOT NULL,
-            `product_id` INT DEFAULT NULL,
-            `package_id` INT NOT NULL DEFAULT 0,
-            `product_quantity` INT NOT NULL DEFAULT 1,
-            `create_by` VARCHAR(30) DEFAULT NULL,
-            `create_date` DATE DEFAULT NULL,
-            `create_time` TIME DEFAULT NULL,
-            `update_by` VARCHAR(30) DEFAULT NULL,
-            `update_date` DATE DEFAULT NULL,
-            `update_time` TIME DEFAULT NULL,
-            `status` CHAR(1) NOT NULL DEFAULT 'A',
-            KEY `idx_stock_in_order_id` (`stock_in_order_id`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
-
-        mysqli_query($db, $createOrderSql);
-        mysqli_query($db, $createItemSql);
-
-        $hasProductId = mysqli_query($db, "SHOW COLUMNS FROM `" . $itemTable . "` LIKE 'product_id'");
-        if (!$hasProductId || mysqli_num_rows($hasProductId) === 0) {
-            mysqli_query($db, "ALTER TABLE `" . $itemTable . "` ADD COLUMN `product_id` INT DEFAULT NULL AFTER `stock_in_order_id`");
-        }
-    }
-}
-
 if (!function_exists('siEsc')) {
     function siEsc($value)
     {
@@ -1521,7 +1487,7 @@ if (!function_exists('siResolveProductIdFromPackage')) {
 }
 
 if (!function_exists('siSaveOrder')) {
-    function siSaveOrder($financeConnect, $orderTable, $itemTable, $warehouseId, $stockInDate, $orderNumber, $items, $stockOrderRequestId = null)
+    function siSaveOrder($financeConnect, $orderTable, $itemTable, $warehouseId, $stockInDate, $orderNumber, $items)
     {
         $warehouseId = (int) $warehouseId;
         $orderNumber = trim((string) $orderNumber);
@@ -1536,21 +1502,11 @@ if (!function_exists('siSaveOrder')) {
         try {
             $safeOrderNumber = mysqli_real_escape_string($financeConnect, $orderNumber);
             $safeDate = mysqli_real_escape_string($financeConnect, $stockInDate);
-            $safeStockOrderRequestId = is_null($stockOrderRequestId) ? 'NULL' : (int) $stockOrderRequestId;
-
-            if (!is_null($stockOrderRequestId)) {
-                $checkSql = "SELECT id FROM `" . $orderTable . "` WHERE stock_order_request_id='" . (int) $stockOrderRequestId . "' AND status='A' LIMIT 1";
-                $checkRst = mysqli_query($financeConnect, $checkSql);
-                if ($checkRst && ($existing = mysqli_fetch_assoc($checkRst))) {
-                    mysqli_commit($financeConnect);
-                    return array(true, 'Stock In already exists for this stock order request.');
-                }
-            }
 
             $insertOrderSql = "INSERT INTO `" . $orderTable . "`
-                (stock_order_request_id, warehouse_id, order_number, stock_in_date, create_by, create_date, create_time, status)
+                (warehouse_id, order_number, stock_in_date, create_by, create_date, create_time, status)
                 VALUES
-                (" . $safeStockOrderRequestId . ", '" . $warehouseId . "', '" . $safeOrderNumber . "', '" . $safeDate . "', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
+                ('" . $warehouseId . "', '" . $safeOrderNumber . "', '" . $safeDate . "', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
 
             if (!mysqli_query($financeConnect, $insertOrderSql)) {
                 throw new Exception('Failed to save stock in order.');
@@ -1605,16 +1561,43 @@ if (!function_exists('siFetchFlatRows')) {
         $rst = mysqli_query($financeConnect, $sql);
         if ($rst) {
             while ($r = mysqli_fetch_assoc($rst)) {
-                $rows[] = array(
-                    'order_id' => (int) $r['order_id'],
-                    'item_id' => (int) $r['item_id'],
-                    'warehouse_id' => (int) $r['warehouse_id'],
-                    'order_number' => (string) $r['order_number'],
-                    'stock_in_date' => (string) $r['stock_in_date'],
-                    'product_id' => (int) $r['product_id'],
-                    'package_id' => (int) $r['package_id'],
-                    'product_quantity' => (int) $r['product_quantity'],
-                );
+                $productRaw = isset($r['product_id']) ? trim((string) $r['product_id']) : '';
+                $qtyRaw = isset($r['product_quantity']) ? trim((string) $r['product_quantity']) : '';
+                $productParts = array_map('trim', explode(',', $productRaw));
+                $qtyParts = array_map('trim', explode(',', $qtyRaw));
+                $max = max(count($productParts), count($qtyParts));
+
+                if ($max <= 1) {
+                    $rows[] = array(
+                        'order_id' => (int) $r['order_id'],
+                        'item_id' => (int) $r['item_id'],
+                        'warehouse_id' => (int) $r['warehouse_id'],
+                        'order_number' => (string) $r['order_number'],
+                        'stock_in_date' => (string) $r['stock_in_date'],
+                        'product_id' => (int) $productRaw,
+                        'package_id' => (int) $r['package_id'],
+                        'product_quantity' => (int) $qtyRaw,
+                    );
+                    continue;
+                }
+
+                for ($idx = 0; $idx < $max; $idx++) {
+                    $pid = isset($productParts[$idx]) ? (int) $productParts[$idx] : 0;
+                    $qty = isset($qtyParts[$idx]) ? (int) $qtyParts[$idx] : 0;
+                    if ($pid <= 0 && $qty <= 0) {
+                        continue;
+                    }
+                    $rows[] = array(
+                        'order_id' => (int) $r['order_id'],
+                        'item_id' => (int) $r['item_id'],
+                        'warehouse_id' => (int) $r['warehouse_id'],
+                        'order_number' => (string) $r['order_number'],
+                        'stock_in_date' => (string) $r['stock_in_date'],
+                        'product_id' => $pid,
+                        'package_id' => (int) $r['package_id'],
+                        'product_quantity' => $qty,
+                    );
+                }
             }
         }
         return $rows;
