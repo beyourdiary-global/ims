@@ -41,6 +41,35 @@ if (!empty($checkboxValues)) {
     }
 
     $excelData = array();
+    $brandMap = array();
+    $currencyMap = array();
+    $productMap = array();
+    $userMap = array();
+
+    $brandRst = mysqli_query($connect, "SELECT id, name FROM " . BRAND . " WHERE status='A'");
+    if ($brandRst) {
+        while ($b = mysqli_fetch_assoc($brandRst)) {
+            $brandMap[(int) $b['id']] = (string) $b['name'];
+        }
+    }
+    $currencyRst = mysqli_query($connect, "SELECT id, unit FROM " . CUR_UNIT . " WHERE status='A'");
+    if ($currencyRst) {
+        while ($cu = mysqli_fetch_assoc($currencyRst)) {
+            $currencyMap[(int) $cu['id']] = (string) $cu['unit'];
+        }
+    }
+    $productRst = mysqli_query($connect, "SELECT id, name FROM " . PROD . " WHERE status='A'");
+    if ($productRst) {
+        while ($pr = mysqli_fetch_assoc($productRst)) {
+            $productMap[(int) $pr['id']] = (string) $pr['name'];
+        }
+    }
+    $userRst = mysqli_query($connect, "SELECT id, name FROM " . USR_USER . " WHERE status='A'");
+    if ($userRst) {
+        while ($usr = mysqli_fetch_assoc($userRst)) {
+            $userMap[(int) $usr['id']] = (string) $usr['name'];
+        }
+    }
     $query = "SELECT * FROM " . PKG . " WHERE status='A' AND id IN ($checkboxValues) ORDER BY id ASC";
     $exportRst = mysqli_query($connect, $query);
     if ($exportRst) {
@@ -64,7 +93,27 @@ if (!empty($checkboxValues)) {
         while ($row = mysqli_fetch_assoc($exportRst)) {
             $line = array();
             foreach ($exportKeys as $key) {
-                $line[] = isset($row[$key]) && $row[$key] !== null ? (string) $row[$key] : '';
+                $value = isset($row[$key]) && $row[$key] !== null ? (string) $row[$key] : '';
+                if ($key === 'brand') {
+                    $id = (int) $value;
+                    $value = isset($brandMap[$id]) ? $brandMap[$id] : $value;
+                } else if ($key === 'currency_unit' || $key === 'cost_curr') {
+                    $id = (int) $value;
+                    $value = isset($currencyMap[$id]) ? $currencyMap[$id] : $value;
+                } else if ($key === 'product') {
+                    $productNames = array();
+                    foreach (explode(',', $value) as $pidRaw) {
+                        $pid = (int) trim((string) $pidRaw);
+                        if ($pid > 0) {
+                            $productNames[] = isset($productMap[$pid]) ? $productMap[$pid] : (string) $pid;
+                        }
+                    }
+                    $value = implode(',', $productNames);
+                } else if ($key === 'create_by' || $key === 'update_by') {
+                    $id = (int) $value;
+                    $value = isset($userMap[$id]) ? $userMap[$id] : $value;
+                }
+                $line[] = $value;
             }
             $excelData[] = $line;
         }
@@ -202,22 +251,9 @@ if (!$result) {
                                     <td class="text-center"><input type="checkbox" class="export" value="<?= (int) $row['id'] ?>"></td>
                                     <th><?= $num++ ?></th>
                                     <td class="btn-container">
-                                        <?php if (isActionAllowed("View", $pinAccess)): ?>
-                                            <a class="btn btn-primary me-1" href="<?= $redirect_page . "?id=" . $row['id'] ?>">
-                                                <i class="fas fa-eye"></i>
-                                            </a>
-                                        <?php endif; ?>
-                                        <?php if (isActionAllowed("Edit", $pinAccess)): ?>
-                                            <a class="btn btn-warning me-1" href="<?= $redirect_page . "?id=" . $row['id'] . '&act=' . $act_2 ?>">
-                                                <i class="fas fa-edit"></i>
-                                            </a>
-                                        <?php endif; ?>
-                                        <?php if (isActionAllowed("Delete", $pinAccess)): ?>
-                                            <a class="btn btn-danger"
-                                               onclick="confirmationDialog('<?= $row['id'] ?>',['<?= $row['name'] ?>','<?= $row['remark'] ?>'],'<?php echo $pageTitle ?>','<?= $redirect_page ?>','<?= $deleteRedirectPage ?>','D')">
-                                                <i class="fas fa-trash-alt"></i>
-                                            </a>
-                                        <?php endif; ?>
+                                        <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
+                                        <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
+                                        <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
                                     </td>
                                     <td><?= htmlspecialchars($row['name']) ?></td>
                                     <td><?= htmlspecialchars(isset($row['item_code']) ? $row['item_code'] : '') ?></td>

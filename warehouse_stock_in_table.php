@@ -7,7 +7,6 @@ include_once ROOT . '/include/common.php';
 
 $stockInOrderTable = 'stock_in_order';
 $stockInItemTable = 'stock_in_order_item';
-siEnsureSchema($finance_connect, $stockInOrderTable, $stockInItemTable);
 
 $formPage = $SITEURL . '/warehouse_stock_in.php';
 $importPage = $SITEURL . '/warehouse_stock_in_import.php';
@@ -26,14 +25,23 @@ if (!is_array($pinAccess)) {
     $pinAccess = array();
 }
 
+
 $msg = isset($_GET['msg']) ? trim((string) $_GET['msg']) : '';
 $err = isset($_GET['err']) ? trim((string) $_GET['err']) : '';
 
 if (!function_exists('siFetchAssocRows')) {
-    function siFetchAssocRows($financeConnect, $orderTable, $itemTable, $selectedItemIds = array())
+    function siFetchAssocRows($financeConnect, $cmsConnect, $orderTable, $itemTable, $warehouseNameMap, $productNameMap, $selectedOrderIds = array())
     {
         $orderCols = array();
         $itemCols = array();
+        $userMap = array();
+
+        $rstUsers = mysqli_query($cmsConnect, "SELECT id, name FROM " . USR_USER . " WHERE status='A'");
+        if ($rstUsers) {
+            while ($usr = mysqli_fetch_assoc($rstUsers)) {
+                $userMap[(int) $usr['id']] = (string) $usr['name'];
+            }
+        }
 
         $rstOrderCols = mysqli_query($financeConnect, "SHOW COLUMNS FROM `" . $orderTable . "`");
         if ($rstOrderCols) {
@@ -51,9 +59,15 @@ if (!function_exists('siFetchAssocRows')) {
 
         $selectParts = array();
         foreach ($orderCols as $col) {
+            if (strtolower($col) === 'status') {
+                continue;
+            }
             $selectParts[] = "o.`" . $col . "` AS `order_" . $col . "`";
         }
         foreach ($itemCols as $col) {
+            if (strtolower($col) === 'status') {
+                continue;
+            }
             $selectParts[] = "i.`" . $col . "` AS `item_" . $col . "`";
         }
 
@@ -62,12 +76,12 @@ if (!function_exists('siFetchAssocRows')) {
         }
 
         $where = "WHERE o.status='A' AND i.status='A'";
-        if (!empty($selectedItemIds)) {
-            $ids = array_filter(array_map('intval', $selectedItemIds), function ($v) {
+        if (!empty($selectedOrderIds)) {
+            $ids = array_filter(array_map('intval', $selectedOrderIds), function ($v) {
                 return $v > 0;
             });
             if (!empty($ids)) {
-                $where .= " AND i.id IN (" . implode(',', $ids) . ")";
+                $where .= " AND o.id IN (" . implode(',', $ids) . ")";
             }
         }
 
@@ -81,6 +95,46 @@ if (!function_exists('siFetchAssocRows')) {
         $rst = mysqli_query($financeConnect, $sql);
         if ($rst) {
             while ($row = mysqli_fetch_assoc($rst)) {
+                if (isset($row['order_warehouse_id'])) {
+                    $wid = (int) $row['order_warehouse_id'];
+                    if (isset($warehouseNameMap[$wid])) {
+                        $row['order_warehouse_id'] = (string) $warehouseNameMap[$wid];
+                    }
+                }
+                if (isset($row['item_product_id'])) {
+                    $rawProductIds = (string) $row['item_product_id'];
+                     $productIdParts = array_map('trim', explode(',', $rawProductIds));
+                     $productNames = array();
+                     foreach ($productIdParts as $productIdPart) {
+                         if ($productIdPart === '') {
+                             continue;
+                         }
+                         $pid = (int) $productIdPart;
+                         if (isset($productNameMap[$pid])) {
+                             $productNames[] = (string) $productNameMap[$pid];
+                         } else {
+                             // Fallback to the original ID token if no name is found.
+                             $productNames[] = $productIdPart;
+                         }
+                     }
+                     if (!empty($productNames)) {
+                         $row['item_product_id'] = implode(', ', $productNames);
+                     } else {
+                         // If nothing could be resolved, keep the original value.
+                         $row['item_product_id'] = $rawProductIds;
+                     }
+                }
+
+                foreach ($row as $key => $value) {
+                    $normalizedKey = strtolower((string) $key);
+                    if ($normalizedKey === 'order_create_by' || $normalizedKey === 'order_update_by' || $normalizedKey === 'item_create_by' || $normalizedKey === 'item_update_by') {
+                        $uid = (int) $value;
+                        if (isset($userMap[$uid])) {
+                            $row[$key] = (string) $userMap[$uid];
+                        }
+                    }
+                }
+
                 $rows[] = $row;
             }
         }
@@ -100,23 +154,28 @@ if (!function_exists('siExportAssocExcel')) {
             return false;
         }
 
-        $headers = array_keys($rows[0]);
         $exportHeaders = array();
         $displayHeaders = array();
-
-        foreach ($headers as $header) {
+        foreach (array_keys($rows[0]) as $header) {
             $headerLower = strtolower((string) $header);
-            if (substr($headerLower, -7) === '_status') {
-                continue;
-            }
-
             $exportHeaders[] = $header;
             if ($headerLower === 'order_id') {
-                $displayHeaders[] = 'ORDER S/N';
-            } elseif ($headerLower === 'item_id') {
                 $displayHeaders[] = 'S/N';
+            } else if ($headerLower === 'order_warehouse_id') {
+                $displayHeaders[] = 'WAREHOUSE';
+            } else if ($headerLower === 'item_product_id') {
+                $displayHeaders[] = 'PRODUCT NAME';
             } else {
-                $displayHeaders[] = strtoupper(str_replace('_', ' ', (string) $header));
+                $clean = str_replace(array('order_', 'item_'), '', (string) $header);
+                if ($clean === 'id' && strpos((string) $header, 'order_') === 0) {
+                    $displayHeaders[] = 'ORDER ID';
+                } else if ($clean === 'stock_in_order_id' && strpos((string) $header, 'item_') === 0) {
+                    $displayHeaders[] = 'ORDER ID';
+                } else if (strtolower($clean) === 'id' && strpos((string) $header, 'item_') === 0) {
+                    $displayHeaders[] = 'ITEM ID';
+                } else {
+                    $displayHeaders[] = strtoupper(str_replace('_', ' ', $clean));
+                }
             }
         }
 
@@ -157,7 +216,8 @@ if (input('export') === 'excel') {
         echo "<script>alert('You do not have permission to export this page.'); location.href='" . $tablePage . "';</script>";
         exit;
     }
-    $rows = siFetchAssocRows($finance_connect, $stockInOrderTable, $stockInItemTable);
+    $rows = siFetchAssocRows($finance_connect, $connect, $stockInOrderTable, $stockInItemTable, $warehouseNameMap, $productNameMap);
+
     while (ob_get_level() > 0) {
         ob_end_clean();
     }
@@ -172,7 +232,7 @@ if (!empty($checkboxValues)) {
         exit;
     }
 
-    $rows = siFetchAssocRows($finance_connect, $stockInOrderTable, $stockInItemTable, explode(',', $checkboxValues));
+    $rows = siFetchAssocRows($finance_connect, $connect, $stockInOrderTable, $stockInItemTable, $warehouseNameMap, $productNameMap, explode(',', $checkboxValues));
 
     setcookie('rowID', '', time() - 3600, '/');
     while (ob_get_level() > 0) {
@@ -187,22 +247,59 @@ if (!empty($checkboxValues)) {
     siExportAssocExcel($rows, 'stock_in_export');
 }
 
-if (input('act') === 'D' && input('item_id')) {
-    $itemId = (int) input('item_id');
-    $deleteQuery = "UPDATE `" . $stockInItemTable . "` SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $itemId . "'";
-    
-    if (mysqli_query($finance_connect, $deleteQuery)) {
-        // FIX: Add JS alert and remove ?msg from URL
-        echo "<script>alert('Row deleted successfully.'); location.href='" . $tablePage . "';</script>";
+if ((post('act') === 'D' && post('id')) || (input('act') === 'D' && (input('order_id') || input('item_id')))) {
+    $orderId = post('id') ? (int) post('id') : (int) input('order_id');
+    if ($orderId <= 0 && input('item_id')) {
+        $itemIdForOrder = (int) input('item_id');
+        $orderRst = mysqli_query($finance_connect, "SELECT stock_in_order_id FROM `" . $stockInItemTable . "` WHERE id='" . $itemIdForOrder . "' LIMIT 1");
+        if ($orderRst && ($orderRow = mysqli_fetch_assoc($orderRst))) {
+            $orderId = (int) $orderRow['stock_in_order_id'];
+        }
+    }
+
+    $deleteOrderQuery = "UPDATE `" . $stockInOrderTable . "` SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $orderId . "'";
+    $deleteItemsQuery = "UPDATE `" . $stockInItemTable . "` SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE stock_in_order_id='" . $orderId . "'";
+
+    if ($orderId > 0 && mysqli_query($finance_connect, $deleteOrderQuery) && mysqli_query($finance_connect, $deleteItemsQuery)) {
+        if (post('act') === 'D') {
+            echo 'OK';
+        } else {
+            echo "<script>confirmationDialog('', '', '" . addslashes($pageTitle) . "', '', '" . $tablePage . "', 'D');</script>";
+        }
     } else {
         // Log detailed database error server-side and show a generic message to the user
-         error_log('Stock in delete failed for item ID ' . $itemId . ': ' . mysqli_error($finance_connect));
-         echo "<script>alert('Failed to delete row. Please try again later.'); location.href='" . $tablePage . "';</script>";
+         error_log('Stock in delete failed for order ID ' . $orderId . ': ' . mysqli_error($finance_connect));
+         if (post('act') === 'D') {
+            echo 'Failed to delete row. Please try again later.';
+         } else {
+            echo "<script>alert('Failed to delete row. Please try again later.'); location.href='" . $tablePage . "';</script>";
+         }
     }
     exit;
 }
 
 $listRows = siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTable);
+$groupedRows = array();
+foreach ($listRows as $row) {
+    $orderId = (int) $row['order_id'];
+    if (!isset($groupedRows[$orderId])) {
+        $groupedRows[$orderId] = array(
+            'order_id' => $orderId,
+            'item_id' => (int) $row['item_id'],
+            'warehouse_id' => (int) $row['warehouse_id'],
+            'stock_in_date' => (string) $row['stock_in_date'],
+            'order_number' => (string) $row['order_number'],
+            'product_names' => array(),
+            'product_quantities' => array(),
+        );
+    }
+
+    $productName = isset($productNameMap[(int) $row['product_id']]) ? $productNameMap[(int) $row['product_id']] : '';
+    if ($productName !== '') {
+        $groupedRows[$orderId]['product_names'][] = $productName;
+    }
+    $groupedRows[$orderId]['product_quantities'][] = (string) ((int) $row['product_quantity']);
+}
 ?>
 <!DOCTYPE html>
 <html>
@@ -257,22 +354,23 @@ $listRows = siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTa
                         </tr>
                     </thead>
                     <tbody>
-                        <?php $sn = 1; foreach ($listRows as $row) {
+                        <?php $sn = 1; foreach ($groupedRows as $row) {
                             $warehouseName = isset($warehouseNameMap[(int) $row['warehouse_id']]) ? $warehouseNameMap[(int) $row['warehouse_id']] : '';
-                            $productName = isset($productNameMap[(int) $row['product_id']]) ? $productNameMap[(int) $row['product_id']] : '';
+                            $productName = implode(', ', $row['product_names']);
+                            $productQty = implode(', ', $row['product_quantities']);
                         ?>
                             <tr>
-                                <td class="hideColumn"><?= (int) $row['item_id'] ?></td>
-                                <td class="text-center"><input type="checkbox" class="export" value="<?= (int) $row['item_id'] ?>"></td>
+                                <td class="hideColumn"><?= (int) $row['order_id'] ?></td>
+                                <td class="text-center"><input type="checkbox" class="export" value="<?= (int) $row['order_id'] ?>"></td>
                                 <td><?= $sn++ ?></td>
                                 <td class="btn-container">
-                                    <a class="btn btn-sm btn-rounded btn-primary" href="<?= $formPage ?>?act=V&item_id=<?= (int) $row['item_id'] ?>" title="View"><i class="fa-solid fa-eye"></i></a>
-                                    <a class="btn btn-sm btn-rounded btn-warning" href="<?= $formPage ?>?act=E&item_id=<?= (int) $row['item_id'] ?>" title="Edit"><i class="fa-solid fa-pen-to-square"></i></a>
-                                    <a class="btn btn-sm btn-rounded btn-danger" href="<?= $tablePage ?>?act=D&item_id=<?= (int) $row['item_id'] ?>" onclick="return confirm('Delete this row?');" title="Delete"><i class="fa-solid fa-trash"></i></a>
+                                    <a class="btn btn-sm btn-rounded btn-primary" href="<?= $formPage ?>?act=V&order_id=<?= (int) $row['order_id'] ?>" title="View"><i class="fa-solid fa-eye"></i></a>
+                                    <a class="btn btn-sm btn-rounded btn-warning" href="<?= $formPage ?>?act=E&order_id=<?= (int) $row['order_id'] ?>" title="Edit"><i class="fa-solid fa-pen-to-square"></i></a>
+                                    <a class="btn btn-sm btn-rounded btn-danger" onclick="confirmationDialog('<?= (int) $row['order_id'] ?>',['<?= siEsc($row['order_number']) ?>','<?= siEsc($productName) ?>'],'<?= siEsc($pageTitle) ?>','<?= $tablePage ?>','<?= $tablePage ?>','D')" title="Delete"><i class="fa-solid fa-trash"></i></a>
                                 </td>
                                 <td><?= siEsc($warehouseName) ?></td>
                                 <td><?= siEsc($productName) ?></td>
-                                <td><?= (int) $row['product_quantity'] ?></td>
+                                <td><?= siEsc($productQty) ?></td>
                                 <td><?= siEsc($row['stock_in_date']) ?></td>
                                 <td><?= siEsc($row['order_number']) ?></td>
                             </tr>

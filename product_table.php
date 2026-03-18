@@ -40,6 +40,49 @@ if (!empty($checkboxValues)) {
     }
 
     $excelData = array();
+    $brandMap = array();
+    $weightMap = array();
+    $currencyMap = array();
+    $categoryMap = array();
+    $parentMap = array();
+    $userMap = array();
+
+    $brandRst = mysqli_query($connect, "SELECT id, name FROM " . BRAND . " WHERE status='A'");
+    if ($brandRst) {
+        while ($b = mysqli_fetch_assoc($brandRst)) {
+            $brandMap[(int) $b['id']] = (string) $b['name'];
+        }
+    }
+    $weightRst = mysqli_query($connect, "SELECT id, unit FROM " . WGT_UNIT . " WHERE status='A'");
+    if ($weightRst) {
+        while ($w = mysqli_fetch_assoc($weightRst)) {
+            $weightMap[(int) $w['id']] = (string) $w['unit'];
+        }
+    }
+    $currencyRst = mysqli_query($connect, "SELECT id, unit FROM " . CUR_UNIT . " WHERE status='A'");
+    if ($currencyRst) {
+        while ($cu = mysqli_fetch_assoc($currencyRst)) {
+            $currencyMap[(int) $cu['id']] = (string) $cu['unit'];
+        }
+    }
+    $categoryRst = mysqli_query($connect, "SELECT id, name FROM " . PROD_CATEGORY . " WHERE status='A'");
+    if ($categoryRst) {
+        while ($pc = mysqli_fetch_assoc($categoryRst)) {
+            $categoryMap[(int) $pc['id']] = (string) $pc['name'];
+        }
+    }
+    $parentRst = mysqli_query($connect, "SELECT id, name FROM " . PROD . " WHERE status='A'");
+    if ($parentRst) {
+        while ($pp = mysqli_fetch_assoc($parentRst)) {
+            $parentMap[(int) $pp['id']] = (string) $pp['name'];
+        }
+    }
+    $userRst = mysqli_query($connect, "SELECT id, name FROM " . USR_USER . " WHERE status='A'");
+    if ($userRst) {
+        while ($usr = mysqli_fetch_assoc($userRst)) {
+            $userMap[(int) $usr['id']] = (string) $usr['name'];
+        }
+    }
     $query = "SELECT * FROM " . PROD . " WHERE status='A' AND id IN ($checkboxValues) ORDER BY id ASC";
     $exportRst = mysqli_query($connect, $query);
     if ($exportRst) {
@@ -63,7 +106,27 @@ if (!empty($checkboxValues)) {
         while ($row = mysqli_fetch_assoc($exportRst)) {
             $line = array();
             foreach ($exportKeys as $key) {
-                $line[] = isset($row[$key]) && $row[$key] !== null ? (string) $row[$key] : '';
+                $value = isset($row[$key]) && $row[$key] !== null ? (string) $row[$key] : '';
+                if ($key === 'brand') {
+                    $id = (int) $value;
+                    $value = isset($brandMap[$id]) ? $brandMap[$id] : $value;
+                } else if ($key === 'weight_unit') {
+                    $id = (int) $value;
+                    $value = isset($weightMap[$id]) ? $weightMap[$id] : $value;
+                } else if ($key === 'currency_unit') {
+                    $id = (int) $value;
+                    $value = isset($currencyMap[$id]) ? $currencyMap[$id] : $value;
+                } else if ($key === 'product_category') {
+                    $id = (int) $value;
+                    $value = isset($categoryMap[$id]) ? $categoryMap[$id] : $value;
+                } else if ($key === 'parent_product') {
+                    $id = (int) $value;
+                    $value = isset($parentMap[$id]) ? $parentMap[$id] : $value;
+                } else if ($key === 'create_by' || $key === 'update_by') {
+                    $id = (int) $value;
+                    $value = isset($userMap[$id]) ? $userMap[$id] : $value;
+                }
+                $line[] = $value;
             }
             $excelData[] = $line;
         }
@@ -176,16 +239,10 @@ if (!$result) {
                                     <td class="text-center"><input type="checkbox" class="export" value="<?= (int) $row['id'] ?>"></td>
                                     <th scope="row"><?= $num++; ?></th>
                                     <td scope="row" class="btn-container">
-                                        <?php if (isActionAllowed("View", $pinAccess)) : ?>
-                                        <a class="btn btn-primary me-1" href="<?= $redirect_page . "?id=" . $row['id'] ?>"><i class="fas fa-eye"></i></a>
-                                        <?php endif; ?>
-                                        <?php if (isActionAllowed("Edit", $pinAccess)) : ?>
-                                        <a class="btn btn-warning me-1" href="<?= $redirect_page . "?id=" . $row['id'] . '&act=' . $act_2 ?>"><i class="fas fa-edit"></i></a>
-                                        <?php endif; ?>
-                                        <?php if (isActionAllowed("Delete", $pinAccess)) : ?>
-                                        <a class="btn btn-danger" onclick="confirmationDialog('<?= $row['id'] ?>',['<?= $row['name'] ?>'],'<?php echo $pageTitle ?>','<?= $redirect_page ?>','<?= $deleteRedirectPage ?>','D')"><i class="fas fa-trash-alt"></i></a>
-                                        <?php endif; ?>
-                                        </td>
+                                        <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
+                                        <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
+                                        <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], '', $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                    </td>
                                     <td scope="row"><?= $row['name'] ?></td>
                                     <td scope="row">
                                         <?php

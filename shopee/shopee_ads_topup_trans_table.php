@@ -81,6 +81,24 @@ if (!empty($checkboxValues)) {
                         $name = $user['name'];
                     }
                     $lineData[] = $name;
+                } elseif ($columnName === 'currency') {
+                    $currencyVal = isset($row2[$columnName]) ? (string) $row2[$columnName] : '';
+                    if (ctype_digit($currencyVal)) {
+                        $curRst = getData('unit', "id='" . $currencyVal . "'", '', CUR_UNIT, $connect);
+                        if ($curRst && $curRst->num_rows > 0) {
+                            $currencyVal = (string) $curRst->fetch_assoc()['unit'];
+                        }
+                    }
+                    $lineData[] = $currencyVal;
+                } elseif ($columnName === 'pay_meth') {
+                    $payVal = isset($row2[$columnName]) ? (string) $row2[$columnName] : '';
+                    if (ctype_digit($payVal)) {
+                        $payRst = getData('name', "id='" . $payVal . "'", '', PAY_METH, $connect);
+                        if ($payRst && $payRst->num_rows > 0) {
+                            $payVal = (string) $payRst->fetch_assoc()['name'];
+                        }
+                    }
+                    $lineData[] = $payVal;
                 } elseif ($columnName === 'create_date') {
                     // Modify create_date value as needed
                     $lineData[] = isset($row2[$columnName]) ? $row2[$columnName] : '';
@@ -456,6 +474,10 @@ $totalGST = 0;
         if (checkboxValues.length === 0) {
             alert('Please select data to export.');
             return false;
+        }
+
+        if (typeof auditExport === 'function') {
+            auditExport(checkboxValues, 'shopee_ads_topup');
         }
 
         var exportUrl = 'shopee_ads_topup_trans_table.php?export_ids=' + encodeURIComponent(checkboxValues.join(','));

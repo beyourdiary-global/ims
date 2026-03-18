@@ -130,9 +130,31 @@ function getReverseMapping($connect, $table, $idCol, $nameCol) {
     return $map;
 }
 
+function getIdNameMapping($connect, $table, $idCol, $nameCol) {
+    $map = [];
+    $result = mysqli_query($connect, "SELECT `$idCol`, `$nameCol` FROM `$table`");
+    if ($result) {
+        while ($row = mysqli_fetch_assoc($result)) {
+            $map[(int)$row[$idCol]] = (string)$row[$nameCol];
+        }
+    }
+    return $map;
+}
+
+function resolveMapValue($raw, $reverseMap) {
+    $raw = trim((string) $raw);
+    if ($raw === '') return '';
+    if (ctype_digit($raw)) return $raw;
+    $k = strtolower($raw);
+    return isset($reverseMap[$k]) ? (string) $reverseMap[$k] : '';
+}
+
 $brandRevMap = getReverseMapping($connect, BRAND, 'id', 'name');
 $currencyRevMap = getReverseMapping($connect, CUR_UNIT, 'id', 'unit');
 $productRevMap = getReverseMapping($connect, PROD, 'id', 'name');
+$brandNameMap = getIdNameMapping($connect, BRAND, 'id', 'name');
+$currencyNameMap = getIdNameMapping($connect, CUR_UNIT, 'id', 'unit');
+$productNameMap = getIdNameMapping($connect, PROD, 'id', 'name');
 
 // Fetch Current Database State for Comparison
 $existingPackages = [];
@@ -156,51 +178,103 @@ if ($action === 'preview') {
             
             if (isset($parsedRows['error'])) {
                 $importErrors[] = $parsedRows['error'];
-            } elseif (is_array($parsedRows)) {
+            } elseif (is_array($parsedRows) && count($parsedRows) > 1) {
+                $headers = array_map(function ($h) {
+                    return strtoupper(trim((string) $h));
+                }, isset($parsedRows[0]) ? $parsedRows[0] : array());
+                $indexMap = array_flip($headers);
+
+                $getCol = function ($row, $name, $fallback = '') use ($indexMap) {
+                    $idx = isset($indexMap[$name]) ? $indexMap[$name] : -1;
+                    if ($idx < 0 || !isset($row[$idx])) {
+                        return $fallback;
+                    }
+                    return trim((string) $row[$idx]);
+                };
+
                 foreach ($parsedRows as $rowIndex => $data) {
                     if ($rowIndex === 0) continue; // Skip header row
-                    
-                    $data = array_pad($data, 13, '');
-                    $id = trim((string)$data[0]);
-                    $name = trim((string)$data[1]);
+
+                    $id = $getCol($data, 'S/N', $getCol($data, 'ID', ''));
+                    $name = $getCol($data, 'NAME', '');
 
                     // Only process rows that have at least a Name or an ID (Allows new records to be added at the bottom!)
                     if (!empty($id) || !empty($name)) { 
                         
                         $isNew = empty($id) || !isset($existingPackages[$id]);
                         
-                        $csvBrand = trim((string)$data[6]);
-                        $csvPriceCurr = trim((string)$data[5]);
-                        $csvCostCurr = trim((string)$data[8]);
-                        $csvProducts = trim((string)$data[10]);
+                        $csvBrand = $getCol($data, 'BRAND', '');
+                        $csvPriceCurr = $getCol($data, 'CURRENCY UNIT', $getCol($data, 'PRICE CURR', ''));
+                        $csvCostCurr = $getCol($data, 'COST CURR', $getCol($data, 'COST CURRENCY', ''));
+                        $csvProducts = $getCol($data, 'PRODUCT', $getCol($data, 'PRODUCTS INCLUDED', ''));
 
-                        $dbBrandId = isset($brandRevMap[strtolower($csvBrand)]) ? $brandRevMap[strtolower($csvBrand)] : '';
-                        $dbPriceCurrId = isset($currencyRevMap[strtolower($csvPriceCurr)]) ? $currencyRevMap[strtolower($csvPriceCurr)] : '';
-                        $dbCostCurrId = isset($currencyRevMap[strtolower($csvCostCurr)]) ? $currencyRevMap[strtolower($csvCostCurr)] : '';
+                        $dbBrandId = resolveMapValue($csvBrand, $brandRevMap);
+                        $dbPriceCurrId = resolveMapValue($csvPriceCurr, $currencyRevMap);
+                        $dbCostCurrId = resolveMapValue($csvCostCurr, $currencyRevMap);
+                        $fieldErrors = [];
+
+                        if ($csvBrand !== '' && $dbBrandId === '') {
+                            $fieldErrors['brand_name'] = 'Brand not found in database.';
+                        }
+                        if ($csvPriceCurr !== '' && $dbPriceCurrId === '') {
+                            $fieldErrors['price_curr_name'] = 'Price currency not found in database.';
+                        }
+                        if ($csvCostCurr !== '' && $dbCostCurrId === '') {
+                            $fieldErrors['cost_curr_name'] = 'Cost currency not found in database.';
+                        }
+
+                        $brandDisplay = $csvBrand;
+                        if ($dbBrandId !== '' && isset($brandNameMap[(int)$dbBrandId])) {
+                            $brandDisplay = (string) $brandNameMap[(int)$dbBrandId];
+                        }
+                        $priceCurrDisplay = $csvPriceCurr;
+                        if ($dbPriceCurrId !== '' && isset($currencyNameMap[(int)$dbPriceCurrId])) {
+                            $priceCurrDisplay = (string) $currencyNameMap[(int)$dbPriceCurrId];
+                        }
+                        $costCurrDisplay = $csvCostCurr;
+                        if ($dbCostCurrId !== '' && isset($currencyNameMap[(int)$dbCostCurrId])) {
+                            $costCurrDisplay = (string) $currencyNameMap[(int)$dbCostCurrId];
+                        }
 
                         // Reverse lookup product IDs
                         $dbProductIds = [];
+                        $productDisplayNames = [];
                         if (!empty($csvProducts)) {
                             $prodNames = array_map('trim', explode(',', $csvProducts));
                             foreach ($prodNames as $pn) {
-                                if (isset($productRevMap[strtolower($pn)])) {
-                                    $dbProductIds[] = $productRevMap[strtolower($pn)];
+                                if ($pn === '') {
+                                    continue;
+                                }
+                                if (ctype_digit($pn)) {
+                                    $pid = (int) $pn;
+                                    $dbProductIds[] = $pid;
+                                    $productDisplayNames[] = isset($productNameMap[$pid]) ? $productNameMap[$pid] : $pn;
+                                } else if (isset($productRevMap[strtolower($pn)])) {
+                                    $pid = (int) $productRevMap[strtolower($pn)];
+                                    $dbProductIds[] = $pid;
+                                    $productDisplayNames[] = isset($productNameMap[$pid]) ? $productNameMap[$pid] : $pn;
                                 } else {
-                                    $importErrors[] = "Warning: Product '$pn' not found. It will be skipped for Package '$name'.";
+                                    $fieldErrors['product_names'] = "Product '$pn' not found in database.";
+                                    $productDisplayNames[] = $pn;
                                 }
                             }
                         }
+                        $dbProductIds = array_values(array_unique($dbProductIds));
                         sort($dbProductIds); // Standardize array order for comparison
                         $dbProductString = implode(',', $dbProductIds);
 
                         // Variables to check
-                        $item_code = trim((string)$data[2]);
-                        $item_description = trim((string)$data[3]);
-                        $price = trim((string)$data[4]) ?: '0.00';
-                        $cost = trim((string)$data[7]) ?: '0.00';
-                        $agent_cost = trim((string)$data[9]) ?: '0.00';
-                        $barcode_slot_total = trim((string)$data[11]) ?: '0';
-                        $remark = trim((string)$data[12]);
+                        $item_code = $getCol($data, 'ITEM CODE', '');
+                        $item_description = $getCol($data, 'ITEM DESCRIPTION', '');
+                        $price = $getCol($data, 'PRICE', '0.00');
+                        $cost = $getCol($data, 'COST', '0.00');
+                        $agent_cost = $getCol($data, 'AGENT COST', '0.00');
+                        $barcode_slot_total = $getCol($data, 'BARCODE SLOT TOTAL', '0');
+                        $remark = $getCol($data, 'REMARK', '');
+
+                        $price = str_replace(',', '', $price !== '' ? $price : '0.00');
+                        $cost = str_replace(',', '', $cost !== '' ? $cost : '0.00');
+                        $agent_cost = str_replace(',', '', $agent_cost !== '' ? $agent_cost : '0.00');
 
                         // ----- COMPARISON ENGINE -----
                         $changes = [];
@@ -231,20 +305,21 @@ if ($action === 'preview') {
                             $previewData[] = [
                                 'is_new' => $isNew,
                                 'changes' => $changes,
+                                'field_errors' => $fieldErrors,
                                 'id' => $id,
                                 'name' => $name,
                                 'item_code' => $item_code,
                                 'item_description' => $item_description,
                                 'price' => $price,
-                                'brand_name' => $csvBrand,
+                                'brand_name' => $brandDisplay,
                                 'brand_id' => $dbBrandId,
                                 'cost' => $cost,
-                                'cost_curr_name' => $csvCostCurr,
+                                'cost_curr_name' => $costCurrDisplay,
                                 'cost_curr_id' => $dbCostCurrId,
-                                'price_curr_name' => $csvPriceCurr,
+                                'price_curr_name' => $priceCurrDisplay,
                                 'price_curr_id' => $dbPriceCurrId,
                                 'agent_cost' => $agent_cost,
-                                'product_names' => $csvProducts,
+                                'product_names' => implode(', ', $productDisplayNames),
                                 'product_ids' => $dbProductString,
                                 'barcode_slot_total' => $barcode_slot_total,
                                 'remark' => $remark
@@ -257,6 +332,8 @@ if ($action === 'preview') {
                     $importErrors[] = "No new records or changes detected. The database is already up to date with this Excel file!";
                 }
 
+            } elseif (is_array($parsedRows)) {
+                $importErrors[] = "No rows found in uploaded file.";
             }
         } else {
             $importErrors[] = "Invalid format. Please upload an Excel (.xlsx) file.";
@@ -266,8 +343,63 @@ if ($action === 'preview') {
 // Step 2: Save the Data to the Database
 else if ($action === 'update') {
     $postData = isset($_POST['data']) ? $_POST['data'] : [];
+    $previewData = [];
+    $hasValidationError = false;
     $successCount = 0;
     $insertCount = 0;
+
+    foreach ($postData as $row) {
+        $fieldErrors = [];
+        $brandRaw = trim((string) (isset($row['brand_name']) ? $row['brand_name'] : ''));
+        $priceCurrRaw = trim((string) (isset($row['price_curr_name']) ? $row['price_curr_name'] : ''));
+        $costCurrRaw = trim((string) (isset($row['cost_curr_name']) ? $row['cost_curr_name'] : ''));
+        $productsRaw = trim((string) (isset($row['product_names']) ? $row['product_names'] : ''));
+
+        $brandResolved = resolveMapValue($brandRaw, $brandRevMap);
+        $priceCurrResolved = resolveMapValue($priceCurrRaw, $currencyRevMap);
+        $costCurrResolved = resolveMapValue($costCurrRaw, $currencyRevMap);
+
+        if ($brandRaw !== '' && $brandResolved === '') {
+            $fieldErrors['brand_name'] = 'Brand not found in database.';
+        }
+        if ($priceCurrRaw !== '' && $priceCurrResolved === '') {
+            $fieldErrors['price_curr_name'] = 'Price currency not found in database.';
+        }
+        if ($costCurrRaw !== '' && $costCurrResolved === '') {
+            $fieldErrors['cost_curr_name'] = 'Cost currency not found in database.';
+        }
+
+        if ($productsRaw !== '') {
+            $parts = array_map('trim', explode(',', $productsRaw));
+            foreach ($parts as $part) {
+                if ($part === '') continue;
+                if (ctype_digit($part)) {
+                    $pid = (int) $part;
+                    if (!isset($productNameMap[$pid])) {
+                        $fieldErrors['product_names'] = "Product '$part' not found in database.";
+                        break;
+                    }
+                } else if (!isset($productRevMap[strtolower($part)])) {
+                    $fieldErrors['product_names'] = "Product '$part' not found in database.";
+                    break;
+                }
+            }
+        }
+
+        if (!empty($fieldErrors)) {
+            $hasValidationError = true;
+        }
+
+        $row['field_errors'] = $fieldErrors;
+        $row['is_new'] = (isset($row['is_new']) && $row['is_new'] == '1') ? true : false;
+        $row['changes'] = isset($row['changes']) && is_array($row['changes']) ? $row['changes'] : array();
+        $previewData[] = $row;
+    }
+
+    if ($hasValidationError) {
+        $importErrors[] = 'Please correct the highlighted field errors before update.';
+        $action = 'preview';
+    } else {
 
     foreach ($postData as $row) {
         $id = mysqli_real_escape_string($connect, $row['id']);
@@ -277,15 +409,50 @@ else if ($action === 'update') {
         $item_code = mysqli_real_escape_string($connect, $row['item_code']);
         $item_description = mysqli_real_escape_string($connect, $row['item_description']);
         
-        $price = !empty($row['price']) ? mysqli_real_escape_string($connect, $row['price']) : '0.00';
-        $brand_id = !empty($row['brand_id']) ? mysqli_real_escape_string($connect, $row['brand_id']) : '0';
-        $cost = !empty($row['cost']) ? mysqli_real_escape_string($connect, $row['cost']) : '0.00';
-        $cost_curr_id = !empty($row['cost_curr_id']) ? mysqli_real_escape_string($connect, $row['cost_curr_id']) : '0';
-        $price_curr_id = !empty($row['price_curr_id']) ? mysqli_real_escape_string($connect, $row['price_curr_id']) : '0';
+        $price = !empty($row['price']) ? mysqli_real_escape_string($connect, str_replace(',', '', (string) $row['price'])) : '0.00';
+        $cost = !empty($row['cost']) ? mysqli_real_escape_string($connect, str_replace(',', '', (string) $row['cost'])) : '0.00';
         $agent_cost = !empty($row['agent_cost']) ? mysqli_real_escape_string($connect, $row['agent_cost']) : '0.00';
         $barcode_slot = !empty($row['barcode_slot_total']) ? mysqli_real_escape_string($connect, $row['barcode_slot_total']) : '0';
-        
-        $product_ids = mysqli_real_escape_string($connect, $row['product_ids']);
+
+        $brandRaw = trim((string) (isset($row['brand_name']) ? $row['brand_name'] : ''));
+        $priceCurrRaw = trim((string) (isset($row['price_curr_name']) ? $row['price_curr_name'] : ''));
+        $costCurrRaw = trim((string) (isset($row['cost_curr_name']) ? $row['cost_curr_name'] : ''));
+        $productsRaw = trim((string) (isset($row['product_names']) ? $row['product_names'] : ''));
+
+        $brandRaw = resolveMapValue($brandRaw, $brandRevMap);
+        $priceCurrRaw = resolveMapValue($priceCurrRaw, $currencyRevMap);
+        $costCurrRaw = resolveMapValue($costCurrRaw, $currencyRevMap);
+
+        if ($brandRaw !== '' && !ctype_digit($brandRaw)) {
+            $brandRaw = '0';
+        }
+        if ($priceCurrRaw !== '' && !ctype_digit($priceCurrRaw)) {
+            $priceCurrRaw = '0';
+        }
+        if ($costCurrRaw !== '' && !ctype_digit($costCurrRaw)) {
+            $costCurrRaw = '0';
+        }
+
+        $brand_id = $brandRaw !== '' ? mysqli_real_escape_string($connect, $brandRaw) : '0';
+        $price_curr_id = $priceCurrRaw !== '' ? mysqli_real_escape_string($connect, $priceCurrRaw) : '0';
+        $cost_curr_id = $costCurrRaw !== '' ? mysqli_real_escape_string($connect, $costCurrRaw) : '0';
+
+        $productIdsList = array();
+        if ($productsRaw !== '') {
+            $parts = array_map('trim', explode(',', $productsRaw));
+            foreach ($parts as $part) {
+                if ($part === '') continue;
+                if (ctype_digit($part)) {
+                    $productIdsList[] = (int) $part;
+                } else if (isset($productRevMap[strtolower($part)])) {
+                    $productIdsList[] = (int) $productRevMap[strtolower($part)];
+                }
+            }
+        }
+        $productIdsList = array_values(array_unique($productIdsList));
+        sort($productIdsList);
+        $product_ids = mysqli_real_escape_string($connect, implode(',', $productIdsList));
+
         $remark = mysqli_real_escape_string($connect, $row['remark']);
 
         if ($is_new) {
@@ -324,8 +491,24 @@ else if ($action === 'update') {
         }
     }
 
-    echo "<script>alert('Import Complete! Successfully added $insertCount new packages and updated $successCount existing packages.'); window.location.href = '$redirect_page';</script>";
-    exit;
+        $log = [
+            'log_act' => 'Import',
+            'cdate' => $cdate,
+            'ctime' => $ctime,
+            'uid' => USER_ID,
+            'cby' => USER_ID,
+            'query_rec' => 'Bulk import update',
+            'query_table' => PKG,
+            'newval' => 'Inserted=' . (int) $insertCount . ', Updated=' . (int) $successCount,
+            'act_msg' => USER_NAME . " imported package data [ <b>New Added = " . (int) $insertCount . ", Updated = " . (int) $successCount . "</b> ] into <b><i>" . PKG . " Table</i></b>.",
+            'page' => $pageTitle,
+            'connect' => $connect,
+        ];
+        audit_log($log);
+
+        echo "<script>alert('Import Complete! Successfully added $insertCount new packages and updated $successCount existing packages.'); window.location.href = '$redirect_page';</script>";
+        exit;
+    }
 }
 ?>
 
@@ -337,6 +520,7 @@ else if ($action === 'update') {
         .highlight-change { background-color: #fff3cd !important; border-color: #ffecb5 !important; color: #664d03 !important; font-weight: bold; }
         .row-new { background-color: #d1e7dd !important; }
         .row-update { border-left: 4px solid #ffc107 !important; }
+        .field-error { font-size: 12px; color: #dc3545; margin-top: 3px; }
     </style>
 </head>
 <body>
@@ -364,76 +548,96 @@ else if ($action === 'update') {
                             <h5 class="card-title mb-3">Step 2: Preview Changes</h5>
                             <p class="text-muted"><span class="badge bg-success">Green</span> rows will be inserted as new packages. <span class="badge bg-warning text-dark">Yellow</span> fields show exactly what data was changed in Excel.</p>
                             
-                            <form method="post">
-                                <div class="table-responsive">
-                                    <table class="table table-bordered align-middle" style="min-width: 1300px;">
-                                        <thead class="table-dark">
-                                            <tr>
-                                                <th style="width: 100px;">Status</th>
-                                                <th>ID</th>
-                                                <th>Name</th>
-                                                <th>Item Code (SKU)</th>
-                                                <th>Brand</th>
-                                                <th>Products Included</th>
-                                                <th>Price</th>
-                                                <th>Cost</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            <?php foreach ($previewData as $index => $row) { 
-                                                $chg = $row['changes'];
-                                            ?>
-                                                <tr class="<?= $row['is_new'] ? 'row-new' : 'row-update' ?>">
-                                                    <td class="text-center">
-                                                        <?php if ($row['is_new']): ?>
-                                                            <span class="badge bg-success w-100 py-2">NEW</span>
-                                                        <?php else: ?>
-                                                            <span class="badge bg-warning text-dark w-100 py-2">MODIFIED</span>
-                                                        <?php endif; ?>
-                                                    </td>
-                                                    <td>
-                                                        <input type="text" class="form-control-plaintext fw-bold <?= $row['is_new'] ? 'text-success' : '' ?>" name="data[<?= $index ?>][id]" value="<?= htmlspecialchars($row['id'] ?: 'Auto') ?>" readonly>
-                                                    </td>
-                                                    <td><input type="text" class="form-control <?= isset($chg['name']) ? 'highlight-change' : '' ?>" name="data[<?= $index ?>][name]" value="<?= htmlspecialchars($row['name']) ?>" required></td>
-                                                    <td><input type="text" class="form-control <?= isset($chg['item_code']) ? 'highlight-change' : '' ?>" name="data[<?= $index ?>][item_code]" value="<?= htmlspecialchars($row['item_code']) ?>"></td>
-                                                    
-                                                    <td>
-                                                        <input type="text" class="form-control bg-light <?= empty($row['brand_id']) && !empty($row['brand_name']) ? 'border-danger text-danger' : '' ?> <?= isset($chg['brand']) ? 'highlight-change' : '' ?>" value="<?= htmlspecialchars($row['brand_name']) ?>" readonly title="Cannot be changed here">
-                                                        <?php if(empty($row['brand_id']) && !empty($row['brand_name'])) echo "<small class='text-danger fw-bold'>Database Match Failed</small>"; ?>
-                                                    </td>
-                                                    
-                                                    <td>
-                                                        <input type="text" class="form-control bg-light <?= isset($chg['products']) ? 'highlight-change' : '' ?>" value="<?= htmlspecialchars($row['product_names']) ?>" readonly title="Cannot be changed here">
-                                                    </td>
-                                                    
-                                                    <td>
-                                                        <div class="input-group">
-                                                            <span class="input-group-text <?= isset($chg['price_curr']) ? 'highlight-change' : '' ?>"><?= htmlspecialchars($row['price_curr_name'] ?: 'N/A') ?></span>
-                                                            <input type="number" step="0.01" class="form-control <?= isset($chg['price']) ? 'highlight-change' : '' ?>" name="data[<?= $index ?>][price]" value="<?= htmlspecialchars($row['price']) ?>">
-                                                        </div>
-                                                    </td>
-                                                    
-                                                    <td>
-                                                        <div class="input-group">
-                                                            <span class="input-group-text <?= isset($chg['cost_curr']) ? 'highlight-change' : '' ?>"><?= htmlspecialchars($row['cost_curr_name'] ?: 'N/A') ?></span>
-                                                            <input type="number" step="0.01" class="form-control <?= isset($chg['cost']) ? 'highlight-change' : '' ?>" name="data[<?= $index ?>][cost]" value="<?= htmlspecialchars($row['cost']) ?>">
-                                                        </div>
-                                                    </td>
-                                                    
-                                                    <input type="hidden" name="data[<?= $index ?>][is_new]" value="<?= $row['is_new'] ? '1' : '0' ?>">
-                                                    <input type="hidden" name="data[<?= $index ?>][brand_id]" value="<?= htmlspecialchars($row['brand_id']) ?>">
-                                                    <input type="hidden" name="data[<?= $index ?>][price_curr_id]" value="<?= htmlspecialchars($row['price_curr_id']) ?>">
-                                                    <input type="hidden" name="data[<?= $index ?>][cost_curr_id]" value="<?= htmlspecialchars($row['cost_curr_id']) ?>">
-                                                    <input type="hidden" name="data[<?= $index ?>][product_ids]" value="<?= htmlspecialchars($row['product_ids']) ?>">
-                                                    <input type="hidden" name="data[<?= $index ?>][item_description]" value="<?= htmlspecialchars($row['item_description']) ?>">
-                                                    <input type="hidden" name="data[<?= $index ?>][agent_cost]" value="<?= htmlspecialchars($row['agent_cost']) ?>">
-                                                    <input type="hidden" name="data[<?= $index ?>][barcode_slot_total]" value="<?= htmlspecialchars($row['barcode_slot_total']) ?>">
-                                                    <input type="hidden" name="data[<?= $index ?>][remark]" value="<?= htmlspecialchars($row['remark']) ?>">
-                                                </tr>
-                                            <?php } ?>
-                                        </tbody>
-                                    </table>
-                                </div>
+                            <form method="post" autocomplete="off">
+                                <?php foreach ($previewData as $index => $row) {
+                                    $chg = isset($row['changes']) ? $row['changes'] : array();
+                                    $ferr = isset($row['field_errors']) ? $row['field_errors'] : array();
+                                ?>
+                                    <div class="card mb-3 <?= $row['is_new'] ? 'row-new' : 'row-update' ?>">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between mb-3">
+                                                <h6 class="mb-0">Record #<?= $index + 1 ?></h6>
+                                                <?= $row['is_new'] ? '<span class="badge bg-success">NEW</span>' : '<span class="badge bg-warning text-dark">MODIFIED</span>' ?>
+                                            </div>
+                                            <div class="row g-3">
+                                                <div class="col-md-2">
+                                                    <label class="form-label">ID</label>
+                                                    <input type="text" class="form-control" name="data[<?= $index ?>][id]" value="<?= htmlspecialchars($row['id'] ?: 'Auto') ?>" readonly>
+                                                </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label">Name*</label>
+                                                    <input type="text" class="form-control <?= isset($chg['name']) ? 'highlight-change' : '' ?>" name="data[<?= $index ?>][name]" value="<?= htmlspecialchars($row['name']) ?>" required>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label">Item Code</label>
+                                                    <input type="text" class="form-control <?= isset($chg['item_code']) ? 'highlight-change' : '' ?>" name="data[<?= $index ?>][item_code]" value="<?= htmlspecialchars($row['item_code']) ?>">
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label">Item Description</label>
+                                                    <input type="text" class="form-control <?= isset($chg['item_description']) ? 'highlight-change' : '' ?>" name="data[<?= $index ?>][item_description]" value="<?= htmlspecialchars($row['item_description']) ?>">
+                                                </div>
+
+                                                <div class="col-md-3">
+                                                    <label class="form-label">Brand</label>
+                                                    <div class="autocomplete">
+                                                        <input type="text" id="pkgi_brand_<?= $index ?>" class="form-control <?= isset($chg['brand']) ? 'highlight-change' : '' ?> js-lookup-single js-live-search" data-lookup-field="brand_name" data-search-type="name" data-db-table="<?= BRAND ?>" name="data[<?= $index ?>][brand_name]" value="<?= htmlspecialchars($row['brand_name']) ?>">
+                                                        <input type="hidden" id="pkgi_brand_<?= $index ?>_hidden" value="">
+                                                    </div>
+                                                    <?php if (isset($ferr['brand_name'])) { ?><div class="field-error" data-field="brand_name"><?= htmlspecialchars($ferr['brand_name']) ?></div><?php } ?>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label">Price Currency</label>
+                                                    <div class="autocomplete">
+                                                        <input type="text" id="pkgi_price_curr_<?= $index ?>" class="form-control <?= isset($chg['price_curr']) ? 'highlight-change' : '' ?> js-lookup-single js-live-search" data-lookup-field="price_curr_name" data-search-type="unit" data-db-table="<?= CUR_UNIT ?>" name="data[<?= $index ?>][price_curr_name]" value="<?= htmlspecialchars($row['price_curr_name']) ?>">
+                                                        <input type="hidden" id="pkgi_price_curr_<?= $index ?>_hidden" value="">
+                                                    </div>
+                                                    <?php if (isset($ferr['price_curr_name'])) { ?><div class="field-error" data-field="price_curr_name"><?= htmlspecialchars($ferr['price_curr_name']) ?></div><?php } ?>
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <label class="form-label">Price</label>
+                                                    <input type="number" step="0.01" class="form-control <?= isset($chg['price']) ? 'highlight-change' : '' ?>" name="data[<?= $index ?>][price]" value="<?= htmlspecialchars($row['price']) ?>">
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <label class="form-label">Cost Currency</label>
+                                                    <div class="autocomplete">
+                                                        <input type="text" id="pkgi_cost_curr_<?= $index ?>" class="form-control <?= isset($chg['cost_curr']) ? 'highlight-change' : '' ?> js-lookup-single js-live-search" data-lookup-field="cost_curr_name" data-search-type="unit" data-db-table="<?= CUR_UNIT ?>" name="data[<?= $index ?>][cost_curr_name]" value="<?= htmlspecialchars($row['cost_curr_name']) ?>">
+                                                        <input type="hidden" id="pkgi_cost_curr_<?= $index ?>_hidden" value="">
+                                                    </div>
+                                                    <?php if (isset($ferr['cost_curr_name'])) { ?><div class="field-error" data-field="cost_curr_name"><?= htmlspecialchars($ferr['cost_curr_name']) ?></div><?php } ?>
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <label class="form-label">Cost</label>
+                                                    <input type="number" step="0.01" class="form-control <?= isset($chg['cost']) ? 'highlight-change' : '' ?>" name="data[<?= $index ?>][cost]" value="<?= htmlspecialchars($row['cost']) ?>">
+                                                </div>
+
+                                                <div class="col-md-2">
+                                                    <label class="form-label">Agent Cost</label>
+                                                    <input type="number" step="0.01" class="form-control <?= isset($chg['agent_cost']) ? 'highlight-change' : '' ?>" name="data[<?= $index ?>][agent_cost]" value="<?= htmlspecialchars($row['agent_cost']) ?>">
+                                                </div>
+                                                <div class="col-md-6">
+                                                    <label class="form-label">Products Included</label>
+                                                    <input type="text" class="form-control <?= isset($chg['products']) ? 'highlight-change' : '' ?> js-lookup-multi" list="packageImportProductList" data-lookup-field="product_names" name="data[<?= $index ?>][product_names]" value="<?= htmlspecialchars($row['product_names']) ?>">
+                                                    <?php if (isset($ferr['product_names'])) { ?><div class="field-error" data-field="product_names"><?= htmlspecialchars($ferr['product_names']) ?></div><?php } ?>
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <label class="form-label">Barcode Slot Total</label>
+                                                    <input type="number" class="form-control <?= isset($chg['barcode_slot_total']) ? 'highlight-change' : '' ?>" name="data[<?= $index ?>][barcode_slot_total]" value="<?= htmlspecialchars($row['barcode_slot_total']) ?>">
+                                                </div>
+                                                <div class="col-md-2">
+                                                    <label class="form-label">Remark</label>
+                                                    <input type="text" class="form-control <?= isset($chg['remark']) ? 'highlight-change' : '' ?>" name="data[<?= $index ?>][remark]" value="<?= htmlspecialchars($row['remark']) ?>">
+                                                </div>
+                                            </div>
+
+                                            <input type="hidden" name="data[<?= $index ?>][is_new]" value="<?= $row['is_new'] ? '1' : '0' ?>">
+                                        </div>
+                                    </div>
+                                <?php } ?>
+                                <datalist id="packageImportProductList">
+                                    <?php foreach ($productNameMap as $optName) { ?>
+                                        <option value="<?= htmlspecialchars($optName) ?>"></option>
+                                    <?php } ?>
+                                </datalist>
                                 <div class="d-flex justify-content-center gap-2 flex-wrap mt-4">
                                     <a href="package_import.php" class="btn btn-lg btn-rounded btn-secondary px-4">Cancel</a>
                                     <button class="btn btn-lg btn-rounded btn-success px-4" type="submit" name="actionBtn" value="update">
@@ -447,7 +651,7 @@ else if ($action === 'update') {
                     <div class="card mb-4 shadow-sm border-0">
                         <div class="card-body">
                             <h5 class="card-title mb-3">Step 1: Upload Edited Excel File</h5>
-                            <form method="post" enctype="multipart/form-data">
+                            <form method="post" enctype="multipart/form-data" autocomplete="off">
                                 <div class="row g-3 align-items-end">
                                     <div class="col-12 col-md-8">
                                         <label class="form-label fw-bold" for="import_file">Select Excel (.xlsx) File</label>
@@ -470,5 +674,172 @@ else if ($action === 'update') {
 <script>
     preloader(0, '');
     setButtonColor();
+
+    (function () {
+        var siteUrl = <?= json_encode($SITEURL) ?>;
+        var previewServerRows = <?= ($action === 'preview' && !empty($previewData)) ? json_encode($previewData, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) : 'null' ?>;
+
+        function normalizeServerValue(val) {
+            if (val === null || typeof val === 'undefined') {
+                return '';
+            }
+            if (typeof val === 'boolean') {
+                return val ? '1' : '0';
+            }
+            return String(val);
+        }
+
+        function bindServerValue(el, serverValue) {
+            if (!el) {
+                return;
+            }
+
+            var released = false;
+            var apply = function () {
+                if (released) {
+                    return;
+                }
+                el.value = serverValue;
+            };
+
+            var release = function () {
+                released = true;
+            };
+
+            apply();
+            el.addEventListener('input', release, { once: true });
+            el.addEventListener('change', release, { once: true });
+            el.addEventListener('keydown', release, { once: true });
+
+            [120, 350, 700, 1200].forEach(function (delay) {
+                setTimeout(apply, delay);
+            });
+        }
+
+        function enforcePreviewServerValues() {
+            if (!Array.isArray(previewServerRows)) {
+                return;
+            }
+
+            previewServerRows.forEach(function (row, idx) {
+                if (!row || typeof row !== 'object') {
+                    return;
+                }
+
+                Object.keys(row).forEach(function (key) {
+                    if (key === 'changes' || key === 'field_errors') {
+                        return;
+                    }
+
+                    var selector = '[name="data[' + idx + '][' + key + ']"]';
+                    var field = document.querySelector(selector);
+                    if (!field) {
+                        return;
+                    }
+
+                    bindServerValue(field, normalizeServerValue(row[key]));
+                });
+            });
+        }
+
+        enforcePreviewServerValues();
+
+        function clearSearchList(inputId) {
+            var list = document.getElementById('searchResult_' + inputId);
+            if (list) list.remove();
+            var clear = document.getElementById('clear_' + inputId);
+            if (clear) clear.remove();
+        }
+
+        function norm(v) {
+            return String(v || '').toLowerCase().replace(/\s+/g, ' ').trim();
+        }
+
+        var lookupMeta = {
+            brand_name: {
+                names: <?= json_encode(array_values($brandNameMap)) ?>,
+                ids: <?= json_encode(array_map('strval', array_keys($brandNameMap))) ?>
+            },
+            price_curr_name: {
+                names: <?= json_encode(array_values($currencyNameMap)) ?>,
+                ids: <?= json_encode(array_map('strval', array_keys($currencyNameMap))) ?>
+            },
+            cost_curr_name: {
+                names: <?= json_encode(array_values($currencyNameMap)) ?>,
+                ids: <?= json_encode(array_map('strval', array_keys($currencyNameMap))) ?>
+            },
+            product_names: {
+                names: <?= json_encode(array_values($productNameMap)) ?>,
+                ids: <?= json_encode(array_map('strval', array_keys($productNameMap))) ?>
+            }
+        };
+
+        function singleValid(field, raw) {
+            var value = String(raw || '').trim();
+            if (value === '') return true;
+            var meta = lookupMeta[field];
+            if (!meta) return true;
+
+            var byName = {};
+            (meta.names || []).forEach(function (name) { byName[norm(name)] = true; });
+            return !!byName[norm(value)];
+        }
+
+        function multiValid(field, raw) {
+            var value = String(raw || '').trim();
+            if (value === '') return true;
+            var parts = value.split(',');
+            for (var i = 0; i < parts.length; i++) {
+                if (!singleValid(field, parts[i].trim())) return false;
+            }
+            return true;
+        }
+
+        function revalidateField(input) {
+            var field = input.getAttribute('data-lookup-field');
+            if (!field) return;
+
+            var isValid = input.classList.contains('js-lookup-multi') ? multiValid(field, input.value) : singleValid(field, input.value);
+            var row = input.closest('.col-md-3, .col-md-4, .col-md-6, .col-md-2, .col-md-12') || input.parentElement;
+            if (!row) return;
+
+            var err = row.querySelector('.field-error[data-field="' + field + '"]');
+            if (err) {
+                err.style.display = isValid ? 'none' : 'block';
+            }
+        }
+
+        document.querySelectorAll('.js-live-search[data-search-type][data-db-table]').forEach(function (el) {
+            var hidden = document.getElementById(el.id + '_hidden');
+            var check = function() { revalidateField(el); };
+
+            el.addEventListener('keyup', function () {
+                if(hidden) hidden.value = '';
+                searchInput({
+                    search: el.value,
+                    searchType: el.getAttribute('data-search-type'),
+                    elementID: el.id,
+                    hiddenElementID: hidden ? hidden.id : '',
+                    dbTable: el.getAttribute('data-db-table')
+                }, siteUrl);
+                check();
+            });
+
+            el.addEventListener('change', check);
+            el.addEventListener('input', check);
+
+            el.addEventListener('blur', function () {
+                setTimeout(function () { 
+                    clearSearchList(el.id); 
+                    check(); 
+                }, 200);
+            });
+        });
+
+        document.querySelectorAll('.js-lookup-single[data-lookup-field], .js-lookup-multi[data-lookup-field]').forEach(function (el) {
+            el.addEventListener('input', function() { revalidateField(el); });
+            el.addEventListener('change', function() { revalidateField(el); });
+        });
+    })();
 </script>
 </html>

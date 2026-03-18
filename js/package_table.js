@@ -48,7 +48,8 @@ $(document).ready(function ($) {
     updateCheckboxesOnOtherPages(isChecked);
   });
 
-  $('a[name="exportBtn"]').on("click", function () {
+  $('a[name="exportBtn"]').on("click", function (event) {
+    event.preventDefault();
     var checkboxValues = [];
 
     $("#table")
@@ -64,6 +65,7 @@ $(document).ready(function ($) {
       });
 
     if (checkboxValues.length > 0) {
+      auditExport(checkboxValues, "pkg");
       setCookie("rowID", checkboxValues.join(","), 1);
 
       var checkboxes = document.querySelectorAll(".export");
@@ -76,6 +78,7 @@ $(document).ready(function ($) {
         selectAllCheckbox.checked = false;
       }
 
+      alert("Export successful!");
       window.location.href = "package_table.php";
     } else {
       alert("Please select data to export.");
