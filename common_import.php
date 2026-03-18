@@ -17,6 +17,7 @@ $shopeeOrderPinAccess = checkPin($connect, 'Shopee All Orders');
 $packagePinAccess = checkPin($connect, 'Package');
 $stockInPinAccess = checkPin($connect, 'Stock In');
 $productPinAccess = checkPin($connect, 'Product');
+$stockOrderReqPinAccess = checkPin($connect, 'Stock Order Request');
 
 $canShopeeAdsImport = is_array($shopeeAdsPinAccess) && isActionAllowed('Import', $shopeeAdsPinAccess);
 $canFacebookAdsImport = is_array($facebookAdsPinAccess) && isActionAllowed('Import', $facebookAdsPinAccess);
@@ -24,6 +25,7 @@ $canShopeeOrderImport = is_array($shopeeOrderPinAccess) && isActionAllowed('Impo
 $canPackageImport = is_array($packagePinAccess) && isActionAllowed('Import', $packagePinAccess);
 $canStockInImport = is_array($stockInPinAccess) && isActionAllowed('Import', $stockInPinAccess);
 $canProductImport = is_array($productPinAccess) && isActionAllowed('Import', $productPinAccess);
+$canStockOrderReqImport = is_array($stockOrderReqPinAccess) && isActionAllowed('Import', $stockOrderReqPinAccess);
 
 // Configuration Array for all shortcut cards
 $shortcutCards = array(
@@ -64,7 +66,7 @@ $shortcutCards = array(
         'backText' => 'Back To Package Page'
     ),
     array(
-        'title' => 'Stock Import',
+        'title' => 'Stock In Import',
         'desc' => 'Import stock in data.',
         'canImport' => $canStockInImport,
         'canViewBack' => ($canStockInImport),
@@ -80,6 +82,15 @@ $shortcutCards = array(
         'importUrl' => $SITEURL . '/product_import.php',
         'backUrl' => $SITEURL . '/product_table.php',
         'backText' => 'Back To Product Page'
+    ),
+    array(
+        'title' => 'Stock Order Import',
+        'desc' => 'Import stock order request data.',
+        'canImport' => $canStockOrderReqImport,
+        'canViewBack' => ($canStockOrderReqImport),
+        'importUrl' => $SITEURL . '/finance/stock_order_request_import.php',
+        'backUrl' => $SITEURL . '/finance/stock_order_request_table.php',
+        'backText' => 'Back To Stock Order Page'
     )
 );
 

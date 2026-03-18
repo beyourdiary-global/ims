@@ -3,7 +3,7 @@ if (!defined('IMPORT_FORCE_MODULE')) {
     define('IMPORT_FORCE_MODULE', 'shopee_order_req');
 }
 
-$pageTitle = "Import Shortcut";
+$pageTitle = "Shopee Order Import";
 $parentPageTitle = "Shopee All Orders";
 
 include_once 'menuHeader.php';

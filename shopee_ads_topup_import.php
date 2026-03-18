@@ -3,7 +3,7 @@ if (!defined('IMPORT_FORCE_MODULE')) {
     define('IMPORT_FORCE_MODULE', 'shopee_ads_topup');
 }
 
-$pageTitle = "Import Shortcut";
+$pageTitle = "Shopee Ads Topup Import";
 $parentPageTitle = "Shopee Ads Top Up Transaction";
 
 include_once 'menuHeader.php';

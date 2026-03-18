@@ -4,6 +4,7 @@ include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
 
 $redirect_page = $SITEURL . '/product_table.php';
+$shortcut_page = $SITEURL . '/common_import.php';
 $pinAccess = checkCurrentPin($connect, 'Product');
 if (!is_array($pinAccess)) {
     $pinAccess = array();
@@ -439,8 +440,11 @@ if ($action === 'preview') {
         $isNew = (isset($row['is_new']) && $row['is_new'] === '1') ? '1' : '0';
 
         $nameRaw = trim((string)(isset($row['name']) ? $row['name'] : ''));
+        $weightRaw = trim((string)(isset($row['weight']) ? $row['weight'] : ''));
+        $costRaw = trim((string)(isset($row['cost']) ? $row['cost'] : ''));
+        $expireDateRaw = trim((string)(isset($row['expire_date']) ? $row['expire_date'] : ''));
         if ($nameRaw === '') {
-            $fieldErrors['name'] = 'Name is required.';
+            $fieldErrors['name'] = 'Product Name field is required!';
         }
 
         $brandDisplay = trim((string)(isset($row['brand_display']) ? $row['brand_display'] : ''));
@@ -455,9 +459,30 @@ if ($action === 'preview') {
         $categoryResolved = resolveForeignId($categoryDisplay, $categoryRevMap);
         $parentResolved = resolveForeignId($parentDisplay, $parentRevMap);
 
-        if ($brandDisplay !== '' && $brandResolved === '') $fieldErrors['brand_display'] = 'Brand not found in database.';
-        if ($weightUnitDisplay !== '' && $weightUnitResolved === '') $fieldErrors['weight_unit_display'] = 'Weight unit not found in database.';
-        if ($currencyDisplay !== '' && $currencyResolved === '') $fieldErrors['currency_unit_display'] = 'Currency unit not found in database.';
+        if ($brandDisplay === '') {
+            $fieldErrors['brand_display'] = 'Product Brand field is required!';
+        } else if ($brandResolved === '') {
+            $fieldErrors['brand_display'] = 'Brand not found in database.';
+        }
+        if ($weightRaw === '') {
+            $fieldErrors['weight'] = 'Product Weight field is required!';
+        }
+        if ($weightUnitDisplay === '') {
+            $fieldErrors['weight_unit_display'] = 'Product Weight Unit field is required!';
+        } else if ($weightUnitResolved === '') {
+            $fieldErrors['weight_unit_display'] = 'Weight unit not found in database.';
+        }
+        if ($costRaw === '') {
+            $fieldErrors['cost'] = 'Product Cost field is required!';
+        }
+        if ($currencyDisplay === '') {
+            $fieldErrors['currency_unit_display'] = 'Product Currency Unit field is required!';
+        } else if ($currencyResolved === '') {
+            $fieldErrors['currency_unit_display'] = 'Currency unit not found in database.';
+        }
+        if ($expireDateRaw === '') {
+            $fieldErrors['expire_date'] = 'Product Expire Date field is required!';
+        }
         if ($categoryDisplay !== '' && $categoryResolved === '') $fieldErrors['product_category_display'] = 'Product category not found in database.';
         if ($parentDisplay !== '' && $parentResolved === '') $fieldErrors['parent_product_display'] = 'Parent product not found in database.';
 
@@ -561,13 +586,15 @@ if ($action === 'preview') {
             <div class="row mb-4">
                 <div class="col-12 d-flex justify-content-between flex-wrap align-items-center gap-2">
                     <h2>Import & Bulk Edit Products</h2>
-                    <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $redirect_page ?>"><i class="fa-solid fa-arrow-left"></i> Back To Table</a>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $redirect_page ?>"><i class="fa-solid fa-arrow-left"></i> Back To Table</a>
+                        <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $shortcut_page ?>">BACK TO SHORTCUTS</a>
+                    </div>
                 </div>
             </div>
 
             <?php if (!empty($importErrors)) { ?>
-                <div class="alert alert-warning shadow-sm" role="alert">
-                    <h5 class="alert-heading"><i class="fa-solid fa-circle-info"></i> Import Notice</h5>
+                <div class="alert alert-danger shadow-sm" role="alert">
                     <?php foreach ($importErrors as $error) { echo "<div>- " . htmlspecialchars($error) . "</div>"; } ?>
                 </div>
             <?php } ?>
@@ -595,37 +622,40 @@ if ($action === 'preview') {
                                             </div>
                                             <div class="col-md-4">
                                                 <label class="form-label">Name*</label>
-                                                <input type="text" class="form-control <?= isset($chg['name']) ? 'highlight-change' : '' ?>" name="data[<?= $index ?>][name]" value="<?= htmlspecialchars($row['name']) ?>" required>
+                                                <input type="text" class="form-control <?= isset($chg['name']) ? 'highlight-change' : '' ?> js-required-field" data-required-field="name" data-required-message="Product Name field is required!" name="data[<?= $index ?>][name]" value="<?= htmlspecialchars($row['name']) ?>" required>
+                                                <?php if (isset($ferr['name'])) { ?><div class="field-error" data-field="name"><?= htmlspecialchars($ferr['name']) ?></div><?php } ?>
                                             </div>
                                             <div class="col-md-3">
-                                                <label class="form-label">Brand</label>
+                                                <label class="form-label">Brand*</label>
                                                 <div class="autocomplete">
-                                                    <input type="text" id="pi_brand_<?= $index ?>" class="form-control <?= isset($chg['brand']) ? 'highlight-change' : '' ?> js-lookup-single js-live-search" data-lookup-field="brand_display" data-search-type="name" data-db-table="<?= BRAND ?>" name="data[<?= $index ?>][brand_display]" value="<?= htmlspecialchars($row['brand_display']) ?>">
+                                                    <input type="text" id="pi_brand_<?= $index ?>" class="form-control <?= isset($chg['brand']) ? 'highlight-change' : '' ?> js-lookup-single js-live-search js-required-field" data-lookup-field="brand_display" data-required-field="brand_display" data-required-message="Product Brand field is required!" data-search-type="name" data-db-table="<?= BRAND ?>" name="data[<?= $index ?>][brand_display]" value="<?= htmlspecialchars($row['brand_display']) ?>" required>
                                                     <input type="hidden" id="pi_brand_<?= $index ?>_hidden" value="">
                                                 </div>
                                                 <?php if (isset($ferr['brand_display'])) { ?><div class="field-error" data-field="brand_display"><?= htmlspecialchars($ferr['brand_display']) ?></div><?php } ?>
                                             </div>
                                             <div class="col-md-3">
-                                                <label class="form-label">Weight</label>
-                                                <input type="text" class="form-control <?= isset($chg['weight']) ? 'highlight-change' : '' ?>" name="data[<?= $index ?>][weight]" value="<?= htmlspecialchars($row['weight']) ?>">
+                                                <label class="form-label">Weight*</label>
+                                                <input type="text" class="form-control <?= isset($chg['weight']) ? 'highlight-change' : '' ?> js-required-field" data-required-field="weight" data-required-message="Product Weight field is required!" name="data[<?= $index ?>][weight]" value="<?= htmlspecialchars($row['weight']) ?>" required>
+                                                <?php if (isset($ferr['weight'])) { ?><div class="field-error" data-field="weight"><?= htmlspecialchars($ferr['weight']) ?></div><?php } ?>
                                             </div>
 
                                             <div class="col-md-3">
-                                                <label class="form-label">Weight Unit</label>
+                                                <label class="form-label">Weight Unit*</label>
                                                 <div class="autocomplete">
-                                                    <input type="text" id="pi_weight_unit_<?= $index ?>" class="form-control <?= isset($chg['weight_unit']) ? 'highlight-change' : '' ?> js-lookup-single js-live-search" data-lookup-field="weight_unit_display" data-search-type="unit" data-db-table="<?= WGT_UNIT ?>" name="data[<?= $index ?>][weight_unit_display]" value="<?= htmlspecialchars($row['weight_unit_display']) ?>">
+                                                    <input type="text" id="pi_weight_unit_<?= $index ?>" class="form-control <?= isset($chg['weight_unit']) ? 'highlight-change' : '' ?> js-lookup-single js-live-search js-required-field" data-lookup-field="weight_unit_display" data-required-field="weight_unit_display" data-required-message="Product Weight Unit field is required!" data-search-type="unit" data-db-table="<?= WGT_UNIT ?>" name="data[<?= $index ?>][weight_unit_display]" value="<?= htmlspecialchars($row['weight_unit_display']) ?>" required>
                                                     <input type="hidden" id="pi_weight_unit_<?= $index ?>_hidden" value="">
                                                 </div>
                                                 <?php if (isset($ferr['weight_unit_display'])) { ?><div class="field-error" data-field="weight_unit_display"><?= htmlspecialchars($ferr['weight_unit_display']) ?></div><?php } ?>
                                             </div>
                                             <div class="col-md-3">
-                                                <label class="form-label">Cost</label>
-                                                <input type="text" class="form-control <?= isset($chg['cost']) ? 'highlight-change' : '' ?>" name="data[<?= $index ?>][cost]" value="<?= htmlspecialchars($row['cost']) ?>">
+                                                <label class="form-label">Cost*</label>
+                                                <input type="text" class="form-control <?= isset($chg['cost']) ? 'highlight-change' : '' ?> js-required-field" data-required-field="cost" data-required-message="Product Cost field is required!" name="data[<?= $index ?>][cost]" value="<?= htmlspecialchars($row['cost']) ?>" required>
+                                                <?php if (isset($ferr['cost'])) { ?><div class="field-error" data-field="cost"><?= htmlspecialchars($ferr['cost']) ?></div><?php } ?>
                                             </div>
                                             <div class="col-md-3">
-                                                <label class="form-label">Currency Unit</label>
+                                                <label class="form-label">Currency Unit*</label>
                                                 <div class="autocomplete">
-                                                    <input type="text" id="pi_currency_unit_<?= $index ?>" class="form-control <?= isset($chg['currency_unit']) ? 'highlight-change' : '' ?> js-lookup-single js-live-search" data-lookup-field="currency_unit_display" data-search-type="unit" data-db-table="<?= CUR_UNIT ?>" name="data[<?= $index ?>][currency_unit_display]" value="<?= htmlspecialchars($row['currency_unit_display']) ?>">
+                                                    <input type="text" id="pi_currency_unit_<?= $index ?>" class="form-control <?= isset($chg['currency_unit']) ? 'highlight-change' : '' ?> js-lookup-single js-live-search js-required-field" data-lookup-field="currency_unit_display" data-required-field="currency_unit_display" data-required-message="Product Currency Unit field is required!" data-search-type="unit" data-db-table="<?= CUR_UNIT ?>" name="data[<?= $index ?>][currency_unit_display]" value="<?= htmlspecialchars($row['currency_unit_display']) ?>" required>
                                                     <input type="hidden" id="pi_currency_unit_<?= $index ?>_hidden" value="">
                                                 </div>
                                                 <?php if (isset($ferr['currency_unit_display'])) { ?><div class="field-error" data-field="currency_unit_display"><?= htmlspecialchars($ferr['currency_unit_display']) ?></div><?php } ?>
@@ -648,8 +678,9 @@ if ($action === 'preview') {
                                                 <?php if (isset($ferr['product_category_display'])) { ?><div class="field-error" data-field="product_category_display"><?= htmlspecialchars($ferr['product_category_display']) ?></div><?php } ?>
                                             </div>
                                             <div class="col-md-3">
-                                                <label class="form-label">Expire Date</label>
-                                                <input type="date" class="form-control <?= isset($chg['expire_date']) ? 'highlight-change' : '' ?>" name="data[<?= $index ?>][expire_date]" value="<?= htmlspecialchars($row['expire_date']) ?>">
+                                                <label class="form-label">Expire Date*</label>
+                                                <input type="date" class="form-control <?= isset($chg['expire_date']) ? 'highlight-change' : '' ?> js-required-field" data-required-field="expire_date" data-required-message="Product Expire Date field is required!" name="data[<?= $index ?>][expire_date]" value="<?= htmlspecialchars($row['expire_date']) ?>" required>
+                                                <?php if (isset($ferr['expire_date'])) { ?><div class="field-error" data-field="expire_date"><?= htmlspecialchars($ferr['expire_date']) ?></div><?php } ?>
                                             </div>
                                             <div class="col-md-3">
                                                 <label class="form-label">Parent Product</label>
@@ -788,15 +819,21 @@ if ($action === 'preview') {
         var lookupMeta = {
             brand_display: {
                 names: <?= json_encode(array_values($brandNameMap)) ?>,
-                ids: <?= json_encode(array_map('strval', array_keys($brandNameMap))) ?>
+                ids: <?= json_encode(array_map('strval', array_keys($brandNameMap))) ?>,
+                requiredMessage: 'Product Brand field is required!',
+                invalidMessage: 'Brand not found in database.'
             },
             weight_unit_display: {
                 names: <?= json_encode(array_values($weightNameMap)) ?>,
-                ids: <?= json_encode(array_map('strval', array_keys($weightNameMap))) ?>
+                ids: <?= json_encode(array_map('strval', array_keys($weightNameMap))) ?>,
+                requiredMessage: 'Product Weight Unit field is required!',
+                invalidMessage: 'Weight unit not found in database.'
             },
             currency_unit_display: {
                 names: <?= json_encode(array_values($currencyNameMap)) ?>,
-                ids: <?= json_encode(array_map('strval', array_keys($currencyNameMap))) ?>
+                ids: <?= json_encode(array_map('strval', array_keys($currencyNameMap))) ?>,
+                requiredMessage: 'Product Currency Unit field is required!',
+                invalidMessage: 'Currency unit not found in database.'
             },
             product_category_display: {
                 names: <?= json_encode(array_values($categoryNameMap)) ?>,
@@ -819,23 +856,66 @@ if ($action === 'preview') {
             return !!byName[norm(value)];
         }
 
-        function revalidateField(input) {
+        function resolveFieldContainer(input) {
+            return input.closest('.col-md-3, .col-md-4, .col-md-6, .col-md-2, .col-md-12') || input.parentElement;
+        }
+
+        function setFieldError(input, field, message) {
+            var row = resolveFieldContainer(input);
+            if (!row) return;
+
+            var err = row.querySelector('.field-error[data-field="' + field + '"]');
+            if (!err) {
+                err = document.createElement('div');
+                err.className = 'field-error';
+                err.setAttribute('data-field', field);
+                row.appendChild(err);
+            }
+
+            if (message) {
+                err.textContent = message;
+                err.style.display = 'block';
+            } else {
+                err.style.display = 'none';
+            }
+        }
+
+        function revalidateLookupField(input) {
             var field = input.getAttribute('data-lookup-field');
             if (!field) return;
-            
-            var isValid = hasValidValue(field, input.value);
-            var row = input.closest('.col-md-3, .col-md-4, .col-md-6, .col-md-2, .col-md-12') || input.parentElement;
-            if (!row) return;
-            
-            var err = row.querySelector('.field-error[data-field="' + field + '"]');
-            if (err) {
-                err.style.display = isValid ? 'none' : 'block';
+
+            var meta = lookupMeta[field] || {};
+            var value = String(input.value || '').trim();
+            if (value === '' && meta.requiredMessage) {
+                setFieldError(input, field, meta.requiredMessage);
+                return;
             }
+
+            if (value !== '' && !hasValidValue(field, value)) {
+                setFieldError(input, field, meta.invalidMessage || 'Value not found in database.');
+                return;
+            }
+
+            setFieldError(input, field, '');
+        }
+
+        function revalidateRequiredField(input) {
+            var field = input.getAttribute('data-required-field');
+            if (!field) return;
+
+            if (input.classList.contains('js-lookup-single')) {
+                revalidateLookupField(input);
+                return;
+            }
+
+            var message = input.getAttribute('data-required-message') || 'This field is required!';
+            var value = String(input.value || '').trim();
+            setFieldError(input, field, value === '' ? message : '');
         }
 
         document.querySelectorAll('.js-live-search[data-search-type][data-db-table]').forEach(function (el) {
             var hidden = document.getElementById(el.id + '_hidden');
-            var check = function() { revalidateField(el); };
+            var check = function() { revalidateLookupField(el); };
 
             el.addEventListener('keyup', function () {
                 if(hidden) hidden.value = '';
@@ -861,8 +941,13 @@ if ($action === 'preview') {
         });
 
         document.querySelectorAll('.js-lookup-single[data-lookup-field]').forEach(function (el) {
-            el.addEventListener('input', function () { revalidateField(el); });
-            el.addEventListener('change', function () { revalidateField(el); });
+            el.addEventListener('input', function () { revalidateLookupField(el); });
+            el.addEventListener('change', function () { revalidateLookupField(el); });
+        });
+
+        document.querySelectorAll('.js-required-field[data-required-field]').forEach(function (el) {
+            el.addEventListener('input', function () { revalidateRequiredField(el); });
+            el.addEventListener('change', function () { revalidateRequiredField(el); });
         });
     })();
 </script>
