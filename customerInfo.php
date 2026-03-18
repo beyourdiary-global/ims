@@ -122,6 +122,11 @@ if (post('actionBtn')) {
 
             $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
+            if (trim((string) $cusPhoneCode) === '') {
+                $phone_code_err = 'Phone Code is required!';
+                break;
+            }
+
             if (isDuplicateRecord("name", $cusFirstName, $tblName, $connect, $dataID) && isDuplicateRecord("last_name", $cusLastName, $tblName, $connect, $dataID) && isDuplicateRecord("email", $cusEmail, $tblName, $connect, $dataID)) {
                 $err = "Duplicate record found for " . $pageTitle;
                 break;
@@ -324,8 +329,12 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                                 $phone_code_val = $row['phone_country']; // Fallback
                                             }
                                         }
+                                        if (post('actionBtn') && post('actionBtn') !== 'back') {
+                                            $phone_code_val = postSpaceFilter('cusPhoneCode');
+                                        }
                                         ?>
                                         <input class="form-control" type="text" name="cusPhoneCode" id="cusPhoneCode" <?php if ($act == '') echo 'disabled' ?> placeholder="<?php echo ($act != '') ? '+' : '' ?>" value="<?php echo $phone_code_val; ?>">
+                                        <span id="phoneCodeMsg"><?php if (isset($phone_code_err)) { ?><p style='color:red;margin-bottom:0'><?php echo $phone_code_err; ?></p><?php } ?></span>
 
                                 
                                             
@@ -598,17 +607,23 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                 return false;
             }
         }
-            $("#cusEmail").on("input", function() {
-                if (!$("#cusEmail").val()) {
-                    $("#emailMsg").html("<p style='color:red;margin-bottom:0'>Email is required!</p>");
-                } else if (!validateEmail()) {
-                    $("#emailMsg").html("<p style='color:red;margin-bottom:0'>Invalid Email Format</p>");
-                } else {
-                    $("#emailMsg").html("");
+
+            function validatePhoneCode() {
+                var phoneCodeRaw = $("#cusPhoneCode").val() || "";
+                var phoneCodeDigits = phoneCodeRaw.replace(/\+/g, '').trim();
+                if (phoneCodeDigits === '') {
+                    $("#phoneCodeMsg").html("<p style='color:red;margin-bottom:0'>Phone Code is required!</p>");
+                    return false;
                 }
-            });
+                $("#phoneCodeMsg").html("");
+                return true;
+            }
 
             $("#actionBtn").on("click", function(event) {
+                if (!validatePhoneCode()) {
+                    event.preventDefault();
+                }
+
                 if (!validateEmail()) {
                     $("#emailMsg").html("<p style='color:red;margin-bottom:0'>Invalid Email Format</p>");
                     event.preventDefault();

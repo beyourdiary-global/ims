@@ -513,7 +513,7 @@ if ($token) {
             <div class="card mb-4">
                 <div class="card-body">
                     <h5 class="card-title mb-3">Stock In Form</h5>
-                    <form method="post" id="stockInForm">
+                    <form method="post" id="stockInForm" novalidate>
                         <?php if ($isEditMode || $isViewMode) { ?>
                             <input type="hidden" name="order_id" value="<?= (int) $formData['order_id'] ?>">
                         <?php } ?>
@@ -729,6 +729,121 @@ if ($token) {
     document.querySelectorAll('#stockInItemBody tr').forEach(function(row) {
         bindRow(row);
     });
+
+    function clearFieldError(input) {
+        if (!input) return;
+        input.classList.remove('si-invalid');
+        input.style.borderColor = '';
+
+        var container = input.closest('td') || input.parentElement;
+        if (!container) return;
+
+        var errorEl = container.querySelector('.si-field-error[data-field-key="' + (input.getAttribute('data-field-key') || '') + '"]');
+        if (errorEl) {
+            errorEl.remove();
+        }
+    }
+
+    function setFieldError(input, message) {
+        if (!input) return;
+
+        var fieldKey = input.getAttribute('data-field-key') || input.name || ('field_' + Date.now());
+        input.setAttribute('data-field-key', fieldKey);
+
+        input.classList.add('si-invalid');
+        input.style.borderColor = '#ff0000';
+
+        var container = input.closest('td') || input.parentElement;
+        if (!container) return;
+
+        var selector = '.si-field-error[data-field-key="' + fieldKey + '"]';
+        var errorEl = container.querySelector(selector);
+        if (!errorEl) {
+            errorEl = document.createElement('div');
+            errorEl.className = 'si-field-error';
+            errorEl.setAttribute('data-field-key', fieldKey);
+            errorEl.style.color = '#ff0000';
+            errorEl.style.marginTop = '4px';
+            errorEl.style.fontSize = '0.95rem';
+            container.appendChild(errorEl);
+        }
+        errorEl.textContent = message;
+    }
+
+    function clearAllFieldErrors() {
+        document.querySelectorAll('.si-field-error').forEach(function(el) {
+            el.remove();
+        });
+        document.querySelectorAll('.si-invalid').forEach(function(input) {
+            input.classList.remove('si-invalid');
+            input.style.borderColor = '';
+        });
+    }
+
+    function isEmptyValue(value) {
+        return String(value || '').trim() === '';
+    }
+
+    var stockInForm = document.getElementById('stockInForm');
+    if (stockInForm) {
+        stockInForm.addEventListener('submit', function(e) {
+            var submitter = e.submitter;
+            if (!submitter) return;
+
+            var actionValue = submitter.value || '';
+            if (actionValue !== 'save' && actionValue !== 'update') {
+                return;
+            }
+
+            clearAllFieldErrors();
+
+            var hasError = false;
+
+            var warehouseInput = document.getElementById('warehouse_id');
+            var stockInDateInput = document.getElementById('stock_in_date');
+            var orderNumberInput = document.getElementById('order_number');
+
+            if (warehouseInput && isEmptyValue(warehouseInput.value)) {
+                setFieldError(warehouseInput, 'Warehouse is required!');
+                hasError = true;
+            }
+
+            if (stockInDateInput && isEmptyValue(stockInDateInput.value)) {
+                setFieldError(stockInDateInput, 'Stock In Date is required!');
+                hasError = true;
+            }
+
+            if (orderNumberInput && isEmptyValue(orderNumberInput.value)) {
+                setFieldError(orderNumberInput, 'Order Number is required!');
+                hasError = true;
+            }
+
+            document.querySelectorAll('#stockInItemBody tr').forEach(function(row, idx) {
+                var productNameInput = row.querySelector('input[name="product_name[]"]');
+                var qtyInput = row.querySelector('input[name="product_quantity[]"]');
+
+                if (productNameInput) {
+                    productNameInput.setAttribute('data-field-key', 'product_name_' + idx);
+                    if (isEmptyValue(productNameInput.value)) {
+                        setFieldError(productNameInput, 'Product Name is required!');
+                        hasError = true;
+                    }
+                }
+
+                if (qtyInput) {
+                    qtyInput.setAttribute('data-field-key', 'product_qty_' + idx);
+                    if (isEmptyValue(qtyInput.value)) {
+                        setFieldError(qtyInput, 'Product Quantity is required!');
+                        hasError = true;
+                    }
+                }
+            });
+
+            if (hasError) {
+                e.preventDefault();
+            }
+        });
+    }
 </script>
 </body>
 </html>

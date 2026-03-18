@@ -669,7 +669,8 @@ function validateFacebookPreviewRecords($records, &$errors, $metaAccounts, $user
     $transactionIds = [];
 
     foreach ($records as $index => $record) {
-        $rowLabel = 'Facebook receipt #' . ($index + 1);
+        $sourceFile = isset($record['source_file_name']) ? trim((string) $record['source_file_name']) : '';
+        $rowLabel = 'Receipt ' . ($index + 1) . ': ' . ($sourceFile !== '' ? $sourceFile : ('Facebook receipt #' . ($index + 1)));
 
         if ($record['source_status'] !== 'Paid') {
             $errors[] = $rowLabel . ' is not marked as Paid.';
@@ -806,10 +807,13 @@ function validateFacebookPreviewRecords($records, &$errors, $metaAccounts, $user
                                     <input type="hidden" name="fb_import_summary[skipped_files]" value="<?= (int) $facebookImportSummary['skipped_files'] ?>">
 
                                     <?php foreach ($facebookPreviewRecords as $index => $record) { ?>
-                                        <div class="border rounded p-3 mb-4">
+                                        <div class="border rounded p-3 mb-4 fb-receipt-card" data-receipt-index="<?= (int) $index ?>">
                                             <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-                                                <h6 class="mb-0">Receipt <?= $index + 1 ?>: <?= htmlspecialchars($record['source_file_name']) ?></h6>
-                                                <span class="badge bg-success">Paid</span>
+                                                <h6 class="mb-0 fb-receipt-title">Receipt <?= $index + 1 ?>: <?= htmlspecialchars($record['source_file_name']) ?></h6>
+                                                <div class="d-flex gap-2 align-items-center">
+                                                    <span class="badge bg-success">Paid</span>
+                                                    <button type="button" class="btn btn-sm btn-rounded btn-danger js-remove-fb-receipt">Remove</button>
+                                                </div>
                                             </div>
 
                                             <input type="hidden" name="fb_records[<?= $index ?>][source_file_name]" value="<?= htmlspecialchars($record['source_file_name']) ?>">
@@ -879,7 +883,7 @@ function validateFacebookPreviewRecords($records, &$errors, $metaAccounts, $user
                                     <?php } ?>
 
                                     <div class="d-flex justify-content-center gap-2 flex-wrap mt-4">
-                                        <button class="btn btn-lg btn-rounded btn-primary px-4" type="submit" name="actionBtn" value="insertFacebookAdsTopup">
+                                        <button class="btn btn-lg btn-rounded btn-primary px-4" type="submit" name="actionBtn" value="insertFacebookAdsTopup" id="fbInsertAllBtn">
                                             <i class="fa-solid fa-database"></i> Insert All
                                         </button>
                                     </div>
@@ -896,6 +900,39 @@ function validateFacebookPreviewRecords($records, &$errors, $metaAccounts, $user
 <script>
     preloader(0, '');
     setButtonColor();
+
+    (function () {
+        function renumberReceipts() {
+            var cards = document.querySelectorAll('.fb-receipt-card');
+            cards.forEach(function (card, idx) {
+                var title = card.querySelector('.fb-receipt-title');
+                if (!title) {
+                    return;
+                }
+                var text = title.textContent || '';
+                var fileName = text.replace(/^Receipt\s+\d+\s*:\s*/, '').trim();
+                title.textContent = 'Receipt ' + (idx + 1) + ': ' + fileName;
+            });
+
+            var insertBtn = document.getElementById('fbInsertAllBtn');
+            if (insertBtn) {
+                insertBtn.disabled = cards.length === 0;
+            }
+        }
+
+        document.querySelectorAll('.js-remove-fb-receipt').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                var card = btn.closest('.fb-receipt-card');
+                if (!card) {
+                    return;
+                }
+                card.remove();
+                renumberReceipts();
+            });
+        });
+
+        renumberReceipts();
+    })();
 </script>
 
 </html>

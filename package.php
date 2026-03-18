@@ -378,7 +378,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                     Name<span
                                         class="requireRed">*</span></label>
                                 <input class="form-control" type="text" name="currentDataName" id="currentDataName"
-                                    value="<?php if (isset($row['name'])) echo $row['name'] ?>"
+                                    value="<?php echo isset($_POST['currentDataName']) ? htmlspecialchars($_POST['currentDataName']) : (isset($row['name']) ? htmlspecialchars($row['name']) : ''); ?>"
                                     <?php if ($act == '') echo 'readonly' ?> required autocomplete="off">
                                 <div id="err_msg">
                                     <span class="mt-n1" id="errorSpan"><?php if (isset($err)) echo $err; ?></span>
@@ -391,7 +391,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                     <div class="form-group mb-3">
                                         <label class="form-label form_lbl" id="item_code_lbl" for="item_code">Item Code (SKU)<span class="requireRed">*</span></label>
                                         <input class="form-control" type="text" name="item_code" id="item_code" 
-                                            value="<?php echo (isset($row['item_code'])) ? htmlspecialchars($row['item_code']) : ''; ?>" 
+                                            value="<?php echo isset($_POST['item_code']) ? htmlspecialchars($_POST['item_code']) : ((isset($row['item_code'])) ? htmlspecialchars($row['item_code']) : ''); ?>" 
                                             <?php if ($act == '') echo 'readonly' ?> required autocomplete="off">
                                     </div>
                                 </div>
@@ -400,7 +400,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                     <div class="form-group mb-3">
                                         <label class="form-label form_lbl" id="item_description_lbl" for="item_description">Item Description<span class="requireRed">*</span></label>
                                         <input class="form-control" type="text" name="item_description" id="item_description" 
-                                            value="<?php echo (isset($row['item_description'])) ? htmlspecialchars($row['item_description']) : ''; ?>" 
+                                            value="<?php echo isset($_POST['item_description']) ? htmlspecialchars($_POST['item_description']) : ((isset($row['item_description'])) ? htmlspecialchars($row['item_description']) : ''); ?>" 
                                             <?php if ($act == '') echo 'readonly' ?> required autocomplete="off">
                                     </div>
                                 </div>
@@ -410,7 +410,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                 <label class="form-label form_lbl" id="price_lbl" for="price">Selling Price<span
                                         class="requireRed">*</span></label>
                                 <input class="form-control" type="number" name="price" id="price"
-                                    value="<?php echo (isset($row['price'])) ? $row['price'] : ''; ?>"
+                                    value="<?php echo isset($_POST['price']) ? htmlspecialchars($_POST['price']) : ((isset($row['price'])) ? htmlspecialchars($row['price']) : ''); ?>"
                                     <?php if ($act == '') echo 'readonly' ?> required>
                                 <div id="err_msg">
                                     <span class="mt-n1"><?php if (isset($err2)) echo $err2; ?></span>
@@ -436,12 +436,15 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                         $curUnitName = $product_info_row['unit'];
                                     }
                                 }
+                                if (isset($_POST['cur_unit'])) {
+                                    $curUnitName = $_POST['cur_unit'];
+                                }
                                 ?>
                                 <input class="form-control" type="text" name="cur_unit" id="cur_unit"
                                     value="<?php echo htmlspecialchars($curUnitName); ?>"
                                     <?php if ($act == '') echo 'readonly'; ?> required>
                                 <input type="hidden" name="cur_unit_hidden" id="cur_unit_hidden"
-                                    value="<?php echo (isset($row['currency_unit'])) ? htmlspecialchars($row['currency_unit']) : ''; ?>">
+                                    value="<?php echo isset($_POST['cur_unit_hidden']) ? htmlspecialchars($_POST['cur_unit_hidden']) : ((isset($row['currency_unit'])) ? htmlspecialchars($row['currency_unit']) : ''); ?>">
                                 <div id="err_msg">
                                     <span class="mt-n1"><?php if (isset($err3)) echo $err3; ?></span>
                                 </div>
@@ -493,7 +496,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                 <label class="form-label form_lbl" id="cost_lbl" for="package_cost">Cost<span
                                         class="requireRed">*</span></label>
                                 <input class="form-control" type="number" required step="0.01" name="package_cost" id="package_cost"
-                                    value="<?php echo (isset($row['cost'])) ? $row['cost'] : ''; ?>"
+                                    value="<?php echo isset($_POST['package_cost']) ? htmlspecialchars($_POST['package_cost']) : ((isset($row['cost'])) ? htmlspecialchars($row['cost']) : ''); ?>"
                                     <?php if ($act == '') echo 'readonly' ?>>
                                 <div id="err_msg">
                                     <span class="mt-n1"><?php if (isset($cost_err)) echo $cost_err; ?></span>
@@ -520,12 +523,15 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                         $costUnitName = $cost_curr_row['unit'];
                                     }
                                 }
+                                if (isset($_POST['cost_curr'])) {
+                                    $costUnitName = $_POST['cost_curr'];
+                                }
                                 ?>
                                 <input class="form-control" type="text" name="cost_curr" id="cost_curr"
                                     value="<?php echo htmlspecialchars($costUnitName); ?>"
                                     <?php if ($act == '') echo 'readonly'; ?> required>
                                 <input type="hidden" name="cost_curr_hidden" id="cost_curr_hidden"
-                                    value="<?php echo isset($row['cost_curr']) ? htmlspecialchars($row['cost_curr']) : ''; ?>">
+                                    value="<?php echo isset($_POST['cost_curr_hidden']) ? htmlspecialchars($_POST['cost_curr_hidden']) : (isset($row['cost_curr']) ? htmlspecialchars($row['cost_curr']) : ''); ?>">
                                 <div id="err_msg">
                                     <span class="mt-n1"><?php if (isset($cost_curr_err)) echo $cost_curr_err; ?></span>
                                 </div>
@@ -537,7 +543,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                         <div class="form-group mb-3">
                             <label class="form-label form_lbl" for="agent_cost">Agent Cost (RM)<span class="requireRed">*</span></label>
                             <input class="form-control" type="number" name="agent_cost" id="agent_cost" step="0.01"
-                                value="<?php echo (isset($row['agent_cost'])) ? $row['agent_cost'] : ''; ?>"
+                                value="<?php echo isset($_POST['agent_cost']) ? htmlspecialchars($_POST['agent_cost']) : ((isset($row['agent_cost'])) ? htmlspecialchars($row['agent_cost']) : ''); ?>"
                                 <?php if ($act == '') echo 'readonly' ?> required>
                             <div id="err_msg">
                                 <span class="mt-n1"><?php if (isset($agent_cost_err)) echo $agent_cost_err; ?></span>
@@ -570,8 +576,69 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                 if (isset($row['product'])) {
                                     $echoVal = $row['product'];
                                 }
-                                
-                                if (!empty($echoVal) ) {
+
+                                if (isset($_POST['prod_name']) && is_array($_POST['prod_name'])) {
+                                    $postedProdNames = $_POST['prod_name'];
+                                    $postedProdVals = isset($_POST['prod_val']) && is_array($_POST['prod_val']) ? $_POST['prod_val'] : array();
+                                    $rowCount = max(count($postedProdNames), count($postedProdVals));
+                                    if ($rowCount < 1) {
+                                        $rowCount = 1;
+                                    }
+
+                                    for ($i = 0; $i < $rowCount; $i++) {
+                                        $num = $i + 1;
+                                        $pn = isset($postedProdNames[$i]) ? $postedProdNames[$i] : '';
+                                        $pid = isset($postedProdVals[$i]) ? $postedProdVals[$i] : '';
+                                        $pw = '';
+                                        $pwu = '';
+                                        $pwun = '';
+                                        $ps = '';
+                                        $pslot = '';
+
+                                        if (!empty($pid)) {
+                                            $product_info_result = getData('*', "id = '$pid'", '', PROD, $connect);
+                                            if ($product_info_result && $product_info_result->num_rows > 0) {
+                                                $product_info_row = $product_info_result->fetch_assoc();
+                                                $pw = $product_info_row['weight'];
+                                                $pwu = $product_info_row['weight_unit'];
+                                                $ps = $product_info_row['barcode_status'];
+                                                $pslot = $product_info_row['barcode_slot'];
+
+                                                $wgt_unit_result = getData('unit', "id = '$pwu'", '', WGT_UNIT, $connect);
+                                                if ($wgt_unit_result && $wgt_unit_result->num_rows > 0) {
+                                                    $wgt_unit_row = $wgt_unit_result->fetch_assoc();
+                                                    $pwun = $wgt_unit_row['unit'];
+                                                }
+                                            }
+                                        }
+                                        ?>
+                                        <tr>
+                                            <td><?= $num ?></td>
+                                            <td class="autocomplete">
+                                                <input type="text" name="prod_name[]" id="prod_name_<?= $num ?>" value="<?= htmlspecialchars($pn) ?>" onkeyup="prodInfo(this)"<?= $readonly ?>>
+                                                <input type="hidden" name="prod_val[]" id="prod_val_<?= $num ?>" value="<?= htmlspecialchars($pid) ?>" oninput="prodInfoAutoFill(this)">
+                                                <div id="err_msg"><span class="mt-n1"><?php if (isset($err4)) echo $err4; ?></span></div>
+                                            </td>
+                                            <td><input class="readonlyInput" type="text" name="wgt[]" id="wgt_<?= $num ?>" value="<?= htmlspecialchars($pw) ?>" readonly></td>
+                                            <td>
+                                                <input class="readonlyInput" type="text" name="wgt_unit[]" id="wgt_unit_<?= $num ?>" value="<?= htmlspecialchars($pwun) ?>" readonly>
+                                                <input type="hidden" name="wgt_unit_val[]" id="wgt_unit_val_<?= $num ?>" value="<?= htmlspecialchars($pwu) ?>" readonly>
+                                            </td>
+                                            <td><input class="readonlyInput" type="text" name="barcode_status[]" id="barcode_status_<?= $num ?>" value="<?= htmlspecialchars($ps) ?>" readonly></td>
+                                            <td><input class="readonlyInput" type="text" name="barcode_slot[]" id="barcode_slot_<?= $num ?>" value="<?= htmlspecialchars($pslot) ?>" readonly></td>
+                                            <?php if ($act != ''): ?>
+                                                <td>
+                                                    <?php if ($num == 1): ?>
+                                                        <button class="mt-1" id="action_menu_btn" type="button" onclick="Add()"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>
+                                                    <?php else: ?>
+                                                        <button class="mt-1" id="action_menu_btn" type="button" onclick="Remove(this)"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000" value="Remove"></i></button>
+                                                    <?php endif; ?>
+                                                </td>
+                                            <?php endif; ?>
+                                        </tr>
+                                        <?php
+                                    }
+                                } else if (!empty($echoVal)) {
                                     $num = 1; // numbering
                                     $echoVal = explode(',', $echoVal);
                                 
@@ -630,7 +697,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                     <tr>
                                         <td>1</td>
                                         <td class="autocomplete">
-                                            <input type="text" name="prod_name[]" id="prod_name_1" value="" onkeyup="prodInfo(this)">
+                                            <input type="text" name="prod_name[]" id="prod_name_1" value="" onkeyup="prodInfo(this)"<?= $readonly ?>>
                                             <input type="hidden" name="prod_val[]" id="prod_val_1" value="" oninput="prodInfoAutoFill(this)">
                                             <div id="err_msg"><span class="mt-n1"><?php if (isset($err4)) echo $err4; ?></span></div>
                                         </td>
@@ -641,7 +708,11 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                         </td>
                                         <td><input class="readonlyInput" type="text" name="barcode_status[]" id="barcode_status_1" value="" readonly></td>
                                         <td><input class="readonlyInput" type="text" name="barcode_slot[]" id="barcode_slot_1" value="" readonly></td>
-                                        <td><button class="mt-1" id="action_menu_btn" type="button" onclick="Add()"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button></td>
+                                        <?php if ($act != ''): ?>
+                                            <td><button class="mt-1" id="action_menu_btn" type="button" onclick="Add()"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button></td>
+                                        <?php else: ?>
+                                            <td></td>
+                                        <?php endif; ?>
                                     </tr>
                                 <?php } ?>
                                 </tbody>
@@ -654,13 +725,15 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                             if (isset($barcode_slot_total) && $barcode_slot_total != '')
                                                 echo $barcode_slot_total;
                                             else {
-                                                if (isset($dataExisted) && isset($row['barcode_slot_total']))
+                                                if (isset($_POST['barcode_slot_total_hidden']) && $_POST['barcode_slot_total_hidden'] !== '')
+                                                    echo htmlspecialchars($_POST['barcode_slot_total_hidden']);
+                                                else if (isset($dataExisted) && isset($row['barcode_slot_total']))
                                                     echo $row['barcode_slot_total'];
                                                 else echo '0';
                                             }
                                             ?><input name="barcode_slot_total_hidden" id="barcode_slot_total_hidden"
                                                 type="hidden"
-                                                value="<?php echo (isset($row['barcode_slot_total'])) ? $row['barcode_slot_total'] : ''; ?>">
+                                                value="<?php echo isset($_POST['barcode_slot_total_hidden']) ? htmlspecialchars($_POST['barcode_slot_total_hidden']) : ((isset($row['barcode_slot_total'])) ? htmlspecialchars($row['barcode_slot_total']) : ''); ?>">
                                         </td>
                                         <td scope="col"></td>
                                     </tr>
@@ -673,7 +746,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                     <div class="form-group mb-3">
                         <label class="form-label" for="currentDataRemark"><?php echo $pageTitle ?> Remark</label>
                         <textarea class="form-control" name="currentDataRemark" id="currentDataRemark" rows="3"
-                            <?php if ($act == '') echo 'readonly' ?>><?php if (isset($row['remark'])) echo $row['remark'] ?></textarea>
+                            <?php if ($act == '') echo 'readonly' ?>><?php echo isset($_POST['currentDataRemark']) ? htmlspecialchars($_POST['currentDataRemark']) : (isset($row['remark']) ? htmlspecialchars($row['remark']) : ''); ?></textarea>
                     </div>
 
                     <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
