@@ -30,10 +30,18 @@ $msg = isset($_GET['msg']) ? trim((string) $_GET['msg']) : '';
 $err = isset($_GET['err']) ? trim((string) $_GET['err']) : '';
 
 if (!function_exists('siFetchAssocRows')) {
-    function siFetchAssocRows($financeConnect, $orderTable, $itemTable, $warehouseNameMap, $productNameMap, $selectedOrderIds = array())
+    function siFetchAssocRows($financeConnect, $cmsConnect, $orderTable, $itemTable, $warehouseNameMap, $productNameMap, $selectedOrderIds = array())
     {
         $orderCols = array();
         $itemCols = array();
+        $userMap = array();
+
+        $rstUsers = mysqli_query($cmsConnect, "SELECT id, name FROM " . USR_USER . " WHERE status='A'");
+        if ($rstUsers) {
+            while ($usr = mysqli_fetch_assoc($rstUsers)) {
+                $userMap[(int) $usr['id']] = (string) $usr['name'];
+            }
+        }
 
         $rstOrderCols = mysqli_query($financeConnect, "SHOW COLUMNS FROM `" . $orderTable . "`");
         if ($rstOrderCols) {
@@ -94,11 +102,39 @@ if (!function_exists('siFetchAssocRows')) {
                     }
                 }
                 if (isset($row['item_product_id'])) {
-                    $pid = (int) $row['item_product_id'];
-                    if (isset($productNameMap[$pid])) {
-                        $row['item_product_id'] = (string) $productNameMap[$pid];
+                    $rawProductIds = (string) $row['item_product_id'];
+                     $productIdParts = array_map('trim', explode(',', $rawProductIds));
+                     $productNames = array();
+                     foreach ($productIdParts as $productIdPart) {
+                         if ($productIdPart === '') {
+                             continue;
+                         }
+                         $pid = (int) $productIdPart;
+                         if (isset($productNameMap[$pid])) {
+                             $productNames[] = (string) $productNameMap[$pid];
+                         } else {
+                             // Fallback to the original ID token if no name is found.
+                             $productNames[] = $productIdPart;
+                         }
+                     }
+                     if (!empty($productNames)) {
+                         $row['item_product_id'] = implode(', ', $productNames);
+                     } else {
+                         // If nothing could be resolved, keep the original value.
+                         $row['item_product_id'] = $rawProductIds;
+                     }
+                }
+
+                foreach ($row as $key => $value) {
+                    $normalizedKey = strtolower((string) $key);
+                    if ($normalizedKey === 'order_create_by' || $normalizedKey === 'order_update_by' || $normalizedKey === 'item_create_by' || $normalizedKey === 'item_update_by') {
+                        $uid = (int) $value;
+                        if (isset($userMap[$uid])) {
+                            $row[$key] = (string) $userMap[$uid];
+                        }
                     }
                 }
+
                 $rows[] = $row;
             }
         }
@@ -180,7 +216,7 @@ if (input('export') === 'excel') {
         echo "<script>alert('You do not have permission to export this page.'); location.href='" . $tablePage . "';</script>";
         exit;
     }
-    $rows = siFetchAssocRows($finance_connect, $stockInOrderTable, $stockInItemTable, $warehouseNameMap, $productNameMap);
+    $rows = siFetchAssocRows($finance_connect, $connect, $stockInOrderTable, $stockInItemTable, $warehouseNameMap, $productNameMap);
 
     while (ob_get_level() > 0) {
         ob_end_clean();
@@ -196,7 +232,7 @@ if (!empty($checkboxValues)) {
         exit;
     }
 
-    $rows = siFetchAssocRows($finance_connect, $stockInOrderTable, $stockInItemTable, $warehouseNameMap, $productNameMap, explode(',', $checkboxValues));
+    $rows = siFetchAssocRows($finance_connect, $connect, $stockInOrderTable, $stockInItemTable, $warehouseNameMap, $productNameMap, explode(',', $checkboxValues));
 
     setcookie('rowID', '', time() - 3600, '/');
     while (ob_get_level() > 0) {

@@ -254,7 +254,7 @@ if (!$result) {
                                         <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
                                         <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
                                         <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
-                                    </td></td>
+                                    </td>
                                     <td><?= htmlspecialchars($row['name']) ?></td>
                                     <td><?= htmlspecialchars(isset($row['item_code']) ? $row['item_code'] : '') ?></td>
                                     <td><?= htmlspecialchars(isset($row['item_description']) ? $row['item_description'] : '') ?></td>

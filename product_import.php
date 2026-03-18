@@ -59,11 +59,21 @@ if (!function_exists('parse_xlsx')) {
         }
 
         if (!$sheetXml) {
-            // Windows/local fallback when ZipArchive extension is unavailable.
+            // Pure-PHP fallback using PharData when ZipArchive is unavailable.
             $tempDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'xlsx_' . uniqid();
             if (@mkdir($tempDir)) {
-                $cmd = 'tar -xf ' . escapeshellarg($filepath) . ' -C ' . escapeshellarg($tempDir) . ' 2>&1';
-                @shell_exec($cmd);
+                if (class_exists('PharData')) {
+                    try {
+                        // Copy to a temporary .zip extension so PharData recognizes the archive format
+                        $tempZip = $tempDir . DIRECTORY_SEPARATOR . 'temp.zip';
+                        copy($filepath, $tempZip);
+                        $phar = new \PharData($tempZip);
+                        $phar->extractTo($tempDir, null, true);
+                        @unlink($tempZip);
+                    } catch (Exception $e) {
+                        // Extraction failed
+                    }
+                }
 
                 $ssPath = $tempDir . DIRECTORY_SEPARATOR . 'xl' . DIRECTORY_SEPARATOR . 'sharedStrings.xml';
                 if (file_exists($ssPath)) {
@@ -566,7 +576,7 @@ if ($action === 'preview') {
                 <div class="card mb-4 shadow-sm border-0">
                     <div class="card-body">
                         <h5 class="card-title mb-3">Step 2: Preview Changes</h5>
-                        <form method="post">
+                        <form method="post" autocomplete="off">
                             <?php foreach ($previewData as $index => $row) {
                                 $chg = isset($row['changes']) && is_array($row['changes']) ? $row['changes'] : array();
                                 $ferr = isset($row['field_errors']) && is_array($row['field_errors']) ? $row['field_errors'] : array();
@@ -671,7 +681,7 @@ if ($action === 'preview') {
                 <div class="card mb-4 shadow-sm border-0">
                     <div class="card-body">
                         <h5 class="card-title mb-3">Step 1: Upload Edited Excel File</h5>
-                        <form method="post" enctype="multipart/form-data">
+                        <form method="post" enctype="multipart/form-data" autocomplete="off">
                             <div class="row g-3 align-items-end">
                                 <div class="col-12 col-md-8">
                                     <label class="form-label fw-bold" for="import_file">Select Excel (.xlsx) File</label>
@@ -697,6 +707,72 @@ if ($action === 'preview') {
 
     (function () {
         var siteUrl = <?= json_encode($SITEURL) ?>;
+        var previewServerRows = <?= ($action === 'preview' && !empty($previewData)) ? json_encode($previewData, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) : 'null' ?>;
+
+        function normalizeServerValue(val) {
+            if (val === null || typeof val === 'undefined') {
+                return '';
+            }
+            if (typeof val === 'boolean') {
+                return val ? '1' : '0';
+            }
+            return String(val);
+        }
+
+        function bindServerValue(el, serverValue) {
+            if (!el) {
+                return;
+            }
+
+            var released = false;
+            var apply = function () {
+                if (released) {
+                    return;
+                }
+                el.value = serverValue;
+            };
+
+            var release = function () {
+                released = true;
+            };
+
+            apply();
+            el.addEventListener('input', release, { once: true });
+            el.addEventListener('change', release, { once: true });
+            el.addEventListener('keydown', release, { once: true });
+
+            [120, 350, 700, 1200].forEach(function (delay) {
+                setTimeout(apply, delay);
+            });
+        }
+
+        function enforcePreviewServerValues() {
+            if (!Array.isArray(previewServerRows)) {
+                return;
+            }
+
+            previewServerRows.forEach(function (row, idx) {
+                if (!row || typeof row !== 'object') {
+                    return;
+                }
+
+                Object.keys(row).forEach(function (key) {
+                    if (key === 'changes' || key === 'field_errors') {
+                        return;
+                    }
+
+                    var selector = '[name="data[' + idx + '][' + key + ']"]';
+                    var field = document.querySelector(selector);
+                    if (!field) {
+                        return;
+                    }
+
+                    bindServerValue(field, normalizeServerValue(row[key]));
+                });
+            });
+        }
+
+        enforcePreviewServerValues();
 
         function clearSearchList(inputId) {
             var list = document.getElementById('searchResult_' + inputId);
@@ -704,36 +780,6 @@ if ($action === 'preview') {
             var clear = document.getElementById('clear_' + inputId);
             if (clear) clear.remove();
         }
-
-        document.querySelectorAll('.js-live-search[data-search-type][data-db-table]').forEach(function (el) {
-            var hidden = document.getElementById(el.id + '_hidden');
-            if (!hidden) return;
-
-            el.addEventListener('keyup', function () {
-                hidden.value = '';
-                searchInput({
-                    search: el.value,
-                    searchType: el.getAttribute('data-search-type'),
-                    elementID: el.id,
-                    hiddenElementID: hidden.id,
-                    dbTable: el.getAttribute('data-db-table')
-                }, siteUrl);
-            });
-
-            el.addEventListener('change', function () {
-                if (el.value.trim() === '') {
-                    hidden.value = '';
-                    clearSearchList(el.id);
-                }
-            });
-
-            el.addEventListener('blur', function () {
-                setTimeout(function () { clearSearchList(el.id); }, 120);
-            });
-
-            hidden.addEventListener('input', function () { clearErrorForField(el); });
-            hidden.addEventListener('change', function () { clearErrorForField(el); });
-        });
 
         function norm(v) {
             return String(v || '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -769,29 +815,54 @@ if ($action === 'preview') {
             if (!meta) return true;
 
             var byName = {};
-            var byId = {};
             (meta.names || []).forEach(function (name) { byName[norm(name)] = true; });
-            (meta.ids || []).forEach(function (id) { byId[String(id)] = true; });
-
-            if (byName[norm(value)]) return true;
-            if (/^\d+$/.test(value) && byId[value]) return true;
-            return false;
+            return !!byName[norm(value)];
         }
 
-        function clearErrorForField(input) {
+        function revalidateField(input) {
             var field = input.getAttribute('data-lookup-field');
             if (!field) return;
-            if (!hasValidValue(field, input.value)) return;
-
+            
+            var isValid = hasValidValue(field, input.value);
             var row = input.closest('.col-md-3, .col-md-4, .col-md-6, .col-md-2, .col-md-12') || input.parentElement;
             if (!row) return;
+            
             var err = row.querySelector('.field-error[data-field="' + field + '"]');
-            if (err) err.style.display = 'none';
+            if (err) {
+                err.style.display = isValid ? 'none' : 'block';
+            }
         }
 
+        document.querySelectorAll('.js-live-search[data-search-type][data-db-table]').forEach(function (el) {
+            var hidden = document.getElementById(el.id + '_hidden');
+            var check = function() { revalidateField(el); };
+
+            el.addEventListener('keyup', function () {
+                if(hidden) hidden.value = '';
+                searchInput({
+                    search: el.value,
+                    searchType: el.getAttribute('data-search-type'),
+                    elementID: el.id,
+                    hiddenElementID: hidden ? hidden.id : '',
+                    dbTable: el.getAttribute('data-db-table')
+                }, siteUrl);
+                check();
+            });
+
+            el.addEventListener('change', check);
+            el.addEventListener('input', check);
+
+            el.addEventListener('blur', function () {
+                setTimeout(function () { 
+                    clearSearchList(el.id); 
+                    check(); 
+                }, 200);
+            });
+        });
+
         document.querySelectorAll('.js-lookup-single[data-lookup-field]').forEach(function (el) {
-            el.addEventListener('input', function () { clearErrorForField(el); });
-            el.addEventListener('change', function () { clearErrorForField(el); });
+            el.addEventListener('input', function () { revalidateField(el); });
+            el.addEventListener('change', function () { revalidateField(el); });
         });
     })();
 </script>
