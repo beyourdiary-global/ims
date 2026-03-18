@@ -3,7 +3,7 @@ if (!defined('IMPORT_FORCE_MODULE')) {
     define('IMPORT_FORCE_MODULE', 'fb_ads_topup');
 }
 
-$pageTitle = "Import Shortcut";
+$pageTitle = "Facebook Ads Topup Import";
 $parentPageTitle = "Facebook Ads Top Up Transaction";
 
 include_once 'menuHeader.php';

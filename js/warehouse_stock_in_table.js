@@ -52,17 +52,14 @@ $(document).ready(function ($) {
     event.preventDefault();
     var checkboxValues = [];
 
-    $("#stockInListTable")
-      .DataTable()
-      .$("tr", { filter: "applied" })
-      .each(function () {
-        var checkbox = $(this).find(".export:checked");
-        if (checkbox.length > 0) {
-          checkbox.each(function () {
-            checkboxValues.push($(this).val());
-          });
-        }
-      });
+    $("#stockInListTable tbody tr").each(function () {
+      var checkbox = $(this).find(".export:checked");
+      if (checkbox.length > 0) {
+        checkbox.each(function () {
+          checkboxValues.push($(this).val());
+        });
+      }
+    });
 
     if (checkboxValues.length > 0) {
       auditExport(checkboxValues, "stock_in_order_item");
@@ -79,7 +76,10 @@ $(document).ready(function ($) {
       }
 
       alert("Export successful!");
-      window.location.href = "warehouse_stock_in_table.php";
+      var exportUrl =
+        "warehouse_stock_in_table.php?export=excel&ids=" +
+        encodeURIComponent(checkboxValues.join(","));
+      window.open(exportUrl, "_blank");
     } else {
       alert("Please select data to export.");
     }

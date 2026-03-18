@@ -197,15 +197,32 @@ if (!function_exists('siExportAssocExcel')) {
     }
 }
 
-$checkboxValues = isset($_COOKIE['rowID']) ? $_COOKIE['rowID'] : '';
-if (!empty($checkboxValues)) {
-    $checkboxValues = preg_replace('/[^0-9,]/', '', (string) $checkboxValues);
-    $ids = array_filter(explode(',', $checkboxValues), 'strlen');
-    $ids = array_map('intval', $ids);
-    $ids = array_filter($ids, function ($v) {
+if (!function_exists('siAuditExportAction')) {
+    function siAuditExportAction($connect, $pageTitle, $targetTable, $idsText)
+    {
+        $log = array(
+            'log_act' => 'Export',
+            'cdate' => date('Y-m-d'),
+            'ctime' => date('H:i:s'),
+            'uid' => USER_ID,
+            'cby' => USER_ID,
+            'query_rec' => 'Export IDs: ' . (string) $idsText,
+            'query_table' => (string) $targetTable,
+            'act_msg' => USER_NAME . ' exported stock in data [<b>ID = ' . htmlspecialchars((string) $idsText, ENT_QUOTES, 'UTF-8') . '</b>] from <b><i>' . $targetTable . ' Table</i></b>.',
+            'page' => $pageTitle,
+            'connect' => $connect,
+        );
+        audit_log($log);
+    }
+}
+
+$exportIdsParam = isset($_GET['ids']) ? preg_replace('/[^0-9,]/', '', (string) $_GET['ids']) : '';
+$exportIds = array();
+if ($exportIdsParam !== '') {
+    $exportIds = array_filter(array_map('intval', explode(',', $exportIdsParam)), function ($v) {
         return $v > 0;
     });
-    $checkboxValues = implode(',', $ids);
+    $exportIds = array_values(array_unique($exportIds));
 }
 
 if (input('export') === 'excel') {
@@ -216,34 +233,24 @@ if (input('export') === 'excel') {
         echo "<script>alert('You do not have permission to export this page.'); location.href='" . $tablePage . "';</script>";
         exit;
     }
-    $rows = siFetchAssocRows($finance_connect, $connect, $stockInOrderTable, $stockInItemTable, $warehouseNameMap, $productNameMap);
+    if (!empty($exportIds)) {
+        $rows = siFetchAssocRows($finance_connect, $connect, $stockInOrderTable, $stockInItemTable, $warehouseNameMap, $productNameMap, $exportIds);
+        if (empty($rows)) {
+            while (ob_get_level() > 0) {
+                ob_end_clean();
+            }
+            echo "<script>alert('No selected stock-in rows found to export.'); location.href='" . $tablePage . "';</script>";
+            exit;
+        }
+        siAuditExportAction($connect, $pageTitle, $stockInItemTable, implode(',', $exportIds));
+    } else {
+        $rows = siFetchAssocRows($finance_connect, $connect, $stockInOrderTable, $stockInItemTable, $warehouseNameMap, $productNameMap);
+        siAuditExportAction($connect, $pageTitle, $stockInItemTable, 'ALL');
+    }
 
     while (ob_get_level() > 0) {
         ob_end_clean();
     }
-    siExportAssocExcel($rows, 'stock_in_export');
-}
-
-if (!empty($checkboxValues)) {
-    if (!isActionAllowed("Export", $pinAccess)) {
-        setcookie('rowID', '', time() - 3600, '/');
-        ob_end_clean();
-        echo "<script>alert('You do not have permission to export this page.'); location.href='" . $tablePage . "';</script>";
-        exit;
-    }
-
-    $rows = siFetchAssocRows($finance_connect, $connect, $stockInOrderTable, $stockInItemTable, $warehouseNameMap, $productNameMap, explode(',', $checkboxValues));
-
-    setcookie('rowID', '', time() - 3600, '/');
-    while (ob_get_level() > 0) {
-        ob_end_clean();
-    }
-
-    if (empty($rows)) {
-        echo "<script>alert('No selected stock-in rows found to export.'); location.href='" . $tablePage . "';</script>";
-        exit;
-    }
-
     siExportAssocExcel($rows, 'stock_in_export');
 }
 

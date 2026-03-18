@@ -1,5 +1,5 @@
 <?php
-$pageTitle = 'Stock Order Request PDF Import';
+$pageTitle = 'Stock Order Request Import';
 $isFinance = 1;
 
 include_once '../menuHeader.php';
@@ -1483,7 +1483,7 @@ foreach ($previewRows as $idx => $rowCheck) {
                     <h2>Stock Order Request PDF Import</h2>
                     <div class="d-flex gap-2 flex-wrap">
                         <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $tablePage ?>">Back To Table</a>
-                        <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $shortcutPage ?>">Back To Shortcuts</a>
+                        <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $shortcutPage ?>">BACK TO SHORTCUTS</a>
                     </div>
                 </div>
             </div>

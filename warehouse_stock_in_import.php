@@ -10,6 +10,7 @@ $stockInItemTable = 'stock_in_order_item';
 
 $importPage = $SITEURL . '/warehouse_stock_in_import.php';
 $tablePage = $SITEURL . '/warehouse_stock_in_table.php';
+$shortcutPage = $SITEURL . '/common_import.php';
 
 $pinAccess = checkCurrentPin($connect, 'Stock In');
 if (!is_array($pinAccess)) {
@@ -120,10 +121,12 @@ if ($actionBtn === 'confirmImport') {
             $orderId = isset($row['order_id']) ? (int) $row['order_id'] : 0;
 
             $warehouseRaw = trim((string) (isset($row['warehouse']) ? $row['warehouse'] : ''));
-            $stockInDate = siNormalizeImportedDate(isset($row['stock_in_date']) ? $row['stock_in_date'] : '');
+            $stockInDateRaw = trim((string) (isset($row['stock_in_date']) ? $row['stock_in_date'] : ''));
+            $stockInDate = siNormalizeImportedDate($stockInDateRaw);
             $orderNumber = trim((string) (isset($row['order_number']) ? $row['order_number'] : ''));
             $productRaw = trim((string) (isset($row['product_name']) ? $row['product_name'] : ''));
-            $qty = isset($row['product_quantity']) ? (int) $row['product_quantity'] : 0;
+            $qtyRaw = trim((string) (isset($row['product_quantity']) ? $row['product_quantity'] : ''));
+            $qty = (int) $qtyRaw;
             $packageId = isset($row['package_id']) ? (int) $row['package_id'] : 0;
 
             $warehouseId = 0;
@@ -141,20 +144,28 @@ if ($actionBtn === 'confirmImport') {
             }
 
             $fieldErrors = array();
-            if ($warehouseId <= 0) {
+            if ($warehouseRaw === '') {
+                $fieldErrors['warehouse'] = 'Warehouse field is required!';
+            } else if ($warehouseId <= 0) {
                 $fieldErrors['warehouse'] = 'Warehouse not found in database.';
             }
-            if ($productId <= 0) {
+            if ($productRaw === '') {
+                $fieldErrors['product_name'] = 'Product Name field is required!';
+            } else if ($productId <= 0) {
                 $fieldErrors['product_name'] = 'Product not found in database.';
             }
-            if ($qty <= 0) {
+            if ($qtyRaw === '') {
+                $fieldErrors['product_quantity'] = 'Product Quantity field is required!';
+            } else if ($qty <= 0) {
                 $fieldErrors['product_quantity'] = 'Quantity must be greater than 0.';
             }
-            if ($stockInDate === '') {
-                $fieldErrors['stock_in_date'] = 'Stock in date is required.';
+            if ($stockInDateRaw === '') {
+                $fieldErrors['stock_in_date'] = 'Stock In Date field is required!';
+            } else if ($stockInDate === '') {
+                $fieldErrors['stock_in_date'] = 'Stock In Date format is invalid.';
             }
             if ($orderNumber === '') {
-                $fieldErrors['order_number'] = 'Order number is required.';
+                $fieldErrors['order_number'] = 'Order Number field is required!';
             }
 
             $before = ($itemId > 0 && isset($currentByItemId[$itemId])) ? $currentByItemId[$itemId] : null;
@@ -367,25 +378,37 @@ if ($actionBtn === 'importPreview') {
 
                     $notes = array();
                     $fieldErrors = array();
-                    if ($warehouseId <= 0) {
+                    if ($warehouseRaw === '') {
+                        $notes[] = 'Missing warehouse';
+                        $fieldErrors['warehouse'] = 'Warehouse field is required!';
+                    } else if ($warehouseId <= 0) {
                         $notes[] = 'Invalid warehouse';
                         $fieldErrors['warehouse'] = 'Warehouse not found in database.';
                     }
-                    if ($productId <= 0) {
+                    if ($productRaw === '') {
+                        $notes[] = 'Missing product';
+                        $fieldErrors['product_name'] = 'Product Name field is required!';
+                    } else if ($productId <= 0) {
                         $notes[] = 'Invalid product';
                         $fieldErrors['product_name'] = 'Product not found in database.';
                     }
-                    if ($qty <= 0) {
+                    if ($qtyRaw === '') {
+                        $notes[] = 'Missing quantity';
+                        $fieldErrors['product_quantity'] = 'Product Quantity field is required!';
+                    } else if ($qty <= 0) {
                         $notes[] = 'Invalid quantity';
                         $fieldErrors['product_quantity'] = 'Quantity must be greater than 0.';
                     }
-                    if ($stockInDate === '') {
+                    if ($stockInDateRaw === '') {
                         $notes[] = 'Missing stock in date';
-                        $fieldErrors['stock_in_date'] = 'Stock in date is required.';
+                        $fieldErrors['stock_in_date'] = 'Stock In Date field is required!';
+                    } else if ($stockInDate === '') {
+                        $notes[] = 'Invalid stock in date';
+                        $fieldErrors['stock_in_date'] = 'Stock In Date format is invalid.';
                     }
                     if ($orderNumber === '') {
                         $notes[] = 'Missing order number';
-                        $fieldErrors['order_number'] = 'Order number is required.';
+                        $fieldErrors['order_number'] = 'Order Number field is required!';
                     }
 
                     $after = array(
@@ -418,17 +441,62 @@ if ($actionBtn === 'importPreview') {
                     }
 
                     if ($itemId > 0 && isset($currentByItemId[$itemId])) {
+                        $currentRow = $currentByItemId[$itemId];
+                        $currentWarehouseName = isset($warehouseNameMap[(int) $currentRow['warehouse_id']]) ? strtolower(trim((string) $warehouseNameMap[(int) $currentRow['warehouse_id']])) : '';
+                        $currentProductName = isset($productNameMap[(int) $currentRow['product_id']]) ? strtolower(trim((string) $productNameMap[(int) $currentRow['product_id']])) : '';
+
+                        $warehouseRawNorm = strtolower(trim((string) $warehouseRaw));
+                        $productRawNorm = strtolower(trim((string) $productRaw));
+
+                        // Keep existing IDs when the imported text is the same display value.
+                        // This avoids false "modified" rows when duplicate names exist in master data.
+                        if ($warehouseRawNorm !== '' && $currentWarehouseName !== '' && $warehouseRawNorm === $currentWarehouseName) {
+                            $warehouseId = (int) $currentRow['warehouse_id'];
+                            $after['warehouse_id'] = $warehouseId;
+                        }
+                        if ($productRawNorm !== '' && $currentProductName !== '' && $productRawNorm === $currentProductName) {
+                            $productId = (int) $currentRow['product_id'];
+                            $after['product_id'] = $productId;
+                        }
+                    }
+
+                    if ($itemId > 0 && isset($currentByItemId[$itemId])) {
                         $old = $currentByItemId[$itemId];
                         $oldStockInDate = siNormalizeImportedDate(isset($old['stock_in_date']) ? $old['stock_in_date'] : '');
+
+                        $normText = function ($value) {
+                            return strtolower(trim((string) $value));
+                        };
+
+                        $oldOrderNo = trim((string) (isset($old['order_number']) ? $old['order_number'] : ''));
+                        $newOrderNo = trim((string) (isset($after['order_number']) ? $after['order_number'] : ''));
+
+                        $orderNoChanged = false;
+                        if ($oldOrderNo !== $newOrderNo) {
+                            if (is_numeric($oldOrderNo) && is_numeric($newOrderNo)) {
+                                $orderNoChanged = ((float) $oldOrderNo !== (float) $newOrderNo);
+                            } else {
+                                $orderNoChanged = true;
+                            }
+                        }
 
                         $changed = (
                             (int) $old['warehouse_id'] !== (int) $after['warehouse_id'] ||
                             (string) $oldStockInDate !== (string) $after['stock_in_date'] ||
-                            (string) $old['order_number'] !== (string) $after['order_number'] ||
+                            $orderNoChanged ||
                             (int) $old['product_id'] !== (int) $after['product_id'] ||
                             (int) $old['product_quantity'] !== (int) $after['product_quantity'] ||
                             (int) $old['package_id'] !== (int) $after['package_id']
                         );
+
+                        // Fallback comparison for product name text to avoid false positives on name/ID formatting differences.
+                        if (!$changed) {
+                            $oldProductName = isset($productNameMap[(int) $old['product_id']]) ? (string) $productNameMap[(int) $old['product_id']] : '';
+                            $newProductName = (string) $productRaw;
+                            if ($oldProductName !== '' && $newProductName !== '' && $normText($oldProductName) !== $normText($newProductName)) {
+                                $changed = true;
+                            }
+                        }
 
                         if (count($notes) > 0 || $changed) {
                             $entries[] = array(
@@ -534,13 +602,15 @@ $previewData = isset($_SESSION['si_import_preview']) ? $_SESSION['si_import_prev
             <div class="row mb-4">
                 <div class="col-12 d-flex justify-content-between flex-wrap align-items-center gap-2">
                     <h2>Import &amp; Bulk Edit Stock In</h2>
-                    <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $tablePage ?>"><i class="fa-solid fa-arrow-left"></i> Back To Table</a>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $tablePage ?>"><i class="fa-solid fa-arrow-left"></i> Back To Table</a>
+                        <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $shortcutPage ?>">BACK TO SHORTCUTS</a>
+                    </div>
                 </div>
             </div>
             
             <?php if (!empty($importErrors)) { ?>
-                <div class="alert alert-warning shadow-sm" role="alert">
-                    <h5 class="alert-heading"><i class="fa-solid fa-circle-info"></i> Import Notice</h5>
+                <div class="alert alert-danger shadow-sm" role="alert">
                     <?php foreach ($importErrors as $error) { echo '<div>- ' . siEsc($error) . '</div>'; } ?>
                 </div>
             <?php } ?>
@@ -619,34 +689,34 @@ $previewData = isset($_SESSION['si_import_preview']) ? $_SESSION['si_import_prev
                                             <div class="col-md-4">
                                                 <label class="form-label">Warehouse*</label>
                                                 <div class="autocomplete">
-                                                    <input id="si_warehouse_<?= $idx ?>" class="form-control lookup-input js-stock-warehouse-input js-server-bound <?= $chgWarehouse ? 'highlight-change' : '' ?>" autocomplete="new-password" data-server-value="<?= siEsc($wAfter) ?>" data-lookup-field="warehouse" name="rows[<?= $idx ?>][warehouse]" value="<?= siEsc($wAfter) ?>" required>
+                                                    <input id="si_warehouse_<?= $idx ?>" class="form-control lookup-input js-stock-warehouse-input js-server-bound js-required-field <?= $chgWarehouse ? 'highlight-change' : '' ?>" autocomplete="new-password" data-server-value="<?= siEsc($wAfter) ?>" data-lookup-field="warehouse" data-required-field="warehouse" data-required-message="Warehouse field is required!" name="rows[<?= $idx ?>][warehouse]" value="<?= siEsc($wAfter) ?>" required>
                                                     <input type="hidden" id="si_warehouse_<?= $idx ?>_hidden" value="">
                                                 </div>
-                                                <?php if (isset($fieldErrors['warehouse'])) { ?><div class="field-error"><?= siEsc($fieldErrors['warehouse']) ?></div><?php } ?>
+                                                <?php if (isset($fieldErrors['warehouse'])) { ?><div class="field-error" data-field="warehouse"><?= siEsc($fieldErrors['warehouse']) ?></div><?php } ?>
                                             </div>
                                             <div class="col-md-4">
                                                 <label class="form-label">Stock In Date*</label>
-                                                <input type="date" class="form-control <?= $chgDate ? 'highlight-change' : '' ?>" name="rows[<?= $idx ?>][stock_in_date]" value="<?= siEsc($after['stock_in_date']) ?>" required>
-                                                <?php if (isset($fieldErrors['stock_in_date'])) { ?><div class="field-error"><?= siEsc($fieldErrors['stock_in_date']) ?></div><?php } ?>
+                                                <input type="date" class="form-control js-required-field <?= $chgDate ? 'highlight-change' : '' ?>" data-required-field="stock_in_date" data-required-message="Stock In Date field is required!" name="rows[<?= $idx ?>][stock_in_date]" value="<?= siEsc($after['stock_in_date']) ?>" required>
+                                                <?php if (isset($fieldErrors['stock_in_date'])) { ?><div class="field-error" data-field="stock_in_date"><?= siEsc($fieldErrors['stock_in_date']) ?></div><?php } ?>
                                             </div>
 
                                             <div class="col-md-4">
                                                 <label class="form-label">Order Number*</label>
-                                                <input type="text" class="form-control <?= $chgOrderNo ? 'highlight-change' : '' ?>" name="rows[<?= $idx ?>][order_number]" value="<?= siEsc($oAfter) ?>" required>
-                                                <?php if (isset($fieldErrors['order_number'])) { ?><div class="field-error"><?= siEsc($fieldErrors['order_number']) ?></div><?php } ?>
+                                                <input type="text" class="form-control js-required-field <?= $chgOrderNo ? 'highlight-change' : '' ?>" data-required-field="order_number" data-required-message="Order Number field is required!" name="rows[<?= $idx ?>][order_number]" value="<?= siEsc($oAfter) ?>" required>
+                                                <?php if (isset($fieldErrors['order_number'])) { ?><div class="field-error" data-field="order_number"><?= siEsc($fieldErrors['order_number']) ?></div><?php } ?>
                                             </div>
                                             <div class="col-md-4">
                                                 <label class="form-label">Product Name*</label>
                                                 <div class="autocomplete">
-                                                    <input id="si_product_<?= $idx ?>" class="form-control lookup-input js-stock-live-search js-server-bound <?= $chgProduct ? 'highlight-change' : '' ?>" autocomplete="new-password" data-server-value="<?= siEsc($pAfter) ?>" data-search-type="name" data-db-table="<?= PROD ?>" data-lookup-field="product_name" name="rows[<?= $idx ?>][product_name]" value="<?= siEsc($pAfter) ?>" required>
+                                                    <input id="si_product_<?= $idx ?>" class="form-control lookup-input js-stock-live-search js-server-bound js-required-field <?= $chgProduct ? 'highlight-change' : '' ?>" autocomplete="new-password" data-server-value="<?= siEsc($pAfter) ?>" data-search-type="name" data-db-table="<?= PROD ?>" data-lookup-field="product_name" data-required-field="product_name" data-required-message="Product Name field is required!" name="rows[<?= $idx ?>][product_name]" value="<?= siEsc($pAfter) ?>" required>
                                                     <input type="hidden" id="si_product_<?= $idx ?>_hidden" value="">
                                                 </div>
-                                                <?php if (isset($fieldErrors['product_name'])) { ?><div class="field-error"><?= siEsc($fieldErrors['product_name']) ?></div><?php } ?>
+                                                <?php if (isset($fieldErrors['product_name'])) { ?><div class="field-error" data-field="product_name"><?= siEsc($fieldErrors['product_name']) ?></div><?php } ?>
                                             </div>
                                             <div class="col-md-2">
                                                 <label class="form-label">Product Quantity*</label>
-                                                <input type="number" class="form-control <?= $chgQty ? 'highlight-change' : '' ?>" min="1" name="rows[<?= $idx ?>][product_quantity]" value="<?= (int) $qAfter ?>" required>
-                                                <?php if (isset($fieldErrors['product_quantity'])) { ?><div class="field-error"><?= siEsc($fieldErrors['product_quantity']) ?></div><?php } ?>
+                                                <input type="number" class="form-control js-required-field <?= $chgQty ? 'highlight-change' : '' ?>" data-required-field="product_quantity" data-required-message="Product Quantity field is required!" min="1" name="rows[<?= $idx ?>][product_quantity]" value="<?= (int) $qAfter ?>" required>
+                                                <?php if (isset($fieldErrors['product_quantity'])) { ?><div class="field-error" data-field="product_quantity"><?= siEsc($fieldErrors['product_quantity']) ?></div><?php } ?>
                                             </div>
                                             <div class="col-md-2">
                                                 <label class="form-label">Package ID</label>
@@ -802,37 +872,84 @@ $previewData = isset($_SESSION['si_import_preview']) ? $_SESSION['si_import_prev
             });
         }
 
-        function hideFieldError(input) {
+        function resolveFieldContainer(input) {
+            return input.closest('.col-md-4, .col-md-2, .col-md-3, .col-md-6, .col-md-12') || input.parentElement;
+        }
+
+        function setFieldError(input, field, message) {
+            var row = resolveFieldContainer(input);
+            if (!row) return;
+
+            var err = row.querySelector('.field-error[data-field="' + field + '"]');
+            if (!err) {
+                err = document.createElement('div');
+                err.className = 'field-error';
+                err.setAttribute('data-field', field);
+                row.appendChild(err);
+            }
+
+            if (message) {
+                err.textContent = message;
+                err.style.display = 'block';
+            } else {
+                err.style.display = 'none';
+            }
+        }
+
+        function validateLookupField(input) {
             var key = input.getAttribute('data-lookup-field');
-            var row = input.closest('.col-md-4, .col-md-2, .col-md-3, .col-md-6, .col-md-12') || input.parentElement;
-            if (!row || !key) return;
-            
-            var err = row.querySelector('.field-error');
+            if (!key) return;
+
             var val = norm(input.value);
-            var isError = false;
-
-            if (val === '') {
-                isError = true;
-            } else if (key === 'warehouse' && !warehouseSet[val]) {
-                isError = true;
-            } else if (key === 'product_name' && !productSet[val]) {
-                isError = true;
+            if (key === 'warehouse') {
+                if (val === '') {
+                    setFieldError(input, key, 'Warehouse field is required!');
+                } else if (!warehouseSet[val]) {
+                    setFieldError(input, key, 'Warehouse not found in database.');
+                } else {
+                    setFieldError(input, key, '');
+                }
             }
 
-            // Hide or show the text
-            if (err) {
-                err.style.display = isError ? 'block' : 'none';
+            if (key === 'product_name') {
+                if (val === '') {
+                    setFieldError(input, key, 'Product Name field is required!');
+                } else if (!productSet[val]) {
+                    setFieldError(input, key, 'Product not found in database.');
+                } else {
+                    setFieldError(input, key, '');
+                }
             }
-            
-            // Force remove any red borders from the wrapper when corrected
-            if (!isError) {
-                row.style.border = 'none';
+        }
+
+        function validateSimpleRequiredField(input) {
+            var field = input.getAttribute('data-required-field');
+            if (!field) return;
+
+            if (input.classList.contains('js-stock-warehouse-input') || input.classList.contains('js-stock-live-search')) {
+                validateLookupField(input);
+                return;
             }
+
+            var value = String(input.value || '').trim();
+            var requiredMessage = input.getAttribute('data-required-message') || 'This field is required!';
+
+            if (value === '') {
+                setFieldError(input, field, requiredMessage);
+                return;
+            }
+
+            if (field === 'product_quantity' && Number(value) <= 0) {
+                setFieldError(input, field, 'Quantity must be greater than 0.');
+                return;
+            }
+
+            setFieldError(input, field, '');
         }
 
         document.querySelectorAll('.js-stock-live-search[data-search-type][data-db-table]').forEach(function (el) {
             var hidden = document.getElementById(el.id + '_hidden');
-            var check = function() { hideFieldError(el); };
+            var check = function() { validateLookupField(el); };
 
             el.addEventListener('keyup', function () {
                 if (hidden) hidden.value = '';
@@ -871,7 +988,7 @@ $previewData = isset($_SESSION['si_import_preview']) ? $_SESSION['si_import_prev
         });
 
         document.querySelectorAll('.js-stock-warehouse-input[data-lookup-field="warehouse"]').forEach(function (el) {
-            var check = function() { hideFieldError(el); };
+            var check = function() { validateLookupField(el); };
             el.addEventListener('input', function () {
                 showWarehouseSearchUI(el);
                 check();
@@ -889,6 +1006,11 @@ $previewData = isset($_SESSION['si_import_preview']) ? $_SESSION['si_import_prev
                     check();
                 }, 120);
             });
+        });
+
+        document.querySelectorAll('.js-required-field[data-required-field]').forEach(function (el) {
+            el.addEventListener('input', function () { validateSimpleRequiredField(el); });
+            el.addEventListener('change', function () { validateSimpleRequiredField(el); });
         });
     })();
 </script>
