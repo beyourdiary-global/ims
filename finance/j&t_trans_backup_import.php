@@ -147,20 +147,45 @@ if (!function_exists('jtImpBuildRecordFromText')) {
     {
         $text = str_replace("\r", "\n", (string) $text);
         $text = preg_replace('/\n+/', "\n", $text);
+        $lines = preg_split('/\n/', $text);
 
         $invNo = '';
-        $invPatterns = array(
-            '/invoice\s*(?:no\.?|number)?\s*[:#]?\s*([A-Za-z0-9\-\/]+)/i',
-            '/tax\s+invoice\s*[:#]?\s*([A-Za-z0-9\-\/]+)/i',
-        );
-        foreach ($invPatterns as $pattern) {
-            $invNo = jtImpExtractSingleValue($text, $pattern);
-            if ($invNo !== '') {
+        foreach ($lines as $line) {
+            $line = preg_replace('/\s+/', ' ', trim((string) $line));
+            if ($line === '') {
+                continue;
+            }
+
+            if (preg_match('/invoice[ \t]*(?:no\.?|number)[ \t]*[:#\-]?[ \t]*([A-Za-z0-9][A-Za-z0-9\-\/]{3,})/i', $line, $mInv)) {
+                $candidateInv = trim((string) $mInv[1]);
+                if (preg_match('/\d/', $candidateInv)) {
+                    $invNo = $candidateInv;
+                    break;
+                }
+            }
+        }
+
+        if ($invNo === '') {
+            $invNo = jtImpExtractSingleValue($text, '/invoice[ \t]*(?:no\.?|number)[ \t]*[:#\-]?[ \t]*((?=[A-Za-z0-9\-\/]{4,}$)[A-Za-z0-9][A-Za-z0-9\-\/]*\d[A-Za-z0-9\-\/]*)/im');
+        }
+
+        $rawDate = '';
+        foreach ($lines as $line) {
+            $line = preg_replace('/\s+/', ' ', trim((string) $line));
+            if ($line === '') {
+                continue;
+            }
+
+            if (preg_match('/invoice[ \t]*date[ \t]*[:#\-]?[ \t]*([0-9]{4}[\.\/\-][0-9]{1,2}[\.\/\-][0-9]{1,2}|[0-9]{1,2}[\.\/\-][0-9]{1,2}[\.\/\-][0-9]{2,4})/i', $line, $mDate)) {
+                $rawDate = trim((string) $mDate[1]);
                 break;
             }
         }
 
-        $rawDate = jtImpExtractSingleValue($text, '/(?:invoice\s*date|date)\s*[:#]?\s*([0-9]{1,2}[\.\/\-][0-9]{1,2}[\.\/\-][0-9]{2,4})/i');
+        if ($rawDate === '') {
+            $rawDate = jtImpExtractSingleValue($text, '/(?:invoice[ \t]*date|date)[ \t]*[:#\-]?[ \t]*([0-9]{4}[\.\/\-][0-9]{1,2}[\.\/\-][0-9]{1,2}|[0-9]{1,2}[\.\/\-][0-9]{1,2}[\.\/\-][0-9]{2,4})/i');
+        }
+
         $invDate = jtImpNormalizeDate($rawDate);
 
         $currency = strtoupper(jtImpExtractSingleValue($text, '/(?:currency|invoice\s*currency)\s*[:#]?\s*([A-Za-z]{3})/i'));
@@ -170,7 +195,6 @@ if (!function_exists('jtImpBuildRecordFromText')) {
         $totalGst = '';
         $totalAmount = '';
 
-        $lines = preg_split('/\n/', $text);
         foreach ($lines as $line) {
             $line = preg_replace('/\s+/', ' ', trim((string) $line));
             if ($line === '') {
