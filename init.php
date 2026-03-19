@@ -167,6 +167,8 @@ define('SHOPEE_CUST_INFO', 'shopee_customer_info');
 define('ATOME_TRANS_BACKUP', 'atome_transaction_backup');
 define('SHOPEE_SG_ORDER_REQ', 'shopee_sg_order_request');
 define('JT_TRANS_BACKUP', 'jt_transaction_backup');
+define('JT_TRANS_ITEM', 'jt_transaction_items');
+define('JT_TRANS_GST', 'jt_transaction_extra_charges');
 define('STRIPE_TRANS_BACKUP', 'stripe_transaction_backup');
 define('LAZADA_CUST_RCD', 'customer_lazada_deals_transaction');
 define('WEB_ORDER_REQ', 'website_order_request');
