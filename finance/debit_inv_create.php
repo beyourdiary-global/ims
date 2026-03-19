@@ -16,17 +16,18 @@ $redirectLink = ("<script>location.href = '$redirect_page';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
 //Checking The Page ID , Action , Pin Access Exist Or Not
-if (!($dataID))
+if (!($dataID)) {
     echo $redirectLink;
+    exit;
+}
 
 //Get The Data From Database
 $rst = getData('*', "id = '$dataID'", '', $tblName, $finance_connect);
 
 //Checking Data Error When Retrieved From Database
 if (!$rst || !($row = $rst->fetch_assoc())) {
-    $errorExist = 1;
-    $_SESSION['tempValConfirmBox'] = true;
-    $act = "F";
+    echo "<script>alert('Invoice record not found.');location.href = '$redirect_page';</script>";
+    exit;
 }
 
 $defaultDate = date('Y-m-d');
@@ -45,10 +46,10 @@ if (!$proj_result) {
 }
 
 $proj_row = $proj_result->fetch_assoc();
-$curr_row = $curr_result->fetch_assoc();
-$mrcht_row = $mrcht_result->fetch_assoc();
-$pay_row = $pay_result->fetch_assoc();
-$pic_row = $pic_result->fetch_assoc();
+$curr_row = ($curr_result && $curr_result->num_rows > 0) ? $curr_result->fetch_assoc() : array();
+$mrcht_row = ($mrcht_result && $mrcht_result->num_rows > 0) ? $mrcht_result->fetch_assoc() : array();
+$pay_row = ($pay_result && $pay_result->num_rows > 0) ? $pay_result->fetch_assoc() : array();
+$pic_row = ($pic_result && $pic_result->num_rows > 0) ? $pic_result->fetch_assoc() : array();
 ?>
 <!DOCTYPE html>
 <html>
