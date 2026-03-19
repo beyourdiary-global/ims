@@ -57,6 +57,33 @@ if (!empty($row['company'])) {
     }
 }
 
+if (post('actionBtn') && post('actionBtn') !== 'back') {
+    $selectedCompanyName = postSpaceFilter('companyName');
+}
+
+$retainFormInput = ($_SERVER['REQUEST_METHOD'] === 'POST' && post('actionBtn') !== 'back');
+$selectedCompanyId = isset($row['company']) ? $row['company'] : '';
+$selectedCompanyLabel = $selectedCompanyName;
+if ($retainFormInput) {
+    $selectedCompanyName = isset($_POST['companyName']) ? trim((string)$_POST['companyName']) : $selectedCompanyName;
+    $selectedCompanyId = isset($_POST['company']) ? trim((string)$_POST['company']) : '';
+    $selectedCompanyLabel = isset($_POST['company_selected_name']) ? trim((string)$_POST['company_selected_name']) : '';
+
+    // Always prefer the selected option label when a valid company ID is posted.
+    if ($selectedCompanyId !== '' && ctype_digit((string)$selectedCompanyId)) {
+        foreach ($companyOptions as $companyOption) {
+            if ((string)$companyOption['id'] === (string)$selectedCompanyId) {
+                $selectedCompanyName = $companyOption['name'];
+                $selectedCompanyLabel = $companyOption['name'];
+                break;
+            }
+        }
+    } else if ($selectedCompanyLabel !== '') {
+        // If ID is lost but user selected an option, keep the selected label instead of raw typed keyword.
+        $selectedCompanyName = $selectedCompanyLabel;
+    }
+}
+
 //Delete Data
 if ($act == 'D') {
     deleteRecord($tblName, '', $dataID, $row['name'], $connect, $connect, $cdate, $ctime, $pageTitle);
@@ -101,16 +128,50 @@ if (post('actionBtn')) {
             $company = postSpaceFilter('company');
             $companyName = postSpaceFilter('companyName');
             $dataRemark = postSpaceFilter('currentDataRemark');
+            $hasValidationError = false;
+
+            $isBrandNameEmpty = !isset($_POST['currentDataName']) || trim((string)$currentDataName) === '';
+            $isCompanyNameEmpty = !isset($_POST['companyName']) || trim((string)$companyName) === '';
+
+            if ($isBrandNameEmpty) {
+                $name_err = 'Brand Name is required!';
+                $hasValidationError = true;
+            }
+
+            if ($isCompanyNameEmpty) {
+                $company_err = 'Company is required!';
+                $hasValidationError = true;
+            } else {
+                $isValidCompanySelection = false;
+
+                if ($company && is_numeric($company) && isRecordExist(COMPANY, 'id', $company, $connect)) {
+                    $matchedCompanyName = '';
+                    foreach ($companyOptions as $companyOption) {
+                        if ((string)$companyOption['id'] === (string)$company) {
+                            $matchedCompanyName = trim((string)$companyOption['name']);
+                            break;
+                        }
+                    }
+
+                    if ($matchedCompanyName !== '' && strcasecmp($matchedCompanyName, trim((string)$companyName)) === 0) {
+                        $isValidCompanySelection = true;
+                    }
+                }
+
+                if (!$isValidCompanySelection) {
+                    $company_err = 'Please select valid company!';
+                    $hasValidationError = true;
+                }
+            }
+
+            if ($hasValidationError) {
+                break;
+            }
 
             $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
             if (isDuplicateRecord("name", $currentDataName, $tblName, $connect, $dataID)) {
                 $err = "Duplicate record found for " . $pageTitle . " name.";
-                break;
-            }
-
-            if (!$company || !is_numeric($company) || !isRecordExist(COMPANY, 'id', $company, $connect)) {
-                $err = "Please select a company.";
                 break;
             }
 
@@ -228,6 +289,16 @@ if (isset($_SESSION['tempValConfirmBox'])) {
     echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
 }
 
+$submittedForSave = in_array((string)post('actionBtn'), array('addData', 'updData'), true);
+if ($submittedForSave) {
+    if (!isset($name_err) && trim((string)post('currentDataName')) === '') {
+        $name_err = 'Brand Name is required!';
+    }
+    if (!isset($company_err) && trim((string)post('companyName')) === '') {
+        $company_err = 'Company is required!';
+    }
+}
+
 ?>
 
 <!DOCTYPE html>
@@ -260,22 +331,26 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                     </div>
 
                     <div class="form-group mb-3">
-                        <label class="form-label" for="currentDataName"><?php echo $pageTitle ?> Name</label>
-                        <input class="form-control" type="text" name="currentDataName" id="currentDataName" value="<?php if (isset($row['name'])) echo $row['name'] ?>" <?php if ($act == '') echo 'readonly' ?> required autocomplete="off">
+                        <label class="form-label form_lbl" for="currentDataName"><?php echo $pageTitle ?> Name<span class="requireRed">*</span></label>
+                        <input class="form-control" type="text" name="currentDataName" id="currentDataName" value="<?= htmlspecialchars($retainFormInput ? (isset($_POST['currentDataName']) ? trim((string)$_POST['currentDataName']) : '') : (isset($row['name']) ? $row['name'] : ''), ENT_QUOTES, 'UTF-8') ?>" <?php if ($act == '') echo 'readonly' ?> required autocomplete="off">
                         <div id="err_msg">
-                            <span class="mt-n1" id="errorSpan"><?php if (isset($err)) echo $err; ?></span>
+                            <span class="mt-n1" id="errorSpan"><?php if (isset($name_err)) echo $name_err; else if (isset($err)) echo $err; ?></span>
                         </div>
                     </div>
 
                     <div class="form-group mb-3 autocomplete">
-                        <label class="form-label" for="companyName">Company<span class="requireRed">*</span></label>
-                        <input class="form-control" type="text" id="companyName" name="companyName" value="<?= htmlspecialchars($selectedCompanyName) ?>" <?php if ($act == '') echo 'readonly' ?> autocomplete="off">
-                        <input type="hidden" id="company" name="company" value="<?= isset($row['company']) ? htmlspecialchars($row['company']) : '' ?>">
+                        <label class="form-label form_lbl" for="companyName">Company<span class="requireRed">*</span></label>
+                        <input class="form-control" type="text" id="companyName" name="companyName" value="<?= htmlspecialchars($selectedCompanyName) ?>" <?php if ($act == '') echo 'readonly' ?> autocomplete="off" required>
+                        <input type="hidden" id="company" name="company" value="<?= htmlspecialchars($selectedCompanyId, ENT_QUOTES, 'UTF-8') ?>">
+                        <input type="hidden" id="company_selected_name" name="company_selected_name" value="<?= htmlspecialchars($selectedCompanyLabel, ENT_QUOTES, 'UTF-8') ?>">
+                        <div id="company_err_msg">
+                            <span class="mt-n1" id="companyErrorSpan" style="color: red;"><?php if (isset($company_err)) echo $company_err; ?></span>
+                        </div>
                     </div>
 
                     <div class="form-group mb-3">
                         <label class="form-label" for="currentDataRemark"><?php echo $pageTitle ?> Remark</label>
-                        <textarea class="form-control" name="currentDataRemark" id="currentDataRemark" rows="3" <?php if ($act == '') echo 'readonly' ?>><?php if (isset($row['remark'])) echo $row['remark'] ?></textarea>
+                        <textarea class="form-control" name="currentDataRemark" id="currentDataRemark" rows="3" <?php if ($act == '') echo 'readonly' ?>><?= htmlspecialchars($retainFormInput ? (isset($_POST['currentDataRemark']) ? trim((string)$_POST['currentDataRemark']) : '') : (isset($row['remark']) ? $row['remark'] : ''), ENT_QUOTES, 'UTF-8') ?></textarea>
                     </div>
 
                     <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
@@ -299,6 +374,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 
     const companyInput = document.getElementById('companyName');
     const companyIdInput = document.getElementById('company');
+    const companySelectedNameInput = document.getElementById('company_selected_name');
 
     function normalizeText(text) {
         return String(text || '').toLowerCase().replace(/\s+/g, ' ').trim();
@@ -315,10 +391,27 @@ if (isset($_SESSION['tempValConfirmBox'])) {
         const value = normalizeText(companyInput.value);
         const matched = (companyOptions || []).find((option) => normalizeText(option.name) === value);
         companyIdInput.value = matched ? String(optionId(matched.id)) : '';
+        if (companySelectedNameInput) {
+            companySelectedNameInput.value = matched ? matched.name : '';
+        }
     }
 
     function optionId(id) {
         return parseInt(id, 10);
+    }
+
+    function findCompanyById(id) {
+        const normalizedId = String(id || '');
+        return (companyOptions || []).find((option) => String(option.id) === normalizedId) || null;
+    }
+
+    function applySelectedCompany(option) {
+        if (!option) return;
+        companyInput.value = option.name;
+        companyIdInput.value = String(optionId(option.id));
+        if (companySelectedNameInput) {
+            companySelectedNameInput.value = option.name;
+        }
     }
 
     function renderAutocompleteList() {
@@ -347,8 +440,12 @@ if (isset($_SESSION['tempValConfirmBox'])) {
             li.textContent = option.name;
             li.addEventListener('mousedown', function(e) {
                 e.preventDefault();
-                companyInput.value = option.name;
-                companyIdInput.value = String(optionId(option.id));
+                applySelectedCompany(option);
+                closeAutocomplete(companyInput);
+            });
+            li.addEventListener('click', function(e) {
+                e.preventDefault();
+                applySelectedCompany(option);
                 closeAutocomplete(companyInput);
             });
             ul.appendChild(li);
@@ -360,12 +457,18 @@ if (isset($_SESSION['tempValConfirmBox'])) {
     if (companyInput) {
         companyInput.addEventListener('input', function() {
             companyIdInput.value = '';
+            if (companySelectedNameInput) {
+                companySelectedNameInput.value = '';
+            }
             renderAutocompleteList();
         });
+        
         companyInput.addEventListener('change', syncCompanyIdByName);
+        
         companyInput.addEventListener('blur', function() {
             setTimeout(function() {
                 closeAutocomplete(companyInput);
+                syncCompanyIdByName();
             }, 120);
         });
 
@@ -378,22 +481,70 @@ if (isset($_SESSION['tempValConfirmBox'])) {
     }
 
     const form = document.getElementById('form');
-    if (form && action) {
-        form.addEventListener('submit', function(event) {
-            if (event.submitter && event.submitter.value === 'back') {
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            if (e.submitter && e.submitter.value === 'back') {
                 return;
             }
 
-            syncCompanyIdByName();
-            if (!companyIdInput.value) {
-                event.preventDefault();
-                const errorSpan = document.getElementById('errorSpan');
+            var errorSpan = document.getElementById('errorSpan');
+            var companyErrorSpan = document.getElementById('companyErrorSpan');
+            var hasError = false;
+
+            // Prevent duplicate messages by resetting each field's single error span.
+            if (errorSpan) {
+                errorSpan.textContent = '';
+            }
+            if (companyErrorSpan) {
+                companyErrorSpan.textContent = '';
+            }
+
+            var brandValue = document.getElementById('currentDataName') ? document.getElementById('currentDataName').value : '';
+            var companyValue = companyInput ? companyInput.value : '';
+
+            if (normalizeText(brandValue) === '') {
+                hasError = true;
                 if (errorSpan) {
-                    errorSpan.textContent = 'Please select a valid company.';
+                    errorSpan.textContent = 'Brand Name is required!';
                 }
+            }
+
+            // On submit, always resolve company against available options.
+            let matched = null;
+            if (companyIdInput.value) {
+                matched = findCompanyById(companyIdInput.value);
+            }
+
+            if (!matched) {
+                syncCompanyIdByName();
+                if (companyIdInput.value) {
+                    matched = findCompanyById(companyIdInput.value);
+                }
+            }
+
+            if (matched) {
+                applySelectedCompany(matched);
+            }
+
+            if (normalizeText(companyValue) === '') {
+                hasError = true;
+                if (companyErrorSpan) {
+                    companyErrorSpan.textContent = 'Company is required!';
+                }
+            } else if (!matched) {
+                hasError = true;
+                if (companyErrorSpan) {
+                    companyErrorSpan.textContent = 'Please select valid company!';
+                }
+            }
+
+            if (hasError) {
+                // Keep user on page and show errors instantly.
+                e.preventDefault();
             }
         });
     }
+
 </script>
 
 </body>

@@ -326,7 +326,7 @@ foreach ($listRows as $row) {
                     <div class="col-12 d-flex justify-content-between flex-wrap">
                         <h2><?= siEsc($pageTitle) ?></h2>
                         <div class="mt-auto mb-auto d-flex flex-wrap gap-2">
-                            <a class="btn btn-sm btn-rounded btn-primary" id="addBtn" href="<?= $formPage ?>">Add Stock In</a>
+                            <a class="btn btn-sm btn-rounded btn-primary" id="addBtn" href="<?= $formPage ?>?act=I">Add Stock In</a>
                             <?php if (isActionAllowed("Import", $pinAccess)): ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" id="addBtn" href="<?= $importPage ?>">Import</a>
                             <?php endif; ?>
@@ -371,9 +371,15 @@ foreach ($listRows as $row) {
                                 <td class="text-center"><input type="checkbox" class="export" value="<?= (int) $row['order_id'] ?>"></td>
                                 <td><?= $sn++ ?></td>
                                 <td class="btn-container">
-                                    <a class="btn btn-sm btn-rounded btn-primary" href="<?= $formPage ?>?act=V&order_id=<?= (int) $row['order_id'] ?>" title="View"><i class="fa-solid fa-eye"></i></a>
-                                    <a class="btn btn-sm btn-rounded btn-warning" href="<?= $formPage ?>?act=E&order_id=<?= (int) $row['order_id'] ?>" title="Edit"><i class="fa-solid fa-pen-to-square"></i></a>
-                                    <a class="btn btn-sm btn-rounded btn-danger" onclick="confirmationDialog('<?= (int) $row['order_id'] ?>',['<?= siEsc($row['order_number']) ?>','<?= siEsc($productName) ?>'],'<?= siEsc($pageTitle) ?>','<?= $tablePage ?>','<?= $tablePage ?>','D')" title="Delete"><i class="fa-solid fa-trash"></i></a>
+                                    <?php if (isActionAllowed('View', $pinAccess)) { ?>
+                                        <a class="btn btn-sm btn-rounded btn-primary" href="<?= $formPage ?>?order_id=<?= (int) $row['order_id'] ?>" title="View"><i class="fa-solid fa-eye"></i></a>
+                                    <?php } ?>
+                                    <?php if (isActionAllowed('Edit', $pinAccess)) { ?>
+                                        <a class="btn btn-sm btn-rounded btn-warning" href="<?= $formPage ?>?act=E&order_id=<?= (int) $row['order_id'] ?>" title="Edit"><i class="fa-solid fa-pen-to-square"></i></a>
+                                    <?php } ?>
+                                    <?php if (isActionAllowed('Delete', $pinAccess)) { ?>
+                                        <a class="btn btn-sm btn-rounded btn-danger" onclick="confirmationDialog('<?= (int) $row['order_id'] ?>',['<?= siEsc($row['order_number']) ?>','<?= siEsc($productName) ?>'],'<?= siEsc($pageTitle) ?>','<?= $formPage ?>?act=D','<?= $tablePage ?>','D')" title="Delete"><i class="fa-solid fa-trash"></i></a>
+                                    <?php } ?>
                                 </td>
                                 <td><?= siEsc($warehouseName) ?></td>
                                 <td><?= siEsc($productName) ?></td>
