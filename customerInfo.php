@@ -306,8 +306,8 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                     </div>
 
                                     <div class="col-sm-4">
-                                        <label class="form-label" for="cusBirthday">Birthday</label>
-                                        <input class="form-control" type="date" name="cusBirthday" id="cusBirthday" value="<?php if (isset($row['birthday'])) echo $row['birthday'] ?>" placeholder="YYYY-MM-DD" pattern="\d{4}-\d{2}-\d{2}" <?php if ($act == '') echo 'readonly' ?>>
+                                        <label class="form-label" for="cusBirthday">Birthday <span class="requireRed">*</span></label>
+                                        <input class="form-control" type="date" name="cusBirthday" id="cusBirthday" required value="<?php if (isset($row['birthday'])) echo $row['birthday'] ?>" placeholder="YYYY-MM-DD" pattern="\d{4}-\d{2}-\d{2}" <?php if ($act == '') echo 'readonly' ?>>
                                     </div>
                                 </div>
                             </div>
@@ -333,7 +333,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                             $phone_code_val = postSpaceFilter('cusPhoneCode');
                                         }
                                         ?>
-                                        <input class="form-control" type="text" name="cusPhoneCode" id="cusPhoneCode" <?php if ($act == '') echo 'disabled' ?> placeholder="<?php echo ($act != '') ? '+' : '' ?>" value="<?php echo $phone_code_val; ?>">
+                                        <input class="form-control" type="text" name="cusPhoneCode" id="cusPhoneCode" <?php if ($act == '') echo 'disabled' ?> placeholder="<?php echo ($act != '') ? '+' : '' ?>" value="<?php echo htmlspecialchars($phone_code_val, ENT_QUOTES, 'UTF-8'); ?>">
                                         <span id="phoneCodeMsg"><?php if (isset($phone_code_err)) { ?><p style='color:red;margin-bottom:0'><?php echo $phone_code_err; ?></p><?php } ?></span>
 
                                 

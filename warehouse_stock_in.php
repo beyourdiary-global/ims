@@ -9,12 +9,35 @@ $stockInOrderTable = 'stock_in_order';
 $stockInItemTable = 'stock_in_order_item';
 $tblName = $stockInOrderTable;
 
-$pinAccess = checkCurrentPin($connect, 'Stock In');
+$redirectTable = $SITEURL . '/warehouse_stock_in_table.php';
+$redirectLink = "<script>location.href='" . $redirectTable . "';</script>";
+$clearLocalStorage = '<script>localStorage.clear();</script>';
+
+$pinAccess = checkCurrentPin($connect, $pageTitle);
 if (!is_array($pinAccess)) {
     $pinAccess = array();
 }
 
-$redirectTable = $SITEURL . '/warehouse_stock_in_table.php';
+$legacyItemId = !empty(input('item_id')) ? (int) input('item_id') : 0;
+$dataID = !empty(input('order_id')) ? (int) input('order_id') : (!empty(input('id')) ? (int) input('id') : ((int) post('order_id') > 0 ? (int) post('order_id') : (int) post('id')));
+$act = !empty(input('act')) ? strtoupper(trim((string) input('act'))) : strtoupper(trim((string) post('act')));
+$token = trim((string) input('t'));
+
+if ($act === 'V') {
+    $act = '';
+}
+if ($token !== '' && $act === '') {
+    $act = 'I';
+}
+
+$pageAction = getPageAction($act);
+$pageActionTitle = $pageAction . ' ' . $pageTitle;
+$actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
+
+if ((!$dataID && !$act && $token === '') || !isActionAllowed($pageAction, $pinAccess)) {
+    echo $redirectLink;
+    exit;
+}
 
 $warehouses = siLoadWarehouses($connect);
 $products = siLoadProducts($connect);
@@ -23,17 +46,6 @@ $packageProductMap = siBuildPackageProductMap($packages);
 
 list($warehouseNameMap, $warehouseNameToId) = siBuildNameMaps($warehouses);
 list($productNameMap, $productNameToId) = siBuildNameMaps($products);
-
-$legacyItemId = !empty(input('item_id')) ? (int) input('item_id') : 0;
-$dataID = !empty(input('order_id')) ? (int) input('order_id') : (int) post('order_id');
-$act = !empty(input('act')) ? strtoupper(trim((string) input('act'))) : strtoupper(trim((string) post('act')));
-$pageAction = getPageAction($act);
-$pageActionTitle = $pageAction . " " . $pageTitle;
-$pageOrderId = $dataID;
-$isViewMode = ($act === 'V' && $pageOrderId > 0);
-$isEditMode = ($act === 'E' && $pageOrderId > 0);
-
-
 
 $formData = array(
     'order_id' => 0,
@@ -54,10 +66,6 @@ $formRows = array(
     )
 );
 
-$warehouseDisabledAttr = $isViewMode ? ' disabled' : '';
-$inputReadonlyAttr = $isViewMode ? ' readonly' : '';
-$inputDisabledAttr = $isViewMode ? ' disabled' : '';
-
 $err = '';
 
 $orderById = array();
@@ -72,26 +80,26 @@ foreach (siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTable
             'items' => array(),
         );
     }
+
     $orderById[$orderId]['items'][] = array(
         'item_id' => (int) $row['item_id'],
         'product_id' => (int) $row['product_id'],
         'product_quantity' => (int) $row['product_quantity'],
     );
 
-    if ($pageOrderId <= 0 && $legacyItemId > 0 && (int) $row['item_id'] === $legacyItemId) {
-        $pageOrderId = $orderId;
-        $isViewMode = ($act === 'V' && $pageOrderId > 0);
-        $isEditMode = ($act === 'E' && $pageOrderId > 0);
+    if ($dataID <= 0 && $legacyItemId > 0 && (int) $row['item_id'] === $legacyItemId) {
+        $dataID = $orderId;
     }
 }
 
-if (($isViewMode || $isEditMode) && $pageOrderId > 0) {
-    if (!isset($orderById[$pageOrderId])) {
+if ($dataID > 0 && $act !== 'I') {
+    if (!isset($orderById[$dataID])) {
         $err = 'Stock In row not found.';
-        $isViewMode = false;
-        $isEditMode = false;
+        $act = 'F';
+        $pageAction = getPageAction($act);
+        $pageActionTitle = $pageAction . ' ' . $pageTitle;
     } else {
-        $r = $orderById[$pageOrderId];
+        $r = $orderById[$dataID];
         $formData['order_id'] = (int) $r['order_id'];
         $formData['item_id'] = isset($r['items'][0]['item_id']) ? (int) $r['items'][0]['item_id'] : 0;
         $formData['warehouse_id'] = (int) $r['warehouse_id'];
@@ -99,7 +107,7 @@ if (($isViewMode || $isEditMode) && $pageOrderId > 0) {
         $formData['order_number'] = (string) $r['order_number'];
         $formData['product_id'] = isset($r['items'][0]['product_id']) ? (int) $r['items'][0]['product_id'] : 0;
         $formData['product_name'] = isset($productNameMap[(int) $formData['product_id']]) ? (string) $productNameMap[(int) $formData['product_id']] : '';
-        $formData['product_quantity'] = isset($r['items'][0]['product_quantity']) ? (int) $r['items'][0]['product_quantity'] : 0;
+        $formData['product_quantity'] = isset($r['items'][0]['product_quantity']) ? (string) ((int) $r['items'][0]['product_quantity']) : '';
 
         $formRows = array();
         foreach ($r['items'] as $itemRow) {
@@ -109,6 +117,7 @@ if (($isViewMode || $isEditMode) && $pageOrderId > 0) {
                 'product_quantity' => (string) ((int) $itemRow['product_quantity']),
             );
         }
+
         if (count($formRows) === 0) {
             $formRows[] = array(
                 'product_id' => (int) $formData['product_id'],
@@ -119,297 +128,344 @@ if (($isViewMode || $isEditMode) && $pageOrderId > 0) {
     }
 }
 
-if ($isViewMode && $pageOrderId > 0 && isset($orderById[$pageOrderId])) {
-    $viewRow = $orderById[$pageOrderId];
-    $log = [
-        'log_act' => $pageAction,
-        'cdate' => $cdate,
-        'ctime' => $ctime,
-        'uid' => USER_ID,
-        'cby' => USER_ID,
-        'query_rec' => 'OrderID=' . (int) $pageOrderId,
-        'query_table' => $tblName,
-        'act_msg' => USER_NAME . " viewed stock in data [ <b>Order No = " . htmlspecialchars((string) $viewRow['order_number'], ENT_QUOTES, 'UTF-8') . "</b> ] from <b><i>" . $stockInOrderTable . " Table</i></b>.",
-        'page' => $pageTitle,
-        'connect' => $connect,
-    ];
-    audit_log($log);
-}
-
-if (post('actionBtn') === 'save') {
-    $warehouseId = (int) postSpaceFilter('warehouse_id');
-    $stockInDate = trim((string) postSpaceFilter('stock_in_date'));
-    $orderNumber = trim((string) postSpaceFilter('order_number'));
-
-    $productIds = isset($_POST['product_id']) ? postSpaceFilter('product_id') : array();
-    $productNames = isset($_POST['product_name']) ? postSpaceFilter('product_name') : array();
-    $quantities = isset($_POST['product_quantity']) ? postSpaceFilter('product_quantity') : array();
-
-    if (!is_array($productIds)) $productIds = array();
-    if (!is_array($productNames)) $productNames = array();
-    if (!is_array($quantities)) $quantities = array();
-
-    $items = array();
-    $invalidProduct = false;
-
-    $max = max(count($productIds), count($productNames), count($quantities));
-    for ($i = 0; $i < $max; $i++) {
-        $prodId = isset($productIds[$i]) ? (int) $productIds[$i] : 0;
-        $prodName = isset($productNames[$i]) ? trim((string) $productNames[$i]) : '';
-        $qty = isset($quantities[$i]) ? (int) $quantities[$i] : 0;
-
-        if ($prodId <= 0 && $prodName !== '') {
-            $prodKey = strtolower(trim($prodName));
-            if (isset($productNameToId[$prodKey])) {
-                $prodId = (int) $productNameToId[$prodKey];
-            }
+if ($act === 'D') {
+    if ($dataID <= 0 || !isset($orderById[$dataID])) {
+        if (post('act') === 'D') {
+            echo 'Invalid stock in order.';
+        } else {
+            echo "<script>alert('Invalid stock in order.'); location.href='" . $redirectTable . "';</script>";
         }
-
-        $hasAnyValue = ($prodId > 0 || $qty > 0 || $prodName !== '');
-        if (!$hasAnyValue) {
-            continue;
-        }
-
-        if ($prodId <= 0) {
-            $invalidProduct = true;
-            continue;
-        }
-
-        if ($qty <= 0) {
-            continue;
-        }
-
-        $items[] = array(
-            'product_id' => $prodId,
-            'package_id' => 0,
-            'qty' => $qty,
-        );
+        exit;
     }
 
-    if ($warehouseId <= 0) {
-        $err = 'Warehouse cannot be empty.';
-    } else if ($stockInDate === '') {
-        $err = 'Stock In Date cannot be empty.';
-    } else if ($orderNumber === '') {
-        $err = 'Order Number cannot be empty.';
-    } else if ($invalidProduct) {
-        $err = 'Please select valid product name from the list.';
-    } else if (count($items) === 0) {
-        $err = 'Please add at least one valid product row.';
-    } else {
-        $saved = siSaveOrder(
-            $finance_connect,
-            $stockInOrderTable,
-            $stockInItemTable,
-            $warehouseId,
-            $stockInDate,
-            $orderNumber,
-            $items
-        );
+    $orderNo = (string) $orderById[$dataID]['order_number'];
+    $deleteOrderQuery = "UPDATE `" . $stockInOrderTable . "` SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . (int) $dataID . "' AND status='A'";
+    $deleteItemsQuery = "UPDATE `" . $stockInItemTable . "` SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE stock_in_order_id='" . (int) $dataID . "' AND status='A'";
 
-        if ($saved[0]) {
-            $savePageAction = getPageAction('I');
-            $summaryRows = array();
-            foreach ($items as $it) {
-                $summaryRows[] = 'ProductID=' . (int) $it['product_id'] . ', Qty=' . (int) $it['qty'];
+    mysqli_begin_transaction($finance_connect);
+    try {
+        $okOrder = mysqli_query($finance_connect, $deleteOrderQuery);
+        if (!$okOrder) {
+            throw new Exception(mysqli_error($finance_connect));
+        }
+
+        $okItems = mysqli_query($finance_connect, $deleteItemsQuery);
+        if (!$okItems) {
+            throw new Exception(mysqli_error($finance_connect));
+        }
+
+        mysqli_commit($finance_connect);
+
+        $log = [
+            'log_act' => getPageAction('D'),
+            'cdate' => $cdate,
+            'ctime' => $ctime,
+            'uid' => USER_ID,
+            'cby' => USER_ID,
+            'query_rec' => 'OrderID=' . (int) $dataID,
+            'query_table' => $tblName,
+            'act_msg' => USER_NAME . " deleted stock in data [ <b>Order No = " . htmlspecialchars($orderNo, ENT_QUOTES, 'UTF-8') . "</b> ] under <b><i>" . $stockInItemTable . " Table</i></b>.",
+            'page' => $pageTitle,
+            'connect' => $connect,
+        ];
+        audit_log($log);
+
+        if (post('act') === 'D') {
+            echo 'OK';
+        } else {
+            echo "<script>confirmationDialog('', '', '" . addslashes($pageTitle) . "', '', '" . $redirectTable . "', 'D');</script>";
+        }
+    } catch (Exception $ex) {
+        mysqli_rollback($finance_connect);
+        error_log('Stock in delete failed for order ID ' . (int) $dataID . ': ' . $ex->getMessage());
+        if (post('act') === 'D') {
+            echo 'Failed to delete row. Please try again later.';
+        } else {
+            echo "<script>alert('Failed to delete row. Please try again later.'); location.href='" . $redirectTable . "';</script>";
+        }
+    }
+
+    exit;
+}
+
+if (post('actionBtn')) {
+    $action = post('actionBtn');
+
+    switch ($action) {
+        case 'addData':
+        case 'updData':
+            $warehouseId = (int) postSpaceFilter('warehouse_id');
+            $stockInDate = trim((string) postSpaceFilter('stock_in_date'));
+            $orderNumber = trim((string) postSpaceFilter('order_number'));
+
+            $productIds = isset($_POST['product_id']) ? postSpaceFilter('product_id') : array();
+            $productNames = isset($_POST['product_name']) ? postSpaceFilter('product_name') : array();
+            $quantities = isset($_POST['product_quantity']) ? postSpaceFilter('product_quantity') : array();
+
+            if (!is_array($productIds)) {
+                $productIds = array();
             }
-            $queryRecord = 'WarehouseID=' . $warehouseId . '; StockInDate=' . $stockInDate . '; OrderNo=' . $orderNumber;
-            $newValue = implode(' | ', $summaryRows);
-            $log = [
-                'log_act' => $savePageAction,
-                'cdate' => $cdate,
-                'ctime' => $ctime,
-                'uid' => USER_ID,
-                'cby' => USER_ID,
-                'query_rec' => $queryRecord,
-                'query_table' => $tblName,
-                'newval' => $newValue,
-                'act_msg' => USER_NAME . " added stock in data [ <b>Order No = " . htmlspecialchars($orderNumber, ENT_QUOTES, 'UTF-8') . "</b> ] under <b><i>" . $stockInItemTable . " Table</i></b>.",
-                'page' => $pageTitle,
-                'connect' => $connect,
-            ];
-            audit_log($log);
+            if (!is_array($productNames)) {
+                $productNames = array();
+            }
+            if (!is_array($quantities)) {
+                $quantities = array();
+            }
 
-            echo "<script>confirmationDialog('', '', '" . addslashes($pageTitle) . "', '', '" . $redirectTable . "', 'I');</script>";
+            $formData['order_id'] = (int) postSpaceFilter('order_id');
+            $formData['warehouse_id'] = $warehouseId;
+            $formData['stock_in_date'] = $stockInDate;
+            $formData['order_number'] = $orderNumber;
+
+            $items = array();
+            $formRows = array();
+            $invalidProduct = false;
+            $max = max(count($productIds), count($productNames), count($quantities));
+
+            for ($i = 0; $i < $max; $i++) {
+                $prodId = isset($productIds[$i]) ? (int) $productIds[$i] : 0;
+                $prodName = isset($productNames[$i]) ? trim((string) $productNames[$i]) : '';
+                $qty = isset($quantities[$i]) ? trim((string) $quantities[$i]) : '';
+                $qtyInt = (int) $qty;
+
+                if ($prodId <= 0 && $prodName !== '') {
+                    $prodKey = strtolower(trim($prodName));
+                    if (isset($productNameToId[$prodKey])) {
+                        $prodId = (int) $productNameToId[$prodKey];
+                    }
+                }
+
+                $formRows[] = array(
+                    'product_id' => $prodId,
+                    'product_name' => $prodName,
+                    'product_quantity' => $qty,
+                );
+
+                $hasAnyValue = ($prodId > 0 || $qtyInt > 0 || $prodName !== '');
+                if (!$hasAnyValue) {
+                    continue;
+                }
+
+                if ($prodId <= 0) {
+                    $invalidProduct = true;
+                    continue;
+                }
+
+                if ($qtyInt <= 0) {
+                    continue;
+                }
+
+                $items[] = array(
+                    'product_id' => $prodId,
+                    'package_id' => 0,
+                    'qty' => $qtyInt,
+                );
+            }
+
+            if (count($formRows) === 0) {
+                $formRows[] = array(
+                    'product_id' => 0,
+                    'product_name' => '',
+                    'product_quantity' => '',
+                );
+            }
+
+            if ($warehouseId <= 0) {
+                $err = 'Warehouse cannot be empty.';
+            } else if ($stockInDate === '') {
+                $err = 'Stock In Date cannot be empty.';
+            } else if ($orderNumber === '') {
+                $err = 'Order Number cannot be empty.';
+            } else if ($invalidProduct) {
+                $err = 'Please select valid product name from the list.';
+            } else if (count($items) === 0) {
+                $err = 'Please add at least one valid product row.';
+            } else if ($action === 'addData') {
+                $saved = siSaveOrder(
+                    $finance_connect,
+                    $stockInOrderTable,
+                    $stockInItemTable,
+                    $warehouseId,
+                    $stockInDate,
+                    $orderNumber,
+                    $items
+                );
+
+                if ($saved[0]) {
+                    $summaryRows = array();
+                    foreach ($items as $it) {
+                        $summaryRows[] = 'ProductID=' . (int) $it['product_id'] . ', Qty=' . (int) $it['qty'];
+                    }
+
+                    $log = [
+                        'log_act' => getPageAction('I'),
+                        'cdate' => $cdate,
+                        'ctime' => $ctime,
+                        'uid' => USER_ID,
+                        'cby' => USER_ID,
+                        'query_rec' => 'WarehouseID=' . (int) $warehouseId . '; StockInDate=' . $stockInDate . '; OrderNo=' . $orderNumber,
+                        'query_table' => $tblName,
+                        'newval' => implode(' | ', $summaryRows),
+                        'act_msg' => USER_NAME . " added stock in data [ <b>Order No = " . htmlspecialchars($orderNumber, ENT_QUOTES, 'UTF-8') . "</b> ] under <b><i>" . $stockInItemTable . " Table</i></b>.",
+                        'page' => $pageTitle,
+                        'connect' => $connect,
+                    ];
+                    audit_log($log);
+
+                    $_SESSION['tempValConfirmBox'] = true;
+                    $act = 'I';
+                    break;
+                }
+
+                $err = $saved[1];
+            } else {
+                $orderId = (int) postSpaceFilter('order_id');
+                if ($orderId <= 0) {
+                    $orderId = (int) $dataID;
+                }
+
+                if ($orderId <= 0) {
+                    $err = 'Invalid row for update.';
+                    break;
+                }
+
+                $oldWarehouseId = 0;
+                $oldStockInDate = '';
+                $oldOrderNumber = '';
+                $oldSummaryRows = array();
+
+                $oldOrderSql = "SELECT warehouse_id, stock_in_date, order_number FROM `" . $stockInOrderTable . "` WHERE id='" . $orderId . "' AND status='A' LIMIT 1";
+                $oldOrderRst = mysqli_query($finance_connect, $oldOrderSql);
+                if ($oldOrderRst && ($oldOrderRow = mysqli_fetch_assoc($oldOrderRst))) {
+                    $oldWarehouseId = (int) $oldOrderRow['warehouse_id'];
+                    $oldStockInDate = (string) $oldOrderRow['stock_in_date'];
+                    $oldOrderNumber = (string) $oldOrderRow['order_number'];
+                }
+
+                $oldItemsSql = "SELECT product_id, product_quantity FROM `" . $stockInItemTable . "` WHERE stock_in_order_id='" . $orderId . "' AND status='A' ORDER BY id ASC";
+                $oldItemsRst = mysqli_query($finance_connect, $oldItemsSql);
+                if ($oldItemsRst) {
+                    while ($oldItem = mysqli_fetch_assoc($oldItemsRst)) {
+                        $oldSummaryRows[] = 'ProductID=' . (int) $oldItem['product_id'] . ', Qty=' . (int) $oldItem['product_quantity'];
+                    }
+                }
+
+                $newSummaryRows = array();
+                foreach ($items as $it) {
+                    $newSummaryRows[] = 'ProductID=' . (int) $it['product_id'] . ', Qty=' . (int) $it['qty'];
+                }
+
+                $hasNoChanges = ((int) $oldWarehouseId === (int) $warehouseId)
+                    && ($oldStockInDate === $stockInDate)
+                    && ($oldOrderNumber === $orderNumber)
+                    && (implode(' | ', $oldSummaryRows) === implode(' | ', $newSummaryRows));
+
+                if ($hasNoChanges) {
+                    $_SESSION['tempValConfirmBox'] = true;
+                    $act = 'NC';
+                    break;
+                }
+
+                $safeDate = mysqli_real_escape_string($finance_connect, $stockInDate);
+                $safeOrderNo = mysqli_real_escape_string($finance_connect, $orderNumber);
+
+                $uOrder = "UPDATE `" . $stockInOrderTable . "` SET warehouse_id='" . (int) $warehouseId . "', stock_in_date='" . $safeDate . "', order_number='" . $safeOrderNo . "', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $orderId . "' AND status='A'";
+                $deactivateItems = "UPDATE `" . $stockInItemTable . "` SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE stock_in_order_id='" . $orderId . "' AND status='A'";
+
+                mysqli_begin_transaction($finance_connect);
+                try {
+                    $okOrder = mysqli_query($finance_connect, $uOrder);
+                    if (!$okOrder) {
+                        throw new Exception(mysqli_error($finance_connect));
+                    }
+
+                    $okDeactivate = mysqli_query($finance_connect, $deactivateItems);
+                    if (!$okDeactivate) {
+                        throw new Exception(mysqli_error($finance_connect));
+                    }
+
+                    foreach ($items as $item) {
+                        $productId = (int) $item['product_id'];
+                        $qty = (int) $item['qty'];
+                        $iItem = "INSERT INTO `" . $stockInItemTable . "` (stock_in_order_id, product_id, package_id, product_quantity, create_by, create_date, create_time, status) VALUES ('" . $orderId . "', '" . $productId . "', '0', '" . $qty . "', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
+                        $okItem = mysqli_query($finance_connect, $iItem);
+                        if (!$okItem) {
+                            throw new Exception(mysqli_error($finance_connect));
+                        }
+                    }
+
+                    mysqli_commit($finance_connect);
+
+                    $summaryRows = array();
+                    foreach ($items as $it) {
+                        $summaryRows[] = 'ProductID=' . (int) $it['product_id'] . ', Qty=' . (int) $it['qty'];
+                    }
+
+                    $oldChanges = implode(' | ', $oldSummaryRows);
+                    $changes = implode(' | ', $summaryRows);
+
+                    $oldVals = array();
+                    $newVals = array();
+                    $msgChanges = array();
+
+                    if ((int) $oldWarehouseId !== (int) $warehouseId) {
+                        $oldVals[] = 'WarehouseID=' . $oldWarehouseId;
+                        $newVals[] = 'WarehouseID=' . $warehouseId;
+                        $msgChanges[] = "[ <b>WarehouseID</b> : <b>'" . $oldWarehouseId . "'</b> to <b>'" . $warehouseId . "'</b> ]";
+                    }
+                    if ($oldStockInDate !== $stockInDate) {
+                        $oldVals[] = 'StockInDate=' . $oldStockInDate;
+                        $newVals[] = 'StockInDate=' . $stockInDate;
+                        $msgChanges[] = "[ <b>StockInDate</b> : <b>'" . $oldStockInDate . "'</b> to <b>'" . $stockInDate . "'</b> ]";
+                    }
+                    if ($oldOrderNumber !== $orderNumber) {
+                        $oldVals[] = 'OrderNo=' . $oldOrderNumber;
+                        $newVals[] = 'OrderNo=' . $orderNumber;
+                        $msgChanges[] = "[ <b>OrderNo</b> : <b>'" . htmlspecialchars($oldOrderNumber, ENT_QUOTES, 'UTF-8') . "'</b> to <b>'" . htmlspecialchars($orderNumber, ENT_QUOTES, 'UTF-8') . "'</b> ]";
+                    }
+                    if ($oldChanges !== $changes) {
+                        $oldItemsStr = $oldChanges !== '' ? $oldChanges : '-';
+                        $newItemsStr = $changes !== '' ? $changes : '-';
+                        $oldVals[] = 'Items={' . $oldItemsStr . '}';
+                        $newVals[] = 'Items={' . $newItemsStr . '}';
+                        $msgChanges[] = "[ <b>Items</b> : <b>'" . htmlspecialchars($oldItemsStr, ENT_QUOTES, 'UTF-8') . "'</b> to <b>'" . htmlspecialchars($newItemsStr, ENT_QUOTES, 'UTF-8') . "'</b> ]";
+                    }
+
+                    if (count($msgChanges) > 0) {
+                        $log = [
+                            'log_act' => getPageAction('E'),
+                            'cdate' => $cdate,
+                            'ctime' => $ctime,
+                            'uid' => USER_ID,
+                            'cby' => USER_ID,
+                            'query_rec' => 'OrderID=' . $orderId,
+                            'query_table' => $tblName,
+                            'oldval' => implode(' ; ', $oldVals),
+                            'changes' => implode(' ; ', $newVals),
+                            'act_msg' => USER_NAME . " edited stock in data [ <b>Order ID = " . (int) $orderId . "</b> ] " . implode(' ', $msgChanges) . " under <b><i>" . $stockInItemTable . " Table</i></b>.",
+                            'page' => $pageTitle,
+                            'connect' => $connect,
+                        ];
+                        audit_log($log);
+                    }
+
+                    $_SESSION['tempValConfirmBox'] = true;
+                    $act = 'E';
+                    break;
+                } catch (Exception $ex) {
+                    mysqli_rollback($finance_connect);
+                    $err = 'Update failed: ' . $ex->getMessage();
+                }
+            }
+            break;
+
+        case 'back':
+            echo $clearLocalStorage . ' ' . $redirectLink;
             exit;
-        }
-
-        $err = $saved[1];
     }
 }
 
-if (post('actionBtn') === 'update') {
-    $orderId = (int) postSpaceFilter('order_id');
-    $warehouseId = (int) postSpaceFilter('warehouse_id');
-    $stockInDate = trim((string) postSpaceFilter('stock_in_date'));
-    $orderNumber = trim((string) postSpaceFilter('order_number'));
-
-    $productIds = isset($_POST['product_id']) ? postSpaceFilter('product_id') : array();
-    $productNames = isset($_POST['product_name']) ? postSpaceFilter('product_name') : array();
-    $quantities = isset($_POST['product_quantity']) ? postSpaceFilter('product_quantity') : array();
-
-    if (!is_array($productIds)) $productIds = array($productIds);
-    if (!is_array($productNames)) $productNames = array($productNames);
-    if (!is_array($quantities)) $quantities = array($quantities);
-
-    $items = array();
-    $invalidProduct = false;
-    $max = max(count($productIds), count($productNames), count($quantities));
-
-    for ($i = 0; $i < $max; $i++) {
-        $prodId = isset($productIds[$i]) ? (int) $productIds[$i] : 0;
-        $prodName = isset($productNames[$i]) ? trim((string) $productNames[$i]) : '';
-        $qty = isset($quantities[$i]) ? (int) $quantities[$i] : 0;
-
-        if ($prodId <= 0 && $prodName !== '') {
-            $prodKey = strtolower(trim($prodName));
-            if (isset($productNameToId[$prodKey])) {
-                $prodId = (int) $productNameToId[$prodKey];
-            }
-        }
-
-        $hasAnyValue = ($prodId > 0 || $qty > 0 || $prodName !== '');
-        if (!$hasAnyValue) {
-            continue;
-        }
-
-        if ($prodId <= 0) {
-            $invalidProduct = true;
-            continue;
-        }
-
-        if ($qty <= 0) {
-            continue;
-        }
-
-        $items[] = array(
-            'product_id' => $prodId,
-            'qty' => $qty,
-        );
-    }
-
-    if ($orderId <= 0) {
-        $err = 'Invalid row for update.';
-    } else if ($warehouseId <= 0) {
-        $err = 'Warehouse cannot be empty.';
-    } else if ($stockInDate === '') {
-        $err = 'Stock In Date cannot be empty.';
-    } else if ($orderNumber === '') {
-        $err = 'Order Number cannot be empty.';
-    } else if ($invalidProduct) {
-        $err = 'Please select valid product name from the list.';
-    } else if (count($items) === 0) {
-        $err = 'Please add at least one valid product row.';
-    } else {
-        $oldWarehouseId = 0;
-        $oldStockInDate = '';
-        $oldOrderNumber = '';
-        $oldSummaryRows = array();
-
-        $oldOrderSql = "SELECT warehouse_id, stock_in_date, order_number FROM `" . $stockInOrderTable . "` WHERE id='" . $orderId . "' AND status='A' LIMIT 1";
-        $oldOrderRst = mysqli_query($finance_connect, $oldOrderSql);
-        if ($oldOrderRst && ($oldOrderRow = mysqli_fetch_assoc($oldOrderRst))) {
-            $oldWarehouseId = (int) $oldOrderRow['warehouse_id'];
-            $oldStockInDate = (string) $oldOrderRow['stock_in_date'];
-            $oldOrderNumber = (string) $oldOrderRow['order_number'];
-        }
-
-        $oldItemsSql = "SELECT product_id, product_quantity FROM `" . $stockInItemTable . "` WHERE stock_in_order_id='" . $orderId . "' AND status='A' ORDER BY id ASC";
-        $oldItemsRst = mysqli_query($finance_connect, $oldItemsSql);
-        if ($oldItemsRst) {
-            while ($oldItem = mysqli_fetch_assoc($oldItemsRst)) {
-                $oldSummaryRows[] = 'ProductID=' . (int) $oldItem['product_id'] . ', Qty=' . (int) $oldItem['product_quantity'];
-            }
-        }
-
-        $safeDate = mysqli_real_escape_string($finance_connect, $stockInDate);
-        $safeOrderNo = mysqli_real_escape_string($finance_connect, $orderNumber);
-
-        $uOrder = "UPDATE `" . $stockInOrderTable . "` SET warehouse_id='" . $warehouseId . "', stock_in_date='" . $safeDate . "', order_number='" . $safeOrderNo . "', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $orderId . "' AND status='A'";
-        $deactivateItems = "UPDATE `" . $stockInItemTable . "` SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE stock_in_order_id='" . $orderId . "' AND status='A'";
-
-        mysqli_begin_transaction($finance_connect);
-        try {
-            mysqli_query($finance_connect, $uOrder);
-
-            mysqli_query($finance_connect, $deactivateItems);
-
-            foreach ($items as $item) {
-                $productId = (int) $item['product_id'];
-                $qty = (int) $item['qty'];
-                $iItem = "INSERT INTO `" . $stockInItemTable . "` (stock_in_order_id, product_id, package_id, product_quantity, create_by, create_date, create_time, status) VALUES ('" . $orderId . "', '" . $productId . "', '0', '" . $qty . "', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
-                mysqli_query($finance_connect, $iItem);
-            }
-
-            mysqli_commit($finance_connect);
-
-            $editPageAction = getPageAction('E');
-            $summaryRows = array();
-            foreach ($items as $it) {
-                $summaryRows[] = 'ProductID=' . (int) $it['product_id'] . ', Qty=' . (int) $it['qty'];
-            }
-            
-            $oldChanges = implode(' | ', $oldSummaryRows);
-            $changes = implode(' | ', $summaryRows);
-
-            $oldVals = array();
-            $newVals = array();
-            $msgChanges = array();
-
-            if ((int)$oldWarehouseId !== (int)$warehouseId) {
-                $oldVals[] = "WarehouseID=" . $oldWarehouseId;
-                $newVals[] = "WarehouseID=" . $warehouseId;
-                $msgChanges[] = "[ <b>WarehouseID</b> : <b>'" . $oldWarehouseId . "'</b> to <b>'" . $warehouseId . "'</b> ]";
-            }
-            if ($oldStockInDate !== $stockInDate) {
-                $oldVals[] = "StockInDate=" . $oldStockInDate;
-                $newVals[] = "StockInDate=" . $stockInDate;
-                $msgChanges[] = "[ <b>StockInDate</b> : <b>'" . $oldStockInDate . "'</b> to <b>'" . $stockInDate . "'</b> ]";
-            }
-            if ($oldOrderNumber !== $orderNumber) {
-                $oldVals[] = "OrderNo=" . $oldOrderNumber;
-                $newVals[] = "OrderNo=" . $orderNumber;
-                $msgChanges[] = "[ <b>OrderNo</b> : <b>'" . htmlspecialchars($oldOrderNumber, ENT_QUOTES, 'UTF-8') . "'</b> to <b>'" . htmlspecialchars($orderNumber, ENT_QUOTES, 'UTF-8') . "'</b> ]";
-            }
-            if ($oldChanges !== $changes) {
-                $oldItemsStr = $oldChanges !== '' ? $oldChanges : '-';
-                $newItemsStr = $changes !== '' ? $changes : '-';
-                $oldVals[] = "Items={" . $oldItemsStr . "}";
-                $newVals[] = "Items={" . $newItemsStr . "}";
-                $msgChanges[] = "[ <b>Items</b> : <b>'" . htmlspecialchars($oldItemsStr, ENT_QUOTES, 'UTF-8') . "'</b> to <b>'" . htmlspecialchars($newItemsStr, ENT_QUOTES, 'UTF-8') . "'</b> ]";
-            }
-
-            if (count($msgChanges) > 0) {
-                $queryRecord = 'OrderID=' . $orderId;
-                
-                $log = [
-                    'log_act' => $editPageAction,
-                    'cdate' => $cdate,
-                    'ctime' => $ctime,
-                    'uid' => USER_ID,
-                    'cby' => USER_ID,
-                    'query_rec' => $queryRecord,
-                    'query_table' => $tblName,
-                    'oldval' => implode(' ; ', $oldVals),
-                    'changes' => implode(' ; ', $newVals),
-                    'act_msg' => USER_NAME . " edited stock in data [ <b>Order ID = " . (int) $orderId . "</b> ] " . implode(' ', $msgChanges) . " under <b><i>" . $stockInItemTable . " Table</i></b>.",
-                    'page' => $pageTitle,
-                    'connect' => $connect,
-                ];
-                audit_log($log);
-            }
-
-            echo "<script>confirmationDialog('', '', '" . addslashes($pageTitle) . "', '', '" . $redirectTable . "', 'E');</script>";
-            exit;
-        } catch (Exception $ex) {
-            mysqli_rollback($finance_connect);
-            $err = 'Update failed: ' . $ex->getMessage();
-        }
-    }
-}
-
-$token = input('t');
-if ($token) {
+if ($token !== '') {
     $requestId = sorDecodeToken($token);
     if ($requestId > 0) {
         $reqSql = "SELECT id,
@@ -422,7 +478,7 @@ if ($token) {
         if ($reqRst && ($req = mysqli_fetch_assoc($reqRst))) {
             $itemSql = "SELECT product_id,
                                package_id,
-                           IFNULL(productQty, IFNULL(packageQty, 1)) AS qty
+                               IFNULL(productQty, IFNULL(packageQty, 1)) AS qty
                         FROM " . STOCK_ORDER_REQ_ITEM . "
                         WHERE request_id='" . (int) $requestId . "' AND status='A'";
             $itemRst = mysqli_query($finance_connect, $itemSql);
@@ -456,9 +512,8 @@ if ($token) {
             );
 
             if ($saved[0]) {
-                $tokenPageAction = getPageAction('I');
                 $log = [
-                    'log_act' => $tokenPageAction,
+                    'log_act' => getPageAction('I'),
                     'cdate' => $cdate,
                     'ctime' => $ctime,
                     'uid' => USER_ID,
@@ -481,369 +536,158 @@ if ($token) {
         $err = 'Invalid token.';
     }
 }
+
+if (isset($_SESSION['tempValConfirmBox'])) {
+    unset($_SESSION['tempValConfirmBox']);
+    echo $clearLocalStorage;
+    echo '<script>confirmationDialog("","","' . addslashes($pageTitle) . '","","' . $redirectTable . '","' . addslashes($act) . '");</script>';
+}
+
+$isViewMode = ($act === '' && $dataID > 0 && isset($orderById[$dataID]));
+$isEditMode = ($act === 'E' && $dataID > 0 && isset($orderById[$dataID]));
+$isAddMode = ($act === 'I');
+
+$warehouseDisabledAttr = $isViewMode ? ' disabled' : '';
+$inputReadonlyAttr = $isViewMode ? ' readonly' : '';
+
+if ($isViewMode && $dataID > 0 && isset($orderById[$dataID])) {
+    $viewRow = $orderById[$dataID];
+    $log = [
+        'log_act' => getPageAction(''),
+        'cdate' => $cdate,
+        'ctime' => $ctime,
+        'uid' => USER_ID,
+        'cby' => USER_ID,
+        'query_rec' => 'OrderID=' . (int) $dataID,
+        'query_table' => $tblName,
+        'act_msg' => USER_NAME . " viewed stock in data [ <b>Order No = " . htmlspecialchars((string) $viewRow['order_number'], ENT_QUOTES, 'UTF-8') . "</b> ] from <b><i>" . $stockInOrderTable . " Table</i></b>.",
+        'page' => $pageTitle,
+        'connect' => $connect,
+    ];
+    audit_log($log);
+}
 ?>
 <!DOCTYPE html>
 <html>
 <head>
-    <link rel="stylesheet" href="./css/main.css">
+    <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
+    <style>
+        #stockInItemTable .product_name {
+            font-weight: normal !important;
+        }
+    </style>
 </head>
 <body>
 <div class="pre-load-center"><div class="preloader"></div></div>
 <div class="page-load-cover">
-    <div class="container-fluid d-flex justify-content-center mt-3">
-        <div class="col-12 col-md-11">
-            <div class="d-flex flex-column mb-3">
-                <div class="row">
-                    <p><a href="<?= $SITEURL ?>/dashboard.php">Dashboard</a> <i class="fa-solid fa-chevron-right fa-xs"></i> <a href="<?= $redirectTable ?>">Stock In</a> <i class="fa-solid fa-chevron-right fa-xs"></i> Add Stock In</p>
-                </div>
-                <div class="row">
-                    <div class="col-12 d-flex justify-content-between flex-wrap">
-                        <h2><?= $isViewMode ? 'View Stock In' : ($isEditMode ? 'Edit Stock In' : 'Add Stock In') ?></h2>
-                        <div class="mt-auto mb-auto">
-                            <a class="btn btn-sm btn-rounded btn-primary" id="actionBtn" href="<?= $redirectTable ?>">Back To Table</a>
-                        </div>
-                    </div>
-                </div>
-            </div>
+    <div class="d-flex flex-column my-3 ms-3">
+        <p><a href="<?= $redirectTable ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i>
+            <?= siEsc($pageActionTitle) ?>
+        </p>
+    </div>
 
+    <div id="formContainer" class="container-fluid mt-2">
+        <div class="col-12 col-md-12 formWidthAdjust">
             <?php if ($err !== '') { ?>
                 <div class="alert alert-danger"><?= siEsc($err) ?></div>
             <?php } ?>
 
-            <div class="card mb-4">
-                <div class="card-body">
-                    <h5 class="card-title mb-3">Stock In Form</h5>
-                    <form method="post" id="stockInForm" novalidate>
-                        <?php if ($isEditMode || $isViewMode) { ?>
-                            <input type="hidden" name="order_id" value="<?= (int) $formData['order_id'] ?>">
-                        <?php } ?>
-                        <div class="row">
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label">Warehouse*</label>
-                                <select class="form-select" name="warehouse_id" id="warehouse_id" required<?= $warehouseDisabledAttr ?>>
-                                    <option value="">Select Warehouse</option>
-                                    <?php foreach ($warehouses as $w) { ?>
-                                        <option value="<?= (int) $w['id'] ?>" <?= ((int) $formData['warehouse_id'] === (int) $w['id']) ? 'selected' : '' ?>><?= siEsc($w['name']) ?></option>
-                                    <?php } ?>
-                                </select>
-                                <?php if ($isViewMode) { ?>
-                                    <input type="hidden" name="warehouse_id" value="<?= (int) $formData['warehouse_id'] ?>">
-                                <?php } ?>
-                            </div>
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label">Stock In Date*</label>
-                                <input class="form-control" type="date" name="stock_in_date" id="stock_in_date" value="<?= siEsc($formData['stock_in_date']) ?>" required<?= $inputReadonlyAttr ?>>
-                            </div>
-                            <div class="col-md-4 mb-3">
-                                <label class="form-label">Order Number*</label>
-                                <input class="form-control" type="text" name="order_number" id="order_number" value="<?= siEsc($formData['order_number']) ?>" required<?= $inputReadonlyAttr ?>>
-                            </div>
-                        </div>
+            <form method="post" id="stockInForm" novalidate>
+                <input type="hidden" name="act" value="<?= siEsc($act) ?>">
+                <input type="hidden" id="stockInProductsJson" value="<?= siEsc(json_encode(array_values($products))) ?>">
+                <input type="hidden" id="isViewModeFlag" value="<?= $isViewMode ? '1' : '0' ?>">
+                <?php if ($isEditMode || $isViewMode) { ?>
+                    <input type="hidden" name="order_id" value="<?= (int) $formData['order_id'] ?>">
+                <?php } ?>
 
-                        <div class="table-responsive">
-                            <table class="table table-bordered" id="stockInItemTable">
+                <div class="form-group mb-5">
+                    <h2><?= siEsc($pageActionTitle) ?></h2>
+                </div>
+
+                <div class="row">
+                    <div class="col-12 col-md-4 mb-3">
+                        <label class="form-label form_lbl">Warehouse<span class="requireRed">*</span></label>
+                        <select class="form-select" name="warehouse_id" id="warehouse_id" required<?= $warehouseDisabledAttr ?>>
+                            <option value="">Select Warehouse</option>
+                            <?php foreach ($warehouses as $w) { ?>
+                                <option value="<?= (int) $w['id'] ?>" <?= ((int) $formData['warehouse_id'] === (int) $w['id']) ? 'selected' : '' ?>><?= siEsc($w['name']) ?></option>
+                            <?php } ?>
+                        </select>
+                        <?php if ($isViewMode) { ?>
+                            <input type="hidden" name="warehouse_id" value="<?= (int) $formData['warehouse_id'] ?>">
+                        <?php } ?>
+                    </div>
+                    <div class="col-12 col-md-4 mb-3">
+                        <label class="form-label form_lbl">Stock In Date<span class="requireRed">*</span></label>
+                        <input class="form-control" type="date" name="stock_in_date" id="stock_in_date" value="<?= siEsc($formData['stock_in_date']) ?>" required<?= $inputReadonlyAttr ?>>
+                    </div>
+                    <div class="col-12 col-md-4 mb-3">
+                        <label class="form-label form_lbl">Order Number<span class="requireRed">*</span></label>
+                        <input class="form-control" type="text" name="order_number" id="order_number" value="<?= siEsc($formData['order_number']) ?>" required<?= $inputReadonlyAttr ?> autocomplete="off">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="table-responsive mb-3">
+                        <table class="table table-bordered" id="stockInItemTable">
                                 <thead>
                                     <tr>
                                         <th width="60">#</th>
-                                        <th>Product Name*</th>
-                                        <th width="180">Product Quantity*</th>
-                                        <th width="120">Action</th>
+                                        <th style="min-width: 250px;">Product Name*</th>
+                                        <th width="150">Product Quantity*</th>
+                                        <th width="100">Action</th>
                                     </tr>
                                 </thead>
-                                <tbody id="stockInItemBody">
-                                    <?php foreach ($formRows as $idx => $formRow) { ?>
-                                    <tr>
-                                        <td class="row-no"><?= (int) ($idx + 1) ?></td>
-                                        <td>
-                                            <div class="autocomplete">
-                                                <input class="form-control product_name" name="product_name[]" placeholder="Type Product" value="<?= siEsc($formRow['product_name']) ?>" required<?= $inputReadonlyAttr ?>>
-                                                <input type="hidden" name="product_id[]" class="product_id" value="<?= (int) $formRow['product_id'] ?>">
-                                            </div>
-                                        </td>
-                                        <td>
-                                            <input class="form-control" type="number" name="product_quantity[]" min="1" value="<?= siEsc($formRow['product_quantity']) ?>" required<?= $inputReadonlyAttr ?>>
-                                        </td>
-                                        <td>
-                                            <?php if (!$isViewMode) { ?>
-                                                <button type="button" class="btn btn-sm btn-rounded btn-danger remove-stock-row">Remove</button>
+                            <tbody id="stockInItemBody">
+                                <?php foreach ($formRows as $idx => $formRow) { ?>
+                                <tr>
+                                    <td class="row-no"><?= (int) ($idx + 1) ?></td>
+                                    <td class="autocomplete">
+                                        <input type="text" class="form-control product_name" name="product_name[]" placeholder="Type Product" value="<?= siEsc($formRow['product_name']) ?>" required<?= $inputReadonlyAttr ?>>
+                                        <input type="hidden" name="product_id[]" class="product_id" value="<?= (int) $formRow['product_id'] ?>">
+                                    </td>
+                                    <td>
+                                        <input class="form-control" type="number" name="product_quantity[]" min="1" value="<?= siEsc($formRow['product_quantity']) ?>" required<?= $inputReadonlyAttr ?>>
+                                    </td>
+                                    <td class="row-action-cell" style="text-align:center;">
+                                        <?php if (!$isViewMode) { ?>
+                                            <?php if ($idx === 0) { ?>
+                                                <button class="mt-1" id="action_menu_btn" type="button" onclick="AddStockInRow()"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>
                                             <?php } else { ?>
-                                                &nbsp;
+                                                <button class="mt-1 remove-stock-row" id="action_menu_btn" type="button" onclick="RemoveStockInRow(this)"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>
                                             <?php } ?>
-                                        </td>
-                                    </tr>
-                                    <?php } ?>
-                                </tbody>
-                            </table>
-                        </div>
-
-                        <?php if (!$isViewMode && !$isEditMode) { ?>
-                            <button type="button" class="btn btn-sm btn-rounded btn-primary" id="addStockInRowBtn">+ Add Product</button>
-                            <button class="btn btn-sm btn-rounded btn-primary ms-2" name="actionBtn" value="save">Save Stock In</button>
-                        <?php } else if ($isEditMode) { ?>
-                            <button type="button" class="btn btn-sm btn-rounded btn-primary" id="addStockInRowBtn">+ Add Product</button>
-                            <button class="btn btn-sm btn-rounded btn-primary ms-2" name="actionBtn" value="update">Update Stock In</button>
-                        <?php } ?>
-                    </form>
+                                        <?php } ?>
+                                    </td>
+                                </tr>
+                                <?php } ?>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
-            </div>
+
+                <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
+                    <?php if ($isAddMode) { ?>
+                        <button class="btn btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="actionBtn" value="addData"><?= siEsc($pageActionTitle) ?></button>
+                    <?php } else if ($isEditMode) { ?>
+                        <button class="btn btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="actionBtn" value="updData"><?= siEsc($pageActionTitle) ?></button>
+                    <?php } ?>
+                    <button class="btn btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="actionBtn" value="back">Back</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>
 
 <script>
-    var page = <?= json_encode('Stock In') ?>;
-    var action = '';
+    var page = <?= json_encode($pageTitle) ?>;
+    var action = <?= json_encode($act) ?>;
     checkCurrentPage(page, action);
     dropdownMenuDispFix();
     setButtonColor();
-    preloader(300);
-
-    function norm(v) {
-        return String(v || '').toLowerCase().replace(/\s+/g, ' ').trim();
-    }
-
-    var products = <?= json_encode(array_values($products)) ?>;
-    var productByName = {};
-    products.forEach(function(p){
-        productByName[norm(p.name)] = p;
-    });
-
-    function closeList(input) {
-        var listId = input.getAttribute('data-list-id');
-        if (!listId) return;
-        var el = document.getElementById(listId);
-        if (el) el.remove();
-    }
-
-    function renderList(input, hiddenInput, options) {
-        closeList(input);
-        var keyword = norm(input.value);
-        if (keyword === '' || input.hasAttribute('readonly')) return;
-
-        var filtered = (options || []).filter(function(opt){
-            return norm(opt.name).indexOf(keyword) !== -1;
-        }).slice(0, 20);
-        if (filtered.length === 0) return;
-
-        var listId = 'sr_' + (input.name || 'x') + '_' + Date.now();
-        input.setAttribute('data-list-id', listId);
-
-        var ul = document.createElement('ul');
-        ul.className = 'searchResult';
-        ul.id = listId;
-        ul.style.width = input.offsetWidth + 'px';
-
-        filtered.forEach(function(opt){
-            var li = document.createElement('li');
-            li.textContent = opt.name;
-            li.addEventListener('mousedown', function(e){
-                e.preventDefault();
-                input.value = opt.name;
-                hiddenInput.value = String(opt.id);
-                closeList(input);
-            });
-            ul.appendChild(li);
-        });
-
-        input.after(ul);
-    }
-
-    function bindRow(row) {
-        var productName = row.querySelector('.product_name');
-        var productId = row.querySelector('.product_id');
-        if (!productName || !productId || productName.dataset.bound === '1') return;
-
-        productName.dataset.bound = '1';
-
-        productName.addEventListener('input', function(){
-            productId.value = '';
-            renderList(productName, productId, products);
-        });
-
-        productName.addEventListener('change', function(){
-            var byName = productByName[norm(productName.value)] || null;
-            productId.value = byName ? String(byName.id) : '';
-        });
-
-        productName.addEventListener('blur', function(){
-            setTimeout(function(){ closeList(productName); }, 120);
-        });
-    }
-
-    function reindexRows() {
-        document.querySelectorAll('#stockInItemBody tr').forEach(function(row, idx) {
-            var no = row.querySelector('.row-no');
-            if (no) no.textContent = String(idx + 1);
-        });
-    }
-
-    var isViewMode = <?= json_encode($isViewMode) ?>;
-    var isEditMode = <?= json_encode($isEditMode) ?>;
-
-    document.getElementById('stockInItemBody').addEventListener('click', function(e) {
-        if (isViewMode) {
-            return;
-        }
-
-        var removeBtn = e.target.closest('.remove-stock-row');
-        if (!removeBtn) {
-            return;
-        }
-
-        var tbody = document.getElementById('stockInItemBody');
-        var rows = tbody.querySelectorAll('tr');
-        if (rows.length <= 1) {
-            var row = removeBtn.closest('tr');
-            if (!row) return;
-            var productNameInput = row.querySelector('input[name="product_name[]"]');
-            var productIdInput = row.querySelector('input[name="product_id[]"]');
-            var qtyInput = row.querySelector('input[name="product_quantity[]"]');
-            if (productNameInput) productNameInput.value = '';
-            if (productIdInput) productIdInput.value = '';
-            if (qtyInput) qtyInput.value = '';
-            return;
-        }
-
-        var tr = removeBtn.closest('tr');
-        if (tr) {
-            tr.remove();
-            reindexRows();
-        }
-    });
-
-    var addBtn = document.getElementById('addStockInRowBtn');
-    if (addBtn) {
-        addBtn.addEventListener('click', function() {
-            var tbody = document.getElementById('stockInItemBody');
-            var tr = document.createElement('tr');
-            tr.innerHTML = '<td class="row-no"></td>' +
-                '<td><div class="autocomplete"><input class="form-control product_name" name="product_name[]" placeholder="Type Product" required><input type="hidden" name="product_id[]" class="product_id" value=""></div></td>' +
-                '<td><input class="form-control" type="number" name="product_quantity[]" min="1" value="" required></td>' +
-                '<td><button type="button" class="btn btn-sm btn-rounded btn-danger remove-stock-row">Remove</button></td>';
-            tbody.appendChild(tr);
-            bindRow(tr);
-            reindexRows();
-        });
-    }
-
-    document.querySelectorAll('#stockInItemBody tr').forEach(function(row) {
-        bindRow(row);
-    });
-
-    function clearFieldError(input) {
-        if (!input) return;
-        input.classList.remove('si-invalid');
-        input.style.borderColor = '';
-
-        var container = input.closest('td') || input.parentElement;
-        if (!container) return;
-
-        var errorEl = container.querySelector('.si-field-error[data-field-key="' + (input.getAttribute('data-field-key') || '') + '"]');
-        if (errorEl) {
-            errorEl.remove();
-        }
-    }
-
-    function setFieldError(input, message) {
-        if (!input) return;
-
-        var fieldKey = input.getAttribute('data-field-key') || input.name || ('field_' + Date.now());
-        input.setAttribute('data-field-key', fieldKey);
-
-        input.classList.add('si-invalid');
-        input.style.borderColor = '#ff0000';
-
-        var container = input.closest('td') || input.parentElement;
-        if (!container) return;
-
-        var selector = '.si-field-error[data-field-key="' + fieldKey + '"]';
-        var errorEl = container.querySelector(selector);
-        if (!errorEl) {
-            errorEl = document.createElement('div');
-            errorEl.className = 'si-field-error';
-            errorEl.setAttribute('data-field-key', fieldKey);
-            errorEl.style.color = '#ff0000';
-            errorEl.style.marginTop = '4px';
-            errorEl.style.fontSize = '0.95rem';
-            container.appendChild(errorEl);
-        }
-        errorEl.textContent = message;
-    }
-
-    function clearAllFieldErrors() {
-        document.querySelectorAll('.si-field-error').forEach(function(el) {
-            el.remove();
-        });
-        document.querySelectorAll('.si-invalid').forEach(function(input) {
-            input.classList.remove('si-invalid');
-            input.style.borderColor = '';
-        });
-    }
-
-    function isEmptyValue(value) {
-        return String(value || '').trim() === '';
-    }
-
-    var stockInForm = document.getElementById('stockInForm');
-    if (stockInForm) {
-        stockInForm.addEventListener('submit', function(e) {
-            var submitter = e.submitter;
-            if (!submitter) return;
-
-            var actionValue = submitter.value || '';
-            if (actionValue !== 'save' && actionValue !== 'update') {
-                return;
-            }
-
-            clearAllFieldErrors();
-
-            var hasError = false;
-
-            var warehouseInput = document.getElementById('warehouse_id');
-            var stockInDateInput = document.getElementById('stock_in_date');
-            var orderNumberInput = document.getElementById('order_number');
-
-            if (warehouseInput && isEmptyValue(warehouseInput.value)) {
-                setFieldError(warehouseInput, 'Warehouse is required!');
-                hasError = true;
-            }
-
-            if (stockInDateInput && isEmptyValue(stockInDateInput.value)) {
-                setFieldError(stockInDateInput, 'Stock In Date is required!');
-                hasError = true;
-            }
-
-            if (orderNumberInput && isEmptyValue(orderNumberInput.value)) {
-                setFieldError(orderNumberInput, 'Order Number is required!');
-                hasError = true;
-            }
-
-            document.querySelectorAll('#stockInItemBody tr').forEach(function(row, idx) {
-                var productNameInput = row.querySelector('input[name="product_name[]"]');
-                var qtyInput = row.querySelector('input[name="product_quantity[]"]');
-
-                if (productNameInput) {
-                    productNameInput.setAttribute('data-field-key', 'product_name_' + idx);
-                    if (isEmptyValue(productNameInput.value)) {
-                        setFieldError(productNameInput, 'Product Name is required!');
-                        hasError = true;
-                    }
-                }
-
-                if (qtyInput) {
-                    qtyInput.setAttribute('data-field-key', 'product_qty_' + idx);
-                    if (isEmptyValue(qtyInput.value)) {
-                        setFieldError(qtyInput, 'Product Quantity is required!');
-                        hasError = true;
-                    }
-                }
-            });
-
-            if (hasError) {
-                e.preventDefault();
-            }
-        });
-    }
+    preloader(300, action);
 </script>
 </body>
+<script>
+<?php include './js/warehouse_stock_in.js'; ?>
+</script>
 </html>

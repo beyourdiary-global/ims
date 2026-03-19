@@ -918,6 +918,11 @@ function validateFacebookPreviewRecords($records, &$errors, $metaAccounts, $user
             if (insertBtn) {
                 insertBtn.disabled = cards.length === 0;
             }
+            // Keep hidden preview summary in sync with current receipts
+             var previewInput = document.querySelector('input[name="fb_import_summary[preview_records]"]');
+             if (previewInput) {
+                 previewInput.value = cards.length;
+             }
         }
 
         document.querySelectorAll('.js-remove-fb-receipt').forEach(function (btn) {

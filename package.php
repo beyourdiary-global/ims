@@ -585,30 +585,77 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                         $rowCount = 1;
                                     }
 
+                                    // Preload product and weight unit data to avoid N+1 queries
+                                    $productsById = array();
+                                    $weightUnitsById = array();
+                                    
+                                    if (!empty($postedProdVals) && is_array($postedProdVals)) {
+                                        $prodIdSet = array();
+                                        foreach ($postedProdVals as $val) {
+                                            if (trim($val) !== '') {
+                                                $intId = (int)$val;
+                                                if ($intId > 0) {
+                                                    $prodIdSet[$intId] = true;
+                                                }
+                                            }
+                                        }
+                                        
+                                        if (!empty($prodIdSet)) {
+                                            $idList = implode(',', array_keys($prodIdSet));
+                                            $product_info_result = getData('*', "id IN ($idList)", '', PROD, $connect);
+                                            
+                                            $weightUnitIds = array();
+                                            
+                                            if ($product_info_result && $product_info_result->num_rows > 0) {
+                                                while ($product_info_row = $product_info_result->fetch_assoc()) {
+                                                    $prodIdKey = (int)$product_info_row['id'];
+                                                    $productsById[$prodIdKey] = $product_info_row;
+                                                    
+                                                    if (!empty($product_info_row['weight_unit'])) {
+                                                        $wuId = (int)$product_info_row['weight_unit'];
+                                                        if ($wuId > 0) {
+                                                            $weightUnitIds[$wuId] = true;
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            
+                                            if (!empty($weightUnitIds)) {
+                                                $wuIdList = implode(',', array_keys($weightUnitIds));
+                                                $wgt_unit_result = getData('id, unit', "id IN ($wuIdList)", '', WGT_UNIT, $connect);
+                                                if ($wgt_unit_result && $wgt_unit_result->num_rows > 0) {
+                                                    while ($wgt_unit_row = $wgt_unit_result->fetch_assoc()) {
+                                                        $wuKey = (int)$wgt_unit_row['id'];
+                                                        $weightUnitsById[$wuKey] = $wgt_unit_row;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+
                                     for ($i = 0; $i < $rowCount; $i++) {
                                         $num = $i + 1;
                                         $pn = isset($postedProdNames[$i]) ? $postedProdNames[$i] : '';
-                                        $pid = isset($postedProdVals[$i]) ? $postedProdVals[$i] : '';
+                                        
+                                        // Cast to integer to prevent SQL injection & ensure safe lookups
+                                        $pid = isset($postedProdVals[$i]) && ctype_digit((string)$postedProdVals[$i]) ? (int)$postedProdVals[$i] : 0;
+
                                         $pw = '';
                                         $pwu = '';
                                         $pwun = '';
                                         $ps = '';
                                         $pslot = '';
 
-                                        if (!empty($pid)) {
-                                            $product_info_result = getData('*', "id = '$pid'", '', PROD, $connect);
-                                            if ($product_info_result && $product_info_result->num_rows > 0) {
-                                                $product_info_row = $product_info_result->fetch_assoc();
-                                                $pw = $product_info_row['weight'];
-                                                $pwu = $product_info_row['weight_unit'];
-                                                $ps = $product_info_row['barcode_status'];
-                                                $pslot = $product_info_row['barcode_slot'];
-
-                                                $wgt_unit_result = getData('unit', "id = '$pwu'", '', WGT_UNIT, $connect);
-                                                if ($wgt_unit_result && $wgt_unit_result->num_rows > 0) {
-                                                    $wgt_unit_row = $wgt_unit_result->fetch_assoc();
-                                                    $pwun = $wgt_unit_row['unit'];
-                                                }
+                                        if ($pid > 0 && isset($productsById[$pid])) {
+                                            $product_info_row = $productsById[$pid];
+                                            $pw = isset($product_info_row['weight']) ? $product_info_row['weight'] : '';
+                                            $pwu = isset($product_info_row['weight_unit']) ? $product_info_row['weight_unit'] : '';
+                                            $ps = isset($product_info_row['barcode_status']) ? $product_info_row['barcode_status'] : '';
+                                            $pslot = isset($product_info_row['barcode_slot']) ? $product_info_row['barcode_slot'] : '';
+                                            
+                                            $pwuInt = (int)$pwu;
+                                            if ($pwuInt > 0 && isset($weightUnitsById[$pwuInt])) {
+                                                $pwun = $weightUnitsById[$pwuInt]['unit'];
                                             }
                                         }
                                         ?>
