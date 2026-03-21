@@ -603,5 +603,4 @@ $menuList = array(
                 }, 300);
             }
         });
-    })(jQuery);
 </script>

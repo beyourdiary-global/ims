@@ -18,6 +18,7 @@ $packagePinAccess = checkPin($connect, 'Package');
 $stockInPinAccess = checkPin($connect, 'Stock In');
 $productPinAccess = checkPin($connect, 'Product');
 $stockOrderReqPinAccess = checkPin($connect, 'Stock Order Request');
+$jtBackupPinAccess = checkPin($connect, 'J&T Transaction Backup Record');
 
 $canShopeeAdsImport = is_array($shopeeAdsPinAccess) && isActionAllowed('Import', $shopeeAdsPinAccess);
 $canFacebookAdsImport = is_array($facebookAdsPinAccess) && isActionAllowed('Import', $facebookAdsPinAccess);
@@ -26,6 +27,7 @@ $canPackageImport = is_array($packagePinAccess) && isActionAllowed('Import', $pa
 $canStockInImport = is_array($stockInPinAccess) && isActionAllowed('Import', $stockInPinAccess);
 $canProductImport = is_array($productPinAccess) && isActionAllowed('Import', $productPinAccess);
 $canStockOrderReqImport = is_array($stockOrderReqPinAccess) && isActionAllowed('Import', $stockOrderReqPinAccess);
+$canJtBackupImport = is_array($jtBackupPinAccess) && isActionAllowed('Import', $jtBackupPinAccess);
 
 // Configuration Array for all shortcut cards
 $shortcutCards = array(
@@ -91,6 +93,15 @@ $shortcutCards = array(
         'importUrl' => $SITEURL . '/finance/stock_order_request_import.php',
         'backUrl' => $SITEURL . '/finance/stock_order_request_table.php',
         'backText' => 'Back To Stock Order Page'
+    ),
+    array(
+        'title' => 'J&T Transaction Backup Import',
+        'desc' => 'Import J&T transaction backup PDF or ZIP files.',
+        'canImport' => $canJtBackupImport,
+        'canViewBack' => ($canJtBackupImport),
+        'importUrl' => $SITEURL . '/finance/j&t_trans_backup_import.php',
+        'backUrl' => $SITEURL . '/finance/j&t_trans_backup_table.php',
+        'backText' => 'Back To J&T Transaction Page'
     )
 );
 

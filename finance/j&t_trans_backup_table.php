@@ -7,6 +7,7 @@ include '../checkCurrentPagePin.php';
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . "_list.xlsx";
 $img_path = '../' . img_server . 'finance/j&t_trans_backup/';
+$tblName = 'jt_transaction_backup';
 
 
 $tempDir = '../' . img_server . "temp/";
@@ -25,9 +26,9 @@ if (!empty($checkboxValues)) {
     setcookie('rowID', '', time() - 3600, '/');
     // Defining column names
     $excelData = array(
-        array('S/N', 'INVOICE NUMBER', 'INVOICE DATE', 'ATTACHMENT', 'CREATE BY', 'CREATE DATE', 'CREATE TIME', 'UPDATE BY', 'UPDATE DATE', 'UPDATE TIME')
+        array('S/N', 'INVOICE NUMBER', 'INVOICE DATE', 'INVOICE CURRENCY', 'TOTAL GST', 'TOTAL AMOUNT PAYABLE', 'ATTACHMENT', 'CREATE BY', 'CREATE DATE', 'CREATE TIME', 'UPDATE BY', 'UPDATE DATE', 'UPDATE TIME')
     );    // Get the data from the database using the WHERE clause
-    $query2 = $finance_connect->query("SELECT * FROM " . JT_TRANS_BACKUP . " WHERE status = 'A' AND id IN ($checkboxValues) ORDER BY number ASC, date ASC");
+    $query2 = $finance_connect->query("SELECT * FROM " . $tblName . " WHERE status = 'A' AND id IN ($checkboxValues) ORDER BY number ASC, date ASC");
 
     $excelRowNum = 1;
     if ($query2->num_rows > 0) {
@@ -50,7 +51,7 @@ if (!empty($checkboxValues)) {
             }
 
             // Define the column names in the same order as in your database query
-            $columnNames = array('number', 'date', 'attachment', 'create_by', 'create_date', 'create_time', 'update_by', 'update_date', 'update_time');
+            $columnNames = array('number', 'date', 'currency', 'total_gst', 'total_amount', 'attachment', 'create_by', 'create_date', 'create_time', 'update_by', 'update_date', 'update_time');
 
             foreach ($columnNames as $columnName) {
                 // Check if the value is null, if so, replace it with an empty string
@@ -158,8 +159,10 @@ $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/finance/j&t_trans_backup.php';
+$deleteRedirectPage = $SITEURL . '/finance/j&t_trans_backup_table.php';
+$import_page = $SITEURL . '/finance/j&t_trans_backup_import.php';
 
-$result = getData('*', '', '', JT_TRANS_BACKUP, $finance_connect);
+$result = getData('*', '', '', $tblName, $finance_connect);
 
 $img_path = SITEURL . img_server . 'finance/j&t_trans_backup/';
 ?>
@@ -212,9 +215,15 @@ $img_path = SITEURL . img_server . 'finance/j&t_trans_backup/';
                                     href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                     Transaction </a>
                             <?php endif; ?>
+                            <?php if (isActionAllowed("Import", $pinAccess)): ?>
+                                <a class="btn btn-sm btn-rounded btn-primary" name="importBtn" id="addBtn"
+                                    href="<?= $import_page ?>"><i class="fa-solid fa-file-import"></i> Import</a>
+                            <?php endif; ?>
+                            <?php if (isActionAllowed("Export", $pinAccess)): ?>
                             <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn"
                                 onclick="if (exportData()) { showExportNotification(); }"><i
                                     class="fa-solid fa-file-export"></i> Export</a>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
@@ -236,6 +245,9 @@ $img_path = SITEURL . img_server . 'finance/j&t_trans_backup/';
                             <th scope="col" id="action_col" width="100px">Action</th>
                             <th scope="col">Invoice Number</th>
                             <th scope="col">Invoice Date</th>
+                            <th scope="col">Invoice Currency</th>
+                            <th scope="col">Total GST</th>
+                            <th scope="col">Total Amount Payable</th>
                             <th scope="col">Attachment</th>
                         </tr>
                     </thead>
@@ -245,11 +257,11 @@ $img_path = SITEURL . img_server . 'finance/j&t_trans_backup/';
                                 ?>
 
                                 <tr>
-                                    <th class="hideColumn" scope="row">
-                                        <?= $row['id'] ?>
-                                    </th>
                                     <th class="text-center">
                                         <input type="checkbox" class="export" value="<?= $row['id'] ?>">
+                                    </th>
+                                    <th class="hideColumn" scope="row">
+                                        <?= $row['id'] ?>
                                     </th>
                                     <th scope="row">
                                         <?= $num++; ?>
@@ -266,6 +278,15 @@ $img_path = SITEURL . img_server . 'finance/j&t_trans_backup/';
 
                                         <td scope="row"><?php if (isset($row['date']))
                                         echo $row['date'] ?></td>
+
+                                        <td scope="row"><?php if (isset($row['currency']))
+                                            echo $row['currency'] ?></td>
+
+                                        <td scope="row"><?php if (isset($row['total_gst']))
+                                            echo $row['total_gst'] ?></td>
+
+                                        <td scope="row"><?php if (isset($row['total_amount']))
+                                            echo $row['total_amount'] ?></td>
 
                                         <td scope="row">
                                         <?php if (isset($row['attachment'])) { ?><a href="<?= $img_path . $row['attachment'] ?>"
@@ -288,6 +309,9 @@ $img_path = SITEURL . img_server . 'finance/j&t_trans_backup/';
                             <th scope="col" id="action_col" width="100px">Action</th>
                             <th scope="col">Invoice Number</th>
                             <th scope="col">Invoice Date</th>
+                            <th scope="col">Invoice Currency</th>
+                            <th scope="col">Total GST</th>
+                            <th scope="col">Total Amount Payable</th>
                             <th scope="col">Attachment</th>
 
                         </tr>

@@ -2,8 +2,8 @@
 // 1. Database Credentials
 $dbhost     = '127.0.0.1';
 $dbport     = 3306;
-$dbUser     = 'beyourdi_cms';
-$dbpwd      = 'Byd1234@Global';
+$dbUser     = 'root';
+$dbpwd      = '';
 
 $db_cms     = 'beyourdi_cms-uat';
 $db_fin     = 'beyourdi_financial-uat';
@@ -282,6 +282,42 @@ alterColumnToVarcharIfInt($conn, $db_fin, 'shopee_sg_order_request', 'brand', 25
 // Ensure Stock In item supports CSV products and quantities.
 alterColumnToVarcharIfInt($conn, $db_fin, 'stock_in_order_item', 'product_id', 100);
 alterColumnToVarcharIfInt($conn, $db_fin, 'stock_in_order_item', 'product_quantity', 255);
+
+addColumnIfMissing($conn, $db_fin, 'jt_transaction_backup', 'currency', "ALTER TABLE `jt_transaction_backup` ADD COLUMN `currency` VARCHAR(10) DEFAULT NULL AFTER `date`");
+addColumnIfMissing($conn, $db_fin, 'jt_transaction_backup', 'total_gst', "ALTER TABLE `jt_transaction_backup` ADD COLUMN `total_gst` DECIMAL(10,2) DEFAULT '0.00' AFTER `currency`");
+addColumnIfMissing($conn, $db_fin, 'jt_transaction_backup', 'total_amount', "ALTER TABLE `jt_transaction_backup` ADD COLUMN `total_amount` DECIMAL(10,2) DEFAULT '0.00' AFTER `total_gst`");
+
+$createJtTransactionItemsTableSql = "CREATE TABLE IF NOT EXISTS `jt_transaction_items` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `transaction_id` INT NOT NULL,
+    `service_type` VARCHAR(255) DEFAULT NULL,
+    `shipments_count` INT DEFAULT '0',
+    `total_weight_kg` DECIMAL(10,2) DEFAULT '0.00',
+    `standard_charge` DECIMAL(10,2) DEFAULT '0.00',
+    `extra_charges` DECIMAL(10,2) DEFAULT '0.00',
+    `nett_charge` DECIMAL(10,2) DEFAULT '0.00'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+if ($conn->query($createJtTransactionItemsTableSql)) {
+    echo "<p style='color:blue;'>Table `jt_transaction_items` is ready.</p>";
+} else {
+    echo "<p style='color:red;'>Error creating `jt_transaction_items`: " . $conn->error . "</p>";
+}
+
+$createJtTransactionExtraChargesTableSql = "CREATE TABLE IF NOT EXISTS `jt_transaction_extra_charges` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `transaction_id` INT NOT NULL,
+    `type` VARCHAR(50) DEFAULT NULL,
+    `rate` DECIMAL(5,2) DEFAULT '0.00',
+    `amount` DECIMAL(10,2) DEFAULT '0.00',
+    `gst_paid` DECIMAL(10,2) DEFAULT '0.00'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+if ($conn->query($createJtTransactionExtraChargesTableSql)) {
+    echo "<p style='color:blue;'>Table `jt_transaction_extra_charges` is ready.</p>";
+} else {
+    echo "<p style='color:red;'>Error creating `jt_transaction_extra_charges`: " . $conn->error . "</p>";
+}
 
 // ==========================================
 // PIN GROUPS & CMS DATABASE UPDATE

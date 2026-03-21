@@ -7,6 +7,54 @@ include 'menuHeader.php';
 $sendEmail = '';
 $redirect_page = '';
 
+if (!function_exists('cpBase64UrlDecode')) {
+    function cpBase64UrlDecode($data)
+    {
+        $b64 = strtr((string) $data, '-_', '+/');
+        $pad = strlen($b64) % 4;
+        if ($pad > 0) {
+            $b64 .= str_repeat('=', 4 - $pad);
+        }
+        return base64_decode($b64, true);
+    }
+}
+
+if (!function_exists('cpIsValidResetToken')) {
+    function cpIsValidResetToken($token, $email, $passwordHash)
+    {
+        $decoded = cpBase64UrlDecode($token);
+        if ($decoded === false) {
+            return false;
+        }
+
+        $parts = explode('|', (string) $decoded);
+        if (count($parts) !== 3) {
+            return false;
+        }
+
+        $tokenEmail = (string) $parts[0];
+        $expiresTs = (int) $parts[1];
+        $tokenSig = (string) $parts[2];
+
+        if ($tokenEmail === '' || $expiresTs <= 0 || $tokenSig === '') {
+            return false;
+        }
+
+        if (strcasecmp($tokenEmail, (string) $email) !== 0) {
+            return false;
+        }
+
+        if (time() > $expiresTs) {
+            return false;
+        }
+
+        $secret = hash('sha256', SITEURL . '|' . dbpwd . '|forgot-password');
+        $expectedSig = hash_hmac('sha256', $tokenEmail . '|' . $expiresTs . '|' . (string) $passwordHash, $secret);
+
+        return hash_equals($expectedSig, $tokenSig);
+    }
+}
+
 // checking
 if (input('token') && input('email'))
     $pageMode = 'emailRstPassword';
@@ -50,16 +98,32 @@ if ($pageMode == 'userChgPassword') {
     }
 } else if ($pageMode == 'emailRstPassword') {
     $redirect_page = $SITEURL . '/index.php';
+    $email = input('email');
+    $token = input('token');
+    $tokenValid = false;
+
+    if ($email && $token) {
+        $safeEmail = mysqli_real_escape_string($connect, $email);
+        $rstToken = getData('*', "email = '" . $safeEmail . "'", '', USR_USER, $connect);
+        if ($rstToken && mysqli_num_rows($rstToken) == 1) {
+            $rowToken = $rstToken->fetch_assoc();
+            $pwdHash = isset($rowToken['password_alt']) ? (string) $rowToken['password_alt'] : '';
+            $tokenValid = cpIsValidResetToken($token, $email, $pwdHash);
+        }
+    }
+
+    if (!$tokenValid) {
+        $commonErr = 'Reset link is invalid or expired. Please request a new one.';
+    }
 
     if (post('actionBtn') == 'rstpass') {
-        $email = input('email');
-        $token = input('token');
         $new_password = post('rstnewpass');
         $confirm_password = post('rstconfirmpass');
 
-        if ($email && $token && $new_password && $confirm_password) {
+        if ($tokenValid && $email && $token && $new_password && $confirm_password) {
             if ($new_password == $confirm_password) {
-                $rst = getData('*', "email = '$email'", '', USR_USER, $connect);
+                $safeEmail = mysqli_real_escape_string($connect, $email);
+                $rst = getData('*', "email = '" . $safeEmail . "'", '', USR_USER, $connect);
                 if (!$rst) {
                     echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
                     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
@@ -69,7 +133,7 @@ if ($pageMode == 'userChgPassword') {
                 if (mysqli_num_rows($rst) == 1) {
                     try {
                         $_SESSION['tempValConfirmBox'] = true;
-                        $query = "UPDATE " . USR_USER . " SET password_alt = '" . md5($new_password) . "' WHERE email = '" . $email . "'";
+                        $query = "UPDATE " . USR_USER . " SET password_alt = '" . md5($new_password) . "' WHERE email = '" . $safeEmail . "'";
                         mysqli_query($connect, $query);
                         $sendEmail = 'rstSendEmail';
                     } catch (Exception $e) {
@@ -77,7 +141,11 @@ if ($pageMode == 'userChgPassword') {
                     }
                 } else $commonErr = 'No email existed in the system.';
             } else $newpassErr = $confirmpassErr = 'Password Not Match.';
-        } else $commonErr = 'Field cannot be blank.';
+        } else if (!$tokenValid) {
+            $commonErr = 'Reset link is invalid or expired. Please request a new one.';
+        } else {
+            $commonErr = 'Field cannot be blank.';
+        }
     }
 
     if ($sendEmail == 'rstSendEmail') {
@@ -85,7 +153,7 @@ if ($pageMode == 'userChgPassword') {
         $to = $email;
         $subject = 'Password has been reset';
         $message = 'Password has been successfully reset.';
-        mail($to, $subject, $message_user);
+        @mail($to, $subject, $message);
         ob_get_clean();
     }
 } else {
