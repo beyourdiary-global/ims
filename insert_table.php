@@ -2,7 +2,7 @@
 // Include init.php to access all dynamic global configurations
 include_once 'init.php'; 
 
-// 1. Database Credentials (loaded dynamically from init.php)
+// 1. Database Credentials (loaded from init.php)
 $dbhost     = dbhost;
 $dbUser     = dbuser;
 $dbpwd      = dbpwd;
@@ -302,7 +302,9 @@ $createJtTransactionItemsTableSql = "CREATE TABLE IF NOT EXISTS `jt_transaction_
     `total_weight_kg` DECIMAL(10,2) DEFAULT '0.00',
     `standard_charge` DECIMAL(10,2) DEFAULT '0.00',
     `extra_charges` DECIMAL(10,2) DEFAULT '0.00',
-    `nett_charge` DECIMAL(10,2) DEFAULT '0.00'
+    `nett_charge` DECIMAL(10,2) DEFAULT '0.00',
+    INDEX `idx_jt_transaction_items_transaction_id` (`transaction_id`),
+    CONSTRAINT `fk_jt_items_transaction` FOREIGN KEY (`transaction_id`) REFERENCES `jt_transaction_backup`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
 if ($conn->query($createJtTransactionItemsTableSql)) {
@@ -317,7 +319,9 @@ $createJtTransactionExtraChargesTableSql = "CREATE TABLE IF NOT EXISTS `jt_trans
     `type` VARCHAR(50) DEFAULT NULL,
     `rate` DECIMAL(5,2) DEFAULT '0.00',
     `amount` DECIMAL(10,2) DEFAULT '0.00',
-    `gst_paid` DECIMAL(10,2) DEFAULT '0.00'
+    `gst_paid` DECIMAL(10,2) DEFAULT '0.00',
+    INDEX `idx_jt_transaction_extra_charges_transaction_id` (`transaction_id`),
+    CONSTRAINT `fk_jt_extra_charges_transaction` FOREIGN KEY (`transaction_id`) REFERENCES `jt_transaction_backup`(`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
 if ($conn->query($createJtTransactionExtraChargesTableSql)) {
@@ -417,6 +421,47 @@ if ($conn->select_db($db_cms)) {
     ensureSingleShopeePinForGroup($conn, 3, '[128:1,2,3,4,5,6]');
 }
 // --- END: SHOPEE ROLE-BASED PIN GROUPS ---
+
+// --- START: IMPORT SHORTCUT PIN GROUP ---
+if ($conn->select_db($db_cms)) {
+    // 1. Insert new Pin Group (131) with only pin '1'
+    $sqlInsertImportShortcut = "INSERT IGNORE INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+    (131, 'Import Shortcut', '1', 'Import Shortcut Access', '1', CURDATE(), CURTIME(), 'A')";
+    
+    if ($conn->query($sqlInsertImportShortcut)) {
+        echo "<p style='color:blue;'>Pin group 131 (Import Shortcut) ensured in CMS database.</p>";
+    } else {
+        echo "<p style='color:red;'>Error creating Pin group 131: " . $conn->error . "</p>";
+    }
+
+    // 2. Assign Pin Group 131 to Super Admin (id=1)
+    $sqlUpdateAdmin1_131 = "UPDATE `user_group` 
+    SET `pins` = CONCAT(`pins`, '+[131:1]') 
+    WHERE `id` = 1 AND `pins` NOT LIKE '%[131:%'";
+    
+    if ($conn->query($sqlUpdateAdmin1_131)) {
+        if ($conn->affected_rows > 0) echo "<p style='color:blue;'>Granted Import Shortcut access to Super Admin.</p>";
+    }
+
+    // 3. Assign Pin Group 131 to Admin (id=2)
+    $sqlUpdateAdmin2_131 = "UPDATE `user_group` 
+    SET `pins` = CONCAT(`pins`, '+[131:1]') 
+    WHERE `id` = 2 AND `pins` NOT LIKE '%[131:%'";
+    
+    if ($conn->query($sqlUpdateAdmin2_131)) {
+        if ($conn->affected_rows > 0) echo "<p style='color:blue;'>Granted Import Shortcut access to Admin.</p>";
+    }
+
+    // 4. Assign Pin Group 131 to Basic User (id=3)
+    $sqlUpdateBasic_131 = "UPDATE `user_group` 
+    SET `pins` = CONCAT(`pins`, '+[131:1]') 
+    WHERE `id` = 3 AND `pins` NOT LIKE '%[131:%'";
+    
+    if ($conn->query($sqlUpdateBasic_131)) {
+        if ($conn->affected_rows > 0) echo "<p style='color:blue;'>Granted Import Shortcut access to Basic User.</p>";
+    }
+}
+// --- END: IMPORT SHORTCUT PIN GROUP ---
 
 // --- START: IMPORT SHORTCUT PIN GROUP ---
 if ($conn->select_db($db_cms)) {
