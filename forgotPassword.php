@@ -15,6 +15,8 @@ if ($rst != false) {
     echo "<script>location.href ='$SITEURL/index.php';</script>";
 }
 
+include "header.php";
+
 $resetpass_btn = post('resetpass_btn');
 
 if (!function_exists('fpBase64UrlEncode')) {
