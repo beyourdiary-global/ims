@@ -1,4 +1,30 @@
 <?php
+// Include init.php to access all dynamic global configurations
+include_once 'init.php'; 
+
+// 1. Database Credentials (loaded from init.php)
+$dbhost     = dbhost;
+$dbUser     = dbuser;
+$dbpwd      = dbpwd;
+$db_cms     = dbname;
+$db_fin     = dbFinance;
+
+// Separate the port from the host if it exists (e.g. "127.0.0.1:3306")
+$dbport = 3306;
+if (strpos($dbhost, ':') !== false) {
+    list($dbhost, $dbport) = explode(':', $dbhost);
+}
+
+// 2. Connect to MySQL Server (Create DB if not exists)
+$conn = new mysqli($dbhost, $dbUser, $dbpwd, "", $dbport);
+if ($conn->connect_error) {
+    die("Connection failed: " . $conn->connect_error);
+}
+
+// 2.1 Select Financial Database
+if (!$conn->select_db($db_fin)) {
+    die('Unable to select database `' . $db_fin . '`: ' . $conn->error);
+}
 
 // ==========================================
 // HELPER FUNCTIONS (FIXED)
