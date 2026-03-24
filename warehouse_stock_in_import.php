@@ -758,6 +758,13 @@ $previewData = isset($_SESSION['si_import_preview']) ? $_SESSION['si_import_prev
 </div>
 
 <script>
+    // Pass PHP data to the external Javascript file
+    window.__WAREHOUSE_STOCK_IN_IMPORT_CONFIG = {
+        siteUrl: <?php echo json_encode($SITEURL); ?>,
+        warehouseList: <?php echo json_encode($warehouseOptions); ?>,
+        productList: <?php echo json_encode($productOptions); ?>
+    };
+
     setButtonColor();
     preloader(300, '');
     <?php include "js/warehouse_stock_in_import.js"; ?>

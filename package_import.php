@@ -713,6 +713,24 @@ else if ($action === 'update') {
 <script>
     setButtonColor();
     preloader(300, '');
+    window.__PACKAGE_IMPORT_CONFIG = {
+         siteUrl: <?= json_encode($SITEURL) ?>,
+         previewServerRows: <?= json_encode(isset($previewData) ? $previewData : []) ?>,
+         lookupMeta: {
+             brands: {
+                 names: <?= json_encode(isset($brandNameMap) ? array_keys($brandNameMap) : []) ?>,
+                 ids: <?= json_encode(isset($brandNameMap) ? array_values($brandNameMap) : []) ?>
+             },
+             currencies: {
+                 names: <?= json_encode(isset($currencyNameMap) ? array_keys($currencyNameMap) : []) ?>,
+                 ids: <?= json_encode(isset($currencyNameMap) ? array_values($currencyNameMap) : []) ?>
+             },
+             products: {
+                 names: <?= json_encode(isset($productNameMap) ? array_keys($productNameMap) : []) ?>,
+                 ids: <?= json_encode(isset($productNameMap) ? array_values($productNameMap) : []) ?>
+             }
+         }
+     };
     <?php include "js/package_import.js"; ?>
 </script>
 </html>

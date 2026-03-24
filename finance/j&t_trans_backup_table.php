@@ -19,17 +19,31 @@ if (!file_exists($tempAttachDir)) {
     mkdir($tempAttachDir, 0777, true);
 }
 
-$checkboxValues = isset($_COOKIE['rowID']) ? $_COOKIE['rowID'] : '';
+$checkboxValuesRaw = isset($_COOKIE['rowID']) ? $_COOKIE['rowID'] : '';
 
-// Check if any checkboxes are checked
-if (!empty($checkboxValues)) {
+// Sanitize checkbox values from cookie: allow only comma-separated integers
+$checkboxIds = array();
+if (!empty($checkboxValuesRaw)) {
+    $parts = explode(',', $checkboxValuesRaw);
+    foreach ($parts as $part) {
+        $part = trim($part);
+        if ($part !== '' && ctype_digit($part)) {
+            $checkboxIds[] = (int)$part;
+        }
+    }
+}
+
+// Check if any valid checkbox IDs are present
+if (!empty($checkboxIds)) {
     setcookie('rowID', '', time() - 3600, '/');
     // Defining column names
     $excelData = array(
         array('S/N', 'INVOICE NUMBER', 'INVOICE DATE', 'INVOICE CURRENCY', 'TOTAL GST', 'TOTAL AMOUNT PAYABLE', 'ATTACHMENT', 'CREATE BY', 'CREATE DATE', 'CREATE TIME', 'UPDATE BY', 'UPDATE DATE', 'UPDATE TIME')
-    );    // Get the data from the database using the WHERE clause
-    $query2 = $finance_connect->query("SELECT * FROM " . $tblName . " WHERE status = 'A' AND id IN ($checkboxValues) ORDER BY number ASC, date ASC");
-
+    );    
+    // Get the data from the database using the WHERE clause
+    $idList = implode(',', $checkboxIds);
+    $query2 = $finance_connect->query("SELECT * FROM " . $tblName . " WHERE status = 'A' AND id IN ($idList) ORDER BY number ASC, date ASC");
+    
     $excelRowNum = 1;
     if ($query2->num_rows > 0) {
         while ($row2 = $query2->fetch_assoc()) {

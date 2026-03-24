@@ -33,10 +33,23 @@ $courierIds = array();
 $pkgIds = array();
 $productIds = array();
 $brandIds = array();
+$requestOrderNumbers = array();
 
 if ($result && mysqli_num_rows($result) > 0) {
     while ($row = mysqli_fetch_assoc($result)) {
+        $resolvedOrderNumber = trim((string) (isset($row['invoice_no']) ? $row['invoice_no'] : ''));
+        if ($resolvedOrderNumber === '') {
+            $resolvedOrderNumber = 'SOR-' . (int) $row['id'];
+        }
+        $row['_resolved_order_number'] = $resolvedOrderNumber;
+
         $rows[] = $row;
+
+        $orderNumberKey = strtolower($resolvedOrderNumber);
+        if ($orderNumberKey !== '') {
+            $requestOrderNumbers[$orderNumberKey] = $resolvedOrderNumber;
+        }
+
         if (!empty($row['brand_id'])) {
             $brandIds[(int) $row['brand_id']] = true;
         }
@@ -61,6 +74,27 @@ if ($result && mysqli_num_rows($result) > 0) {
                 }
                 if (isset($parts[4]) && (int) $parts[4] > 0) {
                     $brandIds[(int) $parts[4]] = true;
+                }
+            }
+        }
+    }
+}
+
+$stockedInOrderMap = array();
+if (!empty($requestOrderNumbers)) {
+    $escapedOrderNumbers = array();
+    foreach ($requestOrderNumbers as $orderNumber) {
+        $escapedOrderNumbers[] = "'" . mysqli_real_escape_string($finance_connect, (string) $orderNumber) . "'";
+    }
+
+    if (!empty($escapedOrderNumbers)) {
+        $stockedSql = "SELECT DISTINCT TRIM(order_number) AS order_number FROM `stock_in_order` WHERE status='A' AND TRIM(order_number) IN (" . implode(',', $escapedOrderNumbers) . ")";
+        $stockedRst = mysqli_query($finance_connect, $stockedSql);
+        if ($stockedRst) {
+            while ($stockedRow = mysqli_fetch_assoc($stockedRst)) {
+                $stockedOrderNumber = strtolower(trim((string) (isset($stockedRow['order_number']) ? $stockedRow['order_number'] : '')));
+                if ($stockedOrderNumber !== '') {
+                    $stockedInOrderMap[$stockedOrderNumber] = true;
                 }
             }
         }
@@ -335,7 +369,11 @@ function sorQrHref($path, $siteUrl)
                                     <?php renderViewEditButton('View', $redirect_page, $row, $pinAccess); ?>
                                     <?php renderViewEditButton('Edit', $redirect_page, $row, $pinAccess, $act_2); ?>
                                     <?php renderDeleteButton($pinAccess, $row['id'], isset($row['invoice_no']) ? $row['invoice_no'] : '', '', $pageTitle, $redirect_page, $deleteRedirectPage); ?>
-                                    <?php if (!empty($row['qr_image'])) { ?>
+                                    <?php
+                                    $resolvedOrderNumber = strtolower(trim((string) (isset($row['_resolved_order_number']) ? $row['_resolved_order_number'] : '')));
+                                    $isStockedInOrder = ($resolvedOrderNumber !== '' && isset($stockedInOrderMap[$resolvedOrderNumber]));
+                                    ?>
+                                    <?php if (!empty($row['qr_image']) && !$isStockedInOrder) { ?>
                                         <button type="button" class="btn btn-sm btn-rounded btn-primary sor-qr-btn" data-id="<?= (int) $row['id'] ?>" data-href="<?= htmlspecialchars(sorQrHref($row['qr_image'], $SITEURL), ENT_QUOTES, 'UTF-8') ?>" title="Download QR">
                                             <i class="fa-solid fa-qrcode"></i>
                                         </button>

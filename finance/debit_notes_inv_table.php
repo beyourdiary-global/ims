@@ -141,7 +141,7 @@ if (post('pay_status_option')) {
                         <tbody>
                             <?php while ($row = $result->fetch_assoc()) {
                                 $mrcht = getData('name', "id='" . $row['bill_nameID'] . "'", '', MERCHANT, $finance_connect);
-                                $row2 = $mrcht->fetch_assoc();
+                                $row2 = ($mrcht && $mrcht->num_rows > 0) ? $mrcht->fetch_assoc() : array();
                                 ?>
                                 <?php $payment_status = $row['payment_status']; ?>
                                 <tr>
