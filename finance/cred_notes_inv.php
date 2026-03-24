@@ -597,11 +597,13 @@ span.input-group-text{
 
                                                         if (isset($echoVal)) {
                                                             $curr_rst = getData('unit', "id = '$echoVal'", '', CUR_UNIT, $connect);
-                                                            if (!$curr_rst) {
-                                                                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                                                echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                                            if ($curr_rst && $curr_rst->num_rows > 0) {
+                                                                $curr_row = $curr_rst->fetch_assoc();
+                                                            } else {
+                                                                $curr_row = array('unit' => '');
                                                             }
-                                                            $curr_row = $curr_rst->fetch_assoc();
+                                                        } else {
+                                                            $curr_row = array('unit' => '');
                                                         }
                                                         ?>
                                                         <input class="form-control" type="text" name="cni_curr"
@@ -636,11 +638,13 @@ span.input-group-text{
 
                                                     if (isset($echoVal)) {
                                                         $mrcht_rst = getData('name', "id = '$echoVal'", '', MERCHANT, $finance_connect);
-                                                        if (!$mrcht_rst) {
-                                                            echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                                            echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                                        if ($mrcht_rst && $mrcht_rst->num_rows > 0) {
+                                                            $mrcht_row = $mrcht_rst->fetch_assoc();
+                                                        } else {
+                                                            $mrcht_row = array('name' => '');
                                                         }
-                                                        $mrcht_row = $mrcht_rst->fetch_assoc();
+                                                    } else {
+                                                        $mrcht_row = array('name' => '');
                                                     }
                                                     ?>
                                                     <input class="form-control" type="text" placeholder="Customer Name"
@@ -895,8 +899,13 @@ span.input-group-text{
 
                                                                 if (isset($echoVal)) {
                                                                     $pic_result = getData('name', "id = '$echoVal'", '', USR_USER, $connect);
-
-                                                                    $pic_row = $pic_result->fetch_assoc();
+                                                                    if ($pic_result && $pic_result->num_rows > 0) {
+                                                                        $pic_row = $pic_result->fetch_assoc();
+                                                                    } else {
+                                                                        $pic_row = array('name' => '');
+                                                                    }
+                                                                } else {
+                                                                    $pic_row = array('name' => '');
                                                                 }
                                                                 ?>
                                                                 <input class="form-control" type="text" name="cni_pic"

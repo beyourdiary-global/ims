@@ -176,8 +176,7 @@ document.querySelectorAll(".record-card").forEach(function (recordCard) {
     return;
   }
 
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "header/js/pdf.worker.min.js";
 
   var fileInput = document.getElementById("import_file");
   var form = document.getElementById("jtUploadForm");

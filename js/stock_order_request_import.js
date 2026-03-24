@@ -262,8 +262,12 @@ document.querySelectorAll(".sor-pkg-select").forEach(function (sel) {
   if (typeof pdfjsLib === "undefined" || typeof Tesseract === "undefined")
     return;
 
-  pdfjsLib.GlobalWorkerOptions.workerSrc =
-    "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  var workerSrc =
+    (typeof sorCfg !== "undefined" && sorCfg.pdfjsWorkerSrc) ||
+    "/finance/header/js/pdf.worker.min.js";
+  if (workerSrc) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc;
+  }
 
   var fileInput = document.getElementById("import_file");
   var form = document.getElementById("sorUploadForm");

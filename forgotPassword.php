@@ -15,8 +15,6 @@ if ($rst != false) {
     echo "<script>location.href ='$SITEURL/index.php';</script>";
 }
 
-include "header.php";
-
 $resetpass_btn = post('resetpass_btn');
 
 if (!function_exists('fpBase64UrlEncode')) {
@@ -75,6 +73,7 @@ if ($resetpass_btn == 1) {
         echo json_encode($response);
         exit;
     }
+
 
     if (mysqli_num_rows($result) == 1) {
         $rowUser = $result->fetch_assoc();

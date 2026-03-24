@@ -713,6 +713,28 @@ else if ($action === 'update') {
 <script>
     setButtonColor();
     preloader(300, '');
+    window.__PACKAGE_IMPORT_CONFIG = {
+         siteUrl: <?= json_encode($SITEURL) ?>,
+         previewServerRows: <?= json_encode(isset($previewData) ? $previewData : []) ?>,
+         lookupMeta: {
+             brand_name: {
+                 names: <?= json_encode(isset($brandNameMap) ? array_values($brandNameMap) : []) ?>,
+                 ids: <?= json_encode(isset($brandNameMap) ? array_map('strval', array_keys($brandNameMap)) : []) ?>
+             },
+             price_curr_name: {
+                 names: <?= json_encode(isset($currencyNameMap) ? array_values($currencyNameMap) : []) ?>,
+                 ids: <?= json_encode(isset($currencyNameMap) ? array_map('strval', array_keys($currencyNameMap)) : []) ?>
+             },
+             cost_curr_name: {
+                 names: <?= json_encode(isset($currencyNameMap) ? array_values($currencyNameMap) : []) ?>,
+                 ids: <?= json_encode(isset($currencyNameMap) ? array_map('strval', array_keys($currencyNameMap)) : []) ?>
+             },
+             product_names: {
+                 names: <?= json_encode(isset($productNameMap) ? array_values($productNameMap) : []) ?>,
+                 ids: <?= json_encode(isset($productNameMap) ? array_map('strval', array_keys($productNameMap)) : []) ?>
+             }
+         }
+     };
     <?php include "js/package_import.js"; ?>
 </script>
 </html>

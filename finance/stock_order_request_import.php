@@ -1795,6 +1795,13 @@ foreach ($previewRows as $idx => $rowCheck) {
 <script>
     setButtonColor();
     preloader(300, '');
+
+     window.__SOR_IMPORT_CONFIG = window.__SOR_IMPORT_CONFIG || {
+         brandToCompanyMap: <?= json_encode($brandToCompanyMap ?? new stdClass()) ?>,
+         brandNameMap: <?= json_encode($brandNameMap ?? new stdClass()) ?>,
+         companyNameMap: <?= json_encode($companyNameMap ?? new stdClass()) ?>
+     };
+     
     <?php include "../js/stock_order_request_import.js"; ?>
 </script>
 </body>

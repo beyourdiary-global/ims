@@ -733,7 +733,37 @@ if ($action === 'preview') {
 </div>
 </body>
 <script>
+    preloader(0, '');
     setButtonColor();
+
+    // Pass PHP data to the external Javascript file
+    window.__PRODUCT_IMPORT_CONFIG = {
+        siteUrl: <?= json_encode($SITEURL) ?>,
+        previewServerRows: <?= ($action === 'preview' && !empty($previewData)) ? json_encode($previewData, JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP) : 'null' ?>,
+        lookupMeta: {
+            brand_display: {
+                names: <?= json_encode(array_values($brandNameMap)) ?>,
+                ids: <?= json_encode(array_map('strval', array_keys($brandNameMap))) ?>
+            },
+            weight_unit_display: {
+                names: <?= json_encode(array_values($weightNameMap)) ?>,
+                ids: <?= json_encode(array_map('strval', array_keys($weightNameMap))) ?>
+            },
+            currency_unit_display: {
+                names: <?= json_encode(array_values($currencyNameMap)) ?>,
+                ids: <?= json_encode(array_map('strval', array_keys($currencyNameMap))) ?>
+            },
+            product_category_display: {
+                names: <?= json_encode(array_values($categoryNameMap)) ?>,
+                ids: <?= json_encode(array_map('strval', array_keys($categoryNameMap))) ?>
+            },
+            parent_product_display: {
+                names: <?= json_encode(array_values($parentNameMap)) ?>,
+                ids: <?= json_encode(array_map('strval', array_keys($parentNameMap))) ?>
+            }
+        }
+    };
+
     preloader(300, '');
     <?php include "js/product_import.js"; ?>
 </script>

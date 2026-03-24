@@ -97,7 +97,7 @@ $result = getData('*', '', '', SHOPEE_CUST_INFO, $finance_connect);
                                     $picName = $countryName = $brandName = $seriesName = '';
 
                                     $picValue = isset($row['pic']) ? trim((string) $row['pic']) : '';
-                                    if ($picValue !== '') {
+                                    if ($picValue !== '' && $picValue !== '0') {
                                         if (isset($picCache[$picValue])) {
                                             // Use cached PIC display name
                                             $picName = $picCache[$picValue];
@@ -119,7 +119,7 @@ $result = getData('*', '', '', SHOPEE_CUST_INFO, $finance_connect);
                                     }
 
                                     $countryValue = isset($row['country']) ? trim((string) $row['country']) : '';
-                                    if ($countryValue !== '') {
+                                    if ($countryValue !== '' && $countryValue !== '0') {
                                         if (isset($countryCache[$countryValue])) {
                                             // Use cached Country display name
                                             $countryName = $countryCache[$countryValue];
@@ -144,7 +144,7 @@ $result = getData('*', '', '', SHOPEE_CUST_INFO, $finance_connect);
                                     }
 
                                     $brandValue = isset($row['brand']) ? trim((string) $row['brand']) : '';
-                                    if ($brandValue !== '') {
+                                    if ($brandValue !== '' && $brandValue !== '0') {
                                         $brand = getData('name', "id='" . $brandValue . "'", 'LIMIT 1', BRAND, $connect);
                                         if (!$brand || $brand->num_rows === 0) {
                                             $brand = getData('name', "name='" . $brandValue . "'", 'LIMIT 1', BRAND, $connect);
@@ -158,7 +158,7 @@ $result = getData('*', '', '', SHOPEE_CUST_INFO, $finance_connect);
                                     }
 
                                     $seriesValue = isset($row['series']) ? trim((string) $row['series']) : '';
-                                    if ($seriesValue !== '') {
+                                    if ($seriesValue !== '' && $seriesValue !== '0') {
                                         $series = getData('name', "id='" . $seriesValue . "'", 'LIMIT 1', BRD_SERIES, $connect);
                                         if (!$series || $series->num_rows === 0) {
                                             $series = getData('name', "name='" . $seriesValue . "'", 'LIMIT 1', BRD_SERIES, $connect);

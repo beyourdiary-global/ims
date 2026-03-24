@@ -24,12 +24,13 @@ $pinAccess = checkCurrentPin($connect, $pageTitle);
 if (!function_exists('resolveLookupValue')) {
     function resolveLookupValue($tableName, $rawValue, $displayField, $connect, $altDisplayField = '')
     {
+        $rawValue = trim((string) $rawValue);
         $resolved = [
-            'id' => $rawValue,
-            'display' => $rawValue,
+            'id' => '',
+            'display' => '',
         ];
 
-        if ($rawValue === null || $rawValue === '') {
+        if ($rawValue === '' || $rawValue === '0') {
             return $resolved;
         }
 
@@ -50,6 +51,10 @@ if (!function_exists('resolveLookupValue')) {
             $lookupRow = $rst->fetch_assoc();
             $resolved['id'] = $lookupRow['id'];
             $resolved['display'] = $lookupRow[$displayField];
+        } else {
+            // Keep original value for non-empty non-zero legacy text values.
+            $resolved['id'] = $rawValue;
+            $resolved['display'] = $rawValue;
         }
 
         return $resolved;
@@ -97,6 +102,28 @@ if (post('actionBtn')) {
             $scr_brand = postSpaceFilter("scr_brand_hidden");
             $scr_series = postSpaceFilter("scr_series_hidden");
             $scr_remark = postSpaceFilter("scr_remark");
+            $scr_pic_text = postSpaceFilter("scr_pic");
+            $scr_country_text = postSpaceFilter("scr_country");
+            $scr_brand_text = postSpaceFilter("scr_brand");
+            $scr_series_text = postSpaceFilter("scr_series");
+
+            // Normalize hidden lookup IDs. If hidden value is empty/0, resolve by typed text.
+            if ($scr_pic === '' || $scr_pic === '0') {
+                $resolvedPic = resolveLookupValue(USR_USER, $scr_pic_text, 'name', $connect);
+                $scr_pic = (string) $resolvedPic['id'];
+            }
+            if ($scr_country === '' || $scr_country === '0') {
+                $resolvedCountry = resolveLookupValue(COUNTRIES, $scr_country_text, 'nicename', $connect, 'name');
+                $scr_country = (string) $resolvedCountry['id'];
+            }
+            if ($scr_brand === '' || $scr_brand === '0') {
+                $resolvedBrand = resolveLookupValue(BRAND, $scr_brand_text, 'name', $connect);
+                $scr_brand = (string) $resolvedBrand['id'];
+            }
+            if ($scr_series === '' || $scr_series === '0') {
+                $resolvedSeries = resolveLookupValue(BRD_SERIES, $scr_series_text, 'name', $connect);
+                $scr_series = (string) $resolvedSeries['id'];
+            }
 
             $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
