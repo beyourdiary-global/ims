@@ -45,7 +45,7 @@ if (!empty($checkboxIds)) {
     $query2 = $finance_connect->query("SELECT * FROM " . $tblName . " WHERE status = 'A' AND id IN ($idList) ORDER BY number ASC, date ASC");
     
     $excelRowNum = 1;
-    if ($query2->num_rows > 0) {
+    if ($query2 && $query2->num_rows > 0) {
         while ($row2 = $query2->fetch_assoc()) {
             // Initialize an empty array to store the row data
             $lineData = array();

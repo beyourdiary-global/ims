@@ -77,10 +77,8 @@ $(".submitBtn").on("click", () => {
   //event.preventDefault();
 
   var name_chk = 0;
-  var pic_chk = 0;
   var country_chk = 0;
-  var brand_chk = 0;
-  var series_chk = 0;
+  var currency_chk = 0;
 
   if (
     $("#scr_username").val() === "" ||
@@ -99,11 +97,7 @@ $(".submitBtn").on("click", () => {
   if (
     $("#scr_pic").val() === "" ||
     $("#scr_pic").val() === null ||
-    $("#scr_pic").val() === undefined ||
-    $("#scr_pic_hidden").val() === "" ||
-    $("#scr_pic_hidden").val() === null ||
-    $("#scr_pic_hidden").val() === undefined ||
-    $("#scr_pic_hidden").val() === "0"
+    $("#scr_pic").val() === undefined
   ) {
     pic_chk = 0;
     $("#scr_pic").after(
@@ -172,7 +166,7 @@ $(".submitBtn").on("click", () => {
     name_chk == 1 &&
     pic_chk == 1 &&
     country_chk == 1 &&
-    brand_chk == 1 &&
+    brand_chk &&
     series_chk == 1
   )
     $(this).closest("form").submit();
