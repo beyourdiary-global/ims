@@ -74,8 +74,7 @@ if ($resetpass_btn == 1) {
         exit;
     }
 
-    include "header.php";
-    
+
     if (mysqli_num_rows($result) == 1) {
         $rowUser = $result->fetch_assoc();
         $name = isset($rowUser['name']) ? (string) $rowUser['name'] : 'User';
