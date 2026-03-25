@@ -292,10 +292,18 @@ if ($action === 'preview') {
                             if ((string)$ex['currency_unit'] !== (string)$dbPriceCurrId) $changes['price_curr'] = true;
                             if ((string)$ex['cost_curr'] !== (string)$dbCostCurrId) $changes['cost_curr'] = true;
                             
-                            // Check Product changes safely
-                            $exProducts = array_filter(explode(',', $ex['product'] ?? ''));
-                            sort($exProducts);
-                            if (implode(',', $exProducts) !== $dbProductString) $changes['products'] = true;
+                            // Check product changes with normalized ID lists (trim, numeric only, unique, sorted).
+                            $exProductsRaw = array_map('trim', explode(',', (string) ($ex['product'] ?? '')));
+                            $exProductIds = array();
+                            foreach ($exProductsRaw as $exProd) {
+                                if ($exProd === '' || !ctype_digit($exProd)) {
+                                    continue;
+                                }
+                                $exProductIds[] = (int) $exProd;
+                            }
+                            $exProductIds = array_values(array_unique($exProductIds));
+                            sort($exProductIds);
+                            if (implode(',', $exProductIds) !== $dbProductString) $changes['products'] = true;
 
                             if ((string)$ex['barcode_slot_total'] !== (string)$barcode_slot_total) $changes['barcode_slot_total'] = true;
                             if (trim((string)$ex['remark']) !== $remark) $changes['remark'] = true;

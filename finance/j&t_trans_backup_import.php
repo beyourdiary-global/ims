@@ -382,6 +382,7 @@ if (post('actionBtn')) {
             mysqli_begin_transaction($finance_connect);
             try {
                 $inserted = 0;
+                $importedIds = array(); // Added to track IDs for the audit log
 
                 foreach ($postedRecords as $record) {
                     $invNo = trim((string) (isset($record['jt_inv_number']) ? $record['jt_inv_number'] : ''));
@@ -470,10 +471,29 @@ if (post('actionBtn')) {
                         }
                     }
 
+                    $importedIds[] = $transactionId; // Capture the inserted ID
                     $inserted++;
                 }
 
                 mysqli_commit($finance_connect);
+                
+                // Add the audit log if at least one record was inserted
+                if ($inserted > 0) {
+                    $log = [
+                        'log_act' => 'import',
+                        'cdate' => $cdate,
+                        'ctime' => $ctime,
+                        'uid' => USER_ID,
+                        'cby' => USER_ID,
+                        'query_rec' => implode(', ', $importedIds),
+                        'query_table' => $tblName,
+                        'act_msg' => USER_NAME . " imported " . $inserted . " J&T transaction(s) under <b><i>$tblName Table</i></b>.",
+                        'page' => $pageTitle,
+                        'connect' => $connect,
+                    ];
+                    audit_log($log);
+                }
+
                 unset($_SESSION['jt_backup_import_preview']);
                 echo "<script>alert('Imported " . $inserted . " transaction(s) successfully.');location.href='" . $tablePage . "';</script>";
                 exit;

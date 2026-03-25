@@ -97,6 +97,33 @@ function alterColumnToVarcharIfInt($conn, $dbName, $tableName, $columnName, $var
     }
 }
 
+function alterColumnToTextIfVarchar($conn, $dbName, $tableName, $columnName)
+{
+    $safeDb = $conn->real_escape_string($dbName);
+    $safeTable = $conn->real_escape_string($tableName);
+    $safeColumn = $conn->real_escape_string($columnName);
+    $sql = "SELECT DATA_TYPE FROM information_schema.columns WHERE table_schema='$safeDb' AND table_name='$safeTable' AND column_name='$safeColumn' LIMIT 1";
+    $rst = $conn->query($sql);
+
+    if (!$rst || $rst->num_rows === 0) {
+        return;
+    }
+
+    $row = $rst->fetch_assoc();
+    if ($row) {
+        $row = array_change_key_case($row, CASE_LOWER);
+    }
+
+    if (isset($row['data_type']) && strtolower((string) $row['data_type']) === 'varchar') {
+        $alterSql = "ALTER TABLE `$tableName` MODIFY COLUMN `$columnName` TEXT NULL";
+        if ($conn->query($alterSql)) {
+            echo "<p style='color:blue;'>Updated `$tableName`.`$columnName` to TEXT.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed updating `$tableName`.`$columnName` to TEXT: " . $conn->error . "</p>";
+        }
+    }
+}
+
 function indexExists($conn, $dbName, $tableName, $indexName)
 {
     $safeDb = $conn->real_escape_string($dbName);
@@ -182,7 +209,9 @@ $createStockOrderRequestItemTableSql = "CREATE TABLE IF NOT EXISTS `stock_order_
     `request_id` INT NOT NULL,
     `product_id` INT DEFAULT NULL,
     `package_id` INT NOT NULL,
+    `package_group_key` VARCHAR(120) DEFAULT NULL,
     `package_desc` TEXT DEFAULT NULL,
+    `package_price` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
     `packageQty` INT NOT NULL DEFAULT 1,
     `productQty` INT NOT NULL DEFAULT 1,
     `create_by` VARCHAR(30) DEFAULT NULL,
@@ -206,6 +235,7 @@ $createStockInOrderTableSql = "CREATE TABLE IF NOT EXISTS `stock_in_order` (
     `warehouse_id` INT NOT NULL,
     `order_number` VARCHAR(120) NOT NULL,
     `stock_in_date` DATE NOT NULL,
+    `attachment` TEXT DEFAULT NULL,
     `create_by` VARCHAR(30) DEFAULT NULL,
     `create_date` DATE DEFAULT NULL,
     `create_time` TIME DEFAULT NULL,
@@ -253,6 +283,8 @@ addColumnIfMissing($conn, $db_fin, 'stock_order_request', 'company_id', "ALTER T
 addColumnIfMissing($conn, $db_fin, 'stock_order_request_item', 'product_id', "ALTER TABLE `stock_order_request_item` ADD COLUMN `product_id` INT DEFAULT NULL AFTER `request_id`");
 addColumnIfMissing($conn, $db_fin, 'stock_order_request_item', 'brand_id', "ALTER TABLE `stock_order_request_item` ADD COLUMN `brand_id` INT DEFAULT NULL AFTER `product_id`");
 addColumnIfMissing($conn, $db_fin, 'stock_order_request_item', 'company_id', "ALTER TABLE `stock_order_request_item` ADD COLUMN `company_id` INT DEFAULT NULL AFTER `brand_id`");
+addColumnIfMissing($conn, $db_fin, 'stock_order_request_item', 'package_group_key', "ALTER TABLE `stock_order_request_item` ADD COLUMN `package_group_key` VARCHAR(120) DEFAULT NULL AFTER `package_id`");
+addColumnIfMissing($conn, $db_fin, 'stock_order_request_item', 'package_price', "ALTER TABLE `stock_order_request_item` ADD COLUMN `package_price` DECIMAL(12,2) NOT NULL DEFAULT 0.00 AFTER `package_desc`");
 
 if (!columnExists($conn, $db_fin, 'stock_order_request_item', 'packageQty')) {
     if (columnExists($conn, $db_fin, 'stock_order_request_item', 'qty')) {
@@ -289,10 +321,14 @@ alterColumnToVarcharIfInt($conn, $db_fin, 'shopee_sg_order_request', 'brand', 25
 // Ensure Stock In item supports CSV products and quantities.
 alterColumnToVarcharIfInt($conn, $db_fin, 'stock_in_order_item', 'product_id', 100);
 alterColumnToVarcharIfInt($conn, $db_fin, 'stock_in_order_item', 'product_quantity', 255);
+addColumnIfMissing($conn, $db_fin, 'stock_in_order', 'attachment', "ALTER TABLE `stock_in_order` ADD COLUMN `attachment` TEXT DEFAULT NULL AFTER `stock_in_date`");
+alterColumnToTextIfVarchar($conn, $db_fin, 'stock_in_order', 'attachment');
 
 addColumnIfMissing($conn, $db_fin, 'jt_transaction_backup', 'currency', "ALTER TABLE `jt_transaction_backup` ADD COLUMN `currency` VARCHAR(10) DEFAULT NULL AFTER `date`");
 addColumnIfMissing($conn, $db_fin, 'jt_transaction_backup', 'total_gst', "ALTER TABLE `jt_transaction_backup` ADD COLUMN `total_gst` DECIMAL(10,2) DEFAULT '0.00' AFTER `currency`");
 addColumnIfMissing($conn, $db_fin, 'jt_transaction_backup', 'total_amount', "ALTER TABLE `jt_transaction_backup` ADD COLUMN `total_amount` DECIMAL(10,2) DEFAULT '0.00' AFTER `total_gst`");
+
+$conn->query("ALTER TABLE `jt_transaction_backup` ENGINE=InnoDB");
 
 $createJtTransactionItemsTableSql = "CREATE TABLE IF NOT EXISTS `jt_transaction_items` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -355,6 +391,26 @@ if ($conn->select_db($db_cms)) {
     } else {
         echo "<p style='color:red;'>Error creating `company`: " . $conn->error . "</p>";
     }
+
+    $createSqlAccountTableSql = "CREATE TABLE IF NOT EXISTS `sql_account` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `name` VARCHAR(255) NOT NULL,
+    `create_by` VARCHAR(30) DEFAULT NULL,
+    `create_date` DATE DEFAULT NULL,
+    `create_time` TIME DEFAULT NULL,
+    `update_by` VARCHAR(30) DEFAULT NULL,
+    `update_date` DATE DEFAULT NULL,
+    `update_time` TIME DEFAULT NULL,
+    `status` CHAR(1) NOT NULL DEFAULT 'A'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createSqlAccountTableSql)) {
+        echo "<p style='color:blue;'>Table `sql_account` is ready.</p>";
+    } else {
+        echo "<p style='color:red;'>Error creating `sql_account`: " . $conn->error . "</p>";
+    }
+
+    addColumnIfMissing($conn, $db_cms, 'sql_account', 'status', "ALTER TABLE `sql_account` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A' AFTER `name`");
 
     addColumnIfMissing($conn, $db_cms, 'brand', 'company', "ALTER TABLE `brand` ADD COLUMN `company` INT DEFAULT NULL AFTER `name`");
 
@@ -503,6 +559,47 @@ if ($conn->select_db($db_cms)) {
     }
 }
 // --- END: IMPORT SHORTCUT PIN GROUP ---
+
+// --- START: SQL ACCOUNT PIN GROUP ---
+if ($conn->select_db($db_cms)) {
+    // 1. Insert new Pin Group (132)
+    $sqlInsertSqlAccountPin = "INSERT IGNORE INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+    (132, 'SQL Account', '1,2,3,4,5,6', 'SQL Account Management', '1', CURDATE(), CURTIME(), 'A')";
+
+    if ($conn->query($sqlInsertSqlAccountPin)) {
+        echo "<p style='color:blue;'>Pin group 132 (SQL Account) ensured in CMS database.</p>";
+    } else {
+        echo "<p style='color:red;'>Error creating Pin group 132: " . $conn->error . "</p>";
+    }
+
+    // 2. Assign Pin Group 132 to Super Admin (id=1)
+    $sqlUpdateAdmin1_132 = "UPDATE `user_group`
+    SET `pins` = CONCAT(`pins`, '+[132:1,2,3,4,5,6]')
+    WHERE `id` = 1 AND `pins` NOT LIKE '%[132:%'";
+
+    if ($conn->query($sqlUpdateAdmin1_132)) {
+        if ($conn->affected_rows > 0) echo "<p style='color:blue;'>Granted SQL Account access to Super Admin.</p>";
+    }
+
+    // 3. Assign Pin Group 132 to Admin (id=2)
+    $sqlUpdateAdmin2_132 = "UPDATE `user_group`
+    SET `pins` = CONCAT(`pins`, '+[132:1,2,3,4,5,6]')
+    WHERE `id` = 2 AND `pins` NOT LIKE '%[132:%'";
+
+    if ($conn->query($sqlUpdateAdmin2_132)) {
+        if ($conn->affected_rows > 0) echo "<p style='color:blue;'>Granted SQL Account access to Admin.</p>";
+    }
+
+    // 4. Assign Pin Group 132 to Basic User (id=3)
+    $sqlUpdateBasic_132 = "UPDATE `user_group`
+    SET `pins` = CONCAT(`pins`, '+[132:1,2,3,4,5,6]')
+    WHERE `id` = 3 AND `pins` NOT LIKE '%[132:%'";
+
+    if ($conn->query($sqlUpdateBasic_132)) {
+        if ($conn->affected_rows > 0) echo "<p style='color:blue;'>Granted SQL Account access to Basic User.</p>";
+    }
+}
+// --- END: SQL ACCOUNT PIN GROUP ---
 
 echo "<h3>Stock Order Request financial schema setup complete.</h3>";
 $conn->close();

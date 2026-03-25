@@ -245,11 +245,12 @@ $menuList = array(
         'expand' => array(
             array('Barcode Generator', 'mdi mdi-barcode', $SITEURL . '/barcode_generator.php', '22'),
             array('Rate Checking', 'mdi mdi-package-variant', $SITEURL . '/rate_checking.php', '17'),
+            array('SQL Account', 'mdi mdi-database', $SITEURL . '/sql_account_table.php', '132'),
             array('Theme Setting', 'mdi mdi-brush-variant', $SITEURL . '/theme_setting.php', '23'),
             array('System Setting', 'mdi mdi-brush-variant', $SITEURL . '/system_setting.php', '39'),
 
         ),
-        'pin' => array('22', '17', '23', '39')
+        'pin' => array('22', '17', '132', '23', '39')
     ),
     array(
         'Settings',

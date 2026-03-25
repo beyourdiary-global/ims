@@ -213,6 +213,99 @@ function isEmptyValue(value) {
   return String(value || "").trim() === "";
 }
 
+function refreshAttachmentPreview() {
+  var listWrap = document.getElementById("stock_in_attachment_img_list");
+  var placeholder = document.getElementById("stock_in_attachment_placeholder");
+  if (!listWrap) {
+    return;
+  }
+
+  listWrap.innerHTML = "";
+  var hasImage = false;
+
+  document
+    .querySelectorAll(".stock-in-attachment-input")
+    .forEach(function (input) {
+      if (!input.files || input.files.length === 0) {
+        return;
+      }
+
+      Array.prototype.forEach.call(input.files, function (file) {
+        if (!file || !file.type || file.type.indexOf("image/") !== 0) {
+          return;
+        }
+
+        hasImage = true;
+        var reader = new FileReader();
+        reader.onload = function (ev) {
+          var img = document.createElement("img");
+          img.src = String(
+            ev.target && ev.target.result ? ev.target.result : "",
+          );
+          img.alt = "Attachment Preview";
+          img.style.maxWidth = "120px";
+          img.style.maxHeight = "120px";
+          img.style.objectFit = "cover";
+          img.style.borderRadius = "6px";
+          listWrap.appendChild(img);
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+
+  if (placeholder) {
+    placeholder.style.display = hasImage ? "none" : "inline";
+  }
+}
+
+var stockAttachmentWrap = document.getElementById("stock_in_attachment_inputs");
+if (stockAttachmentWrap) {
+  stockAttachmentWrap.addEventListener("change", function (e) {
+    if (e.target && e.target.classList.contains("stock-in-attachment-input")) {
+      refreshAttachmentPreview();
+    }
+  });
+
+  stockAttachmentWrap.addEventListener("click", function (e) {
+    var target = e.target;
+    if (!target) {
+      return;
+    }
+
+    var addBtn = target.closest(".add-stock-attachment-btn");
+    var removeBtn = target.closest(".remove-stock-attachment-btn");
+
+    if (addBtn) {
+      var row = document.createElement("div");
+      row.className = "mb-2 si-attachment-input-row";
+      row.innerHTML =
+        '<input class="form-control stock-in-attachment-input" type="file" name="stock_in_attachment[]" accept=".png,.jpg,.jpeg,.webp">' +
+        '<button class="mt-1 remove-stock-attachment-btn" id="action_menu_btn" type="button" title="Remove attachment row"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>';
+      stockAttachmentWrap.appendChild(row);
+      return;
+    }
+
+    if (removeBtn) {
+      var rows = stockAttachmentWrap.querySelectorAll(
+        ".si-attachment-input-row",
+      );
+      if (rows.length <= 1) {
+        var onlyInput =
+          rows[0] && rows[0].querySelector(".stock-in-attachment-input");
+        if (onlyInput) {
+          onlyInput.value = "";
+        }
+      } else {
+        var removeRow = removeBtn.closest(".si-attachment-input-row");
+        if (removeRow) {
+          removeRow.remove();
+        }
+      }
+      refreshAttachmentPreview();
+    }
+  });
+}
+
 var stockInForm = document.getElementById("stockInForm");
 if (stockInForm) {
   stockInForm.addEventListener("submit", function (e) {
@@ -233,6 +326,8 @@ if (stockInForm) {
     var warehouseInput = document.getElementById("warehouse_id");
     var stockInDateInput = document.getElementById("stock_in_date");
     var orderNumberInput = document.getElementById("order_number");
+    var attachmentInput = document.getElementById("stock_in_attachment");
+    var currentAttachmentInput = document.getElementById("current_attachment");
 
     if (warehouseInput && isEmptyValue(warehouseInput.value)) {
       setFieldError(warehouseInput, "Warehouse is required!");
@@ -247,6 +342,39 @@ if (stockInForm) {
     if (orderNumberInput && isEmptyValue(orderNumberInput.value)) {
       setFieldError(orderNumberInput, "Order Number is required!");
       hasError = true;
+    }
+
+    if (attachmentInput) {
+      var hasExistingAttachment = false;
+      if (
+        currentAttachmentInput &&
+        !isEmptyValue(currentAttachmentInput.value)
+      ) {
+        var currentRaw = String(currentAttachmentInput.value || "").trim();
+        if (currentRaw.charAt(0) === "[") {
+          try {
+            var parsed = JSON.parse(currentRaw);
+            hasExistingAttachment = Array.isArray(parsed) && parsed.length > 0;
+          } catch (err) {
+            hasExistingAttachment = currentRaw !== "";
+          }
+        } else {
+          hasExistingAttachment = currentRaw !== "";
+        }
+      }
+
+      var hasSelectedFile = false;
+      document
+        .querySelectorAll(".stock-in-attachment-input")
+        .forEach(function (input) {
+          if (input.files && input.files.length > 0) {
+            hasSelectedFile = true;
+          }
+        });
+      if (!hasExistingAttachment && !hasSelectedFile) {
+        setFieldError(attachmentInput, "At least 1 attachment is required!");
+        hasError = true;
+      }
     }
 
     document

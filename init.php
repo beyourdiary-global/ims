@@ -1,4 +1,25 @@
 <?php
+// 30 days in seconds (30 days * 24 hours * 60 mins * 60 secs)
+$sessionLifetime = 2592000;
+
+// Determine if the current connection is secure (HTTPS) to set the cookie's "secure" flag appropriately
+$secure = (
+    (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443)
+);
+
+// Configure session cookie parameters with secure defaults
+session_set_cookie_params([
+    'lifetime' => $sessionLifetime,
+    'path'     => '/',
+    'domain'   => '',
+    'secure'   => $secure,
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
+
+ini_set('session.gc_maxlifetime', $sessionLifetime);
+
 session_start();
 
 // Auto-detect environment based on the URL host
@@ -113,6 +134,7 @@ define('SOCSO_CATH', 'socso_category');
 define('EMPLOYEE_EPF', 'employee_epf_rate');
 define('EMPLOYER_EPF', 'employer_epf_rate');
 define('PAY_METH', 'payment_method');
+define('SQL_ACC', 'sql_account');
 define('EMPINFO', 'employee_info');
 define('EMPPERSONALINFO', 'employee_personal_info');
 define('TAG', 'tag');

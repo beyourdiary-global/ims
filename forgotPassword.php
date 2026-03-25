@@ -45,8 +45,20 @@ if (!function_exists('fpSendMailFallback')) {
         $headers[] = 'Content-type: text/html; charset=utf-8';
         $headers[] = 'From: BeYourDiary <noreply@beyourdiary.com>';
         $headers[] = 'Reply-To: noreply@beyourdiary.com';
+        $headers[] = 'Return-Path: noreply@beyourdiary.com';
+        $headers[] = 'X-Mailer: PHP/' . phpversion();
 
-        return @mail((string) $toEmail, (string) $subject, (string) $htmlContent, implode("\r\n", $headers));
+        $toEmail = (string) $toEmail;
+        $subject = (string) $subject;
+        $htmlContent = (string) $htmlContent;
+        $headerStr = implode("\r\n", $headers);
+
+        $sent = @mail($toEmail, $subject, $htmlContent, $headerStr);
+        if (!$sent) {
+            $sent = @mail($toEmail, $subject, $htmlContent, $headerStr, '-fnoreply@beyourdiary.com');
+        }
+
+        return $sent;
     }
 }
 
@@ -74,6 +86,7 @@ if ($resetpass_btn == 1) {
         exit;
     }
 
+    
 
     if (mysqli_num_rows($result) == 1) {
         $rowUser = $result->fetch_assoc();
@@ -164,10 +177,12 @@ if ($resetpass_btn == 1) {
 }
 ?>
 
+
 <!DOCTYPE html>
 <html>
 
 <head>
+<?php include "header.php"; ?>
     <link rel="stylesheet" href="./css/main.css">
     <link rel="stylesheet" href="./css/login.css">
     <link rel="icon" type="image" href="<?php echo ($dataExisted ? $img_path . $row['meta_logo'] : 'img/byd_logo'); ?>">
@@ -224,8 +239,6 @@ if ($resetpass_btn == 1) {
         </div>
     </div>
 
-</body>
-
 <script>
     checkCurrentPage('invalid');
 
@@ -236,9 +249,8 @@ if ($resetpass_btn == 1) {
     $('#resetpass_btn').on('click', (event) => {
         event.preventDefault();
         var email_chk = 0;
-        var password_chk = 0;
 
-        if (!(isEmail($('#email-addr').val()))) {
+        if (!isEmail($('#email-addr').val())) {
             email_chk = 0;
             $("#email-addr_error").text("Wrong email format!");
         } else {
@@ -251,7 +263,7 @@ if ($resetpass_btn == 1) {
             email_chk = 0;
             $("#email-addr_error").text("Please enter your email");
         } else {
-            if (!(isEmail($('#email-addr').val()))) {
+            if (!isEmail($('#email-addr').val())) {
                 email_chk = 0;
                 $("#email-addr_error").text("Wrong email format!");
             } else {
@@ -294,5 +306,7 @@ if ($resetpass_btn == 1) {
             return false;
     })
 </script>
+
+</body>
 
 </html>
