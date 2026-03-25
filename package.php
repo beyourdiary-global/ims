@@ -643,15 +643,15 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                         $pw = '';
                                         $pwu = '';
                                         $pwun = '';
-                                        $ps = '';
-                                        $pslot = '';
+                                        $ps = '0';
+                                        $pslot = '0';
 
                                         if ($pid > 0 && isset($productsById[$pid])) {
                                             $product_info_row = $productsById[$pid];
                                             $pw = isset($product_info_row['weight']) ? $product_info_row['weight'] : '';
                                             $pwu = isset($product_info_row['weight_unit']) ? $product_info_row['weight_unit'] : '';
-                                            $ps = isset($product_info_row['barcode_status']) ? $product_info_row['barcode_status'] : '';
-                                            $pslot = isset($product_info_row['barcode_slot']) ? $product_info_row['barcode_slot'] : '';
+                                            $ps = isset($product_info_row['barcode_status']) && trim((string)$product_info_row['barcode_status']) !== '' ? $product_info_row['barcode_status'] : '0';
+                                            $pslot = isset($product_info_row['barcode_slot']) && trim((string)$product_info_row['barcode_slot']) !== '' ? $product_info_row['barcode_slot'] : '0';
                                             
                                             $pwuInt = (int)$pwu;
                                             if ($pwuInt > 0 && isset($weightUnitsById[$pwuInt])) {
@@ -699,8 +699,8 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                             $pn = $product_info_row['name'];
                                             $pw = $product_info_row['weight'];
                                             $pwu = $product_info_row['weight_unit'];
-                                            $ps = $product_info_row['barcode_status'];
-                                            $pslot = $product_info_row['barcode_slot'];
+                                            $ps = (isset($product_info_row['barcode_status']) && trim((string)$product_info_row['barcode_status']) !== '') ? $product_info_row['barcode_status'] : '0';
+                                            $pslot = (isset($product_info_row['barcode_slot']) && trim((string)$product_info_row['barcode_slot']) !== '') ? $product_info_row['barcode_slot'] : '0';
                                 
                                             // get weight unit info
                                             $wgt_unit_result = getData('unit', "id = '$pwu'", '', WGT_UNIT, $connect);
@@ -753,8 +753,8 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                             <input class="readonlyInput" type="text" name="wgt_unit[]" id="wgt_unit_1" value="" readonly>
                                             <input type="hidden" name="wgt_unit_val[]" id="wgt_unit_val_1" value="" readonly>
                                         </td>
-                                        <td><input class="readonlyInput" type="text" name="barcode_status[]" id="barcode_status_1" value="" readonly></td>
-                                        <td><input class="readonlyInput" type="text" name="barcode_slot[]" id="barcode_slot_1" value="" readonly></td>
+                                        <td><input class="readonlyInput" type="text" name="barcode_status[]" id="barcode_status_1" value="0" readonly></td>
+                                        <td><input class="readonlyInput" type="text" name="barcode_slot[]" id="barcode_slot_1" value="0" readonly></td>
                                         <?php if ($act != ''): ?>
                                             <td><button class="mt-1" id="action_menu_btn" type="button" onclick="Add()"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button></td>
                                         <?php else: ?>

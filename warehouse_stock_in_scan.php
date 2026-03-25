@@ -5,6 +5,99 @@ include_once ROOT . '/include/common.php';
 $stockInOrderTable = 'stock_in_order';
 $stockInItemTable = 'stock_in_order_item';
 
+if (!function_exists('scanAttachmentDirRel')) {
+    function scanAttachmentDirRel()
+    {
+        $base = defined('img_server') ? (string) constant('img_server') : '/images_server/';
+        $base = '/' . trim($base, '/');
+        return $base . '/finance/stock_in/';
+    }
+}
+
+if (!function_exists('scanAttachmentDirAbs')) {
+    function scanAttachmentDirAbs()
+    {
+        $rel = ltrim((string) scanAttachmentDirRel(), '/\\');
+        return rtrim((string) ROOT, '/\\') . '/' . $rel;
+    }
+}
+
+if (!function_exists('scanEnsureAttachmentDir')) {
+    function scanEnsureAttachmentDir()
+    {
+        $dir = scanAttachmentDirAbs();
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0777, true);
+        }
+        return is_dir($dir);
+    }
+}
+
+if (!function_exists('scanUploadAttachmentFiles')) {
+    function scanUploadAttachmentFiles($fileField)
+    {
+        if (!isset($_FILES[$fileField]) || !is_array($_FILES[$fileField])) {
+            return array(false, array(), 'Attachment file is missing.');
+        }
+
+        $file = $_FILES[$fileField];
+        $names = isset($file['name']) ? $file['name'] : array();
+        $tmpNames = isset($file['tmp_name']) ? $file['tmp_name'] : array();
+        $errors = isset($file['error']) ? $file['error'] : array();
+
+        if (!is_array($names)) {
+            $names = array($names);
+            $tmpNames = array($tmpNames);
+            $errors = array($errors);
+        }
+
+        $allowed = array('png', 'jpg', 'jpeg', 'webp');
+
+        if (!scanEnsureAttachmentDir()) {
+            return array(false, array(), 'Attachment folder is not ready.');
+        }
+
+        $saved = array();
+        $hasAnyFile = false;
+
+        for ($idx = 0; $idx < count($names); $idx++) {
+            $origName = isset($names[$idx]) ? (string) $names[$idx] : '';
+            $tmpName = isset($tmpNames[$idx]) ? (string) $tmpNames[$idx] : '';
+            $errCode = isset($errors[$idx]) ? (int) $errors[$idx] : UPLOAD_ERR_NO_FILE;
+
+            if ($errCode === UPLOAD_ERR_NO_FILE) {
+                continue;
+            }
+
+            $hasAnyFile = true;
+            if ($errCode !== UPLOAD_ERR_OK) {
+                return array(false, array(), 'Attachment upload failed.');
+            }
+
+            $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+            if (!in_array($ext, $allowed, true)) {
+                return array(false, array(), 'Attachment must be png, jpg, jpeg or webp.');
+            }
+
+            $newName = 'stock_in_scan_' . date('Ymd_His') . '_' . mt_rand(1000, 9999) . '_' . $idx . '.' . $ext;
+            $absPath = scanAttachmentDirAbs() . $newName;
+            $relPath = scanAttachmentDirRel() . $newName;
+
+            if (!@move_uploaded_file($tmpName, $absPath)) {
+                return array(false, array(), 'Failed to save attachment file.');
+            }
+
+            $saved[] = $relPath;
+        }
+
+        if (!$hasAnyFile) {
+            return array(false, array(), 'Attachment is required.');
+        }
+
+        return array(true, $saved, '');
+    }
+}
+
 if (!function_exists('scanGetAllowedCountries')) {
     function scanGetAllowedCountries()
     {
@@ -151,13 +244,15 @@ if (!function_exists('scanLookupCountryCode')) {
 }
 
 if (!function_exists('scanSaveOrderSecure')) {
-    function scanSaveOrderSecure($db, $orderTable, $itemTable, $warehouseId, $orderNumber, $items, $actor)
+    function scanSaveOrderSecure($db, $orderTable, $itemTable, $warehouseId, $orderNumber, $items, $actor, $attachments)
     {
         $warehouseId = (int) $warehouseId;
         $orderNumber = trim((string) $orderNumber);
         $actor = trim((string) $actor);
+        $attachmentValue = siAttachmentEncodeList($attachments);
+        $attachmentList = siAttachmentDecodeList($attachmentValue);
 
-        if ($warehouseId <= 0 || $orderNumber === '' || count($items) === 0) {
+        if ($warehouseId <= 0 || $orderNumber === '' || count($attachmentList) === 0 || count($items) === 0) {
             return array(false, 'Missing required stock in data.', 0, false);
         }
 
@@ -197,18 +292,36 @@ if (!function_exists('scanSaveOrderSecure')) {
                 }
                 mysqli_stmt_close($countStmt);
 
+                $existingAttachment = '';
+                $attachmentSql = "SELECT attachment FROM `" . $orderTable . "` WHERE id=? LIMIT 1";
+                $attachmentStmt = mysqli_prepare($db, $attachmentSql);
+                if ($attachmentStmt) {
+                    mysqli_stmt_bind_param($attachmentStmt, 'i', $stockInOrderId);
+                    mysqli_stmt_execute($attachmentStmt);
+                    $attachmentRst = mysqli_stmt_get_result($attachmentStmt);
+                    if ($attachmentRst && ($attachmentRow = mysqli_fetch_assoc($attachmentRst))) {
+                        $existingAttachment = isset($attachmentRow['attachment']) ? trim((string) $attachmentRow['attachment']) : '';
+                    }
+                    mysqli_stmt_close($attachmentStmt);
+                }
+
                 if ($existingItemCount > 0) {
+                    $mergedAttachment = siAttachmentEncodeList(array_merge(siAttachmentDecodeList($existingAttachment), $attachmentList));
+                    if ($mergedAttachment !== siAttachmentEncodeList(siAttachmentDecodeList($existingAttachment))) {
+                        $safeAttachment = mysqli_real_escape_string($db, $mergedAttachment);
+                        mysqli_query($db, "UPDATE `" . $orderTable . "` SET attachment='" . $safeAttachment . "', update_by='" . mysqli_real_escape_string($db, $actor) . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . (int) $stockInOrderId . "' LIMIT 1");
+                    }
                     mysqli_commit($db);
                     return array(true, 'Stock In already exists for this order number.', $stockInOrderId, true);
                 }
 
                 // Repair mode: existing order found without items.
-                $touchOrderSql = "UPDATE `" . $orderTable . "` SET stock_in_date=NOW() WHERE id=? LIMIT 1";
+                $touchOrderSql = "UPDATE `" . $orderTable . "` SET stock_in_date=NOW(), attachment=? WHERE id=? LIMIT 1";
                 $touchOrderStmt = mysqli_prepare($db, $touchOrderSql);
                 if (!$touchOrderStmt) {
                     throw new Exception('Failed to prepare stock in order timestamp update.');
                 }
-                mysqli_stmt_bind_param($touchOrderStmt, 'i', $stockInOrderId);
+                mysqli_stmt_bind_param($touchOrderStmt, 'si', $attachmentValue, $stockInOrderId);
                 if (!mysqli_stmt_execute($touchOrderStmt)) {
                     mysqli_stmt_close($touchOrderStmt);
                     throw new Exception('Failed to update stock in date time.');
@@ -218,14 +331,14 @@ if (!function_exists('scanSaveOrderSecure')) {
                 mysqli_stmt_close($checkStmt);
 
                 $insertOrderSql = "INSERT INTO `" . $orderTable . "`
-                    (warehouse_id, order_number, stock_in_date, create_by, create_date, create_time, status)
+                    (warehouse_id, order_number, stock_in_date, attachment, create_by, create_date, create_time, status)
                     VALUES
-                    (?, ?, NOW(), ?, CURDATE(), CURTIME(), 'A')";
+                    (?, ?, NOW(), ?, ?, CURDATE(), CURTIME(), 'A')";
                 $insertOrderStmt = mysqli_prepare($db, $insertOrderSql);
                 if (!$insertOrderStmt) {
                     throw new Exception('Failed to prepare stock in order insert.');
                 }
-                mysqli_stmt_bind_param($insertOrderStmt, 'iss', $warehouseId, $orderNumber, $actor);
+                mysqli_stmt_bind_param($insertOrderStmt, 'isss', $warehouseId, $orderNumber, $attachmentValue, $actor);
                 if (!mysqli_stmt_execute($insertOrderStmt)) {
                     mysqli_stmt_close($insertOrderStmt);
                     throw new Exception('Failed to save stock in order.');
@@ -350,7 +463,9 @@ $packageProductMap = siBuildPackageProductMap($packages);
 list($warehouseNameMap, $warehouseNameToId) = siBuildNameMaps($warehouses);
 list($productNameMap, $productNameToId) = siBuildNameMaps($products);
 
-$token = isset($_GET['t']) ? trim((string) $_GET['t']) : '';
+$isSubmit = (strtolower((string) $_SERVER['REQUEST_METHOD']) === 'post' && isset($_POST['actionBtn']) && (string) $_POST['actionBtn'] === 'submitStockIn');
+$submittedToken = isset($_POST['scan_token']) ? trim((string) $_POST['scan_token']) : '';
+$token = $submittedToken !== '' ? $submittedToken : (isset($_GET['t']) ? trim((string) $_GET['t']) : '');
 $statusClass = 'danger';
 $statusTitle = 'Stock In Failed';
 $message = '';
@@ -361,6 +476,7 @@ $stockInItems = array();
 $countryCode = '';
 $clientIp = scanGetClientIp();
 $allowedCountries = scanGetAllowedCountries();
+$uploadedAttachments = array();
 
 if ($token === '') {
     $message = 'Missing stock in token.';
@@ -467,72 +583,91 @@ if ($token === '') {
                             'country' => ($countryCode === '' ? 'Unknown' : $countryCode),
                         ));
 
-                        $saveResult = scanSaveOrderSecure(
-                            $finance_connect,
-                            $stockInOrderTable,
-                            $stockInItemTable,
-                            (int) $requestInfo['warehouse_id'],
-                            (string) $requestInfo['order_number'],
-                            $requestItems,
-                            (string) (USER_ID !== '' ? USER_ID : 'QR_PUBLIC')
-                        );
+                        if (!$isSubmit) {
+                            $statusClass = 'warning';
+                            $statusTitle = 'Attachment Required';
+                            $message = 'Please upload at least 1 attachment photo to submit stock in.';
+                        } else {
+                            $uploadResult = scanUploadAttachmentFiles('stock_in_attachment');
+                            if (!$uploadResult[0]) {
+                                $statusClass = 'danger';
+                                $statusTitle = 'Attachment Required';
+                                $message = (string) $uploadResult[2];
+                                scanAuditLog('submit_failed', $message, array(
+                                    'request_id' => (int) $requestInfo['id'],
+                                ));
+                            } else {
+                                $uploadedAttachments = (array) $uploadResult[1];
 
-                        $saveOk = isset($saveResult[0]) ? (bool) $saveResult[0] : false;
-                        $saveMsg = isset($saveResult[1]) ? (string) $saveResult[1] : 'Unable to save stock in.';
-                        $saveOrderId = isset($saveResult[2]) ? (int) $saveResult[2] : 0;
-                        $alreadyExists = isset($saveResult[3]) ? (bool) $saveResult[3] : false;
+                                $saveResult = scanSaveOrderSecure(
+                                    $finance_connect,
+                                    $stockInOrderTable,
+                                    $stockInItemTable,
+                                    (int) $requestInfo['warehouse_id'],
+                                    (string) $requestInfo['order_number'],
+                                    $requestItems,
+                                    (string) (USER_ID !== '' ? USER_ID : 'QR_PUBLIC'),
+                                    $uploadedAttachments
+                                );
 
-                        if ($saveOk) {
-                            $statusClass = $alreadyExists ? 'warning' : 'success';
-                            $statusTitle = $alreadyExists ? 'Stock In Already Submitted' : 'Stock In Submitted Successfully';
-                            $message = $saveMsg;
-                            scanAuditLog('submit_success', $saveMsg, array(
-                                'request_id' => (int) $requestInfo['id'],
-                                'stock_in_id' => $saveOrderId,
-                                'status' => ($alreadyExists ? 'already_exists' : 'created'),
-                            ));
+                                $saveOk = isset($saveResult[0]) ? (bool) $saveResult[0] : false;
+                                $saveMsg = isset($saveResult[1]) ? (string) $saveResult[1] : 'Unable to save stock in.';
+                                $saveOrderId = isset($saveResult[2]) ? (int) $saveResult[2] : 0;
+                                $alreadyExists = isset($saveResult[3]) ? (bool) $saveResult[3] : false;
 
-                            if ($saveOrderId > 0) {
-                                $orderSql = "SELECT id, warehouse_id, order_number, stock_in_date, create_date, create_time
-                                             FROM `" . $stockInOrderTable . "`
-                                             WHERE id=? AND status='A' LIMIT 1";
-                                $orderStmt = mysqli_prepare($finance_connect, $orderSql);
-                                if ($orderStmt) {
-                                    mysqli_stmt_bind_param($orderStmt, 'i', $saveOrderId);
-                                    mysqli_stmt_execute($orderStmt);
-                                    $orderRst = mysqli_stmt_get_result($orderStmt);
-                                    if ($orderRst) {
-                                        $stockInInfo = mysqli_fetch_assoc($orderRst);
-                                    }
-                                    mysqli_stmt_close($orderStmt);
-                                }
+                                if ($saveOk) {
+                                    $statusClass = $alreadyExists ? 'warning' : 'success';
+                                    $statusTitle = $alreadyExists ? 'Stock In Already Submitted' : 'Stock In Submitted Successfully';
+                                    $message = $saveMsg;
+                                    scanAuditLog('submit_success', $saveMsg, array(
+                                        'request_id' => (int) $requestInfo['id'],
+                                        'stock_in_id' => $saveOrderId,
+                                        'status' => ($alreadyExists ? 'already_exists' : 'created'),
+                                    ));
 
-                                $itemDetailSql = "SELECT product_id, product_quantity
-                                                  FROM `" . $stockInItemTable . "`
-                                                  WHERE stock_in_order_id=? AND status='A'
-                                                  ORDER BY id ASC";
-                                $itemDetailStmt = mysqli_prepare($finance_connect, $itemDetailSql);
-                                if ($itemDetailStmt) {
-                                    mysqli_stmt_bind_param($itemDetailStmt, 'i', $saveOrderId);
-                                    mysqli_stmt_execute($itemDetailStmt);
-                                    $itemDetailRst = mysqli_stmt_get_result($itemDetailStmt);
-                                    if ($itemDetailRst) {
-                                        while ($row = mysqli_fetch_assoc($itemDetailRst)) {
-                                            $pid = isset($row['product_id']) ? (int) $row['product_id'] : 0;
-                                            $stockInItems[] = array(
-                                                'product_name' => isset($productNameMap[$pid]) ? $productNameMap[$pid] : ('Product #' . $pid),
-                                                'qty' => isset($row['product_quantity']) ? (int) $row['product_quantity'] : 0,
-                                            );
+                                    if ($saveOrderId > 0) {
+                                        $orderSql = "SELECT id, warehouse_id, order_number, stock_in_date, attachment, create_date, create_time
+                                                     FROM `" . $stockInOrderTable . "`
+                                                     WHERE id=? AND status='A' LIMIT 1";
+                                        $orderStmt = mysqli_prepare($finance_connect, $orderSql);
+                                        if ($orderStmt) {
+                                            mysqli_stmt_bind_param($orderStmt, 'i', $saveOrderId);
+                                            mysqli_stmt_execute($orderStmt);
+                                            $orderRst = mysqli_stmt_get_result($orderStmt);
+                                            if ($orderRst) {
+                                                $stockInInfo = mysqli_fetch_assoc($orderRst);
+                                            }
+                                            mysqli_stmt_close($orderStmt);
+                                        }
+
+                                        $itemDetailSql = "SELECT product_id, product_quantity
+                                                          FROM `" . $stockInItemTable . "`
+                                                          WHERE stock_in_order_id=? AND status='A'
+                                                          ORDER BY id ASC";
+                                        $itemDetailStmt = mysqli_prepare($finance_connect, $itemDetailSql);
+                                        if ($itemDetailStmt) {
+                                            mysqli_stmt_bind_param($itemDetailStmt, 'i', $saveOrderId);
+                                            mysqli_stmt_execute($itemDetailStmt);
+                                            $itemDetailRst = mysqli_stmt_get_result($itemDetailStmt);
+                                            if ($itemDetailRst) {
+                                                while ($row = mysqli_fetch_assoc($itemDetailRst)) {
+                                                    $pid = isset($row['product_id']) ? (int) $row['product_id'] : 0;
+                                                    $stockInItems[] = array(
+                                                        'product_name' => isset($productNameMap[$pid]) ? $productNameMap[$pid] : ('Product #' . $pid),
+                                                        'qty' => isset($row['product_quantity']) ? (int) $row['product_quantity'] : 0,
+                                                    );
+                                                }
+                                            }
+                                            mysqli_stmt_close($itemDetailStmt);
                                         }
                                     }
-                                    mysqli_stmt_close($itemDetailStmt);
+                                } else {
+                                    $message = $saveMsg;
+                                    scanAuditLog('submit_failed', $saveMsg, array(
+                                        'request_id' => (int) $requestInfo['id'],
+                                    ));
                                 }
                             }
-                        } else {
-                            $message = $saveMsg;
-                            scanAuditLog('submit_failed', $saveMsg, array(
-                                'request_id' => (int) $requestInfo['id'],
-                            ));
                         }
                     }
                 }
@@ -547,6 +682,8 @@ if ($token === '') {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Stock In Scan Result</title>
+    <link href="<?= $SITEURL ?>/header/fontawesome-free-6.0.0-web/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
     <style>
         body { font-family: "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; background: linear-gradient(135deg, #f4f8fb 0%, #eaf2f9 100%); color: #1f2d3d; }
         .container { max-width: 900px; margin: 32px auto; background: #fff; border-radius: 14px; box-shadow: 0 14px 40px rgba(22, 56, 89, 0.12); padding: 24px; }
@@ -565,6 +702,8 @@ if ($token === '') {
         th, td { border: 1px solid #d8e3ee; padding: 8px; text-align: left; }
         th { background: #f3f8fd; }
         .small { font-size: 12px; color: #617487; }
+        .scan-attachment-input-row { display:flex; gap:8px; align-items:center; }
+        .scan-attachment-input { display:block; flex:1; padding:8px; border:1px solid #ccd9e6; border-radius:8px; background:#fff; }
     </style>
 </head>
 <body>
@@ -609,6 +748,28 @@ if ($token === '') {
             </table>
         <?php } ?>
 
+        <?php if (is_array($requestInfo) && count($requestItems) > 0 && !is_array($stockInInfo)) { ?>
+            <h3 style="margin-top: 20px;">Upload Attachment</h3>
+            <form method="post" enctype="multipart/form-data" style="margin-top: 10px;">
+                <input type="hidden" name="scan_token" value="<?= siEsc($token) ?>">
+                <div style="max-width: 560px;">
+                    <label for="stock_in_attachment" style="display:block;margin-bottom:8px;font-weight:600;">Attachment Photo <span style="color:#d00000;">*</span></label>
+                    <div id="stock_in_attachment_inputs" style="display:flex;flex-direction:column;gap:8px;">
+                        <div class="scan-attachment-input-row">
+                            <input id="stock_in_attachment" class="scan-attachment-input" name="stock_in_attachment[]" type="file" accept=".png,.jpg,.jpeg,.webp" required>
+                            <button type="button" class="mt-1" id="action_menu_btn" data-attach-action="add" title="Add another attachment"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>
+                        </div>
+                    </div>
+                    <div id="stock_in_attachment_preview" style="margin-top:10px;padding:10px;border:1px dashed #c7d7e8;border-radius:8px;background:#f8fbff;max-width:420px;">
+                        <div id="stock_in_attachment_img_list" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+                        <span id="stock_in_attachment_placeholder" class="small">Image preview</span>
+                    </div>
+                    <div class="small" style="margin-top:6px;">Required: upload at least one photo to complete stock in. Click + to add more attachments.</div>
+                    <button type="submit" name="actionBtn" value="submitStockIn" style="margin-top:12px;padding:10px 16px;border:0;border-radius:8px;background:#1f6fd5;color:#fff;font-weight:600;">Submit Stock In</button>
+                </div>
+            </form>
+        <?php } ?>
+
         <?php if (is_array($stockInInfo)) { ?>
             <h3 style="margin-top: 20px;">Stock In Submission</h3>
             <div class="grid">
@@ -616,6 +777,16 @@ if ($token === '') {
                     <div><span class="k">Stock In ID:</span> <span class="v"><?= (int) $stockInInfo['id'] ?></span></div>
                     <div><span class="k">Order Number:</span> <span class="v"><?= siEsc((string) $stockInInfo['order_number']) ?></span></div>
                     <div><span class="k">Stock In Date:</span> <span class="v"><?= siEsc((string) $stockInInfo['stock_in_date']) ?></span></div>
+                    <?php $scanAttachments = siAttachmentDecodeList(isset($stockInInfo['attachment']) ? (string) $stockInInfo['attachment'] : ''); ?>
+                    <?php if (count($scanAttachments) > 0) { ?>
+                        <div><span class="k">Attachments:</span>
+                            <span class="v">
+                                <?php foreach ($scanAttachments as $idx => $scanAttachment) { ?>
+                                    <div><a href="<?= siEsc(rtrim((string) $SITEURL, '/') . '/' . ltrim((string) $scanAttachment, '/')) ?>" target="_blank">View Attachment <?= (int) ($idx + 1) ?></a></div>
+                                <?php } ?>
+                            </span>
+                        </div>
+                    <?php } ?>
                     <div><span class="k">Created Date:</span> <span class="v"><?= siEsc((string) $stockInInfo['create_date']) ?> <?= siEsc((string) $stockInInfo['create_time']) ?></span></div>
                 </div>
             </div>
@@ -644,5 +815,96 @@ if ($token === '') {
 
         <p class="small" style="margin-top:16px;">If you are blocked unexpectedly, please contact administrator.</p>
     </div>
+
+    <script>
+    (function () {
+        var inputWrap = document.getElementById('stock_in_attachment_inputs');
+        var listWrap = document.getElementById('stock_in_attachment_img_list');
+        var placeholder = document.getElementById('stock_in_attachment_placeholder');
+        if (!inputWrap || !listWrap || !placeholder) {
+            return;
+        }
+
+        function refreshPreview() {
+            listWrap.innerHTML = '';
+
+            var hasImage = false;
+            var inputs = inputWrap.querySelectorAll('.scan-attachment-input');
+            inputs.forEach(function (input) {
+                if (!input.files || input.files.length === 0) {
+                    return;
+                }
+
+                Array.prototype.forEach.call(input.files, function (file) {
+                    if (!file || !file.type || file.type.indexOf('image/') !== 0) {
+                        return;
+                    }
+
+                    hasImage = true;
+                    var objectUrl = URL.createObjectURL(file);
+                    var img = document.createElement('img');
+                    img.src = objectUrl;
+                    img.alt = 'Attachment Preview';
+                    img.style.maxWidth = '120px';
+                    img.style.maxHeight = '120px';
+                    img.style.objectFit = 'cover';
+                    img.style.borderRadius = '6px';
+                    img.onload = function () {
+                        URL.revokeObjectURL(objectUrl);
+                    };
+                    listWrap.appendChild(img);
+                });
+            });
+
+            placeholder.style.display = hasImage ? 'none' : 'inline';
+            if (!hasImage) {
+                placeholder.textContent = 'Selected file is not an image preview.';
+            } else {
+                placeholder.textContent = 'Image preview';
+            }
+        }
+
+        inputWrap.addEventListener('change', function (e) {
+            if (e.target && e.target.classList.contains('scan-attachment-input')) {
+                refreshPreview();
+            }
+        });
+
+        inputWrap.addEventListener('click', function (e) {
+            var target = e.target;
+            if (!target) {
+                return;
+            }
+
+            var addBtn = target.closest('[data-attach-action="add"]');
+            var removeBtn = target.closest('[data-attach-action="remove"]');
+
+            if (addBtn) {
+                var row = document.createElement('div');
+                row.className = 'scan-attachment-input-row';
+                row.innerHTML = '<input class="scan-attachment-input" name="stock_in_attachment[]" type="file" accept=".png,.jpg,.jpeg,.webp">' +
+                    '<button type="button" class="mt-1" id="action_menu_btn" data-attach-action="remove" title="Remove attachment row"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>';
+                inputWrap.appendChild(row);
+                return;
+            }
+
+            if (removeBtn) {
+                var rows = inputWrap.querySelectorAll('.scan-attachment-input-row');
+                if (rows.length <= 1) {
+                    var onlyInput = rows[0] ? rows[0].querySelector('.scan-attachment-input') : null;
+                    if (onlyInput) {
+                        onlyInput.value = '';
+                    }
+                } else {
+                    var rowToRemove = removeBtn.closest('.scan-attachment-input-row');
+                    if (rowToRemove) {
+                        rowToRemove.remove();
+                    }
+                }
+                refreshPreview();
+            }
+        });
+    })();
+    </script>
 </body>
 </html>

@@ -178,8 +178,8 @@ if ($isStockBalanceView) {
                                     <th width="60">#</th>
                                     <th>Product Name</th>
                                     <th width="140">Quantity</th>
-                                    <th width="180">Unit Price</th>
-                                    <th width="180">Total Price</th>
+                                    <th width="220">Product Cost Per Unit</th>
+                                    <th width="180">Total Cost</th>
                                     <th width="220">Last Updated Time</th>
                                 </tr>
                             </thead>

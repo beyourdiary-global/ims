@@ -1486,14 +1486,71 @@ if (!function_exists('siResolveProductIdFromPackage')) {
     }
 }
 
+if (!function_exists('siAttachmentDecodeList')) {
+    function siAttachmentDecodeList($rawValue)
+    {
+        $rawValue = trim((string) $rawValue);
+        if ($rawValue === '') {
+            return array();
+        }
+
+        $list = array();
+        if ($rawValue !== '' && substr($rawValue, 0, 1) === '[') {
+            $decoded = json_decode($rawValue, true);
+            if (is_array($decoded)) {
+                foreach ($decoded as $path) {
+                    $p = trim((string) $path);
+                    if ($p !== '') {
+                        $list[] = $p;
+                    }
+                }
+            }
+        }
+
+        if (count($list) === 0) {
+            $list[] = $rawValue;
+        }
+
+        $uniq = array();
+        foreach ($list as $path) {
+            $uniq[$path] = true;
+        }
+        return array_keys($uniq);
+    }
+}
+
+if (!function_exists('siAttachmentEncodeList')) {
+    function siAttachmentEncodeList($paths)
+    {
+        if (!is_array($paths)) {
+            $paths = siAttachmentDecodeList($paths);
+        }
+
+        $clean = array();
+        foreach ($paths as $path) {
+            $p = trim((string) $path);
+            if ($p !== '') {
+                $clean[$p] = true;
+            }
+        }
+
+        $final = array_keys($clean);
+        if (count($final) === 0) {
+            return '';
+        }
+        return json_encode($final);
+    }
+}
+
 if (!function_exists('siSaveOrder')) {
-    function siSaveOrder($financeConnect, $orderTable, $itemTable, $warehouseId, $stockInDate, $orderNumber, $items)
+    function siSaveOrder($financeConnect, $orderTable, $itemTable, $warehouseId, $stockInDate, $orderNumber, $items, $attachmentPath = '')
     {
         $warehouseId = (int) $warehouseId;
         $orderNumber = trim((string) $orderNumber);
         $stockInDate = trim((string) $stockInDate);
+        $attachmentPath = siAttachmentEncodeList($attachmentPath);
 
-        if ($warehouseId <= 0 || $orderNumber === '' || $stockInDate === '' || count($items) === 0) {
+        if ($warehouseId <= 0 || $orderNumber === '' || $stockInDate === '' || $attachmentPath === '' || count($items) === 0) {
             return array(false, 'Missing required fields.');
         }
 
@@ -1502,11 +1559,12 @@ if (!function_exists('siSaveOrder')) {
         try {
             $safeOrderNumber = mysqli_real_escape_string($financeConnect, $orderNumber);
             $safeDate = mysqli_real_escape_string($financeConnect, $stockInDate);
+            $safeAttachment = mysqli_real_escape_string($financeConnect, $attachmentPath);
 
             $insertOrderSql = "INSERT INTO `" . $orderTable . "`
-                (warehouse_id, order_number, stock_in_date, create_by, create_date, create_time, status)
+                (warehouse_id, order_number, stock_in_date, attachment, create_by, create_date, create_time, status)
                 VALUES
-                ('" . $warehouseId . "', '" . $safeOrderNumber . "', '" . $safeDate . "', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
+                ('" . $warehouseId . "', '" . $safeOrderNumber . "', '" . $safeDate . "', '" . $safeAttachment . "', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
 
             if (!mysqli_query($financeConnect, $insertOrderSql)) {
                 throw new Exception('Failed to save stock in order.');
@@ -1551,6 +1609,7 @@ if (!function_exists('siFetchFlatRows')) {
                     o.warehouse_id,
                     o.order_number,
                     o.stock_in_date,
+                    o.attachment,
                     i.product_id,
                     i.package_id,
                     i.product_quantity
@@ -1574,6 +1633,7 @@ if (!function_exists('siFetchFlatRows')) {
                         'warehouse_id' => (int) $r['warehouse_id'],
                         'order_number' => (string) $r['order_number'],
                         'stock_in_date' => (string) $r['stock_in_date'],
+                        'attachment' => (string) (isset($r['attachment']) ? $r['attachment'] : ''),
                         'product_id' => (int) $productRaw,
                         'package_id' => (int) $r['package_id'],
                         'product_quantity' => (int) $qtyRaw,
@@ -1593,6 +1653,7 @@ if (!function_exists('siFetchFlatRows')) {
                         'warehouse_id' => (int) $r['warehouse_id'],
                         'order_number' => (string) $r['order_number'],
                         'stock_in_date' => (string) $r['stock_in_date'],
+                        'attachment' => (string) (isset($r['attachment']) ? $r['attachment'] : ''),
                         'product_id' => $pid,
                         'package_id' => (int) $r['package_id'],
                         'product_quantity' => $qty,

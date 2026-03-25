@@ -47,12 +47,104 @@ $packageProductMap = siBuildPackageProductMap($packages);
 list($warehouseNameMap, $warehouseNameToId) = siBuildNameMaps($warehouses);
 list($productNameMap, $productNameToId) = siBuildNameMaps($products);
 
+if (!function_exists('siAttachmentDirRel')) {
+    function siAttachmentDirRel()
+    {
+        return rtrim((string) img_server, '/') . '/finance/stock_in/';
+    }
+}
+
+if (!function_exists('siAttachmentDirAbs')) {
+    function siAttachmentDirAbs()
+    {
+        $rel = ltrim((string) siAttachmentDirRel(), '/\\');
+        return rtrim((string) ROOT, '/\\') . '/' . $rel;
+    }
+}
+
+if (!function_exists('siEnsureAttachmentDir')) {
+    function siEnsureAttachmentDir()
+    {
+        $dir = siAttachmentDirAbs();
+        if (!is_dir($dir)) {
+            @mkdir($dir, 0777, true);
+        }
+        return is_dir($dir);
+    }
+}
+
+if (!function_exists('siUploadAttachmentFiles')) {
+    function siUploadAttachmentFiles($fileField)
+    {
+        if (!isset($_FILES[$fileField]) || !is_array($_FILES[$fileField])) {
+            return array(false, array(), 'Attachment file is missing.');
+        }
+
+        $file = $_FILES[$fileField];
+        $names = isset($file['name']) ? $file['name'] : array();
+        $tmpNames = isset($file['tmp_name']) ? $file['tmp_name'] : array();
+        $errors = isset($file['error']) ? $file['error'] : array();
+
+        if (!is_array($names)) {
+            $names = array($names);
+            $tmpNames = array($tmpNames);
+            $errors = array($errors);
+        }
+
+        $allowed = array('png', 'jpg', 'jpeg', 'webp');
+
+        if (!siEnsureAttachmentDir()) {
+            return array(false, array(), 'Attachment folder is not ready.');
+        }
+
+        $saved = array();
+        $hasAnyFile = false;
+
+        for ($idx = 0; $idx < count($names); $idx++) {
+            $origName = isset($names[$idx]) ? (string) $names[$idx] : '';
+            $tmpName = isset($tmpNames[$idx]) ? (string) $tmpNames[$idx] : '';
+            $errCode = isset($errors[$idx]) ? (int) $errors[$idx] : UPLOAD_ERR_NO_FILE;
+
+            if ($errCode === UPLOAD_ERR_NO_FILE) {
+                continue;
+            }
+
+            $hasAnyFile = true;
+            if ($errCode !== UPLOAD_ERR_OK) {
+                return array(false, array(), 'Attachment upload failed.');
+            }
+
+            $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+            if (!in_array($ext, $allowed, true)) {
+                return array(false, array(), 'Attachment must be png, jpg, jpeg or webp.');
+            }
+
+            $newName = 'stock_in_' . date('Ymd_His') . '_' . mt_rand(1000, 9999) . '_' . $idx . '.' . $ext;
+            $absPath = siAttachmentDirAbs() . $newName;
+            $relPath = siAttachmentDirRel() . $newName;
+
+            if (!@move_uploaded_file($tmpName, $absPath)) {
+                return array(false, array(), 'Failed to save attachment file.');
+            }
+
+            $saved[] = $relPath;
+        }
+
+        if (!$hasAnyFile) {
+            return array(false, array(), 'Attachment is required.');
+        }
+
+        return array(true, $saved, '');
+    }
+}
+
 $formData = array(
     'order_id' => 0,
     'item_id' => 0,
     'warehouse_id' => 0,
     'stock_in_date' => '',
     'order_number' => '',
+    'attachment' => '',
     'product_id' => 0,
     'product_name' => '',
     'product_quantity' => '',
@@ -77,6 +169,7 @@ foreach (siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTable
             'warehouse_id' => (int) $row['warehouse_id'],
             'stock_in_date' => (string) $row['stock_in_date'],
             'order_number' => (string) $row['order_number'],
+            'attachment' => (string) (isset($row['attachment']) ? $row['attachment'] : ''),
             'items' => array(),
         );
     }
@@ -105,6 +198,7 @@ if ($dataID > 0 && $act !== 'I') {
         $formData['warehouse_id'] = (int) $r['warehouse_id'];
         $formData['stock_in_date'] = (string) $r['stock_in_date'];
         $formData['order_number'] = (string) $r['order_number'];
+        $formData['attachment'] = (string) (isset($r['attachment']) ? $r['attachment'] : '');
         $formData['product_id'] = isset($r['items'][0]['product_id']) ? (int) $r['items'][0]['product_id'] : 0;
         $formData['product_name'] = isset($productNameMap[(int) $formData['product_id']]) ? (string) $productNameMap[(int) $formData['product_id']] : '';
         $formData['product_quantity'] = isset($r['items'][0]['product_quantity']) ? (string) ((int) $r['items'][0]['product_quantity']) : '';
@@ -197,6 +291,22 @@ if (post('actionBtn')) {
             $warehouseId = (int) postSpaceFilter('warehouse_id');
             $stockInDate = trim((string) postSpaceFilter('stock_in_date'));
             $orderNumber = trim((string) postSpaceFilter('order_number'));
+            $existingAttachment = trim((string) postSpaceFilter('current_attachment'));
+            $attachmentList = siAttachmentDecodeList($existingAttachment);
+
+            if (isset($_FILES['stock_in_attachment']) && is_array($_FILES['stock_in_attachment'])) {
+                $uploadResult = siUploadAttachmentFiles('stock_in_attachment');
+                if (!$uploadResult[0]) {
+                    $uploadErr = (string) $uploadResult[2];
+                    if ($uploadErr !== 'Attachment is required.') {
+                        $err = $uploadErr;
+                    }
+                } else {
+                    $attachmentList = array_merge($attachmentList, (array) $uploadResult[1]);
+                }
+            }
+
+            $attachmentPath = siAttachmentEncodeList($attachmentList);
 
             $productIds = isset($_POST['product_id']) ? postSpaceFilter('product_id') : array();
             $productNames = isset($_POST['product_name']) ? postSpaceFilter('product_name') : array();
@@ -216,6 +326,7 @@ if (post('actionBtn')) {
             $formData['warehouse_id'] = $warehouseId;
             $formData['stock_in_date'] = $stockInDate;
             $formData['order_number'] = $orderNumber;
+            $formData['attachment'] = $attachmentPath;
 
             $items = array();
             $formRows = array();
@@ -270,12 +381,16 @@ if (post('actionBtn')) {
                 );
             }
 
-            if ($warehouseId <= 0) {
+            if ($err !== '') {
+                // keep upload error from previous step
+            } else if ($warehouseId <= 0) {
                 $err = 'Warehouse cannot be empty.';
             } else if ($stockInDate === '') {
                 $err = 'Stock In Date cannot be empty.';
             } else if ($orderNumber === '') {
                 $err = 'Order Number cannot be empty.';
+            } else if (count(siAttachmentDecodeList($attachmentPath)) === 0) {
+                $err = 'At least 1 attachment is required.';
             } else if ($invalidProduct) {
                 $err = 'Please select valid product name from the list.';
             } else if (count($items) === 0) {
@@ -288,7 +403,8 @@ if (post('actionBtn')) {
                     $warehouseId,
                     $stockInDate,
                     $orderNumber,
-                    $items
+                    $items,
+                    $attachmentPath
                 );
 
                 if ($saved[0]) {
@@ -332,15 +448,21 @@ if (post('actionBtn')) {
                 $oldWarehouseId = 0;
                 $oldStockInDate = '';
                 $oldOrderNumber = '';
+                $oldAttachment = '';
+                $oldAttachmentNorm = '';
                 $oldSummaryRows = array();
 
-                $oldOrderSql = "SELECT warehouse_id, stock_in_date, order_number FROM `" . $stockInOrderTable . "` WHERE id='" . $orderId . "' AND status='A' LIMIT 1";
+                $oldOrderSql = "SELECT warehouse_id, stock_in_date, order_number, attachment FROM `" . $stockInOrderTable . "` WHERE id='" . $orderId . "' AND status='A' LIMIT 1";
                 $oldOrderRst = mysqli_query($finance_connect, $oldOrderSql);
                 if ($oldOrderRst && ($oldOrderRow = mysqli_fetch_assoc($oldOrderRst))) {
                     $oldWarehouseId = (int) $oldOrderRow['warehouse_id'];
                     $oldStockInDate = (string) $oldOrderRow['stock_in_date'];
                     $oldOrderNumber = (string) $oldOrderRow['order_number'];
+                    $oldAttachment = (string) (isset($oldOrderRow['attachment']) ? $oldOrderRow['attachment'] : '');
+                    $oldAttachmentNorm = siAttachmentEncodeList(siAttachmentDecodeList($oldAttachment));
                 }
+
+                $newAttachmentNorm = siAttachmentEncodeList(siAttachmentDecodeList($attachmentPath));
 
                 $oldItemsSql = "SELECT product_id, product_quantity FROM `" . $stockInItemTable . "` WHERE stock_in_order_id='" . $orderId . "' AND status='A' ORDER BY id ASC";
                 $oldItemsRst = mysqli_query($finance_connect, $oldItemsSql);
@@ -358,6 +480,7 @@ if (post('actionBtn')) {
                 $hasNoChanges = ((int) $oldWarehouseId === (int) $warehouseId)
                     && ($oldStockInDate === $stockInDate)
                     && ($oldOrderNumber === $orderNumber)
+                    && ($oldAttachmentNorm === $newAttachmentNorm)
                     && (implode(' | ', $oldSummaryRows) === implode(' | ', $newSummaryRows));
 
                 if ($hasNoChanges) {
@@ -368,8 +491,9 @@ if (post('actionBtn')) {
 
                 $safeDate = mysqli_real_escape_string($finance_connect, $stockInDate);
                 $safeOrderNo = mysqli_real_escape_string($finance_connect, $orderNumber);
+                $safeAttachment = mysqli_real_escape_string($finance_connect, $newAttachmentNorm);
 
-                $uOrder = "UPDATE `" . $stockInOrderTable . "` SET warehouse_id='" . (int) $warehouseId . "', stock_in_date='" . $safeDate . "', order_number='" . $safeOrderNo . "', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $orderId . "' AND status='A'";
+                $uOrder = "UPDATE `" . $stockInOrderTable . "` SET warehouse_id='" . (int) $warehouseId . "', stock_in_date='" . $safeDate . "', order_number='" . $safeOrderNo . "', attachment='" . $safeAttachment . "', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $orderId . "' AND status='A'";
                 $deactivateItems = "UPDATE `" . $stockInItemTable . "` SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE stock_in_order_id='" . $orderId . "' AND status='A'";
 
                 mysqli_begin_transaction($finance_connect);
@@ -422,6 +546,13 @@ if (post('actionBtn')) {
                         $oldVals[] = 'OrderNo=' . $oldOrderNumber;
                         $newVals[] = 'OrderNo=' . $orderNumber;
                         $msgChanges[] = "[ <b>OrderNo</b> : <b>'" . htmlspecialchars($oldOrderNumber, ENT_QUOTES, 'UTF-8') . "'</b> to <b>'" . htmlspecialchars($orderNumber, ENT_QUOTES, 'UTF-8') . "'</b> ]";
+                    }
+                    if ($oldAttachmentNorm !== $newAttachmentNorm) {
+                        $oldCount = count(siAttachmentDecodeList($oldAttachmentNorm));
+                        $newCount = count(siAttachmentDecodeList($newAttachmentNorm));
+                        $oldVals[] = 'AttachmentCount=' . $oldCount;
+                        $newVals[] = 'AttachmentCount=' . $newCount;
+                        $msgChanges[] = "[ <b>Attachment Count</b> : <b>'" . $oldCount . "'</b> to <b>'" . $newCount . "'</b> ]";
                     }
                     if ($oldChanges !== $changes) {
                         $oldItemsStr = $oldChanges !== '' ? $oldChanges : '-';
@@ -476,59 +607,8 @@ if ($token !== '') {
                    WHERE id='" . (int) $requestId . "' AND status='A' LIMIT 1";
         $reqRst = mysqli_query($finance_connect, $reqSql);
         if ($reqRst && ($req = mysqli_fetch_assoc($reqRst))) {
-            $itemSql = "SELECT product_id,
-                               package_id,
-                               IFNULL(productQty, IFNULL(packageQty, 1)) AS qty
-                        FROM " . STOCK_ORDER_REQ_ITEM . "
-                        WHERE request_id='" . (int) $requestId . "' AND status='A'";
-            $itemRst = mysqli_query($finance_connect, $itemSql);
-            $items = array();
-            if ($itemRst) {
-                while ($it = mysqli_fetch_assoc($itemRst)) {
-                    $prodId = isset($it['product_id']) ? (int) $it['product_id'] : 0;
-                    $pkgId = isset($it['package_id']) ? (int) $it['package_id'] : 0;
-                    if ($prodId <= 0) {
-                        $prodId = siResolveProductIdFromPackage($packageProductMap, $pkgId);
-                    }
-                    if ($prodId <= 0) {
-                        continue;
-                    }
-                    $items[] = array(
-                        'product_id' => $prodId,
-                        'package_id' => 0,
-                        'qty' => (int) $it['qty'],
-                    );
-                }
-            }
-
-            $saved = siSaveOrder(
-                $finance_connect,
-                $stockInOrderTable,
-                $stockInItemTable,
-                (int) $req['warehouse_id'],
-                (string) $req['request_date'],
-                (string) $req['order_number'],
-                $items
-            );
-
-            if ($saved[0]) {
-                $log = [
-                    'log_act' => getPageAction('I'),
-                    'cdate' => $cdate,
-                    'ctime' => $ctime,
-                    'uid' => USER_ID,
-                    'cby' => USER_ID,
-                    'query_rec' => 'RequestID=' . (int) $requestId,
-                    'query_table' => $tblName,
-                    'newval' => 'Auto-created from request token',
-                    'act_msg' => USER_NAME . " created stock in data from stock order request [ <b>Request ID = " . (int) $requestId . "</b> ] under <b><i>" . $stockInItemTable . " Table</i></b>.",
-                    'page' => $pageTitle,
-                    'connect' => $connect,
-                ];
-                audit_log($log);
-            }
-
-            echo "<script>alert('" . addslashes($saved[1]) . "'); location.href='" . $redirectTable . "';</script>";
+            $scanUrl = $SITEURL . '/warehouse_stock_in_scan.php?t=' . urlencode($token);
+            echo "<script>location.href='" . $scanUrl . "';</script>";
             exit;
         }
         $err = 'Invalid or inactive stock order request token.';
@@ -575,6 +655,40 @@ if ($isViewMode && $dataID > 0 && isset($orderById[$dataID])) {
         #stockInItemTable .product_name {
             font-weight: normal !important;
         }
+
+        .si-attach-wrap {
+            border: 1px solid #e2e2e2;
+            border-radius: 8px;
+            padding: 12px;
+        }
+
+        .si-attach-preview {
+            min-height: 180px;
+            border: 1px dashed #d0d0d0;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #fafafa;
+            padding: 10px;
+        }
+
+        .si-attach-preview img {
+            max-width: 100%;
+            max-height: 260px;
+            object-fit: contain;
+        }
+
+        .si-attachment-input-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .si-attachment-input-row .stock-in-attachment-input {
+            flex: 1;
+        }
+
     </style>
 </head>
 <body>
@@ -592,10 +706,11 @@ if ($isViewMode && $dataID > 0 && isset($orderById[$dataID])) {
                 <div class="alert alert-danger"><?= siEsc($err) ?></div>
             <?php } ?>
 
-            <form method="post" id="stockInForm" novalidate>
+            <form method="post" id="stockInForm" enctype="multipart/form-data" novalidate>
                 <input type="hidden" name="act" value="<?= siEsc($act) ?>">
                 <input type="hidden" id="stockInProductsJson" value="<?= siEsc(json_encode(array_values($products))) ?>">
                 <input type="hidden" id="isViewModeFlag" value="<?= $isViewMode ? '1' : '0' ?>">
+                <input type="hidden" name="current_attachment" id="current_attachment" value="<?= siEsc((string) $formData['attachment']) ?>">
                 <?php if ($isEditMode || $isViewMode) { ?>
                     <input type="hidden" name="order_id" value="<?= (int) $formData['order_id'] ?>">
                 <?php } ?>
@@ -624,6 +739,66 @@ if ($isViewMode && $dataID > 0 && isset($orderById[$dataID])) {
                     <div class="col-12 col-md-4 mb-3">
                         <label class="form-label form_lbl">Order Number<span class="requireRed">*</span></label>
                         <input class="form-control" type="text" name="order_number" id="order_number" value="<?= siEsc($formData['order_number']) ?>" required<?= $inputReadonlyAttr ?> autocomplete="off">
+                    </div>
+                </div>
+
+                <div class="row">
+                    <div class="col-12 mb-3">
+                        <label class="form-label form_lbl">Attachment<span class="requireRed">*</span></label>
+                        <?php
+                        $attachmentPath = trim((string) $formData['attachment']);
+                        $attachmentUrl = $attachmentPath !== '' ? (rtrim((string) $SITEURL, '/') . '/' . ltrim($attachmentPath, '/')) : '';
+                        $attachmentExt = strtolower(pathinfo($attachmentPath, PATHINFO_EXTENSION));
+                        $isImageAttachment = in_array($attachmentExt, array('png', 'jpg', 'jpeg', 'webp'), true);
+                        ?>
+                        <div class="si-attach-wrap">
+                            <div class="row g-3 align-items-start">
+                                <div class="col-12 col-md-6">
+                                    <?php if (!$isViewMode) { ?>
+                                        <div id="stock_in_attachment_inputs">
+                                            <div class="mb-2 si-attachment-input-row">
+                                                <input class="form-control stock-in-attachment-input" type="file" name="stock_in_attachment[]" id="stock_in_attachment" accept=".png,.jpg,.jpeg,.webp">
+                                                <button class="mt-1 add-stock-attachment-btn" id="action_menu_btn" type="button" title="Add another attachment"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>
+                                            </div>
+                                        </div>
+                                        <small class="text-muted">Upload at least 1 photo for every stock in. Click + to add more attachments.</small>
+                                    <?php } ?>
+
+                                                    <?php
+                                                    $attachmentPaths = siAttachmentDecodeList((string) $formData['attachment']);
+                                                    ?>
+                                                    <?php if (count($attachmentPaths) > 0) { ?>
+                                        <div class="mt-2" id="stock_in_attachment_preview">
+                                                            <?php foreach ($attachmentPaths as $attachIdx => $attachPath) { ?>
+                                                                <?php $attachUrl = rtrim((string) $SITEURL, '/') . '/' . ltrim((string) $attachPath, '/'); ?>
+                                                                <div><a href="<?= siEsc($attachUrl) ?>" target="_blank">Open attachment <?= (int) ($attachIdx + 1) ?></a></div>
+                                                            <?php } ?>
+                                        </div>
+                                    <?php } else { ?>
+                                                        <div class="mt-2" id="stock_in_attachment_preview"></div>
+                                    <?php } ?>
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <div class="si-attach-preview">
+                                                        <div id="stock_in_attachment_img_list" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;">
+                                                            <?php
+                                                            $hasImage = false;
+                                                            foreach ($attachmentPaths as $attachPath) {
+                                                                $ext = strtolower(pathinfo((string) $attachPath, PATHINFO_EXTENSION));
+                                                                if (!in_array($ext, array('png', 'jpg', 'jpeg', 'webp'), true)) {
+                                                                    continue;
+                                                                }
+                                                                $hasImage = true;
+                                                                $imgUrl = rtrim((string) $SITEURL, '/') . '/' . ltrim((string) $attachPath, '/');
+                                                            ?>
+                                                                <img src="<?= siEsc($imgUrl) ?>" alt="Attachment Preview" style="max-width:120px;max-height:120px;object-fit:cover;border-radius:6px;">
+                                                            <?php } ?>
+                                                        </div>
+                                                        <span id="stock_in_attachment_placeholder" class="text-muted"<?= $hasImage ? ' style="display:none;"' : '' ?>>Image preview</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
