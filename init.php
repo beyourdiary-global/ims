@@ -2,7 +2,21 @@
 // 30 days in seconds (30 days * 24 hours * 60 mins * 60 secs)
 $sessionLifetime = 2592000;
 
-session_set_cookie_params($sessionLifetime);
+// Determine if the current connection is secure (HTTPS) to set the cookie's "secure" flag appropriately
+$secure = (
+    (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443)
+);
+
+// Configure session cookie parameters with secure defaults
+session_set_cookie_params([
+    'lifetime' => $sessionLifetime,
+    'path'     => '/',
+    'domain'   => '',
+    'secure'   => $secure,
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
 
 ini_set('session.gc_maxlifetime', $sessionLifetime);
 

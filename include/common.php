@@ -1495,9 +1495,12 @@ if (!function_exists('siAttachmentDecodeList')) {
         }
 
         $list = array();
+        $isJsonArray = false; // Track if it's successfully parsed as JSON
+
         if ($rawValue !== '' && substr($rawValue, 0, 1) === '[') {
             $decoded = json_decode($rawValue, true);
             if (is_array($decoded)) {
+                $isJsonArray = true; // Mark as valid JSON array
                 foreach ($decoded as $path) {
                     $p = trim((string) $path);
                     if ($p !== '') {
@@ -1507,7 +1510,8 @@ if (!function_exists('siAttachmentDecodeList')) {
             }
         }
 
-        if (count($list) === 0) {
+        // Only fallback to using the raw value if it wasn't a valid JSON array
+        if (!$isJsonArray && count($list) === 0) {
             $list[] = $rawValue;
         }
 

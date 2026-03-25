@@ -177,12 +177,12 @@ if ($resetpass_btn == 1) {
 }
 ?>
 
-<?php include "header.php"; ?>
 
 <!DOCTYPE html>
 <html>
 
 <head>
+<?php include "header.php"; ?>
     <link rel="stylesheet" href="./css/main.css">
     <link rel="stylesheet" href="./css/login.css">
     <link rel="icon" type="image" href="<?php echo ($dataExisted ? $img_path . $row['meta_logo'] : 'img/byd_logo'); ?>">

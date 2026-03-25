@@ -105,8 +105,10 @@ if (post('actionBtn')) {
                         $newvalarr[] = $currentDataName;
                         $datafield[] = 'name';
                     }
-
-                    $query = "INSERT INTO " . $tblName . "(name,create_by,create_date,create_time,update_by,update_date,update_time,status) VALUES ('$currentDataName','" . USER_ID . "',CURDATE(),CURTIME(),'" . USER_ID . "',CURDATE(),CURTIME(),'A')";
+                    
+                    // Sanitize input before inserting into database
+                    $safeName = mysqli_real_escape_string($connect, $currentDataName);
+                    $query = "INSERT INTO " . $tblName . "(name,create_by,create_date,create_time,update_by,update_date,update_time,status) VALUES ('$safeName','" . USER_ID . "',CURDATE(),CURTIME(),'" . USER_ID . "',CURDATE(),CURTIME(),'A')";
                     $returnData = mysqli_query($connect, $query);
                     $dataID = $connect->insert_id;
                 } catch (Exception $e) {
@@ -124,7 +126,9 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (!empty($oldvalarr) && !empty($chgvalarr)) {
-                        $query = "UPDATE " . $tblName . " SET name ='$currentDataName', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id = '$dataID' AND status='A'";
+                        // Sanitize input before updating database
+                        $safeName = mysqli_real_escape_string($connect, $currentDataName);
+                        $query = "UPDATE " . $tblName . " SET name ='$safeName', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id = '$dataID' AND status='A'";
                         $returnData = mysqli_query($connect, $query);
                     } else {
                         $act = 'NC';

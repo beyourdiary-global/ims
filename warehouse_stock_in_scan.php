@@ -27,7 +27,10 @@ if (!function_exists('scanEnsureAttachmentDir')) {
     {
         $dir = scanAttachmentDirAbs();
         if (!is_dir($dir)) {
-            @mkdir($dir, 0777, true);
+            if (!mkdir($dir, 0755, true) && !is_dir($dir)) {
+                error_log('Failed to create attachment directory: ' . $dir);
+                return false;
+            }
         }
         return is_dir($dir);
     }
@@ -59,7 +62,9 @@ if (!function_exists('scanUploadAttachmentFiles')) {
 
         $saved = array();
         $hasAnyFile = false;
+        $validFiles = array();
 
+        // Pass 1: Validate all files first
         for ($idx = 0; $idx < count($names); $idx++) {
             $origName = isset($names[$idx]) ? (string) $names[$idx] : '';
             $tmpName = isset($tmpNames[$idx]) ? (string) $tmpNames[$idx] : '';
@@ -78,20 +83,30 @@ if (!function_exists('scanUploadAttachmentFiles')) {
             if (!in_array($ext, $allowed, true)) {
                 return array(false, array(), 'Attachment must be png, jpg, jpeg or webp.');
             }
+            
+            $validFiles[] = array('tmpName' => $tmpName, 'ext' => $ext);
+        }
 
-            $newName = 'stock_in_scan_' . date('Ymd_His') . '_' . mt_rand(1000, 9999) . '_' . $idx . '.' . $ext;
+        if (!$hasAnyFile || count($validFiles) === 0) {
+            return array(false, array(), 'Attachment is required.');
+        }
+
+        // Pass 2: Move files safely
+        foreach ($validFiles as $idx => $f) {
+            $newName = 'stock_in_scan_' . date('Ymd_His') . '_' . mt_rand(1000, 9999) . '_' . $idx . '.' . $f['ext'];
             $absPath = scanAttachmentDirAbs() . $newName;
             $relPath = scanAttachmentDirRel() . $newName;
 
-            if (!@move_uploaded_file($tmpName, $absPath)) {
+            if (!@move_uploaded_file($f['tmpName'], $absPath)) {
+                // Rollback previously saved files to avoid orphans
+                foreach ($saved as $savedRelPath) {
+                    $savedAbsPath = rtrim((string) ROOT, '/\\') . '/' . ltrim((string) $savedRelPath, '/\\');
+                    @unlink($savedAbsPath);
+                }
                 return array(false, array(), 'Failed to save attachment file.');
             }
 
             $saved[] = $relPath;
-        }
-
-        if (!$hasAnyFile) {
-            return array(false, array(), 'Attachment is required.');
         }
 
         return array(true, $saved, '');
@@ -829,11 +844,14 @@ if ($token === '') {
             listWrap.innerHTML = '';
 
             var hasImage = false;
+            var hasFiles = false; // Add this line
             var inputs = inputWrap.querySelectorAll('.scan-attachment-input');
             inputs.forEach(function (input) {
                 if (!input.files || input.files.length === 0) {
                     return;
                 }
+                
+                hasFiles = true; // Add this line
 
                 Array.prototype.forEach.call(input.files, function (file) {
                     if (!file || !file.type || file.type.indexOf('image/') !== 0) {
@@ -857,7 +875,7 @@ if ($token === '') {
             });
 
             placeholder.style.display = hasImage ? 'none' : 'inline';
-            if (!hasImage) {
+            if (hasFiles && !hasImage) {
                 placeholder.textContent = 'Selected file is not an image preview.';
             } else {
                 placeholder.textContent = 'Image preview';

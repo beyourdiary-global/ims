@@ -1394,6 +1394,7 @@ if ($action === 'insertStockOrderPdf') {
         if (count($importErrors) === 0) {
             mysqli_begin_transaction($finance_connect);
             $inserted = 0;
+            $importedIds = array(); // Added to track IDs for the audit log
 
             try {
                 foreach ($grouped as $g) {
@@ -1472,10 +1473,29 @@ if ($action === 'insertStockOrderPdf') {
                     $safeQr = mysqli_real_escape_string($finance_connect, $qrWebPath);
                     mysqli_query($finance_connect, "UPDATE " . STOCK_ORDER_REQ . " SET order_link_token='$safeToken', qr_image='$safeQr' WHERE id='" . (int) $requestId . "'");
 
+                    $importedIds[] = $requestId; // Capture the inserted ID
                     $inserted++;
                 }
 
                 mysqli_commit($finance_connect);
+
+                // Add the audit log if at least one record was inserted
+                if ($inserted > 0) {
+                    $log = [
+                        'log_act' => 'import',
+                        'cdate' => $cdate,
+                        'ctime' => $ctime,
+                        'uid' => USER_ID,
+                        'cby' => USER_ID,
+                        'query_rec' => implode(', ', $importedIds),
+                        'query_table' => STOCK_ORDER_REQ,
+                        'act_msg' => USER_NAME . " imported " . $inserted . " stock order request(s) under <b><i>" . STOCK_ORDER_REQ . " Table</i></b>.",
+                        'page' => $pageTitle,
+                        'connect' => $connect,
+                    ];
+                    audit_log($log);
+                }
+
                 unset($_SESSION['sor_pdf_import_preview']);
                 echo "<script>alert('Imported " . $inserted . " stock order request(s) successfully.');location.href='" . htmlspecialchars($tablePage, ENT_QUOTES, 'UTF-8') . "';</script>";
                 exit;
