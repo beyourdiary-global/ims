@@ -156,7 +156,13 @@ if (!function_exists('sorImpNorm')) {
 if (!function_exists('sorImpLookup')) {
     function sorImpLookup($text)
     {
-        return strtolower(preg_replace('/[^a-z0-9]+/i', '', sorImpNorm($text)));
+        $norm = sorImpNorm($text);
+        $norm = preg_replace('/[^\p{L}\p{N}]+/u', '', (string) $norm);
+        if ($norm === '') return '';
+        if (function_exists('mb_strtolower')) {
+            return mb_strtolower($norm, 'UTF-8');
+        }
+        return strtolower($norm);
     }
 }
 
@@ -173,7 +179,9 @@ if (!function_exists('sorImpCleanPdfTextOperand')) {
             '\\(' => '(', '\\)' => ')',
             '\\\\' => '\\',
         ));
-        return sorImpNorm(preg_replace('/[^[:print:] ]/', ' ', $text));
+        // Keep Unicode letters (including Chinese). Strip only control bytes.
+        $text = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]+/', ' ', (string) $text);
+        return sorImpNorm($text);
     }
 }
 
@@ -268,12 +276,21 @@ if (!function_exists('sorImpExtractPdfText')) {
     function sorImpExtractPdfText($pdfContent, &$warnings, $clientOcrText = '')
     {
         $text = sorImpExtractPdfTextNative($pdfContent);
-        if (preg_replace('/[^a-zA-Z0-9]/', '', $text) !== '') {
+        $nativeSignalLen = strlen((string) preg_replace('/\s+/', '', (string) $text));
+
+        $clientOcrText = trim((string) $clientOcrText);
+        $ocrSignalLen = strlen((string) preg_replace('/\s+/', '', (string) $clientOcrText));
+
+        // Merge both sources when available to improve label extraction robustness.
+        if ($nativeSignalLen > 30 && $ocrSignalLen > 20) {
+            return trim((string) $text) . "\n" . trim((string) $clientOcrText);
+        }
+
+        if ($nativeSignalLen > 30) {
             return $text;
         }
 
-        $clientOcrText = trim((string) $clientOcrText);
-        if ($clientOcrText !== '' && strlen(preg_replace('/[^a-zA-Z0-9]/', '', $clientOcrText)) > 20) {
+        if ($ocrSignalLen > 20) {
             return $clientOcrText;
         }
 
@@ -394,11 +411,26 @@ if (!function_exists('sorImpDateToYmd')) {
         $text = trim(str_replace(array('"', "'", ','), '', (string) $text));
         if ($text === '') return '';
 
-        if (preg_match('/(\d{1,2})[\/.\-\s]+(\d{1,2})[\/.\-\s]+(\d{4})/', $text, $m)) {
-            return sprintf('%04d-%02d-%02d', (int) $m[3], (int) $m[2], (int) $m[1]);
-        }
+        // OCR tolerance for common misread characters in numeric dates.
+        $text = strtr($text, array('O' => '0', 'o' => '0', 'I' => '1', 'l' => '1'));
+        $text = preg_replace('/\s+/', '', (string) $text);
+
         if (preg_match('/(\d{4})[\/.\-\s]+(\d{1,2})[\/.\-\s]+(\d{1,2})/', $text, $m)) {
-            return sprintf('%04d-%02d-%02d', (int) $m[1], (int) $m[2], (int) $m[3]);
+            $y = (int) $m[1];
+            $mo = (int) $m[2];
+            $d = (int) $m[3];
+            if (checkdate($mo, $d, $y)) {
+                return sprintf('%04d-%02d-%02d', $y, $mo, $d);
+            }
+        }
+
+        if (preg_match('/(\d{1,2})[\/.\-\s]+(\d{1,2})[\/.\-\s]+(\d{4})/', $text, $m)) {
+            $d = (int) $m[1];
+            $mo = (int) $m[2];
+            $y = (int) $m[3];
+            if (checkdate($mo, $d, $y)) {
+                return sprintf('%04d-%02d-%02d', $y, $mo, $d);
+            }
         }
 
         $ts = strtotime(str_replace('/', '-', $text));
@@ -414,6 +446,16 @@ if (!function_exists('sorImpDateToYmd')) {
 if (!function_exists('sorImpFindInvoiceNo')) {
     function sorImpFindInvoiceNo($text, $fileName)
     {
+        // Support numeric invoice format: "INVOICE #1611300057"
+        if (preg_match('/Invoice\s*#\s*([0-9]{6,})/i', $text, $m)) {
+            return trim((string) $m[1]);
+        }
+
+        // Support numeric invoice format: "Invoice No: 1611300057"
+        if (preg_match('/Invoice\s*(?:No|Number)[.:\s#-]*\s*([0-9]{6,})/i', $text, $m)) {
+            return trim((string) $m[1]);
+        }
+
         // Try explicit Invoice # or Invoice No patterns in text
         if (preg_match('/Invoice\s*#\s*(INV[-\s]?[A-Z0-9-]+)/i', $text, $m)) {
             return strtoupper(preg_replace('/\s+/', '', $m[1]));
@@ -440,15 +482,31 @@ if (!function_exists('sorImpFindInvoiceNo')) {
 if (!function_exists('sorImpFindInvoiceDate')) {
     function sorImpFindInvoiceDate($text)
     {
+        // Strongest priority: line-level detection around "Invoice Date" label.
+        $lines = sorImpGetPdfTextLines((string) $text);
+        foreach ($lines as $line) {
+            if (!preg_match('/(?:invoice|voice)\s*date/i', (string) $line)) continue;
+            if (preg_match('/([0-9OIl]{4}[\/.\-][0-9OIl]{1,2}[\/.\-][0-9OIl]{1,2}|[0-9OIl]{1,2}[\/.\-][0-9OIl]{1,2}[\/.\-][0-9OIl]{4})/iu', (string) $line, $m)) {
+                $v = sorImpDateToYmd((string) $m[1]);
+                if ($v !== '') return $v;
+            }
+        }
+
+        // Dedicated text-wide match for "INVOICE DATE : 2026-03-16" style content.
+        if (preg_match('/(?:invoice|voice)\s*date[^0-9OIl]{0,20}([0-9OIl]{4}[\/.\-][0-9OIl]{1,2}[\/.\-][0-9OIl]{1,2}|[0-9OIl]{1,2}[\/.\-][0-9OIl]{1,2}[\/.\-][0-9OIl]{4})/iu', (string) $text, $m)) {
+            $v = sorImpDateToYmd((string) $m[1]);
+            if ($v !== '') return $v;
+        }
+
         // Normalize: keep letters, digits, slashes, dots, dashes
         $clean = preg_replace('/[^a-zA-Z0-9\/.\-]/', ' ', $text);
         $clean = trim(preg_replace('/\s+/', ' ', $clean));
 
-        // Date regex tolerating spaces around separators
-        $d = '(\d{1,2}\s*[\/.\-]\s*\d{1,2}\s*[\/.\-]\s*\d{4})';
+        // Date regex tolerating spaces around separators and common OCR letters
+        $d = '([0-9OIl]{1,2}\s*[\/.\-]\s*[0-9OIl]{1,2}\s*[\/.\-]\s*[0-9OIl]{2,4})';
 
-        // Priority 1: "Invoices Date" / "Invoice Date"
-        if (preg_match('/invoices?\s*date\s*:?\s*' . $d . '/i', $clean, $m)) {
+        // Priority 1: "Invoices Date" / "Invoice Date" / "Voice Date"
+        if (preg_match('/(?:in)?voices?\s*date\s*:?\s*' . $d . '/i', $clean, $m)) {
             $v = sorImpDateToYmd(str_replace(' ', '', $m[1]));
             if ($v !== '') return $v;
         }
@@ -459,19 +517,25 @@ if (!function_exists('sorImpFindInvoiceDate')) {
             if ($v !== '') return $v;
         }
 
-        // Priority 3: "Date" (generic)
+        // Priority 3: first yyyy-mm-dd style in whole text.
+        if (preg_match('/([0-9OIl]{4}[\/\.\-][0-9OIl]{1,2}[\/\.\-][0-9OIl]{1,2})/', $clean, $m)) {
+            $v = sorImpDateToYmd(str_replace(' ', '', $m[1]));
+            if ($v !== '') return $v;
+        }
+
+        // Priority 4: "Date" (generic)
         if (preg_match('/\bdate\s*:?\s*' . $d . '/i', $clean, $m)) {
             $v = sorImpDateToYmd(str_replace(' ', '', $m[1]));
             if ($v !== '') return $v;
         }
 
-        // Priority 4: first date-like pattern in entire text
+        // Priority 5: first date-like pattern in entire text
         if (preg_match('/' . $d . '/', $clean, $m)) {
             $v = sorImpDateToYmd(str_replace(' ', '', $m[1]));
             if ($v !== '') return $v;
         }
 
-        // Priority 5: yyyy-mm-dd format
+        // Priority 6: yyyy-mm-dd format
         if (preg_match('/(\d{4}[\/.\-]\d{1,2}[\/.\-]\d{1,2})/', $clean, $m)) {
             $v = sorImpDateToYmd($m[1]);
             if ($v !== '') return $v;
@@ -491,10 +555,10 @@ if (!function_exists('sorImpFindTotalPrice')) {
 
         // Try patterns in order of specificity
         $patterns = array(
-            '/sub\s*total\s*:?\s*(?:RM|MYR|SGD|USD)?\s*(\d+(?:\.\d{1,2}))/i',
-            '/grand\s*total\s*:?\s*(?:RM|MYR|SGD|USD)?\s*(\d+(?:\.\d{1,2}))/i',
-            '/total\s*amount\s*:?\s*(?:RM|MYR|SGD|USD)?\s*(\d+(?:\.\d{1,2}))/i',
-            '/total\s*:?\s*(?:RM|MYR|SGD|USD)?\s*(\d+(?:\.\d{1,2}))/i',
+            '/sub\s*total\s*:?\s*(?:RM|MYR|MVR|SGD|USD)?\s*(\d+(?:\.\d{1,2}))/i',
+            '/grand\s*total\s*:?\s*(?:RM|MYR|MVR|SGD|USD)?\s*(\d+(?:\.\d{1,2}))/i',
+            '/total\s*amount\s*:?\s*(?:RM|MYR|MVR|SGD|USD)?\s*(\d+(?:\.\d{1,2}))/i',
+            '/total\s*:?\s*(?:RM|MYR|MVR|SGD|USD)?\s*(\d+(?:\.\d{1,2}))/i',
         );
 
         foreach ($patterns as $pattern) {
@@ -512,7 +576,7 @@ if (!function_exists('sorImpFindTotalPrice')) {
         }
 
         // Fallback: collect all RM amounts, pick the largest as likely subtotal
-        if (preg_match_all('/(?:RM|MYR)\s*(\d+(?:\.\d{1,2}))/i', $origClean, $matches)) {
+        if (preg_match_all('/(?:RM|MYR|MVR)\s*(\d+(?:\.\d{1,2}))/i', $origClean, $matches)) {
             $amounts = array_map('floatval', $matches[1]);
             rsort($amounts);
             if (!empty($amounts)) {
@@ -590,45 +654,59 @@ if (!function_exists('sorImpResolveProductFromText')) {
             }
         }
 
+        // Fuzzy fallback for OCR typos, e.g. "Rosehaay" -> "RoseLady".
+        $bestId = 0;
+        $bestDist = 999;
+        $kLen = strlen($key);
+        foreach ($productKeyToId as $pKey => $pId) {
+            $pLen = strlen($pKey);
+            if ($pLen < 4) continue;
+            if (abs($kLen - $pLen) > 3) continue;
+            $dist = levenshtein($key, $pKey);
+            if ($dist < $bestDist) {
+                $bestDist = $dist;
+                $bestId = (int) $pId;
+            }
+        }
+        if ($bestId > 0 && $bestDist <= 3) {
+            return $bestId;
+        }
+
         return 0;
     }
 }
 
+if (!function_exists('sorImpResolvePackageByProductId')) {
+    function sorImpResolvePackageByProductId($productId, $packages)
+    {
+        $productId = (int) $productId;
+        if ($productId <= 0) return null;
+
+        foreach ($packages as $pkg) {
+            $ids = isset($pkg['product_ids']) && is_array($pkg['product_ids']) ? $pkg['product_ids'] : array();
+            foreach ($ids as $pid) {
+                if ((int) $pid === $productId) {
+                    return $pkg;
+                }
+            }
+        }
+
+        return null;
+    }
+}
+
 if (!function_exists('sorImpParseNumberedInvoiceRow')) {
-    /**
-     * Parse numbered invoice row and extract item text + row qty + row total.
-     * Example: "2 CNY2026D - Carb Zero x 2 RM 336.00 RM 0.00 1 RM168.00"
-     */
     function sorImpParseNumberedInvoiceRow($line)
     {
         $line = trim((string) $line);
         if ($line === '') return null;
 
-        if (preg_match('/^\s*(\d{1,3})\s+(.+?)\s+(\d{1,4})\s+(?:RM|MYR|SGD|USD)?\s*([\d,]+(?:\.\d{1,2})?)\s*$/i', $line, $m)) {
-            return array(
-                'index' => (int) $m[1],
-                'text' => trim((string) $m[2]),
-                'qty' => (int) $m[3],
-                'line_total' => (float) str_replace(',', '', (string) $m[4]),
-            );
+        // Existing Format 1 & 2
+        if (preg_match('/^\s*(\d{1,3})\s+(.+?)\s+(\d{1,4})\s+(?:RM|MYR|MVR|SGD|USD)?\s*([\d,]+(?:\.\d{1,2})?)\s*$/i', $line, $m)) {
+            return array('index' => (int) $m[1], 'text' => trim((string) $m[2]), 'qty' => (int) $m[3], 'line_total' => (float) str_replace(',', '', (string) $m[4]));
         }
-
-        if (preg_match('/^\s*(\d{1,3})\s+(.+?)(?:\s+RM\s|\s+MYR\s|\s+SGD\s|\s+USD\s|\s+\d{1,3}(?:,\d{3})*\.\d{2})/i', $line, $m)) {
-            return array(
-                'index' => (int) $m[1],
-                'text' => trim((string) $m[2]),
-                'qty' => 1,
-                'line_total' => 0.00,
-            );
-        }
-
-        if (preg_match('/^\s*(\d{1,3})\s+([A-Za-z].{2,})$/', $line, $m)) {
-            return array(
-                'index' => (int) $m[1],
-                'text' => trim((string) $m[2]),
-                'qty' => 1,
-                'line_total' => 0.00,
-            );
+        if (preg_match('/^\s*(\d{1,3})\s+(.+?)(?:\s+(?:RM|MYR|MVR|SGD|USD)\s+|\s+\d{1,3}(?:,\d{3})*\.\d{2})/i', $line, $m)) {
+            return array('index' => (int) $m[1], 'text' => trim((string) $m[2]), 'qty' => 1, 'line_total' => 0.00);
         }
 
         return null;
@@ -643,10 +721,255 @@ if (!function_exists('sorImpSanitizeExtractedName')) {
 
         // Remove OCR marker symbols often attached to names.
         $text = str_replace(array('*', '+', '•', '·'), '', $text);
+        // Trim noisy leading punctuation that can appear in OCR output.
+        $text = preg_replace('/^[\s\.,:;\-_]+/u', '', (string) $text);
         // Remove dangling currency tokens at end: "... RM" / "... RM RM".
         $text = preg_replace('/(?:\s+(?:RM|MYR|SGD|USD))+\s*$/i', '', $text);
         $text = preg_replace('/\s+/', ' ', (string) $text);
         return trim((string) $text);
+    }
+}
+
+if (!function_exists('sorImpNormalizePackageLabelText')) {
+    function sorImpNormalizePackageLabelText($text, $resolvedProductName = '')
+    {
+        $text = sorImpSanitizeExtractedName((string) $text);
+        if ($text === '') return '';
+
+        // Collapse spaces between Han/Han, Han/number and number/Han.
+        $text = preg_replace('/(?<=\p{Han})\s+(?=\p{Han})/u', '', (string) $text);
+        $text = preg_replace('/(?<=\p{Han})\s+(?=\d)/u', '', (string) $text);
+        $text = preg_replace('/(?<=\d)\s+(?=\p{Han})/u', '', (string) $text);
+
+        // Force common campaign phrase and buy-gift phrase into expected simplified form.
+        $text = preg_replace('/38\s*[女丰神]\s*节/u', '38女神节', (string) $text);
+        $text = preg_replace('/买\s*2\s*送\s*1/u', '买2送1', (string) $text);
+
+        // If product is known, normalize OCR variants around "Rose..." to canonical value.
+        if ($resolvedProductName !== '') {
+            $text = preg_replace('/rose[a-z]{2,}/iu', (string) $resolvedProductName, (string) $text);
+            $text = preg_replace('/\b' . preg_quote((string) $resolvedProductName, '/') . '\s+' . preg_quote((string) $resolvedProductName, '/') . '\b/iu', (string) $resolvedProductName, (string) $text);
+        }
+
+        // Remove trailing SKU-like code suffixes such as E28.
+        $text = preg_replace('/\s+[A-Z]\d{1,4}\s*$/u', '', (string) $text);
+        $text = preg_replace('/\s+/', ' ', (string) $text);
+        return trim((string) $text);
+    }
+}
+
+if (!function_exists('sorImpNormalizeProductLabelText')) {
+    function sorImpNormalizeProductLabelText($text)
+    {
+        $text = sorImpSanitizeExtractedName((string) $text);
+        if ($text === '') return '';
+
+        // Keep the leading product token; drop trailing OCR noise like "R200 TR 25800".
+        if (preg_match('/^([A-Za-z][A-Za-z0-9_-]{2,})(?:\s+.*)?$/u', (string) $text, $m)) {
+            $text = (string) $m[1];
+        }
+
+        return trim((string) $text);
+    }
+}
+
+if (!function_exists('sorImpExtractLabelValueInline')) {
+    function sorImpExtractLabelValueInline($line, $labelPattern, $stopPatterns = array())
+    {
+        $line = (string) $line;
+        if (!preg_match('/' . $labelPattern . '\s*[:：-]\s*(.+)/iu', $line, $m)) {
+            return '';
+        }
+
+        $value = (string) $m[1];
+        foreach ($stopPatterns as $stop) {
+            $value = preg_replace('/\s+' . $stop . '\s*[:：-].*$/iu', '', $value);
+        }
+
+        return sorImpSanitizeExtractedName($value);
+    }
+}
+
+if (!function_exists('sorImpExtractLabelValueFromText')) {
+    function sorImpExtractLabelValueFromText($text, $labelPattern, $stopPatterns = array())
+    {
+        $text = (string) $text;
+        if (!preg_match('/' . $labelPattern . '\s*[:：-]?\s*(.+)/isu', $text, $m)) {
+            return '';
+        }
+
+        $value = (string) $m[1];
+        foreach ($stopPatterns as $stop) {
+            $value = preg_replace('/\s+' . $stop . '\s*[:：-]?.*$/isu', '', $value);
+        }
+
+        // Stop at line break if still too long.
+        $value = preg_replace('/[\r\n].*$/s', '', $value);
+        return sorImpSanitizeExtractedName($value);
+    }
+}
+
+if (!function_exists('sorImpParseLabelBasedInvoiceItems')) {
+    /**
+     * Fallback parser for image-style invoices with labels such as:
+     * "Package Name : ..." and "Products Name : ..."
+     */
+    function sorImpParseLabelBasedInvoiceItems($text)
+    {
+        $lineItems = array();
+        $lines = sorImpGetPdfTextLines($text);
+        $packageText = '';
+        $productText = '';
+        $qtyFromLabel = 1;
+        $lineTotal = 0.00;
+
+        $foundTotal = sorImpFindTotalPrice($text);
+        if ($foundTotal !== '') {
+            $lineTotal = (float) $foundTotal;
+        }
+
+        // First pass on full text (works better when OCR merges multiple labels on one line).
+        $packageText = sorImpExtractLabelValueFromText(
+            $text,
+            'package\s*name',
+            array('products?\s*name', 'sku', 'price', 'qty', 'total', 'delivery\s*fee')
+        );
+        $productText = sorImpExtractLabelValueFromText(
+            $text,
+            'products?\s*name',
+            array('sku', 'price', 'qty', 'total', 'delivery\s*fee', 'package\s*name')
+        );
+
+        // Try to parse qty + line total from "Price QTY TOTAL" row.
+        if (preg_match('/(?:MYR|RM)\s*([0-9]+(?:\.[0-9]{2})?)\s+(\d{1,4})\s+(?:MYR|RM)\s*([0-9]+(?:\.[0-9]{2})?)/iu', (string) $text, $mt)) {
+            $q = (int) $mt[2];
+            if ($q > 0) $qtyFromLabel = $q;
+            $lt = (float) $mt[3];
+            if ($lt > 0) $lineTotal = $lt;
+        }
+
+        foreach ($lines as $lineRaw) {
+            $line = sorImpNorm($lineRaw);
+            if ($line === '') continue;
+
+            if ($packageText === '') {
+                $pkgVal = sorImpExtractLabelValueInline(
+                    $line,
+                    'package\s*name',
+                    array('products?\s*name', 'sku', 'qty', 'price', 'total')
+                );
+                if ($pkgVal !== '') {
+                    $packageText = $pkgVal;
+                }
+            }
+
+            if ($productText === '') {
+                $prodVal = sorImpExtractLabelValueInline(
+                    $line,
+                    'products?\s*name',
+                    array('sku', 'qty', 'price', 'total', 'package\s*name')
+                );
+                if ($prodVal !== '') {
+                    $productText = $prodVal;
+                }
+            }
+
+            if (preg_match('/\bqty\b[^0-9]{0,8}(\d{1,4})\b/i', $line, $m)) {
+                $q = (int) $m[1];
+                if ($q > 0) $qtyFromLabel = $q;
+            }
+
+            if ($lineTotal <= 0 && preg_match('/\btotal\b[^0-9]{0,12}(?:MYR|RM)?\s*([0-9]+(?:\.[0-9]{2})?)\b/iu', $line, $m)) {
+                $t = (float) $m[1];
+                if ($t > 0) $lineTotal = $t;
+            }
+        }
+
+        $packageText = preg_replace('/^\s*package\s*name\s*[:：.\-]?\s*/iu', '', (string) $packageText);
+        $productText = preg_replace('/^\s*products?\s*name\s*[:：.\-]?\s*/iu', '', (string) $productText);
+        $packageText = sorImpNormalizePackageLabelText($packageText);
+        $productText = sorImpNormalizeProductLabelText($productText);
+
+        if ($packageText === '') {
+            return $lineItems;
+        }
+
+        $products = array();
+        if ($productText !== '') {
+            $parts = preg_split('/\s*[,;|]\s*/', $productText);
+            if (!is_array($parts) || count($parts) === 0) {
+                $parts = array($productText);
+            }
+
+            foreach ($parts as $part) {
+                $name = sorImpSanitizeExtractedName($part);
+                if ($name === '') continue;
+
+                $itemQty = $qtyFromLabel;
+                if (preg_match('/^(.*?)\s*[xX]\s*(\d{1,4})$/u', $name, $mx)) {
+                    $name = sorImpSanitizeExtractedName((string) $mx[1]);
+                    $mq = (int) $mx[2];
+                    if ($mq > 0) $itemQty = $mq;
+                }
+
+                if ($name !== '') {
+                    $products[] = array(
+                        'name' => $name,
+                        'qty' => max(1, (int) $itemQty),
+                    );
+                }
+            }
+        }
+
+        // If product text not parsed by separators, keep as one product line.
+        if (count($products) === 0 && $productText !== '') {
+            $products[] = array(
+                'name' => sorImpSanitizeExtractedName($productText),
+                'qty' => max(1, (int) $qtyFromLabel),
+            );
+        }
+
+        // If product label is missing, infer likely product token from package text.
+        if (count($products) === 0 && $packageText !== '') {
+            if (preg_match_all('/\b[A-Za-z][A-Za-z0-9_-]{2,}\b/u', $packageText, $mm) && isset($mm[0]) && count($mm[0]) > 0) {
+                $candidate = '';
+                foreach ($mm[0] as $tokenRaw) {
+                    $token = trim((string) $tokenRaw);
+                    if ($token === '') continue;
+                    // Skip SKU-like short codes such as E28.
+                    if (preg_match('/^[A-Z]\d{1,4}$/', $token)) continue;
+                    if (preg_match('/^\d+[A-Z]\d*$/', $token)) continue;
+                    if (preg_match('/^[A-Z0-9]{1,5}$/', $token)) continue;
+
+                    // Prefer brand-like token e.g. RoseLady (mixed case letters).
+                    if (preg_match('/[A-Z]/', $token) && preg_match('/[a-z]/', $token)) {
+                        $candidate = $token;
+                        break;
+                    }
+
+                    if ($candidate === '') {
+                        $candidate = $token;
+                    }
+                }
+                if ($candidate !== '') {
+                    $products[] = array(
+                        'name' => sorImpSanitizeExtractedName($candidate),
+                        'qty' => max(1, (int) $qtyFromLabel),
+                    );
+                }
+            }
+        }
+
+        $lineItems[] = array(
+            'index' => 1,
+            'package_text' => $packageText,
+            'products' => $products,
+            'row_qty' => max(1, (int) $qtyFromLabel),
+            'line_total_price' => (float) $lineTotal,
+            'has_section_marker' => false,
+        );
+
+        return $lineItems;
     }
 }
 
@@ -861,7 +1184,7 @@ if (!function_exists('sorImpParsePdfToRows')) {
 
                 // Format 1: Name RM<price> [tax%] <qty> RM<total>
                 if (preg_match(
-                    '/^(.+?)\s+RM\s*[\d,]+\.?\d*(?:\s+\d+(?:\.\d+)?%\s+|\s+)(\d{1,4})\s+RM\s*[\d,]+\.?\d*\s*$/i',
+                    '/^(.+?)\s+(?:RM|MYR|MVR|SGD|USD)\s*[\d,]+\.?\d*(?:\s+\d+(?:\.\d+)?%\s+|\s+)(\d{1,4})\s+(?:RM|MYR|MVR|SGD|USD)\s*[\d,]+\.?\d*\s*$/i',
                     $cleanLine, $m
                 )) {
                     $prodName = trim((string) $m[1]);
@@ -869,7 +1192,7 @@ if (!function_exists('sorImpParsePdfToRows')) {
                 }
                 // Format 2: Name <qty> RM<total>
                 elseif (preg_match(
-                    '/^(.+?)\s+(\d{1,4})\s+RM\s*[\d,]+\.?\d*\s*$/i',
+                    '/^(.+?)\s+(\d{1,4})\s+(?:RM|MYR|MVR|SGD|USD)\s*[\d,]+\.?\d*\s*$/i',
                     $cleanLine, $m
                 )) {
                     $prodName = trim((string) $m[1]);
@@ -902,6 +1225,34 @@ if (!function_exists('sorImpParsePdfToRows')) {
             $lineItems[] = $currentItem;
         }
 
+        // If parser produced only empty/low-quality package rows, force label-based fallback.
+        $hasUsableLineItem = false;
+        foreach ($lineItems as $li) {
+            $pkgTxt = isset($li['package_text']) ? trim((string) $li['package_text']) : '';
+            $prodArr = isset($li['products']) && is_array($li['products']) ? $li['products'] : array();
+            if ($pkgTxt !== '' || count($prodArr) > 0) {
+                $hasUsableLineItem = true;
+                break;
+            }
+        }
+
+        // Fallback for label-based image invoices (Package Name / Products Name)
+        // Keep current extraction logic untouched and only use this when no line items were parsed.
+        if (count($lineItems) === 0 || !$hasUsableLineItem) {
+            $fallbackItems = sorImpParseLabelBasedInvoiceItems($text);
+            if (count($fallbackItems) > 0) {
+                $lineItems = $fallbackItems;
+            }
+        }
+
+        // If PDF contains explicit labels, trust label-based extraction to avoid noisy row parsing.
+        if (preg_match('/package\s*name/iu', (string) $text) || preg_match('/products?\s*name/iu', (string) $text)) {
+            $labelItems = sorImpParseLabelBasedInvoiceItems($text);
+            if (count($labelItems) > 0) {
+                $lineItems = $labelItems;
+            }
+        }
+
         // Keep each numbered package line independent, even if package names repeat.
         $lineItems = array_values($lineItems);
 
@@ -910,10 +1261,51 @@ if (!function_exists('sorImpParsePdfToRows')) {
 
         foreach ($lineItems as $itemIdx => $item) {
             $packageText = $item['package_text'];
+
+            // NEW: If no product lines were explicitly found, attempt to infer 
+            // the product directly from the package text (e.g. "RoseLady" from "2026 38女神节 RoseLady 买2送1")
+            if (count($item['products']) === 0) {
+                $foundProductName = '';
+                $pkgTextClean = strtolower(preg_replace('/\s+/', '', $packageText));
+                foreach ($productNameMap as $pid => $pname) {
+                    if ($pname !== '') {
+                        $pnameClean = strtolower(preg_replace('/\s+/', '', $pname));
+                        if ($pnameClean !== '' && strpos($pkgTextClean, $pnameClean) !== false) {
+                            // Always favor the longest matched product name
+                            if (strlen($pname) > strlen($foundProductName)) {
+                                $foundProductName = $pname;
+                            }
+                        }
+                    }
+                }
+                if ($foundProductName !== '') {
+                    $item['products'][] = array(
+                        'name' => $foundProductName,
+                        'qty' => max(1, (int) $item['row_qty'])
+                    );
+                }
+            }
+
             $itemGroupKey = 'pkg_line_' . (int) ($itemIdx + 1);
 
             // Try to match package in DB
             $pkgHit = sorImpResolvePackageFromText($packageText, $packages, $pkgNameMap, $pkgDescMap);
+
+            // If package text couldn't match, infer package from extracted product.
+            if (!$pkgHit && isset($item['products']) && is_array($item['products']) && count($item['products']) > 0) {
+                foreach ($item['products'] as $tmpProd) {
+                    $tmpPid = sorImpResolveProductFromText(isset($tmpProd['name']) ? $tmpProd['name'] : '', $productKeyToId);
+                    if ($tmpPid > 0) {
+                        $pkgByProduct = sorImpResolvePackageByProductId($tmpPid, $packages);
+                        if ($pkgByProduct) {
+                            $pkgHit = $pkgByProduct;
+                            $packageText = isset($pkgByProduct['name']) ? (string) $pkgByProduct['name'] : $packageText;
+                            break;
+                        }
+                    }
+                }
+            }
+
             $pkgId = $pkgHit ? (int) $pkgHit['id'] : 0;
             $pkgBrandId = ($pkgHit && isset($pkgHit['brand_id'])) ? (int) $pkgHit['brand_id'] : 0;
             $pkgItemDesc = ($pkgHit && isset($pkgHit['item_description'])) ? (string) $pkgHit['item_description'] : '';
@@ -921,41 +1313,16 @@ if (!function_exists('sorImpParsePdfToRows')) {
 
             $lineTotalPrice = isset($item['line_total_price']) ? (float) $item['line_total_price'] : 0.00;
             $rowQty = isset($item['row_qty']) ? (int) $item['row_qty'] : 1;
-            $hasSectionMarker = !empty($item['has_section_marker']);
-            $isStandalone = (count($item['products']) === 0 && !$hasSectionMarker);
-
-            if ($isStandalone) {
-                $standaloneName = sorImpSanitizeExtractedName($packageText);
-                $standaloneProductId = sorImpResolveProductFromText($standaloneName, $productKeyToId);
-                $standaloneBrandId = ($standaloneProductId > 0 && isset($productBrandMap[$standaloneProductId])) ? (int) $productBrandMap[$standaloneProductId] : 0;
-                $standaloneCompanyId = ($standaloneBrandId > 0 && isset($brandCompanyMap[$standaloneBrandId])) ? (int) $brandCompanyMap[$standaloneBrandId] : 0;
-
-                $rows[] = array(
-                    'source_file' => (string) $pdfFile['name'],
-                    'invoice_no' => $invoiceNo,
-                    'invoice_date' => $invoiceDate,
-                    'total_price' => $totalPrice,
-                    'warehouse_id' => '',
-                    'product_id' => $standaloneProductId,
-                    'product_name' => $standaloneName,
-                    'pdf_product_name' => $standaloneName,
-                    'package_id' => 0,
-                    'package_name' => '',
-                    'pdf_package_name' => '',
-                    'package_group_key' => $itemGroupKey,
-                    'line_type' => 'standalone_product',
-                    'line_total_price' => $lineTotalPrice,
-                    'package_qty' => max(1, $rowQty),
-                    'item_description' => $standaloneName,
-                    'qty' => max(1, $rowQty),
-                    'brand_id' => $standaloneBrandId,
-                    'company_id' => $standaloneCompanyId,
-                    'warning' => '',
-                );
-            } else if (count($item['products']) > 0) {
+            if (count($item['products']) > 0) {
                 // This package has product sub-items in the PDF
                 foreach ($item['products'] as $prod) {
                     $productId = sorImpResolveProductFromText($prod['name'], $productKeyToId);
+                    $resolvedProductName = ($productId > 0 && isset($productNameMap[$productId]))
+                        ? (string) $productNameMap[$productId]
+                        : sorImpNormalizeProductLabelText((string) $prod['name']);
+
+                    // Normalize package text with resolved product and trim trailing SKU-like OCR code.
+                    $packageText = sorImpNormalizePackageLabelText((string) $packageText, $resolvedProductName);
 
                     $rows[] = array(
                         'source_file' => (string) $pdfFile['name'],
@@ -964,8 +1331,8 @@ if (!function_exists('sorImpParsePdfToRows')) {
                         'total_price' => $totalPrice,
                         'warehouse_id' => '',
                         'product_id' => $productId,
-                        'product_name' => $prod['name'],
-                        'pdf_product_name' => $prod['name'],
+                        'product_name' => $resolvedProductName,
+                        'pdf_product_name' => $resolvedProductName,
                         'package_id' => $pkgId,
                         'package_name' => $packageText,
                         'pdf_package_name' => $packageText,
@@ -1079,7 +1446,7 @@ if (!function_exists('sorImpParsePdfToRows')) {
                 'package_name' => '',
                 'pdf_package_name' => '',
                 'package_group_key' => 'pkg_line_1',
-                'line_type' => 'standalone_product',
+                'line_type' => 'package',
                 'line_total_price' => 0.00,
                 'package_qty' => 1,
                 'item_description' => '',
@@ -1098,11 +1465,91 @@ if (!function_exists('sorImpParsePdfToRows')) {
 //  ACTION HANDLERS
 // ============================================================
 
+if (!function_exists('sorImpSaveUploadedImportFile')) {
+    function sorImpSaveUploadedImportFile($upload, $pageName)
+    {
+        if (!isset($upload['tmp_name']) || !isset($upload['name'])) {
+            return '';
+        }
+        $tmpName = (string) $upload['tmp_name'];
+        $originalName = trim((string) $upload['name']);
+        if ($tmpName === '' || $originalName === '' || !is_file($tmpName)) {
+            return '';
+        }
+
+        $ext = strtolower((string) pathinfo($originalName, PATHINFO_EXTENSION));
+        $baseName = (string) pathinfo($originalName, PATHINFO_FILENAME);
+        $safeBase = preg_replace('/[^a-zA-Z0-9_-]/', '_', $baseName);
+        if ($safeBase === '') {
+            $safeBase = 'import_file';
+        }
+        $safePage = preg_replace('/[^a-zA-Z0-9_-]/', '_', (string) $pageName);
+        if ($safePage === '') {
+            $safePage = 'import_page';
+        }
+
+        $relDir = 'temp/attachment/sqlaccount/' . date('Y') . '/' . date('m') . '/' . $safePage . '/';
+        $absDir = ROOT . img_server . $relDir;
+        if (!is_dir($absDir)) {
+            @mkdir($absDir, 0777, true);
+        }
+        if (!is_dir($absDir)) {
+            return '';
+        }
+
+        $newFile = $safeBase . '_' . date('Ymd_His') . ($ext !== '' ? '.' . $ext : '');
+        $absPath = $absDir . $newFile;
+        if (@copy($tmpName, $absPath)) {
+            return $relDir . $newFile;
+        }
+        return '';
+    }
+}
+
 $action = post('actionBtn');
 $importErrors = array();
 $importWarnings = array();
 $importPackageFieldErrors = array();
 $importProductFieldErrors = array();
+
+if ($action === 'checkDuplicateInvoiceImport') {
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
+    }
+
+    $postedInvoiceJson = isset($_POST['invoice_nos']) ? (string) $_POST['invoice_nos'] : '';
+    $postedInvoices = @json_decode($postedInvoiceJson, true);
+    if (!is_array($postedInvoices)) {
+        $postedInvoices = array();
+    }
+
+    $normalizedToOriginal = array();
+    foreach ($postedInvoices as $invRaw) {
+        $inv = trim((string) $invRaw);
+        if ($inv === '') continue;
+        $norm = strtolower(preg_replace('/\s+/', '', $inv));
+        if ($norm === '') continue;
+        if (!isset($normalizedToOriginal[$norm])) {
+            $normalizedToOriginal[$norm] = $inv;
+        }
+    }
+
+    $duplicateNorm = array();
+    foreach ($normalizedToOriginal as $norm => $originalInvoice) {
+        $safeInvoice = mysqli_real_escape_string($finance_connect, $originalInvoice);
+        $dupSql = "SELECT id FROM " . STOCK_ORDER_REQ . " WHERE status='A' AND LOWER(REPLACE(TRIM(invoice_no), ' ', '')) = LOWER('" . $safeInvoice . "') LIMIT 1";
+        $dupRst = mysqli_query($finance_connect, $dupSql);
+        if ($dupRst && mysqli_num_rows($dupRst) > 0) {
+            $duplicateNorm[] = $norm;
+        }
+    }
+
+    echo json_encode(array(
+        'ok' => true,
+        'duplicates' => array_values(array_unique($duplicateNorm)),
+    ));
+    exit;
+}
 
 // Always start clean on normal page loads to avoid stale edited preview values.
 if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
@@ -1136,6 +1583,7 @@ if ($action === 'parseStockOrderPdf') {
     if (!isset($_FILES['import_file']) || $_FILES['import_file']['error'] !== UPLOAD_ERR_OK) {
         $importErrors[] = 'Please choose a PDF or ZIP file.';
     } else {
+        sorImpSaveUploadedImportFile($_FILES['import_file'], basename(__FILE__, '.php'));
         $sourceFiles = sorImpCollectPdfFiles($_FILES['import_file'], $importErrors, $importWarnings);
         $previewRows = array();
 
@@ -1178,6 +1626,7 @@ if ($action === 'parseStockOrderPdf') {
 
 if ($action === 'insertStockOrderPdf') {
     $postedRows = isset($_POST['rows']) && is_array($_POST['rows']) ? $_POST['rows'] : array();
+    list($pkgNameMap, $pkgDescMap) = sorImpBuildPackageIndexes($packages);
 
     if (count($postedRows) === 0) {
         $importErrors[] = 'No preview rows to insert.';
@@ -1186,8 +1635,6 @@ if ($action === 'insertStockOrderPdf') {
 
         foreach ($postedRows as $idx => $r) {
             $rowNo = $idx + 1;
-            $lineType = isset($r['line_type']) ? trim((string) $r['line_type']) : 'package';
-            $isStandalone = ($lineType === 'standalone_product');
             $warehouseId = isset($r['warehouse_id']) ? (int) $r['warehouse_id'] : 0;
             $courierIdRaw = isset($r['courier_id']) ? trim((string) $r['courier_id']) : '';
             $courierId = $courierIdRaw;
@@ -1215,10 +1662,6 @@ if ($action === 'insertStockOrderPdf') {
             $rowBrandId = isset($r['brand_id']) ? (int) $r['brand_id'] : 0;
             $rowCompanyId = isset($r['company_id']) ? (int) $r['company_id'] : 0;
 
-            if ($isStandalone && $packageQty <= 0) {
-                $packageQty = 1;
-            }
-
             if ($productId <= 0 && $productName !== '') {
                 $key = sorImpLookup($productName);
                 if (isset($productNameToId[$key])) {
@@ -1226,10 +1669,15 @@ if ($action === 'insertStockOrderPdf') {
                 }
             }
 
-            if (!$isStandalone && $packageId <= 0 && $packageName !== '') {
+            if ($packageId <= 0 && $packageName !== '') {
                 $pkgKey = sorImpLookup($packageName);
                 if (isset($packageNameToId[$pkgKey])) {
                     $packageId = (int) $packageNameToId[$pkgKey];
+                } else {
+                    $pkgHitOnInsert = sorImpResolvePackageFromText($packageName, $packages, $pkgNameMap, $pkgDescMap);
+                    if ($pkgHitOnInsert && isset($pkgHitOnInsert['id'])) {
+                        $packageId = (int) $pkgHitOnInsert['id'];
+                    }
                 }
             }
 
@@ -1241,27 +1689,37 @@ if ($action === 'insertStockOrderPdf') {
             }
             if ($invoiceNo === '') $importErrors[] = 'Row #' . $rowNo . ': Invoice is required.';
             if ($invoiceDate === '') $importErrors[] = 'Row #' . $rowNo . ': Invoice Date is required.';
-            if (!$isStandalone) {
-                if ($packageName === '' && $packageId <= 0) {
-                    $importErrors[] = 'Row #' . $rowNo . ': Package is required.';
-                    $importPackageFieldErrors[$idx] = 'Package is required.';
-                } else if ($packageId <= 0 || !isset($packageMap[$packageId])) {
-                    $importErrors[] = 'Row #' . $rowNo . ': Valid package is required.';
-                    $importPackageFieldErrors[$idx] = 'Package name not found. Please enter a valid package name from DB.';
-                }
+            if ($packageName === '' && $packageId <= 0) {
+                $importErrors[] = 'Row #' . $rowNo . ': Package is required.';
+                $importPackageFieldErrors[$idx] = 'Package is required.';
+            } else if ($packageId <= 0 || !isset($packageMap[$packageId])) {
+                $importErrors[] = 'Row #' . $rowNo . ': Valid package is required.';
+                $importPackageFieldErrors[$idx] = 'Package name not found. Please enter a valid package name from DB.';
+            }
+            $hasValidPackage = ($packageId > 0 && isset($packageMap[$packageId]));
+            $packageHasLinkedProducts = false;
+            if ($hasValidPackage) {
+                $pkgProducts = isset($packageMap[$packageId]['product_ids']) && is_array($packageMap[$packageId]['product_ids'])
+                    ? $packageMap[$packageId]['product_ids']
+                    : array();
+                $packageHasLinkedProducts = count($pkgProducts) > 0;
             }
 
-            if ($productName === '' && $productId <= 0) {
-                $importErrors[] = 'Row #' . $rowNo . ': Product is required.';
-                $importProductFieldErrors[$idx] = 'Product is required.';
-            } else if ($productId <= 0) {
-                $importErrors[] = 'Row #' . $rowNo . ': Valid product is required.';
-                $importProductFieldErrors[$idx] = 'Product name not found. Please enter a valid product name from DB.';
+            if ($hasValidPackage) {
+                if ($packageHasLinkedProducts) {
+                    if ($productName === '' && $productId <= 0) {
+                        $importErrors[] = 'Row #' . $rowNo . ': Product is required.';
+                        $importProductFieldErrors[$idx] = 'Product is required.';
+                    } else if ($productId <= 0) {
+                        $importErrors[] = 'Row #' . $rowNo . ': Valid product is required.';
+                        $importProductFieldErrors[$idx] = 'Product name not found. Please enter a valid product name from DB.';
+                    }
+                }
             }
             if ($packageQty <= 0) $importErrors[] = 'Row #' . $rowNo . ': Package quantity must be more than 0.';
             if ($productQty <= 0) $importErrors[] = 'Row #' . $rowNo . ': Product quantity must be more than 0.';
 
-            if (!$isStandalone && $packageId > 0 && isset($packageMap[$packageId])) {
+            if ($packageId > 0 && isset($packageMap[$packageId])) {
                 $pkg = $packageMap[$packageId];
                 $productIds = isset($pkg['product_ids']) ? $pkg['product_ids'] : array();
                 if (is_array($productIds) && count($productIds) > 0 && $productId > 0 && !in_array($productId, $productIds, true)) {
@@ -1270,7 +1728,7 @@ if ($action === 'insertStockOrderPdf') {
                 }
             }
 
-            if (!$isStandalone && $packageId > 0 && isset($packageMap[$packageId])) {
+            if ($packageId > 0 && isset($packageMap[$packageId])) {
                 $pkg = $packageMap[$packageId];
                 $pkgBrandId = isset($pkg['brand_id']) ? (int) $pkg['brand_id'] : 0;
                 if ($pkgBrandId > 0) {
@@ -1288,7 +1746,7 @@ if ($action === 'insertStockOrderPdf') {
             }
 
             if ($rowCompanyId <= 0) {
-                $importWarnings[] = 'Row #' . $rowNo . ': Company could not be resolved from brand — it will be left blank. Please set the brand on the package or product.';
+                // Keep company blank silently; do not surface row-level warning banner.
             }
 
             $invoiceKey = strtolower(preg_replace('/\s+/', '', $invoiceNo));
@@ -1329,7 +1787,7 @@ if ($action === 'insertStockOrderPdf') {
                 $grouped[$groupKey]['brand_ids'][$brandId] = true;
             }
 
-            if (!$isStandalone && $packageId > 0 && isset($packageMap[$packageId])) {
+            if ($packageId > 0 && isset($packageMap[$packageId])) {
                 $pkg = $packageMap[$packageId];
                 $resolvedDesc = $itemDescription !== '' ? $itemDescription : (isset($pkg['item_description']) && trim((string) $pkg['item_description']) !== '' ? (string) $pkg['item_description'] : $productName);
                 if ($packagePrice <= 0) {
@@ -1348,28 +1806,6 @@ if ($action === 'insertStockOrderPdf') {
                     'package_desc' => $resolvedDesc,
                     'package_price' => $packagePrice,
                     'packageQty' => $packageQty,
-                    'productQty' => $productQty,
-                    'brand_id' => $brandId,
-                    'company_id' => $rowCompanyId,
-                );
-            } else {
-                $resolvedDesc = $itemDescription !== '' ? $itemDescription : $productName;
-                if ($packagePrice <= 0 && isset($r['line_total_price'])) {
-                    $packagePrice = (float) $r['line_total_price'];
-                }
-                $standaloneGroupKey = 'st_' . $idx;
-                $priceKey = 'st_' . $idx;
-                if (!isset($grouped[$groupKey]['counted_price_keys'][$priceKey])) {
-                    $grouped[$groupKey]['computed_total_price'] += (float) $packagePrice;
-                    $grouped[$groupKey]['counted_price_keys'][$priceKey] = true;
-                }
-                $grouped[$groupKey]['items'][] = array(
-                    'product_id' => $productId,
-                    'package_id' => 0,
-                    'package_group_key' => $standaloneGroupKey,
-                    'package_desc' => $resolvedDesc,
-                    'package_price' => $packagePrice,
-                    'packageQty' => 1,
                     'productQty' => $productQty,
                     'brand_id' => $brandId,
                     'company_id' => $rowCompanyId,
@@ -1533,16 +1969,32 @@ $packageGroupFieldErrors = array();
 foreach ($previewRows as $idx => $rowCheck) {
     $rid = isset($rowCheck['product_id']) ? (int) $rowCheck['product_id'] : 0;
     $pid = isset($rowCheck['package_id']) ? (int) $rowCheck['package_id'] : 0;
-    $lineType = isset($rowCheck['line_type']) ? (string) $rowCheck['line_type'] : 'package';
     if ($rid <= 0) $previewHasMissingProduct = true;
-    if ($lineType !== 'standalone_product' && $pid <= 0) $previewHasMissingPackage = true;
+    if ($pid <= 0) $previewHasMissingPackage = true;
 
     if (isset($importPackageFieldErrors[$idx])) {
         $groupErrKey = isset($rowCheck['package_group']) ? trim((string) $rowCheck['package_group']) : '';
         if ($groupErrKey === '') {
+            $groupErrKey = isset($rowCheck['package_group_key']) ? trim((string) $rowCheck['package_group_key']) : '';
+        }
+        if ($groupErrKey === '') {
             $groupErrKey = 'row_' . (int) $idx;
         }
         $packageGroupFieldErrors[$groupErrKey] = (string) $importPackageFieldErrors[$idx];
+    }
+
+    // Package validation should happen immediately after extraction.
+    $groupErrKeyNow = isset($rowCheck['package_group']) ? trim((string) $rowCheck['package_group']) : '';
+    if ($groupErrKeyNow === '') {
+        $groupErrKeyNow = isset($rowCheck['package_group_key']) ? trim((string) $rowCheck['package_group_key']) : '';
+    }
+    if ($groupErrKeyNow === '') {
+        $groupErrKeyNow = 'row_' . (int) $idx;
+    }
+    if (!isset($packageGroupFieldErrors[$groupErrKeyNow])) {
+        if ($pid <= 0) {
+            $packageGroupFieldErrors[$groupErrKeyNow] = 'Package name not found. Please enter a valid package name from DB.';
+        }
     }
 
     $source = isset($rowCheck['source_file']) && trim((string) $rowCheck['source_file']) !== '' ? (string) $rowCheck['source_file'] : 'Unknown Source';
@@ -1550,6 +2002,35 @@ foreach ($previewRows as $idx => $rowCheck) {
         $rowsBySource[$source] = array();
     }
     $rowsBySource[$source][] = array('idx' => $idx, 'row' => $rowCheck);
+}
+
+$displayImportErrors = array();
+foreach ($importErrors as $error) {
+    $msg = trim((string) $error);
+    if ($msg === '') continue;
+    if (preg_match('/^Row\s*#\d+\s*:/i', $msg)) continue;
+    $displayImportErrors[] = $msg;
+}
+
+$displayImportWarnings = array();
+foreach ($importWarnings as $warning) {
+    $msg = trim((string) $warning);
+    if ($msg === '') continue;
+    if (preg_match('/^Row\s*#\d+\s*:/i', $msg)) continue;
+    $displayImportWarnings[] = $msg;
+}
+
+$existingInvoiceNosNormalized = array();
+$existingInvoiceRst = mysqli_query($finance_connect, "SELECT invoice_no FROM " . STOCK_ORDER_REQ . " WHERE status='A'");
+if ($existingInvoiceRst) {
+    while ($invRow = mysqli_fetch_assoc($existingInvoiceRst)) {
+        $invText = isset($invRow['invoice_no']) ? trim((string) $invRow['invoice_no']) : '';
+        if ($invText === '') continue;
+        $invNorm = strtolower(preg_replace('/\s+/', '', $invText));
+        if ($invNorm !== '') {
+            $existingInvoiceNosNormalized[$invNorm] = true;
+        }
+    }
 }
 ?>
 <!DOCTYPE html>
@@ -1571,7 +2052,6 @@ foreach ($previewRows as $idx => $rowCheck) {
         .sor-import .sor-invalid { border-color: #dc2626 !important; }
         .sor-import .sor-item-inline-error { min-height: 18px; line-height: 1.2; }
         .sor-import table.table td { vertical-align: top; }
-        .sor-import .preview-package-row .package-product-placeholder,
         .sor-import .preview-product-row .product-desc-placeholder,
         .sor-import .preview-product-row .product-total-placeholder { display: none; }
         .sor-import .sor-item-panel {
@@ -1618,21 +2098,7 @@ foreach ($previewRows as $idx => $rowCheck) {
                 </div>
             </div>
 
-            <?php if (!empty($importErrors)) { ?>
-                <div class="alert alert-danger" role="alert">
-                    <?php foreach ($importErrors as $error) { ?>
-                        <div><?= htmlspecialchars((string) $error, ENT_QUOTES, 'UTF-8') ?></div>
-                    <?php } ?>
-                </div>
-            <?php } ?>
 
-            <?php if (!empty($importWarnings)) { ?>
-                <div class="alert alert-warning" role="alert">
-                    <?php foreach ($importWarnings as $warning) { ?>
-                        <div><?= htmlspecialchars((string) $warning, ENT_QUOTES, 'UTF-8') ?></div>
-                    <?php } ?>
-                </div>
-            <?php } ?>
 
             <div class="card mb-4">
                 <div class="card-body">
@@ -1722,18 +2188,7 @@ foreach ($previewRows as $idx => $rowCheck) {
                                         </div>
                                     </div>
 
-                                    <?php
-                                    $packageRowSet = array();
-                                    $standaloneRowSet = array();
-                                    foreach ($rowSet as $rowMetaSplit) {
-                                        $splitType = isset($rowMetaSplit['row']['line_type']) ? (string) $rowMetaSplit['row']['line_type'] : 'package';
-                                        if ($splitType === 'standalone_product') {
-                                            $standaloneRowSet[] = $rowMetaSplit;
-                                        } else {
-                                            $packageRowSet[] = $rowMetaSplit;
-                                        }
-                                    }
-                                    ?>
+                                    <?php $packageRowSet = $rowSet; ?>
 
                                     <div class="mb-3 sor-item-panel">
                                         <label class="form-label form_lbl">Package Items*</label>
@@ -1745,7 +2200,7 @@ foreach ($previewRows as $idx => $rowCheck) {
                                                         <th>Package Name</th>
                                                         <th>Product Name</th>
                                                         <th>Item Description</th>
-                                                        <th width="120">Quantity</th>
+                                                        <th width="140">Quantity</th>
                                                         <th width="140">Total Price</th>
                                                         <th width="100">Action</th>
                                                     </tr>
@@ -1797,9 +2252,7 @@ foreach ($previewRows as $idx => $rowCheck) {
                                                                 <?php $pkgGroupErr = isset($packageGroupFieldErrors[$pkgKey]) ? (string) $packageGroupFieldErrors[$pkgKey] : ''; ?>
                                                                 <div class="err-missing sor-item-inline-error" data-item-error="package" data-group="<?= htmlspecialchars($pkgGroupKey, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($pkgGroupErr, ENT_QUOTES, 'UTF-8') ?></div>
                                                             </td>
-                                                            <td>
-                                                                <input class="form-control package-product-placeholder" type="text" value="" readonly disabled>
-                                                            </td>
+                                                            <td></td>
                                                             <td>
                                                                 <input class="form-control group-desc-field" type="text" id="desc_<?= $idx ?>" data-group="<?= htmlspecialchars($pkgGroupKey, ENT_QUOTES, 'UTF-8') ?>" value="<?= htmlspecialchars((string) $itemDescription, ENT_QUOTES, 'UTF-8') ?>" readonly>
                                                             </td>
@@ -1836,7 +2289,7 @@ foreach ($previewRows as $idx => $rowCheck) {
                                                             </td>
                                                             <td>
                                                                 <div class="autocomplete">
-                                                                    <input class="form-control sor-product-name-input sor-server-value" type="text" id="sor_imp_product_name_<?= $idx ?>" name="rows[<?= $idx ?>][product_name]" value="<?= htmlspecialchars($displayProductName, ENT_QUOTES, 'UTF-8') ?>" data-server-value="<?= htmlspecialchars($displayProductName, ENT_QUOTES, 'UTF-8') ?>" placeholder="Type Product" autocomplete="off">
+                                                                    <input class="form-control sor-product-name-input sor-server-value" type="text" id="sor_imp_product_name_<?= $idx ?>" name="rows[<?= $idx ?>][product_name]" value="<?= htmlspecialchars($displayProductName, ENT_QUOTES, 'UTF-8') ?>" data-server-value="<?= htmlspecialchars($displayProductName, ENT_QUOTES, 'UTF-8') ?>" placeholder="" autocomplete="off">
                                                                 </div>
                                                                 <div class="err-missing sor-item-inline-error" data-item-error="product"><?= htmlspecialchars((string) (isset($importProductFieldErrors[$idx]) ? $importProductFieldErrors[$idx] : ''), ENT_QUOTES, 'UTF-8') ?></div>
                                                             </td>
@@ -1863,70 +2316,6 @@ foreach ($previewRows as $idx => $rowCheck) {
                                             </table>
                                         </div>
 
-                                        <label class="form-label form_lbl mt-2">Products*</label>
-                                        <div class="table-responsive">
-                                            <table class="table table-bordered">
-                                                <thead>
-                                                    <tr>
-                                                        <th width="50">#</th>
-                                                        <th>Product Name</th>
-                                                        <th width="120">Quantity</th>
-                                                        <th width="140">Total Price</th>
-                                                        <th width="100">Action</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    <?php
-                                                    $standaloneNo = 0;
-                                                    $standaloneGroupKey = 'receipt_' . $receiptKey . '_standalone';
-                                                    foreach ($standaloneRowSet as $stMeta) {
-                                                        $idx = (int) $stMeta['idx'];
-                                                        $row = $stMeta['row'];
-                                                        $standaloneNo++;
-                                                        $prodId = (int) (isset($row['product_id']) ? $row['product_id'] : 0);
-                                                        $displayProductName = isset($row['product_name']) ? (string) $row['product_name'] : '';
-                                                        $rowProductQty = (int) (isset($row['product_qty']) ? $row['product_qty'] : (isset($row['qty']) ? $row['qty'] : 1));
-                                                        if ($rowProductQty <= 0) $rowProductQty = 1;
-                                                        $lineTotalPrice = isset($row['line_total_price']) ? (float) $row['line_total_price'] : 0;
-                                                    ?>
-                                                        <tr class="preview-row preview-product-row" data-receipt="<?= $receiptKey ?>" data-package-group="<?= htmlspecialchars($standaloneGroupKey, ENT_QUOTES, 'UTF-8') ?>">
-                                                            <td class="row-no"><?= (int) $standaloneNo ?></td>
-                                                            <td>
-                                                                <input type="hidden" name="rows[<?= $idx ?>][source_file]" value="<?= htmlspecialchars((string) (isset($row['source_file']) ? $row['source_file'] : ''), ENT_QUOTES, 'UTF-8') ?>">
-                                                                <input type="hidden" class="receipt-hidden-invoice_no-<?= $receiptKey ?>" name="rows[<?= $idx ?>][invoice_no]" value="<?= htmlspecialchars($invoiceVal, ENT_QUOTES, 'UTF-8') ?>">
-                                                                <input type="hidden" class="receipt-hidden-invoice_date-<?= $receiptKey ?>" name="rows[<?= $idx ?>][invoice_date]" value="<?= htmlspecialchars($invoiceDateVal, ENT_QUOTES, 'UTF-8') ?>">
-                                                                <input type="hidden" class="receipt-hidden-warehouse_id-<?= $receiptKey ?>" name="rows[<?= $idx ?>][warehouse_id]" value="<?= (int) $warehouseVal ?>">
-                                                                <input type="hidden" class="receipt-hidden-courier_id-<?= $receiptKey ?>" name="rows[<?= $idx ?>][courier_id]" value="<?= htmlspecialchars((string) $courierVal, ENT_QUOTES, 'UTF-8') ?>">
-                                                                <input type="hidden" class="receipt-hidden-courier_name-<?= $receiptKey ?>" name="rows[<?= $idx ?>][courier_name]" value="">
-                                                                <input type="hidden" class="receipt-hidden-total_price-<?= $receiptKey ?>" name="rows[<?= $idx ?>][total_price]" value="<?= htmlspecialchars($totalVal, ENT_QUOTES, 'UTF-8') ?>">
-                                                                <input type="hidden" name="rows[<?= $idx ?>][product_id]" value="<?= (int) $prodId ?>">
-                                                                <input type="hidden" name="rows[<?= $idx ?>][line_type]" value="standalone_product">
-                                                                <input type="hidden" class="pkg-hidden-id" data-group="<?= htmlspecialchars($standaloneGroupKey, ENT_QUOTES, 'UTF-8') ?>" name="rows[<?= $idx ?>][package_id]" value="0">
-                                                                <input type="hidden" class="pkg-hidden-name" data-group="<?= htmlspecialchars($standaloneGroupKey, ENT_QUOTES, 'UTF-8') ?>" name="rows[<?= $idx ?>][package_name]" value="">
-                                                                <input type="hidden" name="rows[<?= $idx ?>][package_group]" value="<?= htmlspecialchars($standaloneGroupKey, ENT_QUOTES, 'UTF-8') ?>">
-                                                                <input type="hidden" name="rows[<?= $idx ?>][package_price]" value="<?= htmlspecialchars(number_format((float) $lineTotalPrice, 2, '.', ''), ENT_QUOTES, 'UTF-8') ?>">
-
-                                                                <div class="autocomplete">
-                                                                    <input class="form-control sor-product-name-input sor-server-value" type="text" id="sor_imp_product_name_<?= $idx ?>" name="rows[<?= $idx ?>][product_name]" value="<?= htmlspecialchars($displayProductName, ENT_QUOTES, 'UTF-8') ?>" data-server-value="<?= htmlspecialchars($displayProductName, ENT_QUOTES, 'UTF-8') ?>" placeholder="Type Product" autocomplete="off">
-                                                                </div>
-                                                                <div class="err-missing sor-item-inline-error" data-item-error="product"><?= htmlspecialchars((string) (isset($importProductFieldErrors[$idx]) ? $importProductFieldErrors[$idx] : ''), ENT_QUOTES, 'UTF-8') ?></div>
-                                                            </td>
-                                                            <td>
-                                                                <input type="hidden" class="group-package-qty" data-group="<?= htmlspecialchars($standaloneGroupKey, ENT_QUOTES, 'UTF-8') ?>" name="rows[<?= $idx ?>][package_qty]" value="1">
-                                                                <input type="hidden" class="group-product-base-qty" data-group="<?= htmlspecialchars($standaloneGroupKey, ENT_QUOTES, 'UTF-8') ?>" name="rows[<?= $idx ?>][product_base_qty]" value="<?= (int) $rowProductQty ?>">
-                                                                <input class="form-control sor-server-value" type="number" min="1" name="rows[<?= $idx ?>][product_qty]" value="<?= (int) $rowProductQty ?>" data-server-value="<?= (int) $rowProductQty ?>">
-                                                            </td>
-                                                            <td>
-                                                                <input class="form-control" type="text" value="<?= $lineTotalPrice > 0 ? htmlspecialchars(number_format($lineTotalPrice, 2, '.', ''), ENT_QUOTES, 'UTF-8') : '' ?>" readonly disabled style="background:#f3f4f6;">
-                                                            </td>
-                                                            <td>
-                                                                <button type="button" class="mt-1 action_menu_btn remove-preview-row" id="action_menu_btn" data-remove-scope="product"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>
-                                                            </td>
-                                                        </tr>
-                                                    <?php } ?>
-                                                </tbody>
-                                            </table>
-                                        </div>
                                     </div>
 
                                 </div>
@@ -1955,7 +2344,8 @@ foreach ($previewRows as $idx => $rowCheck) {
          brandNameMap: <?= json_encode($brandNameMap ?? new stdClass()) ?>,
          companyNameMap: <?= json_encode($companyNameMap ?? new stdClass()) ?>,
          products: <?= json_encode(array_map(function ($id, $name) { return array('id' => (int) $id, 'name' => (string) $name); }, array_keys($products), array_values($products))) ?>,
-         packages: <?= json_encode(array_values($packages)) ?>
+         packages: <?= json_encode(array_values($packages)) ?>,
+         existingInvoiceNosNormalized: <?= json_encode(array_keys($existingInvoiceNosNormalized)) ?>
      };
      
     <?php include "../js/stock_order_request_import.js"; ?>

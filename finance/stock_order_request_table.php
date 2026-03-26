@@ -384,9 +384,9 @@ function sorQrHref($path, $siteUrl)
                                     $isStockedInOrder = ($resolvedOrderNumber !== '' && isset($stockedInOrderMap[$resolvedOrderNumber]));
                                     ?>
                                     <?php if (!empty($row['qr_image']) && !$isStockedInOrder) { ?>
-                                        <button type="button" class="btn btn-sm btn-rounded btn-primary sor-qr-btn" data-id="<?= (int) $row['id'] ?>" data-href="<?= htmlspecialchars(sorQrHref($row['qr_image'], $SITEURL), ENT_QUOTES, 'UTF-8') ?>" title="Download QR">
+                                        <a class="btn btn-sm btn-rounded btn-primary" href="<?= $SITEURL . '/finance/stock_order_request_info.php?id=' . (int) $row['id'] ?>" title="Open QR Info">
                                             <i class="fa-solid fa-qrcode"></i>
-                                        </button>
+                                        </a>
                                     <?php } ?>
                                     <button type="button" class="btn btn-sm btn-rounded btn-primary sor-refresh-btn" data-id="<?= (int) $row['id'] ?>" title="Refresh Tracking">
                                         <i class="fa-solid fa-rotate"></i>
@@ -516,34 +516,6 @@ function sorQrHref($path, $siteUrl)
                 td.appendChild(btn);
             }
         }
-
-        document.querySelectorAll('.sor-qr-btn').forEach(function(btn) {
-            btn.addEventListener('click', function() {
-                var href = btn.getAttribute('data-href') || '';
-                var id = btn.getAttribute('data-id') || 'order';
-                if (!href) {
-                    sorNotify('QR image not found.', 'QR Download');
-                    return;
-                }
-
-                fetch(href)
-                    .then(function(resp) { return resp.blob(); })
-                    .then(function(blob) {
-                        var blobUrl = URL.createObjectURL(blob);
-                        var link = document.createElement('a');
-                        link.href = blobUrl;
-                        link.download = 'stock_order_qr_' + id + '.png';
-                        document.body.appendChild(link);
-                        link.click();
-                        link.remove();
-                        URL.revokeObjectURL(blobUrl);
-                        sorNotify('QR download success.', 'QR Download');
-                    })
-                    .catch(function() {
-                        sorNotify('Failed to download QR image.', 'QR Download');
-                    });
-            });
-        });
 
         document.querySelectorAll('.sor-refresh-btn').forEach(function(btn) {
             btn.addEventListener('click', function() {

@@ -1,0 +1,349 @@
+<?php
+$pageTitle = "User Profile";
+
+include_once 'include/connection.php';
+include_once 'include/common.php';
+include_once 'include/common_variable.php';
+include 'checkCurrentPagePin.php';
+
+$tblName = USR_USER;
+$redirectPage = $SITEURL . '/dashboard.php';
+
+$pinAccess = checkCurrentPin($connect, $pageTitle);
+if (!is_array($pinAccess) || count($pinAccess) === 0 || !isActionAllowed('View', $pinAccess)) {
+    echo '<script>alert("No permission.");location.href = "' . $redirectPage . '";</script>';
+    exit;
+}
+
+$userId = (int) USER_ID;
+if ($userId <= 0) {
+    echo '<script>location.href = "' . $SITEURL . '/logout.php";</script>';
+    exit;
+}
+
+function upfEscape($connect, $value)
+{
+    return mysqli_real_escape_string($connect, (string) $value);
+}
+
+function upfIsDuplicateField($connect, $table, $field, $value, $excludeId)
+{
+    $safeField = preg_replace('/[^a-zA-Z0-9_]/', '', (string) $field);
+    if ($safeField === '') return false;
+
+    $safeValue = upfEscape($connect, $value);
+    $safeId = (int) $excludeId;
+
+    // Force same collation on both sides to avoid illegal mix of collations.
+    $sql = "SELECT id FROM " . $table . " WHERE id <> '" . $safeId . "' AND CONVERT(`" . $safeField . "` USING utf8mb4) COLLATE utf8mb4_unicode_ci = CONVERT('" . $safeValue . "' USING utf8mb4) COLLATE utf8mb4_unicode_ci LIMIT 1";
+    $rst = mysqli_query($connect, $sql);
+    return ($rst && mysqli_num_rows($rst) > 0);
+}
+
+$profileResultAction = '';
+
+$userRst = getData('*', "id='" . $userId . "'", 'LIMIT 1', $tblName, $connect);
+if (!$userRst || $userRst->num_rows === 0) {
+    echo '<script>alert("User not found.");location.href = "' . $SITEURL . '/logout.php";</script>';
+    exit;
+}
+$userRow = $userRst->fetch_assoc();
+
+if (post('actionBtn') === 'checkDuplicateProfile') {
+    if (!headers_sent()) header('Content-Type: application/json; charset=utf-8');
+
+    $name = postSpaceFilter('currentDataName');
+    $username = postSpaceFilter('dataUsername');
+    $email = postSpaceFilter('currentUserEmail');
+
+    $errors = array(
+        'currentDataName' => '',
+        'dataUsername' => '',
+        'currentUserEmail' => '',
+    );
+
+    if ($name !== '' && upfIsDuplicateField($connect, $tblName, 'name', $name, $userId)) {
+        $errors['currentDataName'] = 'Duplicate record found for user name.';
+    }
+    if ($username !== '' && upfIsDuplicateField($connect, $tblName, 'username', $username, $userId)) {
+        $errors['dataUsername'] = 'Duplicate record found for username.';
+    }
+    if ($email !== '' && upfIsDuplicateField($connect, $tblName, 'email', $email, $userId)) {
+        $errors['currentUserEmail'] = 'Duplicate record found for user email.';
+    }
+
+    echo json_encode(array(
+        'ok' => true,
+        'errors' => $errors,
+    ));
+    exit;
+}
+
+if (post('actionBtn')) {
+    $action = post('actionBtn');
+
+    if ($action === 'back') {
+        echo '<script>location.href = "' . $redirectPage . '";</script>';
+        exit;
+    }
+
+    if ($action === 'saveProfile') {
+        if (!isActionAllowed('Edit', $pinAccess)) {
+            $profileResultAction = 'F';
+        } else {
+            $name = postSpaceFilter('currentDataName');
+            $username = postSpaceFilter('dataUsername');
+            $email = postSpaceFilter('currentUserEmail');
+
+            if ($name === '') {
+                $profileResultAction = 'F';
+            } else if ($username === '') {
+                $profileResultAction = 'F';
+            } else if ($email === '') {
+                $profileResultAction = 'F';
+            } else if (
+                upfIsDuplicateField($connect, $tblName, 'name', $name, $userId) ||
+                upfIsDuplicateField($connect, $tblName, 'username', $username, $userId) ||
+                upfIsDuplicateField($connect, $tblName, 'email', $email, $userId)
+            ) {
+                $profileResultAction = 'F';
+            } else {
+                $safeName = mysqli_real_escape_string($connect, $name);
+                $safeUsername = mysqli_real_escape_string($connect, $username);
+                $safeEmail = mysqli_real_escape_string($connect, $email);
+
+                $oldName = isset($userRow['name']) ? trim((string) $userRow['name']) : '';
+                $oldUsername = isset($userRow['username']) ? trim((string) $userRow['username']) : '';
+                $oldEmail = isset($userRow['email']) ? trim((string) $userRow['email']) : '';
+
+                if ($oldName === $name && $oldUsername === $username && $oldEmail === $email) {
+                    $profileResultAction = 'NC';
+                    $_SESSION['tempValConfirmBox'] = true;
+                } else {
+                    $query = "UPDATE " . $tblName . " SET name='$safeName', username='$safeUsername', email='$safeEmail', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $userId . "'";
+                    $ok = mysqli_query($connect, $query);
+
+                    if ($ok) {
+                        $_SESSION['username'] = $safeUsername;
+                        $profileResultAction = 'E';
+                        $_SESSION['tempValConfirmBox'] = true;
+                    } else {
+                        $profileResultAction = 'F';
+                    }
+                }
+            }
+        }
+    }
+}
+
+$userRst = getData('*', "id='" . $userId . "'", 'LIMIT 1', $tblName, $connect);
+if (!$userRst || $userRst->num_rows === 0) {
+    echo '<script>alert("User not found.");location.href = "' . $SITEURL . '/logout.php";</script>';
+    exit;
+}
+$userRow = $userRst->fetch_assoc();
+
+$mainSupName = '-';
+$secondSupName = '-';
+
+$mainSupId = isset($userRow['main_report_supervisor']) ? (int) $userRow['main_report_supervisor'] : 0;
+$secondSupId = isset($userRow['second_report_supervisor']) ? (int) $userRow['second_report_supervisor'] : 0;
+
+if ($mainSupId > 0) {
+    $mainRst = getData('name', "id='" . $mainSupId . "'", 'LIMIT 1', $tblName, $connect);
+    if ($mainRst && $mainRst->num_rows > 0) {
+        $mainSupName = (string) $mainRst->fetch_assoc()['name'];
+    }
+}
+
+if ($secondSupId > 0) {
+    $secondRst = getData('name', "id='" . $secondSupId . "'", 'LIMIT 1', $tblName, $connect);
+    if ($secondRst && $secondRst->num_rows > 0) {
+        $secondSupName = (string) $secondRst->fetch_assoc()['name'];
+    }
+}
+
+include 'menuHeader.php';
+
+if (isset($_SESSION['tempValConfirmBox'])) {
+    unset($_SESSION['tempValConfirmBox']);
+    $redirectSelf = $SITEURL . '/user_profile.php';
+    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectSelf . '","' . $profileResultAction . '");</script>';
+}
+?>
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
+</head>
+<body>
+    <div class="pre-load-center">
+        <div class="preloader"></div>
+    </div>
+
+    <div class="page-load-cover">
+        <div class="d-flex flex-column my-3 ms-3">
+            <p><a href="<?= $redirectPage ?>">Dashboard</a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?= $pageTitle ?></p>
+        </div>
+
+        <div id="formContainer" class="container d-flex justify-content-center">
+            <div class="col-8 col-md-6 formWidthAdjust">
+                <form id="form" method="post" novalidate>
+                    <div class="form-group mb-5">
+                        <h2><?= $pageTitle ?></h2>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label class="form-label" for="currentDataName">Name</label>
+                        <input class="form-control" type="text" name="currentDataName" id="currentDataName" value="<?= htmlspecialchars((string) $userRow['name'], ENT_QUOTES, 'UTF-8') ?>" required autocomplete="off">
+                        <div id="err_msg"><span class="mt-n1" id="err_currentDataName"></span></div>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label class="form-label" for="dataUsername">Username</label>
+                        <input class="form-control" type="text" name="dataUsername" id="dataUsername" value="<?= htmlspecialchars((string) $userRow['username'], ENT_QUOTES, 'UTF-8') ?>" required autocomplete="off">
+                        <div id="err_msg"><span class="mt-n1" id="err_dataUsername"></span></div>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label class="form-label" for="currentUserEmail">Email</label>
+                        <input class="form-control" type="text" name="currentUserEmail" id="currentUserEmail" value="<?= htmlspecialchars((string) $userRow['email'], ENT_QUOTES, 'UTF-8') ?>" required autocomplete="off">
+                        <div id="err_msg"><span class="mt-n1" id="err_currentUserEmail"></span></div>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label class="form-label">Main Report Supervisor</label>
+                        <input class="form-control" type="text" value="<?= htmlspecialchars($mainSupName, ENT_QUOTES, 'UTF-8') ?>" readonly>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label class="form-label">Second Report Supervisor</label>
+                        <input class="form-control" type="text" value="<?= htmlspecialchars($secondSupName, ENT_QUOTES, 'UTF-8') ?>" readonly>
+                    </div>
+
+                    <div class="form-group mb-4">
+                        <a class="btn btn-sm btn-rounded btn-primary" href="<?= $SITEURL ?>/changePassword.php">Change Password</a>
+                    </div>
+
+                    <div class="form-group mt-4 d-flex justify-content-center flex-md-row flex-column">
+                        <button class="btn btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="actionBtn" value="saveProfile">Save Profile</button>
+                        <button class="btn btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="backBtn" value="back">Back</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        var page = "<?= $pageTitle ?>";
+        var action = "E";
+
+        checkCurrentPage(page, action);
+        centerAlignment("formContainer");
+        setButtonColor();
+        preloader(300, action);
+
+        (function () {
+            var form = document.getElementById('form');
+            var submitBtn = document.getElementById('actionBtn');
+            if (!form || !submitBtn) return;
+
+            var allowSubmit = false;
+            var fields = ['currentDataName', 'dataUsername', 'currentUserEmail'];
+
+            function setFieldError(fieldId, msg) {
+                var box = document.getElementById('err_' + fieldId);
+                var input = document.getElementById(fieldId);
+                if (box) {
+                    box.textContent = msg || '';
+                    box.style.color = msg ? '#ff0000' : '';
+                }
+                if (input) {
+                    if (msg) input.classList.add('is-invalid');
+                    else input.classList.remove('is-invalid');
+                }
+            }
+
+            function clearAllErrors() {
+                fields.forEach(function (id) {
+                    setFieldError(id, '');
+                });
+            }
+
+            form.addEventListener('submit', function (e) {
+                var active = document.activeElement;
+                if (active && active.id === 'backBtn') return;
+
+                if (allowSubmit) return;
+
+                e.preventDefault();
+                clearAllErrors();
+
+                var nameVal = (document.getElementById('currentDataName').value || '').trim();
+                var usernameVal = (document.getElementById('dataUsername').value || '').trim();
+                var emailVal = (document.getElementById('currentUserEmail').value || '').trim();
+
+                var hasError = false;
+                if (nameVal === '') {
+                    setFieldError('currentDataName', 'Name is required.');
+                    hasError = true;
+                }
+                if (usernameVal === '') {
+                    setFieldError('dataUsername', 'Username is required.');
+                    hasError = true;
+                }
+                if (emailVal === '') {
+                    setFieldError('currentUserEmail', 'Email is required.');
+                    hasError = true;
+                }
+
+                if (hasError) return;
+
+                var fd = new FormData();
+                fd.append('actionBtn', 'checkDuplicateProfile');
+                fd.append('currentDataName', nameVal);
+                fd.append('dataUsername', usernameVal);
+                fd.append('currentUserEmail', emailVal);
+
+                fetch(window.location.href, {
+                    method: 'POST',
+                    body: fd,
+                    credentials: 'same-origin'
+                }).then(function (r) {
+                    return r.json();
+                }).then(function (res) {
+                    var dup = (res && res.errors) ? res.errors : {};
+                    var dupHit = false;
+
+                    if (dup.currentDataName) {
+                        setFieldError('currentDataName', dup.currentDataName);
+                        dupHit = true;
+                    }
+                    if (dup.dataUsername) {
+                        setFieldError('dataUsername', dup.dataUsername);
+                        dupHit = true;
+                    }
+                    if (dup.currentUserEmail) {
+                        setFieldError('currentUserEmail', dup.currentUserEmail);
+                        dupHit = true;
+                    }
+
+                    if (dupHit) return;
+
+                    allowSubmit = true;
+                    
+                    var hiddenAction = document.createElement('input');
+                    hiddenAction.type = 'hidden';
+                    hiddenAction.name = 'actionBtn';
+                    hiddenAction.value = 'saveProfile';
+                    form.appendChild(hiddenAction);
+                    
+                    form.submit();
+                }).catch(function () {
+                    setFieldError('currentDataName', 'Unable to validate now. Please try again.');
+                });
+            });
+        })();
+    </script>
+</body>
+</html>

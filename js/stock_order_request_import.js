@@ -4,11 +4,174 @@ var brandNameMap = sorCfg.brandNameMap || {};
 var companyNameMap = sorCfg.companyNameMap || {};
 var productOptions = Array.isArray(sorCfg.products) ? sorCfg.products : [];
 var packageOptions = Array.isArray(sorCfg.packages) ? sorCfg.packages : [];
+var existingInvoiceNosNormalized = Array.isArray(
+  sorCfg.existingInvoiceNosNormalized,
+)
+  ? sorCfg.existingInvoiceNosNormalized
+  : [];
 
 var page = "Stock Order Request";
 var action = "";
 checkCurrentPage(page, action);
 dropdownMenuDispFix();
+
+function findPackageById(pkgId) {
+  var id = parseInt(pkgId || "0", 10);
+  if (isNaN(id) || id <= 0) return null;
+  for (var i = 0; i < packageOptions.length; i++) {
+    var optId = parseInt(packageOptions[i].id || 0, 10);
+    if (!isNaN(optId) && optId === id) return packageOptions[i];
+  }
+  return null;
+}
+
+function findPackageByName(name) {
+  var key = normalizeText(name || "");
+  if (key === "") return null;
+  for (var i = 0; i < packageOptions.length; i++) {
+    if (normalizeText(packageOptions[i].name || "") === key) {
+      return packageOptions[i];
+    }
+  }
+  return null;
+}
+
+function findProductById(productId) {
+  var id = parseInt(productId || "0", 10);
+  if (isNaN(id) || id <= 0) return null;
+  for (var i = 0; i < productOptions.length; i++) {
+    var optId = parseInt(productOptions[i].id || 0, 10);
+    if (!isNaN(optId) && optId === id) return productOptions[i];
+  }
+  return null;
+}
+
+function packageHasLinkedProducts(pkgOpt) {
+  return !!(
+    pkgOpt &&
+    Array.isArray(pkgOpt.product_ids) &&
+    pkgOpt.product_ids.length > 0
+  );
+}
+
+function recalcGroupPackagePrice(groupKey, pkgOpt) {
+  if (!groupKey) return;
+  var qtyField = document.querySelector(
+    '.group-qty-field[data-group="' + groupKey + '"]',
+  );
+  var packageQty = qtyField ? parseInt(qtyField.value || "0", 10) : 1;
+  if (isNaN(packageQty) || packageQty <= 0) packageQty = 1;
+
+  var unitPrice = pkgOpt ? parseFloat(pkgOpt.price || "0") : 0;
+  if (isNaN(unitPrice) || unitPrice < 0) unitPrice = 0;
+  var packagePrice = unitPrice * packageQty;
+
+  document
+    .querySelectorAll('.group-package-price[data-group="' + groupKey + '"]')
+    .forEach(function (el) {
+      el.value = packagePrice.toFixed(2);
+    });
+
+  var packageRow = document.querySelector(
+    'tr.preview-package-row[data-package-group="' + groupKey + '"]',
+  );
+  if (packageRow) {
+    var totalInput = packageRow.querySelector("td:nth-child(6) input");
+    if (totalInput) {
+      totalInput.value = packagePrice > 0 ? packagePrice.toFixed(2) : "";
+    }
+  }
+}
+
+function applyPackageSelection(groupKey, pkgOpt) {
+  if (!groupKey) return;
+
+  var pkgId = pkgOpt ? parseInt(pkgOpt.id || 0, 10) : 0;
+  var pkgName = pkgOpt ? String(pkgOpt.name || "") : "";
+  var desc = pkgOpt ? String(pkgOpt.item_description || "") : "";
+  var brandId = pkgOpt ? parseInt(pkgOpt.brand_id || 0, 10) : 0;
+  if (isNaN(brandId) || brandId < 0) brandId = 0;
+  var companyId =
+    brandId > 0 && brandToCompanyMap.hasOwnProperty(String(brandId))
+      ? parseInt(brandToCompanyMap[String(brandId)] || 0, 10)
+      : 0;
+  if (isNaN(companyId) || companyId < 0) companyId = 0;
+
+  document
+    .querySelectorAll('.pkg-hidden-id[data-group="' + groupKey + '"]')
+    .forEach(function (el) {
+      el.value = String(pkgId > 0 ? pkgId : 0);
+    });
+  document
+    .querySelectorAll('.pkg-hidden-name[data-group="' + groupKey + '"]')
+    .forEach(function (el) {
+      el.value = pkgName;
+    });
+  document
+    .querySelectorAll('.pkg-hidden-desc[data-group="' + groupKey + '"]')
+    .forEach(function (el) {
+      el.value = desc;
+    });
+  document
+    .querySelectorAll('.pkg-brand-hidden[data-group="' + groupKey + '"]')
+    .forEach(function (el) {
+      el.value = String(brandId > 0 ? brandId : 0);
+    });
+  document
+    .querySelectorAll('.pkg-company-hidden[data-group="' + groupKey + '"]')
+    .forEach(function (el) {
+      el.value = String(companyId > 0 ? companyId : 0);
+    });
+
+  document
+    .querySelectorAll('.group-desc-field[data-group="' + groupKey + '"]')
+    .forEach(function (el) {
+      el.value = desc;
+    });
+
+  var productRows = Array.prototype.slice.call(
+    document.querySelectorAll(
+      'tr.preview-product-row[data-package-group="' + groupKey + '"]',
+    ),
+  );
+  var pkgProductIds =
+    pkgOpt && Array.isArray(pkgOpt.product_ids) ? pkgOpt.product_ids : [];
+  var hasLinkedProducts = packageHasLinkedProducts(pkgOpt);
+
+  productRows.forEach(function (row, rowIdx) {
+    var productNameInput = row.querySelector(".sor-product-name-input");
+    var productIdHidden = row.querySelector('input[name$="[product_id]"]');
+
+    var mappedPid =
+      rowIdx < pkgProductIds.length ? parseInt(pkgProductIds[rowIdx], 10) : 0;
+    if ((isNaN(mappedPid) || mappedPid <= 0) && pkgProductIds.length > 0) {
+      mappedPid = parseInt(pkgProductIds[0], 10);
+    }
+    var mappedProduct = mappedPid > 0 ? findProductById(mappedPid) : null;
+
+    if (mappedProduct) {
+      if (productNameInput) {
+        productNameInput.value = String(mappedProduct.name || "");
+        productNameInput.readOnly = false;
+        clearItemInlineError(productNameInput);
+      }
+      if (productIdHidden) {
+        productIdHidden.value = String(mappedProduct.id || 0);
+      }
+    } else {
+      if (productNameInput) {
+        productNameInput.value = "";
+        productNameInput.readOnly = !hasLinkedProducts;
+        clearItemInlineError(productNameInput);
+      }
+      if (productIdHidden) {
+        productIdHidden.value = "0";
+      }
+    }
+  });
+
+  recalcGroupPackagePrice(groupKey, pkgOpt);
+}
 
 function applyServerRenderedValues() {
   var previewForm = document.getElementById("sorImportPreviewForm");
@@ -301,7 +464,7 @@ document.querySelectorAll(".sor-pkg-name-input").forEach(function (input) {
   var groupKey = input.getAttribute("data-group") || "";
   var wrapper = input.closest(".autocomplete");
 
-  var syncPackageGroup = function () {
+  var syncPackageGroup = function (clearLinkedIds) {
     if (!groupKey) return;
     var packageName = String(input.value || "").trim();
 
@@ -311,16 +474,28 @@ document.querySelectorAll(".sor-pkg-name-input").forEach(function (input) {
         el.value = packageName;
       });
 
-    // Clear package/product linkage so backend can re-resolve from typed names.
-    document
-      .querySelectorAll('.pkg-hidden-id[data-group="' + groupKey + '"]')
-      .forEach(function (el) {
-        el.value = "0";
-      });
+    if (clearLinkedIds) {
+      // User edited package text manually, clear linkage until a package is selected again.
+      document
+        .querySelectorAll('.pkg-hidden-id[data-group="' + groupKey + '"]')
+        .forEach(function (el) {
+          el.value = "0";
+        });
+
+      // If typed text exactly matches a package name, resolve it immediately.
+      var exactPkg = findPackageByName(packageName);
+      if (exactPkg) {
+        applyPackageSelection(groupKey, exactPkg);
+      }
+    }
   };
 
-  input.addEventListener("input", syncPackageGroup);
-  input.addEventListener("change", syncPackageGroup);
+  input.addEventListener("input", function () {
+    syncPackageGroup(true);
+  });
+  input.addEventListener("change", function () {
+    syncPackageGroup(true);
+  });
   input.addEventListener("input", function () {
     clearItemInlineError(input);
   });
@@ -330,45 +505,17 @@ document.querySelectorAll(".sor-pkg-name-input").forEach(function (input) {
 
   input.addEventListener("input", function () {
     renderAutocompleteList(input, packageOptions, function (opt) {
-      document
-        .querySelectorAll('.pkg-hidden-id[data-group="' + groupKey + '"]')
-        .forEach(function (el) {
-          el.value = String(opt.id || 0);
-        });
-      document
-        .querySelectorAll('.pkg-hidden-name[data-group="' + groupKey + '"]')
-        .forEach(function (el) {
-          el.value = String(opt.name || "");
-        });
-
-      var desc = String(opt.item_description || "");
-      document
-        .querySelectorAll('.group-desc-field[data-group="' + groupKey + '"]')
-        .forEach(function (el) {
-          el.value = desc;
-        });
-      document
-        .querySelectorAll('.pkg-hidden-desc[data-group="' + groupKey + '"]')
-        .forEach(function (el) {
-          el.value = desc;
-        });
-
-      var brandId = parseInt(opt.brand_id || 0, 10);
-      var companyId =
-        brandId > 0 && brandToCompanyMap.hasOwnProperty(String(brandId))
-          ? parseInt(brandToCompanyMap[String(brandId)] || 0, 10)
-          : 0;
-      document
-        .querySelectorAll('.pkg-brand-hidden[data-group="' + groupKey + '"]')
-        .forEach(function (el) {
-          el.value = String(brandId > 0 ? brandId : 0);
-        });
-      document
-        .querySelectorAll('.pkg-company-hidden[data-group="' + groupKey + '"]')
-        .forEach(function (el) {
-          el.value = String(companyId > 0 ? companyId : 0);
-        });
+      applyPackageSelection(groupKey, opt);
+      clearItemInlineError(input);
     });
+  });
+
+  input.addEventListener("change", function () {
+    var typedPkg = findPackageByName(input.value || "");
+    if (typedPkg) {
+      applyPackageSelection(groupKey, typedPkg);
+      clearItemInlineError(input);
+    }
   });
 
   input.addEventListener("blur", function () {
@@ -383,7 +530,8 @@ document.querySelectorAll(".sor-pkg-name-input").forEach(function (input) {
     }
   });
 
-  syncPackageGroup();
+  // Keep extracted/validated package IDs on first render.
+  syncPackageGroup(false);
 });
 
 document.querySelectorAll(".sor-product-name-input").forEach(function (input) {
@@ -453,9 +601,66 @@ document.querySelectorAll(".sor-product-name-input").forEach(function (input) {
 
 var previewForm = document.getElementById("sorImportPreviewForm");
 if (previewForm) {
+  var allowAsyncValidatedSubmit = false;
+  var lastSubmitActionValue = "";
+
+  var insertButtons = previewForm.querySelectorAll(
+    'button[name="actionBtn"][value="insertStockOrderPdf"]',
+  );
+  insertButtons.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      lastSubmitActionValue = "insertStockOrderPdf";
+    });
+  });
+
+  var ensureActionHiddenField = function (value) {
+    var hidden = previewForm.querySelector(
+      'input[type="hidden"][name="actionBtn"][data-js-action="1"]',
+    );
+    if (!hidden) {
+      hidden = document.createElement("input");
+      hidden.type = "hidden";
+      hidden.name = "actionBtn";
+      hidden.setAttribute("data-js-action", "1");
+      previewForm.appendChild(hidden);
+    }
+    hidden.value = String(value || "");
+  };
+
+  var checkDuplicateInvoiceNos = function () {
+    return new Promise(function (resolve) {
+      var invoiceInputs = Array.prototype.slice.call(
+        previewForm.querySelectorAll('.receipt-sync[data-field="invoice_no"]'),
+      );
+      var duplicateNorm = [];
+      var existingSet = {};
+      existingInvoiceNosNormalized.forEach(function (n) {
+        var norm = String(n || "").toLowerCase();
+        if (norm !== "") existingSet[norm] = true;
+      });
+
+      invoiceInputs.forEach(function (el) {
+        var v = String(el.value || "").trim();
+        var norm = v.toLowerCase().replace(/\s+/g, "");
+        if (norm !== "" && existingSet.hasOwnProperty(norm)) {
+          duplicateNorm.push(norm);
+        }
+      });
+
+      resolve({ ok: true, duplicates: duplicateNorm });
+    });
+  };
+
   previewForm.addEventListener("submit", function (e) {
+    if (allowAsyncValidatedSubmit) {
+      allowAsyncValidatedSubmit = false;
+      return;
+    }
+
     var submitter = e.submitter || null;
-    var actionBtnValue = submitter ? String(submitter.value || "") : "";
+    var actionBtnValue = submitter
+      ? String(submitter.value || "")
+      : String(lastSubmitActionValue || "");
     var submitterName = submitter ? String(submitter.name || "") : "";
 
     // Cancel should always be allowed and should not be blocked by validation.
@@ -469,6 +674,8 @@ if (previewForm) {
     if (actionBtnValue !== "insertStockOrderPdf") {
       return;
     }
+
+    e.preventDefault();
 
     var hasError = false;
     var requiredMsg = {
@@ -512,11 +719,31 @@ if (previewForm) {
     });
 
     previewForm.querySelectorAll(".sor-pkg-name-input").forEach(function (el) {
+      var groupKey = el.getAttribute("data-group") || "";
+      var hasValidPackageId = false;
+      if (groupKey !== "") {
+        previewForm
+          .querySelectorAll('.pkg-hidden-id[data-group="' + groupKey + '"]')
+          .forEach(function (pkgEl) {
+            var pkgId = parseInt(pkgEl.value || "0", 10);
+            if (!isNaN(pkgId) && pkgId > 0) {
+              hasValidPackageId = true;
+            }
+          });
+      }
+
       var val = String(el.value || "").trim();
       if (val === "") {
         hasError = true;
         el.classList.add("sor-invalid");
         setItemInlineError(el, "Package is required.");
+      } else if (!hasValidPackageId) {
+        hasError = true;
+        el.classList.add("sor-invalid");
+        setItemInlineError(
+          el,
+          "Package name not found. Please enter a valid package name from DB.",
+        );
       } else {
         clearItemInlineError(el);
       }
@@ -525,6 +752,27 @@ if (previewForm) {
     previewForm
       .querySelectorAll(".sor-product-name-input")
       .forEach(function (el) {
+        var row = el.closest("tr.preview-product-row");
+        var groupKey = row ? row.getAttribute("data-package-group") || "" : "";
+        var pkgIdInput = row
+          ? row.querySelector('.pkg-hidden-id[data-group="' + groupKey + '"]')
+          : null;
+        var pkgId = pkgIdInput ? parseInt(pkgIdInput.value || "0", 10) : 0;
+        var pkg = findPackageById(pkgId);
+
+        // Package-first workflow: if package is not resolved yet,
+        // show package error and do not block here with product error.
+        if (isNaN(pkgId) || pkgId <= 0) {
+          clearItemInlineError(el);
+          return;
+        }
+
+        // If package has no linked products, do not require product input.
+        if (!packageHasLinkedProducts(pkg)) {
+          clearItemInlineError(el);
+          return;
+        }
+
         var val = String(el.value || "").trim();
         if (val === "") {
           hasError = true;
@@ -536,8 +784,53 @@ if (previewForm) {
       });
 
     if (hasError) {
-      e.preventDefault();
+      return;
     }
+
+    checkDuplicateInvoiceNos().then(function (dupResult) {
+      var dupSet = {};
+      (dupResult.duplicates || []).forEach(function (n) {
+        dupSet[String(n || "").toLowerCase()] = true;
+      });
+
+      var hasDup = false;
+      previewForm
+        .querySelectorAll('.receipt-sync[data-field="invoice_no"]')
+        .forEach(function (el) {
+          var receipt = el.getAttribute("data-receipt");
+          var box = previewForm.querySelector(
+            '.sor-inline-error[data-receipt="' +
+              receipt +
+              '"][data-field-err="invoice_no"]',
+          );
+          var val = String(el.value || "").trim();
+          var norm = val.toLowerCase().replace(/\s+/g, "");
+
+          if (box) {
+            box.textContent = "";
+            box.style.display = "none";
+          }
+
+          if (norm !== "" && dupSet.hasOwnProperty(norm)) {
+            hasDup = true;
+            el.classList.add("sor-invalid");
+            if (box) {
+              box.textContent = "Invoice number already exists.";
+              box.style.display = "block";
+            }
+          } else {
+            el.classList.remove("sor-invalid");
+          }
+        });
+
+      if (hasDup) {
+        return;
+      }
+
+      allowAsyncValidatedSubmit = true;
+      ensureActionHiddenField("insertStockOrderPdf");
+      previewForm.submit();
+    });
   });
 }
 
@@ -688,6 +981,7 @@ document.querySelectorAll(".sor-pkg-select").forEach(function (sel) {
         for (var i = 1; i <= pdfDoc.numPages; i++) {
           tasks.push(
             pdfDoc.getPage(i).then(function (page) {
+              // Reduced scale from 3.0 to 2.0 to save memory and processing time
               var viewport = page.getViewport({ scale: 2.0 });
               var canvas = document.createElement("canvas");
               canvas.width = viewport.width;
@@ -697,7 +991,8 @@ document.querySelectorAll(".sor-pkg-select").forEach(function (sel) {
               return page
                 .render({ canvasContext: ctx, viewport: viewport })
                 .promise.then(function () {
-                  return Tesseract.recognize(canvas, "eng")
+                  // Simplified language models to avoid heavy fallback chaining
+                  return Tesseract.recognize(canvas, "eng+chi_sim")
                     .then(function (result) {
                       return result && result.data && result.data.text
                         ? result.data.text

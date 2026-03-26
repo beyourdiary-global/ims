@@ -410,6 +410,34 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Error creating `sql_account`: " . $conn->error . "</p>";
     }
 
+    $createTokenSettingTableSql = "CREATE TABLE IF NOT EXISTS `token_setting` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `name` VARCHAR(255) NOT NULL,
+    `bot_token` VARCHAR(255) NOT NULL,
+    `remark` TEXT DEFAULT NULL,
+    `create_by` VARCHAR(30) DEFAULT NULL,
+    `create_date` DATE DEFAULT NULL,
+    `create_time` TIME DEFAULT NULL,
+    `update_by` VARCHAR(30) DEFAULT NULL,
+    `update_date` DATE DEFAULT NULL,
+    `update_time` TIME DEFAULT NULL,
+    `status` CHAR(1) NOT NULL DEFAULT 'A'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createTokenSettingTableSql)) {
+        echo "<p style='color:blue;'>Table `token_setting` is ready.</p>";
+    } else {
+        echo "<p style='color:red;'>Error creating `token_setting`: " . $conn->error . "</p>";
+    }
+
+    dropColumnIfExists($conn, $db_cms, 'token_setting', 'chat_id', "ALTER TABLE `token_setting` DROP COLUMN `chat_id`");
+
+    addColumnIfMissing($conn, $db_cms, 'user', 'main_report_supervisor', "ALTER TABLE `user` ADD COLUMN `main_report_supervisor` INT DEFAULT NULL AFTER `access_id`");
+    addColumnIfMissing($conn, $db_cms, 'user', 'second_report_supervisor', "ALTER TABLE `user` ADD COLUMN `second_report_supervisor` INT DEFAULT NULL AFTER `main_report_supervisor`");
+    if (columnExists($conn, $db_cms, 'user', 'main_report_supervisor') && columnExists($conn, $db_cms, 'user', 'second_report_supervisor')) {
+        echo "<p style='color:blue;'>Columns `main_report_supervisor` and `second_report_supervisor` are ready in `user` table.</p>";
+    }
+
     addColumnIfMissing($conn, $db_cms, 'sql_account', 'status', "ALTER TABLE `sql_account` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A' AFTER `name`");
 
     addColumnIfMissing($conn, $db_cms, 'brand', 'company', "ALTER TABLE `brand` ADD COLUMN `company` INT DEFAULT NULL AFTER `name`");
@@ -600,6 +628,85 @@ if ($conn->select_db($db_cms)) {
     }
 }
 // --- END: SQL ACCOUNT PIN GROUP ---
+
+// --- START: TOKEN SETTING PIN GROUP ---
+if ($conn->select_db($db_cms)) {
+    // 1. Insert new Pin Group (133)
+    $sqlInsertTokenSettingPin = "INSERT IGNORE INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+    (133, 'Token Setting', '1,2,3,4,5,6', 'Token Setting Management', '1', CURDATE(), CURTIME(), 'A')";
+
+    if ($conn->query($sqlInsertTokenSettingPin)) {
+        echo "<p style='color:blue;'>Pin group 133 (Token Setting) ensured in CMS database.</p>";
+    } else {
+        echo "<p style='color:red;'>Error creating Pin group 133: " . $conn->error . "</p>";
+    }
+
+    // 2. Assign Pin Group 133 to Super Admin (id=1)
+    $sqlUpdateAdmin1_133 = "UPDATE `user_group`
+    SET `pins` = CONCAT(`pins`, '+[133:1,2,3,4,5,6]')
+    WHERE `id` = 1 AND `pins` NOT LIKE '%[133:%'";
+
+    if ($conn->query($sqlUpdateAdmin1_133)) {
+        if ($conn->affected_rows > 0) echo "<p style='color:blue;'>Granted Token Setting access to Super Admin.</p>";
+    }
+
+    // 3. Assign Pin Group 133 to Admin (id=2)
+    $sqlUpdateAdmin2_133 = "UPDATE `user_group`
+    SET `pins` = CONCAT(`pins`, '+[133:1,2,3,4,5,6]')
+    WHERE `id` = 2 AND `pins` NOT LIKE '%[133:%'";
+
+    if ($conn->query($sqlUpdateAdmin2_133)) {
+        if ($conn->affected_rows > 0) echo "<p style='color:blue;'>Granted Token Setting access to Admin.</p>";
+    }
+
+    // 4. Assign Pin Group 133 to Basic User (id=3)
+    $sqlUpdateBasic_133 = "UPDATE `user_group`
+    SET `pins` = CONCAT(`pins`, '+[133:1,2,3,4,5,6]')
+    WHERE `id` = 3 AND `pins` NOT LIKE '%[133:%'";
+
+    if ($conn->query($sqlUpdateBasic_133)) {
+        if ($conn->affected_rows > 0) echo "<p style='color:blue;'>Granted Token Setting access to Basic User.</p>";
+    }
+}
+// --- END: TOKEN SETTING PIN GROUP ---
+
+// --- START: USER PROFILE PIN GROUP ---
+if ($conn->select_db($db_cms)) {
+    // 1. Insert new Pin Group (134)
+    $sqlInsertUserProfilePin = "INSERT IGNORE INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+    (134, 'User Profile', '1,3', 'User Profile View/Edit', '1', CURDATE(), CURTIME(), 'A')";
+
+    if ($conn->query($sqlInsertUserProfilePin)) {
+        echo "<p style='color:blue;'>Pin group 134 (User Profile) ensured in CMS database.</p>";
+    } else {
+        echo "<p style='color:red;'>Error creating Pin group 134: " . $conn->error . "</p>";
+    }
+
+    // 2. Assign Pin Group 134 to Super Admin (id=1)
+    $sqlUpdateAdmin1_134 = "UPDATE `user_group`
+    SET `pins` = CONCAT(`pins`, '+[134:1,3]')
+    WHERE `id` = 1 AND `pins` NOT LIKE '%[134:%'";
+    if ($conn->query($sqlUpdateAdmin1_134)) {
+        if ($conn->affected_rows > 0) echo "<p style='color:blue;'>Granted User Profile access to Super Admin.</p>";
+    }
+
+    // 3. Assign Pin Group 134 to Admin (id=2)
+    $sqlUpdateAdmin2_134 = "UPDATE `user_group`
+    SET `pins` = CONCAT(`pins`, '+[134:1,3]')
+    WHERE `id` = 2 AND `pins` NOT LIKE '%[134:%'";
+    if ($conn->query($sqlUpdateAdmin2_134)) {
+        if ($conn->affected_rows > 0) echo "<p style='color:blue;'>Granted User Profile access to Admin.</p>";
+    }
+
+    // 4. Assign Pin Group 134 to Basic User (id=3)
+    $sqlUpdateBasic_134 = "UPDATE `user_group`
+    SET `pins` = CONCAT(`pins`, '+[134:1,3]')
+    WHERE `id` = 3 AND `pins` NOT LIKE '%[134:%'";
+    if ($conn->query($sqlUpdateBasic_134)) {
+        if ($conn->affected_rows > 0) echo "<p style='color:blue;'>Granted User Profile access to Basic User.</p>";
+    }
+}
+// --- END: USER PROFILE PIN GROUP ---
 
 echo "<h3>Stock Order Request financial schema setup complete.</h3>";
 $conn->close();

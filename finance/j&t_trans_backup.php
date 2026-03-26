@@ -335,7 +335,6 @@ if (post('actionBtn')) {
                 break;
             } else if ($isDuplicate) {
                 $jt_inv_number_err = "Duplicate record found for " . $pageTitle . " Invoice Number.";
-                $jt_inv_date_err = "Duplicate record found for " . $pageTitle . " Invoice Date.";
                 break;
             } else if ($action == 'addTransaction') {
                 try {

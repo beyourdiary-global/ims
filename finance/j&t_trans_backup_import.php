@@ -45,13 +45,59 @@ if (!function_exists('jtImpToAmount')) {
             return 0.0;
         }
 
-        $value = str_replace(',', '', $value);
+        $value = str_replace(' ', '', $value);
+        if (strpos($value, ',') !== false && strpos($value, '.') === false) {
+            $value = str_replace(',', '.', $value);
+        } else if (strpos($value, ',') !== false && strpos($value, '.') !== false) {
+            $value = str_replace(',', '', $value);
+        }
         $value = preg_replace('/[^0-9\.\-]/', '', $value);
         if ($value === '' || $value === '-' || $value === '.') {
             return 0.0;
         }
 
         return (float) $value;
+    }
+}
+
+if (!function_exists('jtImpSaveUploadedImportFile')) {
+    function jtImpSaveUploadedImportFile($upload, $pageName)
+    {
+        if (!isset($upload['tmp_name']) || !isset($upload['name'])) {
+            return '';
+        }
+        $tmpName = (string) $upload['tmp_name'];
+        $originalName = trim((string) $upload['name']);
+        if ($tmpName === '' || $originalName === '' || !is_file($tmpName)) {
+            return '';
+        }
+
+        $ext = strtolower((string) pathinfo($originalName, PATHINFO_EXTENSION));
+        $baseName = (string) pathinfo($originalName, PATHINFO_FILENAME);
+        $safeBase = preg_replace('/[^a-zA-Z0-9_-]/', '_', $baseName);
+        if ($safeBase === '') {
+            $safeBase = 'import_file';
+        }
+        $safePage = preg_replace('/[^a-zA-Z0-9_-]/', '_', (string) $pageName);
+        if ($safePage === '') {
+            $safePage = 'import_page';
+        }
+
+        $relDir = 'temp/attachment/sqlaccount/' . date('Y') . '/' . date('m') . '/' . $safePage . '/';
+        $absDir = ROOT . img_server . $relDir;
+        if (!is_dir($absDir)) {
+            @mkdir($absDir, 0777, true);
+        }
+        if (!is_dir($absDir)) {
+            return '';
+        }
+
+        $newFile = $safeBase . '_' . date('Ymd_His') . ($ext !== '' ? '.' . $ext : '');
+        $absPath = $absDir . $newFile;
+        if (@copy($tmpName, $absPath)) {
+            return $relDir . $newFile;
+        }
+        return '';
     }
 }
 
@@ -92,14 +138,21 @@ if (!function_exists('jtImpParseDeliveryLine')) {
             return null;
         }
 
-        if (!preg_match('/^([A-Za-z0-9\-\/\&\(\)\s]+?)\s+([0-9]+)\s+([0-9]+(?:\.[0-9]+)?)\s+([0-9]+(?:\.[0-9]+)?)\s+([0-9]+(?:\.[0-9]+)?)\s+([0-9]+(?:\.[0-9]+)?)$/', $line, $m)) {
+        if (!preg_match('/^([A-Za-z0-9\-\/\&\(\)\s]+?)\s+([0-9]+)\s+([0-9]+(?:[\.,][0-9]+)?)\s+([0-9]+(?:[\.,][0-9]+)?)\s+([0-9]+(?:[\.,][0-9]+)?)\s+([0-9]+(?:[\.,][0-9]+)?)$/', $line, $m)) {
             return null;
+        }
+
+        $weightRaw = trim((string) $m[3]);
+        $weightVal = jtImpToAmount($weightRaw);
+        // OCR sometimes drops the decimal separator (e.g. 1.50 -> 150). Restore with a conservative heuristic.
+        if (strpos($weightRaw, '.') === false && strpos($weightRaw, ',') === false && preg_match('/^\d{3,}$/', $weightRaw) && $weightVal >= 100) {
+            $weightVal = $weightVal / 100;
         }
 
         return array(
             'service_type' => trim((string) $m[1]),
             'shipments_count' => (string) ((int) $m[2]),
-            'total_weight_kg' => number_format(jtImpToAmount($m[3]), 2, '.', ''),
+            'total_weight_kg' => number_format($weightVal, 2, '.', ''),
             'standard_charge' => number_format(jtImpToAmount($m[4]), 2, '.', ''),
             'extra_charges' => number_format(jtImpToAmount($m[5]), 2, '.', ''),
             'nett_charge' => number_format(jtImpToAmount($m[6]), 2, '.', ''),
@@ -298,6 +351,7 @@ if (post('actionBtn')) {
         if (!isset($_FILES['import_file']) || (int) $_FILES['import_file']['size'] <= 0) {
             $importErrors[] = 'Please select a PDF or ZIP file.';
         } else {
+            jtImpSaveUploadedImportFile($_FILES['import_file'], basename(__FILE__, '.php'));
             $fileName = isset($_FILES['import_file']['name']) ? (string) $_FILES['import_file']['name'] : '';
             $ext = strtolower(pathinfo($fileName, PATHINFO_EXTENSION));
             $records = array();
