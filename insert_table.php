@@ -674,7 +674,7 @@ if ($conn->select_db($db_cms)) {
 if ($conn->select_db($db_cms)) {
     // 1. Insert new Pin Group (134)
     $sqlInsertUserProfilePin = "INSERT IGNORE INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
-    (134, 'User Profile', '1,2', 'User Profile View/Edit', '1', CURDATE(), CURTIME(), 'A')";
+    (134, 'User Profile', '1,3', 'User Profile View/Edit', '1', CURDATE(), CURTIME(), 'A')";
 
     if ($conn->query($sqlInsertUserProfilePin)) {
         echo "<p style='color:blue;'>Pin group 134 (User Profile) ensured in CMS database.</p>";
@@ -684,7 +684,7 @@ if ($conn->select_db($db_cms)) {
 
     // 2. Assign Pin Group 134 to Super Admin (id=1)
     $sqlUpdateAdmin1_134 = "UPDATE `user_group`
-    SET `pins` = CONCAT(`pins`, '+[134:1,2]')
+    SET `pins` = CONCAT(`pins`, '+[134:1,3]')
     WHERE `id` = 1 AND `pins` NOT LIKE '%[134:%'";
     if ($conn->query($sqlUpdateAdmin1_134)) {
         if ($conn->affected_rows > 0) echo "<p style='color:blue;'>Granted User Profile access to Super Admin.</p>";
@@ -692,7 +692,7 @@ if ($conn->select_db($db_cms)) {
 
     // 3. Assign Pin Group 134 to Admin (id=2)
     $sqlUpdateAdmin2_134 = "UPDATE `user_group`
-    SET `pins` = CONCAT(`pins`, '+[134:1,2]')
+    SET `pins` = CONCAT(`pins`, '+[134:1,3]')
     WHERE `id` = 2 AND `pins` NOT LIKE '%[134:%'";
     if ($conn->query($sqlUpdateAdmin2_134)) {
         if ($conn->affected_rows > 0) echo "<p style='color:blue;'>Granted User Profile access to Admin.</p>";
@@ -700,7 +700,7 @@ if ($conn->select_db($db_cms)) {
 
     // 4. Assign Pin Group 134 to Basic User (id=3)
     $sqlUpdateBasic_134 = "UPDATE `user_group`
-    SET `pins` = CONCAT(`pins`, '+[134:1,2]')
+    SET `pins` = CONCAT(`pins`, '+[134:1,3]')
     WHERE `id` = 3 AND `pins` NOT LIKE '%[134:%'";
     if ($conn->query($sqlUpdateBasic_134)) {
         if ($conn->affected_rows > 0) echo "<p style='color:blue;'>Granted User Profile access to Basic User.</p>";

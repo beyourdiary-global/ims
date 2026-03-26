@@ -226,7 +226,8 @@ if (post('actionBtn')) {
                         array_push($datafield, 'password');
                     }
 
-                    $hashedPassword = password_hash($userPassword, PASSWORD_DEFAULT);
+                    // Temporarily using md5 to maintain compatibility with the existing login.php flow
+                    $hashedPassword = md5($userPassword);
                     if ($hasSupervisorColumns) {
                         $mainSupervisorSql = ($mainReportSupervisor > 0) ? "'" . (int) $mainReportSupervisor . "'" : "NULL";
                         $secondSupervisorSql = ($secondReportSupervisor > 0) ? "'" . (int) $secondReportSupervisor . "'" : "NULL";

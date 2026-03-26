@@ -981,7 +981,8 @@ document.querySelectorAll(".sor-pkg-select").forEach(function (sel) {
         for (var i = 1; i <= pdfDoc.numPages; i++) {
           tasks.push(
             pdfDoc.getPage(i).then(function (page) {
-              var viewport = page.getViewport({ scale: 3.0 });
+              // Reduced scale from 3.0 to 2.0 to save memory and processing time
+              var viewport = page.getViewport({ scale: 2.0 });
               var canvas = document.createElement("canvas");
               canvas.width = viewport.width;
               canvas.height = viewport.height;
@@ -990,13 +991,8 @@ document.querySelectorAll(".sor-pkg-select").forEach(function (sel) {
               return page
                 .render({ canvasContext: ctx, viewport: viewport })
                 .promise.then(function () {
-                  return Tesseract.recognize(canvas, "eng+chi_sim+chi_tra")
-                    .catch(function () {
-                      return Tesseract.recognize(canvas, "eng+chi_sim");
-                    })
-                    .catch(function () {
-                      return Tesseract.recognize(canvas, "eng");
-                    })
+                  // Simplified language models to avoid heavy fallback chaining
+                  return Tesseract.recognize(canvas, "eng+chi_sim")
                     .then(function (result) {
                       return result && result.data && result.data.text
                         ? result.data.text

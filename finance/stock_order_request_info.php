@@ -90,19 +90,8 @@ function sorInfoTelegramRequest($url, $payload, &$curlErr)
     $curlErr = curl_error($ch);
     curl_close($ch);
 
-    // Local hosts may lack CA bundles; retry without SSL verification as fallback.
-    if ($resp === false && $curlErr !== '' && stripos($curlErr, 'SSL') !== false) {
-        $ch = curl_init($url);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
-        $resp = curl_exec($ch);
-        $curlErr = curl_error($ch);
-        curl_close($ch);
-    }
+    // If an SSL error occurs (e.g., missing CA bundle locally), we now let it fail securely 
+    // instead of bypassing TLS verification, avoiding potential MITM vulnerabilities.
 
     return $resp;
 }
@@ -203,7 +192,9 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
         $telegramErr = 'Token Setting not found. Please create Token Setting first.';
     } else {
         $botToken = trim((string) (isset($tokenRow['bot_token']) ? $tokenRow['bot_token'] : ''));
-        $chatId = trim((string) (isset($tokenRow['chat_id']) ? $tokenRow['chat_id'] : ''));
+        
+        // chat_id is no longer stored in token_setting; start empty and rely on auto-detection below.
+        $chatId = '';
 
         if ($botToken === '') {
             $telegramErr = 'Token Setting is incomplete. Bot Token is required.';

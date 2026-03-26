@@ -99,7 +99,9 @@ if (post('actionBtn')) {
                 break;
             }
 
-            if (isDuplicateRecord('name', $currentDataName, $tblName, $connect, $dataID)) {
+            // Escape the input before checking for duplicates to prevent SQL injection
+            $safeCurrentDataName = mysqli_real_escape_string($connect, $currentDataName);
+            if (isDuplicateRecord('name', $safeCurrentDataName, $tblName, $connect, $dataID)) {
                 $err = 'Duplicate record found for Token Setting name.';
                 break;
             }
