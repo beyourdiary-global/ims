@@ -135,6 +135,7 @@ define('EMPLOYEE_EPF', 'employee_epf_rate');
 define('EMPLOYER_EPF', 'employer_epf_rate');
 define('PAY_METH', 'payment_method');
 define('SQL_ACC', 'sql_account');
+define('TOKEN_SETT', 'token_setting');
 define('EMPINFO', 'employee_info');
 define('EMPPERSONALINFO', 'employee_personal_info');
 define('TAG', 'tag');

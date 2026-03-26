@@ -29,7 +29,7 @@ if (!($dataID) && !($act) || !isActionAllowed($pageAction, $pinAccess))
 $rst = getData('*', "id = '$dataID'", '', $tblName, $connect);
 
 //Checking Data Error When Retrieved From Database
-if (!$rst || !($row = $rst->fetch_assoc()) && $act != 'I') {
+if (($act != 'I') && (!$rst || !($row = $rst->fetch_assoc()))) {
     $errorExist = 1;
     $_SESSION['tempValConfirmBox'] = true;
     $act = "F";
@@ -45,6 +45,39 @@ if (!$pinResult || !$pinGrpResult) {
 }
 
 $pin_arr = array();
+$permission_grp = array();
+$permission_grp_keys = array();
+$permission_grp_count = 0;
+$pinActionList = array();
+$pinGroupList = array();
+
+if ($pinResult) {
+    while ($pinRow = mysqli_fetch_assoc($pinResult)) {
+        $pinActionList[] = array(
+            'id' => (string) $pinRow['id'],
+            'name' => isset($pinRow['name']) ? (string) $pinRow['name'] : '',
+        );
+        $pin_arr[] = (string) $pinRow['id'];
+    }
+}
+
+if ($pinGrpResult) {
+    while ($pinGrpRow = mysqli_fetch_assoc($pinGrpResult)) {
+        $pinCsv = isset($pinGrpRow['pins']) ? (string) $pinGrpRow['pins'] : '';
+        $pinIds = array();
+        foreach (explode(',', $pinCsv) as $pinIdRaw) {
+            $pinId = trim((string) $pinIdRaw);
+            if ($pinId !== '') {
+                $pinIds[] = $pinId;
+            }
+        }
+        $pinGroupList[] = array(
+            'id' => (int) $pinGrpRow['id'],
+            'name' => isset($pinGrpRow['name']) ? (string) $pinGrpRow['name'] : '',
+            'pins' => $pinIds,
+        );
+    }
+}
 
 if ($dataID) {
     $userGroupResult = getData('*', "id = '$dataID'", '', USR_GRP, $connect);
@@ -254,6 +287,99 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 
 <head>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
+    <style>
+        .permission-toolbar {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+        }
+
+        .permission-actions {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .permission-search {
+            min-width: 240px;
+            max-width: 360px;
+            width: 100%;
+        }
+
+        .permission-grid {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+            gap: 14px;
+        }
+
+        .permission-card {
+            border: 1px solid #e2e2e2;
+            border-radius: 10px;
+            background: #fff;
+            overflow: hidden;
+        }
+
+        .permission-card-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 12px 14px;
+            background: #f7f7f9;
+            cursor: pointer;
+        }
+
+        .permission-card-title {
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .permission-card-body {
+            padding: 12px 14px;
+            border-top: 1px solid #ececec;
+            display: none;
+        }
+
+        .permission-card.open .permission-card-body {
+            display: block;
+        }
+
+        .permission-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px 14px;
+        }
+
+        .permission-item {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            min-width: 130px;
+            white-space: nowrap;
+        }
+
+        .permission-arrow {
+            transition: transform .2s ease;
+        }
+
+        .permission-card.open .permission-arrow {
+            transform: rotate(180deg);
+        }
+
+        @media (max-width: 1199px) {
+            .permission-grid {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 991px) {
+            .permission-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
 </head>
 
 <body>
@@ -268,8 +394,8 @@ if (isset($_SESSION['tempValConfirmBox'])) {
             </p>
         </div>
 
-        <div id="formContainer" class="container d-flex justify-content-center">
-            <div class="col-8 col-md-6 formWidthAdjust">
+        <div id="formContainer" class="container-fluid d-flex justify-content-center">
+            <div class="col-12 col-xl-10 formWidthAdjust">
                 <form id="form" method="post" novalidate>
                     <div class="form-group mb-5">
                         <h2>
@@ -285,81 +411,64 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                         </div>
                     </div>
 
-                    <div class="row d-flex justify-content-center">
-                        <div class="form-group mb-3">
-                            <label class="form-label" id="permission_table_lbl" for="permission_table">Permissions</label>
-                            <div class="table-responsive">
-                                <table class="table table-striped" id="permission_table">
-                                    <thead class="table-dark">
-                                        <tr>
-                                            <th scope="col"></th>
-                                            <?php
-                                            if (mysqli_num_rows($pinResult) != 0) {
-                                                while ($pin_row = $pinResult->fetch_assoc()) {
-                                            ?>
-                                                    <th class="text-center" scope="col">
-                                                        <?php
-                                                        echo $pin_row['name'];
-                                                        array_push($pin_arr, $pin_row['id']);
-                                                        ?>
-                                                    </th>
-                                            <?php
-                                                }
-                                                $pin_arr_num = count($pin_arr);
-                                            }
-                                            ?>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        <?php
-                                        if (mysqli_num_rows($pinGrpResult) != 0) {
-                                            while ($pin_grp_row = $pinGrpResult->fetch_assoc()) {
-                                                // get pin
-                                                $pin_grp_pins = explode(",", $pin_grp_row['pins']);
-                                                $pin_grp_pins_count = count($pin_grp_pins);
-                                        ?>
-                                                <tr id="<?php echo $pin_grp_row['name'] . '_row[' . $pin_grp_row['id'] . ']' ?>" name="<?php echo $pin_grp_row['name'] . '_row' ?>">
-                                                    <th scope="row"><?php echo $pin_grp_row['name'] ?></th>
-                                                    <?php
-                                                    for ($i = 0; $i < $pin_arr_num; $i++) {
-                                                        $found = 0;
-                                                        $checked = '';
-
-                                                        for ($j = 0; $j < $pin_grp_pins_count; $j++) {
-                                                            // check if pin exist in pin group
-                                                            if ($pin_arr[$i] == $pin_grp_pins[$j]) {
-                                                                // check if pin checked (act: edit/view)
-                                                                if ((isset($act)) && ($act != 'I')) {
-                                                                    for ($k = 0; $k < $permission_grp_count; $k++) {
-                                                                        if ($permission_grp_keys[$k] == $pin_grp_row['id']) {
-                                                                            if (is_array($permission_grp[$permission_grp_keys[$k]]) || is_object($permission_grp[$permission_grp_keys[$k]])) {
-                                                                                foreach ($permission_grp[$permission_grp_keys[$k]] as $val) {
-                                                                                    if ($val == $pin_grp_pins[$j])
-                                                                                        $checked = " checked";
-                                                                                }
-                                                                            }
-                                                                        }
-                                                                    }
-                                                                }
-
-                                                                if ($act == '')
-                                                                    $readonly = ' disabled';
-                                                                else $readonly = '';
-
-                                                                echo '<td class="text-center" scope="row"><input class="form-check-input" type="checkbox" name="user_grp_chkbox_val[' . $pin_grp_row['id'] . '][]" value="' . $pin_arr[$i] . '"' . $checked . $readonly . '></td>';
-                                                                $found = 1;
-                                                            }
-                                                        }
-                                                        if ($found != 1)
-                                                            echo '<td scope="row"></td>';
-                                                    }
-                                                    ?>
-                                                </tr>
-                                        <?php }
-                                        } ?>
-                                    </tbody>
-                                </table>
+                    <div class="form-group mb-3">
+                        <label class="form-label" id="permission_table_lbl" for="permissionSearch">Permissions</label>
+                        <div class="permission-toolbar">
+                            <div class="permission-actions">
+                                <button class="btn btn-sm btn-outline-secondary" type="button" id="toggleAllPermissionsBtn">Toggle All</button>
+                                <button class="btn btn-sm btn-outline-primary" type="button" id="tickAllPinsBtn" <?php if ($act == '') echo 'disabled'; ?>>Tick All Pins</button>
                             </div>
+                            <input class="form-control permission-search" type="text" id="permissionSearch" placeholder="Search page permissions..." autocomplete="off">
+                        </div>
+
+                        <div class="permission-grid" id="permissionGrid">
+                            <?php foreach ($pinGroupList as $groupIndex => $pinGroup) {
+                                $groupId = (int) $pinGroup['id'];
+                                $groupName = (string) $pinGroup['name'];
+                                $groupPins = isset($pinGroup['pins']) && is_array($pinGroup['pins']) ? $pinGroup['pins'] : array();
+                                $cardId = 'permission_card_' . $groupId;
+                                $bodyId = 'permission_body_' . $groupId;
+                            ?>
+                                <div class="permission-card" id="<?= $cardId ?>" data-permission-group="<?= htmlspecialchars(strtolower($groupName), ENT_QUOTES, 'UTF-8') ?>">
+                                    <div class="permission-card-header" data-target="<?= $bodyId ?>">
+                                        <h6 class="permission-card-title mb-0"><?= htmlspecialchars($groupName, ENT_QUOTES, 'UTF-8') ?></h6>
+                                        <i class="fa-solid fa-chevron-down permission-arrow"></i>
+                                    </div>
+                                    <div class="permission-card-body" id="<?= $bodyId ?>">
+                                        <div class="permission-list">
+                                            <?php
+                                            $hasPermissionItem = false;
+                                            foreach ($pinActionList as $actionItem) {
+                                                $actionId = (string) $actionItem['id'];
+                                                $actionName = (string) $actionItem['name'];
+                                                if (!in_array($actionId, $groupPins, true)) {
+                                                    continue;
+                                                }
+                                                $hasPermissionItem = true;
+                                                $isChecked = '';
+                                                if ((isset($act)) && ($act != 'I') && isset($permission_grp[$groupId]) && is_array($permission_grp[$groupId])) {
+                                                    foreach ($permission_grp[$groupId] as $savedPinVal) {
+                                                        if ((string) $savedPinVal === $actionId) {
+                                                            $isChecked = ' checked';
+                                                            break;
+                                                        }
+                                                    }
+                                                }
+                                                $readonly = ($act == '') ? ' disabled' : '';
+                                                $checkId = 'perm_' . $groupId . '_' . $actionId . '_' . $groupIndex;
+                                            ?>
+                                                <label class="permission-item" data-permission-item="<?= htmlspecialchars(strtolower($actionName), ENT_QUOTES, 'UTF-8') ?>">
+                                                    <input class="form-check-input" type="checkbox" id="<?= $checkId ?>" name="user_grp_chkbox_val[<?= $groupId ?>][]" value="<?= htmlspecialchars($actionId, ENT_QUOTES, 'UTF-8') ?>"<?= $isChecked . $readonly ?>>
+                                                    <span><?= htmlspecialchars($actionName, ENT_QUOTES, 'UTF-8') ?></span>
+                                                </label>
+                                            <?php } ?>
+                                            <?php if (!$hasPermissionItem) { ?>
+                                                <span class="text-muted">No available actions.</span>
+                                            <?php } ?>
+                                        </div>
+                                    </div>
+                                </div>
+                            <?php } ?>
                         </div>
                     </div>
 
@@ -385,6 +494,81 @@ if (isset($_SESSION['tempValConfirmBox'])) {
         checkCurrentPage(page, action);
         setButtonColor();
         preloader(300, action);
+
+        var permissionHeaders = document.querySelectorAll('.permission-card-header');
+        permissionHeaders.forEach(function (header) {
+            header.addEventListener('click', function () {
+                var card = header.closest('.permission-card');
+                if (!card) return;
+                card.classList.toggle('open');
+            });
+        });
+
+        var toggleAllBtn = document.getElementById('toggleAllPermissionsBtn');
+        if (toggleAllBtn) {
+            toggleAllBtn.addEventListener('click', function () {
+                var cards = document.querySelectorAll('.permission-card');
+                var hasClosed = Array.prototype.some.call(cards, function (card) {
+                    return !card.classList.contains('open');
+                });
+                cards.forEach(function (card) {
+                    if (hasClosed) {
+                        card.classList.add('open');
+                    } else {
+                        card.classList.remove('open');
+                    }
+                });
+            });
+        }
+
+        var tickAllPinsBtn = document.getElementById('tickAllPinsBtn');
+        var permissionCheckboxes = function () {
+            return document.querySelectorAll('input[name^="user_grp_chkbox_val"]:not([disabled])');
+        };
+
+        function refreshTickAllButtonState() {
+            if (!tickAllPinsBtn) return;
+            var boxes = permissionCheckboxes();
+            if (!boxes || boxes.length === 0) {
+                tickAllPinsBtn.textContent = 'Tick All Pins';
+                return;
+            }
+            var allChecked = Array.prototype.every.call(boxes, function (checkbox) {
+                return checkbox.checked;
+            });
+            tickAllPinsBtn.textContent = allChecked ? 'Untick All Pins' : 'Tick All Pins';
+        }
+
+        if (tickAllPinsBtn) {
+            tickAllPinsBtn.addEventListener('click', function () {
+                var boxes = permissionCheckboxes();
+                var shouldTickAll = tickAllPinsBtn.textContent !== 'Untick All Pins';
+                boxes.forEach(function (checkbox) {
+                    checkbox.checked = shouldTickAll;
+                });
+                refreshTickAllButtonState();
+            });
+        }
+
+        permissionCheckboxes().forEach(function (checkbox) {
+            checkbox.addEventListener('change', refreshTickAllButtonState);
+        });
+        refreshTickAllButtonState();
+
+        var permissionSearch = document.getElementById('permissionSearch');
+        if (permissionSearch) {
+            permissionSearch.addEventListener('input', function () {
+                var keyword = String(permissionSearch.value || '').toLowerCase().trim();
+                document.querySelectorAll('.permission-card').forEach(function (card) {
+                    var groupName = String(card.getAttribute('data-permission-group') || '');
+                    var itemText = Array.prototype.map.call(card.querySelectorAll('[data-permission-item]'), function (el) {
+                        return String(el.getAttribute('data-permission-item') || '');
+                    }).join(' ');
+                    var matched = keyword === '' || groupName.indexOf(keyword) !== -1 || itemText.indexOf(keyword) !== -1;
+                    card.style.display = matched ? '' : 'none';
+                });
+            });
+        }
     </script>
 
 </body>

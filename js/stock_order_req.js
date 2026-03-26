@@ -3,6 +3,13 @@
   var page = config.page || "Stock Order Request";
   var siteURL = config.siteURL || "";
   var action = config.action || "";
+  var existingInvoiceNosNormalized = Array.isArray(
+    config.existingInvoiceNosNormalized,
+  )
+    ? config.existingInvoiceNosNormalized
+    : [];
+  var existingInvoiceLookup = {};
+  var lastActionBtnValue = "";
 
   checkCurrentPage(page, action);
   centerAlignment("formContainer");
@@ -15,6 +22,20 @@
       .replace(/\s+/g, " ")
       .trim();
   }
+
+  function normalizeInvoiceNo(value) {
+    return String(value || "")
+      .toLowerCase()
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  existingInvoiceNosNormalized.forEach(function (invoiceNo) {
+    var key = normalizeInvoiceNo(invoiceNo);
+    if (key !== "") {
+      existingInvoiceLookup[key] = true;
+    }
+  });
 
   function escapeAttr(value) {
     return String(value || "")
@@ -324,6 +345,9 @@
     var pkgNameInput = packageRow.querySelector(".sor-item-pkg-name");
     var pkgIdInput = packageRow.querySelector(".sor-item-pkg-id");
     var descInput = packageRow.querySelector(".sor-item-desc");
+    var packageQtyEditInput = packageRow.querySelector(
+      ".sor-item-package-qty-edit",
+    );
     var qtyInput = packageRow.querySelector(".sor-item-qty");
     var packageQtyHidden = packageRow.querySelector(".sor-item-package-qty");
     var packagePriceHidden = packageRow.querySelector(
@@ -334,8 +358,12 @@
     var pkgName = pkgNameInput ? pkgNameInput.value : "";
     var pkgId = pkgIdInput ? pkgIdInput.value : "";
     var desc = descInput ? descInput.value : "";
-    var packageQty = qtyInput ? parseInt(qtyInput.value || "0", 10) : 0;
+    var packageQtySourceInput = packageQtyEditInput || qtyInput;
+    var packageQty = packageQtySourceInput
+      ? parseInt(packageQtySourceInput.value || "0", 10)
+      : 0;
     if (isNaN(packageQty) || packageQty <= 0) packageQty = 1;
+    if (packageQtyEditInput) packageQtyEditInput.value = String(packageQty);
     if (qtyInput) qtyInput.value = String(packageQty);
     if (packageQtyHidden) packageQtyHidden.value = String(packageQty);
 
@@ -360,6 +388,22 @@
       if (rowGroupHidden) rowGroupHidden.value = groupId;
       if (row === packageRow) {
         var headerBaseQty = row.querySelector(".sor-item-base-qty");
+        var headerQtyEditInput = row.querySelector(
+          ".sor-item-package-qty-edit",
+        );
+        var headerQtyInput = row.querySelector(".sor-item-qty");
+        if (headerQtyEditInput) {
+          var headerQty = parseInt(headerQtyEditInput.value || "0", 10);
+          if (isNaN(headerQty) || headerQty <= 0) {
+            headerQtyEditInput.value = String(packageQty);
+          }
+        }
+        if (headerQtyInput) {
+          var displayQty = parseInt(headerQtyInput.value || "0", 10);
+          if (isNaN(displayQty) || displayQty <= 0) {
+            headerQtyInput.value = String(packageQty);
+          }
+        }
         if (headerBaseQty) headerBaseQty.value = "1";
         return;
       }
@@ -441,8 +485,6 @@
         var prodIdInput = row.querySelector(".sor-item-prod-id");
         if (prodNameInput && prodIdInput) {
           if (rowRole === "package") {
-            prodNameInput.value = "";
-            prodIdInput.value = "";
             prodNameInput.readOnly = true;
           } else {
             prodNameInput.readOnly = false;
@@ -451,33 +493,51 @@
 
         var qtyInput = row.querySelector(".sor-item-qty");
         if (qtyInput) {
-          qtyInput.readOnly = rowRole !== "package";
+          qtyInput.readOnly = action === "";
         }
-
         var actionCell = row.querySelector("td:last-child");
-        if (actionCell) {
+        if (actionCell && rowRole !== "package") {
           actionCell.innerHTML =
-            '<button type="button" class="mt-1 ' +
-            (rowRole === "package"
-              ? "remove-package-btn"
-              : "remove-product-btn") +
-            '" id="action_menu_btn"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>';
+            action === ""
+              ? ""
+              : '<button type="button" class="mt-1 remove-product-btn" id="action_menu_btn"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>';
         }
       });
 
       if (packageRow) {
+        var headerProdNameInput = packageRow.querySelector(
+          ".sor-item-prod-name",
+        );
+        var headerProdIdInput = packageRow.querySelector(".sor-item-prod-id");
+        if (headerProdNameInput) headerProdNameInput.value = "";
+        if (headerProdIdInput) headerProdIdInput.value = "";
         syncGroupValues(packageRow, false);
       }
     });
 
-    var firstActionRow = document.querySelector("#sorItemBody tr");
-    if (firstActionRow) {
-      var firstActionCell = firstActionRow.querySelector("td:last-child");
-      if (firstActionCell) {
-        firstActionCell.innerHTML =
+    // Keep package action buttons by package order:
+    // 1st package row keeps add button, and package rows stay removable when
+    // there is more than one package group.
+    var packageRows = Array.prototype.slice.call(
+      document.querySelectorAll('#sorItemBody tr[data-row-role="package"]'),
+    );
+    var canRemovePackage = packageRows.length > 1;
+    packageRows.forEach(function (pkgRow, idx) {
+      var pkgActionCell = pkgRow.querySelector("td:last-child");
+      if (!pkgActionCell) return;
+
+      var removeBtnHtml =
+        '<button type="button" class="mt-1 remove-package-btn" id="action_menu_btn" ' +
+        (canRemovePackage ? "" : 'style="visibility:hidden"') +
+        '><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>';
+
+      if (idx === 0) {
+        pkgActionCell.innerHTML =
           '<button type="button" class="mt-1 add-item-row-btn" id="action_menu_btn"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>';
+      } else {
+        pkgActionCell.innerHTML = removeBtnHtml;
       }
-    }
+    });
   }
 
   function clearPackageSelection(row) {
@@ -596,13 +656,6 @@
       }
     });
 
-    document.querySelectorAll(".sor-standalone-price").forEach(function (el) {
-      var p = parseFloat(el.value || "0");
-      if (!isNaN(p) && p > 0) {
-        total += p;
-      }
-    });
-
     var totalInput = document.getElementById("sor_total_price");
     if (totalInput) totalInput.value = total.toFixed(2);
   }
@@ -646,6 +699,7 @@
 
   function buildPackageRowHtml(
     rowKey,
+    groupKey,
     pkgName,
     pkgId,
     prodName,
@@ -666,36 +720,46 @@
       '" name="sor_item_pkg_id[]" value="' +
       escapeAttr(pkgId || "") +
       '"></div></div></td>' +
-      '<td><div class="autocomplete"><input class="form-control sor-item-prod-name" type="text" id="sor_item_prod_name_' +
-      rowKey +
-      '" name="sor_item_prod_name[]" value="' +
-      escapeAttr(prodName || "") +
-      '" ' +
-      (isPackageHeader ? "readonly" : "") +
-      '"><input type="hidden" class="sor-item-prod-id" id="sor_item_prod_id_' +
+      "<td>" +
+      (isPackageHeader
+        ? '<input class="sor-item-prod-name" type="hidden" id="sor_item_prod_name_' +
+          rowKey +
+          '" name="sor_item_prod_name[]" value="' +
+          escapeAttr(prodName || "") +
+          '">'
+        : '<div class="autocomplete"><input class="form-control sor-item-prod-name" type="text" id="sor_item_prod_name_' +
+          rowKey +
+          '" name="sor_item_prod_name[]" value="' +
+          escapeAttr(prodName || "") +
+          '"></div>') +
+      '<input type="hidden" class="sor-item-prod-id" id="sor_item_prod_id_' +
       rowKey +
       '" name="sor_item_prod_id[]" value="' +
       escapeAttr(prodId || "") +
-      '"></div></td>' +
+      '"></td>' +
       '<td class="cell-desc"><div class="desc-main-field"><input class="form-control sor-item-desc" type="text" name="sor_item_desc[]" readonly value="' +
       escapeAttr(desc || "") +
       '"></div></td>' +
       '<td><div class="qty-main-field"><input class="form-control sor-item-qty" type="number" min="1" name="sor_item_product_qty[]" value="' +
       escapeAttr(qty || 1) +
       '" ' +
-      (isPackageHeader ? "" : "readonly") +
+      (action === "" ? "readonly" : "") +
       '"><input class="sor-item-package-qty" type="hidden" name="sor_item_package_qty[]" value="' +
       escapeAttr(qty || 1) +
       '"><input class="sor-item-base-qty" type="hidden" name="sor_item_base_qty[]" value="' +
       (isPackageHeader ? "1" : "1") +
       '"><input class="sor-item-group-key" type="hidden" name="sor_item_group_key[]" value="' +
-      escapeAttr(rowKey) +
+      escapeAttr(groupKey || rowKey) +
       '"><input class="sor-item-package-price" type="hidden" name="sor_item_package_price[]" value="0.00' +
       '"></div></td>' +
       '<td class="cell-total"><div class="total-main-field"><input class="form-control sor-item-total" type="text" value="0.00" readonly></div></td>' +
-      '<td><button type="button" class="mt-1 ' +
-      (isPackageHeader ? "remove-package-btn" : "remove-product-btn") +
-      '" id="action_menu_btn"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button></td>'
+      "<td>" +
+      (isPackageHeader
+        ? '<button type="button" class="mt-1 remove-package-btn" id="action_menu_btn"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>'
+        : action === ""
+          ? ""
+          : '<button type="button" class="mt-1 remove-product-btn" id="action_menu_btn"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>') +
+      "</td>"
     );
   }
 
@@ -704,12 +768,14 @@
     if (!tbody) return null;
 
     var rowKey = Date.now().toString() + "_" + Math.floor(Math.random() * 1000);
+    var rowGroupId = groupId || "pkg_group_" + rowKey;
     var tr = document.createElement("tr");
     tr.setAttribute("data-row-key", rowKey);
-    tr.setAttribute("data-package-group", groupId || "pkg_group_" + rowKey);
+    tr.setAttribute("data-package-group", rowGroupId);
     tr.setAttribute("data-row-role", "package");
     tr.innerHTML = buildPackageRowHtml(
       rowKey,
+      rowGroupId,
       "",
       "",
       "",
@@ -719,6 +785,8 @@
       "package",
     );
     tbody.appendChild(tr);
+    var hiddenGroupInput = tr.querySelector(".sor-item-group-key");
+    if (hiddenGroupInput) hiddenGroupInput.value = rowGroupId;
     bindRowAutocomplete(tr);
     return tr;
   }
@@ -730,12 +798,14 @@
     var product = productLookupById[parseInt(prodId || 0, 10)] || null;
     var role = rowRole === "package" ? "package" : "product";
     var rowKey = Date.now().toString() + "_" + Math.floor(Math.random() * 1000);
+    var rowGroupId = groupId || "pkg_group_" + rowKey;
     var tr = document.createElement("tr");
     tr.setAttribute("data-row-key", rowKey);
-    tr.setAttribute("data-package-group", groupId || "pkg_group_" + rowKey);
+    tr.setAttribute("data-package-group", rowGroupId);
     tr.setAttribute("data-row-role", role);
     tr.innerHTML = buildPackageRowHtml(
       rowKey,
+      rowGroupId,
       pkg.name || "",
       pkg.id || "",
       role === "package" ? "" : product ? product.name : "",
@@ -745,6 +815,8 @@
       role,
     );
     tbody.appendChild(tr);
+    var hiddenGroupInput = tr.querySelector(".sor-item-group-key");
+    if (hiddenGroupInput) hiddenGroupInput.value = rowGroupId;
     bindRowAutocomplete(tr);
     updateRowDescAndPrice(tr);
     renderPackageGroups();
@@ -783,10 +855,19 @@
       !Array.isArray(pkg.product_ids) ||
       pkg.product_ids.length === 0
     ) {
+      var pkgHeaderProdName = row.querySelector(".sor-item-prod-name");
+      var pkgHeaderProdId = row.querySelector(".sor-item-prod-id");
+      if (pkgHeaderProdName) pkgHeaderProdName.value = "";
+      if (pkgHeaderProdId) pkgHeaderProdId.value = "";
       reindexRows();
       renderPackageGroups();
       return;
     }
+
+    var pkgHeaderProdName = row.querySelector(".sor-item-prod-name");
+    var pkgHeaderProdId = row.querySelector(".sor-item-prod-id");
+    if (pkgHeaderProdName) pkgHeaderProdName.value = "";
+    if (pkgHeaderProdId) pkgHeaderProdId.value = "";
 
     pkg.product_ids.forEach(function (pid) {
       var extraProdId = parseInt(pid, 10);
@@ -958,73 +1039,6 @@
     });
   }
 
-  function bindStandaloneAutocomplete(row) {
-    var prodNameInput = row.querySelector(".sor-standalone-prod-name");
-    var prodIdInput = row.querySelector(".sor-standalone-prod-id");
-    if (!prodNameInput || !prodIdInput) return;
-
-    bindTextAutocomplete(prodNameInput, prodIdInput, productOptions);
-  }
-
-  function reindexStandaloneRows() {
-    var rows = document.querySelectorAll("#sorStandaloneBody tr");
-    rows.forEach(function (row, idx) {
-      var no = row.querySelector(".row-no");
-      if (no) no.textContent = String(idx + 1);
-
-      var actionCell = row.querySelector("td:last-child");
-      if (!actionCell) return;
-      if (idx === 0) {
-        actionCell.innerHTML =
-          '<button type="button" class="mt-1 add-standalone-row-btn" id="action_menu_btn"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>';
-      } else {
-        actionCell.innerHTML =
-          '<button type="button" class="mt-1 remove-standalone-btn" id="action_menu_btn"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>';
-      }
-    });
-  }
-
-  document.querySelectorAll("#sorStandaloneBody tr").forEach(function (row) {
-    bindStandaloneAutocomplete(row);
-  });
-
-  var standaloneBody = document.getElementById("sorStandaloneBody");
-  if (standaloneBody) {
-    standaloneBody.addEventListener("click", function (e) {
-      var addStandaloneBtn = e.target.closest(".add-standalone-row-btn");
-      var removeStandaloneBtn = e.target.closest(".remove-standalone-btn");
-      if (addStandaloneBtn) {
-        var tbody = document.getElementById("sorStandaloneBody");
-        if (!tbody) return;
-
-        var rowKey = "st_" + Date.now().toString();
-        var tr = document.createElement("tr");
-        tr.setAttribute("data-row-key", rowKey);
-        tr.innerHTML =
-          '<td class="row-no"></td>' +
-          '<td><div class="autocomplete"><input class="form-control sor-standalone-prod-name" type="text" id="sor_standalone_prod_name_' +
-          rowKey +
-          '" name="sor_standalone_prod_name[]" ><input type="hidden" class="sor-standalone-prod-id" id="sor_standalone_prod_id_' +
-          rowKey +
-          '" name="sor_standalone_prod_id[]" value=""></div></td>' +
-          '<td><input class="form-control sor-standalone-qty" type="number" min="1" name="sor_standalone_qty[]" value="1"><input class="sor-standalone-price" type="hidden" name="sor_standalone_price[]" value="0.00"></td>' +
-          "<td></td>";
-
-        tbody.appendChild(tr);
-        bindStandaloneAutocomplete(tr);
-        reindexStandaloneRows();
-      } else if (removeStandaloneBtn) {
-        var rowCount = document.querySelectorAll(
-          "#sorStandaloneBody tr",
-        ).length;
-        if (rowCount > 1) {
-          removeStandaloneBtn.closest("tr").remove();
-          reindexStandaloneRows();
-        }
-      }
-    });
-  }
-
   if (config.showQrPanel) {
     var copyBtn = document.getElementById("copyOrderLinkBtn");
     var orderLinkInput = document.getElementById("sorOrderLink");
@@ -1103,26 +1117,32 @@
       }
     });
 
-    var hasStandaloneItem = false;
-    document.querySelectorAll("#sorStandaloneBody tr").forEach(function (row) {
-      var prodIdInput = row.querySelector(".sor-standalone-prod-id");
-      var qtyInput = row.querySelector(".sor-standalone-qty");
-      var prodId = prodIdInput ? parseInt(prodIdInput.value || "0", 10) : 0;
-      var qty = qtyInput ? parseInt(qtyInput.value || "0", 10) : 0;
-      if (prodId > 0 && qty > 0) {
-        hasStandaloneItem = true;
-      }
-    });
-
-    return hasPackageItem || hasStandaloneItem;
+    return hasPackageItem;
   }
 
   var sorForm = document.getElementById("sorForm");
   if (sorForm) {
+    sorForm
+      .querySelectorAll('button[name="actionBtn"]')
+      .forEach(function (btn) {
+        btn.addEventListener("click", function () {
+          lastActionBtnValue = String(btn.value || "");
+        });
+      });
+
     sorForm.addEventListener("submit", function (e) {
-      var submitter = e.submitter;
-      if (!submitter) return;
-      var actionValue = String(submitter.value || "");
+      var submitter =
+        e.submitter ||
+        (document.activeElement && document.activeElement.name === "actionBtn"
+          ? document.activeElement
+          : null);
+      var fallbackAddBtn = document.getElementById("addBtn");
+      var actionValue = String(
+        (submitter && submitter.value) ||
+          lastActionBtnValue ||
+          (fallbackAddBtn ? fallbackAddBtn.value : "") ||
+          "",
+      );
       if (actionValue !== "addRecord" && actionValue !== "updRecord") {
         return;
       }
@@ -1157,6 +1177,21 @@
       if (!invoiceNo || String(invoiceNo.value || "").trim() === "") {
         setFieldError(invoiceNo, invoiceNoError, "Invoice cannot be empty.");
         hasError = true;
+      } else {
+        var normalizedInvoiceNo = normalizeInvoiceNo(invoiceNo.value);
+        if (
+          normalizedInvoiceNo !== "" &&
+          existingInvoiceLookup[normalizedInvoiceNo]
+        ) {
+          setFieldError(
+            invoiceNo,
+            invoiceNoError,
+            "Invoice number (" +
+              String(invoiceNo.value || "").trim() +
+              ") already exists. Please use a different invoice number.",
+          );
+          hasError = true;
+        }
       }
 
       if (!invoiceDate || String(invoiceDate.value || "").trim() === "") {
@@ -1181,7 +1216,7 @@
         setFieldError(
           null,
           itemsError,
-          "Please add at least one package item or one product with quantity.",
+          "Please add at least one package item with quantity.",
         );
         hasError = true;
       }
@@ -1208,12 +1243,6 @@
     if (sorItemBody) {
       sorItemBody.addEventListener("input", clearAllFieldErrors);
       sorItemBody.addEventListener("change", clearAllFieldErrors);
-    }
-
-    var sorStandaloneBody = document.getElementById("sorStandaloneBody");
-    if (sorStandaloneBody) {
-      sorStandaloneBody.addEventListener("input", clearAllFieldErrors);
-      sorStandaloneBody.addEventListener("change", clearAllFieldErrors);
     }
   }
 })();

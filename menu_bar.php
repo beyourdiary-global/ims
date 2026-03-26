@@ -32,30 +32,6 @@ $menuList = array(
         'pin' => array('0')             // action
     ),
     array(
-        'Employees',
-        'mdi mdi-account-outline',
-        'javascript:void(0)',
-        'y',
-        'expand' => array(
-            array('Designations', 'mdi mdi-information-outline', $SITEURL . '/designations_table.php', '4'),
-            array('Departments', 'mdi mdi-domain', $SITEURL . '/department_table.php', '5'),
-            array('Employee Details', 'mdi mdi-information-outline', $SITEURL . '/employeeDetailsTable.php', '34'),
-        ),
-        'pin' => array('4', '5', '34')
-    ),
-    array(
-        'Leave Transcation',
-        'mdi mdi-account-outline',
-        'javascript:void(0)',
-        'y',
-        'expand' => array(
-            array('My Leave Transcation', '', $SITEURL . '/myLeaveTransaction.php', '67'),
-            array('Approval Leave Transcation', '', $SITEURL . '/approvalLeaveTransaction.php', '68'),
-            array('All Leave Transcation', '', $SITEURL . '/allLeaveTransaction.php', '72'),
-        ),
-        'pin' => array('67', '68', '72')
-    ),
-    array(
         'Customer',
         'mdi mdi-account-outline',
         'javascript:void(0)',
@@ -391,8 +367,9 @@ $menuList = array(
                 ),
                 'pin' => array('80', '82', '83', '58', '81', '121'),
             ),
+            array('Token Setting', 'mdi mdi-key-chain', $SITEURL . '/token_setting_table.php', '133'),
         ),
-        'pin' => array('1', '2', '3', '6', '8', '9', '10', '11', '12', '13', '14', '15', '16', '19', '24', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47', '48', '49', '50', '51', '52', '56', '57', '58', '60', '63', '65', '66', '67', '68', '69', '70', '72', '74', '75', '76', '77', '78', '79', '80', '81', '82', '83', '84', '85', '86', '87', '88', '89', '91', '92', '93', '94', '121')
+        'pin' => array('1', '2', '3', '6', '8', '9', '10', '11', '12', '13', '14', '15', '16', '19', '24', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47', '48', '49', '50', '51', '52', '56', '57', '58', '60', '63', '65', '66', '67', '68', '69', '70', '72', '74', '75', '76', '77', '78', '79', '80', '81', '82', '83', '84', '85', '86', '87', '88', '89', '91', '92', '93', '94', '121', '133')
     ),
     array(
         'Warehouse',

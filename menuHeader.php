@@ -100,10 +100,10 @@
                             <ul class="dropdown-menu dropdown-menu-right mt-3"
                                 aria-labelledby="navbarDropdownMenuAvatar">
                                 <li>
-                                    <a class="dropdown-item" href="#">My profile</a>
+                                    <a class="dropdown-item" href="<?= $SITEURL ?>/user_profile.php">My profile</a>
                                 </li>
                                 <li>
-                                    <a class="dropdown-item" href="#">Settings</a>
+                                    <a class="dropdown-item" href="<?= $SITEURL ?>/changePassword.php">Settings</a>
                                 </li>
                                 <li>
                                     <a class="dropdown-item" href="<?= $SITEURL ?>/logout.php">Logout</a>
@@ -124,11 +124,11 @@
                     </button>
                     <ul class="dropdown-menu dropdown-menu-right mt-4" aria-labelledby="navbarTogglerMenuAvatar">
                         <li>
-                            <a class="dropdown-item" href="#">My profile</a>
+                            <a class="dropdown-item" href="<?= $SITEURL ?>/user_profile.php">My profile</a>
                             <div class="dropdown-divider my-0"></div>
                         </li>
                         <li>
-                            <a class="dropdown-item" href="#">Settings</a>
+                            <a class="dropdown-item" href="<?= $SITEURL ?>/changePassword.php">Settings</a>
                             <div class="dropdown-divider my-0"></div>
                         </li>
                         <li>
