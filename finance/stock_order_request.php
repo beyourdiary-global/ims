@@ -938,7 +938,6 @@ function sorQrSrc($path, $siteUrl)
                                                     <input class="form-control sor-item-pkg-name" type="text" id="sor_item_pkg_name_<?= (int) $rowKey ?>" name="sor_item_pkg_name[]" value="<?= sorEcho($pkgName) ?>" placeholder="Type Package" <?= ($act == '') ? 'readonly' : '' ?>>
                                                     <input type="hidden" class="sor-item-pkg-id" id="sor_item_pkg_id_<?= (int) $rowKey ?>" name="sor_item_pkg_id[]" value="<?= (int) $pkgId ?>">
                                                 </div>
-                                                <div class="sor-package-qty-note">Quantity(package):
                                                     <input class="form-control sor-item-package-qty-edit" type="number" min="1" value="<?= sorEcho($packageQty) ?>" <?= ($act == '') ? 'readonly' : '' ?>>
                                                 </div>
                                             </div>

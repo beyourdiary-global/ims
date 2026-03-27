@@ -1862,7 +1862,6 @@ foreach ($previewRows as $idx => $rowCheck) {
                                                                 <div class="autocomplete">
                                                                     <input class="form-control mb-2 sor-pkg-name-input sor-server-value" type="text" id="sor_imp_pkg_name_<?= $idx ?>" value="<?= htmlspecialchars($pdfPackageName, ENT_QUOTES, 'UTF-8') ?>" data-server-value="<?= htmlspecialchars($pdfPackageName, ENT_QUOTES, 'UTF-8') ?>" data-group="<?= htmlspecialchars($pkgGroupKey, ENT_QUOTES, 'UTF-8') ?>" placeholder="Type Package" autocomplete="off">
                                                                 </div>
-                                                                <div class="pkg-qty-note">Quantity(package): <?= (int) $rowPackageQty ?></div>
                                                                 <?php $pkgGroupErr = isset($packageGroupFieldErrors[$pkgKey]) ? (string) $packageGroupFieldErrors[$pkgKey] : ''; ?>
                                                                 <div class="err-missing sor-item-inline-error" data-item-error="package" data-group="<?= htmlspecialchars($pkgGroupKey, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($pkgGroupErr, ENT_QUOTES, 'UTF-8') ?></div>
                                                             </td>

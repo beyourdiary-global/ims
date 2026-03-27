@@ -187,12 +187,32 @@ function sorInfoResolveChatIdFromTokenRow($tokenRow)
 
     if (is_array($tokenRow) && isset($tokenRow['remark'])) {
         $remark = trim((string) $tokenRow['remark']);
-        if ($remark !== '' && preg_match('/chat[_\s-]*id\s*[:=]\s*(-?\d{5,})/i', $remark, $m)) {
+        if ($remark !== '' && preg_match('/(?:chat[_\s-]*id|chat|channel)\s*[:=]\s*(@[a-z0-9_]{4,}|-?\d{5,})/i', $remark, $m)) {
             return trim((string) $m[1]);
+        }
+        if ($remark !== '' && preg_match('/(^|\s)(@[a-z0-9_]{4,})($|\s)/i', $remark, $m2)) {
+            return trim((string) $m2[2]);
         }
     }
 
     return '';
+}
+
+function sorInfoFindPreferredTokenRow($connect, $tokenTable)
+{
+    // Prefer rows clearly intended for Stock In Telegram flow, then fallback to latest active token.
+    $sql = "SELECT * FROM `" . $tokenTable . "` WHERE status='A' ORDER BY "
+        . "CASE "
+        . "WHEN LOWER(name) LIKE '%stock in%' OR LOWER(name) LIKE '%stockin%' OR LOWER(name) LIKE '%stock-order%' OR LOWER(name) LIKE '%stock order%' OR LOWER(name) LIKE '%warehouse%' THEN 0 "
+        . "WHEN LOWER(COALESCE(remark, '')) LIKE '%stock in%' OR LOWER(COALESCE(remark, '')) LIKE '%stockin%' OR LOWER(COALESCE(remark, '')) LIKE '%stock-order%' OR LOWER(COALESCE(remark, '')) LIKE '%stock order%' OR LOWER(COALESCE(remark, '')) LIKE '%warehouse%' THEN 1 "
+        . "ELSE 2 END, id DESC LIMIT 1";
+
+    $rst = mysqli_query($connect, $sql);
+    if ($rst && mysqli_num_rows($rst) > 0) {
+        return mysqli_fetch_assoc($rst);
+    }
+
+    return null;
 }
 
 $requestSql = "SELECT * FROM " . STOCK_ORDER_REQ . " WHERE id='" . $requestId . "' AND status='A' LIMIT 1";
@@ -248,8 +268,7 @@ $telegramErr = '';
 
 if (post('actionBtn') === 'sendTelegramStockInBot') {
     $tokenTable = defined('TOKEN_SETT') ? TOKEN_SETT : 'token_setting';
-    $tokenRst = mysqli_query($connect, "SELECT * FROM " . $tokenTable . " WHERE status='A' ORDER BY id DESC LIMIT 1");
-    $tokenRow = ($tokenRst && mysqli_num_rows($tokenRst) > 0) ? mysqli_fetch_assoc($tokenRst) : null;
+    $tokenRow = sorInfoFindPreferredTokenRow($connect, $tokenTable);
 
     if (!$tokenRow) {
         $telegramErr = 'Token Setting not found. Please create Token Setting first.';
