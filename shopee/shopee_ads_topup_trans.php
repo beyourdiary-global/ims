@@ -83,6 +83,8 @@ if (post('actionBtn')) {
                 break;
             } else if ($action == 'addTransaction') {
                 try {
+                    $sat_date_db = date('Y-m-d H:i:s', strtotime(str_replace('T', ' ', (string) $sat_date)));
+
                     //check values
                     if ($sat_acc) {
                         array_push($newvalarr, $sat_acc);
@@ -94,7 +96,7 @@ if (post('actionBtn')) {
                     }
 
                     if ($sat_date) {
-                        array_push($newvalarr, $sat_date);
+                        array_push($newvalarr, $sat_date_db);
                         array_push($datafield, 'payment date');
                     }
 
@@ -128,7 +130,7 @@ if (post('actionBtn')) {
                         array_push($datafield, 'remark');
                     }
 
-                    $query = "INSERT INTO " . $tblName . "(shopee_acc,orderID,payment_date,currency,topup_amt,subtotal,gst,pay_meth,remark,create_by,create_date,create_time) VALUES ('$sat_acc','$sat_order_id','$sat_date','$sat_curr','$sat_amt','$sat_subtotal','$sat_gst','$sat_pay','$sat_remark','" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . "(shopee_acc,orderID,payment_date,currency,topup_amt,subtotal,gst,pay_meth,remark,create_by,create_date,create_time) VALUES ('$sat_acc','$sat_order_id','$sat_date_db','$sat_curr','$sat_amt','$sat_subtotal','$sat_gst','$sat_pay','$sat_remark','" . USER_ID . "',curdate(),curtime())";
                     // Execute the query
                     $returnData = mysqli_query($finance_connect, $query);
                     $_SESSION['tempValConfirmBox'] = true;
@@ -141,6 +143,7 @@ if (post('actionBtn')) {
                     // take old value
                     $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $finance_connect);
                     $row = $rst->fetch_assoc();
+                    $sat_date_db = date('Y-m-d H:i:s', strtotime(str_replace('T', ' ', (string) $sat_date)));
 
                     // check value
                     if ($row['shopee_acc'] != $sat_acc) {
@@ -155,9 +158,9 @@ if (post('actionBtn')) {
                         array_push($datafield, 'order ID');
                     }
 
-                    if ($row['payment_date'] != $sat_date) {
+                    if ($row['payment_date'] != $sat_date_db) {
                         array_push($oldvalarr, $row['payment_date']);
-                        array_push($chgvalarr, $sat_date);
+                        array_push($chgvalarr, $sat_date_db);
                         array_push($datafield, 'payment date');
                     }
 
@@ -200,14 +203,15 @@ if (post('actionBtn')) {
                     // convert into string
                     $oldval = implode(",", $oldvalarr);
                     $chgval = implode(",", $chgvalarr);
-                    $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
-                        $query = "UPDATE " . $tblName . " SET shopee_acc = '$sat_acc', orderID = '$sat_order_id', payment_date = '$sat_date', currency = '$sat_curr', topup_amt = '$sat_amt', subtotal = '$sat_subtotal', gst = '$sat_gst', pay_meth = '$sat_pay', remark ='$sat_remark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
+                        $query = "UPDATE " . $tblName . " SET shopee_acc = '$sat_acc', orderID = '$sat_order_id', payment_date = '$sat_date_db', currency = '$sat_curr', topup_amt = '$sat_amt', subtotal = '$sat_subtotal', gst = '$sat_gst', pay_meth = '$sat_pay', remark ='$sat_remark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
                         $returnData = mysqli_query($finance_connect, $query);
+                        $_SESSION['tempValConfirmBox'] = true;
 
                     } else {
                         $act = 'NC';
+                        $_SESSION['tempValConfirmBox'] = true;
                     }
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();

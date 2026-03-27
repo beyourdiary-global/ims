@@ -1,59 +1,32 @@
-//autocomplete
+// autocomplete
 $(document).ready(function () {
-  if (!$("#scr_pic").attr("disabled")) {
-    $("#scr_pic").keyup(function () {
+  function bindSearch(inputSelector, searchType, dbTable) {
+    var $input = $(inputSelector);
+    if (!$input.length || $input.attr("disabled")) {
+      return;
+    }
+
+    $input.on("keyup", function () {
       var param = {
         search: $(this).val(),
-        searchType: "name", // column of the table
-        elementID: $(this).attr("id"), // id of the input
-        hiddenElementID: $(this).attr("id") + "_hidden", // hidden input for storing the value
-        dbTable: "<?= USR_USER ?>", // json filename (generated when login)
-      };
-      searchInput(param, "<?= $SITEURL ?>");
-      console.log(searchInput);
-    });
-  }
-  if (!$("#scr_country").attr("disabled")) {
-    $("#scr_country").keyup(function () {
-      var param = {
-        search: $(this).val(),
-        searchType: "nicename", // column of the table
-        elementID: $(this).attr("id"), // id of the input
-        hiddenElementID: $(this).attr("id") + "_hidden", // hidden input for storing the value
-        dbTable: "<?= COUNTRIES ?>", // json filename (generated when login)
+        searchType: searchType,
+        elementID: $(this).attr("id"),
+        hiddenElementID: $(this).attr("id") + "_hidden",
+        dbTable: dbTable,
       };
       searchInput(param, "<?= $SITEURL ?>");
     });
   }
-  if (!$("#scr_brand").attr("disabled")) {
-    $("#scr_brand").keyup(function () {
-      var param = {
-        search: $(this).val(),
-        searchType: "name", // column of the table
-        elementID: $(this).attr("id"), // id of the input
-        hiddenElementID: $(this).attr("id") + "_hidden", // hidden input for storing the value
-        dbTable: "<?= BRAND ?>", // json filename (generated when login)
-      };
-      searchInput(param, "<?= $SITEURL ?>");
-    });
-  }
-  if (!$("#scr_series").attr("disabled")) {
-    $("#scr_series").keyup(function () {
-      var param = {
-        search: $(this).val(),
-        searchType: "name", // column of the table
-        elementID: $(this).attr("id"), // id of the input
-        hiddenElementID: $(this).attr("id") + "_hidden", // hidden input for storing the value
-        dbTable: "<?= BRD_SERIES ?>", // json filename (generated when login)
-      };
-      searchInput(param, "<?= $SITEURL ?>");
-    });
-  }
+
+  bindSearch("#scr_pic", "name", "<?= USR_USER ?>");
+  bindSearch("#scr_country", "nicename", "<?= COUNTRIES ?>");
+  bindSearch("#scr_brand", "name", "<?= BRAND ?>");
+  bindSearch("#scr_series", "name", "<?= BRD_SERIES ?>");
 });
 
-//jQuery form validation
+// jQuery form validation
 $("#scr_username").on("input", function () {
-  $(".sa-name-err").remove();
+  $(".scr-name-err").remove();
 });
 
 $("#scr_pic").on("input", function () {
@@ -72,13 +45,22 @@ $("#scr_series").on("input", function () {
   $(".scr-series-err").remove();
 });
 
-$(".submitBtn").on("click", () => {
+$("#scr_contact").on("input", function () {
+  $(".scr-contact-err").remove();
+});
+
+$(".submitBtn").on("click", function (event) {
+  event.preventDefault();
   $(".error-message").remove();
-  //event.preventDefault();
+  var $form = $(this).closest("form");
+  var clickedAction = $(this).val() || $(this).attr("value") || "";
 
   var name_chk = 0;
+  var pic_chk = 0;
+  var brand_chk = 0;
+  var series_chk = 0;
+  var contact_chk = 0;
   var country_chk = 0;
-  var currency_chk = 0;
 
   if (
     $("#scr_username").val() === "" ||
@@ -111,11 +93,7 @@ $(".submitBtn").on("click", () => {
   if (
     $("#scr_brand").val() === "" ||
     $("#scr_brand").val() === null ||
-    $("#scr_brand").val() === undefined ||
-    $("#scr_brand_hidden").val() === "" ||
-    $("#scr_brand_hidden").val() === null ||
-    $("#scr_brand_hidden").val() === undefined ||
-    $("#scr_brand_hidden").val() === "0"
+    $("#scr_brand").val() === undefined
   ) {
     brand_chk = 0;
     $("#scr_brand").after(
@@ -129,29 +107,21 @@ $(".submitBtn").on("click", () => {
   if (
     $("#scr_country").val() === "" ||
     $("#scr_country").val() === null ||
-    $("#scr_country").val() === undefined ||
-    $("#scr_country_hidden").val() === "" ||
-    $("#scr_country_hidden").val() === null ||
-    $("#scr_country_hidden").val() === undefined ||
-    $("#scr_country_hidden").val() === "0"
+    $("#scr_country").val() === undefined
   ) {
     country_chk = 0;
     $("#scr_country").after(
       '<span class="error-message scr-country-err">Country is required!</span>',
     );
   } else {
-    $(".scr-pic-err").remove();
+    $(".scr-country-err").remove();
     country_chk = 1;
   }
 
   if (
     $("#scr_series").val() === "" ||
     $("#scr_series").val() === null ||
-    $("#scr_series").val() === undefined ||
-    $("#scr_series_hidden").val() === "" ||
-    $("#scr_series_hidden").val() === null ||
-    $("#scr_series_hidden").val() === undefined ||
-    $("#scr_series_hidden").val() === "0"
+    $("#scr_series").val() === undefined
   ) {
     series_chk = 0;
     $("#scr_series").after(
@@ -163,12 +133,39 @@ $(".submitBtn").on("click", () => {
   }
 
   if (
+    $("#scr_contact").val() === "" ||
+    $("#scr_contact").val() === null ||
+    $("#scr_contact").val() === undefined
+  ) {
+    contact_chk = 0;
+    $("#scr_contact").after(
+      '<span class="error-message scr-contact-err">Whatsapp / Contact Number is required!</span>',
+    );
+  } else {
+    $(".scr-contact-err").remove();
+    contact_chk = 1;
+  }
+
+  if (
     name_chk == 1 &&
     pic_chk == 1 &&
     country_chk == 1 &&
-    brand_chk &&
-    series_chk == 1
-  )
-    $(this).closest("form").submit();
-  else return false;
+    brand_chk == 1 &&
+    series_chk == 1 &&
+    contact_chk == 1
+  ) {
+    // Programmatic submit does not include clicked submit button value.
+    // Keep it in a hidden field so backend can read the intended action.
+    var $actionHidden = $form.find("input[name='actionBtnHidden']");
+    if (!$actionHidden.length) {
+      $actionHidden = $('<input type="hidden" name="actionBtnHidden">');
+      $form.append($actionHidden);
+    }
+    $actionHidden.val(clickedAction);
+    if ($form.length && $form.get(0)) {
+      $form.get(0).submit();
+    }
+  } else {
+    return false;
+  }
 });

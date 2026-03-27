@@ -82,6 +82,7 @@ $result = getData('*', '', '', SHOPEE_CUST_INFO, $finance_connect);
                                 <th scope="col">Country</th>
                                 <th scope="col">Brand</th>
                                 <th scope="col">Series</th>
+                                <th scope="col">Whatsapp / Contact Number</th>
                                 <th scope="col">Remark</th>
                             </tr>
                         </thead>
@@ -185,6 +186,7 @@ $result = getData('*', '', '', SHOPEE_CUST_INFO, $finance_connect);
                                         <td scope="row"><?= $countryName ?></td>
                                         <td scope="row"><?= $brandName ?></td>
                                         <td scope="row"><?= $seriesName ?></td>
+                                        <td scope="row"><?= isset($row['contact_no']) ? $row['contact_no'] : '' ?></td>
                                         <td scope="row"><?= isset($row['remark']) ? $row['remark'] : '' ?></td>
                                     </tr>
                                 <?php }
@@ -200,6 +202,7 @@ $result = getData('*', '', '', SHOPEE_CUST_INFO, $finance_connect);
                                 <th scope="col">Country</th>
                                 <th scope="col">Brand</th>
                                 <th scope="col">Series</th>
+                                <th scope="col">Whatsapp / Contact Number</th>
                                 <th scope="col">Remark</th>
                             </tr>
                         </tfoot>

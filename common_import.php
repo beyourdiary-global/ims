@@ -19,6 +19,8 @@ $stockInPinAccess = checkPin($connect, 'Stock In');
 $productPinAccess = checkPin($connect, 'Product');
 $stockOrderReqPinAccess = checkPin($connect, 'Stock Order Request');
 $jtBackupPinAccess = checkPin($connect, 'J&T Transaction Backup Record');
+$companyPinAccess = checkPin($connect, 'Company');
+$purchaseOrderPinAccess = checkPin($connect, 'Purchase Order');
 
 $canShopeeAdsImport = is_array($shopeeAdsPinAccess) && isActionAllowed('Import', $shopeeAdsPinAccess);
 $canFacebookAdsImport = is_array($facebookAdsPinAccess) && isActionAllowed('Import', $facebookAdsPinAccess);
@@ -28,6 +30,8 @@ $canStockInImport = is_array($stockInPinAccess) && isActionAllowed('Import', $st
 $canProductImport = is_array($productPinAccess) && isActionAllowed('Import', $productPinAccess);
 $canStockOrderReqImport = is_array($stockOrderReqPinAccess) && isActionAllowed('Import', $stockOrderReqPinAccess);
 $canJtBackupImport = is_array($jtBackupPinAccess) && isActionAllowed('Import', $jtBackupPinAccess);
+$canCompanyImport = is_array($companyPinAccess) && isActionAllowed('Import', $companyPinAccess);
+$canPurchaseOrderImport = is_array($purchaseOrderPinAccess) && isActionAllowed('Import', $purchaseOrderPinAccess);
 
 // Configuration Array for all shortcut cards
 $shortcutCards = array(
@@ -102,6 +106,24 @@ $shortcutCards = array(
         'importUrl' => $SITEURL . '/finance/j&t_trans_backup_import.php',
         'backUrl' => $SITEURL . '/finance/j&t_trans_backup_table.php',
         'backText' => 'Back To J&T Transaction Page'
+    ),
+    array(
+        'title' => 'Company Import',
+        'desc' => 'Import company data and update existing records by company code.',
+        'canImport' => $canCompanyImport,
+        'canViewBack' => ($canCompanyImport),
+        'importUrl' => $SITEURL . '/company_import.php',
+        'backUrl' => $SITEURL . '/company_table.php',
+        'backText' => 'Back To Company Page'
+    ),
+    array(
+        'title' => 'Purchase Order Import',
+        'desc' => 'Import purchase order data and update existing records by doc no + seq + item code.',
+        'canImport' => $canPurchaseOrderImport,
+        'canViewBack' => ($canPurchaseOrderImport),
+        'importUrl' => $SITEURL . '/purchase_order_import.php',
+        'backUrl' => $SITEURL . '/purchase_order_table.php',
+        'backText' => 'Back To Purchase Order Page'
     )
 );
 

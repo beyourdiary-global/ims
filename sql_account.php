@@ -202,7 +202,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                     </div>
 
                     <div class="form-group mb-3">
-                        <label class="form-label" for="currentDataName">SQL Account Name</label>
+                        <label class="form-label" for="currentDataName">SQL Account Name*</label>
                         <input class="form-control" type="text" name="currentDataName" id="currentDataName" value="<?= isset($row['name']) ? htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') : '' ?>" <?= ($act == '') ? 'readonly' : '' ?> required autocomplete="off">
                         <div id="err_msg">
                             <span class="mt-n1" id="errorSpan"><?= isset($err) ? htmlspecialchars((string) $err, ENT_QUOTES, 'UTF-8') : '' ?></span>

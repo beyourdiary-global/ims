@@ -122,7 +122,7 @@ if (post('actionBtn')) {
                 $grpRst = getData('name', "id = '" . (int) $userGroup . "'", 'LIMIT 1', USR_GRP, $connect);
                 if ($grpRst && $grpRst->num_rows > 0) {
                     $grpRow = $grpRst->fetch_assoc();
-                    $isSuperAdminGroup = (strtolower(trim((string) $grpRow['name'])) === 'super admin');
+                    $isSuperAdminGroup = (strtolower(trim((string) $grpRow['name'])) === 'superadmin');
                 }
             }
 
@@ -554,7 +554,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
         if (userGroupEl.selectedIndex >= 0) {
             selectedText = String(userGroupEl.options[userGroupEl.selectedIndex].text || '').toLowerCase();
         }
-        var isSuperAdmin = selectedText === 'super admin';
+        var isSuperAdmin = selectedText === 'superadmin';
 
         supervisorWrap.style.display = isSuperAdmin ? 'none' : '';
         mainEl.required = !isSuperAdmin;

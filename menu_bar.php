@@ -275,12 +275,13 @@ $menuList = array(
                     array('Product Status', 'mdi mdi-package-variant-closed', $SITEURL . '/prod_status_table.php', '15'),
                     array('Brand', 'mdi mdi-label-outline', $SITEURL . '/brand_table.php', '9'),
                     array('Company', 'mdi mdi-office-building-outline', $SITEURL . '/company_table.php', '127'),
+                    array('Purchase Order', 'mdi mdi-file-document-outline', $SITEURL . '/purchase_order_table.php', '135'),
                     array('Courier Account', 'mdi mdi-label-outline', $SITEURL . '/courier_table.php', '50'),
                     array('Category', 'mdi mdi-label-outline', $SITEURL . '/product_category_table.php', '56'),
                     array('Brand Series', 'mdi mdi-label-outline', $SITEURL . '/brand_series_table.php', '74'),
                 ),
 
-                'pin' => array('15', '9', '127', '50', '56', '74'),
+                'pin' => array('15', '9', '127', '135', '50', '56', '74'),
 
             ),
             array(
@@ -369,7 +370,7 @@ $menuList = array(
             ),
             array('Token Setting', 'mdi mdi-key-chain', $SITEURL . '/token_setting_table.php', '133'),
         ),
-        'pin' => array('1', '2', '3', '6', '8', '9', '10', '11', '12', '13', '14', '15', '16', '19', '24', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47', '48', '49', '50', '51', '52', '56', '57', '58', '60', '63', '65', '66', '67', '68', '69', '70', '72', '74', '75', '76', '77', '78', '79', '80', '81', '82', '83', '84', '85', '86', '87', '88', '89', '91', '92', '93', '94', '121', '133')
+        'pin' => array('1', '2', '3', '6', '8', '9', '10', '11', '12', '13', '14', '15', '16', '19', '24', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47', '48', '49', '50', '51', '52', '56', '57', '58', '60', '63', '65', '66', '67', '68', '69', '70', '72', '74', '75', '76', '77', '78', '79', '80', '81', '82', '83', '84', '85', '86', '87', '88', '89', '91', '92', '93', '94', '121', '133', '135', '136')
     ),
     array(
         'Warehouse',
@@ -392,6 +393,14 @@ $menuList = array(
         'n',
         'expand' => array(),
         'pin' => array('131')
+    ),
+    array(
+        'User Record Log',
+        'mdi mdi-text-box-outline',
+        $SITEURL . '/user_record_log.php',
+        'n',
+        'expand' => array(),
+        'pin' => array('136')
     ),
     array(
         'Audit Log',
