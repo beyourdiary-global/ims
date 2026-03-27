@@ -7,10 +7,84 @@ include_once '../checkCurrentPagePin.php';
 
 $tblName = SHOPEE_CUST_INFO;
 
+if (!function_exists('scrEsc')) {
+    function scrEsc($conn, $val)
+    {
+        return mysqli_real_escape_string($conn, (string) $val);
+    }
+}
+
 //Current Page Action And Data ID
 $dataID = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addRecord' : 'updRecord';
+
+if (!function_exists('formatAmountRm')) {
+    function formatAmountRm($val)
+    {
+        $num = is_numeric($val) ? (float) $val : 0;
+        return number_format($num, 2, '.', '');
+    }
+}
+
+if (!function_exists('resolvePackageNamesFromCsv')) {
+    function resolvePackageNamesFromCsv($packageCsv, $connect)
+    {
+        $packageCsv = trim((string) $packageCsv);
+        if ($packageCsv === '') {
+            return '';
+        }
+
+        $packageIds = array_filter(array_map('trim', explode(',', $packageCsv)), function ($v) {
+            return $v !== '';
+        });
+
+        // Collect numeric IDs and ensure uniqueness for the batched query
+        $numericIds = array();
+        foreach ($packageIds as $id) {
+            if (ctype_digit((string) $id)) {
+                $numericIds[] = (int) $id;
+            }
+        }
+        $numericIds = array_values(array_unique($numericIds));
+
+        if (empty($numericIds)) {
+            // No valid numeric IDs; mirror previous behavior by returning the original CSV
+            return $packageCsv; 
+        }
+
+        // Build a single batched query to fetch all package names
+        $idList = implode(',', $numericIds);
+        $sql = "SELECT id, name FROM " . PKG . " WHERE id IN (" . $idList . ")";
+        $result = mysqli_query($connect, $sql);
+
+        $idToName = array();
+        if ($result instanceof mysqli_result) {
+            while ($row = $result->fetch_assoc()) {
+                if (isset($row['id'])) {
+                    $idToName[(int) $row['id']] = isset($row['name']) ? $row['name'] : '';
+                }
+            }
+        }
+
+        $names = array();
+        // Preserve the original order (and duplicates) of IDs when building the name list
+        foreach ($packageIds as $id) {
+            if (!ctype_digit((string) $id)) {
+                continue;
+            }
+            $intId = (int) $id;
+            if (isset($idToName[$intId]) && $idToName[$intId] !== '') {
+                $names[] = $idToName[$intId];
+            }
+        }
+
+        if (empty($names)) {
+            return $packageCsv;
+        }
+        return implode(', ', $names);
+    }
+}
 
 $redirect_page = $SITEURL . '/shopee/shopee_cust_info_table.php';
 $redirectLink = ("<script>location.href = '$redirect_page';</script>");
@@ -83,14 +157,52 @@ if (!($dataID) && !($act)) {
     </script>';
 }
 
+if ($dataID && isset($_GET['open_order_id'])) {
+    $openOrderId = (int) $_GET['open_order_id'];
+    if ($openOrderId > 0) {
+        $orderRst = getData('id,orderID', "id='$openOrderId'", 'LIMIT 1', SHOPEE_SG_ORDER_REQ, $finance_connect);
+        if ($orderRst && $orderRst->num_rows > 0) {
+            $orderRow = $orderRst->fetch_assoc();
+            $orderNo = isset($orderRow['orderID']) ? $orderRow['orderID'] : ('#' . $openOrderId);
+            $log = [
+                'log_act' => 'View',
+                'cdate' => $cdate,
+                'ctime' => $ctime,
+                'uid' => USER_ID,
+                'cby' => USER_ID,
+                'query_rec' => "order_id=" . $openOrderId,
+                'query_table' => SHOPEE_SG_ORDER_REQ,
+                'act_msg' => USER_NAME . " opened Shopee order detail [<b>" . $orderNo . "</b>] from <b><i>" . $pageTitle . "</i></b>.",
+                'page' => $pageTitle,
+                'connect' => $connect,
+            ];
+            audit_log($log);
+        }
+        echo "<script>location.href='" . $SITEURL . "/shopee/shopee_order_req.php?id=" . $openOrderId . "';</script>";
+        exit;
+    }
+}
+
 //Delete Data
 if ($act == 'D') {
     deleteRecord($tblName, '', $dataID, (isset($row['buyer_username']) ? $row['buyer_username'] : ''), $finance_connect, $connect, $cdate, $ctime, $pageTitle);
     $_SESSION['delChk'] = 1;
 }
 
-if (post('actionBtn')) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = post('actionBtn');
+    if ($action === '' || $action === null) {
+        $action = post('actionBtnHidden');
+    }
+    if (($action === '' || $action === null) && ($act === 'I' || $act === 'E')) {
+        $action = ($act === 'I') ? 'addRecord' : 'updRecord';
+    }
+
+    if ($action === '' || $action === null) {
+        $action = '';
+    }
+
+    if ($action !== '') {
 
     switch ($action) {
         case 'addRecord':
@@ -101,6 +213,7 @@ if (post('actionBtn')) {
             $scr_country = postSpaceFilter("scr_country_hidden");
             $scr_brand = postSpaceFilter("scr_brand_hidden");
             $scr_series = postSpaceFilter("scr_series_hidden");
+            $scr_contact = postSpaceFilter("scr_contact");
             $scr_remark = postSpaceFilter("scr_remark");
             $scr_pic_text = postSpaceFilter("scr_pic");
             $scr_country_text = postSpaceFilter("scr_country");
@@ -142,6 +255,9 @@ if (post('actionBtn')) {
             } else if (!$scr_series) {
                 $series_err = "Series cannot be empty";
                 break;
+            } else if (!$scr_contact) {
+                $contact_err = "Whatsapp / Contact Number cannot be empty";
+                break;
             } else if ($action == 'addRecord') {
                 try {
 
@@ -172,20 +288,32 @@ if (post('actionBtn')) {
                         array_push($datafield, 'series');
                     }
 
+                    if ($scr_contact) {
+                        array_push($newvalarr, $scr_contact);
+                        array_push($datafield, 'contact_no');
+                    }
+
                     if ($scr_remark) {
                         array_push($newvalarr, $scr_remark);
                         array_push($datafield, 'remark');
                     }
 
 
-                    $query = "INSERT INTO " . $tblName . "(buyer_username,pic,country,brand,series,remark,create_by,create_date,create_time) VALUES ('$scr_username','$scr_pic','$scr_country','$scr_brand','$scr_series','$scr_remark','" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . "(buyer_username,pic,country,brand,series,contact_no,remark,create_by,create_date,create_time) VALUES ('" . scrEsc($finance_connect, $scr_username) . "','" . scrEsc($finance_connect, $scr_pic) . "','" . scrEsc($finance_connect, $scr_country) . "','" . scrEsc($finance_connect, $scr_brand) . "','" . scrEsc($finance_connect, $scr_series) . "','" . scrEsc($finance_connect, $scr_contact) . "','" . scrEsc($finance_connect, $scr_remark) . "','" . USER_ID . "',curdate(),curtime())";
 
                     // Execute the query
                     $returnData = mysqli_query($finance_connect, $query);
-                    $dataID = $finance_connect->insert_id;
-                    $_SESSION['tempValConfirmBox'] = true;
+                    if ($returnData) {
+                        $dataID = $finance_connect->insert_id;
+                        $_SESSION['tempValConfirmBox'] = true;
+                    } else {
+                        $errorMsg = mysqli_error($finance_connect);
+                        $err1 = "Failed to add record: " . $errorMsg;
+                        $act = "F";
+                    }
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
+                    $err1 = "Failed to add record: " . $errorMsg;
                     $act = "F";
                 }
             } else {
@@ -226,6 +354,12 @@ if (post('actionBtn')) {
                         array_push($datafield, 'series');
                     }
 
+                    if ((isset($row['contact_no']) ? $row['contact_no'] : '') != $scr_contact) {
+                        array_push($oldvalarr, isset($row['contact_no']) ? $row['contact_no'] : '');
+                        array_push($chgvalarr, $scr_contact);
+                        array_push($datafield, 'contact_no');
+                    }
+
                     if ($row['remark'] != $scr_remark) {
                         array_push($oldvalarr, $row['remark']);
                         array_push($chgvalarr, $scr_remark);
@@ -238,14 +372,20 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
-                        $query = "UPDATE " . $tblName . " SET buyer_username = '$scr_username', pic = '$scr_pic', country = '$scr_country', brand = '$scr_brand', series = '$scr_series', remark = '$scr_remark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
+                        $query = "UPDATE " . $tblName . " SET buyer_username = '" . scrEsc($finance_connect, $scr_username) . "', pic = '" . scrEsc($finance_connect, $scr_pic) . "', country = '" . scrEsc($finance_connect, $scr_country) . "', brand = '" . scrEsc($finance_connect, $scr_brand) . "', series = '" . scrEsc($finance_connect, $scr_series) . "', contact_no = '" . scrEsc($finance_connect, $scr_contact) . "', remark = '" . scrEsc($finance_connect, $scr_remark) . "', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '" . (int) $dataID . "'";
                         $returnData = mysqli_query($finance_connect, $query);
+                        if (!$returnData) {
+                            $errorMsg = mysqli_error($finance_connect);
+                            $err1 = "Failed to edit record: " . $errorMsg;
+                            $act = "F";
+                        }
 
                     } else {
                         $act = 'NC';
                     }
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
+                    $err1 = "Failed to edit record: " . $errorMsg;
                     $act = "F";
                 }
             }
@@ -268,11 +408,11 @@ if (post('actionBtn')) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (!empty($returnData) ? '' : (isset($errorMsg) ? $errorMsg : '')));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval'] = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (!empty($returnData) ? '' : (isset($errorMsg) ? $errorMsg : '')));
                 }
                 audit_log($log);
             }
@@ -285,6 +425,7 @@ if (post('actionBtn')) {
                 echo $redirectLink;
             }
             break;
+    }
     }
 }
 
@@ -341,7 +482,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         <div class="preloader"></div>
     </div>
 
-    <div class="page-load-cover">
+    <div class="page-load-cover" style="display:block !important;">
         <div class="d-flex flex-column my-3 ms-3">
             <p><a href="<?= $redirect_page ?>">
                     <?= $pageTitle ?>
@@ -354,7 +495,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         </div>
 
         <div id="SCRformContainer" class="container d-flex justify-content-center">
-            <div class="col-6 col-md-6 formWidthAdjust">
+            <div class="col-11 col-md-10 formWidthAdjust">
                 <form id="SCRForm" method="post" action="" enctype="multipart/form-data">
                     <div class="form-group mb-5">
                         <h2>
@@ -373,7 +514,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 
                     <div class="form-group">
                         <div class="row">
-                            <div class="col-md-12 mb-3">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label form_lbl" id="scr_username_lbl" for="scr_username">Shopee Buyer
                                     Username<span class="requireRed">*</span></label>
                                 <input class="form-control" type="text" name="scr_username" id="scr_username" value="<?php
@@ -394,12 +535,8 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                     </div>
                                 <?php } ?>
                             </div>
-                        </div>
-                    </div>
 
-                    <div class="form-group">
-                        <div class="row">
-                            <div class="form-group autocomplete col-md-6 mb-3">
+                            <div class="form-group autocomplete col-md-4 mb-3">
                                 <label class="form-label form_lbl" id="scr_pic_lbl" for="scr_pic">Sales Person In
                                     Charge<span class="requireRed">*</span></label>
                                     <?php
@@ -439,7 +576,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                     </div>
                                 <?php } ?>
                             </div>
-                            <div class="form-group autocomplete col-md-6 mb-3">
+                            <div class="form-group autocomplete col-md-4 mb-3">
                                 <label class="form-label form_lbl" id="scr_country_lbl" for="scr_country">Country<span
                                         class="requireRed">*</span></label>
                                 <?php
@@ -467,7 +604,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 
                         </div>
                         <div class="row">
-                            <div class="form-group autocomplete col-md-6 mb-3">
+                            <div class="form-group autocomplete col-md-4 mb-3">
                                 <label class="form-label form_lbl" id="scr_brand_lbl" for="scr_brand">Brand<span
                                         class="requireRed">*</span></label>
                                 <?php
@@ -492,7 +629,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                     </div>
                                 <?php } ?>
                             </div>
-                            <div class="form-group autocomplete col-md-6 mb-3">
+                            <div class="form-group autocomplete col-md-4 mb-3">
                                 <label class="form-label form_lbl" id="scr_series_lbl" for="scr_series">Series<span
                                         class="requireRed">*</span></label>
                                 <?php
@@ -517,6 +654,23 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                     </div>
                                 <?php } ?>
                             </div>
+                            <div class="form-group col-md-4 mb-3">
+                                <label class="form-label form_lbl" id="scr_contact_lbl" for="scr_contact">Whatsapp / Contact Number<span class="requireRed">*</span></label>
+                                <input class="form-control" type="text" name="scr_contact" id="scr_contact" value="<?php
+                                if (isset($dataExisted) && isset($row['contact_no']) && !isset($scr_contact)) {
+                                    echo htmlspecialchars((string) $row['contact_no'], ENT_QUOTES, 'UTF-8');
+                                } else if (isset($scr_contact)) {
+                                    echo htmlspecialchars((string) $scr_contact, ENT_QUOTES, 'UTF-8');
+                                } else {
+                                    echo '';
+                                } ?>" <?php if ($act == '')
+                                     echo 'disabled' ?>>
+                                <?php if (isset($contact_err)) { ?>
+                                    <div id="err_msg">
+                                        <span class="mt-n1"><?php echo $contact_err; ?></span>
+                                    </div>
+                                <?php } ?>
+                            </div>
                             <div class="form-group mb-3">
                                 <label class="form-label form_lbl" id="scr_remark_lbl" for="scr_remark">Remark</label>
                                 <textarea class="form-control" name="scr_remark" id="scr_remark" rows="3" <?php if ($act == '')
@@ -526,6 +680,91 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 
                             </div>
                         </div>
+
+                    <?php
+                    if ($dataID) {
+                        $orderRows = array();
+                        $sumFinalAmount = 0.00;
+                        $buyerId = (int) $dataID;
+                        $buyerUsername = isset($row['buyer_username']) ? mysqli_real_escape_string($finance_connect, (string) $row['buyer_username']) : '';
+
+                        $orderWhere = "status='A' AND (buyer='" . $buyerId . "'";
+                        if ($buyerUsername !== '') {
+                            $orderWhere .= " OR buyer='" . $buyerUsername . "'";
+                        }
+                        $orderWhere .= ")";
+
+                        $orderSql = "SELECT * FROM " . SHOPEE_SG_ORDER_REQ . " WHERE " . $orderWhere . " ORDER BY date DESC, time DESC, id DESC";
+                        $orderRst = mysqli_query($finance_connect, $orderSql);
+                        if ($orderRst && $orderRst->num_rows > 0) {
+                            while ($orderRow = $orderRst->fetch_assoc()) {
+                                $orderRows[] = $orderRow;
+                                $sumFinalAmount += (float) (isset($orderRow['final_amt']) ? $orderRow['final_amt'] : 0);
+                            }
+                        } else if (!$orderRst) {
+                            error_log("Shopee order list query failed: " . mysqli_error($finance_connect) . " SQL: " . $orderSql);
+                        }
+                    ?>
+                    <div class="form-group mt-3">
+                        <h5 class="mb-3">Order Records</h5>
+                        <div class="table-responsive">
+                            <table class="table table-striped table-bordered mb-0" id="scr_order_tbl">
+                                <thead>
+                                    <tr>
+                                        <th width="60">S/N</th>
+                                        <th width="200">Action</th>
+                                        <th>Order ID</th>
+                                        <th>Date</th>
+                                        <th>Package</th>
+                                        <th>Buyer Payment Method</th>
+                                        <th>Charges & Fees</th>
+                                        <th>Final Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if (!empty($orderRows)) {
+                                        $orderSN = 1;
+                                        foreach ($orderRows as $orderRow) {
+                                            $orderId = isset($orderRow['id']) ? (int) $orderRow['id'] : 0;
+                                            $orderNo = isset($orderRow['orderID']) ? $orderRow['orderID'] : '';
+                                            $orderDate = isset($orderRow['date']) ? $orderRow['date'] : '';
+                                            $orderPackage = resolvePackageNamesFromCsv(isset($orderRow['package']) ? $orderRow['package'] : '', $connect);
+                                            $buyerPayMethod = isset($orderRow['buyer_pay_meth']) ? $orderRow['buyer_pay_meth'] : '';
+                                            $orderFees = isset($orderRow['fees']) ? $orderRow['fees'] : '0.00';
+                                            $finalAmount = isset($orderRow['final_amt']) ? $orderRow['final_amt'] : '0.00';
+                                            ?>
+                                            <tr>
+                                                <td><?= $orderSN++ ?></td>
+                                                <td>
+                                                    <a class="btn btn-sm btn-rounded btn-primary"
+                                                       href="<?= $SITEURL . '/shopee/shopee_cust_info.php?id=' . (int) $dataID . '&act=' . $act_2 . '&open_order_id=' . $orderId ?>">
+                                                        Show Order Detail
+                                                    </a>
+                                                </td>
+                                                <td><?= htmlspecialchars((string) $orderNo, ENT_QUOTES, 'UTF-8') ?></td>
+                                                <td><?= htmlspecialchars((string) $orderDate, ENT_QUOTES, 'UTF-8') ?></td>
+                                                <td><?= htmlspecialchars((string) $orderPackage, ENT_QUOTES, 'UTF-8') ?></td>
+                                                <td><?= htmlspecialchars((string) $buyerPayMethod, ENT_QUOTES, 'UTF-8') ?></td>
+                                                <td><?= formatAmountRm($orderFees) ?></td>
+                                                <td><?= formatAmountRm($finalAmount) ?></td>
+                                            </tr>
+                                        <?php }
+                                    } else { ?>
+                                        <tr>
+                                            <td colspan="8" class="text-center">No order records found.</td>
+                                        </tr>
+                                    <?php } ?>
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <th colspan="7" class="text-end">Sub-Total (RM)</th>
+                                        <th><?= formatAmountRm($sumFinalAmount) ?></th>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    </div>
+                    <?php } ?>
 
 
                         <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
@@ -562,17 +801,44 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
     ?>
 
     <script>
+        // Always release all loaders, with multiple fallbacks.
+        (function () {
+            function releaseLoader() {
+                var preloaders = document.querySelectorAll('.pre-load-center');
+                var covers = document.querySelectorAll('.page-load-cover');
+
+                for (var i = 0; i < preloaders.length; i++) {
+                    preloaders[i].style.display = 'none';
+                }
+                for (var j = 0; j < covers.length; j++) {
+                    covers[j].style.display = 'block';
+                }
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', function () {
+                    setTimeout(releaseLoader, 10);
+                });
+            } else {
+                setTimeout(releaseLoader, 10);
+            }
+
+            window.addEventListener('load', releaseLoader);
+            setTimeout(releaseLoader, 1500);
+        })();
+    </script>
+
+    <script>
         <?php include "../js/shopee_cust_info.js" ?>
 
         //Initial Page And Action Value
         var page = "<?= $pageTitle ?>";
         var action = "<?php echo isset($act) ? $act : ''; ?>";
 
-        checkCurrentPage(page, action);
-        centerAlignment("formContainer");
-        setAutofocus(action);
-        setButtonColor();
-        preloader(300, action);
+        if (typeof checkCurrentPage === 'function') checkCurrentPage(page, action);
+        if (typeof centerAlignment === 'function') centerAlignment("SCRformContainer");
+        if (typeof setAutofocus === 'function') setAutofocus(action);
+        if (typeof setButtonColor === 'function') setButtonColor();
     </script>
 </body>
 

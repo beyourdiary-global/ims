@@ -1,4 +1,4 @@
-//export notification
+﻿//export notification
 function exportData() {
   var checkboxes = document.querySelectorAll(".export:checked");
   if (checkboxes.length === 0) {
@@ -23,7 +23,9 @@ function captureAndExport(tblName) {
   var checkboxValues = [];
   $("#shopee_ads_topup_trans_table")
     .DataTable()
-    .$("tr", { filter: "applied" })
+    .rows({ search: "applied", page: "current" })
+    .nodes()
+    .to$()
     .each(function () {
       var checkbox = $(this).find(".export:checked");
       if (checkbox.length > 0) {
@@ -46,12 +48,147 @@ function captureAndExport(tblName) {
 }
 
 $(document).ready(function ($) {
+  var filterState = window.shopeeAdsTableFilters || {};
+
+  var table = new DataTable("#shopee_ads_topup_trans_table", {
+    paging: $("#shopee_ads_topup_trans_table tbody tr").length > 10,
+    searching: $("#shopee_ads_topup_trans_table tbody tr").length > 10,
+    autoWidth: false,
+    order: [[2, "asc"]],
+    lengthMenu: [10, 25, 50, 100],
+    columnDefs: [
+      {
+        orderable: false,
+        searchable: false,
+        targets: [0, 1, 3],
+      },
+    ],
+  });
+
+  function setupDatepicker() {
+    if (typeof $.fn.datepicker !== "function") {
+      return;
+    }
+
+    $("#datepicker input").datepicker({
+      format: "yyyy-mm-dd",
+      autoclose: true,
+      todayHighlight: true,
+    });
+
+    $(
+      "#datepicker2 input[name='start'], #datepicker2 input[name='end']",
+    ).datepicker({
+      format: "yyyy-mm-dd",
+      autoclose: true,
+      todayHighlight: true,
+    });
+
+    $(
+      "#datepicker3 input[name='start'], #datepicker3 input[name='end']",
+    ).datepicker({
+      format: "yyyy-mm",
+      autoclose: true,
+      minViewMode: 1,
+    });
+
+    $(
+      "#datepicker4 input[name='start'], #datepicker4 input[name='end']",
+    ).datepicker({
+      format: "yyyy",
+      autoclose: true,
+      minViewMode: 2,
+    });
+  }
+
+  function toggleDateFilters(interval) {
+    $("#datepicker").hide();
+    $("#datepicker2").hide();
+    $("#datepicker3").hide();
+    $("#datepicker4").hide();
+
+    if (interval === "daily") {
+      $("#datepicker").show();
+    } else if (interval === "weekly") {
+      $("#datepicker2").show();
+    } else if (interval === "monthly") {
+      $("#datepicker3").show();
+    } else if (interval === "yearly") {
+      $("#datepicker4").show();
+    }
+  }
+
+  function hydrateFilters() {
+    var interval = filterState.timeInterval || "daily";
+    $("#timeInterval").val(interval);
+    $("#group").val(filterState.group || "");
+    $("#datepicker input").val(filterState.date || "");
+    $("#datepicker2 input[name='start']").val(filterState.start || "");
+    $("#datepicker2 input[name='end']").val(filterState.end || "");
+    $("#datepicker3 input[name='start']").val(filterState.start || "");
+    $("#datepicker3 input[name='end']").val(filterState.end || "");
+    $("#datepicker4 input[name='start']").val(filterState.start || "");
+    $("#datepicker4 input[name='end']").val(filterState.end || "");
+    toggleDateFilters(interval);
+  }
+
+  function applyFilters() {
+    var interval = $("#timeInterval").val() || "daily";
+    var group = $("#group").val() || "";
+
+    var params = new URLSearchParams();
+    params.set("timeInterval", interval);
+
+    if (group !== "") {
+      params.set("group", group);
+    }
+
+    if (interval === "daily") {
+      var day = $("#datepicker input").val();
+      if (day) params.set("date", day);
+    } else {
+      var start = "";
+      var end = "";
+
+      if (interval === "weekly") {
+        start = $("#datepicker2 input[name='start']").val();
+        end = $("#datepicker2 input[name='end']").val();
+      } else if (interval === "monthly") {
+        start = $("#datepicker3 input[name='start']").val();
+        end = $("#datepicker3 input[name='end']").val();
+      } else if (interval === "yearly") {
+        start = $("#datepicker4 input[name='start']").val();
+        end = $("#datepicker4 input[name='end']").val();
+      }
+
+      if (start) params.set("start", start);
+      if (end) params.set("end", end);
+    }
+
+    window.location.href =
+      "shopee_ads_topup_trans_table.php?" + params.toString();
+  }
+
+  setupDatepicker();
+  hydrateFilters();
+
+  $("#timeInterval").on("change", function () {
+    toggleDateFilters($(this).val());
+  });
+
+  $("#applyFilterBtn").on("click", function () {
+    applyFilters();
+  });
+
   $(document).on("change", ".exportAll", function (event) {
     //checkbox handling
     event.preventDefault();
 
     var isChecked = $(this).prop("checked");
-    $(".export").prop("checked", isChecked);
+    $(this)
+      .closest("table")
+      .find("tbody tr:visible .export")
+      .prop("checked", isChecked);
     $(".exportAll").prop("checked", isChecked);
 
     updateCheckboxesOnOtherPages(isChecked);
@@ -99,7 +236,7 @@ $(document).ready(function ($) {
 
   function updateCheckboxesOnOtherPages(isChecked) {
     // Get all cells in the DataTable
-    var cells = $("#shopee_ads_topup_trans_table").DataTable().cells().nodes();
+    var cells = table.rows({ page: "current" }).nodes();
 
     // Check/uncheck all checkboxes in the DataTable
     $(cells).find(".export").prop("checked", isChecked);

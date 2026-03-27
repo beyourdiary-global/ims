@@ -120,8 +120,45 @@ if (post('actionBtn')) {
                     $profileResultAction = 'NC';
                     $_SESSION['tempValConfirmBox'] = true;
                 } else {
+                    $datafield = array();
+                    $oldvalarr = array();
+                    $chgvalarr = array();
+
+                    if ($oldName !== $name) {
+                        $datafield[] = 'name';
+                        $oldvalarr[] = $oldName;
+                        $chgvalarr[] = $name;
+                    }
+                    if ($oldUsername !== $username) {
+                        $datafield[] = 'username';
+                        $oldvalarr[] = $oldUsername;
+                        $chgvalarr[] = $username;
+                    }
+                    if ($oldEmail !== $email) {
+                        $datafield[] = 'email';
+                        $oldvalarr[] = $oldEmail;
+                        $chgvalarr[] = $email;
+                    }
+
                     $query = "UPDATE " . $tblName . " SET name='$safeName', username='$safeUsername', email='$safeEmail', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $userId . "'";
                     $ok = mysqli_query($connect, $query);
+
+                    $auditErr = $ok ? '' : 'Update failed.';
+                    $log = array(
+                        'log_act' => 'edit',
+                        'cdate' => date('Y-m-d'),
+                        'ctime' => date('H:i:s'),
+                        'uid' => USER_ID,
+                        'cby' => USER_ID,
+                        'query_rec' => $query,
+                        'query_table' => $tblName,
+                        'oldval' => implodeWithComma($oldvalarr),
+                        'changes' => implodeWithComma($chgvalarr),
+                        'act_msg' => actMsgLog($userId, $datafield, array(), $oldvalarr, $chgvalarr, $tblName, 'Edit', $auditErr),
+                        'page' => $pageTitle,
+                        'connect' => $connect,
+                    );
+                    audit_log($log);
 
                     if ($ok) {
                         $_SESSION['username'] = $safeUsername;

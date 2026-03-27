@@ -40,19 +40,44 @@ if ($action === 'parseShopeeAdsTopup') {
     $module = 'shopee_ads_topup';
 
     if (!isset($_FILES['import_file']) || !is_uploaded_file($_FILES['import_file']['tmp_name'])) {
-        $importErrors[] = 'Please choose a Shopee Seller Centre HTML file.';
+        $importErrors[] = 'Please choose a Shopee HTML, PDF, or ZIP file.';
     } else {
-        $html = file_get_contents($_FILES['import_file']['tmp_name']);
+        $uploadedName = isset($_FILES['import_file']['name']) ? (string) $_FILES['import_file']['name'] : '';
+        $extension = strtolower(pathinfo($uploadedName, PATHINFO_EXTENSION));
 
-        if ($html === false || trim($html) === '') {
-            $importErrors[] = 'The uploaded file could not be read.';
+        if ($extension === 'html' || $extension === 'htm') {
+            $html = file_get_contents($_FILES['import_file']['tmp_name']);
+
+            if ($html === false || trim($html) === '') {
+                $importErrors[] = 'The uploaded HTML file could not be read.';
+            } else {
+                $parseResult = parseShopeeAdsTopupHtml($html, $shopeeAccounts, $currencyUnits, $paymentMethods);
+                $previewData = $parseResult['data'];
+                $previewData['source_file_name'] = sanitizeImportFilename($uploadedName);
+                $previewData['source_attachment'] = saveShopeeImportAttachmentBinary($html, $uploadedName, basename(__FILE__, '.php'));
+                $importWarnings = $parseResult['warnings'];
+
+                if (!empty($parseResult['errors'])) {
+                    $importErrors = array_merge($importErrors, $parseResult['errors']);
+                }
+            }
         } else {
-            $parseResult = parseShopeeAdsTopupHtml($html, $shopeeAccounts, $currencyUnits, $paymentMethods);
-            $previewData = $parseResult['data'];
-            $importWarnings = $parseResult['warnings'];
+            $sourceFiles = collectShopeeImportSourceFiles($_FILES['import_file'], $importErrors, $importWarnings);
+            if (empty($importErrors) && !empty($sourceFiles)) {
+                if (count($sourceFiles) > 1) {
+                    $importWarnings[] = 'Multiple PDFs detected. Preview currently loads the first matched file only.';
+                }
 
-            if (!empty($parseResult['errors'])) {
-                $importErrors = array_merge($importErrors, $parseResult['errors']);
+                $source = $sourceFiles[0];
+                $parseResult = parseShopeeAdsTopupPdf($source['pdf_content'], $source['original_name'], $shopeeAccounts, $currencyUnits, $paymentMethods);
+                $previewData = $parseResult['data'];
+                $previewData['source_file_name'] = isset($source['original_name']) ? (string) $source['original_name'] : '';
+                $previewData['source_attachment'] = isset($source['attachment_path']) ? (string) $source['attachment_path'] : '';
+                $importWarnings = array_merge($importWarnings, $parseResult['warnings']);
+
+                if (!empty($parseResult['errors'])) {
+                    $importErrors = array_merge($importErrors, $parseResult['errors']);
+                }
             }
         }
     }
@@ -67,7 +92,8 @@ if ($action === 'parseShopeeAdsTopup') {
         $paymentDate = formatImportDatetime($previewData['payment_date']);
         $remark = mysqli_real_escape_string($finance_connect, $previewData['remark']);
         $orderId = mysqli_real_escape_string($finance_connect, $previewData['order_id']);
-        $query = "INSERT INTO " . SHOPEE_ADS_TOPUP . " (shopee_acc, orderID, payment_date, currency, topup_amt, subtotal, gst, pay_meth, remark, create_by, create_date, create_time) VALUES ('" . mysqli_real_escape_string($finance_connect, $previewData['shopee_acc']) . "', '$orderId', '$paymentDate', '" . mysqli_real_escape_string($connect, $previewData['currency']) . "', '" . mysqli_real_escape_string($finance_connect, $previewData['topup_amt']) . "', '" . mysqli_real_escape_string($finance_connect, $previewData['subtotal']) . "', '" . mysqli_real_escape_string($finance_connect, $previewData['gst']) . "', '" . mysqli_real_escape_string($finance_connect, $previewData['pay_meth']) . "', '$remark', '" . USER_ID . "', curdate(), curtime())";
+        $attachmentPath = mysqli_real_escape_string($finance_connect, isset($previewData['source_attachment']) ? (string) $previewData['source_attachment'] : '');
+        $query = "INSERT INTO " . SHOPEE_ADS_TOPUP . " (shopee_acc, orderID, payment_date, currency, topup_amt, subtotal, gst, pay_meth, attachment, remark, create_by, create_date, create_time) VALUES ('" . mysqli_real_escape_string($finance_connect, $previewData['shopee_acc']) . "', '$orderId', '$paymentDate', '" . mysqli_real_escape_string($connect, $previewData['currency']) . "', '" . mysqli_real_escape_string($finance_connect, $previewData['topup_amt']) . "', '" . mysqli_real_escape_string($finance_connect, $previewData['subtotal']) . "', '" . mysqli_real_escape_string($finance_connect, $previewData['gst']) . "', '" . mysqli_real_escape_string($finance_connect, $previewData['pay_meth']) . "', '" . $attachmentPath . "', '$remark', '" . USER_ID . "', curdate(), curtime())";
 
         $returnData = mysqli_query($finance_connect, $query);
 
@@ -122,6 +148,391 @@ function getImportOptionList($tableName, $labelField, $dbConnect)
     }
 
     return $list;
+}
+
+function sanitizeImportFilename($filename)
+{
+    $filename = preg_replace('/[^A-Za-z0-9._-]+/', '_', basename((string) $filename));
+    return $filename !== '' ? $filename : ('import_' . uniqid() . '.pdf');
+}
+
+function saveShopeeImportAttachmentBinary($binaryContent, $originalName, $pageName)
+{
+    $binaryContent = (string) $binaryContent;
+    $originalName = trim((string) $originalName);
+    if ($binaryContent === '' || $originalName === '') {
+        return '';
+    }
+
+    $ext = strtolower((string) pathinfo($originalName, PATHINFO_EXTENSION));
+    $baseName = (string) pathinfo($originalName, PATHINFO_FILENAME);
+    $safeBase = preg_replace('/[^a-zA-Z0-9_-]/', '_', $baseName);
+    if ($safeBase === '') {
+        $safeBase = 'import_file';
+    }
+
+    $safePage = preg_replace('/[^a-zA-Z0-9_-]/', '_', (string) $pageName);
+    if ($safePage === '') {
+        $safePage = 'import_page';
+    }
+
+    $relDir = 'attachment/sqlaccount/' . date('Y') . '/' . date('m') . '/' . $safePage . '/';
+    $absDir = ROOT . img_server . $relDir;
+    if (!is_dir($absDir)) {
+        @mkdir($absDir, 0777, true);
+    }
+    if (!is_dir($absDir)) {
+        return '';
+    }
+
+    $newFile = $safeBase . '_' . date('Ymd_His') . '_' . mt_rand(1000, 9999) . ($ext !== '' ? '.' . $ext : '');
+    $absPath = $absDir . $newFile;
+    if (@file_put_contents($absPath, $binaryContent) !== false) {
+        return $relDir . $newFile;
+    }
+
+    return '';
+}
+
+function collectShopeeImportSourceFiles($fileInfo, &$errors, &$warnings)
+{
+    $sourceFiles = array();
+    $originalName = isset($fileInfo['name']) ? (string) $fileInfo['name'] : '';
+    $extension = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
+
+    if ($extension === 'pdf') {
+        $pdfContent = @file_get_contents($fileInfo['tmp_name']);
+        if ($pdfContent === false || $pdfContent === '') {
+            $errors[] = 'Unable to read the uploaded PDF file.';
+            return array();
+        }
+
+        $sourceFiles[] = array(
+            'pdf_content' => $pdfContent,
+            'original_name' => sanitizeImportFilename($originalName),
+            'attachment_path' => saveShopeeImportAttachmentBinary($pdfContent, $originalName, basename(__FILE__, '.php')),
+        );
+        return $sourceFiles;
+    }
+
+    if ($extension !== 'zip') {
+        $errors[] = 'Only HTML, PDF, or ZIP files are supported.';
+        return array();
+    }
+
+    if (class_exists('ZipArchive')) {
+        $zip = new ZipArchive();
+        if ($zip->open($fileInfo['tmp_name']) !== true) {
+            $errors[] = 'The uploaded ZIP file could not be opened.';
+            return array();
+        }
+
+        for ($index = 0; $index < $zip->numFiles; $index++) {
+            $entryName = $zip->getNameIndex($index);
+            if (substr((string) $entryName, -1) === '/') {
+                continue;
+            }
+
+            if (strtolower(pathinfo((string) $entryName, PATHINFO_EXTENSION)) !== 'pdf') {
+                continue;
+            }
+
+            $pdfContent = $zip->getFromIndex($index);
+            if ($pdfContent === false || $pdfContent === '') {
+                $warnings[] = 'Unable to read PDF entry from ZIP: ' . $entryName;
+                continue;
+            }
+
+            $sourceFiles[] = array(
+                'pdf_content' => $pdfContent,
+                'original_name' => sanitizeImportFilename($entryName),
+                'attachment_path' => saveShopeeImportAttachmentBinary($pdfContent, (string) basename($entryName), basename(__FILE__, '.php')),
+            );
+        }
+
+        $zip->close();
+    } else if (class_exists('PharData')) {
+        try {
+            $zipArchive = new PharData($fileInfo['tmp_name']);
+
+            foreach (new RecursiveIteratorIterator($zipArchive) as $entry) {
+                if (!($entry instanceof SplFileInfo) || !$entry->isFile()) {
+                    continue;
+                }
+
+                $entryName = $entry->getFilename();
+                if (strtolower(pathinfo($entryName, PATHINFO_EXTENSION)) !== 'pdf') {
+                    continue;
+                }
+
+                $pdfContent = @file_get_contents($entry->getPathname());
+                if ($pdfContent === false || $pdfContent === '') {
+                    $warnings[] = 'Unable to read PDF entry from ZIP: ' . $entryName;
+                    continue;
+                }
+
+                $sourceFiles[] = array(
+                    'pdf_content' => $pdfContent,
+                    'original_name' => sanitizeImportFilename($entryName),
+                    'attachment_path' => saveShopeeImportAttachmentBinary($pdfContent, (string) basename($entryName), basename(__FILE__, '.php')),
+                );
+            }
+        } catch (Exception $exception) {
+            $errors[] = 'The uploaded ZIP file could not be opened.';
+            return array();
+        }
+    } else {
+        $errors[] = 'ZIP import requires PHP ZipArchive support in the current web runtime.';
+        return array();
+    }
+
+    if (empty($sourceFiles)) {
+        $errors[] = 'No PDF file was found inside the uploaded ZIP archive.';
+    }
+
+    return $sourceFiles;
+}
+
+function decodePdfStream($stream)
+{
+    $decoded = @gzuncompress($stream);
+    if ($decoded !== false) {
+        return $decoded;
+    }
+
+    $decoded = @gzinflate($stream);
+    if ($decoded !== false) {
+        return $decoded;
+    }
+
+    if (strlen((string) $stream) > 6) {
+        $decoded = @gzinflate(substr((string) $stream, 2));
+        if ($decoded !== false) {
+            return $decoded;
+        }
+    }
+
+    return false;
+}
+
+function cleanPdfTextOperand($text)
+{
+    $text = str_replace("\x00", '', (string) $text);
+    $text = strtr($text, array(
+        '\\n' => ' ',
+        '\\r' => ' ',
+        '\\t' => ' ',
+        '\\(' => '(',
+        '\\)' => ')',
+        '\\\\' => '\\',
+    ));
+
+    return normalizeImportText(preg_replace('/[^[:print:] ]/', ' ', $text));
+}
+
+function extractTextFromPdfContent($content)
+{
+    if ((string) $content === '') {
+        return '';
+    }
+
+    preg_match_all('/stream\r?\n(.*?)endstream/s', (string) $content, $streamMatches);
+    $lines = array();
+
+    foreach ($streamMatches[1] as $stream) {
+        $decoded = decodePdfStream($stream);
+        if ($decoded === false) {
+            continue;
+        }
+
+        if (preg_match_all('/\(([^\)]{1,500})\)\s*Tj/s', $decoded, $textMatches)) {
+            foreach ($textMatches[1] as $match) {
+                $cleanLine = cleanPdfTextOperand($match);
+                if ($cleanLine !== '') {
+                    $lines[] = $cleanLine;
+                }
+            }
+        }
+
+        if (preg_match_all('/\[(.*?)\]\s*TJ/s', $decoded, $arrayMatches)) {
+            foreach ($arrayMatches[1] as $chunk) {
+                preg_match_all('/\(([^\)]*)\)/', $chunk, $innerMatches);
+                $cleanLine = cleanPdfTextOperand(implode('', $innerMatches[1]));
+                if ($cleanLine !== '') {
+                    $lines[] = $cleanLine;
+                }
+            }
+        }
+    }
+
+    return implode("\n", $lines);
+}
+
+function getPdfTextLines($text)
+{
+    $lines = preg_split('/\r\n|\r|\n/', (string) $text);
+    $normalizedLines = array();
+
+    foreach ($lines as $line) {
+        $line = normalizeImportText($line);
+        if ($line !== '') {
+            $normalizedLines[] = $line;
+        }
+    }
+
+    return $normalizedLines;
+}
+
+function extractPdfFieldByLabels($text, $labels)
+{
+    $lines = getPdfTextLines($text);
+
+    foreach ($lines as $index => $line) {
+        $lineLookup = normalizeImportLookup($line);
+        if ($lineLookup === '') {
+            continue;
+        }
+
+        foreach ($labels as $label) {
+            $labelLookup = normalizeImportLookup($label);
+            if ($labelLookup === '' || strpos($lineLookup, $labelLookup) === false) {
+                continue;
+            }
+
+            if (preg_match('/' . preg_quote($label, '/') . '\s*:?\s*(.+)/i', $line, $matches)) {
+                $value = normalizeImportText($matches[1]);
+                if ($value !== '' && normalizeImportLookup($value) !== $labelLookup) {
+                    return $value;
+                }
+            }
+
+            if (isset($lines[$index + 1])) {
+                return normalizeImportText($lines[$index + 1]);
+            }
+        }
+    }
+
+    return '';
+}
+
+function extractPdfMoneyByLabels($text, $labels)
+{
+    $lines = getPdfTextLines($text);
+    foreach ($lines as $line) {
+        foreach ($labels as $label) {
+            if (stripos($line, $label) === false) {
+                continue;
+            }
+
+            $money = extractMoneyDetails($line);
+            if ($money['amount'] !== '') {
+                return $money;
+            }
+        }
+    }
+
+    return array('currency' => '', 'amount' => '');
+}
+
+function parseShopeeAdsTopupPdf($pdfContent, $fileName, $shopeeAccounts, $currencyUnits, $paymentMethods)
+{
+    $data = array(
+        'source_shop_name' => '',
+        'source_currency' => '',
+        'source_payment_method' => '',
+        'shopee_acc' => '',
+        'order_id' => '',
+        'payment_date' => '',
+        'currency' => '',
+        'topup_amt' => '',
+        'subtotal' => '',
+        'gst' => '',
+        'pay_meth' => '',
+        'remark' => '',
+    );
+    $errors = array();
+    $warnings = array();
+
+    $text = extractTextFromPdfContent($pdfContent);
+    if ($text === '') {
+        return array(
+            'data' => $data,
+            'errors' => array('Unable to extract text from PDF receipt: ' . $fileName),
+            'warnings' => $warnings,
+        );
+    }
+
+    $data['source_shop_name'] = extractPdfFieldByLabels($text, array('Shop Name', 'Shopee Account', 'Shop'));
+    $data['order_id'] = extractPdfFieldByLabels($text, array('Order ID', 'Order No', 'Order Number'));
+    $data['payment_date'] = parseShopeeDatetime(extractPdfFieldByLabels($text, array('Completed', 'Payment Date', 'DateTime', 'Invoice Date')));
+    $data['source_payment_method'] = extractPdfFieldByLabels($text, array('Payment Method'));
+
+    $paymentTotal = extractPdfMoneyByLabels($text, array('Payment Total', 'Top-up Amount', 'Top Up Amount', 'Amount'));
+    $subtotal = extractPdfMoneyByLabels($text, array('Subtotal'));
+    $taxValue = extractPdfMoneyByLabels($text, array('GST', 'SST', 'Tax'));
+
+    $data['source_currency'] = $paymentTotal['currency'] !== '' ? $paymentTotal['currency'] : $subtotal['currency'];
+    $data['topup_amt'] = $paymentTotal['amount'];
+    $data['subtotal'] = $subtotal['amount'];
+    $data['gst'] = $taxValue['amount'];
+    $data['remark'] = 'Imported from Shopee text-based PDF';
+
+    if ($data['order_id'] !== '') {
+        $data['remark'] .= ' (' . $data['order_id'] . ')';
+    }
+
+    $currencyFallbacks = array();
+    if ($data['source_currency'] === 'RM') {
+        $currencyFallbacks = array('MYR');
+    } else if ($data['source_currency'] === 'S$') {
+        $currencyFallbacks = array('SGD');
+    }
+
+    $data['shopee_acc'] = resolveImportOptionId($data['source_shop_name'], $shopeeAccounts);
+    $data['currency'] = resolveImportOptionId($data['source_currency'], $currencyUnits, $currencyFallbacks);
+    $data['pay_meth'] = resolveImportOptionId($data['source_payment_method'], $paymentMethods);
+
+    if ($data['source_shop_name'] === '') {
+        $errors[] = 'Shop name could not be detected from the PDF file.';
+    }
+
+    if ($data['order_id'] === '') {
+        $errors[] = 'Order ID could not be detected from the PDF file.';
+    }
+
+    if ($data['payment_date'] === '') {
+        $errors[] = 'Payment date could not be detected from the PDF file.';
+    }
+
+    if ($data['topup_amt'] === '') {
+        $errors[] = 'Payment total could not be detected from the PDF file.';
+    }
+
+    if ($data['subtotal'] === '') {
+        $errors[] = 'Subtotal could not be detected from the PDF file.';
+    }
+
+    if ($data['gst'] === '') {
+        $warnings[] = 'GST amount could not be detected from the PDF file. Please verify before insert.';
+    }
+
+    if ($data['shopee_acc'] === '') {
+        $warnings[] = 'Shopee account was not matched automatically. Please choose the correct account before inserting.';
+    }
+
+    if ($data['currency'] === '') {
+        $warnings[] = 'Currency unit was not matched automatically. Please choose the correct currency before inserting.';
+    }
+
+    if ($data['pay_meth'] === '') {
+        $warnings[] = 'Payment method was not matched automatically. Please choose the correct payment method before inserting.';
+    }
+
+    return array(
+        'data' => $data,
+        'errors' => $errors,
+        'warnings' => $warnings,
+    );
 }
 
 function normalizeImportText($text)
@@ -251,6 +662,8 @@ function getImportLabelById($options, $id)
 function parseShopeeAdsTopupHtml($html, $shopeeAccounts, $currencyUnits, $paymentMethods)
 {
     $data = [
+        'source_file_name' => '',
+        'source_attachment' => '',
         'source_shop_name' => '',
         'source_currency' => '',
         'source_payment_method' => '',
@@ -369,6 +782,8 @@ function parseShopeeAdsTopupHtml($html, $shopeeAccounts, $currencyUnits, $paymen
 function getShopeeAdsPreviewFromPost()
 {
     return [
+        'source_file_name' => postSpaceFilter('source_file_name'),
+        'source_attachment' => postSpaceFilter('source_attachment'),
         'source_shop_name' => postSpaceFilter('source_shop_name'),
         'source_currency' => postSpaceFilter('source_currency'),
         'source_payment_method' => postSpaceFilter('source_payment_method'),
@@ -483,12 +898,12 @@ function validateShopeeAdsPreview($previewData, &$importErrors, $shopeeAccounts,
 
                     <div class="card mb-4 shadow-sm">
                         <div class="card-body">
-                            <h5 class="card-title mb-3">Step 1: Upload Shopee HTML</h5>
+                            <h5 class="card-title mb-3">Step 1: Upload Shopee HTML/PDF/ZIP</h5>
                             <form method="post" enctype="multipart/form-data">
                                 <div class="row g-3 align-items-end">
                                     <div class="col-12 col-md-8">
-                                        <label class="form-label" for="import_file">Shopee Seller Centre HTML File</label>
-                                        <input class="form-control" type="file" name="import_file" id="import_file" accept=".html,.htm" required>
+                                        <label class="form-label" for="import_file">Shopee Seller Centre HTML, PDF, or ZIP File</label>
+                                        <input class="form-control" type="file" name="import_file" id="import_file" accept=".html,.htm,.pdf,.zip" required>
                                     </div>
                                     <div class="col-12 col-md-4">
                                         <button class="btn btn-lg btn-rounded btn-primary w-100 px-4" type="submit" name="actionBtn" value="parseShopeeAdsTopup">
@@ -508,6 +923,8 @@ function validateShopeeAdsPreview($previewData, &$importErrors, $shopeeAccounts,
                                     <input type="hidden" name="source_shop_name" value="<?= htmlspecialchars($previewData['source_shop_name']) ?>">
                                     <input type="hidden" name="source_currency" value="<?= htmlspecialchars($previewData['source_currency']) ?>">
                                     <input type="hidden" name="source_payment_method" value="<?= htmlspecialchars($previewData['source_payment_method']) ?>">
+                                    <input type="hidden" name="source_file_name" value="<?= htmlspecialchars(isset($previewData['source_file_name']) ? $previewData['source_file_name'] : '') ?>">
+                                    <input type="hidden" name="source_attachment" value="<?= htmlspecialchars(isset($previewData['source_attachment']) ? $previewData['source_attachment'] : '') ?>">
                                     <input type="hidden" name="importWarnings" value="<?= htmlspecialchars(implode("\n", $importWarnings)) ?>">
 
                                     <div class="row mb-3">

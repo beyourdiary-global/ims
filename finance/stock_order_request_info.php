@@ -99,38 +99,100 @@ function sorInfoTelegramRequest($url, $payload, &$curlErr)
 function sorInfoResolveTelegramChatId($apiBase, &$resolveErr)
 {
     $resolveErr = '';
-    $getUpdatesUrl = $apiBase . '/getUpdates';
-    $payload = array(
-        'offset' => -1,
-        'limit' => 1,
-        'timeout' => 10,
-    );
-    $curlErr = '';
-    $resp = sorInfoTelegramRequest($getUpdatesUrl, $payload, $curlErr);
+    $extractChatId = function ($decoded) {
+        if (!is_array($decoded) || empty($decoded['ok']) || !isset($decoded['result']) || !is_array($decoded['result']) || count($decoded['result']) === 0) {
+            return '';
+        }
+        $latest = $decoded['result'][count($decoded['result']) - 1];
+        $chatId = '';
+        if (isset($latest['message']['chat']['id'])) {
+            $chatId = (string) $latest['message']['chat']['id'];
+        } else if (isset($latest['channel_post']['chat']['id'])) {
+            $chatId = (string) $latest['channel_post']['chat']['id'];
+        } else if (isset($latest['callback_query']['message']['chat']['id'])) {
+            $chatId = (string) $latest['callback_query']['message']['chat']['id'];
+        } else if (isset($latest['my_chat_member']['chat']['id'])) {
+            $chatId = (string) $latest['my_chat_member']['chat']['id'];
+        }
+        return trim($chatId);
+    };
+
+    $callGetUpdates = function () use ($apiBase) {
+        $url = $apiBase . '/getUpdates';
+        $payload = array(
+            'offset' => -1,
+            'limit' => 1,
+            'timeout' => 10,
+        );
+        $curlErr = '';
+        $resp = sorInfoTelegramRequest($url, $payload, $curlErr);
+        $decoded = json_decode((string) $resp, true);
+        return array($resp, $decoded, $curlErr);
+    };
+
+    list($resp, $decoded, $curlErr) = $callGetUpdates();
     if ($resp === false || $resp === '') {
         $resolveErr = $curlErr !== '' ? $curlErr : 'Unable to call Telegram getUpdates.';
         return '';
     }
 
-    $decoded = json_decode($resp, true);
-    if (!is_array($decoded) || empty($decoded['ok']) || !isset($decoded['result']) || !is_array($decoded['result']) || count($decoded['result']) === 0) {
-        $resolveErr = 'No chat found from bot updates.';
-        return '';
+    $chatId = $extractChatId($decoded);
+    if ($chatId !== '') {
+        return $chatId;
     }
 
-    $latest = $decoded['result'][count($decoded['result']) - 1];
+    $desc = (is_array($decoded) && isset($decoded['description'])) ? trim((string) $decoded['description']) : '';
+    $isWebhookConflict = ($desc !== '' && stripos($desc, 'webhook') !== false);
+
+    // On some live deployments, bots use webhooks and Telegram blocks getUpdates (409 conflict).
+    // Remove webhook and retry once so both local (polling) and live can resolve chat_id.
+    if ($isWebhookConflict) {
+        $delErr = '';
+        $delResp = sorInfoTelegramRequest($apiBase . '/deleteWebhook', array('drop_pending_updates' => false), $delErr);
+        $delDecoded = json_decode((string) $delResp, true);
+        if (is_array($delDecoded) && !empty($delDecoded['ok'])) {
+            list($resp2, $decoded2, $curlErr2) = $callGetUpdates();
+            if ($resp2 !== false && $resp2 !== '') {
+                $chatId = $extractChatId($decoded2);
+                if ($chatId !== '') {
+                    return $chatId;
+                }
+            }
+            if ($curlErr2 !== '') {
+                $resolveErr = $curlErr2;
+            }
+        } else {
+            $resolveErr = $delErr !== '' ? $delErr : ($desc !== '' ? $desc : 'Unable to disable Telegram webhook.');
+            return '';
+        }
+    }
+
+    if ($resolveErr === '') {
+        $resolveErr = $desc !== '' ? $desc : 'No chat found from bot updates.';
+    }
+
+    return '';
+}
+
+function sorInfoResolveChatIdFromTokenRow($tokenRow)
+{
     $chatId = '';
-    if (isset($latest['message']['chat']['id'])) {
-        $chatId = (string) $latest['message']['chat']['id'];
-    } else if (isset($latest['channel_post']['chat']['id'])) {
-        $chatId = (string) $latest['channel_post']['chat']['id'];
-    } else if (isset($latest['callback_query']['message']['chat']['id'])) {
-        $chatId = (string) $latest['callback_query']['message']['chat']['id'];
-    } else if (isset($latest['my_chat_member']['chat']['id'])) {
-        $chatId = (string) $latest['my_chat_member']['chat']['id'];
+
+    if (is_array($tokenRow) && isset($tokenRow['chat_id'])) {
+        $chatId = trim((string) $tokenRow['chat_id']);
+        if ($chatId !== '') {
+            return $chatId;
+        }
     }
 
-    return trim($chatId);
+    if (is_array($tokenRow) && isset($tokenRow['remark'])) {
+        $remark = trim((string) $tokenRow['remark']);
+        if ($remark !== '' && preg_match('/chat[_\s-]*id\s*[:=]\s*(-?\d{5,})/i', $remark, $m)) {
+            return trim((string) $m[1]);
+        }
+    }
+
+    return '';
 }
 
 $requestSql = "SELECT * FROM " . STOCK_ORDER_REQ . " WHERE id='" . $requestId . "' AND status='A' LIMIT 1";
@@ -185,16 +247,17 @@ $telegramMsg = '';
 $telegramErr = '';
 
 if (post('actionBtn') === 'sendTelegramStockInBot') {
-    $tokenRst = mysqli_query($connect, "SELECT * FROM " . TOKEN_SETT . " WHERE status='A' ORDER BY id DESC LIMIT 1");
+    $tokenTable = defined('TOKEN_SETT') ? TOKEN_SETT : 'token_setting';
+    $tokenRst = mysqli_query($connect, "SELECT * FROM " . $tokenTable . " WHERE status='A' ORDER BY id DESC LIMIT 1");
     $tokenRow = ($tokenRst && mysqli_num_rows($tokenRst) > 0) ? mysqli_fetch_assoc($tokenRst) : null;
 
     if (!$tokenRow) {
         $telegramErr = 'Token Setting not found. Please create Token Setting first.';
     } else {
         $botToken = trim((string) (isset($tokenRow['bot_token']) ? $tokenRow['bot_token'] : ''));
-        
-        // chat_id is no longer stored in token_setting; start empty and rely on auto-detection below.
-        $chatId = '';
+
+        // Prefer explicit chat_id when available, then fallback to auto-detection.
+        $chatId = sorInfoResolveChatIdFromTokenRow($tokenRow);
 
         if ($botToken === '') {
             $telegramErr = 'Token Setting is incomplete. Bot Token is required.';
@@ -249,17 +312,23 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
 
                     $decoded2 = json_decode((string) $resp2, true);
                     if (is_array($decoded2) && !empty($decoded2['ok'])) {
-                        $telegramMsg = 'Telegram message sent successfully (fallback without photo).';
+                        $telegramMsg = 'Telegram message sent successful.';
                     } else {
                         $telegramErr = 'Failed to send Telegram message.';
+                        $apiErr = (is_array($decoded) && isset($decoded['description'])) ? trim((string) $decoded['description']) : '';
+                        $apiErr2 = (is_array($decoded2) && isset($decoded2['description'])) ? trim((string) $decoded2['description']) : '';
                         if ($curlErr !== '') {
                             $telegramErr .= ' ' . $curlErr;
+                        } else if ($apiErr !== '') {
+                            $telegramErr .= ' ' . $apiErr;
                         } else if ($curlErr2 !== '') {
                             $telegramErr .= ' ' . $curlErr2;
+                        } else if ($apiErr2 !== '') {
+                            $telegramErr .= ' ' . $apiErr2;
                         }
                     }
                 } else {
-                    $telegramMsg = 'Telegram message sent successfully.';
+                    $telegramMsg = 'Telegram message sent successful.';
                 }
             }
         }
@@ -270,6 +339,29 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
 <html>
 <head>
     <link rel="stylesheet" href="../css/main.css">
+    <style>
+        .sor-copy-btn {
+            min-width: 42px;
+            border-radius: 8px !important;
+            border: 1px solid #2f67d8;
+            background: linear-gradient(180deg, #4f86eb 0%, #2f67d8 100%);
+            color: #fff;
+            transition: all .2s ease;
+            box-shadow: 0 2px 6px rgba(47, 103, 216, .25);
+        }
+
+        .sor-copy-btn:hover,
+        .sor-copy-btn:focus {
+            transform: translateY(-1px);
+            box-shadow: 0 5px 12px rgba(47, 103, 216, .35);
+            color: #fff;
+        }
+
+        .sor-copy-btn i {
+            font-size: 16px;
+            line-height: 1;
+        }
+    </style>
 </head>
 <body>
 <div class="pre-load-center"><div class="preloader"></div></div>
@@ -293,13 +385,6 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
                     </div>
                 </div>
             </div>
-
-            <?php if ($telegramMsg !== '') { ?>
-                <div class="alert alert-success"><?= htmlspecialchars($telegramMsg, ENT_QUOTES, 'UTF-8') ?></div>
-            <?php } ?>
-            <?php if ($telegramErr !== '') { ?>
-                <div class="alert alert-danger"><?= htmlspecialchars($telegramErr, ENT_QUOTES, 'UTF-8') ?></div>
-            <?php } ?>
 
             <div class="card mb-4">
                 <div class="card-body">
@@ -328,7 +413,7 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
                                 <label class="form-label form_lbl">Encrypted Order Link</label>
                                 <div class="input-group">
                                     <input type="text" class="form-control" id="sorOrderLink" readonly value="<?= htmlspecialchars((string) $orderLink, ENT_QUOTES, 'UTF-8') ?>">
-                                    <button type="button" class="btn btn-sm btn-rounded btn-primary" id="copyOrderLinkBtn" title="Copy Link" aria-label="Copy Link"><i class="fa-regular fa-copy"></i></button>
+                                    <button type="button" class="btn sor-copy-btn" id="copyOrderLinkBtn" title="Copy Link" aria-label="Copy Link"><i class="fa-regular fa-copy"></i></button>
                                 </div>
                             </div>
                             <form method="post">
@@ -349,10 +434,58 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
     setButtonColor();
     preloader(300);
 
+    function sorShowResultModal(message, isError) {
+        var modalEl = document.getElementById('sorResultModal');
+        if (!modalEl) {
+            modalEl = document.createElement('div');
+            modalEl.className = 'modal fade';
+            modalEl.id = 'sorResultModal';
+            modalEl.tabIndex = -1;
+            modalEl.setAttribute('aria-hidden', 'true');
+            modalEl.innerHTML =
+                '<div class="modal-dialog modal-dialog-centered" style="font-family:\'Segoe UI\', Tahoma, Geneva, Verdana, sans-serif;">' +
+                '  <div class="modal-content">' +
+                '    <div class="modal-body fs-6 mt-3">' +
+                '      <p id="sorResultModalText" style="text-align:center; font-weight:bold; font-size:25px;"></p>' +
+                '    </div>' +
+                '    <div class="modal-footer d-flex justify-content-center mt-n3" style="border-top:0px">' +
+                '      <button id="sorResultContinueBtn" type="button" class="btn" style="border:1px solid #FF9B44; background-color:#FFFFFF; color:#FF9B44; box-shadow:0 0 !important; border-radius:24px; text-transform:none;">Continue</button>' +
+                '    </div>' +
+                '  </div>' +
+                '</div>';
+            document.body.appendChild(modalEl);
+        }
+
+        var textEl = document.getElementById('sorResultModalText');
+        if (textEl) {
+            textEl.textContent = message || (isError ? 'Error occurred, please try again later.' : 'Telegram message sent successful.');
+            textEl.style.color = isError ? '#c0392b' : '#4b4b4b';
+        }
+
+        if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
+            var modal = bootstrap.Modal.getOrCreateInstance(modalEl, {
+                keyboard: false,
+                backdrop: 'static'
+            });
+            modal.show();
+
+            var continueBtn = document.getElementById('sorResultContinueBtn');
+            if (continueBtn) {
+                continueBtn.onclick = function () {
+                    modal.hide();
+                };
+            }
+        } else {
+            alert(message || 'Done.');
+        }
+    }
+
     var copyBtn = document.getElementById('copyOrderLinkBtn');
     var orderLinkInput = document.getElementById('sorOrderLink');
     if (copyBtn && orderLinkInput) {
         copyBtn.addEventListener('click', function () {
+            var originalIcon = copyBtn.innerHTML;
+            var doneIcon = '<i class="fa-solid fa-check"></i>';
             if (navigator.clipboard && navigator.clipboard.writeText) {
                 navigator.clipboard.writeText(orderLinkInput.value);
             } else {
@@ -360,8 +493,21 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
                 orderLinkInput.select();
                 document.execCommand('copy');
             }
+
+            copyBtn.innerHTML = doneIcon;
+            copyBtn.setAttribute('title', 'Copied');
+            setTimeout(function () {
+                copyBtn.innerHTML = originalIcon;
+                copyBtn.setAttribute('title', 'Copy Link');
+            }, 1200);
         });
     }
+
+    <?php if ($telegramMsg !== '') { ?>
+        sorShowResultModal(<?= json_encode((string) $telegramMsg) ?>, false);
+    <?php } else if ($telegramErr !== '') { ?>
+        sorShowResultModal(<?= json_encode((string) $telegramErr) ?>, true);
+    <?php } ?>
 </script>
 </body>
 </html>

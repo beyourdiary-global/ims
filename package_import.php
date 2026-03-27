@@ -125,7 +125,7 @@ function getReverseMapping($connect, $table, $idCol, $nameCol) {
     $result = mysqli_query($connect, "SELECT `$idCol`, `$nameCol` FROM `$table`");
     if ($result) {
         while ($row = mysqli_fetch_assoc($result)) {
-            $map[strtolower(trim((string)$row[$nameCol]))] = $row[$idCol];
+            $map[normalizeLookupKey((string) $row[$nameCol])] = $row[$idCol];
         }
     }
     return $map;
@@ -143,11 +143,93 @@ function getIdNameMapping($connect, $table, $idCol, $nameCol) {
 }
 
 function resolveMapValue($raw, $reverseMap) {
-    $raw = trim((string) $raw);
+    $raw = normalizeCellText((string) $raw);
     if ($raw === '') return '';
-    if (ctype_digit($raw)) return $raw;
-    $k = strtolower($raw);
+    if (is_numeric($raw) && (string) ((int) $raw) === preg_replace('/\.0+$/', '', (string) $raw)) {
+        return (string) ((int) $raw);
+    }
+    $k = normalizeLookupKey($raw);
     return isset($reverseMap[$k]) ? (string) $reverseMap[$k] : '';
+}
+
+function normalizeCellText($value)
+{
+    $value = str_replace("\xC2\xA0", ' ', (string) $value);
+    $value = preg_replace('/\s+/u', ' ', $value);
+    return trim((string) $value);
+}
+
+function normalizeLookupKey($value)
+{
+    $value = strtolower(normalizeCellText((string) $value));
+    return preg_replace('/[^a-z0-9]+/', '', $value);
+}
+
+function normalizeHeaderKey($value)
+{
+    return preg_replace('/[^A-Z0-9]+/', '', strtoupper(normalizeCellText((string) $value)));
+}
+
+function buildHeaderIndexMap($headerRow)
+{
+    $indexMap = array();
+    $aliasMap = array(
+        'SN' => 'ID',
+        'SNO' => 'ID',
+        'ID' => 'ID',
+        'NAME' => 'NAME',
+        'ITEMCODE' => 'ITEM_CODE',
+        'ITEMDESCRIPTION' => 'ITEM_DESCRIPTION',
+        'PRICE' => 'PRICE',
+        'BRAND' => 'BRAND',
+        'CURRENCYUNIT' => 'CURRENCY_UNIT',
+        'PRICECURR' => 'CURRENCY_UNIT',
+        'COST' => 'COST',
+        'COSTCURR' => 'COST_CURR',
+        'COSTCURRENCY' => 'COST_CURR',
+        'AGENTCOST' => 'AGENT_COST',
+        'PRODUCT' => 'PRODUCT',
+        'PRODUCTSINCLUDED' => 'PRODUCT',
+        'BARCODESLOTTOTAL' => 'BARCODE_SLOT_TOTAL',
+        'REMARK' => 'REMARK',
+    );
+
+    foreach ($headerRow as $idx => $headerName) {
+        $key = normalizeHeaderKey($headerName);
+        if ($key === '') {
+            continue;
+        }
+        if (isset($aliasMap[$key])) {
+            $indexMap[$aliasMap[$key]] = (int) $idx;
+        }
+    }
+
+    return $indexMap;
+}
+
+function getColByKey($row, $indexMap, $key, $fallback = '')
+{
+    if (!isset($indexMap[$key])) {
+        return normalizeCellText($fallback);
+    }
+    $idx = (int) $indexMap[$key];
+    if (!isset($row[$idx])) {
+        return normalizeCellText($fallback);
+    }
+    return normalizeCellText((string) $row[$idx]);
+}
+
+function normalizeNumericString($value, $decimals = 2)
+{
+    $value = normalizeCellText((string) $value);
+    if ($value === '') {
+        return number_format(0, $decimals, '.', '');
+    }
+    $value = preg_replace('/[^0-9\.-]/', '', str_replace(',', '', $value));
+    if ($value === '' || !is_numeric($value)) {
+        return number_format(0, $decimals, '.', '');
+    }
+    return number_format((float) $value, $decimals, '.', '');
 }
 
 $brandRevMap = getReverseMapping($connect, BRAND, 'id', 'name');
@@ -183,31 +265,37 @@ if ($action === 'preview') {
                 $headers = array_map(function ($h) {
                     return strtoupper(trim((string) $h));
                 }, isset($parsedRows[0]) ? $parsedRows[0] : array());
-                $indexMap = array_flip($headers);
-
-                $getCol = function ($row, $name, $fallback = '') use ($indexMap) {
-                    $idx = isset($indexMap[$name]) ? $indexMap[$name] : -1;
-                    if ($idx < 0 || !isset($row[$idx])) {
-                        return $fallback;
-                    }
-                    return trim((string) $row[$idx]);
-                };
+                $indexMap = buildHeaderIndexMap($headers);
 
                 foreach ($parsedRows as $rowIndex => $data) {
                     if ($rowIndex === 0) continue; // Skip header row
 
-                    $id = $getCol($data, 'S/N', $getCol($data, 'ID', ''));
-                    $name = $getCol($data, 'NAME', '');
+                    $idRaw = getColByKey($data, $indexMap, 'ID', '');
+                    $id = '';
+                    if ($idRaw !== '') {
+                        $idNum = (int) preg_replace('/\.0+$/', '', $idRaw);
+                        if ($idNum > 0) {
+                            $id = (string) $idNum;
+                        }
+                    }
+                    $name = getColByKey($data, $indexMap, 'NAME', '');
 
                     // Only process rows that have at least a Name or an ID (Allows new records to be added at the bottom!)
                     if (!empty($id) || !empty($name)) { 
                         
                         $isNew = empty($id) || !isset($existingPackages[$id]);
                         
-                        $csvBrand = $getCol($data, 'BRAND', '');
-                        $csvPriceCurr = $getCol($data, 'CURRENCY UNIT', $getCol($data, 'PRICE CURR', ''));
-                        $csvCostCurr = $getCol($data, 'COST CURR', $getCol($data, 'COST CURRENCY', ''));
-                        $csvProducts = $getCol($data, 'PRODUCT', $getCol($data, 'PRODUCTS INCLUDED', ''));
+                        $csvBrand = getColByKey($data, $indexMap, 'BRAND', '');
+                        $csvPriceCurr = getColByKey($data, $indexMap, 'CURRENCY_UNIT', '');
+                        $csvCostCurr = getColByKey($data, $indexMap, 'COST_CURR', '');
+                        $csvProducts = getColByKey($data, $indexMap, 'PRODUCT', '');
+
+                        if (normalizeLookupKey($csvPriceCurr) === 'rm') {
+                            $csvPriceCurr = 'MYR';
+                        }
+                        if (normalizeLookupKey($csvCostCurr) === 'rm') {
+                            $csvCostCurr = 'MYR';
+                        }
 
                         $dbBrandId = resolveMapValue($csvBrand, $brandRevMap);
                         $dbPriceCurrId = resolveMapValue($csvPriceCurr, $currencyRevMap);
@@ -240,6 +328,7 @@ if ($action === 'preview') {
                         // Reverse lookup product IDs
                         $dbProductIds = [];
                         $productDisplayNames = [];
+                        $hasUnknownProduct = false;
                         if (!empty($csvProducts)) {
                             $prodNames = array_map('trim', explode(',', $csvProducts));
                             foreach ($prodNames as $pn) {
@@ -255,8 +344,8 @@ if ($action === 'preview') {
                                     $dbProductIds[] = $pid;
                                     $productDisplayNames[] = isset($productNameMap[$pid]) ? $productNameMap[$pid] : $pn;
                                 } else {
-                                    $fieldErrors['product_names'] = "Product '$pn' not found in database.";
-                                    $productDisplayNames[] = $pn;
+                                    // Ignore unknown product names for diff-only preview.
+                                    $hasUnknownProduct = true;
                                 }
                             }
                         }
@@ -265,29 +354,25 @@ if ($action === 'preview') {
                         $dbProductString = implode(',', $dbProductIds);
 
                         // Variables to check
-                        $item_code = $getCol($data, 'ITEM CODE', '');
-                        $item_description = $getCol($data, 'ITEM DESCRIPTION', '');
-                        $price = $getCol($data, 'PRICE', '0.00');
-                        $cost = $getCol($data, 'COST', '0.00');
-                        $agent_cost = $getCol($data, 'AGENT COST', '0.00');
-                        $barcode_slot_total = $getCol($data, 'BARCODE SLOT TOTAL', '0');
-                        $remark = $getCol($data, 'REMARK', '');
-
-                        $price = str_replace(',', '', $price !== '' ? $price : '0.00');
-                        $cost = str_replace(',', '', $cost !== '' ? $cost : '0.00');
-                        $agent_cost = str_replace(',', '', $agent_cost !== '' ? $agent_cost : '0.00');
+                        $item_code = getColByKey($data, $indexMap, 'ITEM_CODE', '');
+                        $item_description = getColByKey($data, $indexMap, 'ITEM_DESCRIPTION', '');
+                        $price = normalizeNumericString(getColByKey($data, $indexMap, 'PRICE', '0.00'), 2);
+                        $cost = normalizeNumericString(getColByKey($data, $indexMap, 'COST', '0.00'), 2);
+                        $agent_cost = normalizeNumericString(getColByKey($data, $indexMap, 'AGENT_COST', '0.00'), 2);
+                        $barcode_slot_total = (string) ((int) normalizeNumericString(getColByKey($data, $indexMap, 'BARCODE_SLOT_TOTAL', '0'), 0));
+                        $remark = getColByKey($data, $indexMap, 'REMARK', '');
 
                         // ----- COMPARISON ENGINE -----
                         $changes = [];
                         if (!$isNew) {
                             $ex = $existingPackages[$id];
                             
-                            if (trim((string)$ex['name']) !== $name) $changes['name'] = true;
-                            if (trim((string)($ex['item_code'] ?? '')) !== $item_code) $changes['item_code'] = true;
-                            if (trim((string)($ex['item_description'] ?? '')) !== $item_description) $changes['item_description'] = true;
-                            if ((float)$ex['price'] !== (float)$price) $changes['price'] = true;
-                            if ((float)$ex['cost'] !== (float)$cost) $changes['cost'] = true;
-                            if ((float)$ex['agent_cost'] !== (float)$agent_cost) $changes['agent_cost'] = true;
+                            if (normalizeCellText((string) $ex['name']) !== normalizeCellText($name)) $changes['name'] = true;
+                            if (normalizeCellText((string) ($ex['item_code'] ?? '')) !== normalizeCellText($item_code)) $changes['item_code'] = true;
+                            if (normalizeCellText((string) ($ex['item_description'] ?? '')) !== normalizeCellText($item_description)) $changes['item_description'] = true;
+                            if ((float) $ex['price'] !== (float) $price) $changes['price'] = true;
+                            if ((float) $ex['cost'] !== (float) $cost) $changes['cost'] = true;
+                            if ((float) $ex['agent_cost'] !== (float) $agent_cost) $changes['agent_cost'] = true;
                             if ((string)$ex['brand'] !== (string)$dbBrandId) $changes['brand'] = true;
                             if ((string)$ex['currency_unit'] !== (string)$dbPriceCurrId) $changes['price_curr'] = true;
                             if ((string)$ex['cost_curr'] !== (string)$dbCostCurrId) $changes['cost_curr'] = true;
@@ -303,10 +388,11 @@ if ($action === 'preview') {
                             }
                             $exProductIds = array_values(array_unique($exProductIds));
                             sort($exProductIds);
-                            if (implode(',', $exProductIds) !== $dbProductString) $changes['products'] = true;
+                            // If unknown product names are present from uploaded file, ignore product diff.
+                            if (!$hasUnknownProduct && implode(',', $exProductIds) !== $dbProductString) $changes['products'] = true;
 
-                            if ((string)$ex['barcode_slot_total'] !== (string)$barcode_slot_total) $changes['barcode_slot_total'] = true;
-                            if (trim((string)$ex['remark']) !== $remark) $changes['remark'] = true;
+                            if ((string) ((int) ($ex['barcode_slot_total'] ?? 0)) !== (string) ((int) $barcode_slot_total)) $changes['barcode_slot_total'] = true;
+                            if (normalizeCellText((string) $ex['remark']) !== normalizeCellText($remark)) $changes['remark'] = true;
                         }
 
                         // Only add to preview if it's NEW or if something actually CHANGED
@@ -360,15 +446,22 @@ else if ($action === 'update') {
     foreach ($postData as $row) {
         $fieldErrors = [];
         $nameRaw = trim((string) (isset($row['name']) ? $row['name'] : ''));
-        $itemCodeRaw = trim((string) (isset($row['item_code']) ? $row['item_code'] : ''));
-        $itemDescriptionRaw = trim((string) (isset($row['item_description']) ? $row['item_description'] : ''));
-        $brandRaw = trim((string) (isset($row['brand_name']) ? $row['brand_name'] : ''));
-        $priceCurrRaw = trim((string) (isset($row['price_curr_name']) ? $row['price_curr_name'] : ''));
-        $costCurrRaw = trim((string) (isset($row['cost_curr_name']) ? $row['cost_curr_name'] : ''));
-        $priceRaw = trim((string) (isset($row['price']) ? $row['price'] : ''));
-        $costRaw = trim((string) (isset($row['cost']) ? $row['cost'] : ''));
-        $agentCostRaw = trim((string) (isset($row['agent_cost']) ? $row['agent_cost'] : ''));
-        $productsRaw = trim((string) (isset($row['product_names']) ? $row['product_names'] : ''));
+        $itemCodeRaw = normalizeCellText((string) (isset($row['item_code']) ? $row['item_code'] : ''));
+        $itemDescriptionRaw = normalizeCellText((string) (isset($row['item_description']) ? $row['item_description'] : ''));
+        $brandRaw = normalizeCellText((string) (isset($row['brand_name']) ? $row['brand_name'] : ''));
+        $priceCurrRaw = normalizeCellText((string) (isset($row['price_curr_name']) ? $row['price_curr_name'] : ''));
+        $costCurrRaw = normalizeCellText((string) (isset($row['cost_curr_name']) ? $row['cost_curr_name'] : ''));
+        $priceRaw = normalizeCellText((string) (isset($row['price']) ? $row['price'] : ''));
+        $costRaw = normalizeCellText((string) (isset($row['cost']) ? $row['cost'] : ''));
+        $agentCostRaw = normalizeCellText((string) (isset($row['agent_cost']) ? $row['agent_cost'] : ''));
+        $productsRaw = normalizeCellText((string) (isset($row['product_names']) ? $row['product_names'] : ''));
+
+        if (normalizeLookupKey($priceCurrRaw) === 'rm') {
+            $priceCurrRaw = 'MYR';
+        }
+        if (normalizeLookupKey($costCurrRaw) === 'rm') {
+            $costCurrRaw = 'MYR';
+        }
 
         $brandResolved = resolveMapValue($brandRaw, $brandRevMap);
         $priceCurrResolved = resolveMapValue($priceCurrRaw, $currencyRevMap);
@@ -408,22 +501,7 @@ else if ($action === 'update') {
             $fieldErrors['agent_cost'] = 'Agent Cost field is required!';
         }
 
-        if ($productsRaw !== '') {
-            $parts = array_map('trim', explode(',', $productsRaw));
-            foreach ($parts as $part) {
-                if ($part === '') continue;
-                if (ctype_digit($part)) {
-                    $pid = (int) $part;
-                    if (!isset($productNameMap[$pid])) {
-                        $fieldErrors['product_names'] = "Product '$part' not found in database.";
-                        break;
-                    }
-                } else if (!isset($productRevMap[strtolower($part)])) {
-                    $fieldErrors['product_names'] = "Product '$part' not found in database.";
-                    break;
-                }
-            }
-        }
+        // Ignore unknown product names. Product field should not block update/preview.
 
         if (!empty($fieldErrors)) {
             $hasValidationError = true;
@@ -444,19 +522,26 @@ else if ($action === 'update') {
         $id = mysqli_real_escape_string($connect, $row['id']);
         $is_new = ($row['is_new'] == '1');
         
-        $name = mysqli_real_escape_string($connect, $row['name']);
-        $item_code = mysqli_real_escape_string($connect, $row['item_code']);
-        $item_description = mysqli_real_escape_string($connect, $row['item_description']);
+        $name = mysqli_real_escape_string($connect, normalizeCellText((string) $row['name']));
+        $item_code = mysqli_real_escape_string($connect, normalizeCellText((string) $row['item_code']));
+        $item_description = mysqli_real_escape_string($connect, normalizeCellText((string) $row['item_description']));
         
-        $price = !empty($row['price']) ? mysqli_real_escape_string($connect, str_replace(',', '', (string) $row['price'])) : '0.00';
-        $cost = !empty($row['cost']) ? mysqli_real_escape_string($connect, str_replace(',', '', (string) $row['cost'])) : '0.00';
-        $agent_cost = !empty($row['agent_cost']) ? mysqli_real_escape_string($connect, $row['agent_cost']) : '0.00';
+        $price = mysqli_real_escape_string($connect, normalizeNumericString(isset($row['price']) ? $row['price'] : '0.00', 2));
+        $cost = mysqli_real_escape_string($connect, normalizeNumericString(isset($row['cost']) ? $row['cost'] : '0.00', 2));
+        $agent_cost = mysqli_real_escape_string($connect, normalizeNumericString(isset($row['agent_cost']) ? $row['agent_cost'] : '0.00', 2));
         $barcode_slot = !empty($row['barcode_slot_total']) ? mysqli_real_escape_string($connect, $row['barcode_slot_total']) : '0';
 
-        $brandRaw = trim((string) (isset($row['brand_name']) ? $row['brand_name'] : ''));
-        $priceCurrRaw = trim((string) (isset($row['price_curr_name']) ? $row['price_curr_name'] : ''));
-        $costCurrRaw = trim((string) (isset($row['cost_curr_name']) ? $row['cost_curr_name'] : ''));
-        $productsRaw = trim((string) (isset($row['product_names']) ? $row['product_names'] : ''));
+        $brandRaw = normalizeCellText((string) (isset($row['brand_name']) ? $row['brand_name'] : ''));
+        $priceCurrRaw = normalizeCellText((string) (isset($row['price_curr_name']) ? $row['price_curr_name'] : ''));
+        $costCurrRaw = normalizeCellText((string) (isset($row['cost_curr_name']) ? $row['cost_curr_name'] : ''));
+        $productsRaw = normalizeCellText((string) (isset($row['product_names']) ? $row['product_names'] : ''));
+
+        if (normalizeLookupKey($priceCurrRaw) === 'rm') {
+            $priceCurrRaw = 'MYR';
+        }
+        if (normalizeLookupKey($costCurrRaw) === 'rm') {
+            $costCurrRaw = 'MYR';
+        }
 
         $brandRaw = resolveMapValue($brandRaw, $brandRevMap);
         $priceCurrRaw = resolveMapValue($priceCurrRaw, $currencyRevMap);
@@ -477,20 +562,32 @@ else if ($action === 'update') {
         $cost_curr_id = $costCurrRaw !== '' ? mysqli_real_escape_string($connect, $costCurrRaw) : '0';
 
         $productIdsList = array();
+        $hasUnknownProductInput = false;
         if ($productsRaw !== '') {
             $parts = array_map('trim', explode(',', $productsRaw));
             foreach ($parts as $part) {
                 if ($part === '') continue;
                 if (ctype_digit($part)) {
                     $productIdsList[] = (int) $part;
-                } else if (isset($productRevMap[strtolower($part)])) {
-                    $productIdsList[] = (int) $productRevMap[strtolower($part)];
+                } else {
+                    $resolvedProd = resolveMapValue($part, $productRevMap);
+                    if ($resolvedProd !== '') {
+                        $productIdsList[] = (int) $resolvedProd;
+                    } else {
+                        $hasUnknownProductInput = true;
+                    }
                 }
             }
         }
         $productIdsList = array_values(array_unique($productIdsList));
         sort($productIdsList);
-        $product_ids = mysqli_real_escape_string($connect, implode(',', $productIdsList));
+
+        if ($hasUnknownProductInput && !$is_new && isset($existingPackages[(int) $id])) {
+            // Keep existing products when uploaded list contains unknown products.
+            $product_ids = mysqli_real_escape_string($connect, (string) $existingPackages[(int) $id]['product']);
+        } else {
+            $product_ids = mysqli_real_escape_string($connect, implode(',', $productIdsList));
+        }
 
         $remark = mysqli_real_escape_string($connect, $row['remark']);
 

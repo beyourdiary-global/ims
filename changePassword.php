@@ -1,8 +1,20 @@
 <?php
 $pageTitle = "Change Password";
 
-// get required file
-include 'menuHeader.php';
+include_once 'include/connection.php';
+include_once 'include/common.php';
+include_once 'include/common_variable.php';
+
+// checking
+if (input('token') && input('email'))
+    $pageMode = 'emailRstPassword';
+else
+    $pageMode = 'userChgPassword';
+
+// Load full authenticated layout only for in-session password change.
+if ($pageMode == 'userChgPassword') {
+    include 'menuHeader.php';
+}
 
 $sendEmail = '';
 $redirect_page = '';
@@ -54,13 +66,6 @@ if (!function_exists('cpIsValidResetToken')) {
         return hash_equals($expectedSig, $tokenSig);
     }
 }
-
-// checking
-if (input('token') && input('email'))
-    $pageMode = 'emailRstPassword';
-else
-    $pageMode = 'userChgPassword';
-
 
 if ($pageMode == 'userChgPassword') {
     // menuheader
@@ -162,7 +167,11 @@ if ($pageMode == 'userChgPassword') {
 
 if (isset($_SESSION['tempValConfirmBox'])) {
     unset($_SESSION['tempValConfirmBox']);
-    echo '<script>confirmationDialog("","","User Password","","' . $redirect_page . '","PC");</script>';
+    if ($pageMode == 'emailRstPassword') {
+        echo '<script>alert("Password updated successfully.");location.href="' . $redirect_page . '";</script>';
+    } else {
+        echo '<script>confirmationDialog("","","User Password","","' . $redirect_page . '","PC");</script>';
+    }
 }
 ?>
 
@@ -170,6 +179,11 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 <html>
 
 <head>
+    <?php 
+    if ($pageMode == 'emailRstPassword') { 
+        include "header.php"; 
+    } 
+    ?>
     <link rel="stylesheet" href="./css/main.css">
     <?php if ($pageMode == 'emailRstPassword') { ?>
         <link rel="stylesheet" href="./css/login.css">
@@ -339,8 +353,12 @@ if (isset($_SESSION['tempValConfirmBox'])) {
     </div>
 
     <script>
-        checkCurrentPage('invalid');
-        centerAlignment("passwordContainer");
+        if (typeof checkCurrentPage === 'function') {
+            checkCurrentPage('invalid');
+        }
+        if (typeof centerAlignment === 'function') {
+            centerAlignment("passwordContainer");
+        }
     </script>
 </body>
 

@@ -20,6 +20,14 @@ session_set_cookie_params([
 
 ini_set('session.gc_maxlifetime', $sessionLifetime);
 
+// --- FIX: Create a private, isolated folder for this app's sessions ---
+$sessionPath = __DIR__ . '/app_sessions'; // Creates a folder named 'app_sessions' next to init.php
+if (!file_exists($sessionPath)) {
+    @mkdir($sessionPath, 0777, true);
+}
+ini_set('session.save_path', $sessionPath);
+// ----------------------------------------------------------------------
+
 session_start();
 
 // Auto-detect environment based on the URL host
@@ -107,6 +115,7 @@ define('DEPT', 'department');
 define('HOLIDAY', 'holiday');
 define('BRAND', 'brand');
 define('COMPANY', 'company');
+define('PURCHASE_ORDER', 'purchase_order');
 define('PLTF', 'platform');
 define('PROD_STATUS', 'product_status');
 define('WHSE', 'warehouse');
@@ -195,6 +204,7 @@ define('JT_TRANS_GST', 'jt_transaction_extra_charges');
 define('STRIPE_TRANS_BACKUP', 'stripe_transaction_backup');
 define('LAZADA_CUST_RCD', 'customer_lazada_deals_transaction');
 define('WEB_ORDER_REQ', 'website_order_request');
+define('USER_RECORD_LOG', 'user_record_log');
 // define('LAZADA_CUST_RCD', 'customer_lazada_deals_transaction');
 define('CRED_INV_PROD', 'cred_inv_products');
 define('DEBIT_NOTES_INV', 'debit_notes_invoice');

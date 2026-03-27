@@ -10,7 +10,19 @@ $path =  $_SERVER['PHP_SELF'];
 $path = explode("/", $path);
 $login_url = $SITEURL."/index.php";
 
-if(!($path[sizeof($path)-1] == 'forgotPassword.php'))
+$currentPage = $path[sizeof($path) - 1];
+$isForgotPasswordPage = ($currentPage === 'forgotPassword.php');
+$isTokenResetPage = (
+    $currentPage === 'changePassword.php'
+    && isset($_GET['token'])
+    && isset($_GET['email'])
+    && !is_array($_GET['token'])
+    && !is_array($_GET['email'])
+    && trim((string) $_GET['token']) !== ''
+    && trim((string) $_GET['email']) !== ''
+);
+
+if (!($isForgotPasswordPage || $isTokenResetPage))
     if(!(isset($_SESSION['userid'])))
         echo("<script>location.href = '$login_url';</script>");
 

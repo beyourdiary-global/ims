@@ -491,7 +491,7 @@ function convertSpecialChars() {
     for (x = 0; x < chars.length; x++) {
       arguments[i].value = arguments[i].value.replace(
         new RegExp(chars[x], "g"),
-        codes[x]
+        codes[x],
       );
     }
   }
@@ -570,7 +570,7 @@ var vmoreHLnews = function (boxwidth, totalitems, nodata) {
         {
           scrollLeft: hlprev.position().left,
         },
-        1000
+        1000,
       );
     }
   });
@@ -585,7 +585,7 @@ var vmoreHLnews = function (boxwidth, totalitems, nodata) {
         {
           scrollLeft: hlnext.position().left,
         },
-        1000
+        1000,
       );
     }
   });
@@ -1172,7 +1172,7 @@ function dropdownMenuDispFix() {
         popperConfig(defaultBsPopperConfig) {
           return { ...defaultBsPopperConfig, strategy: "fixed" };
         },
-      })
+      }),
   );
 }
 
@@ -1210,7 +1210,7 @@ function searchInput(param, siteURL) {
             '<ul class="searchResult" id="searchResult_' +
               elementID +
               '"></ul>',
-            '<div id="clear_' + elementID + '" class="clear"></div>'
+            '<div id="clear_' + elementID + '" class="clear"></div>',
           );
 
         // set width same as input
@@ -1226,13 +1226,13 @@ function searchInput(param, siteURL) {
             var desc = result[i]["desc"];
             var value = result[i]["val"];
             $("#searchResult_" + elementID).append(
-              "<li value='" + value + "'>" + desc + "</li>"
+              "<li value='" + value + "'>" + desc + "</li>",
             );
           } else {
             var id = result[i]["id"];
             var name = result[i][type];
             $("#searchResult_" + elementID).append(
-              "<li value='" + id + "'>" + name + "</li>"
+              "<li value='" + id + "'>" + name + "</li>",
             );
             dataArr[id] = result[i];
           }
@@ -1240,7 +1240,7 @@ function searchInput(param, siteURL) {
 
         if (addSelection) {
           $("#searchResult_" + elementID).append(
-            "<li value='" + addSelection + "'>" + addSelection + "</li>"
+            "<li value='" + addSelection + "'>" + addSelection + "</li>",
           );
         }
 
@@ -1298,7 +1298,7 @@ function searchInput2(param, siteURL) {
             '<ul class="searchResult" id="searchResult_' +
               elementID +
               '"></ul>',
-            '<div id="clear_' + elementID + '" class="clear"></div>'
+            '<div id="clear_' + elementID + '" class="clear"></div>',
           );
 
         // set width same as input
@@ -1314,13 +1314,13 @@ function searchInput2(param, siteURL) {
             var desc = result[i]["desc"];
             var value = result[i]["val"];
             $("#searchResult_" + elementID).append(
-              "<li value='" + value + "'>" + desc + "</li>"
+              "<li value='" + value + "'>" + desc + "</li>",
             );
           } else {
             var id = result[i]["id"];
             var name = result[i][type];
             $("#searchResult_" + elementID).append(
-              "<li value='" + id + "'>" + name + "</li>"
+              "<li value='" + id + "'>" + name + "</li>",
             );
             dataArr[id] = result[i];
           }
@@ -1328,7 +1328,7 @@ function searchInput2(param, siteURL) {
 
         if (addSelection) {
           $("#searchResult_" + elementID).append(
-            "<li value='" + addSelection + "'>" + addSelection + "</li>"
+            "<li value='" + addSelection + "'>" + addSelection + "</li>",
           );
         }
 
@@ -1501,13 +1501,13 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function checkRequiredInputs() {
     var requiredInputs = document.querySelectorAll(
-      "input[required], select[required]"
+      "input[required], select[required]",
     );
 
     requiredInputs.forEach(function (input) {
       if (input.value.trim() === "") {
         var labelContent = document.querySelector(
-          'label[for="' + input.id + '"]'
+          'label[for="' + input.id + '"]',
         ).textContent;
 
         labelContent = labelContent.replace(/\*/g, "");
@@ -1570,20 +1570,41 @@ function checkCurrentPage(page, action) {
 }
 
 function preloader(additionalDelay, action) {
-  document.addEventListener("DOMContentLoaded", function () {
+  function releasePageLoader() {
     setTimeout(function () {
-      document.querySelector(".preloader").style.display = "none";
-      document.querySelector(".pre-load-center").style.display = "none";
-      document.querySelector(".page-load-cover").style.display = "block";
+      var preloaders = document.querySelectorAll(".preloader");
+      var preloadCenters = document.querySelectorAll(".pre-load-center");
+      var pageCovers = document.querySelectorAll(".page-load-cover");
+
+      for (var i = 0; i < preloaders.length; i++) {
+        preloaders[i].style.display = "none";
+      }
+      for (var j = 0; j < preloadCenters.length; j++) {
+        preloadCenters[j].style.display = "none";
+      }
+      for (var k = 0; k < pageCovers.length; k++) {
+        pageCovers[k].style.display = "block";
+      }
+
       setAutofocus(action);
-    }, additionalDelay);
+    }, additionalDelay || 0);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", releasePageLoader);
+  } else {
+    releasePageLoader();
+  }
+
+  window.addEventListener("load", function () {
+    releasePageLoader();
   });
 }
 
 function setAutofocus(action) {
   if (action === "I" || action === "E") {
     var firstInput = $(
-      "input[type='text']:visible:enabled:not(:checkbox,:radio,:hidden,[readonly]), textarea:visible:enabled:not(:hidden,[readonly]), input[type='number']:visible:enabled:not(:hidden,[readonly])"
+      "input[type='text']:visible:enabled:not(:checkbox,:radio,:hidden,[readonly]), textarea:visible:enabled:not(:hidden,[readonly]), input[type='number']:visible:enabled:not(:hidden,[readonly])",
     )
       .filter(function () {
         return $.trim($(this).val()) === "";

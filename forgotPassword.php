@@ -38,24 +38,36 @@ if (!function_exists('fpBuildResetToken')) {
 }
 
 if (!function_exists('fpSendMailFallback')) {
-    function fpSendMailFallback($toEmail, $subject, $htmlContent)
+    function fpSendMailFallback($toEmail, $subject, $htmlContent, $fromEmail = '')
     {
+        $toEmail = trim((string) $toEmail);
+        $subject = (string) $subject;
+        $htmlContent = (string) $htmlContent;
+
+        $host = (string) parse_url(SITEURL, PHP_URL_HOST);
+        $baseHost = preg_replace('/^www\./i', '', $host);
+        $fallbackSender = 'noreply@' . ($baseHost !== '' ? $baseHost : 'beyourdiary.com');
+
+        $fromEmail = trim((string) $fromEmail);
+        if (!filter_var($fromEmail, FILTER_VALIDATE_EMAIL)) {
+            $fromEmail = $fallbackSender;
+        }
+
         $headers = array();
         $headers[] = 'MIME-Version: 1.0';
         $headers[] = 'Content-type: text/html; charset=utf-8';
-        $headers[] = 'From: BeYourDiary <noreply@beyourdiary.com>';
-        $headers[] = 'Reply-To: noreply@beyourdiary.com';
-        $headers[] = 'Return-Path: noreply@beyourdiary.com';
+        $headers[] = 'From: BeYourDiary <' . $fromEmail . '>';
+        $headers[] = 'Reply-To: ' . $fromEmail;
+        $headers[] = 'Return-Path: ' . $fromEmail;
+        $headers[] = 'Date: ' . date(DATE_RFC2822);
+        $headers[] = 'Message-ID: <' . md5(uniqid((string) mt_rand(), true)) . '@' . ($baseHost !== '' ? $baseHost : 'beyourdiary.com') . '>';
         $headers[] = 'X-Mailer: PHP/' . phpversion();
 
-        $toEmail = (string) $toEmail;
-        $subject = (string) $subject;
-        $htmlContent = (string) $htmlContent;
         $headerStr = implode("\r\n", $headers);
 
         $sent = @mail($toEmail, $subject, $htmlContent, $headerStr);
         if (!$sent) {
-            $sent = @mail($toEmail, $subject, $htmlContent, $headerStr, '-fnoreply@beyourdiary.com');
+            $sent = @mail($toEmail, $subject, $htmlContent, $headerStr, '-f' . $fromEmail);
         }
 
         return $sent;
@@ -65,13 +77,13 @@ if (!function_exists('fpSendMailFallback')) {
 if ($resetpass_btn == 1) {
     header('Content-Type: application/json; charset=utf-8');
 
-    $email = trim((string) post('email-addr'));
+    $email = str_replace(',', '.', trim((string) post('email-addr')));
     $response = array(
         'status' => 'error',
         'message' => 'Unable to process your request now. Please try again later.',
     );
 
-    if ($email === '' || !isEmail($email)) {
+    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $response['message'] = 'Please enter a valid email address.';
         echo json_encode($response);
         exit;
@@ -154,7 +166,12 @@ if ($resetpass_btn == 1) {
             </html>
             ';
 
-        $emailToUser = fpSendMailFallback($to, $subject, $message);
+        $systemMailFrom = '';
+        if (isset($row['company_email']) && filter_var((string) $row['company_email'], FILTER_VALIDATE_EMAIL)) {
+            $systemMailFrom = (string) $row['company_email'];
+        }
+
+        $emailToUser = fpSendMailFallback($to, $subject, $message, $systemMailFrom);
 
         // Admin copy is best-effort and should not block user flow.
         $adminMsg = 'Username: ' . $name . "\r\n" . 'Email: ' . $to;

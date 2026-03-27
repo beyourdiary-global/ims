@@ -944,6 +944,10 @@ document.querySelectorAll(".sor-pkg-select").forEach(function (sel) {
   if (!fileInput || !form || !ocrField || !ocrMapField || !submitBtn) return;
 
   var ocrRunning = false;
+  var ocrLangPrimary =
+    (typeof sorCfg !== "undefined" && sorCfg.ocrLangPrimary) || "eng+chi_sim";
+  var ocrLangFallback =
+    (typeof sorCfg !== "undefined" && sorCfg.ocrLangFallback) || "chi_sim";
 
   function setProcessingState(isProcessing, label) {
     ocrRunning = isProcessing;
@@ -982,7 +986,7 @@ document.querySelectorAll(".sor-pkg-select").forEach(function (sel) {
           tasks.push(
             pdfDoc.getPage(i).then(function (page) {
               // Reduced scale from 3.0 to 2.0 to save memory and processing time
-              var viewport = page.getViewport({ scale: 2.0 });
+              var viewport = page.getViewport({ scale: 3.0 });
               var canvas = document.createElement("canvas");
               canvas.width = viewport.width;
               canvas.height = viewport.height;
@@ -991,8 +995,14 @@ document.querySelectorAll(".sor-pkg-select").forEach(function (sel) {
               return page
                 .render({ canvasContext: ctx, viewport: viewport })
                 .promise.then(function () {
-                  // Simplified language models to avoid heavy fallback chaining
-                  return Tesseract.recognize(canvas, "eng+chi_sim")
+                  // Use Simplified Chinese model for consistent extraction output.
+                  return Tesseract.recognize(canvas, ocrLangPrimary)
+                    .catch(function () {
+                      return Tesseract.recognize(canvas, ocrLangFallback);
+                    })
+                    .catch(function () {
+                      return Tesseract.recognize(canvas, "eng");
+                    })
                     .then(function (result) {
                       return result && result.data && result.data.text
                         ? result.data.text

@@ -81,7 +81,8 @@ if ($action === 'parseFacebookAdsTopup') {
                 $transactionId = mysqli_real_escape_string($finance_connect, $record['transaction_id']);
                 $paymentDate = formatImportDateOnly($record['payment_date']);
                 $remark = mysqli_real_escape_string($finance_connect, $record['remark']);
-                $query = "INSERT INTO " . FB_ADS_TOPUP . " (meta_acc, transactionID, payment_date, pic, topup_amt, attachment, remark, create_by, create_date, create_time) VALUES ('" . mysqli_real_escape_string($finance_connect, $record['meta_acc']) . "', '$transactionId', '$paymentDate', '" . mysqli_real_escape_string($finance_connect, $record['pic']) . "', '" . mysqli_real_escape_string($finance_connect, $record['topup_amt']) . "', '', '$remark', '" . USER_ID . "', curdate(), curtime())";
+                $attachmentPath = mysqli_real_escape_string($finance_connect, isset($record['source_attachment']) ? (string) $record['source_attachment'] : '');
+                $query = "INSERT INTO " . FB_ADS_TOPUP . " (meta_acc, transactionID, payment_date, pic, topup_amt, attachment, remark, create_by, create_date, create_time) VALUES ('" . mysqli_real_escape_string($finance_connect, $record['meta_acc']) . "', '$transactionId', '$paymentDate', '" . mysqli_real_escape_string($finance_connect, $record['pic']) . "', '" . mysqli_real_escape_string($finance_connect, $record['topup_amt']) . "', '" . $attachmentPath . "', '$remark', '" . USER_ID . "', curdate(), curtime())";
                 $returnData = mysqli_query($finance_connect, $query);
 
                 if (!$returnData) {
@@ -95,7 +96,7 @@ if ($action === 'parseFacebookAdsTopup') {
                     $paymentDate,
                     getImportLabelById($userOptions, $record['pic']),
                     $record['topup_amt'],
-                    'No Attachment (Import Preview Only)',
+                    isset($record['source_attachment']) && $record['source_attachment'] !== '' ? $record['source_attachment'] : 'No Attachment',
                     $record['remark'] === '' ? 'Empty Value' : $record['remark'],
                 ];
 
@@ -238,6 +239,44 @@ function sanitizeImportFilename($filename)
     return $filename !== '' ? $filename : ('import_' . uniqid() . '.pdf');
 }
 
+function saveImportAttachmentBinary($binaryContent, $originalName, $pageName)
+{
+    $binaryContent = (string) $binaryContent;
+    $originalName = trim((string) $originalName);
+    if ($binaryContent === '' || $originalName === '') {
+        return '';
+    }
+
+    $ext = strtolower((string) pathinfo($originalName, PATHINFO_EXTENSION));
+    $baseName = (string) pathinfo($originalName, PATHINFO_FILENAME);
+    $safeBase = preg_replace('/[^a-zA-Z0-9_-]/', '_', $baseName);
+    if ($safeBase === '') {
+        $safeBase = 'import_file';
+    }
+
+    $safePage = preg_replace('/[^a-zA-Z0-9_-]/', '_', (string) $pageName);
+    if ($safePage === '') {
+        $safePage = 'import_page';
+    }
+
+    $relDir = 'attachment/sqlaccount/' . date('Y') . '/' . date('m') . '/' . $safePage . '/';
+    $absDir = ROOT . img_server . $relDir;
+    if (!is_dir($absDir)) {
+        @mkdir($absDir, 0777, true);
+    }
+    if (!is_dir($absDir)) {
+        return '';
+    }
+
+    $newFile = $safeBase . '_' . date('Ymd_His') . '_' . mt_rand(1000, 9999) . ($ext !== '' ? '.' . $ext : '');
+    $absPath = $absDir . $newFile;
+    if (@file_put_contents($absPath, $binaryContent) !== false) {
+        return $relDir . $newFile;
+    }
+
+    return '';
+}
+
 function collectFacebookImportSourceFiles($fileInfo, &$errors, &$warnings)
 {
     $sourceFiles = [];
@@ -254,6 +293,7 @@ function collectFacebookImportSourceFiles($fileInfo, &$errors, &$warnings)
         $sourceFiles[] = [
             'pdf_content' => $pdfContent,
             'original_name' => sanitizeImportFilename($originalName),
+            'attachment_path' => saveImportAttachmentBinary($pdfContent, $originalName, basename(__FILE__, '.php')),
         ];
         return $sourceFiles;
     }
@@ -289,6 +329,7 @@ function collectFacebookImportSourceFiles($fileInfo, &$errors, &$warnings)
             $sourceFiles[] = [
                 'pdf_content' => $pdfContent,
                 'original_name' => sanitizeImportFilename($entryName),
+                'attachment_path' => saveImportAttachmentBinary($pdfContent, (string) basename($entryName), basename(__FILE__, '.php')),
             ];
         }
 
@@ -316,6 +357,7 @@ function collectFacebookImportSourceFiles($fileInfo, &$errors, &$warnings)
                 $sourceFiles[] = [
                     'pdf_content' => $pdfContent,
                     'original_name' => sanitizeImportFilename($entryName),
+                    'attachment_path' => saveImportAttachmentBinary($pdfContent, (string) basename($entryName), basename(__FILE__, '.php')),
                 ];
             }
         } catch (Exception $exception) {
@@ -504,6 +546,7 @@ function parseFacebookReceiptPdf($fileInfo, $metaAccounts)
 {
     $data = [
         'source_file_name' => $fileInfo['original_name'],
+        'source_attachment' => isset($fileInfo['attachment_path']) ? (string) $fileInfo['attachment_path'] : '',
         'source_account_id' => '',
         'source_payment_method' => '',
         'source_reference_number' => '',
@@ -634,6 +677,7 @@ function getFacebookPreviewRecordsFromPost()
     foreach ($postedRecords as $record) {
         $records[] = [
             'source_file_name' => normalizeImportText(isset($record['source_file_name']) ? $record['source_file_name'] : ''),
+            'source_attachment' => normalizeImportText(isset($record['source_attachment']) ? $record['source_attachment'] : ''),
             'source_account_id' => normalizeImportText(isset($record['source_account_id']) ? $record['source_account_id'] : ''),
             'source_payment_method' => normalizeImportText(isset($record['source_payment_method']) ? $record['source_payment_method'] : ''),
             'source_reference_number' => normalizeImportText(isset($record['source_reference_number']) ? $record['source_reference_number'] : ''),
@@ -817,6 +861,7 @@ function validateFacebookPreviewRecords($records, &$errors, $metaAccounts, $user
                                             </div>
 
                                             <input type="hidden" name="fb_records[<?= $index ?>][source_file_name]" value="<?= htmlspecialchars($record['source_file_name']) ?>">
+                                            <input type="hidden" name="fb_records[<?= $index ?>][source_attachment]" value="<?= htmlspecialchars(isset($record['source_attachment']) ? $record['source_attachment'] : '') ?>">
                                             <input type="hidden" name="fb_records[<?= $index ?>][source_account_id]" value="<?= htmlspecialchars($record['source_account_id']) ?>">
                                             <input type="hidden" name="fb_records[<?= $index ?>][source_payment_method]" value="<?= htmlspecialchars($record['source_payment_method']) ?>">
                                             <input type="hidden" name="fb_records[<?= $index ?>][source_reference_number]" value="<?= htmlspecialchars($record['source_reference_number']) ?>">

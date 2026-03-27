@@ -82,6 +82,7 @@ $result = getData('*', '', '', SHOPEE_CUST_INFO, $finance_connect);
                                 <th scope="col">Country</th>
                                 <th scope="col">Brand</th>
                                 <th scope="col">Series</th>
+                                <th scope="col">Whatsapp / Contact Number</th>
                                 <th scope="col">Remark</th>
                             </tr>
                         </thead>
@@ -173,19 +174,20 @@ $result = getData('*', '', '', SHOPEE_CUST_INFO, $finance_connect);
                                     ?>
 
                                     <tr>
-                                        <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
-                                        <th scope="row"><?= $num++; ?></th>
+                                        <th class="hideColumn" scope="row"><?= htmlspecialchars($row['id'], ENT_QUOTES, 'UTF-8') ?></th>
+                                        <th scope="row"><?= htmlspecialchars($num++, ENT_QUOTES, 'UTF-8') ?></th>
                                         <td scope="row" class="btn-container">
                                             <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
                                             <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
                                             <?php renderDeleteButton($pinAccess, $row['id'], $row['buyer_username'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
                                         </td>
-                                        <td scope="row"><?= isset($row['buyer_username']) ? $row['buyer_username'] : '' ?></td>
-                                        <td scope="row"><?= $picName ?></td>
-                                        <td scope="row"><?= $countryName ?></td>
-                                        <td scope="row"><?= $brandName ?></td>
-                                        <td scope="row"><?= $seriesName ?></td>
-                                        <td scope="row"><?= isset($row['remark']) ? $row['remark'] : '' ?></td>
+                                        <td scope="row"><?= htmlspecialchars(isset($row['buyer_username']) ? $row['buyer_username'] : '', ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td scope="row"><?= htmlspecialchars($picName, ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td scope="row"><?= htmlspecialchars($countryName, ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td scope="row"><?= htmlspecialchars($brandName, ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td scope="row"><?= htmlspecialchars($seriesName, ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td scope="row"><?= htmlspecialchars(isset($row['contact_no']) ? $row['contact_no'] : '', ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td scope="row"><?= htmlspecialchars(isset($row['remark']) ? $row['remark'] : '', ENT_QUOTES, 'UTF-8') ?></td>
                                     </tr>
                                 <?php }
                             } ?>
@@ -200,6 +202,7 @@ $result = getData('*', '', '', SHOPEE_CUST_INFO, $finance_connect);
                                 <th scope="col">Country</th>
                                 <th scope="col">Brand</th>
                                 <th scope="col">Series</th>
+                                <th scope="col">Whatsapp / Contact Number</th>
                                 <th scope="col">Remark</th>
                             </tr>
                         </tfoot>
