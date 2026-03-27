@@ -189,13 +189,6 @@ if ($resetpass_btn == 1) {
         $response['message'] = 'If the email exists, a reset link has been sent.';
     }
 
-    // --- Temporary debug code for localhost testing ---
-    if (isset($resetUrl) && (strpos($_SERVER['HTTP_HOST'], 'localhost') !== false || strpos($_SERVER['HTTP_HOST'], '127.0.0.1') !== false)) {
-        $response['status'] = 'success'; // Override to success so the box is green
-        $response['message'] = 'Local Debug - <a href="' . $resetUrl . '" style="color:#23B200; text-decoration:underline;">Click Here to Reset Password</a>';
-    }
-    // --------------------------------------------------
-
     echo json_encode($response);
     exit;
 }

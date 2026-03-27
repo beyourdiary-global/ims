@@ -1,4 +1,4 @@
-//export notification
+﻿//export notification
 function exportData() {
   var checkboxes = document.querySelectorAll(".export:checked");
   if (checkboxes.length === 0) {
@@ -42,7 +42,10 @@ $(document).ready(function ($) {
     event.preventDefault();
 
     var isChecked = $(this).prop("checked");
-    $(".export").prop("checked", isChecked);
+    $(this)
+      .closest("table")
+      .find("tbody tr:visible .export")
+      .prop("checked", isChecked);
     $(".exportAll").prop("checked", isChecked);
 
     updateCheckboxesOnOtherPages(isChecked);
@@ -54,7 +57,9 @@ $(document).ready(function ($) {
 
     $("#table")
       .DataTable()
-      .$("tr", { filter: "applied" })
+      .rows({ search: "applied", page: "current" })
+      .nodes()
+      .to$()
       .each(function () {
         var checkbox = $(this).find(".export:checked");
         if (checkbox.length > 0) {
@@ -86,7 +91,7 @@ $(document).ready(function ($) {
   });
 
   function updateCheckboxesOnOtherPages(isChecked) {
-    var cells = $("#table").DataTable().cells().nodes();
+    var cells = $("#table").DataTable().rows({ page: "current" }).nodes();
     $(cells).find(".export").prop("checked", isChecked);
   }
 });

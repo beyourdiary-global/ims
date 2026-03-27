@@ -38,7 +38,7 @@ if (!empty($checkboxValues)) {
     setcookie('rowID', '', time() - 3600, '/');
     // Defining column names
     $excelData = array(
-        array('S/N', 'SHOPEE ACCOUNT', 'ORDER ID', 'DATETIME', 'CURRENCY UNIT', 'TOP-UP AMOUNT', 'SUBTOTAL', 'GST(%)', 'PAYMENT METHOD', 'REMARK', 'CREATE BY', 'CREATE DATE', 'CREATE TIME', 'UPDATE BY', 'UPDATE DATE', 'UPDATE TIME')
+        array('S/N', 'SHOPEE ACCOUNT', 'ORDER ID', 'DATETIME', 'CURRENCY UNIT', 'TOP-UP AMOUNT', 'SUBTOTAL', 'GST(%)', 'PAYMENT METHOD', 'ATTACHMENT', 'REMARK', 'CREATE BY', 'CREATE DATE', 'CREATE TIME', 'UPDATE BY', 'UPDATE DATE', 'UPDATE TIME')
     );
     // Get the data from the database using the WHERE clause
     $query2 = $finance_connect->query("SELECT * FROM " . SHOPEE_ADS_TOPUP . " WHERE status = 'A' AND id IN ($checkboxValues) ORDER BY shopee_acc ASC, orderID ASC, payment_date ASC, currency ASC, topup_amt ASC,subtotal ASC,gst ASC, pay_meth ASC");
@@ -56,20 +56,31 @@ if (!empty($checkboxValues)) {
             $lineData[] = $excelRowNum;
 
             if (isset($row2['attachment']) && !empty($row2['attachment'])) {
-                $attachmentSourcePath = $img_path . $row2['attachment'];
+                $attachmentRelPath = trim(str_replace('\\', '/', (string) $row2['attachment']), '/');
+                if (strpos($attachmentRelPath, '/') !== false) {
+                    $attachmentSourcePath = '../' . img_server . $attachmentRelPath;
+                } else {
+                    $attachmentSourcePath = $img_path . $attachmentRelPath;
+                }
                 if (file_exists($attachmentSourcePath)) {
-                    $attachmentCreationDate = strtotime($row2['create_date']);
-                    $yearMonthFolder = $tempAttachDir . date('Y', $attachmentCreationDate) . '/' . date('m', $attachmentCreationDate) . '/';
-                    if (!file_exists($yearMonthFolder)) {
-                        mkdir($yearMonthFolder, 0777, true);
+                    if (strpos($attachmentRelPath, '/') !== false) {
+                        $zipRelativePath = $attachmentRelPath;
+                    } else {
+                        $attachmentCreationDate = strtotime($row2['create_date']);
+                        $zipRelativePath = date('Y', $attachmentCreationDate) . '/' . date('m', $attachmentCreationDate) . '/' . $attachmentRelPath;
                     }
-                    $attachmentDestPath = $yearMonthFolder . $row2['attachment'];
+
+                    $attachmentDestPath = $tempAttachDir . $zipRelativePath;
+                    $attachmentDestDir = dirname($attachmentDestPath);
+                    if (!file_exists($attachmentDestDir)) {
+                        mkdir($attachmentDestDir, 0777, true);
+                    }
                     copy($attachmentSourcePath, $attachmentDestPath);
                 }
             }
 
             // Define the column names in the same order as in your database query
-            $columnNames = array('shopee_acc', 'orderID', 'payment_date', 'currency', 'topup_amt', 'subtotal', 'gst', 'pay_meth', 'remark', 'create_by', 'create_date', 'create_time', 'update_by', 'update_date', 'update_time');
+            $columnNames = array('shopee_acc', 'orderID', 'payment_date', 'currency', 'topup_amt', 'subtotal', 'gst', 'pay_meth', 'attachment', 'remark', 'create_by', 'create_date', 'create_time', 'update_by', 'update_date', 'update_time');
 
             foreach ($columnNames as $columnName) {
                 // Check if the value is null, if so, replace it with an empty string
@@ -390,7 +401,7 @@ function sat_is_in_interval($paymentDate, $interval, $dateFilter, $start, $end)
                                 <a class="btn btn-sm btn-rounded btn-primary px-3" name="importBtn" id="addBtn" href="<?= $SITEURL ?>/shopee_ads_topup_import.php"><i class="fa-solid fa-file-import"></i> Import </a>
                             <?php endif; ?>
                             <?php if (isActionAllowed("Export", $pinAccess)) : ?>
-                                <a class="btn btn-sm btn-rounded btn-primary px-3" name="exportBtnShopee" id="addBtn" href="#" onclick="return shopeeTopupExportFallback(event)"><i class="fa-solid fa-file-export"></i> Export</a>
+                                <a class="btn btn-sm btn-rounded btn-primary px-3" name="exportBtnShopee" id="addBtn" href="#"><i class="fa-solid fa-file-export"></i> Export</a>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -496,6 +507,11 @@ function sat_is_in_interval($paymentDate, $interval, $dateFilter, $start, $end)
                         $viewActMsg = '';
                         $sql = '';
                         if (isset($row['orderID'], $row['id']) && !empty($row['orderID'])) {
+                            $paymentDate = isset($row['payment_date']) ? $row['payment_date'] : '';
+                            if (!sat_is_in_interval($paymentDate, $timeInterval, $dateFilter, $rangeStart, $rangeEnd)) {
+                                continue;
+                            }
+
                             $q1 = getData('*', "id='" . $row['shopee_acc'] . "'", 'LIMIT 1', SHOPEE_ACC, $finance_connect);
                             $shopee_acc = $q1->fetch_assoc();
                             $q2 = getData('unit', "id='" . $row['currency'] . "'", 'LIMIT 1', CUR_UNIT, $connect);
@@ -506,11 +522,6 @@ function sat_is_in_interval($paymentDate, $interval, $dateFilter, $start, $end)
                             $shopee = isset($shopee_acc['name']) ? $shopee_acc['name'] : '';
                             $curr = isset($currs['unit']) ? $currs['unit'] : '';
                             $method = isset($pay['name']) ? $pay['name'] : '';
-                            $paymentDate = $row['payment_date'];
-
-                            if (!sat_is_in_interval($paymentDate, $timeInterval, $dateFilter, $rangeStart, $rangeEnd)) {
-                                continue;
-                            }
 
                             if ($groupOption !== '') {
                                 $groupKey = '';
@@ -610,32 +621,6 @@ function sat_is_in_interval($paymentDate, $interval, $dateFilter, $start, $end)
         end: <?= json_encode($rangeEnd) ?>,
         group: <?= json_encode($groupOption) ?>
     };
-
-    function shopeeTopupExportFallback(event) {
-        if (event) {
-            event.preventDefault();
-        }
-
-        var checkedBoxes = document.querySelectorAll('#shopee_ads_topup_trans_table .export:checked');
-        var checkboxValues = [];
-        checkedBoxes.forEach(function (checkbox) {
-            checkboxValues.push(checkbox.value);
-        });
-
-        if (checkboxValues.length === 0) {
-            alert('Please select data to export.');
-            return false;
-        }
-
-        if (typeof auditExport === 'function') {
-            auditExport(checkboxValues, 'shopee_ads_topup');
-        }
-
-        var exportUrl = 'shopee_ads_topup_trans_table.php?export_ids=' + encodeURIComponent(checkboxValues.join(','));
-        alert('Export successful!');
-        window.location.href = exportUrl;
-        return false;
-    }
 
     /**
   oufei 20231014

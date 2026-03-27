@@ -20,6 +20,14 @@ session_set_cookie_params([
 
 ini_set('session.gc_maxlifetime', $sessionLifetime);
 
+// --- FIX: Create a private, isolated folder for this app's sessions ---
+$sessionPath = __DIR__ . '/app_sessions'; // Creates a folder named 'app_sessions' next to init.php
+if (!file_exists($sessionPath)) {
+    @mkdir($sessionPath, 0777, true);
+}
+ini_set('session.save_path', $sessionPath);
+// ----------------------------------------------------------------------
+
 session_start();
 
 // Auto-detect environment based on the URL host

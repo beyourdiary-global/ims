@@ -1,4 +1,4 @@
-preloader(300);
+﻿preloader(300);
 
 $(document).ready(function () {
   var cfg = window.__COMPANY_TABLE_CONFIG || {};
@@ -15,7 +15,10 @@ $(document).ready(function () {
     event.preventDefault();
 
     var isChecked = $(this).prop("checked");
-    $(".export").prop("checked", isChecked);
+    $(this)
+      .closest("table")
+      .find("tbody tr:visible .export")
+      .prop("checked", isChecked);
     $(".exportAll").prop("checked", isChecked);
 
     updateCheckboxesOnOtherPages(isChecked);
@@ -32,7 +35,9 @@ $(document).ready(function () {
       if ($.fn.DataTable.isDataTable("#table")) {
         $("#table")
           .DataTable()
-          .$("tr", { filter: "applied" })
+          .rows({ search: "applied", page: "current" })
+          .nodes()
+          .to$()
           .each(function () {
             var checkbox = $(this).find(".export:checked");
             if (checkbox.length > 0) {
@@ -53,6 +58,12 @@ $(document).ready(function () {
       }
 
       $("#export_ids").val(checkboxValues.join(","));
+      if (
+        window.location.hostname === "localhost" ||
+        window.location.hostname === "127.0.0.1"
+      ) {
+        alert("Export data successful.");
+      }
       $("#exportForm").trigger("submit");
     },
   );
@@ -61,7 +72,7 @@ $(document).ready(function () {
     if (!$.fn.DataTable.isDataTable("#table")) {
       return;
     }
-    var cells = $("#table").DataTable().cells().nodes();
+    var cells = $("#table").DataTable().rows({ page: "current" }).nodes();
     $(cells).find(".export").prop("checked", isChecked);
   }
 });

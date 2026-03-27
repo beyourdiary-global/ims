@@ -53,6 +53,8 @@ if ($action === 'parseShopeeAdsTopup') {
             } else {
                 $parseResult = parseShopeeAdsTopupHtml($html, $shopeeAccounts, $currencyUnits, $paymentMethods);
                 $previewData = $parseResult['data'];
+                $previewData['source_file_name'] = sanitizeImportFilename($uploadedName);
+                $previewData['source_attachment'] = saveShopeeImportAttachmentBinary($html, $uploadedName, basename(__FILE__, '.php'));
                 $importWarnings = $parseResult['warnings'];
 
                 if (!empty($parseResult['errors'])) {
@@ -69,6 +71,8 @@ if ($action === 'parseShopeeAdsTopup') {
                 $source = $sourceFiles[0];
                 $parseResult = parseShopeeAdsTopupPdf($source['pdf_content'], $source['original_name'], $shopeeAccounts, $currencyUnits, $paymentMethods);
                 $previewData = $parseResult['data'];
+                $previewData['source_file_name'] = isset($source['original_name']) ? (string) $source['original_name'] : '';
+                $previewData['source_attachment'] = isset($source['attachment_path']) ? (string) $source['attachment_path'] : '';
                 $importWarnings = array_merge($importWarnings, $parseResult['warnings']);
 
                 if (!empty($parseResult['errors'])) {
@@ -88,7 +92,8 @@ if ($action === 'parseShopeeAdsTopup') {
         $paymentDate = formatImportDatetime($previewData['payment_date']);
         $remark = mysqli_real_escape_string($finance_connect, $previewData['remark']);
         $orderId = mysqli_real_escape_string($finance_connect, $previewData['order_id']);
-        $query = "INSERT INTO " . SHOPEE_ADS_TOPUP . " (shopee_acc, orderID, payment_date, currency, topup_amt, subtotal, gst, pay_meth, remark, create_by, create_date, create_time) VALUES ('" . mysqli_real_escape_string($finance_connect, $previewData['shopee_acc']) . "', '$orderId', '$paymentDate', '" . mysqli_real_escape_string($connect, $previewData['currency']) . "', '" . mysqli_real_escape_string($finance_connect, $previewData['topup_amt']) . "', '" . mysqli_real_escape_string($finance_connect, $previewData['subtotal']) . "', '" . mysqli_real_escape_string($finance_connect, $previewData['gst']) . "', '" . mysqli_real_escape_string($finance_connect, $previewData['pay_meth']) . "', '$remark', '" . USER_ID . "', curdate(), curtime())";
+        $attachmentPath = mysqli_real_escape_string($finance_connect, isset($previewData['source_attachment']) ? (string) $previewData['source_attachment'] : '');
+        $query = "INSERT INTO " . SHOPEE_ADS_TOPUP . " (shopee_acc, orderID, payment_date, currency, topup_amt, subtotal, gst, pay_meth, attachment, remark, create_by, create_date, create_time) VALUES ('" . mysqli_real_escape_string($finance_connect, $previewData['shopee_acc']) . "', '$orderId', '$paymentDate', '" . mysqli_real_escape_string($connect, $previewData['currency']) . "', '" . mysqli_real_escape_string($finance_connect, $previewData['topup_amt']) . "', '" . mysqli_real_escape_string($finance_connect, $previewData['subtotal']) . "', '" . mysqli_real_escape_string($finance_connect, $previewData['gst']) . "', '" . mysqli_real_escape_string($finance_connect, $previewData['pay_meth']) . "', '" . $attachmentPath . "', '$remark', '" . USER_ID . "', curdate(), curtime())";
 
         $returnData = mysqli_query($finance_connect, $query);
 
@@ -151,6 +156,44 @@ function sanitizeImportFilename($filename)
     return $filename !== '' ? $filename : ('import_' . uniqid() . '.pdf');
 }
 
+function saveShopeeImportAttachmentBinary($binaryContent, $originalName, $pageName)
+{
+    $binaryContent = (string) $binaryContent;
+    $originalName = trim((string) $originalName);
+    if ($binaryContent === '' || $originalName === '') {
+        return '';
+    }
+
+    $ext = strtolower((string) pathinfo($originalName, PATHINFO_EXTENSION));
+    $baseName = (string) pathinfo($originalName, PATHINFO_FILENAME);
+    $safeBase = preg_replace('/[^a-zA-Z0-9_-]/', '_', $baseName);
+    if ($safeBase === '') {
+        $safeBase = 'import_file';
+    }
+
+    $safePage = preg_replace('/[^a-zA-Z0-9_-]/', '_', (string) $pageName);
+    if ($safePage === '') {
+        $safePage = 'import_page';
+    }
+
+    $relDir = 'attachment/sqlaccount/' . date('Y') . '/' . date('m') . '/' . $safePage . '/';
+    $absDir = ROOT . img_server . $relDir;
+    if (!is_dir($absDir)) {
+        @mkdir($absDir, 0777, true);
+    }
+    if (!is_dir($absDir)) {
+        return '';
+    }
+
+    $newFile = $safeBase . '_' . date('Ymd_His') . '_' . mt_rand(1000, 9999) . ($ext !== '' ? '.' . $ext : '');
+    $absPath = $absDir . $newFile;
+    if (@file_put_contents($absPath, $binaryContent) !== false) {
+        return $relDir . $newFile;
+    }
+
+    return '';
+}
+
 function collectShopeeImportSourceFiles($fileInfo, &$errors, &$warnings)
 {
     $sourceFiles = array();
@@ -167,6 +210,7 @@ function collectShopeeImportSourceFiles($fileInfo, &$errors, &$warnings)
         $sourceFiles[] = array(
             'pdf_content' => $pdfContent,
             'original_name' => sanitizeImportFilename($originalName),
+            'attachment_path' => saveShopeeImportAttachmentBinary($pdfContent, $originalName, basename(__FILE__, '.php')),
         );
         return $sourceFiles;
     }
@@ -202,6 +246,7 @@ function collectShopeeImportSourceFiles($fileInfo, &$errors, &$warnings)
             $sourceFiles[] = array(
                 'pdf_content' => $pdfContent,
                 'original_name' => sanitizeImportFilename($entryName),
+                'attachment_path' => saveShopeeImportAttachmentBinary($pdfContent, (string) basename($entryName), basename(__FILE__, '.php')),
             );
         }
 
@@ -229,6 +274,7 @@ function collectShopeeImportSourceFiles($fileInfo, &$errors, &$warnings)
                 $sourceFiles[] = array(
                     'pdf_content' => $pdfContent,
                     'original_name' => sanitizeImportFilename($entryName),
+                    'attachment_path' => saveShopeeImportAttachmentBinary($pdfContent, (string) basename($entryName), basename(__FILE__, '.php')),
                 );
             }
         } catch (Exception $exception) {
@@ -616,6 +662,8 @@ function getImportLabelById($options, $id)
 function parseShopeeAdsTopupHtml($html, $shopeeAccounts, $currencyUnits, $paymentMethods)
 {
     $data = [
+        'source_file_name' => '',
+        'source_attachment' => '',
         'source_shop_name' => '',
         'source_currency' => '',
         'source_payment_method' => '',
@@ -734,6 +782,8 @@ function parseShopeeAdsTopupHtml($html, $shopeeAccounts, $currencyUnits, $paymen
 function getShopeeAdsPreviewFromPost()
 {
     return [
+        'source_file_name' => postSpaceFilter('source_file_name'),
+        'source_attachment' => postSpaceFilter('source_attachment'),
         'source_shop_name' => postSpaceFilter('source_shop_name'),
         'source_currency' => postSpaceFilter('source_currency'),
         'source_payment_method' => postSpaceFilter('source_payment_method'),
@@ -873,6 +923,8 @@ function validateShopeeAdsPreview($previewData, &$importErrors, $shopeeAccounts,
                                     <input type="hidden" name="source_shop_name" value="<?= htmlspecialchars($previewData['source_shop_name']) ?>">
                                     <input type="hidden" name="source_currency" value="<?= htmlspecialchars($previewData['source_currency']) ?>">
                                     <input type="hidden" name="source_payment_method" value="<?= htmlspecialchars($previewData['source_payment_method']) ?>">
+                                    <input type="hidden" name="source_file_name" value="<?= htmlspecialchars(isset($previewData['source_file_name']) ? $previewData['source_file_name'] : '') ?>">
+                                    <input type="hidden" name="source_attachment" value="<?= htmlspecialchars(isset($previewData['source_attachment']) ? $previewData['source_attachment'] : '') ?>">
                                     <input type="hidden" name="importWarnings" value="<?= htmlspecialchars(implode("\n", $importWarnings)) ?>">
 
                                     <div class="row mb-3">

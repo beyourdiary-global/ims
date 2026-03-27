@@ -52,14 +52,25 @@ if (!empty($checkboxIds)) {
             $lineData[] = $excelRowNum;
 
             if (isset($row2['attachment']) && !empty($row2['attachment'])) {
-                $attachmentSourcePath = $img_path . $row2['attachment'];
+                $attachmentRelPath = trim(str_replace('\\', '/', (string) $row2['attachment']), '/');
+                if (strpos($attachmentRelPath, '/') !== false) {
+                    $attachmentSourcePath = '../' . img_server . $attachmentRelPath;
+                } else {
+                    $attachmentSourcePath = $img_path . $attachmentRelPath;
+                }
                 if (file_exists($attachmentSourcePath)) {
-                    $attachmentCreationDate = strtotime($row2['create_date']);
-                    $yearMonthFolder = $tempAttachDir . date('Y', $attachmentCreationDate) . '/' . date('m', $attachmentCreationDate) . '/';
-                    if (!file_exists($yearMonthFolder)) {
-                        mkdir($yearMonthFolder, 0777, true);
+                    if (strpos($attachmentRelPath, '/') !== false) {
+                        $zipRelativePath = $attachmentRelPath;
+                    } else {
+                        $attachmentCreationDate = strtotime($row2['create_date']);
+                        $zipRelativePath = date('Y', $attachmentCreationDate) . '/' . date('m', $attachmentCreationDate) . '/' . $attachmentRelPath;
                     }
-                    $attachmentDestPath = $yearMonthFolder . $row2['attachment'];
+
+                    $attachmentDestPath = $tempAttachDir . $zipRelativePath;
+                    $attachmentDestDir = dirname($attachmentDestPath);
+                    if (!file_exists($attachmentDestDir)) {
+                        mkdir($attachmentDestDir, 0777, true);
+                    }
                     copy($attachmentSourcePath, $attachmentDestPath);
                 }
             }
@@ -303,9 +314,15 @@ $img_path = SITEURL . img_server . 'finance/j&t_trans_backup/';
                                             echo $row['total_amount'] ?></td>
 
                                         <td scope="row">
-                                        <?php if (isset($row['attachment'])) { ?><a href="<?= $img_path . $row['attachment'] ?>"
-                                                target="_blank">
-                                                <?= $row['attachment'] ?>
+                                        <?php
+                                        if (isset($row['attachment']) && trim((string) $row['attachment']) !== '') {
+                                            $attachmentRel = trim(str_replace('\\', '/', (string) $row['attachment']), '/');
+                                            $attachmentHref = (strpos($attachmentRel, '/') !== false)
+                                                ? (SITEURL . img_server . $attachmentRel)
+                                                : ($img_path . $attachmentRel);
+                                        ?>
+                                            <a href="<?= $attachmentHref ?>" target="_blank">
+                                                <?= htmlspecialchars((string) $row['attachment'], ENT_QUOTES, 'UTF-8') ?>
                                             </a>
                                         <?php } ?>
                                     </td>

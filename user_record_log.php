@@ -15,7 +15,9 @@ $pinAccess = checkCurrentPin($connect, $pageTitle);
 $uploadWebDir = trim((string) $imgServer, '/') . '/user_record_log/';
 $uploadDir = rtrim((string) $rootDir, '\\/') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $uploadWebDir);
 if (!file_exists($uploadDir)) {
-    @mkdir($uploadDir, 0777, true);
+    if (!mkdir($uploadDir, 0755, true) && !is_dir($uploadDir)) {
+        error_log('Failed to create upload directory: ' . $uploadDir);
+    }
 }
 
 if (!isActionAllowed('View', $pinAccess)) {
@@ -23,31 +25,16 @@ if (!isActionAllowed('View', $pinAccess)) {
     exit;
 }
 
-$urlDebugFile = rtrim((string) $rootDir, '\\/') . DIRECTORY_SEPARATOR . 'user_record_log_debug.log';
-
 function urlServerLog($message, $context = array())
 {
-    $file = isset($GLOBALS['urlDebugFile']) ? (string) $GLOBALS['urlDebugFile'] : '';
-    if ($file === '') {
-        return;
-    }
-
-    $line = '[' . date('Y-m-d H:i:s') . '] ' . (string) $message;
-    if (!empty($context)) {
-        $json = @json_encode($context);
-        if ($json !== false) {
-            $line .= ' ' . $json;
-        }
-    }
-    $line .= PHP_EOL;
-    @file_put_contents($file, $line, FILE_APPEND);
+    // Debug logging disabled intentionally.
+    return;
 }
 
 function urlJsonResponse($payload)
 {
     while (ob_get_level() > 0) {
-        @ob_clean();
-        break;
+        @ob_end_clean();
     }
     header('Content-Type: application/json');
     echo json_encode($payload);
@@ -319,11 +306,13 @@ if ($urlAction !== '') {
         if (isset($_FILES['attachment']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK && $_FILES['attachment']['size'] > 0) {
             $origName = $_FILES['attachment']['name'];
             $tmpPath = $_FILES['attachment']['tmp_name'];
+            $fileSize = isset($_FILES['attachment']['size']) ? (int) $_FILES['attachment']['size'] : 0;
             $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
-            $allowed = array('png', 'jpg', 'jpeg', 'svg', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt');
+            $allowed = array('png', 'jpg', 'jpeg', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt');
+            $maxFileSize = 10 * 1024 * 1024; // 10MB
             urlServerLog('Attachment upload attempt', array(
                 'name' => (string) $origName,
-                'size' => isset($_FILES['attachment']['size']) ? (int) $_FILES['attachment']['size'] : 0,
+                'size' => $fileSize,
                 'ext' => (string) $ext,
             ));
             if (!in_array($ext, $allowed)) {
@@ -333,6 +322,43 @@ if ($urlAction !== '') {
                 }
                 urlJsonResponse(array('ok' => 0, 'message' => 'Attachment format is not allowed.'));
             }
+            if ($fileSize <= 0 || $fileSize > $maxFileSize) {
+                if ($urlIsFallback) {
+                    urlFallbackResponse('Attachment size is invalid or exceeds 10MB.', false);
+                }
+                urlJsonResponse(array('ok' => 0, 'message' => 'Attachment size is invalid or exceeds 10MB.'));
+            }
+
+            $mimeByExt = array(
+                'png' => array('image/png'),
+                'jpg' => array('image/jpeg'),
+                'jpeg' => array('image/jpeg'),
+                'pdf' => array('application/pdf'),
+                'txt' => array('text/plain', 'application/octet-stream'),
+                'doc' => array('application/msword', 'application/octet-stream'),
+                'docx' => array('application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/zip'),
+                'xls' => array('application/vnd.ms-excel', 'application/octet-stream'),
+                'xlsx' => array('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip'),
+            );
+            if (function_exists('finfo_open')) {
+                $finfo = finfo_open(FILEINFO_MIME_TYPE);
+                $detectedMime = $finfo ? finfo_file($finfo, $tmpPath) : '';
+                if ($finfo) {
+                    finfo_close($finfo);
+                }
+
+                $allowedMime = isset($mimeByExt[$ext]) ? $mimeByExt[$ext] : array();
+                if ($detectedMime === false) {
+                    $detectedMime = '';
+                }
+                if (!empty($allowedMime) && !in_array((string) $detectedMime, $allowedMime, true)) {
+                    if ($urlIsFallback) {
+                        urlFallbackResponse('Attachment MIME type is not allowed.', false);
+                    }
+                    urlJsonResponse(array('ok' => 0, 'message' => 'Attachment MIME type is not allowed.'));
+                }
+            }
+
             $newName = 'record_' . date('Ymd_His') . '_' . USER_ID . '_' . mt_rand(1000, 9999) . '.' . $ext;
             if (!move_uploaded_file($tmpPath, $uploadDir . $newName)) {
                 urlServerLog('Attachment upload failed', array('target' => $uploadDir . $newName));

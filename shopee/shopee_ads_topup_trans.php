@@ -7,6 +7,75 @@ include_once '../checkCurrentPagePin.php';
 
 $tblName = SHOPEE_ADS_TOPUP;
 
+$allowed_ext = array("png", "jpg", "jpeg", "svg", "pdf");
+$legacyImgPath = '../' . img_server . 'finance/shopee_ads_topup_trans/';
+if (!file_exists($legacyImgPath)) {
+    @mkdir($legacyImgPath, 0777, true);
+}
+
+if (!function_exists('satSanitizeAttachmentFilename')) {
+    function satSanitizeAttachmentFilename($filename)
+    {
+        $filename = (string) $filename;
+        $filename = preg_replace('/[^A-Za-z0-9._-]+/', '_', basename($filename));
+        return $filename !== '' ? $filename : ('attachment_' . uniqid());
+    }
+}
+
+if (!function_exists('satStoreAttachmentUpload')) {
+    function satStoreAttachmentUpload($fileInfo, $pageName, &$errorMsg)
+    {
+        $errorMsg = '';
+        if (!isset($fileInfo['tmp_name']) || !isset($fileInfo['name'])) {
+            return '';
+        }
+
+        $tmpName = (string) $fileInfo['tmp_name'];
+        $originalName = satSanitizeAttachmentFilename((string) $fileInfo['name']);
+        if ($tmpName === '' || $originalName === '') {
+            return '';
+        }
+
+        $ext = strtolower((string) pathinfo($originalName, PATHINFO_EXTENSION));
+        $allowed = array('png', 'jpg', 'jpeg', 'svg', 'pdf');
+        if ($ext === '' || !in_array($ext, $allowed, true)) {
+            $errorMsg = 'Only PNG, JPG, JPEG, SVG or PDF file is allowed.';
+            return '';
+        }
+
+        $safePage = preg_replace('/[^a-zA-Z0-9_-]/', '_', (string) $pageName);
+        if ($safePage === '') {
+            $safePage = 'shopee_ads_topup';
+        }
+
+        $baseName = (string) pathinfo($originalName, PATHINFO_FILENAME);
+        $safeBase = preg_replace('/[^a-zA-Z0-9_-]/', '_', $baseName);
+        if ($safeBase === '') {
+            $safeBase = 'attachment';
+        }
+
+        $relDir = 'attachment/sqlaccount/' . date('Y') . '/' . date('m') . '/' . $safePage . '/';
+        $absDir = ROOT . img_server . $relDir;
+        if (!is_dir($absDir)) {
+            @mkdir($absDir, 0777, true);
+        }
+        if (!is_dir($absDir)) {
+            $errorMsg = 'Failed to create attachment directory.';
+            return '';
+        }
+
+        $newFile = $safeBase . '_' . date('Ymd_His') . '_' . mt_rand(1000, 9999) . '.' . $ext;
+        $absPath = $absDir . $newFile;
+
+        if (!@move_uploaded_file($tmpName, $absPath)) {
+            $errorMsg = 'Failed to upload the file.';
+            return '';
+        }
+
+        return $relDir . $newFile;
+    }
+}
+
 $dataID = input('id');
 $act = input('act');
 $pageAction = getPageAction($act);
@@ -51,11 +120,27 @@ if (post('actionBtn')) {
     $sat_pay = postSpaceFilter('sat_pay_hidden');
     $sat_remark = postSpaceFilter('sat_remark');
 
+    $sat_attach = '';
+    $satAttachUploadFailed = false;
+    if (isset($_FILES['sat_attach']) && isset($_FILES['sat_attach']['size']) && (int) $_FILES['sat_attach']['size'] > 0) {
+        $uploadErr = '';
+        $sat_attach = satStoreAttachmentUpload($_FILES['sat_attach'], basename(__FILE__, '.php'), $uploadErr);
+        if ($sat_attach === '' && $uploadErr !== '') {
+            $attach_err = $uploadErr;
+            $satAttachUploadFailed = true;
+        }
+    } else if (isset($_POST['existing_attachment'])) {
+        $sat_attach = trim((string) $_POST['existing_attachment']);
+    }
+
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
     switch ($action) {
         case 'addTransaction':
         case 'updTransaction':
+            if ($satAttachUploadFailed) {
+                break;
+            }
             
             if (!$sat_acc && $sat_acc < 1) {
                 $acc_err = "Shopee Account cannot be empty.";
@@ -125,12 +210,17 @@ if (post('actionBtn')) {
                         array_push($datafield, 'payment method');
                     }
 
+                    if ($sat_attach) {
+                        array_push($newvalarr, $sat_attach);
+                        array_push($datafield, 'attachment');
+                    }
+
                     if ($sat_remark) {
                         array_push($newvalarr, $sat_remark);
                         array_push($datafield, 'remark');
                     }
 
-                    $query = "INSERT INTO " . $tblName . "(shopee_acc,orderID,payment_date,currency,topup_amt,subtotal,gst,pay_meth,remark,create_by,create_date,create_time) VALUES ('$sat_acc','$sat_order_id','$sat_date_db','$sat_curr','$sat_amt','$sat_subtotal','$sat_gst','$sat_pay','$sat_remark','" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . "(shopee_acc,orderID,payment_date,currency,topup_amt,subtotal,gst,pay_meth,attachment,remark,create_by,create_date,create_time) VALUES ('$sat_acc','$sat_order_id','$sat_date_db','$sat_curr','$sat_amt','$sat_subtotal','$sat_gst','$sat_pay','$sat_attach','$sat_remark','" . USER_ID . "',curdate(),curtime())";
                     // Execute the query
                     $returnData = mysqli_query($finance_connect, $query);
                     $_SESSION['tempValConfirmBox'] = true;
@@ -194,6 +284,13 @@ if (post('actionBtn')) {
                         array_push($datafield, 'pay meth');
                     }
 
+                    $sat_attach = isset($sat_attach) ? $sat_attach : '';
+                    if (($row['attachment'] != $sat_attach) && ($sat_attach != '')) {
+                        array_push($oldvalarr, $row['attachment']);
+                        array_push($chgvalarr, $sat_attach);
+                        array_push($datafield, 'attachment');
+                    }
+
                     if ($row['remark'] != $sat_remark) {
                         array_push($oldvalarr, $row['remark'] == '' ? 'Empty Value' : $row['remark']);
                         array_push($chgvalarr, $sat_remark == '' ? 'Empty Value' : $sat_remark);
@@ -205,7 +302,7 @@ if (post('actionBtn')) {
                     $chgval = implode(",", $chgvalarr);
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
-                        $query = "UPDATE " . $tblName . " SET shopee_acc = '$sat_acc', orderID = '$sat_order_id', payment_date = '$sat_date_db', currency = '$sat_curr', topup_amt = '$sat_amt', subtotal = '$sat_subtotal', gst = '$sat_gst', pay_meth = '$sat_pay', remark ='$sat_remark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
+                        $query = "UPDATE " . $tblName . " SET shopee_acc = '$sat_acc', orderID = '$sat_order_id', payment_date = '$sat_date_db', currency = '$sat_curr', topup_amt = '$sat_amt', subtotal = '$sat_subtotal', gst = '$sat_gst', pay_meth = '$sat_pay', attachment = '$sat_attach', remark ='$sat_remark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
                         $returnData = mysqli_query($finance_connect, $query);
                         $_SESSION['tempValConfirmBox'] = true;
 
@@ -560,6 +657,47 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                     </div>
                                 <?php } ?>
 
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <div class="row">
+                            <div class="col-md mb-3">
+                                <label class="form-label form_lbl" id="sat_attach_lbl" for="sat_attach">Attachment</label>
+                                <input class="form-control" type="file" name="sat_attach" id="sat_attach" <?php if ($act == '')
+                                    echo 'disabled' ?>>
+
+                                <?php if (isset($row['attachment']) && $row['attachment']) { ?>
+                                    <input type="hidden" name="existing_attachment" value="<?php echo htmlspecialchars($row['attachment']); ?>">
+                                    <?php
+                                    $attachmentRaw = trim((string) $row['attachment']);
+                                    $attachmentUrl = '';
+                                    if ($attachmentRaw !== '') {
+                                        $normalizedAttach = ltrim(str_replace('\\', '/', $attachmentRaw), '/');
+                                        if (strpos($normalizedAttach, '/') !== false) {
+                                            $attachmentUrl = rtrim((string) $SITEURL, '/') . '/' . trim((string) img_server, '/\\') . '/' . $normalizedAttach;
+                                        } else {
+                                            $attachmentUrl = rtrim((string) $SITEURL, '/') . '/' . trim((string) img_server, '/\\') . '/finance/shopee_ads_topup_trans/' . rawurlencode(basename($normalizedAttach));
+                                        }
+                                    }
+                                    ?>
+                                    <div id="err_msg">
+                                        <span class="mt-n1">Current Attachment:
+                                            <?php if ($attachmentUrl !== '') { ?>
+                                                <a href="<?php echo htmlspecialchars($attachmentUrl); ?>" target="_blank"><?php echo htmlspecialchars($row['attachment']); ?></a>
+                                            <?php } else { ?>
+                                                <?php echo htmlspecialchars($row['attachment']); ?>
+                                            <?php } ?>
+                                        </span>
+                                    </div>
+                                <?php } ?>
+
+                                <?php if (isset($attach_err)) { ?>
+                                    <div id="err_msg">
+                                        <span class="mt-n1"><?php echo $attach_err; ?></span>
+                                    </div>
+                                <?php } ?>
                             </div>
                         </div>
                     </div>

@@ -3,13 +3,6 @@
   var page = config.page || "Stock Order Request";
   var siteURL = config.siteURL || "";
   var action = config.action || "";
-  var existingInvoiceNosNormalized = Array.isArray(
-    config.existingInvoiceNosNormalized,
-  )
-    ? config.existingInvoiceNosNormalized
-    : [];
-  var existingInvoiceLookup = {};
-  var lastActionBtnValue = "";
 
   checkCurrentPage(page, action);
   centerAlignment("formContainer");
@@ -22,20 +15,6 @@
       .replace(/\s+/g, " ")
       .trim();
   }
-
-  function normalizeInvoiceNo(value) {
-    return String(value || "")
-      .toLowerCase()
-      .replace(/\s+/g, " ")
-      .trim();
-  }
-
-  existingInvoiceNosNormalized.forEach(function (invoiceNo) {
-    var key = normalizeInvoiceNo(invoiceNo);
-    if (key !== "") {
-      existingInvoiceLookup[key] = true;
-    }
-  });
 
   function escapeAttr(value) {
     return String(value || "")
@@ -495,12 +474,16 @@
         if (qtyInput) {
           qtyInput.readOnly = action === "";
         }
+        var packageQtyEditInput = row.querySelector(
+          ".sor-item-package-qty-edit",
+        );
+        if (packageQtyEditInput) {
+          packageQtyEditInput.readOnly = action === "";
+        }
+
         var actionCell = row.querySelector("td:last-child");
         if (actionCell && rowRole !== "package") {
-          actionCell.innerHTML =
-            action === ""
-              ? ""
-              : '<button type="button" class="mt-1 remove-product-btn" id="action_menu_btn"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>';
+          actionCell.innerHTML = "";
         }
       });
 
@@ -509,8 +492,26 @@
           ".sor-item-prod-name",
         );
         var headerProdIdInput = packageRow.querySelector(".sor-item-prod-id");
-        if (headerProdNameInput) headerProdNameInput.value = "";
-        if (headerProdIdInput) headerProdIdInput.value = "";
+        var pkgForHeader = getSelectedPackageInRow(packageRow);
+        if (headerProdNameInput && headerProdIdInput) {
+          if (
+            pkgForHeader &&
+            Array.isArray(pkgForHeader.product_ids) &&
+            pkgForHeader.product_ids.length > 0
+          ) {
+            var firstPid = parseInt(pkgForHeader.product_ids[0], 10);
+            if (firstPid > 0 && productLookupById[firstPid]) {
+              headerProdNameInput.value = productLookupById[firstPid].name;
+              headerProdIdInput.value = String(firstPid);
+            } else {
+              headerProdNameInput.value = "";
+              headerProdIdInput.value = "";
+            }
+          } else {
+            headerProdNameInput.value = "";
+            headerProdIdInput.value = "";
+          }
+        }
         syncGroupValues(packageRow, false);
       }
     });
@@ -533,7 +534,8 @@
 
       if (idx === 0) {
         pkgActionCell.innerHTML =
-          '<button type="button" class="mt-1 add-item-row-btn" id="action_menu_btn"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>';
+          '<button type="button" class="mt-1 add-item-row-btn" id="action_menu_btn"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>' +
+          removeBtnHtml;
       } else {
         pkgActionCell.innerHTML = removeBtnHtml;
       }
@@ -699,7 +701,6 @@
 
   function buildPackageRowHtml(
     rowKey,
-    groupKey,
     pkgName,
     pkgId,
     prodName,
@@ -719,24 +720,26 @@
       rowKey +
       '" name="sor_item_pkg_id[]" value="' +
       escapeAttr(pkgId || "") +
-      '"></div></div></td>' +
-      "<td>" +
+      '"></div>' +
       (isPackageHeader
-        ? '<input class="sor-item-prod-name" type="hidden" id="sor_item_prod_name_' +
-          rowKey +
-          '" name="sor_item_prod_name[]" value="' +
-          escapeAttr(prodName || "") +
-          '">'
-        : '<div class="autocomplete"><input class="form-control sor-item-prod-name" type="text" id="sor_item_prod_name_' +
-          rowKey +
-          '" name="sor_item_prod_name[]" value="' +
-          escapeAttr(prodName || "") +
-          '"></div>') +
-      '<input type="hidden" class="sor-item-prod-id" id="sor_item_prod_id_' +
+        ? '<div class="sor-package-qty-note">Quantity(package): <input class="form-control sor-item-package-qty-edit" type="number" min="1" value="' +
+          escapeAttr(qty || 1) +
+          '" ' +
+          (action === "" ? "readonly" : "") +
+          "></div>"
+        : "") +
+      "</div></td>" +
+      '<td><div class="autocomplete"><input class="form-control sor-item-prod-name" type="text" id="sor_item_prod_name_' +
+      rowKey +
+      '" name="sor_item_prod_name[]" value="' +
+      escapeAttr(prodName || "") +
+      '" ' +
+      (isPackageHeader ? "readonly" : "") +
+      '"><input type="hidden" class="sor-item-prod-id" id="sor_item_prod_id_' +
       rowKey +
       '" name="sor_item_prod_id[]" value="' +
       escapeAttr(prodId || "") +
-      '"></td>' +
+      '"></div></td>' +
       '<td class="cell-desc"><div class="desc-main-field"><input class="form-control sor-item-desc" type="text" name="sor_item_desc[]" readonly value="' +
       escapeAttr(desc || "") +
       '"></div></td>' +
@@ -749,16 +752,14 @@
       '"><input class="sor-item-base-qty" type="hidden" name="sor_item_base_qty[]" value="' +
       (isPackageHeader ? "1" : "1") +
       '"><input class="sor-item-group-key" type="hidden" name="sor_item_group_key[]" value="' +
-      escapeAttr(groupKey || rowKey) +
+      escapeAttr(rowKey) +
       '"><input class="sor-item-package-price" type="hidden" name="sor_item_package_price[]" value="0.00' +
       '"></div></td>' +
       '<td class="cell-total"><div class="total-main-field"><input class="form-control sor-item-total" type="text" value="0.00" readonly></div></td>' +
       "<td>" +
       (isPackageHeader
         ? '<button type="button" class="mt-1 remove-package-btn" id="action_menu_btn"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>'
-        : action === ""
-          ? ""
-          : '<button type="button" class="mt-1 remove-product-btn" id="action_menu_btn"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>') +
+        : "") +
       "</td>"
     );
   }
@@ -768,14 +769,12 @@
     if (!tbody) return null;
 
     var rowKey = Date.now().toString() + "_" + Math.floor(Math.random() * 1000);
-    var rowGroupId = groupId || "pkg_group_" + rowKey;
     var tr = document.createElement("tr");
     tr.setAttribute("data-row-key", rowKey);
-    tr.setAttribute("data-package-group", rowGroupId);
+    tr.setAttribute("data-package-group", groupId || "pkg_group_" + rowKey);
     tr.setAttribute("data-row-role", "package");
     tr.innerHTML = buildPackageRowHtml(
       rowKey,
-      rowGroupId,
       "",
       "",
       "",
@@ -785,8 +784,6 @@
       "package",
     );
     tbody.appendChild(tr);
-    var hiddenGroupInput = tr.querySelector(".sor-item-group-key");
-    if (hiddenGroupInput) hiddenGroupInput.value = rowGroupId;
     bindRowAutocomplete(tr);
     return tr;
   }
@@ -798,14 +795,12 @@
     var product = productLookupById[parseInt(prodId || 0, 10)] || null;
     var role = rowRole === "package" ? "package" : "product";
     var rowKey = Date.now().toString() + "_" + Math.floor(Math.random() * 1000);
-    var rowGroupId = groupId || "pkg_group_" + rowKey;
     var tr = document.createElement("tr");
     tr.setAttribute("data-row-key", rowKey);
-    tr.setAttribute("data-package-group", rowGroupId);
+    tr.setAttribute("data-package-group", groupId || "pkg_group_" + rowKey);
     tr.setAttribute("data-row-role", role);
     tr.innerHTML = buildPackageRowHtml(
       rowKey,
-      rowGroupId,
       pkg.name || "",
       pkg.id || "",
       role === "package" ? "" : product ? product.name : "",
@@ -815,8 +810,6 @@
       role,
     );
     tbody.appendChild(tr);
-    var hiddenGroupInput = tr.querySelector(".sor-item-group-key");
-    if (hiddenGroupInput) hiddenGroupInput.value = rowGroupId;
     bindRowAutocomplete(tr);
     updateRowDescAndPrice(tr);
     renderPackageGroups();
@@ -864,12 +857,20 @@
       return;
     }
 
+    var firstProductId = parseInt(pkg.product_ids[0] || 0, 10);
     var pkgHeaderProdName = row.querySelector(".sor-item-prod-name");
     var pkgHeaderProdId = row.querySelector(".sor-item-prod-id");
-    if (pkgHeaderProdName) pkgHeaderProdName.value = "";
-    if (pkgHeaderProdId) pkgHeaderProdId.value = "";
+    if (
+      firstProductId > 0 &&
+      productLookupById[firstProductId] &&
+      pkgHeaderProdName &&
+      pkgHeaderProdId
+    ) {
+      pkgHeaderProdName.value = productLookupById[firstProductId].name;
+      pkgHeaderProdId.value = String(firstProductId);
+    }
 
-    pkg.product_ids.forEach(function (pid) {
+    pkg.product_ids.slice(1).forEach(function (pid) {
       var extraProdId = parseInt(pid, 10);
       if (extraProdId > 0) {
         addPackageRowWithData(pkg, extraProdId, groupId, "product");
@@ -1122,27 +1123,10 @@
 
   var sorForm = document.getElementById("sorForm");
   if (sorForm) {
-    sorForm
-      .querySelectorAll('button[name="actionBtn"]')
-      .forEach(function (btn) {
-        btn.addEventListener("click", function () {
-          lastActionBtnValue = String(btn.value || "");
-        });
-      });
-
     sorForm.addEventListener("submit", function (e) {
-      var submitter =
-        e.submitter ||
-        (document.activeElement && document.activeElement.name === "actionBtn"
-          ? document.activeElement
-          : null);
-      var fallbackAddBtn = document.getElementById("addBtn");
-      var actionValue = String(
-        (submitter && submitter.value) ||
-          lastActionBtnValue ||
-          (fallbackAddBtn ? fallbackAddBtn.value : "") ||
-          "",
-      );
+      var submitter = e.submitter;
+      if (!submitter) return;
+      var actionValue = String(submitter.value || "");
       if (actionValue !== "addRecord" && actionValue !== "updRecord") {
         return;
       }
@@ -1177,21 +1161,6 @@
       if (!invoiceNo || String(invoiceNo.value || "").trim() === "") {
         setFieldError(invoiceNo, invoiceNoError, "Invoice cannot be empty.");
         hasError = true;
-      } else {
-        var normalizedInvoiceNo = normalizeInvoiceNo(invoiceNo.value);
-        if (
-          normalizedInvoiceNo !== "" &&
-          existingInvoiceLookup[normalizedInvoiceNo]
-        ) {
-          setFieldError(
-            invoiceNo,
-            invoiceNoError,
-            "Invoice number (" +
-              String(invoiceNo.value || "").trim() +
-              ") already exists. Please use a different invoice number.",
-          );
-          hasError = true;
-        }
       }
 
       if (!invoiceDate || String(invoiceDate.value || "").trim() === "") {

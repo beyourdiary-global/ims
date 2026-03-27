@@ -2,6 +2,11 @@
 // Include init.php to access all dynamic global configurations
 include_once 'init.php'; 
 
+// --- SECURITY CHECK: Ensure only logged-in users can run this script ---
+if (!isset($_SESSION['userid']) || empty($_SESSION['userid'])) {
+    die("<h3 style='color:red;'> Unauthorized access! You must be logged in to run this script.</h3>");
+}
+
 // 1. Database Credentials (loaded from init.php)
 $dbhost     = dbhost;
 $dbUser     = dbuser;
@@ -363,6 +368,7 @@ alterColumnToVarcharIfInt($conn, $db_fin, 'stock_order_request', 'courier_id', 1
 alterColumnToVarcharIfInt($conn, $db_fin, 'shopee_sg_order_request', 'package', 255);
 alterColumnToVarcharIfInt($conn, $db_fin, 'shopee_sg_order_request', 'brand', 255);
 addColumnIfMissing($conn, $db_fin, 'shopee_customer_info', 'contact_no', "ALTER TABLE `shopee_customer_info` ADD COLUMN `contact_no` VARCHAR(30) DEFAULT NULL AFTER `series`");
+addColumnIfMissing($conn, $db_fin, 'shopee_ads_topup_transaction', 'attachment', "ALTER TABLE `shopee_ads_topup_transaction` ADD COLUMN `attachment` VARCHAR(255) DEFAULT NULL AFTER `pay_meth`");
 
 // Ensure Stock In item supports CSV products and quantities.
 alterColumnToVarcharIfInt($conn, $db_fin, 'stock_in_order_item', 'product_id', 100);
@@ -817,6 +823,36 @@ if ($conn->select_db($db_cms)) {
     updatePinBlockForGroup($conn, 3, 88, '1,2,3,4,5,6');
 }
 // --- END: J&T BACKUP RECORD PIN UPDATE (ID 88) ---
+
+// --- START: FACEBOOK CUSTOMER RECORD (DEALS) PIN UPDATE (ID 75) ---
+if ($conn->select_db($db_cms)) {
+    $sqlUpdateFbDealsPinGroup = "UPDATE `pin_group` SET `pins` = '1,2,3,4,5,6', `status` = 'A' WHERE `id` = 75";
+    if ($conn->query($sqlUpdateFbDealsPinGroup)) {
+        echo "<p style='color:green;'>Verified Pin group 75 (Facebook Customer Record Deals) updated to 1,2,3,4,5,6.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed updating Pin group 75: " . $conn->error . "</p>";
+    }
+
+    updatePinBlockForGroup($conn, 1, 75, '1,2,3,4,5,6');
+    updatePinBlockForGroup($conn, 2, 75, '1,2,3,4,5,6');
+    updatePinBlockForGroup($conn, 3, 75, '1,2,3,4,5,6');
+}
+// --- END: FACEBOOK CUSTOMER RECORD (DEALS) PIN UPDATE (ID 75) ---
+
+// --- START: SHOPEE CUSTOMER RECORD PIN UPDATE (ID 85) ---
+if ($conn->select_db($db_cms)) {
+    $sqlUpdateShopeeCustPinGroup = "UPDATE `pin_group` SET `pins` = '1,2,3,4,5,6', `status` = 'A' WHERE `id` = 85";
+    if ($conn->query($sqlUpdateShopeeCustPinGroup)) {
+        echo "<p style='color:green;'>Verified Pin group 85 (Shopee Customer Record) updated to 1,2,3,4,5,6.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed updating Pin group 85: " . $conn->error . "</p>";
+    }
+
+    updatePinBlockForGroup($conn, 1, 85, '1,2,3,4,5,6');
+    updatePinBlockForGroup($conn, 2, 85, '1,2,3,4,5,6');
+    updatePinBlockForGroup($conn, 3, 85, '1,2,3,4,5,6');
+}
+// --- END: SHOPEE CUSTOMER RECORD PIN UPDATE (ID 85) ---
 
 echo "<h3>Stock Order Request financial schema setup complete.</h3>";
 $conn->close();

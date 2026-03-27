@@ -1,4 +1,4 @@
-//export notification
+﻿//export notification
 function exportData() {
     var checkboxes = document.querySelectorAll('.export:checked');
     if (checkboxes.length === 0) {
@@ -17,7 +17,7 @@ $(document).ready(function ($) {
         event.preventDefault();
 
         var isChecked = $(this).prop("checked");
-        $(".export").prop("checked", isChecked);
+        $(this).closest("table").find("tbody tr:visible .export").prop("checked", isChecked);
         $(".exportAll").prop("checked", isChecked);
 
         updateCheckboxesOnOtherPages(isChecked);
@@ -27,7 +27,7 @@ $(document).ready(function ($) {
         var checkboxValues = [];
 
         // Loop through all pages to collect checked checkboxes
-        $('#internal_consume_ticket_credit_table').DataTable().$('tr', { "filter": "applied" }).each(function () {
+        $('#internal_consume_ticket_credit_table').DataTable().rows({ search: "applied", page: "current" }).nodes().to$().each(function () {
             var checkbox = $(this).find('.export:checked');
             if (checkbox.length > 0) {
                 checkbox.each(function () {
@@ -60,7 +60,7 @@ $(document).ready(function ($) {
 
     function updateCheckboxesOnOtherPages(isChecked) {
         // Get all cells in the DataTable
-        var cells = $('#internal_consume_ticket_credit_table').DataTable().cells().nodes();
+        var cells = $('#internal_consume_ticket_credit_table').DataTable().rows({ page: "current" }).nodes();
 
         // Check/uncheck all checkboxes in the DataTable
         $(cells).find('.export').prop('checked', isChecked);

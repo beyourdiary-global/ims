@@ -39,15 +39,43 @@ if (!function_exists('resolvePackageNamesFromCsv')) {
             return $v !== '';
         });
 
+        // Collect numeric IDs and ensure uniqueness for the batched query
+        $numericIds = array();
+        foreach ($packageIds as $id) {
+            if (ctype_digit((string) $id)) {
+                $numericIds[] = (int) $id;
+            }
+        }
+        $numericIds = array_values(array_unique($numericIds));
+
+        if (empty($numericIds)) {
+            // No valid numeric IDs; mirror previous behavior by returning the original CSV
+            return $packageCsv; 
+        }
+
+        // Build a single batched query to fetch all package names
+        $idList = implode(',', $numericIds);
+        $sql = "SELECT id, name FROM " . PKG . " WHERE id IN (" . $idList . ")";
+        $result = mysqli_query($connect, $sql);
+
+        $idToName = array();
+        if ($result instanceof mysqli_result) {
+            while ($row = $result->fetch_assoc()) {
+                if (isset($row['id'])) {
+                    $idToName[(int) $row['id']] = isset($row['name']) ? $row['name'] : '';
+                }
+            }
+        }
+
         $names = array();
+        // Preserve the original order (and duplicates) of IDs when building the name list
         foreach ($packageIds as $id) {
             if (!ctype_digit((string) $id)) {
                 continue;
             }
-            $rst = getData('name', "id='" . (int) $id . "'", 'LIMIT 1', PKG, $connect);
-            if ($rst && $rst->num_rows > 0) {
-                $r = $rst->fetch_assoc();
-                $names[] = isset($r['name']) ? $r['name'] : '';
+            $intId = (int) $id;
+            if (isset($idToName[$intId]) && $idToName[$intId] !== '') {
+                $names[] = $idToName[$intId];
             }
         }
 
@@ -630,9 +658,9 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 <label class="form-label form_lbl" id="scr_contact_lbl" for="scr_contact">Whatsapp / Contact Number<span class="requireRed">*</span></label>
                                 <input class="form-control" type="text" name="scr_contact" id="scr_contact" value="<?php
                                 if (isset($dataExisted) && isset($row['contact_no']) && !isset($scr_contact)) {
-                                    echo $row['contact_no'];
+                                    echo htmlspecialchars((string) $row['contact_no'], ENT_QUOTES, 'UTF-8');
                                 } else if (isset($scr_contact)) {
-                                    echo $scr_contact;
+                                    echo htmlspecialchars((string) $scr_contact, ENT_QUOTES, 'UTF-8');
                                 } else {
                                     echo '';
                                 } ?>" <?php if ($act == '')

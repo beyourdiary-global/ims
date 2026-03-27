@@ -52,55 +52,6 @@ function parse_xlsx_purchase_order($filepath)
     }
 
     if ($sheetXml === false) {
-        $tempDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'po_xlsx_' . uniqid();
-        if (@mkdir($tempDir)) {
-            $cmd = 'tar -xf ' . escapeshellarg($filepath) . ' -C ' . escapeshellarg($tempDir) . ' 2>&1';
-            @shell_exec($cmd);
-
-            $ssPath = $tempDir . DIRECTORY_SEPARATOR . 'xl' . DIRECTORY_SEPARATOR . 'sharedStrings.xml';
-            if (file_exists($ssPath)) {
-                $ssXml = @file_get_contents($ssPath);
-            }
-
-            $worksheetsDir = $tempDir . DIRECTORY_SEPARATOR . 'xl' . DIRECTORY_SEPARATOR . 'worksheets' . DIRECTORY_SEPARATOR;
-            if (is_dir($worksheetsDir)) {
-                $files = scandir($worksheetsDir);
-                if (is_array($files)) {
-                    foreach ($files as $file) {
-                        if (preg_match('/^sheet\d+\.xml$/i', (string) $file)) {
-                            $sheetXml = @file_get_contents($worksheetsDir . $file);
-                            break;
-                        }
-                    }
-                }
-            }
-
-            $deleteDir = function ($dir) use (&$deleteDir) {
-                if (!is_dir($dir)) {
-                    return;
-                }
-                $items = scandir($dir);
-                if (!is_array($items)) {
-                    return;
-                }
-                foreach ($items as $item) {
-                    if ($item === '.' || $item === '..') {
-                        continue;
-                    }
-                    $path = $dir . DIRECTORY_SEPARATOR . $item;
-                    if (is_dir($path)) {
-                        $deleteDir($path);
-                    } else {
-                        @unlink($path);
-                    }
-                }
-                @rmdir($dir);
-            };
-            $deleteDir($tempDir);
-        }
-    }
-
-    if ($sheetXml === false) {
         return array('error' => 'Unable to read worksheet data from uploaded .xlsx file.');
     }
 

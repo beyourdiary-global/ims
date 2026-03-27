@@ -144,7 +144,7 @@ if (!function_exists('siFetchAssocRows')) {
 }
 
 if (!function_exists('siExportAssocExcel')) {
-    function siExportAssocExcel($rows, $filePrefix)
+    function siExportAssocExcel($rows, $filePrefix, $savePath = '')
     {
         if (!class_exists('CodexWorld\\PhpXlsxGenerator')) {
             include_once ROOT . '/header/PhpXlsxGenerator/PhpXlsxGenerator.php';
@@ -192,8 +192,98 @@ if (!function_exists('siExportAssocExcel')) {
 
         $fileName = $filePrefix . '_' . date('Ymd_His') . '.xlsx';
         $xlsx = \CodexWorld\PhpXlsxGenerator::fromArray($excelData, 'Stock In');
+        if ($savePath !== '') {
+            $xlsx->saveAs($savePath);
+            return $savePath;
+        }
         $xlsx->downloadAs($fileName);
         exit;
+    }
+}
+
+if (!function_exists('siResolveAttachmentAbsPath')) {
+    function siResolveAttachmentAbsPath($rawPath)
+    {
+        $path = trim(str_replace('\\', '/', (string) $rawPath));
+        if ($path === '') {
+            return '';
+        }
+
+        $normalizedImgServer = trim(str_replace('\\', '/', (string) img_server), '/');
+        $normalizedPath = ltrim($path, '/');
+
+        if (strpos($normalizedPath, $normalizedImgServer . '/') === 0) {
+            return rtrim((string) ROOT, '/\\') . '/' . $normalizedPath;
+        }
+
+        if (strpos($normalizedPath, 'attachment/sqlaccount/') === 0) {
+            return rtrim((string) ROOT, '/\\') . '/' . trim((string) img_server, '/\\') . '/' . $normalizedPath;
+        }
+
+        // Legacy stock-in attachment filename fallback.
+        return rtrim((string) ROOT, '/\\') . '/' . trim((string) img_server, '/\\') . '/finance/stock_in/' . basename($normalizedPath);
+    }
+}
+
+if (!function_exists('siBuildAttachmentRelPathInZip')) {
+    function siBuildAttachmentRelPathInZip($rawPath)
+    {
+        $path = trim(str_replace('\\', '/', (string) $rawPath), '/');
+        if ($path === '') {
+            return '';
+        }
+
+        if (strpos($path, '/') !== false) {
+            return $path;
+        }
+
+        return 'finance/stock_in/' . basename($path);
+    }
+}
+
+if (!function_exists('siBuildStockInExportZip')) {
+    function siBuildStockInExportZip($rows, $excelPath, $zipPath)
+    {
+        if (!class_exists('ZipArchive')) {
+            return false;
+        }
+
+        $zip = new ZipArchive();
+        if ($zip->open($zipPath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+            return false;
+        }
+
+        $zip->addFile($excelPath, basename($excelPath));
+
+        $added = array();
+        foreach ($rows as $row) {
+            $attachmentRaw = isset($row['order_attachment']) ? (string) $row['order_attachment'] : '';
+            if ($attachmentRaw === '') {
+                continue;
+            }
+
+            $parts = array_filter(array_map('trim', explode(',', $attachmentRaw)), function ($v) {
+                return $v !== '';
+            });
+
+            foreach ($parts as $part) {
+                $absPath = siResolveAttachmentAbsPath($part);
+                if ($absPath === '' || !file_exists($absPath)) {
+                    continue;
+                }
+
+                $zipRel = 'attachment/' . siBuildAttachmentRelPathInZip($part);
+                if (isset($added[$zipRel])) {
+                    continue;
+                }
+
+                $zip->addFile($absPath, $zipRel);
+                $added[$zipRel] = true;
+            }
+        }
+
+        $zip->close();
+        return true;
     }
 }
 
@@ -246,6 +336,34 @@ if (input('export') === 'excel') {
     } else {
         $rows = siFetchAssocRows($finance_connect, $connect, $stockInOrderTable, $stockInItemTable, $warehouseNameMap, $productNameMap);
         siAuditExportAction($connect, $pageTitle, $stockInItemTable, 'ALL');
+    }
+
+    $tempDir = rtrim((string) ROOT, '/\\') . '/temp/stock_in_export/';
+    if (!is_dir($tempDir)) {
+        @mkdir($tempDir, 0777, true);
+    }
+
+    $stamp = date('Ymd_His');
+    $excelPath = $tempDir . 'stock_in_export_' . $stamp . '.xlsx';
+    $zipPath = $tempDir . 'stock_in_export_' . $stamp . '.zip';
+
+    siExportAssocExcel($rows, 'stock_in_export', $excelPath);
+
+    if (siBuildStockInExportZip($rows, $excelPath, $zipPath)) {
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
+
+        header('Content-Type: application/zip');
+        header('Content-Disposition: attachment; filename="' . basename($zipPath) . '"');
+        header('Content-Length: ' . filesize($zipPath));
+        header('Pragma: no-cache');
+        header('Expires: 0');
+        readfile($zipPath);
+
+        @unlink($excelPath);
+        @unlink($zipPath);
+        exit;
     }
 
     while (ob_get_level() > 0) {
