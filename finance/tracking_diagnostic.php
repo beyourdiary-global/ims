@@ -179,7 +179,18 @@ if (isset($_POST['runDiag'])) {
             $results[] = array('step' => 'DB Lookup', 'status' => 'FAIL', 'detail' => 'Request ID ' . $testRequestId . ' not found in DB');
         }
     } else {
-        $results[] = array('step' => 'Courier/Scrape Test', 'status' => 'SKIP', 'detail' => 'Enter a Request ID above to test courier scrape fallback.');
+        // Even without request ID, test tracking.my with auto-detected slug
+        $slug = sorResolveTrackingMySlug('', $testTrackingNo);
+        $results[] = array('step' => 'Auto-detect Slug', 'status' => $slug !== '' ? 'OK' : 'FAIL',
+            'detail' => 'Slug: ' . ($slug !== '' ? $slug : '(none - could not detect)') . ' | From tracking number: ' . $testTrackingNo);
+
+        if ($slug !== '') {
+            $altUrl = 'https://www.tracking.my/' . $slug . '/' . rawurlencode($testTrackingNo);
+            $results[] = array('step' => 'tracking.my URL', 'status' => 'INFO', 'detail' => $altUrl);
+            $altResult = sorFetchTrackingStatus($altUrl);
+            $results[] = array('step' => 'tracking.my Result', 'status' => stripos($altResult, 'Detected:') !== false ? 'OK' : 'FAIL',
+                'detail' => $altResult);
+        }
     }
 }
 ?>
