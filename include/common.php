@@ -1157,11 +1157,27 @@ if (!function_exists('sorResolveTrackingMySlug')) {
         }
 
         // Auto-detect from tracking number prefix
-        if (strpos($trackingNo, 'MY') === 0 || strpos($trackingNo, 'MYJZ') === 0) {
+        if (preg_match('/^MYJZ/i', $trackingNo)) {
             return 'dhl-ecommerce';
         }
+        if (preg_match('/^SPXMY|^SPX/i', $trackingNo)) {
+            return 'shopee';
+        }
+        if (preg_match('/^MY[A-Z]{2}\d/i', $trackingNo)) {
+            // Generic MY prefix → DHL eCommerce (most common)
+            return 'dhl-ecommerce';
+        }
+        if (preg_match('/^JT/i', $trackingNo)) {
+            return 'jt';
+        }
+        if (preg_match('/^NV/i', $trackingNo)) {
+            return 'ninjavan';
+        }
+        if (preg_match('/^[A-Z]{2}\d{9}[A-Z]{2}$/', $trackingNo)) {
+            return 'pos'; // Pos Malaysia international format
+        }
         if (preg_match('/^\d{10,}$/', $trackingNo)) {
-            return 'pos'; // Pos Malaysia uses numeric tracking numbers
+            return 'pos'; // Pos Malaysia uses long numeric tracking numbers
         }
 
         return '';
@@ -1240,8 +1256,9 @@ if (!function_exists('sorFetchTrackingStatus')) {
             $title = trim(html_entity_decode(strip_tags($matches[1])));
         }
 
-        // Search the full raw body (including script/JSON data) for tracking keywords.
-        $bodyLower = strtolower($body);
+        // Strip <script> blocks to avoid matching JS dictionary keywords (e.g. tracking.my pages).
+        $cleanBody = preg_replace('/<script\b[^>]*>[\s\S]*?<\/script>/i', '', $body);
+        $bodyLower = strtolower($cleanBody);
         $keywords = array(
             'shipment canceled', 'shipment cancelled',
             'cancelled', 'canceled',
@@ -1348,7 +1365,7 @@ if (!function_exists('sorFetchTrackingMyWebSocket')) {
      * 2. Open a WebSocket connection and send the message.
      * 3. Parse the JSON response for the latest tracking event.
      */
-    function sorFetchTrackingMyWebSocket($courierName, $trackingNo)
+    function sorFetchTrackingMyWebSocket($courierName, $trackingNo, &$rawJson = null)
     {
         $trackingNo = trim((string) $trackingNo);
         if ($trackingNo === '') return '';
@@ -1420,18 +1437,50 @@ if (!function_exists('sorFetchTrackingMyWebSocket')) {
         if ($data === '') return '';
 
         $result = json_decode($data, true);
+        $rawJson = $data; // expose raw response for diagnostics
         if (!is_array($result) || !isset($result['result']) || !is_array($result['result'])) return '';
 
-        // Find the latest non-sponsored tracking event
+        // tracking.my response: { result: [ {status, content, date, location, ...}, ... ] }
+        // 'status' is a CATEGORY (e.g. "delivered", "exception", "in_transit")
+        // 'content' is the human-readable description (e.g. "Parcel has been delivered", "Shipment cancelled")
+        // result[0] is the LATEST event.
+
+        // First, find the latest non-sponsored event
+        $latestStatus = '';
+        $latestContent = '';
         foreach ($result['result'] as $event) {
             if (!is_array($event)) continue;
-            $status = isset($event['status']) ? trim((string) $event['status']) : '';
-            if ($status === '' || $status === 'sponsored') continue;
-
-            return ucfirst($status) . ' | Synced: ' . date('Y-m-d H:i:s') . ' | Source: tracking.my';
+            $evStatus = isset($event['status']) ? trim((string) $event['status']) : '';
+            if ($evStatus === '' || $evStatus === 'sponsored') continue;
+            $latestStatus = $evStatus;
+            $latestContent = isset($event['content']) ? trim((string) $event['content']) : '';
+            break; // first non-sponsored = latest
         }
 
-        return '';
+        if ($latestStatus === '') return '';
+
+        // Try to derive a more specific status from the content text
+        $contentLower = strtolower($latestContent);
+        $contentKeywords = array(
+            'cancel' => 'Cancelled',
+            'returned to sender' => 'Returned to Sender',
+            'delivered' => 'Delivered',
+            'out for delivery' => 'Out for Delivery',
+            'in transit' => 'In Transit',
+            'picked up' => 'Picked Up',
+            'preparing' => 'Shipment Information Received',
+            'information received' => 'Shipment Information Received',
+        );
+
+        $displayStatus = ucfirst($latestStatus); // default: use category name
+        foreach ($contentKeywords as $needle => $label) {
+            if (strpos($contentLower, $needle) !== false) {
+                $displayStatus = $label;
+                break;
+            }
+        }
+
+        return $displayStatus . ' | Synced: ' . date('Y-m-d H:i:s') . ' | Source: tracking.my';
     }
 }
 
@@ -1557,13 +1606,15 @@ if (!function_exists('sorRefreshTrackingStatus')) {
         $courierId = isset($row['courier_id']) ? (int) $row['courier_id'] : 0;
 
         $trackingLink = '';
+        $courierNameForSlug = '';
         $courierCountryCode = 'MY';
         $lookupConnect = $cmsConnect ? $cmsConnect : $financeConnect;
         if ($courierId > 0) {
-            $courierSql = "SELECT tracking_link, country FROM " . COURIER . " WHERE id = '$courierId' LIMIT 1";
+            $courierSql = "SELECT tracking_link, country, name FROM " . COURIER . " WHERE id = '$courierId' LIMIT 1";
             $courierRst = mysqli_query($lookupConnect, $courierSql);
             if ($courierRst && ($courierRow = mysqli_fetch_assoc($courierRst))) {
                 $trackingLink = isset($courierRow['tracking_link']) ? trim((string) $courierRow['tracking_link']) : '';
+                $courierNameForSlug = isset($courierRow['name']) ? trim((string) $courierRow['name']) : '';
                 $courierCountryId = isset($courierRow['country']) ? (int) $courierRow['country'] : 0;
                 if ($courierCountryId > 0) {
                     $countrySql = "SELECT code FROM " . COUNTRIES . " WHERE id = '$courierCountryId' LIMIT 1";
@@ -1590,16 +1641,14 @@ if (!function_exists('sorRefreshTrackingStatus')) {
         }
 
         // Secondary fallback: try tracking.my WebSocket API for structured data.
-        $scrapeHasKeyword = (stripos($statusText, 'Detected:') !== false);
-        if (!$scrapeHasKeyword && $trackingNo !== '') {
-            // Resolve courier name for tracking.my slug
-            $courierNameForSlug = '';
-            if ($courierId > 0) {
-                $cnRst = mysqli_query($lookupConnect, "SELECT name FROM " . COURIER . " WHERE id = '" . $courierId . "' LIMIT 1");
-                if ($cnRst && ($cnRow = mysqli_fetch_assoc($cnRst))) {
-                    $courierNameForSlug = isset($cnRow['name']) ? (string) $cnRow['name'] : '';
-                }
-            }
+        // Also runs if the previous step only returned an error/failure message.
+        $statusIsUsable = (stripos($statusText, 'Detected:') !== false)
+            || (stripos($statusText, 'Source:') !== false);
+        $statusIsError = (stripos($statusText, 'Unable to retrieve') !== false)
+            || (stripos($statusText, 'unavailable') !== false)
+            || (stripos($statusText, 'failed') !== false);
+        if ((!$statusIsUsable || $statusIsError) && $trackingNo !== '') {
+            // Resolve courier name for tracking.my slug (already fetched from DB above)
             $wsStatus = sorFetchTrackingMyWebSocket($courierNameForSlug, $trackingNo);
             if ($wsStatus !== '') {
                 $statusText = $wsStatus;
@@ -1612,6 +1661,10 @@ if (!function_exists('sorRefreshTrackingStatus')) {
                     if (stripos($altStatus, 'Detected:') !== false) {
                         $statusText = $altStatus . ' | Source: tracking.my';
                     }
+                }
+                // If all fallbacks failed and the current status is an error, clear it
+                if ($statusIsError && stripos($statusText, 'Unable to retrieve') !== false) {
+                    $statusText = 'Tracking unavailable | Synced: ' . date('Y-m-d H:i:s');
                 }
             }
         }
