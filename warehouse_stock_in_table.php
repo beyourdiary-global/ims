@@ -586,6 +586,15 @@ foreach ($listRows as $row) {
     var action = '';
     checkCurrentPage(page, action);
     dropdownMenuDispFix();
+    $('#stockInListTable').DataTable({
+        paging: true,
+        searching: true,
+        order: [[7, 'desc']], // Stock In Date descending
+        autoWidth: false,
+        columnDefs: [
+            { orderable: false, targets: [1, 3] } // checkbox, action columns
+        ]
+    });
     datatableAlignment('stockInListTable');
     setButtonColor();
     preloader(300);
