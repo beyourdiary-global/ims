@@ -1,19 +1,55 @@
 <?php
+// 30 days in seconds (30 days * 24 hours * 60 mins * 60 secs)
+$sessionLifetime = 2592000;
+
+// Determine if the current connection is secure (HTTPS) to set the cookie's "secure" flag appropriately
+$secure = (
+    (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || (isset($_SERVER['SERVER_PORT']) && $_SERVER['SERVER_PORT'] == 443)
+);
+
+// Configure session cookie parameters with secure defaults
+session_set_cookie_params([
+    'lifetime' => $sessionLifetime,
+    'path'     => '/',
+    'domain'   => '',
+    'secure'   => $secure,
+    'httponly' => true,
+    'samesite' => 'Lax',
+]);
+
+ini_set('session.gc_maxlifetime', $sessionLifetime);
+
+// --- FIX: Create a private, isolated folder for this app's sessions ---
+$sessionPath = __DIR__ . '/app_sessions'; // Creates a folder named 'app_sessions' next to init.php
+if (!file_exists($sessionPath)) {
+    @mkdir($sessionPath, 0777, true);
+}
+ini_set('session.save_path', $sessionPath);
+// ----------------------------------------------------------------------
+
 session_start();
-// $livemode = false; // true = test link, false = live link
-$siteOrlocalMode = true;  //true = live site, false = localhost
+
+// Auto-detect environment based on the URL host
+$host = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : 'localhost';
+
+// If the URL contains 'localhost' or '127.0.0.1', it's local mode. Otherwise, it's live.
+if (strpos($host, 'localhost') !== false || strpos($host, '127.0.0.1') !== false) {
+    $siteOrlocalMode = false; // Local environment
+} else {
+    $siteOrlocalMode = true;  // Live site environment
+}
 
 date_default_timezone_set('Asia/Singapore');
-
 
 $dbUser = $siteOrlocalMode ? 'beyourdi_cms' : 'root';
 
 define('dbuser', $dbUser);
 define('dbpwd', $siteOrlocalMode ? 'Byd1234@Global' : '');
 define('dbhost', $siteOrlocalMode ? '127.0.0.1:3306' : 'localhost');
-define('dbname', 'beyourdi_cms');
-define('dbFinance', 'beyourdi_financial');
-define('SITEURL', $siteOrlocalMode ? 'https://cms.beyourdiary.com' : 'http://localhost/cms');
+define('dbname', 'beyourdi_cms-uat');
+define('dbFinance', 'beyourdi_financial-uat');
+define('SITEURL', $siteOrlocalMode ? 'https://uatcms.beyourdiary.com' : 'http://localhost/cms');
 $SITEURL = SITEURL;
 define('ROOT', dirname(__FILE__));
 define('email_cc', "report@beyourdiary.com	");
@@ -59,13 +95,22 @@ define('USER_GROUP', isset($_SESSION['user_group']) ? $_SESSION['user_group'] : 
 // //error message default mean
 // $error_msg = array('3'=>'Required api key', '4'=>'Invalid api key', '5'=>'Unauthorized user', '0'=>'Success', '1'=>'Required authentication key', '1'=>'Invalid authentication key', '6'=>'Invalid data format');
 
-// easyparcel demo auth & api
-define('EASYPARCEL_DOMAIN_MY', 'https://demo.connect.easyparcel.my/?ac=');
-define('EASYPARCEL_AUTH_MY', 'MwxHG9i3Wu');
-define('EASYPARCEL_API_MY', 'EP-Jj0HYyEkp');
-define('EASYPARCEL_DOMAIN_SG', 'https://demo.connect.easyparcel.sg/?ac=');
-define('EASYPARCEL_AUTH_SG', 'zKpyWplgj9');
-define('EASYPARCEL_API_SG', 'EP-Mqx0IKqqS');
+// easyparcel auth & api (live on live server, demo on localhost)
+if ($siteOrlocalMode) {
+    define('EASYPARCEL_DOMAIN_MY', 'https://connect.easyparcel.my/?ac=');
+    define('EASYPARCEL_AUTH_MY', 'MwxHG9i3Wu');
+    define('EASYPARCEL_API_MY', 'EP-Jj0HYyEkp');
+    define('EASYPARCEL_DOMAIN_SG', 'https://connect.easyparcel.sg/?ac=');
+    define('EASYPARCEL_AUTH_SG', 'nYgGJWc9Hq');
+    define('EASYPARCEL_API_SG', 'EP-Mqx0IKqqS');
+} else {
+    define('EASYPARCEL_DOMAIN_MY', 'https://demo.connect.easyparcel.my/?ac=');
+    define('EASYPARCEL_AUTH_MY', 'MwxHG9i3Wu');
+    define('EASYPARCEL_API_MY', 'EP-Jj0HYyEkp');
+    define('EASYPARCEL_DOMAIN_SG', 'https://demo.connect.easyparcel.sg/?ac=');
+    define('EASYPARCEL_AUTH_SG', 'zKpyWplgj9');
+    define('EASYPARCEL_API_SG', 'EP-Mqx0IKqqS');
+}
 
 // //table name define
 define('USR_USER', 'user');
@@ -78,6 +123,8 @@ define('DESIG', 'designation');
 define('DEPT', 'department');
 define('HOLIDAY', 'holiday');
 define('BRAND', 'brand');
+define('COMPANY', 'company');
+define('PURCHASE_ORDER', 'purchase_order');
 define('PLTF', 'platform');
 define('PROD_STATUS', 'product_status');
 define('WHSE', 'warehouse');
@@ -94,6 +141,8 @@ define('PROD', 'product');
 define('PKG', 'package');
 define('PROJ', 'projects');
 define('STK_REC', 'stock_record');
+define('STOCK_ORDER_REQ', 'stock_order_request');
+define('STOCK_ORDER_REQ_ITEM', 'stock_order_request_item');
 define('L_TYPE', 'leave_type');
 define('CUR_SEGMENTATION', 'customer_segmentation');
 define('RACE', 'race');
@@ -103,6 +152,8 @@ define('SOCSO_CATH', 'socso_category');
 define('EMPLOYEE_EPF', 'employee_epf_rate');
 define('EMPLOYER_EPF', 'employer_epf_rate');
 define('PAY_METH', 'payment_method');
+define('SQL_ACC', 'sql_account');
+define('TOKEN_SETT', 'token_setting');
 define('EMPINFO', 'employee_info');
 define('EMPPERSONALINFO', 'employee_personal_info');
 define('TAG', 'tag');
@@ -157,9 +208,12 @@ define('SHOPEE_CUST_INFO', 'shopee_customer_info');
 define('ATOME_TRANS_BACKUP', 'atome_transaction_backup');
 define('SHOPEE_SG_ORDER_REQ', 'shopee_sg_order_request');
 define('JT_TRANS_BACKUP', 'jt_transaction_backup');
+define('JT_TRANS_ITEM', 'jt_transaction_items');
+define('JT_TRANS_GST', 'jt_transaction_extra_charges');
 define('STRIPE_TRANS_BACKUP', 'stripe_transaction_backup');
 define('LAZADA_CUST_RCD', 'customer_lazada_deals_transaction');
 define('WEB_ORDER_REQ', 'website_order_request');
+define('USER_RECORD_LOG', 'user_record_log');
 // define('LAZADA_CUST_RCD', 'customer_lazada_deals_transaction');
 define('CRED_INV_PROD', 'cred_inv_products');
 define('DEBIT_NOTES_INV', 'debit_notes_invoice');

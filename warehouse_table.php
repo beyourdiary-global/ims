@@ -14,6 +14,24 @@ $num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/warehouse.php';
 $deleteRedirectPage = $SITEURL . '/warehouse_table.php';
+$stockBalancePage = $SITEURL . '/warehouse.php';
+
+$warehousesWithStock = array();
+$stockRst = mysqli_query(
+    $finance_connect,
+    "SELECT DISTINCT o.warehouse_id
+     FROM `stock_in_order` o
+     INNER JOIN `stock_in_order_item` i ON i.stock_in_order_id = o.id AND i.status = 'A'
+     WHERE o.status = 'A'"
+);
+if ($stockRst) {
+    while ($stockRow = mysqli_fetch_assoc($stockRst)) {
+        $wid = isset($stockRow['warehouse_id']) ? (int) $stockRow['warehouse_id'] : 0;
+        if ($wid > 0) {
+            $warehousesWithStock[$wid] = true;
+        }
+    }
+}
 
 $result = getData('*', '', '', $tblName, $connect);
 
@@ -87,9 +105,8 @@ $result = getData('*', '', '', $tblName, $connect);
                             <tr>
                                 <th class="hideColumn" scope="col">ID</th>
                                 <th scope="col" width="60px">S/N</th>
-                                <th scope="col" id="action_col" width="100px">Action</th>
+                                <th scope="col" id="action_col" width="220px">Action</th>
                                 <th scope="col">Name</th>
-                                <th scope="col">Remark</th>
                             </tr>
                         </thead>
 
@@ -103,11 +120,12 @@ $result = getData('*', '', '', $tblName, $connect);
                                         <td scope="row" class="btn-container">
                                             <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
                                             <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                            <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                            <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], '', $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                            <?php if (isActionAllowed("View", $pinAccess) && isset($warehousesWithStock[(int) $row['id']])) { ?>
+                                                <a class="btn btn-sm btn-rounded btn-primary" href="<?= $stockBalancePage . '?view=stock_balance&id=' . (int) $row['id'] ?>">View Stock Balance</a>
+                                            <?php } ?>
                                         </td>
                                         <td scope="row"><?= $row['name'] ?></td>
-                                        <td scope="row"><?php if (isset($row['remark']))
-                                            echo $row['remark'] ?></td>
                                         </tr>
                                     <?php
                                 }
@@ -119,9 +137,8 @@ $result = getData('*', '', '', $tblName, $connect);
                             <tr>
                                 <th class="hideColumn" scope="col">ID</th>
                                 <th scope="col" width="60px">S/N</th>
-                                <th scope="col" id="action_col" width="100px">Action</th>
+                                <th scope="col" id="action_col" width="220px">Action</th>
                                 <th scope="col">Name</th>
-                                <th scope="col">Remark</th>
                             </tr>
                         </tfoot>
                     </table><?php } ?>

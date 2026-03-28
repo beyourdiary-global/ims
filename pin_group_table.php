@@ -5,6 +5,10 @@ include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
 include ROOT.'/include/access.php';
 
+$pinAccess = checkCurrentPin($connect, $pageTitle);
+if (!is_array($pinAccess)) {
+    $pinAccess = array();
+}
 
 $tblName = PIN_GRP;
 

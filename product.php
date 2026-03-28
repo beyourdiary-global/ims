@@ -29,7 +29,7 @@ if (!($dataID) && !($act) || !isActionAllowed($pageAction, $pinAccess))
 $rst = getData('*', "id = '$dataID'", '', $tblName, $connect);
 
 //Checking Data Error When Retrieved From Database
-if (!$rst || !($row = $rst->fetch_assoc()) && $act != 'I') {
+if ($act != 'I' && (!$rst || !($row = $rst->fetch_assoc()))) {
     $errorExist = 1;
     $_SESSION['tempValConfirmBox'] = true;
     $act = "F";
@@ -77,6 +77,7 @@ if (post('actionBtn')) {
 
             $prod_name = postSpaceFilter('prod_name');
             $prod_brand = postSpaceFilter('prod_brand_hidden');
+            $prod_brand_text = postSpaceFilter('prod_brand'); // Added to check what the user typed
             $prod_wgt = postSpaceFilter('prod_wgt');
             $prod_wgt_unit = postSpaceFilter('prod_wgt_unit_hidden');
             $prod_cost = postSpaceFilter('prod_cost');
@@ -87,8 +88,44 @@ if (post('actionBtn')) {
             $prod_expire_date = postSpaceFilter('prod_expire_date');
             $parent_prod = postSpaceFilter('parent_prod_hidden');
 
-            $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
+            // --- STRICT BRAND VALIDATION ---
+            $brand_exists = false;
+            
+            // 1. Check if the hidden ID exists in the BRAND table
+            if (!empty($prod_brand) && ctype_digit($prod_brand)) {
+                $prod_brand_id = (int)$prod_brand;
+                $check_brand = getData('id', "id = $prod_brand_id", '', BRAND, $connect);
+                if ($check_brand && $check_brand->num_rows > 0) {
+                    $brand_exists = true;
+                }
+            }
+            
+            // 2. If ID is empty but they typed text, verify if the exact text exists in the database
+            if (!$brand_exists && !empty($prod_brand_text)) {
+                $safe_brand_text = mysqli_real_escape_string($connect, $prod_brand_text);
+                $check_brand_text = getData('id', "name = '$safe_brand_text'", '', BRAND, $connect);
+                if ($check_brand_text && $check_brand_text->num_rows > 0) {
+                    $brand_exists = true;
+                    // It exists! Automatically grab the correct ID for the database
+                    $brand_row_data = $check_brand_text->fetch_assoc();
+                    $prod_brand = $brand_row_data['id']; 
+                }
+            }
+            
+            // 3. Block submission if brand is not found in the database
+            if (empty($prod_brand_text)) {
+                $brand_err = "Product Brand is required!";
+                $error = 1;
+            } else if (!$brand_exists) {
+                $brand_err = "Brand does not exist! Please select a valid brand from the list.";
+                $error = 1;
+            }
 
+            if (isset($error) && $error == 1) {
+                break; // Stops the save but allows specific errors to display below fields
+            }
+
+            $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
             $check_duplicate_record = isDuplicateRecord("name", $prod_name, $tblName, $connect, $dataID)
                 && isDuplicateRecord("brand", $prod_brand, $tblName, $connect, $dataID)
                 && isDuplicateRecord("weight", $prod_wgt, $tblName, $connect, $dataID)
@@ -294,11 +331,11 @@ if (post('actionBtn')) {
 //Function(title, subtitle, page name, ajax url path, redirect path, action)
 //To show action dialog after finish certain action (eg. edit)
 
-// if (isset($_SESSION['tempValConfirmBox'])) {
-//     unset($_SESSION['tempValConfirmBox']);
-//     echo $clearLocalStorage;
-//     echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
-// }
+if (isset($_SESSION['tempValConfirmBox'])) {
+    unset($_SESSION['tempValConfirmBox']);
+    echo $clearLocalStorage;
+    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+}
 
 ?>
 
@@ -338,37 +375,48 @@ if (post('actionBtn')) {
                     <div class="row">
                         <div class="col-12 col-md-6">
                             <div class="form-group mb-3">
-                                <label class="form-label form_lbl" id="prod_name_lbl" for="prod_name">Product Name<span
-                                        class="requireRed">*</span></label>
-                                <input class="form-control" type="text" name="prod_name" id="prod_name" value="<?php echo (isset($row['name'])) ? $row['name'] : ''; ?>" <?php if ($act == '') echo 'readonly' ?> required>
+                                <label class="form-label form_lbl" id="prod_name_lbl" for="prod_name">Product Name<span class="requireRed">*</span></label>
+                                <input class="form-control" type="text" name="prod_name" id="prod_name" value="<?php echo isset($row['name']) ? htmlspecialchars($row['name'], ENT_QUOTES, 'UTF-8') : ''; ?>" <?php if ($act == '') echo 'readonly' ?> required>
                             </div>
                         </div>
 
                         <div class="col-12 col-md-6">
                             <div class="form-group autocomplete mb-3">
-                                <label class="form-label form_lbl" id="prod_brand_lbl" for="prod_brand">Product Brand<span
-                                        class="requireRed">*</span></label>
+                                <label class="form-label form_lbl" id="prod_brand_lbl" for="prod_brand">Product Brand<span class="requireRed">*</span></label>
                                 <?php
-
                                 unset($echoVal);
-
-                                if (isset($row['brand']))
-                                    $echoVal = $row['brand'];
-
-                                if (isset($echoVal)) {
-                                    $brand_rst = getData('name', "id = '$echoVal'", '', BRAND, $connect);
-                                    if (!$brand_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                        echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                if (isset($row['brand']) && $row['brand'] != '') $echoVal = $row['brand'];
+                                
+                                // --- FIX: Display Custom Brand Names safely ---
+                                $brand_name_display = '';
+                                if (isset($echoVal) && $echoVal != '') {
+                                    // Escape strings to prevent query crash if custom brand contains quotes
+                                    $safe_echoVal = mysqli_real_escape_string($connect, $echoVal);
+                                    $brand_rst = getData('name', "id = '$safe_echoVal'", '', BRAND, $connect);
+                                    
+                                    if ($brand_rst != false && $brand_rst->num_rows > 0) {
+                                        $brand_row = $brand_rst->fetch_assoc();
+                                        $brand_name_display = $brand_row['name'];
+                                    } else {
+                                        // If no matching ID, output the raw custom string stored in the database
+                                        $brand_name_display = $echoVal;
                                     }
-                                    $brand_row = $brand_rst->fetch_assoc();
-                                 
                                 }
                                 ?>
-
-                                <input class="form-control" type="text" name="prod_brand" id="prod_brand" <?php if ($act == '') echo 'readonly' ?> value="<?php echo !empty($echoVal) ? $brand_row['name'] : ''  ?>" required>
-
-                                <input type="hidden" name="prod_brand_hidden" id="prod_brand_hidden" value="<?php echo (isset($row['brand'])) ? $row['brand'] : ''; ?>">
+                                <?php 
+                                // Retain user input if validation fails
+                                if (isset($_POST['prod_brand'])) {
+                                    $brand_name_display = $_POST['prod_brand'];
+                                }
+                                ?>
+                                <input class="form-control" type="text" name="prod_brand" id="prod_brand" <?php if ($act == '') echo 'readonly' ?> value="<?php echo !empty($brand_name_display) ? htmlspecialchars($brand_name_display, ENT_QUOTES, 'UTF-8') : '' ?>" required>
+                                <input type="hidden" name="prod_brand_hidden" id="prod_brand_hidden" value="<?php echo isset($_POST['prod_brand_hidden']) ? htmlspecialchars($_POST['prod_brand_hidden'], ENT_QUOTES, 'UTF-8') : (isset($row['brand']) ? htmlspecialchars($row['brand'], ENT_QUOTES, 'UTF-8') : ''); ?>">
+                                
+                                <?php if (isset($brand_err)) { ?>
+                                    <div id="err_msg">
+                                        <span class="mt-n1"><?php echo $brand_err; ?></span>
+                                    </div>
+                                <?php } ?>
                             </div>
                         </div>
                     </div>
@@ -376,16 +424,11 @@ if (post('actionBtn')) {
                     <div class="row">
                         <div class="col-12 col-md-6">
                             <div class="form-group autocomplete mb-3">
-                                <label class="form-label form_lbl" id="prod_wgt_unit_lbl" for="prod_wgt_unit">Product Weight Unit<span
-                                        class="requireRed">*</span></label>
+                                <label class="form-label form_lbl" id="prod_wgt_unit_lbl" for="prod_wgt_unit">Product Weight Unit<span class="requireRed">*</span></label>
                                 <?php
-
                                 unset($echoVal);
-
-                                if (isset($row['weight_unit']))
-                                    $echoVal = $row['weight_unit'];
-
-                                if (isset($echoVal)) {
+                                if (isset($row['weight_unit']) && $row['weight_unit'] != '') $echoVal = $row['weight_unit'];
+                                if (isset($echoVal) && $echoVal != '') {
                                     $weight_rst = getData('unit', "id = '$echoVal'", '', WGT_UNIT, $connect);
                                     if (!$weight_rst) {
                                         echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
@@ -393,17 +436,15 @@ if (post('actionBtn')) {
                                     }
                                     $weight_row = $weight_rst->fetch_assoc();
                                 }
-
                                 ?>
-                                <input class="form-control" type="text" name="prod_wgt_unit" id="prod_wgt_unit" <?php if ($act == '') echo 'readonly' ?> value="<?php echo !empty($echoVal) ? $weight_row['unit'] : ''  ?>" required>
-                                <input type="hidden" name="prod_wgt_unit_hidden" id="prod_wgt_unit_hidden" value="<?php echo (isset($row['weight_unit'])) ? $row['weight_unit'] : ''; ?>">
+                                <input class="form-control" type="text" name="prod_wgt_unit" id="prod_wgt_unit" <?php if ($act == '') echo 'readonly' ?> value="<?php echo !empty($echoVal) ? htmlspecialchars($weight_row['unit'], ENT_QUOTES, 'UTF-8') : '' ?>" required>
+                                <input type="hidden" name="prod_wgt_unit_hidden" id="prod_wgt_unit_hidden" value="<?php echo (isset($row['weight_unit'])) ? htmlspecialchars($row['weight_unit'], ENT_QUOTES, 'UTF-8') : ''; ?>">
                             </div>
                         </div>
                         <div class="col-12 col-md-6">
                             <div class="form-group mb-3">
-                                <label class="form-label form_lbl" id="prod_wgt_lbl" for="prod_wgt">Product Weight<span
-                                        class="requireRed">*</span></label>
-                                <input class="form-control" type="text" name="prod_wgt" id="prod_wgt" value="<?php echo (isset($row['weight'])) ? $row['weight'] : ''; ?>" <?php if ($act == '') echo 'readonly' ?> required>
+                                <label class="form-label form_lbl" id="prod_wgt_lbl" for="prod_wgt">Product Weight<span class="requireRed">*</span></label>
+                                <input class="form-control" type="text" name="prod_wgt" id="prod_wgt" value="<?php echo isset($row['weight']) ? htmlspecialchars($row['weight'], ENT_QUOTES, 'UTF-8') : ''; ?>" <?php if ($act == '') echo 'readonly' ?> required>
                             </div>
                         </div>
                     </div>
@@ -411,14 +452,10 @@ if (post('actionBtn')) {
                     <div class="row">
                         <div class="col-12 col-md-6">
                             <div class="form-group autocomplete mb-3">
-                                <label class="form-label form_lbl" id="prod_cur_unit_lbl" for="prod_cur_unit">Product Currency Unit<span
-                                        class="requireRed">*</span></label>
+                                <label class="form-label form_lbl" id="prod_cur_unit_lbl" for="prod_cur_unit">Product Currency Unit<span class="requireRed">*</span></label>
                                 <?php
                                 unset($echoVal);
-
-                                if (isset($row['currency_unit']))
-                                    $echoVal = $row['currency_unit'];
-
+                                if (isset($row['currency_unit'])) $echoVal = $row['currency_unit'];
                                 if (!empty($echoVal)) {
                                     $currency_unit_rst = getData('unit', "id = '$echoVal'", '', CUR_UNIT, $connect);
                                     if (!$currency_unit_rst) {
@@ -428,15 +465,14 @@ if (post('actionBtn')) {
                                     $currency_unit_row = $currency_unit_rst->fetch_assoc();
                                 }
                                 ?>
-                                <input class="form-control" type="text" name="prod_cur_unit" id="prod_cur_unit" <?php if ($act == '') echo 'readonly' ?> value="<?php echo !empty($echoVal) ? $currency_unit_row['unit'] : ''  ?>" required>
-                                <input type="hidden" name="prod_cur_unit_hidden" id="prod_cur_unit_hidden" value="<?php echo (isset($row['currency_unit'])) ? $row['currency_unit'] : ''; ?>">
+                                <input class="form-control" type="text" name="prod_cur_unit" id="prod_cur_unit" <?php if ($act == '') echo 'readonly' ?> value="<?php echo !empty($echoVal) ? htmlspecialchars($currency_unit_row['unit'], ENT_QUOTES, 'UTF-8') : '' ?>" required>
+                                <input type="hidden" name="prod_cur_unit_hidden" id="prod_cur_unit_hidden" value="<?php echo (isset($row['currency_unit'])) ? htmlspecialchars($row['currency_unit'], ENT_QUOTES, 'UTF-8') : ''; ?>">
                             </div>
                         </div>
                         <div class="col-12 col-md-6">
                             <div class="form-group mb-3">
-                                <label class="form-label form_lbl" id="prod_cost_lbl" for="prod_cost">Product Cost<span
-                                        class="requireRed">*</span></label>
-                                <input class="form-control" type="number" name="prod_cost" min="0" step=".01" id="prod_cost" value="<?php echo (isset($row['cost'])) ? $row['cost'] : ''; ?>" <?php if ($act == '') echo 'readonly' ?> required>
+                                <label class="form-label form_lbl" id="prod_cost_lbl" for="prod_cost">Product Cost<span class="requireRed">*</span></label>
+                                <input class="form-control" type="number" name="prod_cost" min="0" step=".01" id="prod_cost" value="<?php echo isset($row['cost']) ? htmlspecialchars($row['cost'], ENT_QUOTES, 'UTF-8') : ''; ?>" <?php if ($act == '') echo 'readonly' ?> required>
                             </div>
                         </div>
                     </div>
@@ -452,54 +488,45 @@ if (post('actionBtn')) {
                         <div class="col-12 col-md-6">
                             <div class="form-group mb-3">
                                 <label class="form-label form_lbl" style="display:none" id="prod_barcode_slot_lbl" for="prod_barcode_slot">Product Barcode Slot</label>
-                                <input class="form-control" style="display:none" type="text" name="prod_barcode_slot" id="prod_barcode_slot" value="<?php echo (isset($row['barcode_slot'])) ? $row['barcode_slot'] : ''; ?>" <?php if ($act == '') echo 'readonly' ?>>
+                                <input class="form-control" style="display:none" type="text" name="prod_barcode_slot" id="prod_barcode_slot" value="<?php echo isset($row['barcode_slot']) ? htmlspecialchars($row['barcode_slot'], ENT_QUOTES, 'UTF-8') : ''; ?>" <?php if ($act == '') echo 'readonly' ?>>
                             </div>
                         </div>
                     </div>
 
                     <div class="row">
-                            <div class="form-group autocomplete mb-3">
-                                <label class="form-label form_lbl" id="prod_category_lbl" for="prod_category">Category</label>
-                                <?php
-                                unset($echoVal);
-
-                                if (isset($row['product_category']))
-                                    $echoVal = $row['product_category'];
-
-                                if (!empty($echoVal)) {
-                                    $product_rst = getData('name', "id = '$echoVal'", '', PROD_CATEGORY, $connect);
-                                    if (!$product_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                        echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                                    }
-                                    $product_row = $product_rst->fetch_assoc();
-                                } 
-                                ?>
-                                <input class="form-control" type="text" name="prod_category" id="prod_category" <?php if ($act == '') echo 'readonly' ?> value="<?php echo !empty($echoVal) ? $product_row['name'] : ''  ?>">
-                                <input type="hidden" name="prod_category_hidden" id="prod_category_hidden" value="<?php echo (isset($row['product_category'])) ? $row['product_category'] : ''; ?>">
-
-                            </div>
+                        <div class="form-group autocomplete mb-3">
+                            <label class="form-label form_lbl" id="prod_category_lbl" for="prod_category">Category</label>
+                            <?php
+                            unset($echoVal);
+                            if (isset($row['product_category'])) $echoVal = $row['product_category'];
+                            if (!empty($echoVal)) {
+                                $product_rst = getData('name', "id = '$echoVal'", '', PROD_CATEGORY, $connect);
+                                if (!$product_rst) {
+                                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                                    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                }
+                                $product_row = $product_rst->fetch_assoc();
+                            } 
+                            ?>
+                            <input class="form-control" type="text" name="prod_category" id="prod_category" <?php if ($act == '') echo 'readonly' ?> value="<?php echo !empty($echoVal) ? htmlspecialchars($product_row['name'], ENT_QUOTES, 'UTF-8') : '' ?>">
+                            <input type="hidden" name="prod_category_hidden" id="prod_category_hidden" value="<?php echo (isset($row['product_category'])) ? htmlspecialchars($row['product_category'], ENT_QUOTES, 'UTF-8') : ''; ?>">
                         </div>
+                    </div>
 
                     <div class="row">
                         <div class="col-12 col-md-6">
                             <div class="form-group mb-3">
-                                <label class="form-label form_lbl" id="prod_expire_date_lbl" for="prod_expire_date">Product Expire Date<span
-                                        class="requireRed">*</span></label>
-                                <input class="form-control" type="date" name="prod_expire_date" id="prod_expire_date" value="<?php echo (isset($row['expire_date'])) ? $row['expire_date'] : ''; ?>" <?php if ($act == '') echo 'readonly' ?> required>
+                                <label class="form-label form_lbl" id="prod_expire_date_lbl" for="prod_expire_date">Product Expire Date<span class="requireRed">*</span></label>
+                                <input class="form-control" type="date" name="prod_expire_date" id="prod_expire_date" value="<?php echo isset($row['expire_date']) ? htmlspecialchars($row['expire_date'], ENT_QUOTES, 'UTF-8') : ''; ?>" <?php if ($act == '') echo 'readonly' ?> required>
                             </div>
                         </div>
-
 
                         <div class="col-12 col-md-6">
                             <div class="form-group autocomplete mb-3">
                                 <label class="form-label form_lbl" id="parent_prod_lbl" for="parent_prod">Parent Product</label>
                                 <?php
                                 unset($echoVal);
-
-                                if (isset($row['parent_product']))
-                                    $echoVal = $row['parent_product'];
-
+                                if (isset($row['parent_product'])) $echoVal = $row['parent_product'];
                                 if (!empty($echoVal)) {
                                     $product_rst = getData('name', "id = '$echoVal'", '', PROD, $connect);
                                     if (!$product_rst) {
@@ -509,8 +536,8 @@ if (post('actionBtn')) {
                                     $product_row = $product_rst->fetch_assoc();
                                 }
                                 ?>
-                                <input class="form-control" type="text" name="parent_prod" id="parent_prod" <?php if ($act == '') echo 'readonly' ?> value="<?php echo !empty($echoVal) ? $product_row['name'] : ''  ?>">
-                                <input type="hidden" name="parent_prod_hidden" id="parent_prod_hidden" value="<?php echo (isset($row['parent_product'])) ? $row['parent_product'] : ''; ?>">
+                                <input class="form-control" type="text" name="parent_prod" id="parent_prod" <?php if ($act == '') echo 'readonly' ?> value="<?php echo !empty($echoVal) ? htmlspecialchars($product_row['name'], ENT_QUOTES, 'UTF-8') : '' ?>">
+                                <input type="hidden" name="parent_prod_hidden" id="parent_prod_hidden" value="<?php echo (isset($row['parent_product'])) ? htmlspecialchars($row['parent_product'], ENT_QUOTES, 'UTF-8') : ''; ?>">
                             </div>
                         </div>
                     </div>

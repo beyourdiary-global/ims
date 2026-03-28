@@ -107,16 +107,14 @@ if (post('pay_status_option')) {
                             <h2>
                                 <?php echo $pageTitle ?>
                             </h2>
-                            <?php if ($result) { ?>
-                                <div class="mt-auto mb-auto">
-                                    <?php if (isActionAllowed("Add", $pinAccess)): ?>
-                                        <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                            href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
-                                            <?php echo $pageTitle ?>
-                                        </a>
-                                    <?php endif; ?>
-                                </div>
-                            <?php } ?>
+                            <div class="mt-auto mb-auto">
+                                <?php if (isActionAllowed("Add", $pinAccess)): ?>
+                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
+                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        <?php echo $pageTitle ?>
+                                    </a>
+                                <?php endif; ?>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -143,7 +141,7 @@ if (post('pay_status_option')) {
                         <tbody>
                             <?php while ($row = $result->fetch_assoc()) {
                                 $mrcht = getData('name', "id='" . $row['bill_nameID'] . "'", '', MERCHANT, $finance_connect);
-                                $row2 = $mrcht->fetch_assoc();
+                                $row2 = ($mrcht && $mrcht->num_rows > 0) ? $mrcht->fetch_assoc() : array();
                                 ?>
                                 <?php $payment_status = $row['payment_status']; ?>
                                 <tr>

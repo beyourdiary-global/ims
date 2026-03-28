@@ -13,7 +13,16 @@ $num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/finance/fb_order_req.php';
 $deleteRedirectPage = $SITEURL . '/finance/fb_order_req_table.php';
+$reg_member_page = $SITEURL . '/urb_cust_reg.php';
 $result = getData('*', '', '', FB_ORDER_REQ, $finance_connect);
+
+function fbReqFetchAssoc($rst)
+{
+    if ($rst instanceof mysqli_result && $rst->num_rows > 0) {
+        return $rst->fetch_assoc();
+    }
+    return array();
+}
 ?>
 
 <!DOCTYPE html>
@@ -97,30 +106,30 @@ $result = getData('*', '', '', FB_ORDER_REQ, $finance_connect);
                     <tbody>
                         <?php while ($row = $result->fetch_assoc()) {
                             $q1 = getData('name', "id='" . $row['sales_pic'] . "'", '', USR_USER, $connect);
-                            $pic = $q1->fetch_assoc();
+                            $pic = fbReqFetchAssoc($q1);
 
                             $q2 = getData('nicename', "id='" . $row['country'] . "'", '', COUNTRIES, $connect);
-                            $country = $q2->fetch_assoc();
+                            $country = fbReqFetchAssoc($q2);
 
                             $q3 = getData('name', "id='" . $row['brand'] . "'", '', BRAND, $connect);
-                            $brand = $q3->fetch_assoc();
+                            $brand = fbReqFetchAssoc($q3);
 
                             $q4 = getData('name', "id='" . $row['series'] . "'", '', BRD_SERIES, $connect);
-                            $series = $q4->fetch_assoc();
+                            $series = fbReqFetchAssoc($q4);
 
                             $q5 = getData('name', "id='" . $row['package'] . "'", '', PKG, $connect);
-                            $package = $q5->fetch_assoc();
+                            $package = fbReqFetchAssoc($q5);
 
-                            //fb page
+                            // fb page
                             $q6 = getData('name', "id='" . $row['fb_page'] . "'", '', FB_PAGE_ACC, $finance_connect);
-                            $fb_page = $q6->fetch_assoc();
+                            $fb_page = fbReqFetchAssoc($q6);
 
-                            //channel
+                            // channel
                             $q7 = getData('name', "id='" . $row['channel'] . "'", '', CHANEL_SC_MD, $finance_connect);
-                            $channel = $q7->fetch_assoc();
+                            $channel = fbReqFetchAssoc($q7);
 
                             $q8 = getData('name', "id='" . $row['pay_method'] . "'", '', FIN_PAY_METH, $finance_connect);
-                            $pay_meth = $q8->fetch_assoc();
+                            $pay_meth = fbReqFetchAssoc($q8);
                             ?>
 
                             <tr>
@@ -140,14 +149,32 @@ $result = getData('*', '', '', FB_ORDER_REQ, $finance_connect);
                                         </button>
                                         <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton">
                                             <?php 
-                                         $member_exist = getData('name', "name='" . $row['id'] . "'", '', URBAN_CUST_REG, $connect); 
-                
-                                         if ($member_exist->fetch_assoc()) {
-                                            $reg_url = $reg_member_page . "?id=" . $row['id'] . '&act=' . $act_2;
-                                         } else {
-                                            $reg_url = $reg_member_page . "?id=" . $row['id'] . '&act=' . $act_1;
-                                        }
-                                        ?>
+                                            $safeMemberName = mysqli_real_escape_string($connect, (string) $row['name']);
+                                            $safeFbName = mysqli_real_escape_string($connect, (string) $row['name']);
+                                            $safeFbLink = mysqli_real_escape_string($connect, (string) $row['fb_link']);
+
+                                            $member_exist = getData('name', "name='" . $safeMemberName . "'", 'LIMIT 1', URBAN_CUST_REG, $connect);
+                                            $deal_row_rst = getData('id', "name='" . $safeFbName . "' AND fb_link='" . $safeFbLink . "'", 'LIMIT 1', FB_CUST_DEALS, $connect);
+                                            $deal_row = fbReqFetchAssoc($deal_row_rst);
+                                            $deal_id = isset($deal_row['id']) ? (int) $deal_row['id'] : 0;
+
+                                            if ($member_exist instanceof mysqli_result && $member_exist->num_rows > 0) {
+                                                $reg_url = $reg_member_page . "?id=" . urlencode((string) $row['name']) . '&act=' . (isset($act_2) ? $act_2 : 'E');
+                                                $menu_label = "Edit Member";
+                                            } else if ($deal_id > 0) {
+                                                $reg_url = $reg_member_page . "?id=" . $deal_id . '&act=' . (isset($act_1) ? $act_1 : 'I');
+                                                $menu_label = "Register Member";
+                                            } else {
+                                                $reg_url = '#';
+                                                $menu_label = "Register Member (Unavailable)";
+                                            }
+                                            ?>
+                                            <li>
+                                                <a class="dropdown-item" href="<?= htmlspecialchars($reg_url, ENT_QUOTES, 'UTF-8') ?>" <?= $reg_url === '#' ? 'onclick="return false;"' : '' ?>>
+                                                    <?= $menu_label ?>
+                                                </a>
+                                            </li>
+                                        </ul>
                                     </div>
                                     </td>
                                 <td>

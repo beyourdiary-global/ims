@@ -18,6 +18,27 @@
         $row = $rst->fetch_assoc();
     }
 
+    // --- ADD THIS NEW PART ---
+    if (session_status() == PHP_SESSION_NONE) {
+        session_start();
+    }
+    
+    $displayUserName = "User"; 
+    if (isset($_SESSION['userid'])) {
+        $user_rst = getData('*', "id = '" . $_SESSION['userid'] . "'", '', 'user', $connect);
+        if ($user_rst && $user_rst->num_rows > 0) {
+            $user_row = $user_rst->fetch_assoc();
+            $displayUserName = $user_row['username']; 
+        }
+    } elseif (isset($_SESSION['username'])) {
+        $user_rst = getData('*', "username = '" . $_SESSION['username'] . "'", '', 'user', $connect);
+        if ($user_rst && $user_rst->num_rows > 0) {
+            $user_row = $user_rst->fetch_assoc();
+            $displayUserName = $user_row['username'];
+        }
+    }
+    // --- END OF NEW PART ---
+
     include_once "header.php";
 
     ?>
@@ -69,86 +90,20 @@
                         </ul>
                     </div>
                     <div class="d-flex align-items-center">
-                        <!-- Language -->
-                        <div class="dropdown me-3">
-                            <a class="nav-link dropdown-toggle d-flex align-items-center" href="#"
-                                id="navbarDropdownMenuLanguage" role="button" data-bs-toggle="dropdown"
-                                aria-expanded="false">
-                                <span id="language_name"><i class="flag flag-united-states"></i> English</span>
-                            </a>
-                            <ul class="dropdown-menu dropdown-menu-center mt-3"
-                                aria-labelledby="navbarDropdownMenuLanguage">
-                                <li>
-                                    <a class="dropdown-item" href="#"><i class="flag flag-united-states"></i>English</a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item" href="#"><i class="flag flag-french-guiana"></i>French</a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item" href="#"><i class="flag flag-spain"></i>Spanish</a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item" href="#"><i class="flag flag-germany"></i>German</a>
-                                </li>
-                            </ul>
-                        </div>
-                        <!-- Notifications -->
-                        <div class="dropdown me-3">
-                            <a class="text-reset me-3 dropdown-toggle hidden-arrow" href="#"
-                                id="navbarDropdownNotifMenuLink" role="button" data-bs-toggle="dropdown"
-                                aria-expanded="false">
-                                <i class="far fa-bell fa-lg"></i>
-                                <span class="badge rounded-pill badge-notification badge-color ms-1">3</span>
-                            </a>
-                            <ul class="dropdown-menu dropdown-menu-right mt-3"
-                                aria-labelledby="navbarDropdownNotifMenuLink">
-                                <li>
-                                    <a class="dropdown-item" href="#">Some news</a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item" href="#">Another news</a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item" href="#">Something else here</a>
-                                </li>
-                            </ul>
-                        </div>
-                        <div class="dropdown me-3">
-                            <a class="text-reset me-3 dropdown-toggle hidden-arrow" href="#"
-                                id="navbarDropdownMessageMenuLink" role="button" data-bs-toggle="dropdown"
-                                aria-expanded="false">
-                                <i class="far fa-comment fa-lg"></i>
-                                <span class="badge rounded-pill badge-notification badge-color ms-1">8</span>
-                            </a>
-                            <ul class="dropdown-menu dropdown-menu-right mt-3"
-                                aria-labelledby="navbarDropdownMessageMenuLink">
-                                <li>
-                                    <a class="dropdown-item" href="#">Some news</a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item" href="#">Another news</a>
-                                </li>
-                                <li>
-                                    <a class="dropdown-item" href="#">Something else here</a>
-                                </li>
-                            </ul>
-                        </div>
-                        <!-- Avatar -->
                         <div class="dropdown">
                             <a class="nav-link dropdown-toggle d-flex align-items-center" href="#"
                                 id="navbarDropdownMenuAvatar" role="button" data-bs-toggle="dropdown"
                                 aria-expanded="false">
-                                <img id="accpfp" src="<?php echo $SITEURL . '/' . img . defaultpfp ?>"
-                                    class="rounded-circle">
-                                Admin
+                                <i class="fas fa-user-circle fa-lg me-2"></i>
+                                <?php echo htmlspecialchars($displayUserName); ?>
                             </a>
                             <ul class="dropdown-menu dropdown-menu-right mt-3"
                                 aria-labelledby="navbarDropdownMenuAvatar">
                                 <li>
-                                    <a class="dropdown-item" href="#">My profile</a>
+                                    <a class="dropdown-item" href="<?= $SITEURL ?>/user_profile.php">My profile</a>
                                 </li>
                                 <li>
-                                    <a class="dropdown-item" href="#">Settings</a>
+                                    <a class="dropdown-item" href="<?= $SITEURL ?>/changePassword.php">Settings</a>
                                 </li>
                                 <li>
                                     <a class="dropdown-item" href="<?= $SITEURL ?>/logout.php">Logout</a>
@@ -169,11 +124,11 @@
                     </button>
                     <ul class="dropdown-menu dropdown-menu-right mt-4" aria-labelledby="navbarTogglerMenuAvatar">
                         <li>
-                            <a class="dropdown-item" href="#">My profile</a>
+                            <a class="dropdown-item" href="<?= $SITEURL ?>/user_profile.php">My profile</a>
                             <div class="dropdown-divider my-0"></div>
                         </li>
                         <li>
-                            <a class="dropdown-item" href="#">Settings</a>
+                            <a class="dropdown-item" href="<?= $SITEURL ?>/changePassword.php">Settings</a>
                             <div class="dropdown-divider my-0"></div>
                         </li>
                         <li>

@@ -159,19 +159,27 @@ if (!$result) {
                         if (mysqli_num_rows($result) >= 1) {
 
                             while ($row = $result->fetch_assoc()) {
-                                $resultUser = getData('username', "id='" . $row['user_id'] . "'", '', USR_USER, $connect);
-                                if (!$resultUser) {
-                                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                $displayUsername = 'Public User Scanning Stock Order QR Code';
+                                $userId = isset($row['user_id']) ? trim((string) $row['user_id']) : '';
+
+                                if ($userId !== '') {
+                                    $resultUser = getData('username', "id='" . mysqli_real_escape_string($connect, $userId) . "'", '', USR_USER, $connect);
+                                    if ($resultUser && $resultUser->num_rows > 0) {
+                                        $rowUser = $resultUser->fetch_assoc();
+                                        if (isset($rowUser['username']) && trim((string) $rowUser['username']) !== '') {
+                                            $displayUsername = (string) $rowUser['username'];
+                                        }
+                                    } else {
+                                        $displayUsername = 'Public User Scanning Stock Order QR Code (' . htmlspecialchars($userId, ENT_QUOTES, 'UTF-8') . ')';
+                                    }
                                 }
-                                $rowUser = $resultUser->fetch_assoc();
 
                                 echo '
                             <tr>
                                 <th class="hideColumn" scope="row">' . $row['id'] . '</th>
                                 <th scope="row">' . $num++ . '</th>
                                 <td scope="row">' . $row['create_date'] . ', ' . $row['create_time'] . '</td>
-                                <td scope="row">' . $rowUser['username'] . '</td>
+                                <td scope="row">' . $displayUsername . '</td>
                                 <td scope="row">' . $row['action_message'] . '</td>
                             </tr>
                             ';

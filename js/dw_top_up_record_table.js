@@ -1,4 +1,4 @@
-//export notification
+﻿//export notification
 function exportData() {
     var checkboxes = document.querySelectorAll('.export:checked');
     if (checkboxes.length === 0) {
@@ -17,7 +17,7 @@ $(document).ready(function ($) {
         event.preventDefault();
 
         var isChecked = $(this).prop("checked");
-        $(".export").prop("checked", isChecked);
+        $(this).closest("table").find("tbody tr:visible .export").prop("checked", isChecked);
         $(".exportAll").prop("checked", isChecked);
 
         updateCheckboxesOnOtherPages(isChecked);
@@ -27,7 +27,7 @@ $(document).ready(function ($) {
         var checkboxValues = [];
 
         // Loop through all pages to collect checked checkboxes
-        $('#downline_top_up_record').DataTable().$('tr', { "filter": "applied" }).each(function () {
+        $('#downline_top_up_record').DataTable().rows({ search: "applied", page: "current" }).nodes().to$().each(function () {
             var checkbox = $(this).find('.export:checked');
             if (checkbox.length > 0) {
                 checkbox.each(function () {
@@ -60,7 +60,7 @@ $(document).ready(function ($) {
 
     function updateCheckboxesOnOtherPages(isChecked) {
         // Get all cells in the DataTable
-        var cells = $('#downline_top_up_record').DataTable().cells().nodes();
+        var cells = $('#downline_top_up_record').DataTable().rows({ page: "current" }).nodes();
 
         // Check/uncheck all checkboxes in the DataTable
         $(cells).find('.export').prop('checked', isChecked);

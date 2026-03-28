@@ -39,14 +39,25 @@ if (!empty($checkboxValues)) {
             $meta_acc = $metaQuery->fetch_assoc();
             $accName = isset($meta_acc['accName']) ? $meta_acc['accName'] : '';
             if (isset($row2['attachment']) && !empty($row2['attachment'])) {
-                $attachmentSourcePath = $img_path . $row2['attachment'];
+                $attachmentRelPath = trim(str_replace('\\', '/', (string) $row2['attachment']), '/');
+                if (strpos($attachmentRelPath, '/') !== false) {
+                    $attachmentSourcePath = '../' . img_server . $attachmentRelPath;
+                } else {
+                    $attachmentSourcePath = $img_path . $attachmentRelPath;
+                }
                 if (file_exists($attachmentSourcePath)) {
-                    $attachmentCreationDate = strtotime($row2['create_date']);
-                    $yearMonthFolder = $tempAttachDir . date('Y', $attachmentCreationDate) . '/' . date('m', $attachmentCreationDate) . '/';
-                    if (!file_exists($yearMonthFolder)) {
-                        mkdir($yearMonthFolder, 0777, true);
+                    if (strpos($attachmentRelPath, '/') !== false) {
+                        $zipRelativePath = $attachmentRelPath;
+                    } else {
+                        $attachmentCreationDate = strtotime($row2['create_date']);
+                        $zipRelativePath = date('Y', $attachmentCreationDate) . '/' . date('m', $attachmentCreationDate) . '/' . $attachmentRelPath;
                     }
-                    $attachmentDestPath = $yearMonthFolder . $row2['attachment'];
+
+                    $attachmentDestPath = $tempAttachDir . $zipRelativePath;
+                    $attachmentDestDir = dirname($attachmentDestPath);
+                    if (!file_exists($attachmentDestDir)) {
+                        mkdir($attachmentDestDir, 0777, true);
+                    }
                     copy($attachmentSourcePath, $attachmentDestPath);
                 }
             }

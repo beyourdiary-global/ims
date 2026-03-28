@@ -5,8 +5,10 @@ $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
 
+$pinAccess = checkCurrentPin($connect, $pageTitle);
+
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
-$fileName = date('Y-m-d H:i:s') . "_list.xlsx";
+$fileName = date('Y-m-d_H-i-s') . "_list.xlsx";
 $img_path = '../' . img_server . 'finance/fb_ads_topup_trans/';
 
 $tempDir = '../' . img_server . "temp/";
@@ -20,14 +22,33 @@ if (!file_exists($tempAttachDir)) {
 
 $checkboxValues = isset($_COOKIE['rowID']) ? $_COOKIE['rowID'] : '';
 
+// Sanitize to a comma-separated list of integer IDs
+ if (!empty($checkboxValues)) {
+     // Remove any character that is not a digit or a comma
+     $checkboxValues = preg_replace('/[^0-9,]/', '', $checkboxValues);
+     // Split, filter out empty values, cast to integers, and re-join
+     $ids = array_filter(explode(',', $checkboxValues), 'strlen');
+     $ids = array_map('intval', $ids);
+     $checkboxValues = implode(',', $ids);
+ }
+ 
 // Check if any checkboxes are checked
 if (!empty($checkboxValues)) {
+    if (!isActionAllowed("Export", $pinAccess)) {
+        echo "<script>alert('You do not have permission to export this page.'); location.href='" . $SITEURL . "/finance/fb_ads_topup_trans_table.php';</script>";
+        exit;
+    }
+
     setcookie('rowID', '', time() - 3600, '/');
     // Defining column names
     $excelData = array(
         array('S/N', 'META ACCOUNT', 'TRANSACTION ID', 'INVOICE/PAYMENT DATE', 'PERSON IN CHARGE', 'TOP-UP AMOUNT','ATTACHMENT','REMARK','CREATE BY', 'CREATE DATE', 'CREATE TIME', 'UPDATE BY', 'UPDATE DATE', 'UPDATE TIME')
     );    // Get the data from the database using the WHERE clause
     $query2 = $finance_connect->query("SELECT * FROM " . FB_ADS_TOPUP . " WHERE status = 'A' AND id IN ($checkboxValues) ORDER BY meta_acc ASC, transactionID ASC, payment_date ASC, pic ASC, topup_amt ASC");
+    if (!$query2) {
+        echo "<script>alert('Failed to load data for export.'); location.href='" . $SITEURL . "/finance/fb_ads_topup_trans_table.php';</script>";
+        exit;
+    }
 
     $excelRowNum = 1;
     if ($query2->num_rows > 0) {
@@ -43,20 +64,31 @@ if (!empty($checkboxValues)) {
             $row2['meta_acc'] = $accName;
         
             if (isset($row2['attachment']) && !empty($row2['attachment'])) {
-                $attachmentSourcePath = $img_path . $row2['attachment'];
+                $attachmentRelPath = trim(str_replace('\\', '/', (string) $row2['attachment']), '/');
+                if (strpos($attachmentRelPath, '/') !== false) {
+                    $attachmentSourcePath = '../' . img_server . $attachmentRelPath;
+                } else {
+                    $attachmentSourcePath = $img_path . $attachmentRelPath;
+                }
                 if (file_exists($attachmentSourcePath)) {
-                    $attachmentCreationDate = strtotime($row2['create_date']);
-                    $yearMonthFolder = $tempAttachDir . date('Y', $attachmentCreationDate) . '/' . date('m', $attachmentCreationDate) . '/';
-                    if (!file_exists($yearMonthFolder)) {
-                        mkdir($yearMonthFolder, 0777, true);
+                    if (strpos($attachmentRelPath, '/') !== false) {
+                        $zipRelativePath = $attachmentRelPath;
+                    } else {
+                        $attachmentCreationDate = strtotime($row2['create_date']);
+                        $zipRelativePath = date('Y', $attachmentCreationDate) . '/' . date('m', $attachmentCreationDate) . '/' . $attachmentRelPath;
                     }
-                    $attachmentDestPath = $yearMonthFolder . $row2['attachment'];
+
+                    $attachmentDestPath = $tempAttachDir . $zipRelativePath;
+                    $attachmentDestDir = dirname($attachmentDestPath);
+                    if (!file_exists($attachmentDestDir)) {
+                        mkdir($attachmentDestDir, 0777, true);
+                    }
                     copy($attachmentSourcePath, $attachmentDestPath);
                 }
             }
 
             // Define the column names in the same order as in your database query
-            $columnNames = array('meta_acc', 'transactionID', 'payment_date	', 'pic	', 'topup_amt', 'attachment', 'remark','create_by', 'create_date', 'create_time', 'update_by', 'update_date', 'update_time');
+            $columnNames = array('meta_acc', 'transactionID', 'payment_date', 'pic', 'topup_amt', 'attachment', 'remark','create_by', 'create_date', 'create_time', 'update_by', 'update_date', 'update_time');
 
             foreach ($columnNames as $columnName) {
                 // Check if the value is null, if so, replace it with an empty string
@@ -68,7 +100,14 @@ if (!empty($checkboxValues)) {
                         $name = $user['name'];
                     }
                     $lineData[] = $name;
-                    var_dump($lineData);
+
+                } elseif ($columnName === 'pic') {
+                    $picName = '';
+                    $picRst = getData('name', "id='" . $row2[$columnName] . "'", '', USR_USER, $connect);
+                    if ($picRst && $picRst->num_rows > 0) {
+                        $picName = $picRst->fetch_assoc()['name'];
+                    }
+                    $lineData[] = $picName !== '' ? $picName : (isset($row2[$columnName]) ? $row2[$columnName] : '');
 
                 } elseif ($columnName === 'create_date') {
                     // Modify create_date value as needed
@@ -87,31 +126,39 @@ if (!empty($checkboxValues)) {
 
         if ($tempExcelFilePath) {
             $xlsx->saveAs($tempExcelFilePath);
-            $zipFile = date('Ymd_His') . ".zip";
-            $zip = new ZipArchive();
+            if (class_exists('ZipArchive')) {
+                $zipFile = $tempDir . date('Ymd_His') . ".zip";
+                $zip = new ZipArchive();
+                if ($zip->open($zipFile, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+                    echo "<script>alert('Failed to create export zip file.'); location.href='" . $SITEURL . "/finance/fb_ads_topup_trans_table.php';</script>";
+                    exit;
+                }
 
-            $zip = new ZipArchive();
-            if ($zip->open($zipFile, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
-                die("Failed to create zip file");
+                $zip->addFile($tempExcelFilePath, basename($tempExcelFilePath));
+                addDirToZip($tempAttachDir, $zip, $tempAttachDir);
+                $zip->close();
+
+                header('Content-Type: application/zip');
+                header('Content-Disposition: attachment; filename="' . basename($zipFile) . '"');
+                header('Content-Length: ' . filesize($zipFile));
+                header('Pragma: no-cache');
+                header('Expires: 0');
+                ob_clean();
+                readfile($zipFile);
+                @unlink($zipFile);
+                deleteDir($tempDir);
+                exit;
             }
 
-            // Add the Excel file to the root of the zip archive
-            $zip->addFile($tempExcelFilePath, basename($tempExcelFilePath));
-
-            // Add the 'attachment' folder to the zip archive
-            addDirToZip($tempAttachDir, $zip, $tempAttachDir);
-
-            // Close the zip archive
-            $zip->close();
-
-            header('Content-Type: application/zip');
-            header('Content-Disposition: attachment; filename="' .$zipFile .'"');
-            header('Content-Length: ' . filesize($zipFile));
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment; filename="' . basename($tempExcelFilePath) . '"');
+            header('Content-Length: ' . filesize($tempExcelFilePath));
             header('Pragma: no-cache');
             header('Expires: 0');
             ob_clean();
-            readfile($zipFile);
+            readfile($tempExcelFilePath);
             deleteDir($tempDir);
+            exit;
         }
 
     } else {
@@ -155,7 +202,6 @@ function deleteDir($dirPath) {
     rmdir($dirPath);
 }
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
 $_SESSION['searchChk'] = '';
 unset($_SESSION['resetChk']);
 $_SESSION['act'] = '';
@@ -196,9 +242,14 @@ $tblName = FB_ADS_TOPUP;
                         <h2><?php echo $pageTitle ?></h2>
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
+                                <a class="btn btn-sm btn-rounded btn-primary px-3" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
                             <?php endif; ?>
-                            <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>
+                            <?php if (isActionAllowed("Import", $pinAccess)) : ?>
+                                <a class="btn btn-sm btn-rounded btn-primary px-3" name="importBtn" id="addBtn" href="<?= $SITEURL ?>/facebook_ads_topup_import.php"><i class="fa-solid fa-file-import"></i> Import </a>
+                            <?php endif; ?>
+                            <?php if (isActionAllowed("Export", $pinAccess)) : ?>
+                                <a class="btn btn-sm btn-rounded btn-primary px-3" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>
+                            <?php endif; ?>
 
                         </div>
                     </div>

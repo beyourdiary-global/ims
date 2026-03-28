@@ -15,39 +15,103 @@ if ($rst != false) {
     echo "<script>location.href ='$SITEURL/index.php';</script>";
 }
 
-include "header.php";
-
 $resetpass_btn = post('resetpass_btn');
 
-if ($resetpass_btn == 1) {
-    $email = post('email-addr');
-    $datetime_add24h = date("Y-m-d H:i:s", strtotime('+24 hours'));
-    $token = md5($datetime_add24h . 'forgotpassword');
+if (!function_exists('fpBase64UrlEncode')) {
+    function fpBase64UrlEncode($data)
+    {
+        return rtrim(strtr(base64_encode((string) $data), '+/', '-_'), '=');
+    }
+}
 
-    if ($email) {
-        $query = "SELECT * FROM " . USR_USER . " WHERE email = '" . $email . "'";
-        $result = mysqli_query($connect, $query);
+if (!function_exists('fpBuildResetToken')) {
+    function fpBuildResetToken($email, $passwordHash, $expiresTs)
+    {
+        $email = trim((string) $email);
+        $expiresTs = (int) $expiresTs;
+        $passwordHash = (string) $passwordHash;
+        $secret = hash('sha256', SITEURL . '|' . dbpwd . '|forgot-password');
+        $payload = $email . '|' . $expiresTs;
+        $sig = hash_hmac('sha256', $payload . '|' . $passwordHash, $secret);
+        return fpBase64UrlEncode($payload . '|' . $sig);
+    }
+}
 
-        if (!$result) {
-            echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-            echo "<script>location.href ='$SITEURL/index.php';</script>";
+if (!function_exists('fpSendMailFallback')) {
+    function fpSendMailFallback($toEmail, $subject, $htmlContent, $fromEmail = '')
+    {
+        $toEmail = trim((string) $toEmail);
+        $subject = (string) $subject;
+        $htmlContent = (string) $htmlContent;
+
+        $host = (string) parse_url(SITEURL, PHP_URL_HOST);
+        $baseHost = preg_replace('/^www\./i', '', $host);
+        $fallbackSender = 'noreply@' . ($baseHost !== '' ? $baseHost : 'beyourdiary.com');
+
+        $fromEmail = trim((string) $fromEmail);
+        if (!filter_var($fromEmail, FILTER_VALIDATE_EMAIL)) {
+            $fromEmail = $fallbackSender;
         }
 
+        $headers = array();
+        $headers[] = 'MIME-Version: 1.0';
+        $headers[] = 'Content-type: text/html; charset=utf-8';
+        $headers[] = 'From: BeYourDiary <' . $fromEmail . '>';
+        $headers[] = 'Reply-To: ' . $fromEmail;
+        $headers[] = 'Return-Path: ' . $fromEmail;
+        $headers[] = 'Date: ' . date(DATE_RFC2822);
+        $headers[] = 'Message-ID: <' . md5(uniqid((string) mt_rand(), true)) . '@' . ($baseHost !== '' ? $baseHost : 'beyourdiary.com') . '>';
+        $headers[] = 'X-Mailer: PHP/' . phpversion();
+
+        $headerStr = implode("\r\n", $headers);
+
+        $sent = @mail($toEmail, $subject, $htmlContent, $headerStr);
+        if (!$sent) {
+            $sent = @mail($toEmail, $subject, $htmlContent, $headerStr, '-f' . $fromEmail);
+        }
+
+        return $sent;
+    }
+}
+
+if ($resetpass_btn == 1) {
+    header('Content-Type: application/json; charset=utf-8');
+
+    $email = str_replace(',', '.', trim((string) post('email-addr')));
+    $response = array(
+        'status' => 'error',
+        'message' => 'Unable to process your request now. Please try again later.',
+    );
+
+    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $response['message'] = 'Please enter a valid email address.';
+        echo json_encode($response);
+        exit;
+    }
+
+    $safeEmail = mysqli_real_escape_string($connect, $email);
+    $query = "SELECT id, name, email, password_alt FROM " . USR_USER . " WHERE email = '" . $safeEmail . "' LIMIT 1";
+    $result = mysqli_query($connect, $query);
+
+    if (!$result) {
+        echo json_encode($response);
+        exit;
+    }
+
+    
+
+    if (mysqli_num_rows($result) == 1) {
         $rowUser = $result->fetch_assoc();
+        $name = isset($rowUser['name']) ? (string) $rowUser['name'] : 'User';
+        $to = isset($rowUser['email']) ? (string) $rowUser['email'] : $email;
+        $pwdHash = isset($rowUser['password_alt']) ? (string) $rowUser['password_alt'] : '';
 
-        if (mysqli_num_rows($result) == 1) {
-            $name = $rowUser['name'];
+        $expiresTs = time() + 86400;
+        $token = fpBuildResetToken($to, $pwdHash, $expiresTs);
+        $resetUrl = $SITEURL . '/changePassword.php?token=' . urlencode($token) . '&email=' . urlencode($to);
 
-            ob_start();
-
-            // Multiple recipients
-            $to = $email; // note the comma
-
-            // Subject
-            $subject = 'Request Reset Password';
-
-            // Message
-            $message = '
+        $subject = 'Request Reset Password';
+        $message = '
             <html>
                 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
                 <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
@@ -82,7 +146,7 @@ if ($resetpass_btn == 1) {
                                     You recently requested to reset your password for your [' . $to . '] account. Use the button below to reset it. <b>This password reset is only valid for the next 24 hours</b>.
                                 </p>
                                 <p class="btn_row" style="margin-top: 35px;">
-                                    <a class="btn" href="changePassword.php?token=' . $token . '&email=' . $to . '" style="font-size: 13;border: 1px solid black;color: #FFFFFF;text-decoration: none;background-color: #000000;border-radius: 5px;padding: 10px 15px;">Reset Password</a>
+                                    <a class="btn" href="' . $resetUrl . '" style="font-size: 13;border: 1px solid black;color: #FFFFFF;text-decoration: none;background-color: #000000;border-radius: 5px;padding: 10px 15px;">Reset Password</a>
                                 </p>
                             </td>
                         </tr>
@@ -102,51 +166,40 @@ if ($resetpass_btn == 1) {
             </html>
             ';
 
-            $message_admin = 'Username: ' . $name . "\r\n" . 'Email: ' . $to . '';
-
-            // To send HTML mail, the Content-type header must be set
-            $headers[] = 'MIME-Version: 1.0';
-            $headers[] = 'Content-type: text/html; charset=utf-8';
-
-            // Additional headers
-            $headers[] = 'To: <' . $to . '>';
-            $headers[] = 'From: noreply <noreply@beyourdiary.com>';
-            $headers[] = 'Cc:' . email_cc . '';
-            $headers[] = 'Bcc:';
-
-            //SETUP A php.ini sendmail
-            ini_set('SMTP', 'smtp-relay.brevo.com');
-            ini_set('smtp_port', '587');
-            ini_set('sendmail_from', 'fankaixuan159@gmail.com');
-            ini_set('sendmail_path', "C:\xampp\sendmail\sendmail.exe' -t");
-
-            // Mail it
-            try {
-                echo mail($to, $subject, $message, implode("\r\n", $headers));
-            } catch (Exception $e) {
-                echo 'Caught exception: ', $e->getMessage();
-            }
-
-            // Mail it
-            try {
-                $email_to_admin = mail(email_cc, 'User Request Reset Password Action', $message_admin);
-            } catch (Exception $e) {
-                echo 'Caught exception: ', $e->getMessage();
-            }
-
-            ob_get_clean();
-
-            if ($email_to_user && $email_to_admin)
-                return true;
+        $systemMailFrom = '';
+        if (isset($row['company_email']) && filter_var((string) $row['company_email'], FILTER_VALIDATE_EMAIL)) {
+            $systemMailFrom = (string) $row['company_email'];
         }
+
+        $emailToUser = fpSendMailFallback($to, $subject, $message, $systemMailFrom);
+
+        // Admin copy is best-effort and should not block user flow.
+        $adminMsg = 'Username: ' . $name . "\r\n" . 'Email: ' . $to;
+        @mail(trim((string) email_cc), 'User Request Reset Password Action', $adminMsg);
+
+        if ($emailToUser) {
+            $response['status'] = 'success';
+            $response['message'] = 'Reset link has been sent to your email.';
+        } else {
+            $response['message'] = 'Failed to send reset email. Please contact support.';
+        }
+    } else {
+        // Prevent user enumeration: always return success-like response.
+        $response['status'] = 'success';
+        $response['message'] = 'If the email exists, a reset link has been sent.';
     }
+
+    echo json_encode($response);
+    exit;
 }
 ?>
+
 
 <!DOCTYPE html>
 <html>
 
 <head>
+<?php include "header.php"; ?>
     <link rel="stylesheet" href="./css/main.css">
     <link rel="stylesheet" href="./css/login.css">
     <link rel="icon" type="image" href="<?php echo ($dataExisted ? $img_path . $row['meta_logo'] : 'img/byd_logo'); ?>">
@@ -203,8 +256,6 @@ if ($resetpass_btn == 1) {
         </div>
     </div>
 
-</body>
-
 <script>
     checkCurrentPage('invalid');
 
@@ -212,12 +263,11 @@ if ($resetpass_btn == 1) {
         $("#email-addr_error").text("");
     })
 
-    $('#resetpass_btn').on('click', () => {
+    $('#resetpass_btn').on('click', (event) => {
         event.preventDefault();
         var email_chk = 0;
-        var password_chk = 0;
 
-        if (!(isEmail($('#email-addr').val()))) {
+        if (!isEmail($('#email-addr').val())) {
             email_chk = 0;
             $("#email-addr_error").text("Wrong email format!");
         } else {
@@ -230,7 +280,7 @@ if ($resetpass_btn == 1) {
             email_chk = 0;
             $("#email-addr_error").text("Please enter your email");
         } else {
-            if (!(isEmail($('#email-addr').val()))) {
+            if (!isEmail($('#email-addr').val())) {
                 email_chk = 0;
                 $("#email-addr_error").text("Wrong email format!");
             } else {
@@ -245,6 +295,7 @@ if ($resetpass_btn == 1) {
             $.ajax({
                 type: 'POST',
                 url: 'forgotPassword.php',
+                dataType: 'json',
                 data: {
                     'email-addr': fp_email,
                     'resetpass_btn': email_chk
@@ -255,11 +306,16 @@ if ($resetpass_btn == 1) {
                     $('#loader_result_div').empty();
                     toggle('loader_div');
                     toggle('loader_result_div');
-                    $('#loader_result_div').append('<span style="color:#23B200">Reset link has been sent to your email.</span>');
+                    var ok = result && result.status === 'success';
+                    var msg = (result && result.message) ? result.message : (ok ? 'Reset link has been sent to your email.' : 'Error.');
+                    var color = ok ? '#23B200' : '#FF0000';
+                    $('#loader_result_div').append('<span style="color:' + color + '">' + msg + '</span>');
                 },
                 error: (result) => {
                     toggle('loader_div');
                     toggle('loader_result_div');
+                    $('#loader_result_div').removeClass('hideColumn');
+                    $('#loader_result_div').empty();
                     $('#loader_result_div').append('<span style="color:#FF0000">Error.</span>');
                 }
             })
@@ -267,5 +323,7 @@ if ($resetpass_btn == 1) {
             return false;
     })
 </script>
+
+</body>
 
 </html>

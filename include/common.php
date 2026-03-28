@@ -934,32 +934,82 @@ function renderViewEditButtonByPin($action, $redirect_page, $row, $pinAccess, $a
 	}
 
 }
+
 function renderDeleteButtonByPin($pinAccess, $rowId, $rowName, $rowRemark, $pageTitle, $redirectPage, $deleteRedirectPage)
 {
-	// Check if Delete action is allowed
-	if (isActionAllowed("3", $pinAccess)) {
-		// Generate JavaScript onclick function for confirmation dialog with specific parameters
-		$onclick = 'confirmationDialog(\'' . $rowId . '\',[\'' . $rowName . '\',\'' . $rowRemark . '\'],\'' . $pageTitle . '\',\'' . $redirectPage . '\',\'' . $deleteRedirectPage . '\',\'D\')';
+    // Check if Delete action is allowed
+    if (isActionAllowed("3", $pinAccess)) {
+        
+    // 1. Prepare all arguments in a PHP array
+        $args = [
+            (string)$rowId,
+            [(string)($rowName ?? ''), (string)($rowRemark ?? '')],
+            (string)$pageTitle,
+            (string)$redirectPage,
+            (string)$deleteRedirectPage,
+            'D'
+        ];
 
-		// Output Delete button
-		echo '<a class="btn btn-danger" onclick="' . $onclick . '"><i class="fas fa-trash-alt"></i></a>';
-	}
+        // 2. Encode JS arguments safely, including quotes and symbols in text fields.
+        $payloadJson = json_encode(
+            $args,
+            JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
+        );
+        if ($payloadJson === false) {
+            $payloadJson = '["",["",""],"","","","D"]';
+        }
+
+        $payloadB64 = base64_encode($payloadJson);
+        $jsCall = "(function(){var a=JSON.parse(atob('" . $payloadB64 . "'));confirmationDialog(a[0],a[1],a[2],a[3],a[4],a[5]);})();";
+        $safeOnclick = htmlspecialchars($jsCall, ENT_QUOTES, 'UTF-8');
+
+        // Output Delete button
+        echo '<a class="btn btn-danger" onclick="' . $safeOnclick . '"><i class="fas fa-trash-alt"></i></a>';    
+    }
 }
+
 function renderDeleteButton($pinAccess, $rowId, $rowName, $rowRemark, $pageTitle, $redirectPage, $deleteRedirectPage)
 {
-	// Check if Delete action is allowed
-	if (isActionAllowed("Delete", $pinAccess)) {
-		// Generate JavaScript onclick function for confirmation dialog with specific parameters
-		$onclick = 'confirmationDialog(\'' . $rowId . '\',[\'' . $rowName . '\',\'' . $rowRemark . '\'],\'' . $pageTitle . '\',\'' . $redirectPage . '\',\'' . $deleteRedirectPage . '\',\'D\')';
+    // Check if Delete action is allowed
+    if (isActionAllowed("Delete", $pinAccess)) {
+        
+       // 1. Prepare all arguments in a PHP array
+        $args = [
+            (string)$rowId,
+            [(string)($rowName ?? ''), (string)($rowRemark ?? '')],
+            (string)$pageTitle,
+            (string)$redirectPage,
+            (string)$deleteRedirectPage,
+            'D'
+        ];
 
-		// Output Delete button
-		echo '<a class="btn btn-danger" onclick="' . $onclick . '"><i class="fas fa-trash-alt"></i></a>';
-	}
+        // 2. Encode JS arguments safely, including quotes and symbols in text fields.
+        $payloadJson = json_encode(
+            $args,
+            JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE
+        );
+        if ($payloadJson === false) {
+            $payloadJson = '["",["",""],"","","","D"]';
+        }
+
+        $payloadB64 = base64_encode($payloadJson);
+        $jsCall = "(function(){var a=JSON.parse(atob('" . $payloadB64 . "'));confirmationDialog(a[0],a[1],a[2],a[3],a[4],a[5]);})();";
+        $safeOnclick = htmlspecialchars($jsCall, ENT_QUOTES, 'UTF-8');
+
+        // Output Delete button
+        echo '<a class="btn btn-danger" onclick="' . $safeOnclick . '"><i class="fas fa-trash-alt"></i></a>';
+    }
 }
 
 function getOrderStatusLabel($code) {
+	$normalized = strtolower(trim((string) $code));
+	$normalizedKey = preg_replace('/[^a-z]/', '', $normalized);
+	if ($normalizedKey === 'p' || $normalizedKey === 'pendingto' || $normalizedKey === 'pendingtopack') {
+		return 'Pending To Pack';
+	}
+
     $statuses = [
-        'P'  => 'Processing',
+		'P'  => 'Pending To Pack',
         'SP' => 'SHIP PROCESSING (Warehouse)',
         'WP' => 'Waiting Packing',
         'OC' => 'Order Received (admin checking)',
@@ -968,4 +1018,1243 @@ function getOrderStatusLabel($code) {
     ];
 
     return $statuses[$code] ?? $code; // fallback to code if not found
+}
+
+if (!function_exists('sorGenerateRequestNo')) {
+    function sorGenerateRequestNo($connect)
+    {
+        return 'SOR' . date('YmdHis') . mt_rand(1000, 9999);
+    }
+}
+
+if (!function_exists('sorBase64UrlEncode')) {
+    function sorBase64UrlEncode($data)
+    {
+        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
+    }
+}
+
+if (!function_exists('sorBase64UrlDecode')) {
+    function sorBase64UrlDecode($data)
+    {
+        $padding = strlen($data) % 4;
+        if ($padding > 0) {
+            $data .= str_repeat('=', 4 - $padding);
+        }
+        return base64_decode(strtr($data, '-_', '+/'));
+    }
+}
+
+if (!function_exists('sorEncodeToken')) {
+    function sorEncodeToken($requestId)
+    {
+        $payload = $requestId . '|' . time();
+        $key = hash('sha256', SITEURL . '|stock_order_request', true);
+
+        if (function_exists('openssl_encrypt')) {
+            // 1. Generate a secure, random IV
+            $ivLength = openssl_cipher_iv_length('AES-256-CBC');
+            $iv = openssl_random_pseudo_bytes($ivLength);
+            
+            $encrypted = openssl_encrypt($payload, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
+            if ($encrypted !== false) {
+                // 2. Prepend the random IV to the encrypted data so it can be extracted later
+                return sorBase64UrlEncode($iv . $encrypted);
+            }
+        }
+
+        return sorBase64UrlEncode($payload);
+    }
+}
+
+if (!function_exists('sorDecodeToken')) {
+    // Added an expiry window (86400 seconds = 24 hours)
+    function sorDecodeToken($token, $expirySeconds = 86400)
+    {
+        $key = hash('sha256', SITEURL . '|stock_order_request', true);
+        $decoded = sorBase64UrlDecode($token);
+
+        if ($decoded === false || $decoded === null || $decoded === '') {
+            return 0;
+        }
+
+        $plain = '';
+
+        if (function_exists('openssl_decrypt')) {
+            $ivLength = openssl_cipher_iv_length('AES-256-CBC');
+            // Ensure the decoded string is at least as long as the IV
+            if (strlen($decoded) > $ivLength) {
+                // 3. Extract the random IV from the front, and the ciphertext from the back
+                $iv = substr($decoded, 0, $ivLength);
+                $ciphertext = substr($decoded, $ivLength);
+                
+                $decrypted = openssl_decrypt($ciphertext, 'AES-256-CBC', $key, OPENSSL_RAW_DATA, $iv);
+                if ($decrypted !== false) {
+                    $plain = $decrypted;
+                }
+            }
+        }
+
+        // Fallback for unencrypted payloads (if openssl fails)
+        if ($plain === '') {
+            $plain = $decoded;
+        }
+
+        if (strpos($plain, '|') !== false) {
+            $parts = explode('|', $plain);
+            $requestId = (int) $parts[0];
+            $timestamp = isset($parts[1]) ? (int) $parts[1] : 0;
+            
+            // 4. Validate Expiration (Check if current time minus creation time is within the allowed window)
+            if ($timestamp > 0 && (time() - $timestamp) <= $expirySeconds) {
+                return $requestId;
+            }
+        }
+
+        return 0; // Token is invalid, tampered with, or expired
+    }
+}
+
+if (!function_exists('sorResolveTrackingMySlug')) {
+    /**
+     * Map courier name (from DB) to tracking.my URL slug.
+     * Also tries to auto-detect from tracking number prefix.
+     */
+    function sorResolveTrackingMySlug($courierName, $trackingNo)
+    {
+        $courierName = strtolower(trim((string) $courierName));
+        $trackingNo = strtoupper(trim((string) $trackingNo));
+
+        // Map courier names to tracking.my slugs
+        $nameMap = array(
+            'dhl' => 'dhl-ecommerce',
+            'dhl ecommerce' => 'dhl-ecommerce',
+            'dhl e-commerce' => 'dhl-ecommerce',
+            'pos malaysia' => 'pos',
+            'pos laju' => 'pos',
+            'poslaju' => 'pos',
+            'j&t' => 'jt',
+            'j&t express' => 'jt',
+            'jnt' => 'jt',
+            'jnt express' => 'jt',
+            'shopee express' => 'shopee',
+            'shopee' => 'shopee',
+            'best express' => 'best',
+            'citylink' => 'citylink',
+            'citylink express' => 'citylink',
+            'ninja van' => 'ninjavan',
+            'ninjavan' => 'ninjavan',
+            'gdex' => 'gdex',
+            'flash express' => 'flash',
+            'abx express' => 'abx',
+            'skynet' => 'skynet',
+        );
+
+        foreach ($nameMap as $key => $slug) {
+            if (strpos($courierName, $key) !== false) {
+                return $slug;
+            }
+        }
+
+        // Auto-detect from tracking number prefix
+        if (preg_match('/^MYJZ/i', $trackingNo)) {
+            return 'dhl-ecommerce';
+        }
+        if (preg_match('/^SPXMY|^SPX/i', $trackingNo)) {
+            return 'shopee';
+        }
+        if (preg_match('/^MY[A-Z]{2}\d/i', $trackingNo)) {
+            // Generic MY prefix → DHL eCommerce (most common)
+            return 'dhl-ecommerce';
+        }
+        if (preg_match('/^JT/i', $trackingNo)) {
+            return 'jt';
+        }
+        if (preg_match('/^NV/i', $trackingNo)) {
+            return 'ninjavan';
+        }
+        if (preg_match('/^[A-Z]{2}\d{9}[A-Z]{2}$/', $trackingNo)) {
+            return 'pos'; // Pos Malaysia international format
+        }
+        if (preg_match('/^\d{10,}$/', $trackingNo)) {
+            return 'pos'; // Pos Malaysia uses long numeric tracking numbers
+        }
+
+        return '';
+    }
+}
+
+if (!function_exists('sorBuildTrackingUrl')) {
+    function sorBuildTrackingUrl($trackingLink, $trackingNo)
+    {
+        $trackingLink = trim((string) $trackingLink);
+        $trackingNo = trim((string) $trackingNo);
+
+        if ($trackingLink === '' || $trackingNo === '') {
+            return '';
+        }
+
+        if (strpos($trackingLink, '{tracking}') !== false) {
+            return str_replace('{tracking}', rawurlencode($trackingNo), $trackingLink);
+        }
+
+        $lastChar = substr($trackingLink, -1);
+        if ($lastChar === '=' || $lastChar === '/' || $lastChar === '?') {
+            return $trackingLink . rawurlencode($trackingNo);
+        }
+
+        if (strpos($trackingLink, '?') !== false) {
+            return $trackingLink . '&tracking=' . rawurlencode($trackingNo);
+        }
+
+        return $trackingLink . '?tracking=' . rawurlencode($trackingNo);
+    }
+}
+
+if (!function_exists('sorFetchTrackingStatus')) {
+    function sorFetchTrackingStatus($trackingUrl)
+    {
+        if ($trackingUrl === '') {
+            return '';
+        }
+
+        $opts = array(
+            'http' => array(
+                'method' => 'GET',
+                'header' => "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36\r\n" .
+                            "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n" .
+                            "Accept-Language: en-US,en;q=0.5\r\n",
+                'timeout' => 15,
+                'follow_location' => true,
+                'ignore_errors' => true,
+            ),
+            'ssl' => array(
+                'verify_peer' => false,
+                'verify_peer_name' => false,
+            ),
+        );
+        $ctx = stream_context_create($opts);
+        $body = @file_get_contents($trackingUrl, false, $ctx);
+
+        $httpCode = 0;
+        if (isset($http_response_header) && is_array($http_response_header)) {
+            foreach ($http_response_header as $hdr) {
+                if (preg_match('/^HTTP\/[\d.]+ (\d+)/', $hdr, $m)) {
+                    $httpCode = (int) $m[1];
+                }
+            }
+        }
+
+        $timestamp = date('Y-m-d H:i:s');
+
+        if ($body === false || $body === null || $body === '') {
+            return "Unable to retrieve tracking status (HTTP $httpCode). [$timestamp]";
+        }
+
+        $title = '';
+        if (preg_match('/<title[^>]*>(.*?)<\/title>/is', $body, $matches)) {
+            $title = trim(html_entity_decode(strip_tags($matches[1])));
+        }
+
+        // Strip <script> blocks to avoid matching JS dictionary keywords (e.g. tracking.my pages).
+        $cleanBody = preg_replace('/<script\b[^>]*>[\s\S]*?<\/script>/i', '', $body);
+        $bodyLower = strtolower($cleanBody);
+        $keywords = array(
+            'shipment canceled', 'shipment cancelled',
+            'cancelled', 'canceled',
+            'returned to sender',
+            'exception',
+            'delivered', 'out for delivery', 'in transit',
+            'picked up', 'shipment information received',
+            'customs', 'clearance event',
+            'arrived at facility', 'departed facility',
+        );
+        $found = '';
+        foreach ($keywords as $keyword) {
+            if (strpos($bodyLower, $keyword) !== false) {
+                $found = $keyword;
+                break;
+            }
+        }
+
+        $parts = array();
+        if ($found !== '') {
+            $parts[] = 'Detected: ' . ucwords($found);
+        }
+        $parts[] = 'Synced: ' . $timestamp;
+
+        return implode(' | ', $parts);
+    }
+}
+
+// --- Minimal WebSocket helpers for tracking.my ---
+if (!function_exists('sorWsEncode')) {
+    /** Encode a text payload into a WebSocket frame (client-masked). */
+    function sorWsEncode($payload) {
+        $len = strlen($payload);
+        $frame = chr(0x81); // FIN + text opcode
+        if ($len < 126) {
+            $frame .= chr(0x80 | $len);
+        } elseif ($len < 65536) {
+            $frame .= chr(0x80 | 126) . pack('n', $len);
+        } else {
+            $frame .= chr(0x80 | 127) . pack('J', $len);
+        }
+        $mask = openssl_random_pseudo_bytes(4);
+        $frame .= $mask;
+        for ($i = 0; $i < $len; $i++) {
+            $frame .= $payload[$i] ^ $mask[$i % 4];
+        }
+        return $frame;
+    }
+}
+
+if (!function_exists('sorWsDecode')) {
+    /** Read one WebSocket frame from a socket; handles ping/pong automatically. */
+    function sorWsDecode($socket) {
+        $header = @fread($socket, 2);
+        if ($header === false || strlen($header) < 2) return '';
+        $opcode = ord($header[0]) & 0x0F;
+        $masked = (ord($header[1]) & 0x80) !== 0;
+        $len = ord($header[1]) & 0x7F;
+        if ($len === 126) {
+            $ext = @fread($socket, 2);
+            if ($ext === false || strlen($ext) < 2) return '';
+            $unpacked = unpack('n', $ext);
+            $len = $unpacked[1];
+        } elseif ($len === 127) {
+            $ext = @fread($socket, 8);
+            if ($ext === false || strlen($ext) < 8) return '';
+            $unpacked = unpack('J', $ext);
+            $len = $unpacked[1];
+        }
+        if ($len > 2097152) return ''; // sanity: max 2 MB
+        $mask = '';
+        if ($masked) {
+            $mask = @fread($socket, 4);
+            if ($mask === false) $mask = '';
+        }
+        $payload = '';
+        $remaining = $len;
+        while ($remaining > 0) {
+            $chunk = @fread($socket, min($remaining, 8192));
+            if ($chunk === false || $chunk === '') break;
+            $payload .= $chunk;
+            $remaining -= strlen($chunk);
+        }
+        if ($masked && strlen($mask) === 4) {
+            for ($i = 0; $i < strlen($payload); $i++) {
+                $payload[$i] = $payload[$i] ^ $mask[$i % 4];
+            }
+        }
+        // Ping → reply pong, then read next frame
+        if ($opcode === 0x9) {
+            @fwrite($socket, chr(0x8A) . chr(strlen($payload)) . $payload);
+            return sorWsDecode($socket);
+        }
+        if ($opcode === 1) return $payload; // text frame
+        return '';
+    }
+}
+
+if (!function_exists('sorFetchTrackingMyWebSocket')) {
+    /**
+     * Fetch actual tracking status from tracking.my via its WebSocket API.
+     * 1. GET the tracking.my page to extract the pre-built WebSocket message
+     *    (contains a server-computed verify hash).
+     * 2. Open a WebSocket connection and send the message.
+     * 3. Parse the JSON response for the latest tracking event.
+     */
+    function sorFetchTrackingMyWebSocket($courierName, $trackingNo, &$rawJson = null)
+    {
+        $trackingNo = trim((string) $trackingNo);
+        if ($trackingNo === '') return '';
+
+        $slug = sorResolveTrackingMySlug($courierName, $trackingNo);
+        if ($slug === '') return '';
+
+        $pageUrl = 'https://www.tracking.my/' . $slug . '/' . rawurlencode($trackingNo);
+        $opts = array(
+            'http' => array(
+                'method' => 'GET',
+                'header' => "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36\r\n" .
+                            "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n",
+                'timeout' => 15,
+            ),
+            'ssl' => array('verify_peer' => false, 'verify_peer_name' => false),
+        );
+        $body = @file_get_contents($pageUrl, false, stream_context_create($opts));
+        if ($body === false || $body === '') return '';
+
+        // The page embeds: socket.send("{&quot;action&quot;:...&quot;verify&quot;:&quot;HASH&quot;}")
+        if (!preg_match('/socket\.send\(\s*"([^"]+)"\s*\)/', $body, $m)) return '';
+
+        $wsMessage = html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
+        $wsCheck = json_decode($wsMessage, true);
+        if (!is_array($wsCheck) || !isset($wsCheck['action'])) return '';
+
+        // Open WebSocket connection
+        $wsKey = base64_encode(openssl_random_pseudo_bytes(16));
+        $ctx = stream_context_create(array(
+            'ssl' => array('verify_peer' => false, 'verify_peer_name' => false),
+        ));
+        $sock = @stream_socket_client('ssl://www.tracking.my:443', $errno, $errstr, 10, STREAM_CLIENT_CONNECT, $ctx);
+        if (!$sock) return '';
+
+        stream_set_timeout($sock, 10);
+
+        // WebSocket upgrade handshake
+        $handshake = "GET /websocket HTTP/1.1\r\n" .
+            "Host: www.tracking.my\r\n" .
+            "Upgrade: websocket\r\n" .
+            "Connection: Upgrade\r\n" .
+            "Sec-WebSocket-Key: $wsKey\r\n" .
+            "Sec-WebSocket-Version: 13\r\n" .
+            "Origin: https://www.tracking.my\r\n" .
+            "\r\n";
+        @fwrite($sock, $handshake);
+
+        // Read upgrade response
+        $resp = '';
+        while (!feof($sock)) {
+            $line = @fgets($sock, 1024);
+            if ($line === false) break;
+            $resp .= $line;
+            if ($line === "\r\n") break;
+        }
+        if (strpos($resp, '101') === false) {
+            @fclose($sock);
+            return '';
+        }
+
+        // Send the tracking request
+        @fwrite($sock, sorWsEncode($wsMessage));
+
+        // Read the tracking response
+        $data = sorWsDecode($sock);
+        @fclose($sock);
+
+        if ($data === '') return '';
+
+        $result = json_decode($data, true);
+        $rawJson = $data; // expose raw response for diagnostics
+        if (!is_array($result) || !isset($result['result']) || !is_array($result['result'])) return '';
+
+        // tracking.my response: { result: [ {status, content, date, location, ...}, ... ] }
+        // 'status' is a CATEGORY (e.g. "delivered", "exception", "in_transit")
+        // 'content' is the human-readable description (e.g. "Parcel has been delivered", "Shipment cancelled")
+        // result[0] is the LATEST event.
+
+        // First, find the latest non-sponsored event
+        $latestStatus = '';
+        $latestContent = '';
+        foreach ($result['result'] as $event) {
+            if (!is_array($event)) continue;
+            $evStatus = isset($event['status']) ? trim((string) $event['status']) : '';
+            if ($evStatus === '' || $evStatus === 'sponsored') continue;
+            $latestStatus = $evStatus;
+            $latestContent = isset($event['content']) ? trim((string) $event['content']) : '';
+            break; // first non-sponsored = latest
+        }
+
+        if ($latestStatus === '') return '';
+
+        // Try to derive a more specific status from the content text
+        $contentLower = strtolower($latestContent);
+        $contentKeywords = array(
+            'cancel' => 'Cancelled',
+            'returned to sender' => 'Returned to Sender',
+            'delivered' => 'Delivered',
+            'out for delivery' => 'Out for Delivery',
+            'in transit' => 'In Transit',
+            'picked up' => 'Picked Up',
+            'preparing' => 'Shipment Information Received',
+            'information received' => 'Shipment Information Received',
+        );
+
+        $displayStatus = ucfirst($latestStatus); // default: use category name
+        foreach ($contentKeywords as $needle => $label) {
+            if (strpos($contentLower, $needle) !== false) {
+                $displayStatus = $label;
+                break;
+            }
+        }
+
+        return $displayStatus . ' | Synced: ' . date('Y-m-d H:i:s') . ' | Source: tracking.my';
+    }
+}
+
+if (!function_exists('sorGetEasyParcelConfig')) {
+    function sorGetEasyParcelConfig($countryCode)
+    {
+        $countryCode = strtoupper(trim((string) $countryCode));
+        if ($countryCode === 'SG') {
+            return array(
+                'domain' => EASYPARCEL_DOMAIN_SG,
+                'auth' => EASYPARCEL_AUTH_SG,
+                'api' => EASYPARCEL_API_SG,
+            );
+        }
+
+        return array(
+            'domain' => EASYPARCEL_DOMAIN_MY,
+            'auth' => EASYPARCEL_AUTH_MY,
+            'api' => EASYPARCEL_API_MY,
+        );
+    }
+}
+
+if (!function_exists('sorFetchTrackingStatusEasyParcel')) {
+    function sorFetchTrackingStatusEasyParcel($trackingNo, $countryCode)
+    {
+        $trackingNo = trim((string) $trackingNo);
+        if ($trackingNo === '') {
+            return '';
+        }
+
+        $cfg = sorGetEasyParcelConfig($countryCode);
+
+        // Demo credentials cannot track real parcels — skip entirely.
+        if (stripos($cfg['domain'], 'demo.connect') !== false) {
+            return '';
+        }
+
+        $url = $cfg['domain'] . 'EPTrackingBulk';
+        $postparam = array(
+            'authentication' => $cfg['auth'],
+            'api' => $cfg['api'],
+            'bulk' => array(
+                array('awb' => $trackingNo),
+            ),
+        );
+
+        $postData = http_build_query($postparam);
+        $opts = array(
+            'http' => array(
+                'method' => 'POST',
+                'header' => "Content-Type: application/x-www-form-urlencoded\r\n",
+                'content' => $postData,
+                'timeout' => 15,
+                'ignore_errors' => true,
+            ),
+            'ssl' => array(
+                'verify_peer' => false,
+                'verify_peer_name' => false,
+            ),
+        );
+        $ctx = stream_context_create($opts);
+        $response = @file_get_contents($url, false, $ctx);
+
+        if ($response === false || $response === null || $response === '') {
+            return 'EasyParcel tracking unavailable: request failed';
+        }
+
+        $json = json_decode($response, true);
+        if (!is_array($json)) {
+            return 'EasyParcel tracking response invalid.';
+        }
+
+        // EasyParcel returns api_status "Success" (string) or "0" (numeric) on success.
+        $apiStatus = isset($json['api_status']) ? (string) $json['api_status'] : '';
+        $isSuccess = ($apiStatus === '' || $apiStatus === '0' || strtolower($apiStatus) === 'success');
+        if (!$isSuccess) {
+            $msg = isset($json['error']) ? (string) $json['error'] : 'Unknown EasyParcel error';
+            return 'EasyParcel tracking failed: ' . $msg;
+        }
+
+        $status = '';
+        if (isset($json['result'][0]['latest_status'])) {
+            $status = (string) $json['result'][0]['latest_status'];
+        } else if (isset($json['result'][0]['status'])) {
+            $status = (string) $json['result'][0]['status'];
+        } else if (isset($json['result'][0]['detail'][0]['content'])) {
+            $status = (string) $json['result'][0]['detail'][0]['content'];
+        } else if (isset($json['result'][0]['detail'][0]['status'])) {
+            $status = (string) $json['result'][0]['detail'][0]['status'];
+        }
+
+        $status = trim($status);
+        // EasyParcel uses "--" as a placeholder when it has no tracking data yet.
+        if ($status === '' || $status === '--') {
+            return '';
+        }
+
+        return $status . ' | Synced: ' . date('Y-m-d H:i:s') . ' | Source: EasyParcel';
+    }
+}
+
+if (!function_exists('sorRefreshTrackingStatus')) {
+    function sorRefreshTrackingStatus($financeConnect, $requestId, &$message = '', $cmsConnect = null)
+    {
+        $requestId = (int) $requestId;
+        if ($requestId <= 0) {
+            $message = 'Invalid request id.';
+            return false;
+        }
+
+        $requestSql = "SELECT id, tracking_no, courier_id
+               FROM stock_order_request
+               WHERE id = '$requestId' AND status = 'A'";
+
+        $requestRst = mysqli_query($financeConnect, $requestSql);
+        if (!$requestRst || !($row = mysqli_fetch_assoc($requestRst))) {
+            $message = 'Order request not found.';
+            return false;
+        }
+
+        $trackingNo = isset($row['tracking_no']) ? trim((string) $row['tracking_no']) : '';
+        $courierId = isset($row['courier_id']) ? (int) $row['courier_id'] : 0;
+
+        $trackingLink = '';
+        $courierNameForSlug = '';
+        $courierCountryCode = 'MY';
+        $lookupConnect = $cmsConnect ? $cmsConnect : $financeConnect;
+        if ($courierId > 0) {
+            $courierSql = "SELECT tracking_link, country, name FROM " . COURIER . " WHERE id = '$courierId' LIMIT 1";
+            $courierRst = mysqli_query($lookupConnect, $courierSql);
+            if ($courierRst && ($courierRow = mysqli_fetch_assoc($courierRst))) {
+                $trackingLink = isset($courierRow['tracking_link']) ? trim((string) $courierRow['tracking_link']) : '';
+                $courierNameForSlug = isset($courierRow['name']) ? trim((string) $courierRow['name']) : '';
+                $courierCountryId = isset($courierRow['country']) ? (int) $courierRow['country'] : 0;
+                if ($courierCountryId > 0) {
+                    $countrySql = "SELECT code FROM " . COUNTRIES . " WHERE id = '$courierCountryId' LIMIT 1";
+                    $countryRst = mysqli_query($lookupConnect, $countrySql);
+                    if ($countryRst && ($countryRow = mysqli_fetch_assoc($countryRst))) {
+                        $courierCountryCode = isset($countryRow['code']) ? strtoupper(trim((string) $countryRow['code'])) : 'MY';
+                    }
+                }
+            }
+        }
+
+        if ($trackingNo === '') {
+            $message = 'Missing tracking number.';
+            return false;
+        }
+
+        $statusText = sorFetchTrackingStatusEasyParcel($trackingNo, $courierCountryCode);
+        $trackingUrl = sorBuildTrackingUrl($trackingLink, $trackingNo);
+
+        // Fallback to courier tracking page scrape when EasyParcel cannot provide a usable status.
+        $epFailed = ($statusText === '' || stripos($statusText, 'failed:') !== false || stripos($statusText, 'unavailable') !== false || stripos($statusText, 'no status') !== false);
+        if ($epFailed && $trackingUrl !== '') {
+            $statusText = sorFetchTrackingStatus($trackingUrl);
+        }
+
+        // Secondary fallback: try tracking.my WebSocket API for structured data.
+        // Also runs if the previous step only returned an error/failure message.
+        $statusIsUsable = (stripos($statusText, 'Detected:') !== false)
+            || (stripos($statusText, 'Source:') !== false);
+        $statusIsError = (stripos($statusText, 'Unable to retrieve') !== false)
+            || (stripos($statusText, 'unavailable') !== false)
+            || (stripos($statusText, 'failed') !== false);
+        if ((!$statusIsUsable || $statusIsError) && $trackingNo !== '') {
+            // Resolve courier name for tracking.my slug (already fetched from DB above)
+            $wsStatus = sorFetchTrackingMyWebSocket($courierNameForSlug, $trackingNo);
+            if ($wsStatus !== '') {
+                $statusText = $wsStatus;
+            } else {
+                // Final fallback: keyword scrape on tracking.my page
+                $slug = sorResolveTrackingMySlug($courierNameForSlug, $trackingNo);
+                if ($slug !== '') {
+                    $altUrl = 'https://www.tracking.my/' . $slug . '/' . rawurlencode($trackingNo);
+                    $altStatus = sorFetchTrackingStatus($altUrl);
+                    if (stripos($altStatus, 'Detected:') !== false) {
+                        $statusText = $altStatus . ' | Source: tracking.my';
+                    }
+                }
+                // If all fallbacks failed and the current status is an error, clear it
+                if ($statusIsError && stripos($statusText, 'Unable to retrieve') !== false) {
+                    $statusText = 'Tracking unavailable | Synced: ' . date('Y-m-d H:i:s');
+                }
+            }
+        }
+
+        $safeStatus = mysqli_real_escape_string($financeConnect, $statusText);
+        $safeUrl = mysqli_real_escape_string($financeConnect, $trackingUrl);
+
+        $updateBy = defined('USER_ID') && USER_ID !== '' ? USER_ID : 'cron';
+        $updateSql = "UPDATE stock_order_request
+              SET tracking_status = '$safeStatus',
+              tracking_last_sync = NOW(),
+              update_by = '" . $updateBy . "',
+              update_date = CURDATE(),
+              update_time = CURTIME()
+              WHERE id = '$requestId'";
+
+        if (!mysqli_query($financeConnect, $updateSql)) {
+            $message = 'Failed to update tracking status.';
+            return false;
+        }
+
+        $message = "Tracking refreshed successfully.";
+        return true;
+    }
+}
+
+if (!function_exists('siEsc')) {
+    function siEsc($value)
+    {
+        return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+    }
+}
+
+if (!function_exists('siLoadWarehouses')) {
+    function siLoadWarehouses($connect)
+    {
+        $rows = array();
+        $rst = mysqli_query($connect, "SELECT id, name FROM " . WHSE . " WHERE status='A' ORDER BY name ASC");
+        if ($rst) {
+            while ($r = mysqli_fetch_assoc($rst)) {
+                $rows[] = array('id' => (int) $r['id'], 'name' => (string) $r['name']);
+            }
+        }
+        return $rows;
+    }
+}
+
+if (!function_exists('siLoadProducts')) {
+    function siLoadProducts($connect)
+    {
+        $rows = array();
+        $rst = mysqli_query($connect, "SELECT id, name FROM " . PROD . " WHERE status='A' ORDER BY name ASC");
+        if ($rst) {
+            while ($r = mysqli_fetch_assoc($rst)) {
+                $rows[] = array('id' => (int) $r['id'], 'name' => (string) $r['name']);
+            }
+        }
+        return $rows;
+    }
+}
+
+if (!function_exists('siLoadPackages')) {
+    function siLoadPackages($connect)
+    {
+        $rows = array();
+        $rst = mysqli_query($connect, "SELECT id, name, product FROM " . PKG . " WHERE status='A' ORDER BY name ASC");
+        if ($rst) {
+            while ($r = mysqli_fetch_assoc($rst)) {
+                $productIds = array();
+                $csv = isset($r['product']) ? (string) $r['product'] : '';
+                if ($csv !== '') {
+                    foreach (explode(',', $csv) as $raw) {
+                        $prodId = (int) trim((string) $raw);
+                        if ($prodId > 0) {
+                            $productIds[] = $prodId;
+                        }
+                    }
+                }
+                $rows[] = array(
+                    'id' => (int) $r['id'],
+                    'name' => (string) $r['name'],
+                    'product_ids' => array_values(array_unique($productIds)),
+                );
+            }
+        }
+        return $rows;
+    }
+}
+
+if (!function_exists('siBuildNameMaps')) {
+    function siBuildNameMaps($rows)
+    {
+        $idToName = array();
+        $nameToId = array();
+        foreach ($rows as $r) {
+            $id = isset($r['id']) ? (int) $r['id'] : 0;
+            $name = isset($r['name']) ? (string) $r['name'] : '';
+            if ($id <= 0 || $name === '') {
+                continue;
+            }
+            $idToName[$id] = $name;
+            $nameToId[strtolower(trim($name))] = $id;
+        }
+        return array($idToName, $nameToId);
+    }
+}
+
+if (!function_exists('siBuildPackageProductMap')) {
+    function siBuildPackageProductMap($packages)
+    {
+        $map = array();
+        foreach ($packages as $p) {
+            $pkgId = isset($p['id']) ? (int) $p['id'] : 0;
+            $productIds = isset($p['product_ids']) && is_array($p['product_ids']) ? $p['product_ids'] : array();
+            $map[$pkgId] = $productIds;
+        }
+        return $map;
+    }
+}
+
+if (!function_exists('siPackageMatchesProduct')) {
+    function siPackageMatchesProduct($packageProductMap, $packageId, $productId)
+    {
+        $packageId = (int) $packageId;
+        $productId = (int) $productId;
+        if ($packageId <= 0 || $productId <= 0) {
+            return false;
+        }
+        $allowed = isset($packageProductMap[$packageId]) ? $packageProductMap[$packageId] : array();
+        if (!is_array($allowed) || count($allowed) === 0) {
+            return false;
+        }
+        return in_array($productId, $allowed, true);
+    }
+}
+
+if (!function_exists('siResolveProductIdFromPackage')) {
+    function siResolveProductIdFromPackage($packageProductMap, $packageId)
+    {
+        $packageId = (int) $packageId;
+        if ($packageId <= 0) {
+            return 0;
+        }
+        $allowed = isset($packageProductMap[$packageId]) ? $packageProductMap[$packageId] : array();
+        if (!is_array($allowed) || count($allowed) !== 1) {
+            return 0;
+        }
+        return (int) $allowed[0];
+    }
+}
+
+if (!function_exists('siAttachmentDecodeList')) {
+    function siAttachmentDecodeList($rawValue)
+    {
+        $rawValue = trim((string) $rawValue);
+        if ($rawValue === '') {
+            return array();
+        }
+
+        $list = array();
+        $isJsonArray = false; // Track if it's successfully parsed as JSON
+
+        if ($rawValue !== '' && substr($rawValue, 0, 1) === '[') {
+            $decoded = json_decode($rawValue, true);
+            if (is_array($decoded)) {
+                $isJsonArray = true; // Mark as valid JSON array
+                foreach ($decoded as $path) {
+                    $p = trim((string) $path);
+                    if ($p !== '') {
+                        $list[] = $p;
+                    }
+                }
+            }
+        }
+
+        // Only fallback to using the raw value if it wasn't a valid JSON array
+        if (!$isJsonArray && count($list) === 0) {
+            $list[] = $rawValue;
+        }
+
+        $uniq = array();
+        foreach ($list as $path) {
+            $uniq[$path] = true;
+        }
+        return array_keys($uniq);
+    }
+}
+
+if (!function_exists('siAttachmentEncodeList')) {
+    function siAttachmentEncodeList($paths)
+    {
+        if (!is_array($paths)) {
+            $paths = siAttachmentDecodeList($paths);
+        }
+
+        $clean = array();
+        foreach ($paths as $path) {
+            $p = trim((string) $path);
+            if ($p !== '') {
+                $clean[$p] = true;
+            }
+        }
+
+        $final = array_keys($clean);
+        if (count($final) === 0) {
+            return '';
+        }
+        return json_encode($final);
+    }
+}
+
+if (!function_exists('siSaveOrder')) {
+    function siSaveOrder($financeConnect, $orderTable, $itemTable, $warehouseId, $stockInDate, $orderNumber, $items, $attachmentPath = '')
+    {
+        $warehouseId = (int) $warehouseId;
+        $orderNumber = trim((string) $orderNumber);
+        $stockInDate = trim((string) $stockInDate);
+        $attachmentPath = siAttachmentEncodeList($attachmentPath);
+
+        if ($warehouseId <= 0 || $orderNumber === '' || $stockInDate === '' || $attachmentPath === '' || count($items) === 0) {
+            return array(false, 'Missing required fields.');
+        }
+
+        mysqli_begin_transaction($financeConnect);
+
+        try {
+            $safeOrderNumber = mysqli_real_escape_string($financeConnect, $orderNumber);
+            $safeDate = mysqli_real_escape_string($financeConnect, $stockInDate);
+            $safeAttachment = mysqli_real_escape_string($financeConnect, $attachmentPath);
+
+            $insertOrderSql = "INSERT INTO `" . $orderTable . "`
+                (warehouse_id, order_number, stock_in_date, attachment, create_by, create_date, create_time, status)
+                VALUES
+                ('" . $warehouseId . "', '" . $safeOrderNumber . "', '" . $safeDate . "', '" . $safeAttachment . "', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
+
+            if (!mysqli_query($financeConnect, $insertOrderSql)) {
+                throw new Exception('Failed to save stock in order.');
+            }
+
+            $stockInOrderId = (int) mysqli_insert_id($financeConnect);
+
+            foreach ($items as $item) {
+                $productId = isset($item['product_id']) ? (int) $item['product_id'] : 0;
+                $packageId = isset($item['package_id']) ? (int) $item['package_id'] : 0;
+                $qty = isset($item['qty']) ? (int) $item['qty'] : 0;
+                if ($productId <= 0 || $qty <= 0) {
+                    continue;
+                }
+
+                $insertItemSql = "INSERT INTO `" . $itemTable . "`
+                    (stock_in_order_id, product_id, package_id, product_quantity, create_by, create_date, create_time, status)
+                    VALUES
+                    ('" . $stockInOrderId . "', '" . $productId . "', '" . $packageId . "', '" . $qty . "', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
+
+                if (!mysqli_query($financeConnect, $insertItemSql)) {
+                    throw new Exception('Failed to save stock in item.');
+                }
+            }
+
+            mysqli_commit($financeConnect);
+            return array(true, 'Stock In saved successfully.');
+        } catch (Exception $ex) {
+            mysqli_rollback($financeConnect);
+            return array(false, $ex->getMessage());
+        }
+    }
+}
+
+if (!function_exists('siFetchFlatRows')) {
+    function siFetchFlatRows($financeConnect, $orderTable, $itemTable)
+    {
+        $rows = array();
+        $sql = "SELECT
+                    o.id AS order_id,
+                    i.id AS item_id,
+                    o.warehouse_id,
+                    o.order_number,
+                    o.stock_in_date,
+                    o.attachment,
+                    i.product_id,
+                    i.package_id,
+                    i.product_quantity
+                FROM `" . $orderTable . "` o
+                INNER JOIN `" . $itemTable . "` i ON i.stock_in_order_id=o.id AND i.status='A'
+                WHERE o.status='A'
+                ORDER BY o.id DESC, i.id ASC";
+        $rst = mysqli_query($financeConnect, $sql);
+        if ($rst) {
+            while ($r = mysqli_fetch_assoc($rst)) {
+                $productRaw = isset($r['product_id']) ? trim((string) $r['product_id']) : '';
+                $qtyRaw = isset($r['product_quantity']) ? trim((string) $r['product_quantity']) : '';
+                $productParts = array_map('trim', explode(',', $productRaw));
+                $qtyParts = array_map('trim', explode(',', $qtyRaw));
+                $max = max(count($productParts), count($qtyParts));
+
+                if ($max <= 1) {
+                    $rows[] = array(
+                        'order_id' => (int) $r['order_id'],
+                        'item_id' => (int) $r['item_id'],
+                        'warehouse_id' => (int) $r['warehouse_id'],
+                        'order_number' => (string) $r['order_number'],
+                        'stock_in_date' => (string) $r['stock_in_date'],
+                        'attachment' => (string) (isset($r['attachment']) ? $r['attachment'] : ''),
+                        'product_id' => (int) $productRaw,
+                        'package_id' => (int) $r['package_id'],
+                        'product_quantity' => (int) $qtyRaw,
+                    );
+                    continue;
+                }
+
+                for ($idx = 0; $idx < $max; $idx++) {
+                    $pid = isset($productParts[$idx]) ? (int) $productParts[$idx] : 0;
+                    $qty = isset($qtyParts[$idx]) ? (int) $qtyParts[$idx] : 0;
+                    if ($pid <= 0 && $qty <= 0) {
+                        continue;
+                    }
+                    $rows[] = array(
+                        'order_id' => (int) $r['order_id'],
+                        'item_id' => (int) $r['item_id'],
+                        'warehouse_id' => (int) $r['warehouse_id'],
+                        'order_number' => (string) $r['order_number'],
+                        'stock_in_date' => (string) $r['stock_in_date'],
+                        'attachment' => (string) (isset($r['attachment']) ? $r['attachment'] : ''),
+                        'product_id' => $pid,
+                        'package_id' => (int) $r['package_id'],
+                        'product_quantity' => $qty,
+                    );
+                }
+            }
+        }
+        return $rows;
+    }
+}
+
+if (!function_exists('siExportExcel')) {
+    function siExportExcel($rows, $warehouseNameMap, $productNameMap)
+    {
+        if (!class_exists('CodexWorld\\PhpXlsxGenerator')) {
+            include_once ROOT . '/header/PhpXlsxGenerator/PhpXlsxGenerator.php';
+        }
+
+        $excelData = array(
+            array('Item ID', 'Warehouse', 'Stock In Date', 'Order Number', 'Product Name', 'Product Quantity')
+        );
+
+        foreach ($rows as $row) {
+            $warehouseName = isset($warehouseNameMap[(int) $row['warehouse_id']]) ? $warehouseNameMap[(int) $row['warehouse_id']] : '';
+            $productName = isset($productNameMap[(int) $row['product_id']]) ? $productNameMap[(int) $row['product_id']] : '';
+
+            $excelData[] = array(
+                (string) $row['item_id'],
+                (string) $warehouseName,
+                (string) $row['stock_in_date'],
+                (string) $row['order_number'],
+                (string) $productName,
+                (string) $row['product_quantity'],
+            );
+        }
+
+        $fileName = 'stock_in_export_' . date('Ymd_His') . '.xlsx';
+        $xlsx = \CodexWorld\PhpXlsxGenerator::fromArray($excelData, 'Stock In');
+        $xlsx->downloadAs($fileName);
+        exit;
+    }
+}
+
+if (!function_exists('siParseExcelLikeRows')) {
+    function siParseExcelLikeRows($filePath, $fileName = '')
+    {
+        $rows = array();
+
+        $ext = strtolower((string) pathinfo((string) $fileName, PATHINFO_EXTENSION));
+        if ($ext === 'xlsx') {
+            $sharedStringsXml = false;
+            $sheetXml = false;
+
+            if (class_exists('ZipArchive')) {
+                $zip = new \ZipArchive();
+                if ($zip->open($filePath) === true) {
+                    $sharedStringsXml = $zip->getFromName('xl/sharedStrings.xml');
+                    for ($i = 0; $i < $zip->numFiles; $i++) {
+                        $entry = $zip->getNameIndex($i);
+                        if (preg_match('/xl\/worksheets\/sheet\d+\.xml/i', (string) $entry)) {
+                            $sheetXml = $zip->getFromName($entry);
+                            break;
+                        }
+                    }
+                    $zip->close();
+                }
+            }
+
+            // Windows fallback when ZipArchive is unavailable in runtime.
+            if (!$sheetXml) {
+                $tempDir = sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'si_xlsx_' . uniqid();
+                if (@mkdir($tempDir)) {
+                    $cmd = 'tar -xf ' . escapeshellarg($filePath) . ' -C ' . escapeshellarg($tempDir) . ' 2>&1';
+                    @shell_exec($cmd);
+
+                    $ssPath = $tempDir . DIRECTORY_SEPARATOR . 'xl' . DIRECTORY_SEPARATOR . 'sharedStrings.xml';
+                    if (file_exists($ssPath)) {
+                        $sharedStringsXml = @file_get_contents($ssPath);
+                    }
+
+                    $wsDir = $tempDir . DIRECTORY_SEPARATOR . 'xl' . DIRECTORY_SEPARATOR . 'worksheets' . DIRECTORY_SEPARATOR;
+                    if (is_dir($wsDir)) {
+                        $wsFiles = @scandir($wsDir);
+                        if (is_array($wsFiles)) {
+                            foreach ($wsFiles as $wsFile) {
+                                if (preg_match('/^sheet\d+\.xml$/i', (string) $wsFile)) {
+                                    $sheetXml = @file_get_contents($wsDir . $wsFile);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+
+                    $deleteDir = function ($dir) use (&$deleteDir) {
+                        if (!is_dir($dir)) return;
+                        $items = @scandir($dir);
+                        if (!is_array($items)) return;
+                        foreach ($items as $item) {
+                            if ($item === '.' || $item === '..') continue;
+                            $path = $dir . DIRECTORY_SEPARATOR . $item;
+                            if (is_dir($path)) {
+                                $deleteDir($path);
+                            } else {
+                                @unlink($path);
+                            }
+                        }
+                        @rmdir($dir);
+                    };
+                    $deleteDir($tempDir);
+                }
+            }
+
+            if ($sheetXml) {
+                $sharedStrings = array();
+                if ($sharedStringsXml !== false) {
+                    $ssObj = @simplexml_load_string($sharedStringsXml);
+                    if ($ssObj && isset($ssObj->si)) {
+                        foreach ($ssObj->si as $si) {
+                            $val = '';
+                            if (isset($si->t)) {
+                                $val .= (string) $si->t;
+                            } elseif (isset($si->r)) {
+                                foreach ($si->r as $r) {
+                                    if (isset($r->t)) {
+                                        $val .= (string) $r->t;
+                                    }
+                                }
+                            }
+                            $sharedStrings[] = $val;
+                        }
+                    }
+                }
+
+                $sheetObj = @simplexml_load_string($sheetXml);
+                if ($sheetObj && isset($sheetObj->sheetData->row)) {
+                    $matrix = array();
+                    foreach ($sheetObj->sheetData->row as $row) {
+                        $rowData = array();
+                        $colIndex = 0;
+                        foreach ($row->c as $c) {
+                            $rAttr = (string) $c['r'];
+                            if ($rAttr !== '') {
+                                $letters = preg_replace('/[0-9]/', '', $rAttr);
+                                $idx = 0;
+                                $len = strlen((string) $letters);
+                                for ($j = 0; $j < $len; $j++) {
+                                    $idx = ($idx * 26) + (ord($letters[$j]) - 64);
+                                }
+                                $idx -= 1;
+                            } else {
+                                $idx = $colIndex;
+                            }
+
+                            while ($colIndex < $idx) {
+                                $rowData[$colIndex] = '';
+                                $colIndex++;
+                            }
+
+                            $v = (string) $c->v;
+                            $t = isset($c['t']) ? (string) $c['t'] : '';
+                            if ($t === 's') {
+                                $v = isset($sharedStrings[(int) $v]) ? $sharedStrings[(int) $v] : '';
+                            } elseif ($t === 'inlineStr') {
+                                $v = isset($c->is->t) ? (string) $c->is->t : '';
+                            }
+
+                            $rowData[$colIndex] = $v;
+                            $colIndex++;
+                        }
+                        $matrix[] = $rowData;
+                    }
+
+                    if (count($matrix) > 0) {
+                        $header = isset($matrix[0]) ? $matrix[0] : array();
+                        for ($i = 1; $i < count($matrix); $i++) {
+                            $cells = isset($matrix[$i]) ? $matrix[$i] : array();
+                            $assoc = array();
+                            foreach ($header as $idx => $name) {
+                                $key = strtolower(trim((string) $name));
+                                if ($key === '') continue;
+                                $assoc[$key] = isset($cells[$idx]) ? trim((string) $cells[$idx]) : '';
+                            }
+                            if (count($assoc) > 0) {
+                                $rows[] = $assoc;
+                            }
+                        }
+                        return $rows;
+                    }
+                }
+            }
+        }
+
+        $content = @file_get_contents($filePath);
+        if ($content === false || $content === '') {
+            return $rows;
+        }
+
+        if (stripos($content, '<table') !== false) {
+            $prev = libxml_use_internal_errors(true);
+            $dom = new DOMDocument();
+            if (@$dom->loadHTML($content)) {
+                $trs = $dom->getElementsByTagName('tr');
+                $header = array();
+                foreach ($trs as $tr) {
+                    $cells = array();
+                    foreach ($tr->childNodes as $child) {
+                        if ($child->nodeName === 'th' || $child->nodeName === 'td') {
+                            $cells[] = trim((string) $child->textContent);
+                        }
+                    }
+                    if (count($cells) === 0) {
+                        continue;
+                    }
+                    if (count($header) === 0) {
+                        $header = $cells;
+                        continue;
+                    }
+                    $assoc = array();
+                    foreach ($header as $idx => $name) {
+                        $assoc[strtolower(trim((string) $name))] = isset($cells[$idx]) ? trim((string) $cells[$idx]) : '';
+                    }
+                    $rows[] = $assoc;
+                }
+            }
+            libxml_clear_errors();
+            libxml_use_internal_errors($prev);
+            return $rows;
+        }
+
+        $lines = preg_split('/\r\n|\r|\n/', $content);
+        if (!$lines || count($lines) < 2) {
+            return $rows;
+        }
+
+        $header = preg_split('/\t/', (string) $lines[0]);
+        if (!is_array($header) || count($header) === 0) {
+            return $rows;
+        }
+
+        for ($i = 1; $i < count($lines); $i++) {
+            $line = trim((string) $lines[$i]);
+            if ($line === '') {
+                continue;
+            }
+            $cells = preg_split('/\t/', $line);
+            $assoc = array();
+            foreach ($header as $idx => $name) {
+                $assoc[strtolower(trim((string) $name))] = isset($cells[$idx]) ? trim((string) $cells[$idx]) : '';
+            }
+            $rows[] = $assoc;
+        }
+
+        return $rows;
+    }
+}
+
+if (!function_exists('siFindOrderIdByFields')) {
+    function siFindOrderIdByFields($financeConnect, $orderTable, $warehouseId, $stockInDate, $orderNumber)
+    {
+        $warehouseId = (int) $warehouseId;
+        $safeDate = mysqli_real_escape_string($financeConnect, (string) $stockInDate);
+        $safeOrderNo = mysqli_real_escape_string($financeConnect, (string) $orderNumber);
+        $sql = "SELECT id FROM `" . $orderTable . "` WHERE status='A' AND warehouse_id='" . $warehouseId . "' AND stock_in_date='" . $safeDate . "' AND order_number='" . $safeOrderNo . "' LIMIT 1";
+        $rst = mysqli_query($financeConnect, $sql);
+        if ($rst && ($row = mysqli_fetch_assoc($rst))) {
+            return (int) $row['id'];
+        }
+        return 0;
+    }
 }

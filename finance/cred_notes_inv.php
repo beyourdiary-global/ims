@@ -11,6 +11,7 @@ $tblName = CRED_NOTES_INV;
 $dataID = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
+$isActionPost = (post('actionBtn') !== null && post('actionBtn') !== '');
 
 //Page Redirect Link , Clean LocalStorage , Error Alert Msg 
 $redirect_page = $SITEURL . '/finance/cred_notes_inv_table.php';
@@ -25,14 +26,16 @@ $pageActionTitle = $pageAction . " " . $pageTitle;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 
 //Checking The Page ID , Action , Pin Access Exist Or Not
-if (!($dataID) && !($act) || !isActionAllowed($pageAction, $pinAccess))
+if ((!($dataID) && !($act) && !$isActionPost) || !isActionAllowed($pageAction, $pinAccess)) {
     echo $redirectLink;
+    exit;
+}
 
 //Get The Data From Database
 $rst = getData('*', "id = '$dataID'", '', $tblName, $finance_connect);
 
 //Checking Data Error When Retrieved From Database
-if (!$rst || !($row = $rst->fetch_assoc()) && $act != 'I') {
+if ($act != 'I' && (!$rst || !($row = $rst->fetch_assoc()))) {
     $errorExist = 1;
     $_SESSION['tempValConfirmBox'] = true;
     $act = "F";
@@ -40,7 +43,8 @@ if (!$rst || !($row = $rst->fetch_assoc()) && $act != 'I') {
 
 //Delete Data
 if ($act == 'D') {
-    deleteRecord($tblName, '', $dataID, $row['name'], $finance_connect, $connect, $cdate, $ctime, $pageTitle);
+    $deleteLabel = isset($row['invoice']) ? $row['invoice'] : $dataID;
+    deleteRecord($tblName, '', $dataID, $deleteLabel, $finance_connect, $connect, $cdate, $ctime, $pageTitle);
     $_SESSION['delChk'] = 1;
 }
 
@@ -112,24 +116,46 @@ if (post('actionBtn')) {
             $cni_pay = postSpaceFilter('cni_pay');
             $cni_pay_details = postSpaceFilter('cni_pay_details');
 
-            $descriptions = $_POST["prod_desc"];
-            $prices = $_POST["price"];
-            $quantities = $_POST["quantity"];
-            $amounts = $_POST["amount"];
+            $descriptions = isset($_POST['prod_desc']) ? $_POST['prod_desc'] : array();
+            $prices = isset($_POST['price']) ? $_POST['price'] : array();
+            $quantities = isset($_POST['quantity']) ? $_POST['quantity'] : array();
+            $amounts = isset($_POST['amount']) ? $_POST['amount'] : array();
+
+            if (!is_array($descriptions)) {
+                $descriptions = array($descriptions);
+            }
+            if (!is_array($prices)) {
+                $prices = array($prices);
+            }
+            if (!is_array($quantities)) {
+                $quantities = array($quantities);
+            }
+            if (!is_array($amounts)) {
+                $amounts = array($amounts);
+            }
 
             $pay_terms = postSpaceFilter('pay_terms');
 
             $productIDs = array();
 
-            foreach ($_POST['prod_desc'] as $index => $description) {
+            foreach ($descriptions as $index => $description) {
                 // Prepare values for SQL query
-                $price = $_POST['price'][$index];
-                $quantity = $_POST['quantity'][$index];
-                $amount = $_POST['amount'][$index];
+                $description = mysqli_real_escape_string($finance_connect, trim((string) $description));
+                $price = isset($prices[$index]) ? (float) $prices[$index] : 0;
+                $quantity = isset($quantities[$index]) ? (float) $quantities[$index] : 0;
+                $amount = isset($amounts[$index]) ? (float) $amounts[$index] : 0;
+
+                if ($description === '') {
+                    continue;
+                }
 
                 // Check if a row already exists for the current invoice_row and description
                 $queryCheck = "SELECT id FROM " . CRED_INV_PROD . " WHERE invoice_row = '$inv_id' AND description = '$description'";
                 $resultCheck = mysqli_query($finance_connect, $queryCheck);
+
+                if ($resultCheck === false) {
+                    throw new Exception(mysqli_error($finance_connect));
+                }
 
                 if (mysqli_num_rows($resultCheck) > 0) {
                     // Row already exists, update its details
@@ -141,12 +167,18 @@ if (post('actionBtn')) {
                                     SET price = '$price', quantity = '$quantity', amount = '$amount' 
                                     WHERE id = '$productID'";
                     $update_prod = mysqli_query($finance_connect, $queryUpdate);
+                    if ($update_prod === false) {
+                        throw new Exception(mysqli_error($finance_connect));
+                    }
                 } else {
                     // Row doesn't exist, insert a new row
                     $queryInsert = "INSERT INTO " . CRED_INV_PROD . " 
                                     (invoice_row, description, price, quantity, amount, create_by, create_date, create_time) 
                                     VALUES ('$inv_id', '$description', '$price', '$quantity', '$amount', '$user_id', curdate(), curtime())";
                     $insert_prod = mysqli_query($finance_connect, $queryInsert);
+                    if ($insert_prod === false) {
+                        throw new Exception(mysqli_error($finance_connect));
+                    }
 
                     // Get the ID of the inserted product
                     $productID = mysqli_insert_id($finance_connect);
@@ -411,17 +443,19 @@ if (post('actionBtn')) {
 if (isset($_SESSION['tempValConfirmBox'])) {
     unset($_SESSION['tempValConfirmBox']);
     echo $clearLocalStorage;
-    if ($redirectToCreateInvoicePage == 1) {
+    if ($redirectToCreateInvoicePage == 1 && isset($returnData) && $returnData && !empty($dataID)) {
         $url = $create_page . "?id=" . $dataID;
-        echo "<script>location.href = '$url';</script>";
+        echo "<script>alert('Invoice created successfully.');location.href = '$url';</script>";
+        exit;
     } else {
         echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
     }
 }
 
-if ($redirectToCreateInvoicePage == 1) {
+if ($redirectToCreateInvoicePage == 1 && isset($returnData) && $returnData && !empty($dataID)) {
     $url = $create_page . "?id=" . $dataID;
-    echo "<script>location.href = '$url';</script>";
+    echo "<script>alert('Invoice created successfully.');location.href = '$url';</script>";
+    exit;
 }
 
 ?>
@@ -456,6 +490,8 @@ span.input-group-text{
         <div id="formContainer" class="container-fluid mt-2">
             <div class="col-12 col-md-12 formWidthAdjust">
                 <form id="form" method="post" enctype="multipart/form-data">
+                    <input type="hidden" name="act" value="<?= htmlspecialchars((string) $act) ?>">
+                    <input type="hidden" name="id" value="<?= htmlspecialchars((string) $dataID) ?>">
                     <div class="form-group mb-5">
                         <h2>
                             <?php echo $pageActionTitle ?>
@@ -561,11 +597,13 @@ span.input-group-text{
 
                                                         if (isset($echoVal)) {
                                                             $curr_rst = getData('unit', "id = '$echoVal'", '', CUR_UNIT, $connect);
-                                                            if (!$curr_rst) {
-                                                                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                                                echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                                            if ($curr_rst && $curr_rst->num_rows > 0) {
+                                                                $curr_row = $curr_rst->fetch_assoc();
+                                                            } else {
+                                                                $curr_row = array('unit' => '');
                                                             }
-                                                            $curr_row = $curr_rst->fetch_assoc();
+                                                        } else {
+                                                            $curr_row = array('unit' => '');
                                                         }
                                                         ?>
                                                         <input class="form-control" type="text" name="cni_curr"
@@ -600,11 +638,13 @@ span.input-group-text{
 
                                                     if (isset($echoVal)) {
                                                         $mrcht_rst = getData('name', "id = '$echoVal'", '', MERCHANT, $finance_connect);
-                                                        if (!$mrcht_rst) {
-                                                            echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                                            echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                                        if ($mrcht_rst && $mrcht_rst->num_rows > 0) {
+                                                            $mrcht_row = $mrcht_rst->fetch_assoc();
+                                                        } else {
+                                                            $mrcht_row = array('name' => '');
                                                         }
-                                                        $mrcht_row = $mrcht_rst->fetch_assoc();
+                                                    } else {
+                                                        $mrcht_row = array('name' => '');
                                                     }
                                                     ?>
                                                     <input class="form-control" type="text" placeholder="Customer Name"
@@ -702,7 +742,7 @@ span.input-group-text{
                                                         // get value
                                                         unset($echoVal);
 
-                                                        if (isset($row['products']))
+                                                        if (!empty($row['products']))
                                                             $echoVal = $row['products'];
 
                                                         // echo
@@ -710,8 +750,15 @@ span.input-group-text{
                                                             $num = 1; // numbering
                                                             $echoVal = explode(',', $echoVal);
                                                             foreach ($echoVal as $prod_id) {
+                                                                $prod_id = trim((string) $prod_id);
+                                                                if ($prod_id === '') {
+                                                                    continue;
+                                                                }
                                                                 // product info
                                                                 $product_info_result = getData('*', "id = '$prod_id'", '', CRED_INV_PROD, $finance_connect);
+                                                                if (!$product_info_result || $product_info_result->num_rows === 0) {
+                                                                    continue;
+                                                                }
                                                                 $product_info_row = $product_info_result->fetch_assoc();
 
                                                                 $pid = $product_info_row['id'];
@@ -800,7 +847,7 @@ span.input-group-text{
                                                                 <td class="autocomplete">
                                                                 <label class="form-label form_lbl" for="prod_desc_1" hidden>Description<span class="required-dot">*</span></label>    
                                                                 <input type="text"
-                                                                        name="prod_desc" id="prod_desc_1" value=""
+                                                                    name="prod_desc[]" id="prod_desc_1" value=""
                                                                         onkeyup="prodInfo(this)" required><input type="hidden"
                                                                         name="prod_val" id="prod_val" value=""
                                                                         oninput="prodInfoAutoFill(this)">
@@ -813,11 +860,11 @@ span.input-group-text{
                                                                 </td>
                                                                 <td>
                                                                     <label class="form-label form_lbl" for="price_1" hidden>Price<span class="required-dot">*</span></label>    
-                                                                    <input type="number" name="price" id="price_1" value="" required oninput="calculateAmount(1)">
+                                                                    <input type="number" name="price[]" id="price_1" value="" required oninput="calculateAmount(1)">
                                                                 </td>
                                                                 <td>
                                                                     <label class="form-label form_lbl" for="quantity_1" hidden>Quantity<span class="required-dot">*</span></label>    
-                                                                    <input type="number" name="quantity" id="quantity_1" value="" required oninput="calculateAmount(1)">
+                                                                    <input type="number" name="quantity[]" id="quantity_1" value="" required oninput="calculateAmount(1)">
                                                                 </td>
                                                                 <td>
                                                                     <input class="readonlyInput" type="text" name="amount[]" id="amount_1" value="">
@@ -852,8 +899,13 @@ span.input-group-text{
 
                                                                 if (isset($echoVal)) {
                                                                     $pic_result = getData('name', "id = '$echoVal'", '', USR_USER, $connect);
-
-                                                                    $pic_row = $pic_result->fetch_assoc();
+                                                                    if ($pic_result && $pic_result->num_rows > 0) {
+                                                                        $pic_row = $pic_result->fetch_assoc();
+                                                                    } else {
+                                                                        $pic_row = array('name' => '');
+                                                                    }
+                                                                } else {
+                                                                    $pic_row = array('name' => '');
                                                                 }
                                                                 ?>
                                                                 <input class="form-control" type="text" name="cni_pic"
@@ -994,7 +1046,7 @@ span.input-group-text{
                                         <input type="hidden" name="createInvoice" id="createInvoice" value="0">
                                         
                                         <button class="btn btn-primary d-grid w-100 mb-2 submitBtn createInvoiceButton"
-                                            name="actionBtn" id="actionBtn" onclick="createInvoice();"
+                                            name="actionBtn" id="actionBtn"
                                             value="<?= $actionValue ?>"><?php if ($act == 'I' ) { ?>Create Invoice <?php } ?><?php if ($act == 'E' ) { ?>Edit Invoice <?php } ?></button>
                                         <?php if ($act == 'I' || $act == 'E') { ?>
                                             <button class="btn btn-primary d-grid w-100 mb-2 submitBtn " name="actionBtn"

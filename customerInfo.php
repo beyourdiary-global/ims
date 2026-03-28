@@ -29,7 +29,7 @@ if (!($dataID) && !($act) || !isActionAllowed($pageAction, $pinAccess))
 $rst = getData('*', "id = '$dataID'", '', $tblName, $connect);
 
 //Checking Data Error When Retrieved From Database
-if (!$rst || !($row = $rst->fetch_assoc()) && $act != 'I') {
+if ($act != 'I' && (!$rst || !($row = $rst->fetch_assoc()))) {
     $errorExist = 1;
     $_SESSION['tempValConfirmBox'] = true;
     $act = "F";
@@ -121,6 +121,11 @@ if (post('actionBtn')) {
             ];
 
             $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
+
+            if (trim((string) $cusPhoneCode) === '') {
+                $phone_code_err = 'Phone Code is required!';
+                break;
+            }
 
             if (isDuplicateRecord("name", $cusFirstName, $tblName, $connect, $dataID) && isDuplicateRecord("last_name", $cusLastName, $tblName, $connect, $dataID) && isDuplicateRecord("email", $cusEmail, $tblName, $connect, $dataID)) {
                 $err = "Duplicate record found for " . $pageTitle;
@@ -301,8 +306,8 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                     </div>
 
                                     <div class="col-sm-4">
-                                        <label class="form-label" for="cusBirthday">Birthday</label>
-                                        <input class="form-control" type="date" name="cusBirthday" id="cusBirthday" value="<?php if (isset($row['birthday'])) echo $row['birthday'] ?>" placeholder="YYYY-MM-DD" pattern="\d{4}-\d{2}-\d{2}" <?php if ($act == '') echo 'readonly' ?>>
+                                        <label class="form-label" for="cusBirthday">Birthday <span class="requireRed">*</span></label>
+                                        <input class="form-control" type="date" name="cusBirthday" id="cusBirthday" required value="<?php if (isset($row['birthday'])) echo $row['birthday'] ?>" placeholder="YYYY-MM-DD" pattern="\d{4}-\d{2}-\d{2}" <?php if ($act == '') echo 'readonly' ?>>
                                     </div>
                                 </div>
                             </div>
@@ -315,22 +320,21 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                         <label class="form-label form_lbl" id='cusPhoneCode_lbl'for="cusPhoneCode">Phone Code<span
                                         class="requireRed">*</span></label>
                                         <?php
-                                            unset($echoVal);
-
-                                            if (isset($row['phone_country']))
-                                                $echoVal = $row['phone_country'];
-
-                                            if (isset($echoVal)) {
-                                                $resultPhoneCode = getData('*', "id = '$echoVal'", '', 'countries', $connect);
-
-                                                if (!$resultPhoneCode) {
-                                                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                                    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                                                }
-                                                $rowPhoneCode = $resultPhoneCode->fetch_assoc();
+                                        $phone_code_val = '';
+                                        if (!empty($row['phone_country'])) {
+                                            $resultPhoneCode = getData('phonecode', "id='" . $row['phone_country'] . "'", '', COUNTRIES, $connect);
+                                            if ($resultPhoneCode && $resultPhoneCode->num_rows > 0) {
+                                                $phone_code_val = $resultPhoneCode->fetch_assoc()['phonecode'];
+                                            } else {
+                                                $phone_code_val = $row['phone_country']; // Fallback
                                             }
-                                            ?>
-<input class="form-control" type="text" name="cusPhoneCode" id="cusPhoneCode" <?php if ($act == '') echo 'disabled' ?> placeholder="<?php echo ($act != '') ? '+' : '' ?>" value="<?php echo (!empty($echoVal) ? $rowPhoneCode['phonecode'] : '') ?>">
+                                        }
+                                        if (post('actionBtn') && post('actionBtn') !== 'back') {
+                                            $phone_code_val = postSpaceFilter('cusPhoneCode');
+                                        }
+                                        ?>
+                                        <input class="form-control" type="text" name="cusPhoneCode" id="cusPhoneCode" <?php if ($act == '') echo 'disabled' ?> placeholder="<?php echo ($act != '') ? '+' : '' ?>" value="<?php echo htmlspecialchars($phone_code_val, ENT_QUOTES, 'UTF-8'); ?>">
+                                        <span id="phoneCodeMsg"><?php if (isset($phone_code_err)) { ?><p style='color:red;margin-bottom:0'><?php echo $phone_code_err; ?></p><?php } ?></span>
 
                                 
                                             
@@ -397,25 +401,20 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                     <div class="col-sm-3 autocomplete">
                                         <label class="form-label" for="country">Country/Region</label>
                                         <?php
-                                            unset($echoVal);
-
-                                            if (isset($row['country']))
-                                                $echoVal = $row['country'];
-
-                                            if (isset($echoVal)) {
-                                                $country_rst = getData('name', "id = '$echoVal'", '', COUNTRIES, $connect);
-                                                if (!$country_rst) {
-                                                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                                    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                                                }
-                                                $country_row = $country_rst->fetch_assoc();
+                                        $country_name = '';
+                                        $country_val = isset($row['shipping_country_region']) ? $row['shipping_country_region'] : (isset($row['country']) ? $row['country'] : '');
+                                        
+                                        if (!empty($country_val)) {
+                                            $country_rst = getData('nicename', "id='" . $country_val . "'", '', COUNTRIES, $connect);
+                                            if ($country_rst && $country_rst->num_rows > 0) {
+                                                $country_name = $country_rst->fetch_assoc()['nicename'];
+                                            } else {
+                                                $country_name = $country_val;
                                             }
-                                            ?>
-
-                                            <input class="form-control" type="text" name="country" id="country" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $country_row['nicename'] : ''  ?>">
-
-                                            <input type="hidden" name="country_hidden" id="country_hidden" value="<?php echo (isset($row['shipping_country_region'])) ? $row['shipping_country_region'] : ''; ?>">
-
+                                        }
+                                        ?>
+                                        <input class="form-control" type="text" name="country" id="country" <?php if ($act == '') echo 'disabled' ?> value="<?php echo $country_name; ?>">
+                                        <input type="hidden" name="country_hidden" id="country_hidden" value="<?php echo $country_val; ?>">
                                             <?php if (isset($country_err)) { ?>
                                                 <div id="err_msg">
                                                     <span class="mt-n1"><?php echo $country_err; ?></span>
@@ -452,16 +451,15 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                             <?php
                                             $resultCusSegmentation = getData('*', '', '', CUR_SEGMENTATION, $connect);
 
-                                            if (!$resultCusSegmentation) {
-                                                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                                echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                                            }
-
                                             echo "<option value='' disabled selected>Select customer sgementation</option>";
 
-                                            while ($rowCurSegmentation = $resultCusSegmentation->fetch_assoc()) {
-                                                $selected = isset($row['default_segmentation']) && $rowCurSegmentation['id'] == $row['default_segmentation'] ? "selected" : "";
-                                                echo "<option value='{$rowCurSegmentation['id']}' $selected>{$rowCurSegmentation['name']}</option>";
+                                            if (!$resultCusSegmentation) {
+                                                echo "<option value='' disabled>Unavailable now (please try later)</option>";
+                                            } else {
+                                                while ($rowCurSegmentation = $resultCusSegmentation->fetch_assoc()) {
+                                                    $selected = isset($row['default_segmentation']) && $rowCurSegmentation['id'] == $row['default_segmentation'] ? "selected" : "";
+                                                    echo "<option value='{$rowCurSegmentation['id']}' $selected>{$rowCurSegmentation['name']}</option>";
+                                                }
                                             }
                                             ?>
                                         </select>
@@ -473,16 +471,15 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                             <?php
                                             $resultTag = getData('*', '', '', TAG, $connect);
 
-                                            if (!$resultTag) {
-                                                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                                echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                                            }
-
                                             echo "<option value='' disabled selected>Select customer tags</option>";
 
-                                            while ($rowTag = $resultTag->fetch_assoc()) {
-                                                $selected = isset($row['tags']) && $rowTag['id'] == $row['tags'] ? "selected" : "";
-                                                echo "<option value='{$rowTag['id']}' $selected>{$rowTag['name']}</option>";
+                                            if (!$resultTag) {
+                                                echo "<option value='' disabled>Unavailable now (please try later)</option>";
+                                            } else {
+                                                while ($rowTag = $resultTag->fetch_assoc()) {
+                                                    $selected = isset($row['tags']) && $rowTag['id'] == $row['tags'] ? "selected" : "";
+                                                    echo "<option value='{$rowTag['id']}' $selected>{$rowTag['name']}</option>";
+                                                }
                                             }
                                             ?>
                                         </select>
@@ -506,28 +503,22 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                             <input type="hidden" name="personIncharges_hidden" id="personIncharges_hidden" value="<?php echo $loggedInUserId ?>">
                                             <?php } ?>
                                             <?php
-                                             if(($act == 'E')){
-                                            unset($echoVal);
-
-                                            if (isset($row['person_in_charges']))
-                                                $echoVal = $row['person_in_charges'];
-            
-                                            if (isset($echoVal)) {
-                                           $pic_rst = getData('name', "id = '$echoVal'", '', USR_USER, $connect);
-
-                                            if (!$pic_rst) {
-                                                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                                echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                                            }
-                                            $pic_row = $pic_rst->fetch_assoc();
+                                        if (($act == 'E' || $act == '')) {
+                                            $pic_name = '';
+                                            $pic_val = isset($row['person_in_charges']) ? $row['person_in_charges'] : '';
+                                            
+                                            if (!empty($pic_val)) {
+                                                $pic_rst = getData('name', "id='" . $pic_val . "'", '', USR_USER, $connect);
+                                                if ($pic_rst && $pic_rst->num_rows > 0) {
+                                                    $pic_name = $pic_rst->fetch_assoc()['name'];
+                                                } else {
+                                                    $pic_name = $pic_val;
+                                                }
                                             }
                                             ?>
-                                        <input class="form-control" type="text" name="personIncharges" id="personIncharges" <?php if ($act == '')
-                                            echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $pic_row['name'] : '' ?>">
-
-                                        <input type="hidden" name="personIncharges_hidden" id="personIncharges_hidden"
-                                            value="<?php echo (isset($row['person_in_charges'])) ? $row['person_in_charges'] : ''; ?>">
-                                            <?php } ?>
+                                            <input class="form-control" type="text" name="personIncharges" id="personIncharges" <?php if ($act == '') echo 'disabled' ?> value="<?php echo $pic_name; ?>">
+                                            <input type="hidden" name="personIncharges_hidden" id="personIncharges_hidden" value="<?php echo $pic_val; ?>">
+                                        <?php } ?>
                                         <?php if (isset($pic_err)) { ?>
                                             <div id="err_msg">
                                                 <span class="mt-n1">
@@ -616,17 +607,23 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                 return false;
             }
         }
-            $("#cusEmail").on("input", function() {
-                if (!$("#cusEmail").val()) {
-                    $("#emailMsg").html("<p style='color:red;margin-bottom:0'>Email is required!</p>");
-                } else if (!validateEmail()) {
-                    $("#emailMsg").html("<p style='color:red;margin-bottom:0'>Invalid Email Format</p>");
-                } else {
-                    $("#emailMsg").html("");
+
+            function validatePhoneCode() {
+                var phoneCodeRaw = $("#cusPhoneCode").val() || "";
+                var phoneCodeDigits = phoneCodeRaw.replace(/\+/g, '').trim();
+                if (phoneCodeDigits === '') {
+                    $("#phoneCodeMsg").html("<p style='color:red;margin-bottom:0'>Phone Code is required!</p>");
+                    return false;
                 }
-            });
+                $("#phoneCodeMsg").html("");
+                return true;
+            }
 
             $("#actionBtn").on("click", function(event) {
+                if (!validatePhoneCode()) {
+                    event.preventDefault();
+                }
+
                 if (!validateEmail()) {
                     $("#emailMsg").html("<p style='color:red;margin-bottom:0'>Invalid Email Format</p>");
                     event.preventDefault();

@@ -7,17 +7,19 @@ if (empty($userID)) {
     exit();
 }
 
-$pinArr = array();
-
-$pin_query = "SELECT id FROM " . PIN;
-$pin_result = $connect->query($pin_query);
-
-if ($pin_result->num_rows >= 1) {
-    while ($pin_row = $pin_result->fetch_assoc()) {
-        array_push($pinArr, $pin_row['id']);
-    }
+// Find the logged-in user's highest Shopee access level.
+$userShopeePin = '999999'; // Default to hide if no access
+$userShopeeLink = 'javascript:void(0)';
+if (in_array('130', GlobalPin)) {
+    $userShopeePin = '130';
+    $userShopeeLink = $SITEURL . '/shopee/shopee_order_req_table.php';
+} else if (in_array('129', GlobalPin)) {
+    $userShopeePin = '129';
+    $userShopeeLink = $SITEURL . '/shopee/shopee_verify.php';
+} else if (in_array('128', GlobalPin)) {
+    $userShopeePin = '128';
+    $userShopeeLink = $SITEURL . '/shopee/shopee_processing_order.php';
 }
-
 
 $menuList = array(
     // dashboard
@@ -30,30 +32,6 @@ $menuList = array(
         'pin' => array('0')             // action
     ),
     array(
-        'Employees',
-        'mdi mdi-account-outline',
-        'javascript:void(0)',
-        'y',
-        'expand' => array(
-            array('Designations', 'mdi mdi-information-outline', $SITEURL . '/designations_table.php', '4'),
-            array('Departments', 'mdi mdi-domain', $SITEURL . '/department_table.php', '5'),
-            array('Employee Details', 'mdi mdi-information-outline', $SITEURL . '/employeeDetailsTable.php', '34'),
-        ),
-        'pin' => array('4', '5', '34')
-    ),
-    array(
-        'Leave Transcation',
-        'mdi mdi-account-outline',
-        'javascript:void(0)',
-        'y',
-        'expand' => array(
-            array('My Leave Transcation', '', $SITEURL . '/myLeaveTransaction.php', '67'),
-            array('Approval Leave Transcation', '', $SITEURL . '/approvalLeaveTransaction.php', '68'),
-            array('All Leave Transcation', '', $SITEURL . '/allLeaveTransaction.php', '72'),
-        ),
-        'pin' => array('67', '68', '72')
-    ),
-    array(
         'Customer',
         'mdi mdi-account-outline',
         'javascript:void(0)',
@@ -62,7 +40,7 @@ $menuList = array(
             array('Customer Info', 'mdi mdi-information-outline', $SITEURL . '/customerInfoTable.php', '38'),
             array('Facebook Customer Record (Deals)', 'mdi mdi-deal-outline', $SITEURL . '/fb_cust_deals_table.php', '75'),
             array('Website Customer Record (Deals)', 'mdi mdi-deal-outline', $SITEURL . '/website_customer_record_table.php', '84'),
-            array('Shopee Customer Record (Deals)', 'mdi mdi-deal-outline', $SITEURL . '/finance/shopee_cust_info_table.php', '85'),
+            array('Shopee Customer Record (Deals)', 'mdi mdi-deal-outline', $SITEURL . '/shopee/shopee_cust_info_table.php', '85'),
             array('Lazada Customer Record (Deals)', 'mdi mdi-deal-outline', $SITEURL . '/lazada_cust_rcd_table.php', '91'),
         ),
         'pin' => array('38', '75', '84', '85', '91')
@@ -74,12 +52,13 @@ $menuList = array(
         'y',
         'expand' => array(
             array('Facebook Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/finance/fb_order_req_table.php', '69'),
-            array('Shopee Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/finance/shopee_order_req_table.php', '86'),
+            array('Shopee Order Request', 'mdi mdi-cart', $userShopeeLink, $userShopeePin),
             array('Website Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/finance/website_order_request_table.php', '92'),
             array('Lazada Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/lazada_order_req_table.php', '93'),
+            array('Stock Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/finance/stock_order_request_table.php', '126'),
             array('Order Process List', 'mdi mdi-note-text-outline', $SITEURL . '/finance/order_process_list.php', '95'),
         ),
-        'pin' => array('69', '86', '92', '93', '95')
+        'pin' => array('69', '128', '129', '130', '92', '93', '126', '95')
     ),
     array(
         'Distributor',
@@ -191,7 +170,7 @@ $menuList = array(
                 'expand' => array(
                     array('Facebook Ads Top Up Transaction', 'mdi storefront-outline', $SITEURL . '/finance/fb_ads_topup_trans_table.php', '48'),
                     array('Delivery Fees Claim Record', 'mdi storefront-outline', $SITEURL . '/finance/del_fees_claim_table.php', '66'),
-                    array('Shopee Ads Top Up Transaction', 'mdi storefront-outline', $SITEURL . '/finance/shopee_ads_topup_trans_table.php', '77'),
+                    array('Shopee Ads Top Up Transaction', 'mdi storefront-outline', $SITEURL . '/shopee/shopee_ads_topup_trans_table.php', '77'),
                     array('Internal Consume Item', 'mdi storefront-outline', $SITEURL . '/finance/internal_consume_item_table.php', '67'),
                     array('Internal Consume Ticket/Credit', 'mdi storefront-outline', $SITEURL . '/finance/internal_consume_ticket_credit_table.php', '62'),
                     array('Stock Credit Top Up Record', 'mdi storefront-outline', $SITEURL . '/finance/stock_credit_top_up_request_table.php', '78'),
@@ -204,13 +183,13 @@ $menuList = array(
                 'javascript:void(0)',
                 'y',
                 'expand' => array(
-                    array('Shopee Withdrawal Transactions', 'mdi storefront-outline', $SITEURL . '/finance/shopee_withdrawal_transactions_table.php', '51'),
+                    array('Shopee Withdrawal Transactions', 'mdi storefront-outline', $SITEURL . '/shopee/shopee_withdrawal_transactions_table.php', '51'),
                     array('Merchant Commission Record', 'mdi storefront-outline', $SITEURL . '/finance/merchant_comm_record_table.php', '49'),
                     array('Downline Top Up Record', 'mdi storefront-outline', $SITEURL . '/finance/downline_top_up_record_table.php', '68'),
                     array('Stripe Transaction Backup Record', 'mdi storefront-outline', $SITEURL . '/finance/stripe_trans_backup_table.php', '89'),
                     array('Atome Transaction Backup Record', 'mdi storefront-outline', $SITEURL . '/finance/atome_trans_backup_table.php', '87'),
                     array('Facebook Order Request', 'mdi storefront-outline', $SITEURL . '/finance/fb_order_req_income_table.php', '96'),
-                    array('Shopee Order Report', 'mdi storefront-outline', $SITEURL . '/finance/shopeeOrder_request_income.php', '123'),
+                    array('Shopee Order Report', 'mdi storefront-outline', $SITEURL . '/shopee/shopeeOrder_request_income.php', '123'),
                     array('Website Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/finance/website_order_request_income_table.php', '98'),
                     array('Lazada Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/lazadaOrder_request_income.php', '99'),
 
@@ -242,11 +221,12 @@ $menuList = array(
         'expand' => array(
             array('Barcode Generator', 'mdi mdi-barcode', $SITEURL . '/barcode_generator.php', '22'),
             array('Rate Checking', 'mdi mdi-package-variant', $SITEURL . '/rate_checking.php', '17'),
+            array('SQL Account', 'mdi mdi-database', $SITEURL . '/sql_account_table.php', '132'),
             array('Theme Setting', 'mdi mdi-brush-variant', $SITEURL . '/theme_setting.php', '23'),
             array('System Setting', 'mdi mdi-brush-variant', $SITEURL . '/system_setting.php', '39'),
 
         ),
-        'pin' => array('22', '17', '23', '39')
+        'pin' => array('22', '17', '132', '23', '39')
     ),
     array(
         'Settings',
@@ -294,12 +274,14 @@ $menuList = array(
                 'expand' => array(
                     array('Product Status', 'mdi mdi-package-variant-closed', $SITEURL . '/prod_status_table.php', '15'),
                     array('Brand', 'mdi mdi-label-outline', $SITEURL . '/brand_table.php', '9'),
+                    array('Company', 'mdi mdi-office-building-outline', $SITEURL . '/company_table.php', '127'),
+                    array('Purchase Order', 'mdi mdi-file-document-outline', $SITEURL . '/purchase_order_table.php', '135'),
                     array('Courier Account', 'mdi mdi-label-outline', $SITEURL . '/courier_table.php', '50'),
                     array('Category', 'mdi mdi-label-outline', $SITEURL . '/product_category_table.php', '56'),
                     array('Brand Series', 'mdi mdi-label-outline', $SITEURL . '/brand_series_table.php', '74'),
                 ),
 
-                'pin' => array('15', '9', '50', '56', '74'),
+                'pin' => array('15', '9', '127', '135', '50', '56', '74'),
 
             ),
             array(
@@ -377,17 +359,18 @@ $menuList = array(
                 'javascript:void(0)',
                 'y',
                 'expand' => array(
-                    array('Payment Method (Shopee)', 'mdi mdi-contactless-payment-circle', $SITEURL . '/finance/payment_method_shopee_table.php', '80'),
-                    array('Shopee SG Setting', 'mdi mdi-contactless-payment-circle', $SITEURL . '/finance/shopee_sg_setting_table.php', '82'),
-                    array('Shopee Service Charges Rate Setting', 'mdi storefront-outline', $SITEURL . '/finance/shopee_service_charges_rate_setting_table.php', '83'),
-                    array('Shopee Account Management', 'mdi storefront-outline', $SITEURL . '/finance/shopee_acc_table.php', '58'),
+                    array('Payment Method (Shopee)', 'mdi mdi-contactless-payment-circle', $SITEURL . '/shopee/payment_method_shopee_table.php', '80'),
+                    array('Shopee SG Setting', 'mdi mdi-contactless-payment-circle', $SITEURL . '/shopee/shopee_sg_setting_table.php', '82'),
+                    array('Shopee Service Charges Rate Setting', 'mdi storefront-outline', $SITEURL . '/shopee/shopee_service_charges_rate_setting_table.php', '83'),
+                    array('Shopee Account Management', 'mdi storefront-outline', $SITEURL . '/shopee/shopee_acc_table.php', '58'),
                     array('Lazada Account Management', 'mdi storefront-outline', $SITEURL . '/finance/lazada_acc_table.php', '81'),
                     array('Goal Target', 'mdi mdi-contactless-payment-circle', $SITEURL . '/goalTarget_table.php', '121'),
                 ),
                 'pin' => array('80', '82', '83', '58', '81', '121'),
             ),
+            array('Token Setting', 'mdi mdi-key-chain', $SITEURL . '/token_setting_table.php', '133'),
         ),
-        'pin' => array('1', '2', '3', '6', '8', '9', '10', '11', '12', '13', '14', '15', '16', '19', '24', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47', '48', '49', '50', '51', '52', '56', '57', '58', '60', '63', '65', '66', '67', '68', '69', '70', '72', '74', '75', '76', '77', '78', '79', '80', '81', '82', '83', '84', '85', '86', '87', '88', '89', '91', '92', '93', '94', '121')
+        'pin' => array('1', '2', '3', '6', '8', '9', '10', '11', '12', '13', '14', '15', '16', '19', '24', '26', '27', '28', '29', '30', '31', '32', '33', '34', '35', '36', '37', '38', '39', '40', '41', '42', '43', '44', '45', '46', '47', '48', '49', '50', '51', '52', '56', '57', '58', '60', '63', '65', '66', '67', '68', '69', '70', '72', '74', '75', '76', '77', '78', '79', '80', '81', '82', '83', '84', '85', '86', '87', '88', '89', '91', '92', '93', '94', '121', '133', '135', '136')
     ),
     array(
         'Warehouse',
@@ -395,11 +378,29 @@ $menuList = array(
         'javascript:void(0)',
         'y',
         'expand' => array(
+            array('Warehouse', 'mdi mdi-warehouse', $SITEURL . '/warehouse_table.php', '16'),
+            array('Stock In', 'mdi mdi-tray-arrow-down', $SITEURL . '/warehouse_stock_in_table.php', '125'),
             array('Stock List', 'mdi mdi-package-variant', $SITEURL . '/stock_list_table.php', '104'),
             array('Stock Costing Setting', 'mdi mdi-package-variant', $SITEURL . '/stockCosting.php?act=I', '106'),
 
         ),
-        'pin' => array('104')
+        'pin' => array('16', '104','125', '106')
+    ),
+    array(
+        'Import Shortcut',
+        'mdi mdi-file-import-outline',
+        $SITEURL . '/common_import.php',
+        'n',
+        'expand' => array(),
+        'pin' => array('131')
+    ),
+    array(
+        'User Record Log',
+        'mdi mdi-text-box-outline',
+        $SITEURL . '/user_record_log.php',
+        'n',
+        'expand' => array(),
+        'pin' => array('136')
     ),
     array(
         'Audit Log',
@@ -557,7 +558,6 @@ $menuList = array(
     var sidebar_toggleBtn = $("#sidebarCollapse"); // variable from menuHeader
     var opacityBackground = $('div#filter_screen');
 
-    (function ($) {
         sidebar_toggleBtn.on("click", function () {
             if (sidebar.hasClass("active")) {
                 sidebar.toggleClass("close", true);
@@ -571,7 +571,11 @@ $menuList = array(
             } else {
                 sidebar.toggleClass("active", true);
                 sidebar.toggleClass("close", false);
-                opacityBackground.show();
+                if (isMobileViewport()) {
+                    opacityBackground.show();
+                } else {
+                    opacityBackground.hide();
+                }
             }
         });
 
@@ -586,5 +590,4 @@ $menuList = array(
                 }, 300);
             }
         });
-    })(jQuery);
 </script>
