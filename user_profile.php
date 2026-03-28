@@ -231,19 +231,19 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                     </div>
 
                     <div class="form-group mb-3">
-                        <label class="form-label" for="currentDataName">Name</label>
+                        <label class="form-label" for="currentDataName">Name*</label>
                         <input class="form-control" type="text" name="currentDataName" id="currentDataName" value="<?= htmlspecialchars((string) $userRow['name'], ENT_QUOTES, 'UTF-8') ?>" required autocomplete="off">
                         <div id="err_msg"><span class="mt-n1" id="err_currentDataName"></span></div>
                     </div>
 
                     <div class="form-group mb-3">
-                        <label class="form-label" for="dataUsername">Username</label>
+                        <label class="form-label" for="dataUsername">Username*</label>
                         <input class="form-control" type="text" name="dataUsername" id="dataUsername" value="<?= htmlspecialchars((string) $userRow['username'], ENT_QUOTES, 'UTF-8') ?>" required autocomplete="off">
                         <div id="err_msg"><span class="mt-n1" id="err_dataUsername"></span></div>
                     </div>
 
                     <div class="form-group mb-3">
-                        <label class="form-label" for="currentUserEmail">Email</label>
+                        <label class="form-label" for="currentUserEmail">Email*</label>
                         <input class="form-control" type="text" name="currentUserEmail" id="currentUserEmail" value="<?= htmlspecialchars((string) $userRow['email'], ENT_QUOTES, 'UTF-8') ?>" required autocomplete="off">
                         <div id="err_msg"><span class="mt-n1" id="err_currentUserEmail"></span></div>
                     </div>

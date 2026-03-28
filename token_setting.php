@@ -86,6 +86,7 @@ if (post('actionBtn')) {
         case 'updData':
             $currentDataName = postSpaceFilter('currentDataName');
             $botToken = postSpaceFilter('botToken');
+            $chatId = postSpaceFilter('chatId');
             $remark = postSpaceFilter('remark');
             $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
@@ -117,8 +118,9 @@ if (post('actionBtn')) {
 
                     $safeName = mysqli_real_escape_string($connect, $currentDataName);
                     $safeToken = mysqli_real_escape_string($connect, $botToken);
+                    $safeChatId = mysqli_real_escape_string($connect, $chatId);
                     $safeRemark = mysqli_real_escape_string($connect, $remark);
-                    $query = "INSERT INTO " . $tblName . "(name,bot_token,remark,create_by,create_date,create_time,update_by,update_date,update_time,status) VALUES ('$safeName','$safeToken','$safeRemark','" . USER_ID . "',CURDATE(),CURTIME(),'" . USER_ID . "',CURDATE(),CURTIME(),'A')";
+                    $query = "INSERT INTO " . $tblName . "(name,bot_token,chat_id,remark,create_by,create_date,create_time,update_by,update_date,update_time,status) VALUES ('$safeName','$safeToken','$safeChatId','$safeRemark','" . USER_ID . "',CURDATE(),CURTIME(),'" . USER_ID . "',CURDATE(),CURTIME(),'A')";
                     $returnData = mysqli_query($connect, $query);
                     $dataID = $connect->insert_id;
                 } catch (Exception $e) {
@@ -139,6 +141,12 @@ if (post('actionBtn')) {
                         $datafield[] = 'bot_token';
                     }
 
+                    if ((string) (isset($row['chat_id']) ? $row['chat_id'] : '') !== (string) $chatId) {
+                        $oldvalarr[] = (string) (isset($row['chat_id']) ? $row['chat_id'] : '');
+                        $chgvalarr[] = (string) $chatId;
+                        $datafield[] = 'chat_id';
+                    }
+
                     if ((string) (isset($row['remark']) ? $row['remark'] : '') !== (string) $remark) {
                         $oldvalarr[] = (string) (isset($row['remark']) ? $row['remark'] : '');
                         $chgvalarr[] = (string) $remark;
@@ -150,8 +158,9 @@ if (post('actionBtn')) {
                     if (!empty($oldvalarr) && !empty($chgvalarr)) {
                         $safeName = mysqli_real_escape_string($connect, $currentDataName);
                         $safeToken = mysqli_real_escape_string($connect, $botToken);
+                        $safeChatId = mysqli_real_escape_string($connect, $chatId);
                         $safeRemark = mysqli_real_escape_string($connect, $remark);
-                        $query = "UPDATE " . $tblName . " SET name ='$safeName', bot_token='$safeToken', remark='$safeRemark', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id = '$dataID' AND status='A'";
+                        $query = "UPDATE " . $tblName . " SET name ='$safeName', bot_token='$safeToken', chat_id='$safeChatId', remark='$safeRemark', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id = '$dataID' AND status='A'";
                         $returnData = mysqli_query($connect, $query);
                     } else {
                         $act = 'NC';
@@ -232,6 +241,11 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                     <div class="form-group mb-3">
                         <label class="form-label" for="botToken">Bot Token</label>
                         <input class="form-control" type="text" name="botToken" id="botToken" value="<?= isset($row['bot_token']) ? htmlspecialchars((string) $row['bot_token'], ENT_QUOTES, 'UTF-8') : '' ?>" <?= ($act == '') ? 'readonly' : '' ?> required autocomplete="off">
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label class="form-label" for="chatId">Chat ID <small class="text-muted">(optional, auto-detected if blank)</small></label>
+                        <input class="form-control" type="text" name="chatId" id="chatId" value="<?= isset($row['chat_id']) ? htmlspecialchars((string) $row['chat_id'], ENT_QUOTES, 'UTF-8') : '' ?>" <?= ($act == '') ? 'readonly' : '' ?> autocomplete="off" placeholder="e.g. -1001234567890">
                     </div>
 
                     <div class="form-group mb-3">

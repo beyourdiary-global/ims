@@ -160,6 +160,11 @@ $(document).ready(function () {
       "_hidden_" +
       idx +
       '" value="">' +
+      '<button type="button" class="btn btn-outline-danger sor-remove-row-btn" data-row-type="' +
+      (type === "pkg" ? "pkg" : "brand") +
+      '" title="Remove">' +
+      '<i class="fa-solid fa-xmark"></i>' +
+      "</button>" +
       "</div>";
 
     $(containerId).append(rowHtml);
@@ -171,6 +176,25 @@ $(document).ready(function () {
 
   $("#add_brand_btn").on("click", function () {
     addDynamicLookupRow("brand");
+  });
+
+  $(document).on("click", ".sor-remove-row-btn", function () {
+    var rowType = $(this).data("row-type") === "brand" ? "brand" : "pkg";
+    var containerId =
+      rowType === "pkg" ? "#sor_pkg_container" : "#sor_brand_container";
+    var rowClass = rowType === "pkg" ? ".sor-pkg-row" : ".sor-brand-row";
+    var rowCount = $(containerId + " " + rowClass).length;
+
+    if (rowCount <= 1) {
+      return;
+    }
+
+    $(this).closest(rowClass).remove();
+
+    if (rowType === "pkg") {
+      getPkgBrand();
+      calculatePrice();
+    }
   });
 
   $(document).on("keyup", ".sor-pkg-input", function () {

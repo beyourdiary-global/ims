@@ -1389,8 +1389,8 @@ if ($action === 'checkDuplicateInvoiceImport') {
 
     $duplicateNorm = array();
     foreach ($normalizedToOriginal as $norm => $originalInvoice) {
-        $safeInvoice = mysqli_real_escape_string($finance_connect, $originalInvoice);
-        $dupSql = "SELECT id FROM " . STOCK_ORDER_REQ . " WHERE status='A' AND LOWER(REPLACE(TRIM(invoice_no), ' ', '')) = LOWER('" . $safeInvoice . "') LIMIT 1";
+        $safeNorm = mysqli_real_escape_string($finance_connect, $norm);
+        $dupSql = "SELECT id FROM " . STOCK_ORDER_REQ . " WHERE status='A' AND LOWER(REPLACE(TRIM(invoice_no), ' ', '')) = '" . $safeNorm . "' LIMIT 1";
         $dupRst = mysqli_query($finance_connect, $dupSql);
         if ($dupRst && mysqli_num_rows($dupRst) > 0) {
             $duplicateNorm[] = $norm;

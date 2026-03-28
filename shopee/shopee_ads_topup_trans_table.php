@@ -455,8 +455,7 @@ function sat_is_in_interval($paymentDate, $interval, $dateFilter, $start, $end)
                         <option value="method">Payment Method</option>
                     </select>
                 </div>
-                <div class="col-md-2 d-flex align-items-center justify-content-center">
-                    <button id="applyFilterBtn" type="button" class="btn btn-sm btn-rounded btn-primary me-2"><i class="fa fa-filter"></i> Apply</button>
+                <div class="col-md-2 d-flex align-items-center justify-content-start">
                     <a id='resetButton' href="../reset.php?redirect=shopee/shopee_ads_topup_trans_table.php" class="btn btn-sm btn-rounded btn-primary"> <i class="fa fa-refresh"></i> Reset </a>
                 </div>
             </div>

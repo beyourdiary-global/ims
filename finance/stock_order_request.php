@@ -834,8 +834,8 @@ function sorQrSrc($path, $siteUrl)
                                         <th width="60">#</th>
                                         <th>Package Name</th>
                                         <th>Product Name</th>
-                                        <th>item description</th>
-                                        <th width="160">Quantity(product)</th>
+                                        <th>Item Description</th>
+                                        <th width="160">Quantity</th>
                                         <th width="140">Total Price</th>
                                         <th width="120">Action</th>
                                     </tr>
@@ -917,18 +917,6 @@ function sorQrSrc($path, $siteUrl)
                                     $desc = (string) $g['package_desc'];
                                     $packageQty = (int) $g['package_qty'];
                                     $groupPrice = (float) $g['package_price'];
-                                    $headerProdName = '';
-                                    $headerProdId = 0;
-                                    $headerProductQty = $packageQty;
-                                    $headerBaseQty = 1;
-                                    if (isset($g['products'][0])) {
-                                        $headerProdName = isset($g['products'][0]['product_name']) ? (string) $g['products'][0]['product_name'] : '';
-                                        $headerProdId = isset($g['products'][0]['product_id']) ? (int) $g['products'][0]['product_id'] : 0;
-                                        $headerProductQty = isset($g['products'][0]['product_qty']) ? (int) $g['products'][0]['product_qty'] : $packageQty;
-                                        if ($headerProductQty <= 0) $headerProductQty = $packageQty;
-                                        $headerBaseQty = isset($g['products'][0]['base_qty']) ? (int) $g['products'][0]['base_qty'] : 1;
-                                        if ($headerBaseQty <= 0) $headerBaseQty = 1;
-                                    }
                                 ?>
                                     <tr data-row-key="<?= (int) $rowKey ?>" data-package-group="<?= sorEcho($gk) ?>" data-row-role="package">
                                         <td class="row-no"></td>
@@ -938,16 +926,9 @@ function sorQrSrc($path, $siteUrl)
                                                     <input class="form-control sor-item-pkg-name" type="text" id="sor_item_pkg_name_<?= (int) $rowKey ?>" name="sor_item_pkg_name[]" value="<?= sorEcho($pkgName) ?>" placeholder="Type Package" <?= ($act == '') ? 'readonly' : '' ?>>
                                                     <input type="hidden" class="sor-item-pkg-id" id="sor_item_pkg_id_<?= (int) $rowKey ?>" name="sor_item_pkg_id[]" value="<?= (int) $pkgId ?>">
                                                 </div>
-                                                    <input class="form-control sor-item-package-qty-edit" type="number" min="1" value="<?= sorEcho($packageQty) ?>" <?= ($act == '') ? 'readonly' : '' ?>>
-                                                </div>
                                             </div>
                                         </td>
-                                        <td>
-                                            <div class="autocomplete">
-                                                <input class="form-control sor-item-prod-name" type="text" id="sor_item_prod_name_<?= (int) $rowKey ?>" name="sor_item_prod_name[]" value="<?= sorEcho($headerProdName) ?>" readonly>
-                                                <input type="hidden" class="sor-item-prod-id" id="sor_item_prod_id_<?= (int) $rowKey ?>" name="sor_item_prod_id[]" value="<?= (int) $headerProdId ?>">
-                                            </div>
-                                        </td>
+                                        <td></td>
                                         <td class="cell-desc">
                                             <div class="desc-main-field">
                                                 <input class="form-control sor-item-desc" type="text" name="sor_item_desc[]" value="<?= sorEcho($desc) ?>" readonly>
@@ -955,9 +936,9 @@ function sorQrSrc($path, $siteUrl)
                                         </td>
                                         <td>
                                             <div class="qty-main-field">
-                                                <input class="form-control sor-item-qty" type="number" min="1" name="sor_item_product_qty[]" value="<?= sorEcho($headerProductQty) ?>" <?= ($act == '') ? 'readonly' : '' ?>>
+                                                <input class="form-control sor-item-qty" type="number" min="1" name="sor_item_product_qty[]" value="<?= sorEcho($packageQty) ?>" <?= ($act == '') ? 'readonly' : '' ?>>
                                                 <input class="sor-item-package-qty" type="hidden" name="sor_item_package_qty[]" value="<?= sorEcho($packageQty) ?>">
-                                                <input class="sor-item-base-qty" type="hidden" name="sor_item_base_qty[]" value="<?= sorEcho($headerBaseQty) ?>">
+                                                <input class="sor-item-base-qty" type="hidden" name="sor_item_base_qty[]" value="1">
                                                 <input class="sor-item-group-key" type="hidden" name="sor_item_group_key[]" value="<?= sorEcho($gk) ?>">
                                                 <input class="sor-item-package-price" type="hidden" name="sor_item_package_price[]" value="<?= sorEcho(number_format($groupPrice, 2, '.', '')) ?>">
                                             </div>
@@ -983,10 +964,6 @@ function sorQrSrc($path, $siteUrl)
 
                                     $productNo = 1;
                                     foreach ($g['products'] as $prodIdx => $prod) {
-                                        // First product is shown in package row; detail rows start from the second product.
-                                        if ((int) $prodIdx === 0) {
-                                            continue;
-                                        }
                                         $prodId = (int) $prod['product_id'];
                                         $prodName = (string) $prod['product_name'];
                                         $productQty = (int) $prod['product_qty'];
@@ -1028,7 +1005,9 @@ function sorQrSrc($path, $siteUrl)
                                             </div>
                                         </td>
                                         <td>
-                                            
+                                            <?php if ($act != '') { ?>
+                                                <button type="button" class="mt-1 remove-product-btn" id="action_menu_btn"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>
+                                            <?php } ?>
                                         </td>
                                     </tr>
                                 <?php

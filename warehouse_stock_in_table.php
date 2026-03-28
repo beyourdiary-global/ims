@@ -319,9 +319,7 @@ if (!function_exists('siBuildStockInExportZip')) {
                 continue;
             }
 
-            $parts = array_filter(array_map('trim', explode(',', $attachmentRaw)), function ($v) {
-                return $v !== '';
-            });
+            $parts = siAttachmentDecodeList($attachmentRaw);
 
             foreach ($parts as $part) {
                 $absPath = siResolveAttachmentAbsPath($part);

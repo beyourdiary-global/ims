@@ -215,11 +215,12 @@
 
   function getRowGroupId(row) {
     if (!row) return "";
+    var dataGroup = String(row.getAttribute("data-package-group") || "");
     var hiddenGroupInput = row.querySelector(".sor-item-group-key");
     var hiddenGroup = hiddenGroupInput
       ? String(hiddenGroupInput.value || "")
       : "";
-    var groupId = hiddenGroup || row.getAttribute("data-package-group") || "";
+    var groupId = dataGroup || hiddenGroup || "";
     if (groupId !== "") return groupId;
     var rowKey = row.getAttribute("data-row-key") || Date.now().toString();
     groupId = "pkg_group_" + rowKey;
@@ -483,35 +484,16 @@
 
         var actionCell = row.querySelector("td:last-child");
         if (actionCell && rowRole !== "package") {
-          actionCell.innerHTML = "";
+          if (action !== "") {
+            actionCell.innerHTML =
+              '<button type="button" class="mt-1 remove-product-btn" id="action_menu_btn"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>';
+          } else {
+            actionCell.innerHTML = "";
+          }
         }
       });
 
       if (packageRow) {
-        var headerProdNameInput = packageRow.querySelector(
-          ".sor-item-prod-name",
-        );
-        var headerProdIdInput = packageRow.querySelector(".sor-item-prod-id");
-        var pkgForHeader = getSelectedPackageInRow(packageRow);
-        if (headerProdNameInput && headerProdIdInput) {
-          if (
-            pkgForHeader &&
-            Array.isArray(pkgForHeader.product_ids) &&
-            pkgForHeader.product_ids.length > 0
-          ) {
-            var firstPid = parseInt(pkgForHeader.product_ids[0], 10);
-            if (firstPid > 0 && productLookupById[firstPid]) {
-              headerProdNameInput.value = productLookupById[firstPid].name;
-              headerProdIdInput.value = String(firstPid);
-            } else {
-              headerProdNameInput.value = "";
-              headerProdIdInput.value = "";
-            }
-          } else {
-            headerProdNameInput.value = "";
-            headerProdIdInput.value = "";
-          }
-        }
         syncGroupValues(packageRow, false);
       }
     });
@@ -526,6 +508,11 @@
     packageRows.forEach(function (pkgRow, idx) {
       var pkgActionCell = pkgRow.querySelector("td:last-child");
       if (!pkgActionCell) return;
+
+      if (action === "") {
+        pkgActionCell.innerHTML = "";
+        return;
+      }
 
       var removeBtnHtml =
         '<button type="button" class="mt-1 remove-package-btn" id="action_menu_btn" ' +
@@ -721,24 +708,18 @@
       '" name="sor_item_pkg_id[]" value="' +
       escapeAttr(pkgId || "") +
       '"></div>' +
-      (isPackageHeader
-        ? +escapeAttr(qty || 1) +
-          '" ' +
-          (action === "" ? "readonly" : "") +
-          "></div>"
-        : "") +
       "</div></td>" +
-      '<td><div class="autocomplete"><input class="form-control sor-item-prod-name" type="text" id="sor_item_prod_name_' +
-      rowKey +
-      '" name="sor_item_prod_name[]" value="' +
-      escapeAttr(prodName || "") +
-      '" ' +
-      (isPackageHeader ? "readonly" : "") +
-      '"><input type="hidden" class="sor-item-prod-id" id="sor_item_prod_id_' +
-      rowKey +
-      '" name="sor_item_prod_id[]" value="' +
-      escapeAttr(prodId || "") +
-      '"></div></td>' +
+      (isPackageHeader
+        ? "<td></td>"
+        : '<td><div class="autocomplete"><input class="form-control sor-item-prod-name" type="text" id="sor_item_prod_name_' +
+          rowKey +
+          '" name="sor_item_prod_name[]" value="' +
+          escapeAttr(prodName || "") +
+          '"><input type="hidden" class="sor-item-prod-id" id="sor_item_prod_id_' +
+          rowKey +
+          '" name="sor_item_prod_id[]" value="' +
+          escapeAttr(prodId || "") +
+          '"></div></td>') +
       '<td class="cell-desc"><div class="desc-main-field"><input class="form-control sor-item-desc" type="text" name="sor_item_desc[]" readonly value="' +
       escapeAttr(desc || "") +
       '"></div></td>' +
@@ -758,7 +739,7 @@
       "<td>" +
       (isPackageHeader
         ? '<button type="button" class="mt-1 remove-package-btn" id="action_menu_btn"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>'
-        : "") +
+        : '<button type="button" class="mt-1 remove-product-btn" id="action_menu_btn"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>') +
       "</td>"
     );
   }
@@ -783,11 +764,21 @@
       "package",
     );
     tbody.appendChild(tr);
+    var groupHidden = tr.querySelector(".sor-item-group-key");
+    if (groupHidden) {
+      groupHidden.value = String(tr.getAttribute("data-package-group") || "");
+    }
     bindRowAutocomplete(tr);
     return tr;
   }
 
-  function addPackageRowWithData(pkg, prodId, groupId, rowRole) {
+  function addPackageRowWithData(
+    pkg,
+    prodId,
+    groupId,
+    rowRole,
+    insertAfterRow,
+  ) {
     var tbody = document.getElementById("sorItemBody");
     if (!tbody || !pkg) return;
 
@@ -808,10 +799,18 @@
       1,
       role,
     );
-    tbody.appendChild(tr);
+    if (insertAfterRow && insertAfterRow.parentNode === tbody) {
+      insertAfterRow.after(tr);
+    } else {
+      tbody.appendChild(tr);
+    }
+    var groupHidden = tr.querySelector(".sor-item-group-key");
+    if (groupHidden) {
+      groupHidden.value = String(tr.getAttribute("data-package-group") || "");
+    }
     bindRowAutocomplete(tr);
     updateRowDescAndPrice(tr);
-    renderPackageGroups();
+    return tr;
   }
 
   function expandPackageProducts(row) {
@@ -847,32 +846,23 @@
       !Array.isArray(pkg.product_ids) ||
       pkg.product_ids.length === 0
     ) {
-      var pkgHeaderProdName = row.querySelector(".sor-item-prod-name");
-      var pkgHeaderProdId = row.querySelector(".sor-item-prod-id");
-      if (pkgHeaderProdName) pkgHeaderProdName.value = "";
-      if (pkgHeaderProdId) pkgHeaderProdId.value = "";
       reindexRows();
       renderPackageGroups();
       return;
     }
 
-    var firstProductId = parseInt(pkg.product_ids[0] || 0, 10);
-    var pkgHeaderProdName = row.querySelector(".sor-item-prod-name");
-    var pkgHeaderProdId = row.querySelector(".sor-item-prod-id");
-    if (
-      firstProductId > 0 &&
-      productLookupById[firstProductId] &&
-      pkgHeaderProdName &&
-      pkgHeaderProdId
-    ) {
-      pkgHeaderProdName.value = productLookupById[firstProductId].name;
-      pkgHeaderProdId.value = String(firstProductId);
-    }
-
-    pkg.product_ids.slice(1).forEach(function (pid) {
+    var insertAfter = row;
+    pkg.product_ids.forEach(function (pid) {
       var extraProdId = parseInt(pid, 10);
       if (extraProdId > 0) {
-        addPackageRowWithData(pkg, extraProdId, groupId, "product");
+        var added = addPackageRowWithData(
+          pkg,
+          extraProdId,
+          groupId,
+          "product",
+          insertAfter,
+        );
+        if (added) insertAfter = added;
       }
     });
 
