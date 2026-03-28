@@ -170,10 +170,15 @@ if (isset($_POST['runDiag'])) {
                     'detail' => $scrapeResult);
             }
 
-            // Try tracking.my fallback
+            // Try tracking.my WebSocket fallback
+            $wsResult = sorFetchTrackingMyWebSocket($courierName, $testTrackingNo);
+            $results[] = array('step' => 'tracking.my WebSocket', 'status' => $wsResult !== '' ? 'OK' : 'FAIL',
+                'detail' => $wsResult !== '' ? $wsResult : '(empty - WebSocket failed or no data)');
+
+            // Try tracking.my keyword scrape fallback
             $altUrl = 'https://www.tracking.my/' . rawurlencode($testTrackingNo);
             $altResult = sorFetchTrackingStatus($altUrl);
-            $results[] = array('step' => 'tracking.my Fallback', 'status' => stripos($altResult, 'Detected:') !== false ? 'OK' : 'FAIL',
+            $results[] = array('step' => 'tracking.my Keyword Scrape', 'status' => stripos($altResult, 'Detected:') !== false ? 'OK' : 'FAIL',
                 'detail' => $altResult);
         } else {
             $results[] = array('step' => 'DB Lookup', 'status' => 'FAIL', 'detail' => 'Request ID ' . $testRequestId . ' not found in DB');
@@ -187,8 +192,13 @@ if (isset($_POST['runDiag'])) {
         if ($slug !== '') {
             $altUrl = 'https://www.tracking.my/' . $slug . '/' . rawurlencode($testTrackingNo);
             $results[] = array('step' => 'tracking.my URL', 'status' => 'INFO', 'detail' => $altUrl);
+
+            $wsResult = sorFetchTrackingMyWebSocket('', $testTrackingNo);
+            $results[] = array('step' => 'tracking.my WebSocket', 'status' => $wsResult !== '' ? 'OK' : 'FAIL',
+                'detail' => $wsResult !== '' ? $wsResult : '(empty - WebSocket failed or no data)');
+
             $altResult = sorFetchTrackingStatus($altUrl);
-            $results[] = array('step' => 'tracking.my Result', 'status' => stripos($altResult, 'Detected:') !== false ? 'OK' : 'FAIL',
+            $results[] = array('step' => 'tracking.my Keyword Scrape', 'status' => stripos($altResult, 'Detected:') !== false ? 'OK' : 'FAIL',
                 'detail' => $altResult);
         }
     }

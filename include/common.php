@@ -1244,10 +1244,12 @@ if (!function_exists('sorFetchTrackingStatus')) {
         $bodyLower = strtolower($body);
         $keywords = array(
             'shipment canceled', 'shipment cancelled',
-            'cancelled',
+            'cancelled', 'canceled',
+            'returned to sender',
+            'exception',
             'delivered', 'out for delivery', 'in transit',
-            'exception', 'picked up', 'shipment information received',
-            'returned to sender', 'customs', 'clearance event',
+            'picked up', 'shipment information received',
+            'customs', 'clearance event',
             'arrived at facility', 'departed facility',
         );
         $found = '';
@@ -1265,6 +1267,171 @@ if (!function_exists('sorFetchTrackingStatus')) {
         $parts[] = 'Synced: ' . $timestamp;
 
         return implode(' | ', $parts);
+    }
+}
+
+// --- Minimal WebSocket helpers for tracking.my ---
+if (!function_exists('sorWsEncode')) {
+    /** Encode a text payload into a WebSocket frame (client-masked). */
+    function sorWsEncode($payload) {
+        $len = strlen($payload);
+        $frame = chr(0x81); // FIN + text opcode
+        if ($len < 126) {
+            $frame .= chr(0x80 | $len);
+        } elseif ($len < 65536) {
+            $frame .= chr(0x80 | 126) . pack('n', $len);
+        } else {
+            $frame .= chr(0x80 | 127) . pack('J', $len);
+        }
+        $mask = openssl_random_pseudo_bytes(4);
+        $frame .= $mask;
+        for ($i = 0; $i < $len; $i++) {
+            $frame .= $payload[$i] ^ $mask[$i % 4];
+        }
+        return $frame;
+    }
+}
+
+if (!function_exists('sorWsDecode')) {
+    /** Read one WebSocket frame from a socket; handles ping/pong automatically. */
+    function sorWsDecode($socket) {
+        $header = @fread($socket, 2);
+        if ($header === false || strlen($header) < 2) return '';
+        $opcode = ord($header[0]) & 0x0F;
+        $masked = (ord($header[1]) & 0x80) !== 0;
+        $len = ord($header[1]) & 0x7F;
+        if ($len === 126) {
+            $ext = @fread($socket, 2);
+            if ($ext === false || strlen($ext) < 2) return '';
+            $unpacked = unpack('n', $ext);
+            $len = $unpacked[1];
+        } elseif ($len === 127) {
+            $ext = @fread($socket, 8);
+            if ($ext === false || strlen($ext) < 8) return '';
+            $unpacked = unpack('J', $ext);
+            $len = $unpacked[1];
+        }
+        if ($len > 2097152) return ''; // sanity: max 2 MB
+        $mask = '';
+        if ($masked) {
+            $mask = @fread($socket, 4);
+            if ($mask === false) $mask = '';
+        }
+        $payload = '';
+        $remaining = $len;
+        while ($remaining > 0) {
+            $chunk = @fread($socket, min($remaining, 8192));
+            if ($chunk === false || $chunk === '') break;
+            $payload .= $chunk;
+            $remaining -= strlen($chunk);
+        }
+        if ($masked && strlen($mask) === 4) {
+            for ($i = 0; $i < strlen($payload); $i++) {
+                $payload[$i] = $payload[$i] ^ $mask[$i % 4];
+            }
+        }
+        // Ping → reply pong, then read next frame
+        if ($opcode === 0x9) {
+            @fwrite($socket, chr(0x8A) . chr(strlen($payload)) . $payload);
+            return sorWsDecode($socket);
+        }
+        if ($opcode === 1) return $payload; // text frame
+        return '';
+    }
+}
+
+if (!function_exists('sorFetchTrackingMyWebSocket')) {
+    /**
+     * Fetch actual tracking status from tracking.my via its WebSocket API.
+     * 1. GET the tracking.my page to extract the pre-built WebSocket message
+     *    (contains a server-computed verify hash).
+     * 2. Open a WebSocket connection and send the message.
+     * 3. Parse the JSON response for the latest tracking event.
+     */
+    function sorFetchTrackingMyWebSocket($courierName, $trackingNo)
+    {
+        $trackingNo = trim((string) $trackingNo);
+        if ($trackingNo === '') return '';
+
+        $slug = sorResolveTrackingMySlug($courierName, $trackingNo);
+        if ($slug === '') return '';
+
+        $pageUrl = 'https://www.tracking.my/' . $slug . '/' . rawurlencode($trackingNo);
+        $opts = array(
+            'http' => array(
+                'method' => 'GET',
+                'header' => "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36\r\n" .
+                            "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n",
+                'timeout' => 15,
+            ),
+            'ssl' => array('verify_peer' => false, 'verify_peer_name' => false),
+        );
+        $body = @file_get_contents($pageUrl, false, stream_context_create($opts));
+        if ($body === false || $body === '') return '';
+
+        // The page embeds: socket.send("{&quot;action&quot;:...&quot;verify&quot;:&quot;HASH&quot;}")
+        if (!preg_match('/socket\.send\(\s*"([^"]+)"\s*\)/', $body, $m)) return '';
+
+        $wsMessage = html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
+        $wsCheck = json_decode($wsMessage, true);
+        if (!is_array($wsCheck) || !isset($wsCheck['action'])) return '';
+
+        // Open WebSocket connection
+        $wsKey = base64_encode(openssl_random_pseudo_bytes(16));
+        $ctx = stream_context_create(array(
+            'ssl' => array('verify_peer' => false, 'verify_peer_name' => false),
+        ));
+        $sock = @stream_socket_client('ssl://www.tracking.my:443', $errno, $errstr, 10, STREAM_CLIENT_CONNECT, $ctx);
+        if (!$sock) return '';
+
+        stream_set_timeout($sock, 10);
+
+        // WebSocket upgrade handshake
+        $handshake = "GET /websocket HTTP/1.1\r\n" .
+            "Host: www.tracking.my\r\n" .
+            "Upgrade: websocket\r\n" .
+            "Connection: Upgrade\r\n" .
+            "Sec-WebSocket-Key: $wsKey\r\n" .
+            "Sec-WebSocket-Version: 13\r\n" .
+            "Origin: https://www.tracking.my\r\n" .
+            "\r\n";
+        @fwrite($sock, $handshake);
+
+        // Read upgrade response
+        $resp = '';
+        while (!feof($sock)) {
+            $line = @fgets($sock, 1024);
+            if ($line === false) break;
+            $resp .= $line;
+            if ($line === "\r\n") break;
+        }
+        if (strpos($resp, '101') === false) {
+            @fclose($sock);
+            return '';
+        }
+
+        // Send the tracking request
+        @fwrite($sock, sorWsEncode($wsMessage));
+
+        // Read the tracking response
+        $data = sorWsDecode($sock);
+        @fclose($sock);
+
+        if ($data === '') return '';
+
+        $result = json_decode($data, true);
+        if (!is_array($result) || !isset($result['result']) || !is_array($result['result'])) return '';
+
+        // Find the latest non-sponsored tracking event
+        foreach ($result['result'] as $event) {
+            if (!is_array($event)) continue;
+            $status = isset($event['status']) ? trim((string) $event['status']) : '';
+            if ($status === '' || $status === 'sponsored') continue;
+
+            return ucfirst($status) . ' | Synced: ' . date('Y-m-d H:i:s') . ' | Source: tracking.my';
+        }
+
+        return '';
     }
 }
 
@@ -1422,7 +1589,7 @@ if (!function_exists('sorRefreshTrackingStatus')) {
             $statusText = sorFetchTrackingStatus($trackingUrl);
         }
 
-        // Secondary fallback: try tracking.my with courier-specific slug.
+        // Secondary fallback: try tracking.my WebSocket API for structured data.
         $scrapeHasKeyword = (stripos($statusText, 'Detected:') !== false);
         if (!$scrapeHasKeyword && $trackingNo !== '') {
             // Resolve courier name for tracking.my slug
@@ -1433,12 +1600,18 @@ if (!function_exists('sorRefreshTrackingStatus')) {
                     $courierNameForSlug = isset($cnRow['name']) ? (string) $cnRow['name'] : '';
                 }
             }
-            $slug = sorResolveTrackingMySlug($courierNameForSlug, $trackingNo);
-            if ($slug !== '') {
-                $altUrl = 'https://www.tracking.my/' . $slug . '/' . rawurlencode($trackingNo);
-                $altStatus = sorFetchTrackingStatus($altUrl);
-                if (stripos($altStatus, 'Detected:') !== false) {
-                    $statusText = $altStatus . ' | Source: tracking.my';
+            $wsStatus = sorFetchTrackingMyWebSocket($courierNameForSlug, $trackingNo);
+            if ($wsStatus !== '') {
+                $statusText = $wsStatus;
+            } else {
+                // Final fallback: keyword scrape on tracking.my page
+                $slug = sorResolveTrackingMySlug($courierNameForSlug, $trackingNo);
+                if ($slug !== '') {
+                    $altUrl = 'https://www.tracking.my/' . $slug . '/' . rawurlencode($trackingNo);
+                    $altStatus = sorFetchTrackingStatus($altUrl);
+                    if (stripos($altStatus, 'Detected:') !== false) {
+                        $statusText = $altStatus . ' | Source: tracking.my';
+                    }
                 }
             }
         }
