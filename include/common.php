@@ -1284,9 +1284,10 @@ if (!function_exists('sorFetchTrackingStatusEasyParcel')) {
             return 'EasyParcel tracking response invalid.';
         }
 
-        // Typical EasyParcel success code is 0.
+        // EasyParcel returns api_status "Success" (string) or "0" (numeric) on success.
         $apiStatus = isset($json['api_status']) ? (string) $json['api_status'] : '';
-        if ($apiStatus !== '' && $apiStatus !== '0') {
+        $isSuccess = ($apiStatus === '' || $apiStatus === '0' || strtolower($apiStatus) === 'success');
+        if (!$isSuccess) {
             $msg = isset($json['error']) ? (string) $json['error'] : 'Unknown EasyParcel error';
             return 'EasyParcel tracking failed: ' . $msg;
         }
@@ -1303,8 +1304,9 @@ if (!function_exists('sorFetchTrackingStatusEasyParcel')) {
         }
 
         $status = trim($status);
-        if ($status === '') {
-            return 'EasyParcel tracking returned no status.';
+        // EasyParcel uses "--" as a placeholder when it has no tracking data yet.
+        if ($status === '' || $status === '--') {
+            return '';
         }
 
         return $status . ' | Synced: ' . date('Y-m-d H:i:s') . ' | Source: EasyParcel';
