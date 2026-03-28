@@ -1152,8 +1152,10 @@ if (!function_exists('sorFetchTrackingStatus')) {
         $opts = array(
             'http' => array(
                 'method' => 'GET',
-                'header' => "User-Agent: Mozilla/5.0 StockOrderTrackingBot\r\n",
-                'timeout' => 12,
+                'header' => "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36\r\n" .
+                            "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n" .
+                            "Accept-Language: en-US,en;q=0.5\r\n",
+                'timeout' => 15,
                 'follow_location' => true,
                 'ignore_errors' => true,
             ),
@@ -1185,21 +1187,24 @@ if (!function_exists('sorFetchTrackingStatus')) {
             $title = trim(html_entity_decode(strip_tags($matches[1])));
         }
 
-        $plain = strtolower(strip_tags($body));
-        $keywords = array('delivered', 'out for delivery', 'in transit', 'exception', 'picked up', 'shipment information received', 'shipment canceled', 'shipment cancelled');
+        // Search the full raw body (including script/JSON data) for tracking keywords.
+        $bodyLower = strtolower($body);
+        $keywords = array(
+            'shipment canceled', 'shipment cancelled',
+            'delivered', 'out for delivery', 'in transit',
+            'exception', 'picked up', 'shipment information received',
+            'returned to sender', 'customs', 'clearance event',
+            'arrived at facility', 'departed facility',
+        );
         $found = '';
         foreach ($keywords as $keyword) {
-            if (strpos($plain, $keyword) !== false) {
+            if (strpos($bodyLower, $keyword) !== false) {
                 $found = $keyword;
                 break;
             }
         }
 
         $parts = array();
-        $parts[] = "HTTP $httpCode";
-        if ($title !== '') {
-            $parts[] = 'Title: ' . $title;
-        }
         if ($found !== '') {
             $parts[] = 'Detected: ' . ucwords($found);
         }
@@ -1238,6 +1243,12 @@ if (!function_exists('sorFetchTrackingStatusEasyParcel')) {
         }
 
         $cfg = sorGetEasyParcelConfig($countryCode);
+
+        // Demo credentials cannot track real parcels — skip entirely.
+        if (stripos($cfg['domain'], 'demo.connect') !== false) {
+            return '';
+        }
+
         $url = $cfg['domain'] . 'EPTrackingBulk';
         $postparam = array(
             'authentication' => $cfg['auth'],
@@ -1349,10 +1360,19 @@ if (!function_exists('sorRefreshTrackingStatus')) {
         $statusText = sorFetchTrackingStatusEasyParcel($trackingNo, $courierCountryCode);
         $trackingUrl = sorBuildTrackingUrl($trackingLink, $trackingNo);
 
-        // Fallback to courier tracking page scrape when API cannot provide a usable status.
-        if ($statusText === '' || stripos($statusText, 'failed:') !== false || stripos($statusText, 'unavailable') !== false || stripos($statusText, 'no status') !== false) {
-            if ($trackingUrl !== '') {
-                $statusText = sorFetchTrackingStatus($trackingUrl);
+        // Fallback to courier tracking page scrape when EasyParcel cannot provide a usable status.
+        $epFailed = ($statusText === '' || stripos($statusText, 'failed:') !== false || stripos($statusText, 'unavailable') !== false || stripos($statusText, 'no status') !== false);
+        if ($epFailed && $trackingUrl !== '') {
+            $statusText = sorFetchTrackingStatus($trackingUrl);
+        }
+
+        // Secondary fallback: try tracking.my aggregator when primary scrape found no keyword.
+        $scrapeHasKeyword = (stripos($statusText, 'Detected:') !== false);
+        if (!$scrapeHasKeyword && $trackingNo !== '') {
+            $altUrl = 'https://www.tracking.my/' . rawurlencode($trackingNo);
+            $altStatus = sorFetchTrackingStatus($altUrl);
+            if (stripos($altStatus, 'Detected:') !== false) {
+                $statusText = $altStatus . ' | Source: tracking.my';
             }
         }
 
