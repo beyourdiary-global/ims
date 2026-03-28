@@ -76,9 +76,10 @@ function sorInfoBuildItemsSummary($items, $packageNameMap, $productNameMap)
     );
 }
 
-function sorInfoTelegramRequest($url, $payload, &$curlErr)
+function sorInfoTelegramRequest($url, $payload, &$curlErr, &$httpCode = 0)
 {
     $curlErr = '';
+    $httpCode = 0;
     $ch = curl_init($url);
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
@@ -89,6 +90,7 @@ function sorInfoTelegramRequest($url, $payload, &$curlErr)
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
     $resp = curl_exec($ch);
     $curlErr = curl_error($ch);
+    $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
 
     return $resp;
@@ -317,7 +319,8 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
                 );
 
                 $curlErr = '';
-                $resp = sorInfoTelegramRequest($sendPhotoUrl, $payload, $curlErr);
+                $httpCode = 0;
+                $resp = sorInfoTelegramRequest($sendPhotoUrl, $payload, $curlErr, $httpCode);
 
                 $ok = false;
                 if ($resp !== false && $resp !== '') {
@@ -332,24 +335,37 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
                         'disable_web_page_preview' => true,
                     );
                     $curlErr2 = '';
-                    $resp2 = sorInfoTelegramRequest($sendMessageUrl, $msgPayload, $curlErr2);
+                    $httpCode2 = 0;
+                    $resp2 = sorInfoTelegramRequest($sendMessageUrl, $msgPayload, $curlErr2, $httpCode2);
 
                     $decoded2 = json_decode((string) $resp2, true);
                     if (is_array($decoded2) && !empty($decoded2['ok'])) {
                         $telegramMsg = 'Telegram message sent successful.';
                     } else {
                         $telegramErr = 'Failed to send Telegram message.';
+                        $details = array();
+
                         $apiErr = (is_array($decoded) && isset($decoded['description'])) ? trim((string) $decoded['description']) : '';
                         $apiErr2 = (is_array($decoded2) && isset($decoded2['description'])) ? trim((string) $decoded2['description']) : '';
-                        if ($curlErr !== '') {
-                            $telegramErr .= ' ' . $curlErr;
-                        } else if ($apiErr !== '') {
-                            $telegramErr .= ' ' . $apiErr;
-                        } else if ($curlErr2 !== '') {
-                            $telegramErr .= ' ' . $curlErr2;
-                        } else if ($apiErr2 !== '') {
-                            $telegramErr .= ' ' . $apiErr2;
+
+                        if ($curlErr !== '') $details[] = 'Photo cURL: ' . $curlErr;
+                        if ($apiErr !== '') $details[] = 'Photo API [HTTP ' . $httpCode . ']: ' . $apiErr;
+                        if ($curlErr2 !== '') $details[] = 'Text cURL: ' . $curlErr2;
+                        if ($apiErr2 !== '') $details[] = 'Text API [HTTP ' . $httpCode2 . ']: ' . $apiErr2;
+
+                        if (count($details) === 0) {
+                            if ($resp !== false && $resp !== '') {
+                                $details[] = 'Photo response [HTTP ' . $httpCode . ']: ' . substr((string) $resp, 0, 200);
+                            }
+                            if ($resp2 !== false && $resp2 !== '') {
+                                $details[] = 'Text response [HTTP ' . $httpCode2 . ']: ' . substr((string) $resp2, 0, 200);
+                            }
                         }
+
+                        if (count($details) > 0) {
+                            $telegramErr .= ' ' . implode(' | ', $details);
+                        }
+                        $telegramErr .= ' (Chat ID: ' . $chatId . ')';
                     }
                 } else {
                     $telegramMsg = 'Telegram message sent successful.';

@@ -97,6 +97,7 @@ if ($pkgRst) {
             'name' => (string) $p['name'],
             'item_description' => (string) $p['item_description'],
             'product_ids' => array_values(array_unique($productIds)),
+            'product_ids_raw' => array_values($productIds),
             'brand_id' => isset($p['brand']) ? (int) $p['brand'] : 0,
             'price' => isset($p['price']) ? (float) $p['price'] : 0,
         );
@@ -550,6 +551,105 @@ if (!function_exists('sorImpBuildPackageIndexes')) {
     }
 }
 
+if (!function_exists('sorImpContainsChinese')) {
+    function sorImpContainsChinese($text)
+    {
+        return preg_match('/[\x{4e00}-\x{9fff}]/u', (string) $text) === 1;
+    }
+}
+
+if (!function_exists('sorImpMatchChinesePackageName')) {
+    /**
+     * Score-based matching for package text that contains Chinese characters.
+     * Extracts English product words, buy/free quantity patterns, promo codes
+     * and scores each package by how many features match.
+     */
+    function sorImpMatchChinesePackageName($text, $packages)
+    {
+        $text = (string) $text;
+        if ($text === '') return null;
+
+        // Extract buy/free qty pattern: 买X送Y
+        $buyQty = 0;
+        $freeQty = 0;
+        if (preg_match('/\x{4e70}\s*(\d+)\s*\x{9001}\s*(\d+)/u', $text, $m)) {
+            $buyQty = (int) $m[1];
+            $freeQty = (int) $m[2];
+        }
+
+        // Extract English words (product names)
+        $englishWords = array();
+        if (preg_match_all('/[A-Za-z]{3,}/u', $text, $em)) {
+            foreach ($em[0] as $w) {
+                $englishWords[] = strtolower(trim($w));
+            }
+        }
+        if (count($englishWords) === 0) return null;
+
+        // Detect 3.8/38 Women's Day promo pattern
+        $promoCode = '';
+        if (preg_match('/38\s*[\x{4e00}-\x{9fff}]/u', $text) || preg_match('/\b38\b/', $text)) {
+            $promoCode = '3.8';
+        }
+
+        // Extract year suffix (e.g. "2026" → "26")
+        $yearSuffix = '';
+        if (preg_match('/\b(20\d{2})\b/', $text, $ym)) {
+            $yearSuffix = substr($ym[1], 2);
+        }
+
+        $bestPkg = null;
+        $bestScore = 0;
+
+        foreach ($packages as $pkg) {
+            $pkgName = strtolower((string) (isset($pkg['name']) ? $pkg['name'] : ''));
+            if ($pkgName === '') continue;
+            $score = 0;
+
+            // Check if package name contains the English product words
+            foreach ($englishWords as $word) {
+                if (strlen($word) >= 3 && stripos($pkgName, $word) !== false) {
+                    $score += 10;
+                }
+            }
+            if ($score === 0) continue; // Must match at least one English product word
+
+            // Check buy qty pattern (e.g. "2 box" matches 买2)
+            if ($buyQty > 0 && preg_match('/\b' . $buyQty . '\s*box\b/i', $pkgName)) {
+                $score += 5;
+            }
+            // Check free qty pattern (e.g. "FREE ... 1 box" matches 送1)
+            if ($freeQty > 0 && preg_match('/free.*\b' . $freeQty . '\s*box\b/i', $pkgName)) {
+                $score += 5;
+            }
+            // Check promo code (3.8)
+            if ($promoCode !== '' && stripos($pkgName, $promoCode) !== false) {
+                $score += 3;
+            }
+            // Check year suffix
+            if ($yearSuffix !== '' && stripos($pkgName, $yearSuffix) !== false) {
+                $score += 2;
+            }
+
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $bestPkg = $pkg;
+            }
+        }
+
+        // Require at least product word match + one additional feature
+        if ($bestPkg && $bestScore >= 13) {
+            return $bestPkg;
+        }
+        // If only product word matched, still return if score is decent
+        if ($bestPkg && $bestScore >= 10) {
+            return $bestPkg;
+        }
+
+        return null;
+    }
+}
+
 if (!function_exists('sorImpResolvePackageFromText')) {
     function sorImpResolvePackageFromText($line, $packages, $nameMap, $descMap)
     {
@@ -570,6 +670,14 @@ if (!function_exists('sorImpResolvePackageFromText')) {
                 if (strpos($lineNorm, $d) !== false || strpos($d, $lineNorm) !== false) {
                     return $pkg;
                 }
+            }
+        }
+
+        // Fallback: if text contains Chinese characters, try score-based matching
+        if (sorImpContainsChinese($line)) {
+            $chineseMatch = sorImpMatchChinesePackageName($line, $packages);
+            if ($chineseMatch) {
+                return $chineseMatch;
             }
         }
 
@@ -1143,6 +1251,19 @@ if (!function_exists('sorImpParsePdfToRows')) {
             $lineTotalPrice = isset($item['line_total_price']) ? (float) $item['line_total_price'] : 0.00;
             $rowQty = isset($item['row_qty']) ? (int) $item['row_qty'] : 1;
             $hasSectionMarker = !empty($item['has_section_marker']);
+
+            // When package is matched and has more linked products in DB
+            // than what the PDF extracted, expand from DB instead.
+            // This handles Chinese invoices where only one product name is given
+            // but the package contains multiple products.
+            if ($pkgHit && $pkgId > 0 && isset($packageMap[$pkgId])) {
+                $linkedRawIds = isset($packageMap[$pkgId]['product_ids_raw']) ? $packageMap[$pkgId]['product_ids_raw'] : (isset($packageMap[$pkgId]['product_ids']) ? $packageMap[$pkgId]['product_ids'] : array());
+                if (count($linkedRawIds) > 1 && count($item['products']) <= 1) {
+                    $item['products'] = array();
+                    $hasSectionMarker = true;
+                }
+            }
+
             $isStandalone = (count($item['products']) === 0 && !$hasSectionMarker);
 
             if ($isStandalone) {
@@ -1208,9 +1329,9 @@ if (!function_exists('sorImpParsePdfToRows')) {
                 }
             } else {
                 if ($pkgId > 0 && isset($packageMap[$pkgId])) {
-                    $pkgProductIds = isset($packageMap[$pkgId]['product_ids']) ? $packageMap[$pkgId]['product_ids'] : array();
-                    if (count($pkgProductIds) > 0) {
-                        foreach ($pkgProductIds as $pid) {
+                    $pkgProductIdsRaw = isset($packageMap[$pkgId]['product_ids_raw']) ? $packageMap[$pkgId]['product_ids_raw'] : (isset($packageMap[$pkgId]['product_ids']) ? $packageMap[$pkgId]['product_ids'] : array());
+                    if (count($pkgProductIdsRaw) > 0) {
+                        foreach ($pkgProductIdsRaw as $pid) {
                             $pid = (int) $pid;
                             $rows[] = array(
                                 'source_file' => (string) $pdfFile['name'],
