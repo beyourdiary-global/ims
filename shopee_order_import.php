@@ -806,6 +806,11 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                                         <input type="hidden" class="sor-pkg-hidden" name="sor_pkg_hidden[]"
                                                             id="sor_pkg_hidden_<?php echo $pkgIndex; ?>"
                                                             value="<?php echo htmlspecialchars((string) $pkgRow['id']); ?>">
+                                                        <?php if ($pkgIndex > 0) { ?>
+                                                            <button type="button" class="btn btn-outline-danger sor-remove-row-btn" data-row-type="pkg" title="Remove Package">
+                                                                <i class="fa-solid fa-xmark"></i>
+                                                            </button>
+                                                        <?php } ?>
                                                     </div>
                                                 <?php } ?>
                                             </div>
@@ -872,6 +877,11 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                                         <input type="hidden" class="sor-brand-hidden" name="sor_brand_hidden[]"
                                                             id="sor_brand_hidden_<?php echo $brandIndex; ?>"
                                                             value="<?php echo htmlspecialchars((string) $brandRow['id']); ?>">
+                                                        <?php if ($brandIndex > 0) { ?>
+                                                            <button type="button" class="btn btn-outline-danger sor-remove-row-btn" data-row-type="brand" title="Remove Brand">
+                                                                <i class="fa-solid fa-xmark"></i>
+                                                            </button>
+                                                        <?php } ?>
                                                     </div>
                                                 <?php } ?>
                                             </div>

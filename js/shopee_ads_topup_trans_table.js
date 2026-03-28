@@ -184,15 +184,73 @@ $(document).ready(function ($) {
       "shopee_ads_topup_trans_table.php?" + params.toString();
   }
 
+  var applyTimer = null;
+
+  function scheduleApplyFilters() {
+    if (applyTimer) {
+      clearTimeout(applyTimer);
+    }
+    applyTimer = setTimeout(function () {
+      applyFilters();
+    }, 250);
+  }
+
+  function canAutoApplyCurrentFilter() {
+    var interval = $("#timeInterval").val() || "daily";
+    if (interval === "daily") {
+      return true;
+    }
+
+    var startSelector = "";
+    var endSelector = "";
+    if (interval === "weekly") {
+      startSelector = "#datepicker2 input[name='start']";
+      endSelector = "#datepicker2 input[name='end']";
+    } else if (interval === "monthly") {
+      startSelector = "#datepicker3 input[name='start']";
+      endSelector = "#datepicker3 input[name='end']";
+    } else if (interval === "yearly") {
+      startSelector = "#datepicker4 input[name='start']";
+      endSelector = "#datepicker4 input[name='end']";
+    }
+
+    var startVal = $(startSelector).val() || "";
+    var endVal = $(endSelector).val() || "";
+
+    // For ranges, auto-apply only when both fields are filled or both are empty.
+    return (
+      (startVal !== "" && endVal !== "") || (startVal === "" && endVal === "")
+    );
+  }
+
   setupDatepicker();
   hydrateFilters();
 
   $("#timeInterval").on("change", function () {
     toggleDateFilters($(this).val());
+    if (canAutoApplyCurrentFilter()) {
+      scheduleApplyFilters();
+    }
   });
 
-  $("#applyFilterBtn").on("click", function () {
-    applyFilters();
+  $("#group").on("change", function () {
+    scheduleApplyFilters();
+  });
+
+  $(
+    "#datepicker input, #datepicker2 input, #datepicker3 input, #datepicker4 input",
+  ).on("change", function () {
+    if (canAutoApplyCurrentFilter()) {
+      scheduleApplyFilters();
+    }
+  });
+
+  $(
+    "#datepicker input, #datepicker2 input, #datepicker3 input, #datepicker4 input",
+  ).on("changeDate", function () {
+    if (canAutoApplyCurrentFilter()) {
+      scheduleApplyFilters();
+    }
   });
 
   $(document).on("change", ".exportAll", function (event) {

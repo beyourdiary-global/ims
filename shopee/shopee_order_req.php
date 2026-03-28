@@ -621,7 +621,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
     if (isset($errorExist)) {
         $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataID . "</b> ] from <b><i>$tblName Table</i></b>.";
     } else {
-        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataID . "</b> ] <b>" . $row['name'] . "</b> from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataID . "</b> ] <b>" . (isset($row['orderID']) ? $row['orderID'] : $dataID) . "</b> from <b><i>$tblName Table</i></b>.";
     }
 
     $log = [
@@ -864,10 +864,17 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                         <input type="hidden" class="sor-pkg-hidden" name="sor_pkg_hidden[]"
                                             id="sor_pkg_hidden_<?php echo $pkgIndex; ?>"
                                             value="<?php echo htmlspecialchars((string) $pkgRow['id']); ?>">
+                                        <?php if ($act != '' && $pkgIndex > 0) { ?>
+                                            <button type="button" class="btn btn-outline-danger sor-remove-row-btn" data-row-type="pkg" title="Remove Package">
+                                                <i class="fa-solid fa-xmark"></i>
+                                            </button>
+                                        <?php } ?>
                                     </div>
                                 <?php } ?>
                             </div>
-                            <button type="button" class="btn btn-outline-primary btn-sm" id="add_pkg_btn" <?php if ($act == '') echo 'disabled'; ?>>+ Add Package</button>
+                            <?php if ($act != '') { ?>
+                            <button type="button" class="btn btn-outline-primary btn-sm" id="add_pkg_btn">+ Add Package</button>
+                            <?php } ?>
                             <?php if (isset($pkg_err)) { ?>
                                 <div id="err_msg">
                                     <span class="mt-n1"><?php echo $pkg_err; ?></span>
@@ -921,10 +928,17 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                         <input type="hidden" class="sor-brand-hidden" name="sor_brand_hidden[]"
                                             id="sor_brand_hidden_<?php echo $brandIndex; ?>"
                                             value="<?php echo htmlspecialchars((string) $brandRow['id']); ?>">
+                                        <?php if ($act != '' && $brandIndex > 0) { ?>
+                                            <button type="button" class="btn btn-outline-danger sor-remove-row-btn" data-row-type="brand" title="Remove Brand">
+                                                <i class="fa-solid fa-xmark"></i>
+                                            </button>
+                                        <?php } ?>
                                     </div>
                                 <?php } ?>
                             </div>
-                            <button type="button" class="btn btn-outline-primary btn-sm" id="add_brand_btn" <?php if ($act == '') echo 'disabled'; ?>>+ Add Brand</button>
+                            <?php if ($act != '') { ?>
+                                <button type="button" class="btn btn-outline-primary btn-sm" id="add_brand_btn">+ Add Brand</button>
+                            <?php } ?>
                             <?php if (isset($brand_err)) { ?>
                                 <div id="err_msg">
                                     <span class="mt-n1"><?php echo $brand_err; ?></span>

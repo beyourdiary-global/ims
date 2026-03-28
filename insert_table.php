@@ -523,6 +523,7 @@ if ($conn->select_db($db_cms)) {
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `name` VARCHAR(255) NOT NULL,
     `bot_token` VARCHAR(255) NOT NULL,
+    `chat_id` VARCHAR(100) DEFAULT '',
     `remark` TEXT DEFAULT NULL,
     `create_by` VARCHAR(30) DEFAULT NULL,
     `create_date` DATE DEFAULT NULL,
@@ -558,7 +559,7 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Error creating `user_record_log`: " . $conn->error . "</p>";
     }
 
-    dropColumnIfExists($conn, $db_cms, 'token_setting', 'chat_id', "ALTER TABLE `token_setting` DROP COLUMN `chat_id`");
+    addColumnIfMissing($conn, $db_cms, 'token_setting', 'chat_id', "ALTER TABLE `token_setting` ADD COLUMN `chat_id` VARCHAR(100) DEFAULT '' AFTER `bot_token`");
 
     addColumnIfMissing($conn, $db_cms, 'user', 'main_report_supervisor', "ALTER TABLE `user` ADD COLUMN `main_report_supervisor` INT DEFAULT NULL AFTER `access_id`");
     addColumnIfMissing($conn, $db_cms, 'user', 'second_report_supervisor', "ALTER TABLE `user` ADD COLUMN `second_report_supervisor` INT DEFAULT NULL AFTER `main_report_supervisor`");

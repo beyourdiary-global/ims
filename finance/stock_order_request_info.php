@@ -83,15 +83,13 @@ function sorInfoTelegramRequest($url, $payload, &$curlErr)
     curl_setopt($ch, CURLOPT_POST, true);
     curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
     curl_setopt($ch, CURLOPT_TIMEOUT, 30);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
     curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
     $resp = curl_exec($ch);
     $curlErr = curl_error($ch);
     curl_close($ch);
-
-    // If an SSL error occurs (e.g., missing CA bundle locally), we now let it fail securely 
-    // instead of bypassing TLS verification, avoiding potential MITM vulnerabilities.
 
     return $resp;
 }
@@ -122,7 +120,7 @@ function sorInfoResolveTelegramChatId($apiBase, &$resolveErr)
         $payload = array(
             'offset' => -1,
             'limit' => 1,
-            'timeout' => 10,
+            'timeout' => 2,
         );
         $curlErr = '';
         $resp = sorInfoTelegramRequest($url, $payload, $curlErr);
@@ -268,6 +266,13 @@ $telegramErr = '';
 
 if (post('actionBtn') === 'sendTelegramStockInBot') {
     $tokenTable = defined('TOKEN_SETT') ? TOKEN_SETT : 'token_setting';
+
+    // Auto-add chat_id column if it doesn't exist yet
+    $colCheck = @mysqli_query($connect, "SHOW COLUMNS FROM `" . $tokenTable . "` LIKE 'chat_id'");
+    if ($colCheck && mysqli_num_rows($colCheck) === 0) {
+        @mysqli_query($connect, "ALTER TABLE `" . $tokenTable . "` ADD COLUMN `chat_id` VARCHAR(100) DEFAULT '' AFTER `bot_token`");
+    }
+
     $tokenRow = sorInfoFindPreferredTokenRow($connect, $tokenTable);
 
     if (!$tokenRow) {
@@ -287,7 +292,7 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
                 . "Product: " . ($summary['product'] !== '' ? $summary['product'] : '-') . "\n"
                 . "Link: " . $orderLink;
 
-            $apiBase = 'https://api.telegram.org/bot' . rawurlencode($botToken);
+            $apiBase = 'https://api.telegram.org/bot' . $botToken;
             $sendPhotoUrl = $apiBase . '/sendPhoto';
             $sendMessageUrl = $apiBase . '/sendMessage';
 
@@ -295,7 +300,7 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
                 $resolveErr = '';
                 $chatId = sorInfoResolveTelegramChatId($apiBase, $resolveErr);
                 if ($chatId === '') {
-                    $telegramErr = 'Unable to detect Telegram chat automatically. Please send /start to your bot once, then try again.';
+                    $telegramErr = 'Unable to detect Telegram chat automatically. Please enter the Chat ID in Settings > Token Setting, or send /start to your bot once, then try again.';
                     if ($resolveErr !== '') {
                         $telegramErr .= ' ' . $resolveErr;
                     }
@@ -348,6 +353,16 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
                     }
                 } else {
                     $telegramMsg = 'Telegram message sent successful.';
+                }
+
+                // Save resolved chat_id back to token_setting for future sends
+                if ($telegramMsg !== '' && $chatId !== '' && is_array($tokenRow) && isset($tokenRow['id'])) {
+                    $storedChatId = isset($tokenRow['chat_id']) ? trim((string) $tokenRow['chat_id']) : '';
+                    if ($storedChatId === '') {
+                        $safeChatId = mysqli_real_escape_string($connect, $chatId);
+                        $tokenId = (int) $tokenRow['id'];
+                        @mysqli_query($connect, "UPDATE `" . $tokenTable . "` SET chat_id='" . $safeChatId . "' WHERE id='" . $tokenId . "' AND status='A'");
+                    }
                 }
             }
         }
