@@ -1149,43 +1149,35 @@ if (!function_exists('sorFetchTrackingStatus')) {
             return '';
         }
 
-        $ch = curl_init();
-        $baseOpts = array(
-            CURLOPT_URL => $trackingUrl,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_CONNECTTIMEOUT => 5,
-            CURLOPT_TIMEOUT => 12,
-            CURLOPT_USERAGENT => 'Mozilla/5.0 StockOrderTrackingBot',
+        $opts = array(
+            'http' => array(
+                'method' => 'GET',
+                'header' => "User-Agent: Mozilla/5.0 StockOrderTrackingBot\r\n",
+                'timeout' => 12,
+                'follow_location' => true,
+                'ignore_errors' => true,
+            ),
+            'ssl' => array(
+                'verify_peer' => false,
+                'verify_peer_name' => false,
+            ),
         );
+        $ctx = stream_context_create($opts);
+        $body = @file_get_contents($trackingUrl, false, $ctx);
 
-        $ch = curl_init();
-        curl_setopt_array($ch, $baseOpts + array(
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
-        ));
-        $body = curl_exec($ch);
-        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        $curlErr = curl_error($ch);
-        curl_close($ch);
-
-        // SSL fallback: fresh handle without SSL verification
-        if ($httpCode === 0 && ($body === false || $body === '')) {
-            $ch2 = curl_init();
-            curl_setopt_array($ch2, $baseOpts + array(
-                CURLOPT_SSL_VERIFYPEER => false,
-                CURLOPT_SSL_VERIFYHOST => 0,
-            ));
-            $body = curl_exec($ch2);
-            $httpCode = (int) curl_getinfo($ch2, CURLINFO_HTTP_CODE);
-            $curlErr = curl_error($ch2);
-            curl_close($ch2);
+        $httpCode = 0;
+        if (isset($http_response_header) && is_array($http_response_header)) {
+            foreach ($http_response_header as $hdr) {
+                if (preg_match('/^HTTP\/[\d.]+ (\d+)/', $hdr, $m)) {
+                    $httpCode = (int) $m[1];
+                }
+            }
         }
 
         $timestamp = date('Y-m-d H:i:s');
 
         if ($body === false || $body === null || $body === '') {
-            return "Unable to retrieve tracking status (HTTP $httpCode). $curlErr [$timestamp]";
+            return "Unable to retrieve tracking status (HTTP $httpCode). [$timestamp]";
         }
 
         $title = '';
@@ -1194,7 +1186,7 @@ if (!function_exists('sorFetchTrackingStatus')) {
         }
 
         $plain = strtolower(strip_tags($body));
-        $keywords = array('delivered', 'out for delivery', 'in transit', 'exception', 'picked up', 'shipment information received');
+        $keywords = array('delivered', 'out for delivery', 'in transit', 'exception', 'picked up', 'shipment information received', 'shipment canceled', 'shipment cancelled');
         $found = '';
         foreach ($keywords as $keyword) {
             if (strpos($plain, $keyword) !== false) {
@@ -1256,40 +1248,24 @@ if (!function_exists('sorFetchTrackingStatusEasyParcel')) {
         );
 
         $postData = http_build_query($postparam);
-        $baseOpts = array(
-            CURLOPT_URL => $url,
-            CURLOPT_POST => 1,
-            CURLOPT_POSTFIELDS => $postData,
-            CURLOPT_HEADER => 0,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_CONNECTTIMEOUT => 8,
-            CURLOPT_TIMEOUT => 15,
+        $opts = array(
+            'http' => array(
+                'method' => 'POST',
+                'header' => "Content-Type: application/x-www-form-urlencoded\r\n",
+                'content' => $postData,
+                'timeout' => 15,
+                'ignore_errors' => true,
+            ),
+            'ssl' => array(
+                'verify_peer' => false,
+                'verify_peer_name' => false,
+            ),
         );
-
-        $ch = curl_init();
-        curl_setopt_array($ch, $baseOpts + array(
-            CURLOPT_SSL_VERIFYPEER => true,
-            CURLOPT_SSL_VERIFYHOST => 2,
-        ));
-        $response = curl_exec($ch);
-        $curlErr = curl_error($ch);
-        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-        curl_close($ch);
-
-        // SSL fallback: fresh handle without SSL verification
-        if ($httpCode === 0 && ($response === false || $response === '')) {
-            $ch2 = curl_init();
-            curl_setopt_array($ch2, $baseOpts + array(
-                CURLOPT_SSL_VERIFYPEER => false,
-                CURLOPT_SSL_VERIFYHOST => 0,
-            ));
-            $response = curl_exec($ch2);
-            $curlErr = curl_error($ch2);
-            curl_close($ch2);
-        }
+        $ctx = stream_context_create($opts);
+        $response = @file_get_contents($url, false, $ctx);
 
         if ($response === false || $response === null || $response === '') {
-            return 'EasyParcel tracking unavailable: ' . $curlErr;
+            return 'EasyParcel tracking unavailable: request failed';
         }
 
         $json = json_decode($response, true);
