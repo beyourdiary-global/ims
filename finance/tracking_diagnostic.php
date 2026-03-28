@@ -102,7 +102,8 @@ if (isset($_POST['runDiag'])) {
             // Show api_status
             $apiStatus = isset($json['api_status']) ? (string) $json['api_status'] : '(not set)';
             $error = isset($json['error']) ? (string) $json['error'] : '(not set)';
-            $results[] = array('step' => 'API Status', 'status' => ($apiStatus === '0' || $apiStatus === '') ? 'OK' : 'FAIL', 'detail' =>
+            $isSuccess = ($apiStatus === '0' || $apiStatus === '' || strtolower($apiStatus) === 'success');
+            $results[] = array('step' => 'API Status', 'status' => $isSuccess ? 'OK' : 'FAIL', 'detail' =>
                 'api_status: ' . $apiStatus . ' | error: ' . $error);
 
             // Show result array
