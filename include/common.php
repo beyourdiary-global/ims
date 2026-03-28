@@ -1115,6 +1115,59 @@ if (!function_exists('sorDecodeToken')) {
     }
 }
 
+if (!function_exists('sorResolveTrackingMySlug')) {
+    /**
+     * Map courier name (from DB) to tracking.my URL slug.
+     * Also tries to auto-detect from tracking number prefix.
+     */
+    function sorResolveTrackingMySlug($courierName, $trackingNo)
+    {
+        $courierName = strtolower(trim((string) $courierName));
+        $trackingNo = strtoupper(trim((string) $trackingNo));
+
+        // Map courier names to tracking.my slugs
+        $nameMap = array(
+            'dhl' => 'dhl-ecommerce',
+            'dhl ecommerce' => 'dhl-ecommerce',
+            'dhl e-commerce' => 'dhl-ecommerce',
+            'pos malaysia' => 'pos',
+            'pos laju' => 'pos',
+            'poslaju' => 'pos',
+            'j&t' => 'jt',
+            'j&t express' => 'jt',
+            'jnt' => 'jt',
+            'jnt express' => 'jt',
+            'shopee express' => 'shopee',
+            'shopee' => 'shopee',
+            'best express' => 'best',
+            'citylink' => 'citylink',
+            'citylink express' => 'citylink',
+            'ninja van' => 'ninjavan',
+            'ninjavan' => 'ninjavan',
+            'gdex' => 'gdex',
+            'flash express' => 'flash',
+            'abx express' => 'abx',
+            'skynet' => 'skynet',
+        );
+
+        foreach ($nameMap as $key => $slug) {
+            if (strpos($courierName, $key) !== false) {
+                return $slug;
+            }
+        }
+
+        // Auto-detect from tracking number prefix
+        if (strpos($trackingNo, 'MY') === 0 || strpos($trackingNo, 'MYJZ') === 0) {
+            return 'dhl-ecommerce';
+        }
+        if (preg_match('/^\d{10,}$/', $trackingNo)) {
+            return 'pos'; // Pos Malaysia uses numeric tracking numbers
+        }
+
+        return '';
+    }
+}
+
 if (!function_exists('sorBuildTrackingUrl')) {
     function sorBuildTrackingUrl($trackingLink, $trackingNo)
     {
@@ -1191,6 +1244,7 @@ if (!function_exists('sorFetchTrackingStatus')) {
         $bodyLower = strtolower($body);
         $keywords = array(
             'shipment canceled', 'shipment cancelled',
+            'cancelled',
             'delivered', 'out for delivery', 'in transit',
             'exception', 'picked up', 'shipment information received',
             'returned to sender', 'customs', 'clearance event',
@@ -1368,13 +1422,24 @@ if (!function_exists('sorRefreshTrackingStatus')) {
             $statusText = sorFetchTrackingStatus($trackingUrl);
         }
 
-        // Secondary fallback: try tracking.my aggregator when primary scrape found no keyword.
+        // Secondary fallback: try tracking.my with courier-specific slug.
         $scrapeHasKeyword = (stripos($statusText, 'Detected:') !== false);
         if (!$scrapeHasKeyword && $trackingNo !== '') {
-            $altUrl = 'https://www.tracking.my/' . rawurlencode($trackingNo);
-            $altStatus = sorFetchTrackingStatus($altUrl);
-            if (stripos($altStatus, 'Detected:') !== false) {
-                $statusText = $altStatus . ' | Source: tracking.my';
+            // Resolve courier name for tracking.my slug
+            $courierNameForSlug = '';
+            if ($courierId > 0) {
+                $cnRst = mysqli_query($lookupConnect, "SELECT name FROM " . COURIER . " WHERE id = '" . $courierId . "' LIMIT 1");
+                if ($cnRst && ($cnRow = mysqli_fetch_assoc($cnRst))) {
+                    $courierNameForSlug = isset($cnRow['name']) ? (string) $cnRow['name'] : '';
+                }
+            }
+            $slug = sorResolveTrackingMySlug($courierNameForSlug, $trackingNo);
+            if ($slug !== '') {
+                $altUrl = 'https://www.tracking.my/' . $slug . '/' . rawurlencode($trackingNo);
+                $altStatus = sorFetchTrackingStatus($altUrl);
+                if (stripos($altStatus, 'Detected:') !== false) {
+                    $statusText = $altStatus . ' | Source: tracking.my';
+                }
             }
         }
 
