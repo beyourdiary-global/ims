@@ -91,6 +91,17 @@ function sorInfoTelegramRequest($url, $payload, &$curlErr, &$httpCode = 0)
     $resp = curl_exec($ch);
     $curlErr = curl_error($ch);
     $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+
+    // If SSL verification fails (HTTP 0 = no response, common on PHP 7.x
+    // LiteSpeed servers with outdated CA bundles), retry without strict SSL.
+    if ($httpCode === 0 && ($resp === false || $resp === '')) {
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
+        $resp = curl_exec($ch);
+        $curlErr = curl_error($ch);
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    }
+
     curl_close($ch);
 
     return $resp;
