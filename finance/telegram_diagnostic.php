@@ -80,32 +80,42 @@ if (isset($_POST['runDiag'])) {
             $results[] = array('step' => 'file_get_contents (getMe)', 'status' => $streamOk ? 'OK' : 'FAIL',
                 'detail' => $streamOk ? substr($streamResp, 0, 200) : 'Failed or disabled (allow_url_fopen=' . ini_get('allow_url_fopen') . ')');
 
-            // Step 5: Test sendMessage if chat_id available
+            // Step 5: Test sendMessage via file_get_contents (the method that works)
             if ($chatId !== '') {
-                $testPayload = array(
+                $testPayload = http_build_query(array(
                     'chat_id' => $chatId,
                     'text' => 'Diagnostic test from IMS at ' . date('Y-m-d H:i:s'),
-                );
+                ));
 
-                $ch3 = curl_init();
-                curl_setopt($ch3, CURLOPT_URL, $apiBase . '/sendMessage');
-                curl_setopt($ch3, CURLOPT_POST, true);
-                curl_setopt($ch3, CURLOPT_POSTFIELDS, $testPayload);
-                curl_setopt($ch3, CURLOPT_RETURNTRANSFER, true);
-                curl_setopt($ch3, CURLOPT_CONNECTTIMEOUT, 10);
-                curl_setopt($ch3, CURLOPT_TIMEOUT, 30);
-                curl_setopt($ch3, CURLOPT_SSL_VERIFYPEER, false);
-                curl_setopt($ch3, CURLOPT_SSL_VERIFYHOST, 0);
-                $resp3 = curl_exec($ch3);
-                $err3 = curl_error($ch3);
-                $http3 = (int) curl_getinfo($ch3, CURLINFO_HTTP_CODE);
-                curl_close($ch3);
+                $sendOpts = array(
+                    'http' => array(
+                        'method' => 'POST',
+                        'header' => "Content-Type: application/x-www-form-urlencoded\r\n",
+                        'content' => $testPayload,
+                        'timeout' => 30,
+                        'ignore_errors' => true,
+                    ),
+                    'ssl' => array(
+                        'verify_peer' => false,
+                        'verify_peer_name' => false,
+                    ),
+                );
+                $sendCtx = stream_context_create($sendOpts);
+                $resp3 = @file_get_contents($apiBase . '/sendMessage', false, $sendCtx);
+                $http3 = 0;
+                if (isset($http_response_header) && is_array($http_response_header)) {
+                    foreach ($http_response_header as $hdr) {
+                        if (preg_match('/^HTTP\/[\d.]+ (\d+)/', $hdr, $m)) {
+                            $http3 = (int) $m[1];
+                        }
+                    }
+                }
 
                 $decoded3 = json_decode((string) $resp3, true);
                 $sendOk = (is_array($decoded3) && !empty($decoded3['ok']));
 
-                $results[] = array('step' => 'sendMessage (SSL off)', 'status' => $sendOk ? 'OK' : 'FAIL',
-                    'detail' => 'HTTP ' . $http3 . ' | cURL error: ' . ($err3 !== '' ? $err3 : 'none') . ' | Response: ' . substr((string) $resp3, 0, 300));
+                $results[] = array('step' => 'sendMessage (stream)', 'status' => $sendOk ? 'OK' : 'FAIL',
+                    'detail' => 'HTTP ' . $http3 . ' | Response: ' . substr((string) $resp3, 0, 300));
             } else {
                 $results[] = array('step' => 'sendMessage', 'status' => 'SKIP', 'detail' => 'No chat_id configured. Cannot test send.');
             }
