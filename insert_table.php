@@ -600,6 +600,10 @@ if ($conn->select_db($db_cms)) {
 
     addColumnIfMissing($conn, $db_cms, 'brand', 'company', "ALTER TABLE `brand` ADD COLUMN `company` INT DEFAULT NULL AFTER `name`");
 
+    // Package schema backfill for import/export compatibility.
+    addColumnIfMissing($conn, $db_cms, 'package', 'item_code', "ALTER TABLE `package` ADD COLUMN `item_code` VARCHAR(100) DEFAULT NULL AFTER `name`");
+    addColumnIfMissing($conn, $db_cms, 'package', 'item_description', "ALTER TABLE `package` ADD COLUMN `item_description` TEXT DEFAULT NULL AFTER `item_code`");
+
     // 1. Insert new Pin Groups (125, 126 & 127)
     $sqlInsertPins = "INSERT IGNORE INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
     (125, 'Stock In', '1,2,3,4,5,6', 'Stock In Management', '1', CURDATE(), CURTIME(), 'A'),

@@ -70,25 +70,38 @@ $(document).ready(function ($) {
       return;
     }
 
-    $("#datepicker input").datepicker({
-      format: "yyyy-mm-dd",
+    var commonDatepickerOptions = {
       autoclose: true,
       todayHighlight: true,
+      container: "body",
+      orientation: "bottom auto",
+    };
+
+    $("#datepicker input").datepicker({
+      format: "yyyy-mm-dd",
+      autoclose: commonDatepickerOptions.autoclose,
+      todayHighlight: commonDatepickerOptions.todayHighlight,
+      container: commonDatepickerOptions.container,
+      orientation: commonDatepickerOptions.orientation,
     });
 
     $(
       "#datepicker2 input[name='start'], #datepicker2 input[name='end']",
     ).datepicker({
       format: "yyyy-mm-dd",
-      autoclose: true,
-      todayHighlight: true,
+      autoclose: commonDatepickerOptions.autoclose,
+      todayHighlight: commonDatepickerOptions.todayHighlight,
+      container: commonDatepickerOptions.container,
+      orientation: commonDatepickerOptions.orientation,
     });
 
     $(
       "#datepicker3 input[name='start'], #datepicker3 input[name='end']",
     ).datepicker({
       format: "yyyy-mm",
-      autoclose: true,
+      autoclose: commonDatepickerOptions.autoclose,
+      container: commonDatepickerOptions.container,
+      orientation: commonDatepickerOptions.orientation,
       minViewMode: 1,
     });
 
@@ -96,7 +109,9 @@ $(document).ready(function ($) {
       "#datepicker4 input[name='start'], #datepicker4 input[name='end']",
     ).datepicker({
       format: "yyyy",
-      autoclose: true,
+      autoclose: commonDatepickerOptions.autoclose,
+      container: commonDatepickerOptions.container,
+      orientation: commonDatepickerOptions.orientation,
       minViewMode: 2,
     });
   }

@@ -14,8 +14,10 @@ $tablePage = $SITEURL . '/warehouse_stock_in_table.php';
 
 $warehouses = siLoadWarehouses($connect);
 $products = siLoadProducts($connect);
+$packages = siLoadPackages($connect);
 list($warehouseNameMap, $warehouseNameToId) = siBuildNameMaps($warehouses);
 list($productNameMap, $productNameToId) = siBuildNameMaps($products);
+list($packageNameMap, $packageNameToId) = siBuildNameMaps($packages);
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
@@ -30,7 +32,7 @@ $msg = isset($_GET['msg']) ? trim((string) $_GET['msg']) : '';
 $err = isset($_GET['err']) ? trim((string) $_GET['err']) : '';
 
 if (!function_exists('siFetchAssocRows')) {
-    function siFetchAssocRows($financeConnect, $cmsConnect, $orderTable, $itemTable, $warehouseNameMap, $productNameMap, $selectedOrderIds = array())
+    function siFetchAssocRows($financeConnect, $cmsConnect, $orderTable, $itemTable, $warehouseNameMap, $productNameMap, $packageNameMap, $selectedOrderIds = array())
     {
         $orderCols = array();
         $itemCols = array();
@@ -124,6 +126,27 @@ if (!function_exists('siFetchAssocRows')) {
                          $row['item_product_id'] = $rawProductIds;
                      }
                 }
+                if (isset($row['item_package_id'])) {
+                    $rawPackageIds = (string) $row['item_package_id'];
+                    $packageIdParts = array_map('trim', explode(',', $rawPackageIds));
+                    $packageNames = array();
+                    foreach ($packageIdParts as $packageIdPart) {
+                        if ($packageIdPart === '') {
+                            continue;
+                        }
+                        $pkgId = (int) $packageIdPart;
+                        if (isset($packageNameMap[$pkgId])) {
+                            $packageNames[] = (string) $packageNameMap[$pkgId];
+                        } else {
+                            $packageNames[] = $packageIdPart;
+                        }
+                    }
+                    if (!empty($packageNames)) {
+                        $row['item_package_id'] = implode(', ', $packageNames);
+                    } else {
+                        $row['item_package_id'] = $rawPackageIds;
+                    }
+                }
 
                 foreach ($row as $key => $value) {
                     $normalizedKey = strtolower((string) $key);
@@ -158,6 +181,25 @@ if (!function_exists('siExportAssocExcel')) {
         $displayHeaders = array();
         foreach (array_keys($rows[0]) as $header) {
             $headerLower = strtolower((string) $header);
+
+            // Internal IDs are not part of import form and should not be exported.
+            if ($headerLower === 'item_id' || $headerLower === 'item_stock_in_order_id') {
+                continue;
+            }
+
+            // Keep only one audit column set in export.
+            // Skip order-level audit fields and keep the later item-level fields.
+            if (
+                $headerLower === 'order_create_by' ||
+                $headerLower === 'order_create_date' ||
+                $headerLower === 'order_create_time' ||
+                $headerLower === 'order_update_by' ||
+                $headerLower === 'order_update_date' ||
+                $headerLower === 'order_update_time'
+            ) {
+                continue;
+            }
+
             $exportHeaders[] = $header;
             if ($headerLower === 'order_id') {
                 $displayHeaders[] = 'S/N';
@@ -165,14 +207,12 @@ if (!function_exists('siExportAssocExcel')) {
                 $displayHeaders[] = 'WAREHOUSE';
             } else if ($headerLower === 'item_product_id') {
                 $displayHeaders[] = 'PRODUCT NAME';
+            } else if ($headerLower === 'item_package_id') {
+                $displayHeaders[] = 'PACKAGE NAME';
             } else {
                 $clean = str_replace(array('order_', 'item_'), '', (string) $header);
                 if ($clean === 'id' && strpos((string) $header, 'order_') === 0) {
                     $displayHeaders[] = 'ORDER ID';
-                } else if ($clean === 'stock_in_order_id' && strpos((string) $header, 'item_') === 0) {
-                    $displayHeaders[] = 'ORDER ID';
-                } else if (strtolower($clean) === 'id' && strpos((string) $header, 'item_') === 0) {
-                    $displayHeaders[] = 'ITEM ID';
                 } else {
                     $displayHeaders[] = strtoupper(str_replace('_', ' ', $clean));
                 }
@@ -212,16 +252,32 @@ if (!function_exists('siResolveAttachmentAbsPath')) {
         $normalizedImgServer = trim(str_replace('\\', '/', (string) img_server), '/');
         $normalizedPath = ltrim($path, '/');
 
+        $root = rtrim((string) ROOT, '/\\');
+        $imgBase = trim((string) img_server, '/\\');
+        $baseName = basename($normalizedPath);
+
+        $candidates = array();
         if (strpos($normalizedPath, $normalizedImgServer . '/') === 0) {
-            return rtrim((string) ROOT, '/\\') . '/' . $normalizedPath;
+            $candidates[] = $root . '/' . $normalizedPath;
+        }
+        if (strpos($normalizedPath, 'attachment/sqlaccount/') === 0 || strpos($normalizedPath, 'finance/stock_in/') === 0) {
+            $candidates[] = $root . '/' . $imgBase . '/' . $normalizedPath;
+            $candidates[] = $root . '/' . $normalizedPath;
         }
 
-        if (strpos($normalizedPath, 'attachment/sqlaccount/') === 0) {
-            return rtrim((string) ROOT, '/\\') . '/' . trim((string) img_server, '/\\') . '/' . $normalizedPath;
+        // Common legacy variants where only filename was stored.
+        $candidates[] = $root . '/' . $imgBase . '/finance/stock_in/' . $baseName;
+        $candidates[] = $root . '/' . $imgBase . '/' . $baseName;
+        $candidates[] = $root . '/finance/stock_in/' . $baseName;
+
+        foreach ($candidates as $candidate) {
+            if ($candidate !== '' && file_exists($candidate)) {
+                return $candidate;
+            }
         }
 
-        // Legacy stock-in attachment filename fallback.
-        return rtrim((string) ROOT, '/\\') . '/' . trim((string) img_server, '/\\') . '/finance/stock_in/' . basename($normalizedPath);
+        // Return best-guess path for caller logging/diagnostics.
+        return $root . '/' . $imgBase . '/finance/stock_in/' . $baseName;
     }
 }
 
@@ -254,6 +310,7 @@ if (!function_exists('siBuildStockInExportZip')) {
         }
 
         $zip->addFile($excelPath, basename($excelPath));
+        $zip->addEmptyDir('attachment');
 
         $added = array();
         foreach ($rows as $row) {
@@ -324,7 +381,7 @@ if (input('export') === 'excel') {
         exit;
     }
     if (!empty($exportIds)) {
-        $rows = siFetchAssocRows($finance_connect, $connect, $stockInOrderTable, $stockInItemTable, $warehouseNameMap, $productNameMap, $exportIds);
+        $rows = siFetchAssocRows($finance_connect, $connect, $stockInOrderTable, $stockInItemTable, $warehouseNameMap, $productNameMap, $packageNameMap, $exportIds);
         if (empty($rows)) {
             while (ob_get_level() > 0) {
                 ob_end_clean();
@@ -334,7 +391,7 @@ if (input('export') === 'excel') {
         }
         siAuditExportAction($connect, $pageTitle, $stockInItemTable, implode(',', $exportIds));
     } else {
-        $rows = siFetchAssocRows($finance_connect, $connect, $stockInOrderTable, $stockInItemTable, $warehouseNameMap, $productNameMap);
+        $rows = siFetchAssocRows($finance_connect, $connect, $stockInOrderTable, $stockInItemTable, $warehouseNameMap, $productNameMap, $packageNameMap);
         siAuditExportAction($connect, $pageTitle, $stockInItemTable, 'ALL');
     }
 

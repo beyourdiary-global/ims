@@ -23,8 +23,14 @@ if (!isActionAllowed('Import', $pinAccess)) {
 
 $warehouses = siLoadWarehouses($connect);
 $products = siLoadProducts($connect);
+$packages = siLoadPackages($connect);
 list($warehouseNameMap, $warehouseNameToId) = siBuildNameMaps($warehouses);
 list($productNameMap, $productNameToId) = siBuildNameMaps($products);
+$packageNameMap = array();
+$packageNameToId = array();
+if (is_array($packages)) {
+    list($packageNameMap, $packageNameToId) = siBuildNameMaps($packages);
+}
 $warehouseOptions = array_values($warehouseNameMap);
 $productOptions = array_values($productNameMap);
 
@@ -127,7 +133,7 @@ if ($actionBtn === 'confirmImport') {
             $productRaw = trim((string) (isset($row['product_name']) ? $row['product_name'] : ''));
             $qtyRaw = trim((string) (isset($row['product_quantity']) ? $row['product_quantity'] : ''));
             $qty = (int) $qtyRaw;
-            $packageId = isset($row['package_id']) ? (int) $row['package_id'] : 0;
+            $packageNameRaw = trim((string) (isset($row['package_name']) ? $row['package_name'] : ''));
 
             $warehouseId = 0;
             if ($warehouseRaw !== '' && ctype_digit($warehouseRaw) && isset($warehouseNameMap[(int) $warehouseRaw])) {
@@ -183,7 +189,7 @@ if ($actionBtn === 'confirmImport') {
                     'order_number' => $orderNumber,
                     'product_id' => $productId,
                     'product_display' => $productRaw,
-                    'package_id' => $packageId,
+                    'package_display' => $packageNameRaw,
                     'product_quantity' => $qty,
                 ),
                 'field_errors' => $fieldErrors,
@@ -226,7 +232,7 @@ if ($actionBtn === 'confirmImport') {
                 $orderNumber = trim((string) (isset($row['order_number']) ? $row['order_number'] : ''));
                 $productRaw = trim((string) (isset($row['product_name']) ? $row['product_name'] : ''));
                 $qty = isset($row['product_quantity']) ? (int) $row['product_quantity'] : 0;
-                $packageId = isset($row['package_id']) ? (int) $row['package_id'] : 0;
+                $packageNameRaw = trim((string) (isset($row['package_name']) ? $row['package_name'] : ''));
 
                 $warehouseId = 0;
                 if ($warehouseRaw !== '' && ctype_digit($warehouseRaw) && isset($warehouseNameMap[(int) $warehouseRaw])) {
@@ -255,8 +261,7 @@ if ($actionBtn === 'confirmImport') {
                         (string) $oldStockInDate !== (string) $stockInDate ||
                         (string) $old['order_number'] !== (string) $orderNumber ||
                         (int) $old['product_id'] !== (int) $productId ||
-                        (int) $old['product_quantity'] !== (int) $qty ||
-                        (int) $old['package_id'] !== (int) $packageId
+                        (int) $old['product_quantity'] !== (int) $qty
                     );
 
                     if (!$changed) {
@@ -268,7 +273,7 @@ if ($actionBtn === 'confirmImport') {
                     $uOrder = "UPDATE `" . $stockInOrderTable . "` SET warehouse_id='" . $warehouseId . "', stock_in_date='" . $safeDate . "', order_number='" . $safeOrderNo . "', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $orderId . "'";
                     mysqli_query($finance_connect, $uOrder);
 
-                    $uItem = "UPDATE `" . $stockInItemTable . "` SET product_id='" . $productId . "', package_id='" . $packageId . "', product_quantity='" . $qty . "', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $itemId . "'";
+                    $uItem = "UPDATE `" . $stockInItemTable . "` SET product_id='" . $productId . "', product_quantity='" . $qty . "', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $itemId . "'";
                     mysqli_query($finance_connect, $uItem);
                     $updated++;
                 } else {
@@ -281,7 +286,7 @@ if ($actionBtn === 'confirmImport') {
                         $orderId = (int) mysqli_insert_id($finance_connect);
                     }
 
-                    $iItem = "INSERT INTO `" . $stockInItemTable . "` (stock_in_order_id, product_id, package_id, product_quantity, create_by, create_date, create_time, status) VALUES ('" . $orderId . "', '" . $productId . "', '" . $packageId . "', '" . $qty . "', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
+                    $iItem = "INSERT INTO `" . $stockInItemTable . "` (stock_in_order_id, product_id, package_id, product_quantity, create_by, create_date, create_time, status) VALUES ('" . $orderId . "', '" . $productId . "', '0', '" . $qty . "', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
                     mysqli_query($finance_connect, $iItem);
                     $inserted++;
                 }
@@ -345,6 +350,40 @@ if ($actionBtn === 'importPreview') {
                 $unchangedCount = 0;
                 $errorCount = 0;
 
+                $normalizeOrderNo = function ($value) {
+                    $v = trim((string) $value);
+                    if ($v === '') {
+                        return '';
+                    }
+                    if (is_numeric($v)) {
+                        return (string) ((float) $v);
+                    }
+                    return strtolower($v);
+                };
+                $buildMatchKey = function ($warehouseId, $stockInDate, $orderNumber, $productId, $qty) use ($normalizeOrderNo) {
+                    if ((int) $warehouseId <= 0 || (int) $productId <= 0 || (int) $qty <= 0 || trim((string) $stockInDate) === '' || trim((string) $orderNumber) === '') {
+                        return '';
+                    }
+                    return (int) $warehouseId . '|' . (string) $stockInDate . '|' . $normalizeOrderNo($orderNumber) . '|' . (int) $productId . '|' . (int) $qty;
+                };
+                $matchQueues = array();
+                foreach ($currentRows as $existingRow) {
+                    $mk = $buildMatchKey(
+                        isset($existingRow['warehouse_id']) ? (int) $existingRow['warehouse_id'] : 0,
+                        siNormalizeImportedDate(isset($existingRow['stock_in_date']) ? $existingRow['stock_in_date'] : ''),
+                        isset($existingRow['order_number']) ? (string) $existingRow['order_number'] : '',
+                        isset($existingRow['product_id']) ? (int) $existingRow['product_id'] : 0,
+                        isset($existingRow['product_quantity']) ? (int) $existingRow['product_quantity'] : 0
+                    );
+                    if ($mk === '') {
+                        continue;
+                    }
+                    if (!isset($matchQueues[$mk])) {
+                        $matchQueues[$mk] = array();
+                    }
+                    $matchQueues[$mk][] = $existingRow;
+                }
+
                 foreach ($importRows as $r) {
                     $itemId = isset($r['item id']) ? (int) $r['item id'] : (isset($r['item_id']) ? (int) $r['item_id'] : (isset($r['item_item_id']) ? (int) $r['item_item_id'] : 0));
                     $orderId = isset($r['order id']) ? (int) $r['order id'] : (isset($r['order_id']) ? (int) $r['order_id'] : (isset($r['order_order_id']) ? (int) $r['order_order_id'] : (isset($r['s/n']) ? (int) $r['s/n'] : 0)));
@@ -353,10 +392,9 @@ if ($actionBtn === 'importPreview') {
                     $stockInDate = siNormalizeImportedDate($stockInDateRaw);
                     $orderNumber = trim((string) (isset($r['order number']) ? $r['order number'] : (isset($r['number']) ? $r['number'] : (isset($r['order_number']) ? $r['order_number'] : (isset($r['order_order_number']) ? $r['order_order_number'] : '')))));
                     $productRaw = trim((string) (isset($r['product name']) ? $r['product name'] : (isset($r['product_name']) ? $r['product_name'] : (isset($r['product id']) ? $r['product id'] : (isset($r['item_product_id']) ? $r['item_product_id'] : '')))));
-                    $packageRaw = trim((string) (isset($r['package id']) ? $r['package id'] : (isset($r['item_package_id']) ? $r['item_package_id'] : '0')));
+                    $packageRaw = trim((string) (isset($r['package name']) ? $r['package name'] : (isset($r['package_name']) ? $r['package_name'] : (isset($r['item_package_id']) ? $r['item_package_id'] : (isset($r['package id']) ? $r['package id'] : '')))));
                     $qtyRaw = trim((string) (isset($r['product quantity']) ? $r['product quantity'] : (isset($r['product_quantity']) ? $r['product_quantity'] : (isset($r['item_product_quantity']) ? $r['item_product_quantity'] : '0'))));
                     $qty = (int) round((float) str_replace(',', '', $qtyRaw));
-                    $packageId = (int) round((float) str_replace(',', '', $packageRaw));
 
                     if ($warehouseRaw === '' && $stockInDate === '' && $orderNumber === '' && $productRaw === '' && $qty <= 0) {
                         continue;
@@ -418,9 +456,18 @@ if ($actionBtn === 'importPreview') {
                         'order_number' => $orderNumber,
                         'product_id' => $productId,
                         'product_display' => $productRaw,
-                        'package_id' => $packageId,
+                        'package_display' => $packageRaw,
                         'product_quantity' => $qty,
                     );
+
+                    if ($itemId <= 0) {
+                        $matchKey = $buildMatchKey($after['warehouse_id'], $after['stock_in_date'], $after['order_number'], $after['product_id'], $after['product_quantity']);
+                        if ($matchKey !== '' && isset($matchQueues[$matchKey]) && count($matchQueues[$matchKey]) > 0) {
+                            $matched = array_shift($matchQueues[$matchKey]);
+                            $itemId = isset($matched['item_id']) ? (int) $matched['item_id'] : 0;
+                            $orderId = isset($matched['order_id']) ? (int) $matched['order_id'] : 0;
+                        }
+                    }
 
                     if ($itemId <= 0 && $orderId > 0) {
                         // Build an index of first item_id by order_id once, then reuse it
@@ -485,8 +532,7 @@ if ($actionBtn === 'importPreview') {
                             (string) $oldStockInDate !== (string) $after['stock_in_date'] ||
                             $orderNoChanged ||
                             (int) $old['product_id'] !== (int) $after['product_id'] ||
-                            (int) $old['product_quantity'] !== (int) $after['product_quantity'] ||
-                            (int) $old['package_id'] !== (int) $after['package_id']
+                            (int) $old['product_quantity'] !== (int) $after['product_quantity']
                         );
 
                         // Fallback comparison for product name text to avoid false positives on name/ID formatting differences.
@@ -638,7 +684,13 @@ $previewData = isset($_SESSION['si_import_preview']) ? $_SESSION['si_import_prev
                                 $oAfter = isset($after['order_number']) ? (string) $after['order_number'] : '';
 
                                 $qAfter = isset($after['product_quantity']) ? (int) $after['product_quantity'] : 0;
-                                $pkgAfter = isset($after['package_id']) ? (int) $after['package_id'] : 0;
+                                $pkgAfter = trim((string) (isset($after['package_display']) ? $after['package_display'] : ''));
+                                if ($pkgAfter === '' && $before && isset($before['package_id'])) {
+                                    $pkgIdBefore = (int) $before['package_id'];
+                                    if ($pkgIdBefore > 0 && isset($packageNameMap[$pkgIdBefore])) {
+                                        $pkgAfter = (string) $packageNameMap[$pkgIdBefore];
+                                    }
+                                }
 
                                 $isModified = ($type === 'modified');
                                 $isNew = ($type === 'new');
@@ -658,7 +710,7 @@ $previewData = isset($_SESSION['si_import_preview']) ? $_SESSION['si_import_prev
                                 $chgOrderNo = ($before && (string) $before['order_number'] !== (string) $after['order_number']);
                                 $chgProduct = ($before && (int) $before['product_id'] !== (int) $after['product_id']);
                                 $chgQty = ($before && (int) $before['product_quantity'] !== (int) $after['product_quantity']);
-                                $chgPkg = ($before && (int) $before['package_id'] !== (int) $after['package_id']);
+                                $chgPkg = false;
                             ?>
                                 <div class="card mb-3 <?= siEsc($rowClass) ?>">
                                     <div class="card-body">
@@ -719,8 +771,8 @@ $previewData = isset($_SESSION['si_import_preview']) ? $_SESSION['si_import_prev
                                                 <?php if (isset($fieldErrors['product_quantity'])) { ?><div class="field-error" data-field="product_quantity"><?= siEsc($fieldErrors['product_quantity']) ?></div><?php } ?>
                                             </div>
                                             <div class="col-md-2">
-                                                <label class="form-label">Package ID</label>
-                                                <input type="number" class="form-control <?= $chgPkg ? 'highlight-change' : '' ?>" min="0" name="rows[<?= $idx ?>][package_id]" value="<?= (int) $pkgAfter ?>">
+                                                <label class="form-label">Package Name (Ignored)</label>
+                                                <input type="text" class="form-control <?= $chgPkg ? 'highlight-change' : '' ?>" name="rows[<?= $idx ?>][package_name]" value="<?= siEsc($pkgAfter) ?>">
                                             </div>
                                         </div>
                                     </div>

@@ -290,13 +290,6 @@ if ($action === 'preview') {
                         $csvCostCurr = getColByKey($data, $indexMap, 'COST_CURR', '');
                         $csvProducts = getColByKey($data, $indexMap, 'PRODUCT', '');
 
-                        if (normalizeLookupKey($csvPriceCurr) === 'rm') {
-                            $csvPriceCurr = 'MYR';
-                        }
-                        if (normalizeLookupKey($csvCostCurr) === 'rm') {
-                            $csvCostCurr = 'MYR';
-                        }
-
                         $dbBrandId = resolveMapValue($csvBrand, $brandRevMap);
                         $dbPriceCurrId = resolveMapValue($csvPriceCurr, $currencyRevMap);
                         $dbCostCurrId = resolveMapValue($csvCostCurr, $currencyRevMap);
@@ -456,13 +449,6 @@ else if ($action === 'update') {
         $agentCostRaw = normalizeCellText((string) (isset($row['agent_cost']) ? $row['agent_cost'] : ''));
         $productsRaw = normalizeCellText((string) (isset($row['product_names']) ? $row['product_names'] : ''));
 
-        if (normalizeLookupKey($priceCurrRaw) === 'rm') {
-            $priceCurrRaw = 'MYR';
-        }
-        if (normalizeLookupKey($costCurrRaw) === 'rm') {
-            $costCurrRaw = 'MYR';
-        }
-
         $brandResolved = resolveMapValue($brandRaw, $brandRevMap);
         $priceCurrResolved = resolveMapValue($priceCurrRaw, $currencyRevMap);
         $costCurrResolved = resolveMapValue($costCurrRaw, $currencyRevMap);
@@ -535,13 +521,6 @@ else if ($action === 'update') {
         $priceCurrRaw = normalizeCellText((string) (isset($row['price_curr_name']) ? $row['price_curr_name'] : ''));
         $costCurrRaw = normalizeCellText((string) (isset($row['cost_curr_name']) ? $row['cost_curr_name'] : ''));
         $productsRaw = normalizeCellText((string) (isset($row['product_names']) ? $row['product_names'] : ''));
-
-        if (normalizeLookupKey($priceCurrRaw) === 'rm') {
-            $priceCurrRaw = 'MYR';
-        }
-        if (normalizeLookupKey($costCurrRaw) === 'rm') {
-            $costCurrRaw = 'MYR';
-        }
 
         $brandRaw = resolveMapValue($brandRaw, $brandRevMap);
         $priceCurrRaw = resolveMapValue($priceCurrRaw, $currencyRevMap);

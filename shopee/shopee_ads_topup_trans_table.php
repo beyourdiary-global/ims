@@ -64,10 +64,14 @@ if (!empty($checkboxValues)) {
                 }
                 if (file_exists($attachmentSourcePath)) {
                     if (strpos($attachmentRelPath, '/') !== false) {
-                        $zipRelativePath = $attachmentRelPath;
+                        $pathForZip = ltrim($attachmentRelPath, '/');
+                        if (strpos($pathForZip, 'attachment/') === 0) {
+                            $pathForZip = substr($pathForZip, strlen('attachment/'));
+                        }
+                        $zipRelativePath = 'attachment/' . ltrim($pathForZip, '/');
                     } else {
                         $attachmentCreationDate = strtotime($row2['create_date']);
-                        $zipRelativePath = date('Y', $attachmentCreationDate) . '/' . date('m', $attachmentCreationDate) . '/' . $attachmentRelPath;
+                        $zipRelativePath = 'attachment/' . date('Y', $attachmentCreationDate) . '/' . date('m', $attachmentCreationDate) . '/' . $attachmentRelPath;
                     }
 
                     $attachmentDestPath = $tempAttachDir . $zipRelativePath;

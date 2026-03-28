@@ -722,8 +722,7 @@
       escapeAttr(pkgId || "") +
       '"></div>' +
       (isPackageHeader
-        ? '<div class="sor-package-qty-note">Quantity(package): <input class="form-control sor-item-package-qty-edit" type="number" min="1" value="' +
-          escapeAttr(qty || 1) +
+        ? +escapeAttr(qty || 1) +
           '" ' +
           (action === "" ? "readonly" : "") +
           "></div>"
