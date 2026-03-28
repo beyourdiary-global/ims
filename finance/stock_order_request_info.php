@@ -80,29 +80,42 @@ function sorInfoTelegramRequest($url, $payload, &$curlErr, &$httpCode = 0)
 {
     $curlErr = '';
     $httpCode = 0;
-    $ch = curl_init($url);
-    curl_setopt($ch, CURLOPT_POST, true);
-    curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
-    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-    curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 10);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 30);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, true);
-    curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
+
+    // Build cURL options array so we can recreate a clean handle on retry.
+    $baseOpts = array(
+        CURLOPT_URL => $url,
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $payload,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 10,
+        CURLOPT_TIMEOUT => 30,
+    );
+
+    // Attempt 1: strict SSL
+    $ch = curl_init();
+    curl_setopt_array($ch, $baseOpts + array(
+        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYHOST => 2,
+    ));
     $resp = curl_exec($ch);
     $curlErr = curl_error($ch);
     $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-
-    // If SSL verification fails (HTTP 0 = no response, common on PHP 7.x
-    // LiteSpeed servers with outdated CA bundles), retry without strict SSL.
-    if ($httpCode === 0 && ($resp === false || $resp === '')) {
-        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 0);
-        $resp = curl_exec($ch);
-        $curlErr = curl_error($ch);
-        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-    }
-
     curl_close($ch);
+
+    // Attempt 2: if SSL verification failed (HTTP 0), retry with a fresh
+    // handle and relaxed SSL. Required on PHP 7.x LiteSpeed servers
+    // where the CA bundle is outdated or missing.
+    if ($httpCode === 0 && ($resp === false || $resp === '')) {
+        $ch2 = curl_init();
+        curl_setopt_array($ch2, $baseOpts + array(
+            CURLOPT_SSL_VERIFYPEER => false,
+            CURLOPT_SSL_VERIFYHOST => 0,
+        ));
+        $resp = curl_exec($ch2);
+        $curlErr = curl_error($ch2);
+        $httpCode = (int) curl_getinfo($ch2, CURLINFO_HTTP_CODE);
+        curl_close($ch2);
+    }
 
     return $resp;
 }
