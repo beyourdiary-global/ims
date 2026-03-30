@@ -1,9 +1,9 @@
-name: Deploy CRM via FTP -v2
+name: Deploy CRM via FTP
 
 on:
   push:
     branches:
-      - main   # 或 master，根据你实际分支
+      - main   # 或你实际使用的分支
 
 jobs:
   ftp-deploy:
@@ -13,13 +13,16 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: FTP Deploy
+      - name: FTP Deploy only CRM
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
           server: ${{ secrets.FTP_HOST }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./crm         # 项目根目录
+          local-dir: ./crm      # 只上传 crm 目录
           server-dir: ${{ secrets.FTP_PATH }}
           port: 21
           security: insecure
+          exclude: |
+            .git*
+            .github*
