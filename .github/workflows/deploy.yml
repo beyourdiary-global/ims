@@ -3,7 +3,7 @@ name: Deploy CRM via FTP
 on:
   push:
     branches:
-      - main   # 或你实际使用的分支
+      - main  
 
 jobs:
   ftp-deploy:
