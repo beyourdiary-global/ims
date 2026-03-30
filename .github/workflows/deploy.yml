@@ -18,7 +18,7 @@ jobs:
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
           local-dir: ./          # 可以随便写，dry-run 不会上传
-          server-dir: ${{ secrets.FTP_PATH }}
+          server-dir: ${{ secrets.FTP_PATH }}/   # ⚠️ 必须加 /
           port: 21
-          security: loose        # ⚠️ 修正这里
+          security: loose
           dry-run: true
