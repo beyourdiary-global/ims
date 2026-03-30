@@ -1,29 +1,23 @@
-name: FTP Deploy CRM
+name: FTP Test Connection
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 jobs:
-  ftp-deploy:
+  ftp-test:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Deploy /crm via FTP (dry run)
+      - name: Test FTP Connection
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
           server: ${{ secrets.FTP_HOST }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./               # 本地 crm 文件夹
+          local-dir: ./               # 本地文件夹
           server-dir: ${{ secrets.FTP_PATH }}/
           port: 21
-          security: loose
-          dry-run: true                   # 先测试连接，不上传文件
-          exclude: .git*/,.github*/
+          dry-run: true              # 只测试连接，不上传
           log-level: verbose
