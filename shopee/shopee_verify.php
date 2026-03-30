@@ -5,13 +5,40 @@ $isFinance = 1;
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
 
-$pinAccess = checkPin($connect, 'Shopee Verify Order (Admin)');
+if (!function_exists('getPinGroupNameById')) {
+    function getPinGroupNameById($connect, $pinGroupId)
+    {
+        $pinGroupId = (int) $pinGroupId;
+        if ($pinGroupId <= 0) {
+            return '';
+        }
+
+        $rst = getData('name', "id = '$pinGroupId'", 'LIMIT 1', 'pin_group', $connect);
+        if ($rst && $rst->num_rows > 0) {
+            $row = $rst->fetch_assoc();
+            if (isset($row['name']) && trim((string) $row['name']) !== '') {
+                return (string) $row['name'];
+            }
+        }
+
+        return '';
+    }
+}
+
+    $processingPageName = getPinGroupNameById($connect, 128);
+    $verifyPageName = getPinGroupNameById($connect, 129);
+    $allOrdersPageName = getPinGroupNameById($connect, 130);
+
+$pinAccess = checkPin($connect, $verifyPageName);
 if (!is_array($pinAccess) || count($pinAccess) === 0) {
-    if (is_array(checkPin($connect, 'Shopee All Orders (Superadmin)'))) {
+    $allOrdersAccess = checkPin($connect, $allOrdersPageName);
+    if (is_array($allOrdersAccess) && count($allOrdersAccess) > 0) {
         echo "<script>location.replace('shopee_order_req_table.php');</script>";
         exit;
     }
-    if (is_array(checkPin($connect, 'Shopee Processing Order (Basic User)'))) {
+
+    $processingAccess = checkPin($connect, $processingPageName);
+    if (is_array($processingAccess) && count($processingAccess) > 0) {
         echo "<script>location.replace('shopee_processing_order.php');</script>";
         exit;
     }
