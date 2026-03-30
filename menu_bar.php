@@ -7,6 +7,17 @@ if (empty($userID)) {
     exit();
 }
 
+function getMenuTitleByPinGroupId($connect, $fallbackTitle, $pinGroupId)
+{
+    $pinGroupId = (int) $pinGroupId;
+    if ($pinGroupId <= 0) {
+        return $fallbackTitle;
+    }
+
+    $resolvedTitle = getPinGroupNameById($connect, $pinGroupId);
+    return $resolvedTitle !== '' ? $resolvedTitle : $fallbackTitle;
+}
+
 // Find the logged-in user's highest Shopee access level.
 $userShopeePin = '999999'; // Default to hide if no access
 $userShopeeLink = 'javascript:void(0)';
@@ -461,7 +472,8 @@ $menuList = array(
 
                                 foreach ($url['expand'] as $url2) {
                                     if (in_array($url2[3], GlobalPin)) {
-                                        echo "<li><a class=\"dropdown-item\" href=\"$url2[2]\">$url2[0]</a></li>";
+                                        $url2Title = getMenuTitleByPinGroupId($connect, $url2[0], $url2[3]);
+                                        echo "<li><a class=\"dropdown-item\" href=\"$url2[2]\">$url2Title</a></li>";
                                     }
                                 }
 
@@ -518,7 +530,8 @@ $menuList = array(
 
                                     foreach ($url['expand'] as $url2) {
                                         if (in_array($url2[3], GlobalPin)) {
-                                            echo "<li><a class=\"nav-link\" href=\"$url2[2]\"><i class=\"$url2[1]\"></i><span> $url2[0]<span></a></li>";
+                                            $url2Title = getMenuTitleByPinGroupId($connect, $url2[0], $url2[3]);
+                                            echo "<li><a class=\"nav-link\" href=\"$url2[2]\"><i class=\"$url2[1]\"></i><span> $url2Title<span></a></li>";
                                         }
                                     }
 

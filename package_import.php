@@ -5,7 +5,14 @@ include_once 'checkCurrentPagePin.php';
 
 $redirect_page = $SITEURL . '/package_table.php';
 $shortcut_page = $SITEURL . '/common_import.php';
-$pinAccess = checkCurrentPin($connect, 'Package');
+$parentPagePinGroupId = 21;
+$parentPageTitle = getPinGroupNameById($connect, $parentPagePinGroupId);
+if ($parentPageTitle === '') {
+    $parentPageTitle = 'Package';
+}
+$breadcrumbTitle = $parentPageTitle . ' Import';
+
+$pinAccess = checkPinByGroupId($connect, $parentPagePinGroupId);
 if (!is_array($pinAccess)) {
     $pinAccess = array();
 }
@@ -643,6 +650,13 @@ else if ($action === 'update') {
     <div class="page-load-cover">
         <div class="container-fluid mt-3 mb-5 d-flex justify-content-center">
             <div class="col-12 col-md-11">
+                <div class="row mb-3">
+                    <p>
+                        <a href="<?= $SITEURL ?>/dashboard.php">Dashboard</a>
+                        <i class="fa-solid fa-chevron-right fa-xs"></i>
+                        <?= htmlspecialchars($breadcrumbTitle, ENT_QUOTES, 'UTF-8') ?>
+                    </p>
+                </div>
                 <div class="row mb-4">
                     <div class="col-12 d-flex justify-content-between flex-wrap align-items-center gap-2">
                         <h2>Import & Bulk Edit Packages</h2>
