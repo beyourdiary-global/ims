@@ -1,4 +1,4 @@
-name: FTP Connection Test
+name: FTP Connection Test FTP
 
 on:
   workflow_dispatch:   # 手动触发，用于测试
