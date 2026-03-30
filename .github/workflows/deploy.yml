@@ -3,23 +3,25 @@ name: Deploy CRM via FTP
 on:
   push:
     branches:
-      - main  
+      - main   # 如果你用 master，可以改成 master
 
 jobs:
   ftp-deploy:
     runs-on: ubuntu-latest
 
     steps:
+      # Step 1: 拉取 GitHub 仓库代码
       - name: Checkout code
         uses: actions/checkout@v3
 
+      # Step 2: 使用 FTP 上传 crm 目录
       - name: FTP Deploy only CRM
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
           server: ${{ secrets.FTP_HOST }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./crm      # 只上传 crm 目录
+          local-dir: ./crm          # 只上传 crm 目录
           server-dir: ${{ secrets.FTP_PATH }}
           port: 21
           security: insecure
