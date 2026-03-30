@@ -6,10 +6,17 @@ include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
 include_once ROOT . '/header/phpqrcode/qrlib.php';
 
-$permissionPage = 'Stock Order Request';
-$pinAccess = checkPin($connect, $permissionPage);
-if (!is_array($pinAccess) || count($pinAccess) === 0) {
-    $pinAccess = checkPin($connect, 'Stock List');
+$parentPagePinGroupId = 126;
+$parentPageTitle = getPinGroupNameById($connect, $parentPagePinGroupId);
+if ($parentPageTitle === '') {
+    $parentPageTitle = 'Stock Order Request';
+}
+$breadcrumbTitle = $parentPageTitle . ' Import';
+
+$pinAccess = checkPinByGroupId($connect, $parentPagePinGroupId);
+if (!is_array($pinAccess) || count($pinAccess) === 0 || !isActionAllowed('Import', $pinAccess)) {
+    echo '<script>alert("No permission.");location.href = "' . $SITEURL . '/dashboard.php";</script>';
+    exit;
 }
 
 $tablePage = $SITEURL . '/finance/stock_order_request_table.php';
@@ -2042,9 +2049,7 @@ if ($existingInvoiceRst) {
                 <p>
                     <a href="<?= $SITEURL ?>/dashboard.php">Dashboard</a>
                     <i class="fa-solid fa-chevron-right fa-xs"></i>
-                    <a href="<?= $tablePage ?>">Stock Order Request</a>
-                    <i class="fa-solid fa-chevron-right fa-xs"></i>
-                    PDF Import
+                    <?= htmlspecialchars($breadcrumbTitle, ENT_QUOTES, 'UTF-8') ?>
                 </p>
             </div>
 

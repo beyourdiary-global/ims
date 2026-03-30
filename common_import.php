@@ -1,26 +1,40 @@
 <?php
 $pageTitle = "Import Shortcut";
 
+$importShortcutPinGroupId = 131;
+
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
 
+$importShortcutPinGroupName = getPinGroupNameById($connect, $importShortcutPinGroupId);
+if ($importShortcutPinGroupName !== '') {
+    $pageTitle = $importShortcutPinGroupName;
+}
+
 // Enforce page-level pin access for the Import Shortcut page itself
-$pagePinAccess = checkCurrentPin($connect, $pageTitle);
+$pagePinAccess = checkPinByGroupId($connect, $importShortcutPinGroupId);
 if (empty($pagePinAccess) || !isActionAllowed('View', $pagePinAccess)) {
     echo '<script>alert("No permission.");location.href = "' . $SITEURL . '/dashboard.php";</script>';
     exit;
 }
  
-$shopeeAdsPinAccess = checkPin($connect, 'Shopee Ads Top Up Transaction');
-$facebookAdsPinAccess = checkPin($connect, 'Facebook Ads Top Up Transaction');
-$shopeeOrderPinAccess = checkPin($connect, 'Shopee All Orders');
-$packagePinAccess = checkPin($connect, 'Package');
-$stockInPinAccess = checkPin($connect, 'Stock In');
-$productPinAccess = checkPin($connect, 'Product');
-$stockOrderReqPinAccess = checkPin($connect, 'Stock Order Request');
-$jtBackupPinAccess = checkPin($connect, 'J&T Transaction Backup Record');
-$companyPinAccess = checkPin($connect, 'Company');
-$purchaseOrderPinAccess = checkPin($connect, 'Purchase Order');
+$shopeeAdsPinAccess = checkPinByGroupId($connect, 77);
+$facebookAdsPinAccess = checkPinByGroupId($connect, 48);
+$shopeeOrderPinAccess = array();
+foreach (array(130, 129, 128) as $shopeeOrderPinGroupId) {
+    $candidateAccess = checkPinByGroupId($connect, $shopeeOrderPinGroupId);
+    if (!empty($candidateAccess)) {
+        $shopeeOrderPinAccess = $candidateAccess;
+        break;
+    }
+}
+$packagePinAccess = checkPinByGroupId($connect, 21);
+$stockInPinAccess = checkPinByGroupId($connect, 125);
+$productPinAccess = checkPinByGroupId($connect, 20);
+$stockOrderReqPinAccess = checkPinByGroupId($connect, 126);
+$jtBackupPinAccess = checkPinByGroupId($connect, 88);
+$companyPinAccess = checkPinByGroupId($connect, 127);
+$purchaseOrderPinAccess = checkPinByGroupId($connect, 135);
 
 $canShopeeAdsImport = is_array($shopeeAdsPinAccess) && isActionAllowed('Import', $shopeeAdsPinAccess);
 $canFacebookAdsImport = is_array($facebookAdsPinAccess) && isActionAllowed('Import', $facebookAdsPinAccess);

@@ -12,7 +12,14 @@ $importPage = $SITEURL . '/warehouse_stock_in_import.php';
 $tablePage = $SITEURL . '/warehouse_stock_in_table.php';
 $shortcutPage = $SITEURL . '/common_import.php';
 
-$pinAccess = checkCurrentPin($connect, 'Stock In');
+$parentPagePinGroupId = 125;
+$parentPageTitle = getPinGroupNameById($connect, $parentPagePinGroupId);
+if ($parentPageTitle === '') {
+    $parentPageTitle = 'Stock In';
+}
+$breadcrumbTitle = $parentPageTitle . ' Import';
+
+$pinAccess = checkPinByGroupId($connect, $parentPagePinGroupId);
 if (!is_array($pinAccess)) {
     $pinAccess = array();
 }
@@ -645,6 +652,13 @@ $previewData = isset($_SESSION['si_import_preview']) ? $_SESSION['si_import_prev
 <div class="page-load-cover">
     <div class="container-fluid mt-3 mb-5 d-flex justify-content-center si-import-wrap">
         <div class="col-12 col-md-11">
+            <div class="row mb-3">
+                <p>
+                    <a href="<?= $SITEURL ?>/dashboard.php">Dashboard</a>
+                    <i class="fa-solid fa-chevron-right fa-xs"></i>
+                    <?= htmlspecialchars($breadcrumbTitle, ENT_QUOTES, 'UTF-8') ?>
+                </p>
+            </div>
             <div class="row mb-4">
                 <div class="col-12 d-flex justify-content-between flex-wrap align-items-center gap-2">
                     <h2>Import &amp; Bulk Edit Stock In</h2>

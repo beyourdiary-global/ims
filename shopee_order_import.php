@@ -4,12 +4,39 @@ if (!defined('IMPORT_FORCE_MODULE')) {
 }
 
 $pageTitle = "Shopee Order Import";
-$parentPageTitle = "Shopee All Orders";
+$parentPageTitle = "Shopee Order Request";
+$shopeeOrderPinGroupIds = array(130, 129, 128);
 
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
 
-$pinAccess = checkPin($connect, $parentPageTitle);
+$pinAccess = array();
+$resolvedParentPageTitle = '';
+$fallbackParentPageTitle = '';
+foreach ($shopeeOrderPinGroupIds as $pinGroupId) {
+    $candidateName = getPinGroupNameById($connect, $pinGroupId);
+    if ($fallbackParentPageTitle === '' && $candidateName !== '') {
+        $fallbackParentPageTitle = $candidateName;
+    }
+
+    $candidateAccess = checkPinByGroupId($connect, $pinGroupId);
+    if (!empty($candidateAccess)) {
+        $pinAccess = $candidateAccess;
+        if ($candidateName !== '') {
+            $resolvedParentPageTitle = $candidateName;
+        }
+        break;
+    }
+}
+
+if ($resolvedParentPageTitle === '' && $fallbackParentPageTitle !== '') {
+    $resolvedParentPageTitle = $fallbackParentPageTitle;
+}
+if ($resolvedParentPageTitle !== '') {
+    $parentPageTitle = $resolvedParentPageTitle;
+}
+$breadcrumbTitle = $parentPageTitle . ' Import';
+
 if (!is_array($pinAccess) || count($pinAccess) === 0 || !isActionAllowed('Import', $pinAccess)) {
     echo '<script>alert("No permission.");location.href = "' . $SITEURL . '/dashboard.php";</script>';
     exit;
@@ -708,17 +735,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                     <p>
                         <a href="<?= $SITEURL ?>/dashboard.php">Dashboard</a>
                         <i class="fa-solid fa-chevron-right fa-xs"></i>
-                        <a href="<?= $redirect_page ?>"><?= $pageTitle ?></a>
-                        <?php if ($module === 'shopee_ads_topup') { ?>
-                            <i class="fa-solid fa-chevron-right fa-xs"></i>
-                            Shopee Ads Top Up Import
-                        <?php } else if ($module === 'fb_ads_topup') { ?>
-                            <i class="fa-solid fa-chevron-right fa-xs"></i>
-                            Facebook Ads Top Up Import
-                        <?php } else if ($module === 'shopee_order_req') { ?>
-                            <i class="fa-solid fa-chevron-right fa-xs"></i>
-                            Shopee Order Request Import
-                        <?php } ?>
+                        <?= htmlspecialchars($breadcrumbTitle, ENT_QUOTES, 'UTF-8') ?>
                     </p>
                 </div>
 

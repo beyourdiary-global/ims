@@ -8,7 +8,14 @@ $tblName = COMPANY;
 $sqlAccountTbl = SQL_ACC;
 $redirect_page = $SITEURL . '/company_table.php';
 $shortcut_page = $SITEURL . '/common_import.php';
-$pinAccess = checkCurrentPin($connect, 'Company');
+$parentPagePinGroupId = 127;
+$parentPageTitle = getPinGroupNameById($connect, $parentPagePinGroupId);
+if ($parentPageTitle === '') {
+    $parentPageTitle = 'Company';
+}
+$breadcrumbTitle = $parentPageTitle . ' Import';
+
+$pinAccess = checkPinByGroupId($connect, $parentPagePinGroupId);
 if (!is_array($pinAccess)) {
     $pinAccess = array();
 }
@@ -470,9 +477,7 @@ else if ($action === 'update') {
                     <p>
                         <a href="<?= $SITEURL ?>/dashboard.php">Dashboard</a>
                         <i class="fa-solid fa-chevron-right fa-xs"></i>
-                        <a href="<?= $shortcut_page ?>">Import Shortcut</a>
-                        <i class="fa-solid fa-chevron-right fa-xs"></i>
-                        Company Import
+                        <?= htmlspecialchars($breadcrumbTitle, ENT_QUOTES, 'UTF-8') ?>
                     </p>
                 </div>
                 <div class="row">

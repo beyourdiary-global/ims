@@ -8,7 +8,14 @@ $tblName = PURCHASE_ORDER;
 $companyTbl = COMPANY;
 $redirect_page = $SITEURL . '/purchase_order_table.php';
 $shortcut_page = $SITEURL . '/common_import.php';
-$pinAccess = checkCurrentPin($connect, 'Purchase Order');
+$parentPagePinGroupId = 135;
+$parentPageTitle = getPinGroupNameById($connect, $parentPagePinGroupId);
+if ($parentPageTitle === '') {
+    $parentPageTitle = 'Purchase Order';
+}
+$breadcrumbTitle = $parentPageTitle . ' Import';
+
+$pinAccess = checkPinByGroupId($connect, $parentPagePinGroupId);
 if (!is_array($pinAccess)) {
     $pinAccess = array();
 }
@@ -530,9 +537,7 @@ if ($action === 'preview') {
                     <p>
                         <a href="<?= $SITEURL ?>/dashboard.php">Dashboard</a>
                         <i class="fa-solid fa-chevron-right fa-xs"></i>
-                        <a href="<?= $shortcut_page ?>">Import Shortcut</a>
-                        <i class="fa-solid fa-chevron-right fa-xs"></i>
-                        Purchase Order Import
+                        <?= htmlspecialchars($breadcrumbTitle, ENT_QUOTES, 'UTF-8') ?>
                     </p>
                 </div>
                 <div class="row">

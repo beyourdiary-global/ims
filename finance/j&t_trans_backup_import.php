@@ -5,8 +5,14 @@ $isFinance = 1;
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
 
-$parentPageTitle = 'J&T Transaction Backup Record';
-$pinAccess = checkPin($connect, $parentPageTitle);
+$parentPagePinGroupId = 88;
+$parentPageTitle = getPinGroupNameById($connect, $parentPagePinGroupId);
+if ($parentPageTitle === '') {
+    $parentPageTitle = 'J&T Transaction Backup Record';
+}
+$breadcrumbTitle = $parentPageTitle . ' Import';
+
+$pinAccess = checkPinByGroupId($connect, $parentPagePinGroupId);
 if (!is_array($pinAccess) || count($pinAccess) === 0 || !isActionAllowed('Import', $pinAccess)) {
     echo '<script>alert("No permission.");location.href = "' . $SITEURL . '/dashboard.php";</script>';
     exit;
@@ -751,9 +757,7 @@ $previewSummary = ($previewBundle && isset($previewBundle['summary']) && is_arra
                     <p>
                         <a href="<?= $SITEURL ?>/dashboard.php">Dashboard</a>
                         <i class="fa-solid fa-chevron-right fa-xs"></i>
-                        <a href="<?= $tablePage ?>">J&T Transaction Backup Record</a>
-                        <i class="fa-solid fa-chevron-right fa-xs"></i>
-                        PDF Import
+                        <?= htmlspecialchars($breadcrumbTitle, ENT_QUOTES, 'UTF-8') ?>
                     </p>
                 </div>
 
