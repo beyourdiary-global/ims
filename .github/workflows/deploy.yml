@@ -16,11 +16,11 @@ jobs:
       - name: FTP Deploy
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
-          server: ${{ secrets.FTP_HOST }}
-          username: ${{ secrets.FTP_USERNAME }}
-          password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./crm
-          server-dir: ${{ secrets.FTP_PATH }}/   # 必须加 / 结尾
-          port: 21
-          security: loose
-          dry-run: true    # 测试连接，不实际上传
+  server: ${{ secrets.FTP_HOST }}
+  username: ${{ secrets.FTP_USERNAME }}
+  password: ${{ secrets.FTP_PASSWORD }}
+  local-dir: ./crm/        # ⚠️ 注意加 / 结尾
+  server-dir: ${{ secrets.FTP_PATH }}/   # 服务器目录也要 /
+  port: 21
+  security: loose
+  dry-run: true
