@@ -1,21 +1,25 @@
-name: Deploy CRM
+name: Deploy CRM via FTP
 
 on:
   push:
     branches:
-      - main  
+      - main  # 或者你实际的分支名
 
 jobs:
-  deploy:
+  ftp-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Deploy
-        uses: appleboy/ssh-action@v1.0.0
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: FTP Deploy
+        uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
-          host: 101.99.77.31
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            cd ~/public_html/crm
-            git pull origin main
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./           # 你的项目根目录
+          server-dir: ${{ secrets.FTP_PATH }}
+          git-ftp-args: --insecure
+          port: 21
