@@ -71,18 +71,17 @@ function checkCurrentPin($connect, $currentPage)
 
         $actionMapping = getPin($connect); //get all pins
         
-        $result = array_map(function ($permission) use ($actionMapping) {
-            return $actionMapping[$permission];
-        }, $filteredResultArray);
-
-        if (empty($result)) {
-            echo '<script>';
-            echo 'window.location.href = "dashboard.php";';
-            echo '</script>';
+        $result = array();
+        foreach ($filteredResultArray as $permission) {
+            if (isset($actionMapping[$permission])) {
+                $result[] = $actionMapping[$permission];
+            }
         }
-      
+
         return $result;
     }
+
+    return [];
 }
 function checkPin($connect, $currentPage)
 {
