@@ -1,23 +1,47 @@
-name: FTP Test Connection
+name: FTP Deploy CRM
 
 on:
-  workflow_dispatch:
+  push:
+    branches:
+      - main          # 或你常用分支
+  workflow_dispatch:   # 支持手动触发
 
 jobs:
-  ftp-test:
+  ftp-deploy:
     runs-on: ubuntu-latest
+
     steps:
+      # 1️⃣ Checkout 仓库代码
       - name: Checkout code
         uses: actions/checkout@v3
 
-      - name: Test FTP Connection
+      # 2️⃣ 测试 FTP 连接（dry-run: true）
+      - name: Test FTP connection (dry-run)
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
           server: ${{ secrets.FTP_HOST }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./               # 本地文件夹
+          local-dir: ./                   # 本地 crm 文件夹，末尾一定要有 /
+          server-dir: ${{ secrets.FTP_PATH }}/   # 远程路径，末尾一定要有 /
+          port: 21
+          security: loose                      # FTP，不是 SFTP
+          dry-run: true                        # 先测试连接，不上传文件
+          exclude: "**/.git*/**,**/.github*/**"
+          log-level: verbose                   # 输出详细日志
+
+      # 3️⃣ 正式上传（dry-run: false）
+      - name: Deploy /crm via FTP
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+        uses: SamKirkland/FTP-Deploy-Action@4.3.0
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./crm/
           server-dir: ${{ secrets.FTP_PATH }}/
           port: 21
-          dry-run: true              # 只测试连接，不上传
+          security: loose
+          dry-run: false
+          exclude: "**/.git*/**,**/.github*/**"
           log-level: verbose
