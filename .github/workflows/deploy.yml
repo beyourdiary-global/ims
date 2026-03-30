@@ -1,21 +1,31 @@
-name: Test Secrets
+name: FTP Deploy CRM
 
 on:
-  workflow_dispatch:   # 手动触发
+  push:
+    branches:
+      - main          # 或你常用分支
+  workflow_dispatch:   # 支持手动触发
 
 jobs:
-  check-secrets:
+  ftp-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ checkout 仓库
+      # 1️⃣ Checkout 仓库代码
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # 2️⃣ 测试 Secrets
-      - name: Show FTP Secrets
-        run: |
-          echo "FTP_HOST: ${{ secrets.FTP_HOST }}"
-          echo "FTP_USERNAME: ${{ secrets.FTP_USERNAME }}"
-          echo "FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}"
-          echo "FTP_PATH: ${{ secrets.FTP_PATH }}"
+      # 2️⃣ 部署到 FTP
+      - name: Deploy /crm via FTP
+        uses: SamKirkland/FTP-Deploy-Action@4.3.0
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./                # 本地 crm 文件夹，末尾必须加 /
+          server-dir: ${{ secrets.FTP_PATH }}/  # 远程目录，末尾必须加 /
+          port: 21
+          security: loose                  # FTP，非 SFTP
+          dry-run: false                   # true = 测试，不上传；false = 真上传
+          exclude: .git*/,.github*/       # 排除版本管理文件夹
+          log-level: verbose               # 输出详细日志（不会显示密码）
