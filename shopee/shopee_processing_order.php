@@ -5,13 +5,13 @@ $isFinance = 1;
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
 
-$pinAccess = checkPin($connect, 'Shopee Processing Order');
+$pinAccess = checkPin($connect, 'Shopee Processing Order (Basic User)');
 if (!is_array($pinAccess) || count($pinAccess) === 0) {
-    if (is_array(checkPin($connect, 'Shopee Verify Order'))) {
+    if (is_array(checkPin($connect, 'Shopee Verify Order (Admin)'))) {
         echo "<script>location.replace('shopee_verify.php');</script>";
         exit;
     }
-    if (is_array(checkPin($connect, 'Shopee All Orders'))) {
+    if (is_array(checkPin($connect, 'Shopee All Orders (Superadmin)'))) {
         echo "<script>location.replace('shopee_order_req_table.php');</script>";
         exit;
     }
