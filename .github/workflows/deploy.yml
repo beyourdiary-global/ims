@@ -1,9 +1,9 @@
-name: Deploy CRM via FTP
+name: Deploy FTP
 
 on:
   push:
     branches:
-      - main   # 如果你用 master，可以改成 master
+      - main   
 
 jobs:
   ftp-deploy:
