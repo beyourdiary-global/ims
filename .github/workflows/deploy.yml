@@ -1,4 +1,4 @@
-name: Test FTP Secrets
+name: Test Secrets
 
 on:
   workflow_dispatch:   # 手动触发
@@ -6,10 +6,16 @@ on:
 jobs:
   check-secrets:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Echo FTP Secrets
+      # 1️⃣ checkout 仓库
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # 2️⃣ 测试 Secrets
+      - name: Show FTP Secrets
         run: |
-           echo "HOST: ${{ secrets.FTP_HOST }}"
+          echo "FTP_HOST: ${{ secrets.FTP_HOST }}"
           echo "FTP_USERNAME: ${{ secrets.FTP_USERNAME }}"
           echo "FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}"
           echo "FTP_PATH: ${{ secrets.FTP_PATH }}"
