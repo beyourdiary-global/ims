@@ -5,29 +5,9 @@ $isFinance = 1;
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
 
-if (!function_exists('getPinGroupNameById')) {
-    function getPinGroupNameById($connect, $pinGroupId)
-    {
-        $pinGroupId = (int) $pinGroupId;
-        if ($pinGroupId <= 0) {
-            return '';
-        }
-
-        $rst = getData('name', "id = '$pinGroupId'", 'LIMIT 1', 'pin_group', $connect);
-        if ($rst && $rst->num_rows > 0) {
-            $row = $rst->fetch_assoc();
-            if (isset($row['name']) && trim((string) $row['name']) !== '') {
-                return (string) $row['name'];
-            }
-        }
-
-        return '';
-    }
-}
-
-    $processingPageName = getPinGroupNameById($connect, 128);
-    $verifyPageName = getPinGroupNameById($connect, 129);
-    $allOrdersPageName = getPinGroupNameById($connect, 130);
+$processingPageName = getPinGroupNameById($connect, 128);
+$verifyPageName = getPinGroupNameById($connect, 129);
+$allOrdersPageName = getPinGroupNameById($connect, 130);
 
 $pinAccess = checkPin($connect, $allOrdersPageName);
 if (!is_array($pinAccess) || count($pinAccess) === 0) {

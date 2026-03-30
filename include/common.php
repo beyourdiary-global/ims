@@ -331,6 +331,26 @@ function getData($search_val, $val, $val2, $tbl, $conn)
 	}
 }
 
+if (!function_exists('getPinGroupNameById')) {
+    function getPinGroupNameById($connect, $pinGroupId)
+    {
+        $pinGroupId = (int) $pinGroupId;
+        if ($pinGroupId <= 0) {
+            return '';
+        }
+
+        $rst = getData('name', "id = '$pinGroupId'", 'LIMIT 1', 'pin_group', $connect);
+        if ($rst && $rst->num_rows > 0) {
+            $row = $rst->fetch_assoc();
+            if (isset($row['name']) && trim((string) $row['name']) !== '') {
+                return (string) $row['name'];
+            }
+        }
+
+        return '';
+    }
+}
+
 
 function generateDBData($tblname, $conn)
 {
