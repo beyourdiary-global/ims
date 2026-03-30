@@ -6,7 +6,7 @@ $email = post('email-addr');
 $password = md5(post('password'));
 
 if ($email && $password) {
-     $loginquery = "SELECT * FROM " . USR_USER . " WHERE email='" . $email . "'";
+     $loginquery = "SELECT * FROM " . USR_USER . " WHERE email='" . $email . "' AND status='A'";
      $loginresult = mysqli_query($connect, $loginquery);
 
      if (!(mysqli_num_rows($loginresult) == 1)) {
