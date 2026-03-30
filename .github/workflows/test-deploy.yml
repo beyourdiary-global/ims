@@ -1,30 +1,24 @@
-name: Deploy FTP
+name: FTP Connection Test
 
 on:
-  push:
-    branches:
-      - main   
+  workflow_dispatch:   # 手动触发，用于测试
 
 jobs:
-  ftp-deploy:
+  ftp-test:
     runs-on: ubuntu-latest
 
     steps:
-      # Step 1: 拉取 GitHub 仓库代码
-      - name: Checkout code
+      - name: Checkout repo
         uses: actions/checkout@v3
 
-      # Step 2: 使用 FTP 上传 crm 目录
-      - name: FTP Deploy only CRM
+      - name: Test FTP Connection
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
           server: ${{ secrets.FTP_HOST }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./crm          # 只上传 crm 目录
+          local-dir: ./        # 不上传文件，只测试连接
           server-dir: ${{ secrets.FTP_PATH }}
           port: 21
           security: insecure
-          exclude: |
-            .git*
-            .github*
+          dry-run: true        # 不实际上传，模拟测试
