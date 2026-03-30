@@ -1,9 +1,9 @@
-name: Deploy CRM via FTP
+name: Deploy CRM via FTP -v2
 
 on:
   push:
     branches:
-      - main  # 或者你实际的分支名
+      - main   # 或 master，根据你实际分支
 
 jobs:
   ftp-deploy:
@@ -19,7 +19,7 @@ jobs:
           server: ${{ secrets.FTP_HOST }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          local-dir: ./           # 你的项目根目录
+          local-dir: ./crm         # 项目根目录
           server-dir: ${{ secrets.FTP_PATH }}
-          git-ftp-args: --insecure
           port: 21
+          security: insecure
