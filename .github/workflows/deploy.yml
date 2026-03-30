@@ -3,24 +3,27 @@ name: FTP Deploy CRM
 on:
   push:
     branches:
-      - main  # 或 master
+      - main   # 或者你平时 push 的分支
+  workflow_dispatch:   # 支持手动触发
 
 jobs:
-  deploy:
+  ftp-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v3
 
-      - name: FTP Deploy
+      - name: Deploy /crm/ via FTP
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
-  server: ${{ secrets.FTP_HOST }}
-  username: ${{ secrets.FTP_USERNAME }}
-  password: ${{ secrets.FTP_PASSWORD }}
-  local-dir: ./crm/        # ⚠️ 注意加 / 结尾
-  server-dir: ${{ secrets.FTP_PATH }}/   # 服务器目录也要 /
-  port: 21
-  security: loose
-  dry-run: true
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          local-dir: ./crm/                # ⚠️ 本地文件夹必须加 /
+          server-dir: ${{ secrets.FTP_PATH }}/   # ⚠️ 远程文件夹必须加 /
+          port: 21
+          security: loose
+          dry-run: false                   # ⚠️ 设置 false，才会真正上传
+          exclude: .git*/,.github*/        # 排除 Git 管理文件夹
+          log-level: verbose               # 输出详细日志，方便调试
