@@ -9,7 +9,7 @@ jobs:
     steps:
       - name: Echo FTP Secrets
         run: |
-          echo "FTP_HOST: ${{ secrets.FTP_HOST }}"
+           echo "HOST: ${{ secrets.FTP_HOST }}"
           echo "FTP_USERNAME: ${{ secrets.FTP_USERNAME }}"
           echo "FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}"
           echo "FTP_PATH: ${{ secrets.FTP_PATH }}"
