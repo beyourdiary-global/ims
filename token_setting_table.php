@@ -46,10 +46,7 @@ if (!$result) {
     preloader(300);
 
     $(document).ready(function () {
-        var hasRows = <?= $hasRows ? 'true' : 'false' ?>;
-        if (hasRows) {
-            createSortingTable('table');
-        }
+        createSortingTable('table');
     });
 </script>
 
@@ -134,13 +131,10 @@ if (!$result) {
     <script>
         var page = "<?= $pageTitle ?>";
         var action = "<?= isset($act) ? $act : ' ' ?>";
-        var hasRows = <?= $hasRows ? 'true' : 'false' ?>;
 
         checkCurrentPage(page, action);
         dropdownMenuDispFix();
-        if (hasRows) {
-            datatableAlignment('table');
-        }
+        datatableAlignment('table');
         setButtonColor();
     </script>
 </body>
