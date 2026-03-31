@@ -3,14 +3,15 @@ if (!defined('IMPORT_FORCE_MODULE')) {
     define('IMPORT_FORCE_MODULE', 'shopee_order_req');
 }
 
-$pageTitle = "Shopee Order Import";
 $parentPageTitle = "Shopee Order Request";
+$pageTitle = '';
 $shopeeOrderPinGroupIds = array(130, 129, 128);
 
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
 
 $pinAccess = array();
+$parentPagePinGroupId = 0;
 $resolvedParentPageTitle = '';
 $fallbackParentPageTitle = '';
 foreach ($shopeeOrderPinGroupIds as $pinGroupId) {
@@ -20,8 +21,9 @@ foreach ($shopeeOrderPinGroupIds as $pinGroupId) {
     }
 
     $candidateAccess = checkPinByGroupId($connect, $pinGroupId);
-    if (!empty($candidateAccess)) {
+    if (is_array($candidateAccess) && isActionAllowed('Import', $candidateAccess)) {
         $pinAccess = $candidateAccess;
+        $parentPagePinGroupId = (int) $pinGroupId;
         if ($candidateName !== '') {
             $resolvedParentPageTitle = $candidateName;
         }
@@ -36,6 +38,8 @@ if ($resolvedParentPageTitle !== '') {
     $parentPageTitle = $resolvedParentPageTitle;
 }
 $breadcrumbTitle = $parentPageTitle . ' Import';
+$pageTitle = $breadcrumbTitle;
+$pageHeading = $parentPageTitle . ' Import';
 
 if (!is_array($pinAccess) || count($pinAccess) === 0 || !isActionAllowed('Import', $pinAccess)) {
     echo '<script>alert("No permission.");location.href = "' . $SITEURL . '/dashboard.php";</script>';
@@ -45,9 +49,9 @@ if (!is_array($pinAccess) || count($pinAccess) === 0 || !isActionAllowed('Import
 $module = 'shopee_order_req';
 $redirect_page = $SITEURL . '/common_import.php';
 $shopeeOrderRedirectPage = $SITEURL . '/shopee/shopee_processing_order.php';
-if (in_array('130', GlobalPin)) {
+if ($parentPagePinGroupId === 130) {
     $shopeeOrderRedirectPage = $SITEURL . '/shopee/shopee_order_req_table.php';
-} else if (in_array('129', GlobalPin)) {
+} else if ($parentPagePinGroupId === 129) {
     $shopeeOrderRedirectPage = $SITEURL . '/shopee/shopee_verify.php';
 }
 
@@ -721,6 +725,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
 <html>
 
 <head>
+    <title><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></title>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
 </head>
 
@@ -741,7 +746,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
 
                     <div class="row mb-4">
                         <div class="col-12 d-flex justify-content-between flex-wrap align-items-center gap-2">
-                            <h2>Shopee Order Request Import</h2>
+                            <h2><?= htmlspecialchars($pageHeading, ENT_QUOTES, 'UTF-8') ?></h2>
                             <div class="d-flex gap-2 flex-wrap">
                                 <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $shopeeOrderRedirectPage ?>">Back To Shopee Order Page</a>
                                 <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $redirect_page ?>">Back To Shortcuts</a>
@@ -1018,6 +1023,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
 </body>
 
 <script>
+    document.title = <?= json_encode($pageTitle, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     preloader(0, '');
     setButtonColor();
     <?php if ($module === 'shopee_order_req') { ?>

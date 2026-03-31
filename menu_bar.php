@@ -18,6 +18,179 @@ function getMenuTitleByPinGroupId($connect, $fallbackTitle, $pinGroupId)
     return $resolvedTitle !== '' ? $resolvedTitle : $fallbackTitle;
 }
 
+function parseUserGroupPinMapFromString($rawPins)
+{
+    $groupPinMap = array();
+    $entries = explode('+', (string) $rawPins);
+
+    foreach ($entries as $entry) {
+        $entry = trim($entry);
+        if ($entry === '') {
+            continue;
+        }
+
+        $parts = explode(':', trim($entry, '[]'));
+        if (count($parts) !== 2) {
+            continue;
+        }
+
+        $groupId = trim((string) $parts[0]);
+        if ($groupId === '' || !ctype_digit($groupId)) {
+            continue;
+        }
+
+        $pinIds = array();
+        foreach (explode(',', (string) $parts[1]) as $pinId) {
+            $pinId = trim((string) $pinId);
+            if ($pinId !== '' && ctype_digit($pinId)) {
+                $pinIds[] = $pinId;
+            }
+        }
+
+        $groupPinMap[$groupId] = array_values(array_unique($pinIds));
+    }
+
+    return $groupPinMap;
+}
+
+function getUserAccessIdForMenu($connect, $userId)
+{
+    $userId = (int) $userId;
+    if ($userId <= 0) {
+        return 0;
+    }
+
+    $result = getData('access_id', "id = '$userId'", 'LIMIT 1', 'user', $connect);
+    if ($result && $result->num_rows > 0) {
+        $row = $result->fetch_assoc();
+        return isset($row['access_id']) ? (int) $row['access_id'] : 0;
+    }
+
+    return 0;
+}
+
+function getImportPinIdsForMenu($connect)
+{
+    $importPinIds = array();
+    $result = getData('id,name', "LOWER(name) = 'import'", '', PIN, $connect);
+
+    if ($result) {
+        while ($row = $result->fetch_assoc()) {
+            $pinId = isset($row['id']) ? trim((string) $row['id']) : '';
+            if ($pinId !== '' && ctype_digit($pinId)) {
+                $importPinIds[] = $pinId;
+            }
+        }
+    }
+
+    return array_values(array_unique($importPinIds));
+}
+
+function getPinGroupAllowedPinMapForMenu($connect, $pinGroupIds)
+{
+    $allowedMap = array();
+    $validGroupIds = array();
+
+    foreach ((array) $pinGroupIds as $pinGroupId) {
+        $pinGroupId = trim((string) $pinGroupId);
+        if ($pinGroupId !== '' && ctype_digit($pinGroupId)) {
+            $validGroupIds[] = $pinGroupId;
+        }
+    }
+
+    $validGroupIds = array_values(array_unique($validGroupIds));
+    if (empty($validGroupIds)) {
+        return $allowedMap;
+    }
+
+    $result = getData('id,pins', "id IN (" . implode(',', $validGroupIds) . ")", '', PIN_GRP, $connect);
+    if ($result) {
+        while ($row = $result->fetch_assoc()) {
+            $groupId = isset($row['id']) ? trim((string) $row['id']) : '';
+            if ($groupId === '' || !ctype_digit($groupId)) {
+                continue;
+            }
+
+            $pins = array();
+            foreach (explode(',', (string) $row['pins']) as $pinId) {
+                $pinId = trim((string) $pinId);
+                if ($pinId !== '' && ctype_digit($pinId)) {
+                    $pins[] = $pinId;
+                }
+            }
+
+            $allowedMap[$groupId] = array_values(array_unique($pins));
+        }
+    }
+
+    return $allowedMap;
+}
+
+function hasImportActionForPinGroupForMenu($pinGroupId, $userPinGroupMap, $pinGroupAllowedPinMap, $importPinIds)
+{
+    $pinGroupId = trim((string) $pinGroupId);
+    if ($pinGroupId === '' || !ctype_digit($pinGroupId)) {
+        return false;
+    }
+
+    if (empty($importPinIds)) {
+        return false;
+    }
+
+    $userAllowedPinIds = isset($userPinGroupMap[$pinGroupId]) ? $userPinGroupMap[$pinGroupId] : array();
+    $groupAllowedPinIds = isset($pinGroupAllowedPinMap[$pinGroupId]) ? $pinGroupAllowedPinMap[$pinGroupId] : array();
+    if (empty($userAllowedPinIds) || empty($groupAllowedPinIds)) {
+        return false;
+    }
+
+    $effectivePinIds = array_intersect($userAllowedPinIds, $groupAllowedPinIds);
+    return !empty(array_intersect($effectivePinIds, $importPinIds));
+}
+
+$hasAnyImportAccess = false;
+$userAccessId = getUserAccessIdForMenu($connect, $userID);
+$userPinGroupMap = array();
+if ($userAccessId > 0) {
+    $userGroupResult = getData('pins', "id = '$userAccessId'", 'LIMIT 1', 'user_group', $connect);
+    if ($userGroupResult && $userGroupResult->num_rows > 0) {
+        $userGroupRow = $userGroupResult->fetch_assoc();
+        $userPinGroupMap = parseUserGroupPinMapFromString(isset($userGroupRow['pins']) ? $userGroupRow['pins'] : '');
+    }
+}
+
+$importPinIds = getImportPinIdsForMenu($connect);
+$pinGroupAllowedPinMap = getPinGroupAllowedPinMapForMenu($connect, is_array(GlobalPin) ? GlobalPin : array());
+
+if (!empty($importPinIds)) {
+    foreach (array(77, 50, 21, 125, 20, 126, 88, 127, 135) as $importCardPinGroupId) {
+        if (hasImportActionForPinGroupForMenu($importCardPinGroupId, $userPinGroupMap, $pinGroupAllowedPinMap, $importPinIds)) {
+            $hasAnyImportAccess = true;
+            break;
+        }
+    }
+
+    if (!$hasAnyImportAccess) {
+        foreach (array(130, 129, 128) as $shopeeImportPinGroupId) {
+            if (hasImportActionForPinGroupForMenu($shopeeImportPinGroupId, $userPinGroupMap, $pinGroupAllowedPinMap, $importPinIds)) {
+                $hasAnyImportAccess = true;
+                break;
+            }
+        }
+    }
+}
+
+$importShortcutVisiblePins = array();
+if ($hasAnyImportAccess && is_array(GlobalPin)) {
+    foreach (GlobalPin as $pinGroupId) {
+        $pinGroupId = trim((string) $pinGroupId);
+        if ($pinGroupId !== '') {
+            $importShortcutVisiblePins[] = $pinGroupId;
+        }
+    }
+}
+
+$importShortcutVisiblePins = array_values(array_unique($importShortcutVisiblePins));
+
 // Find the logged-in user's highest Shopee access level.
 $userShopeePin = '999999'; // Default to hide if no access
 $userShopeeLink = 'javascript:void(0)';
@@ -403,7 +576,7 @@ $menuList = array(
         $SITEURL . '/common_import.php',
         'n',
         'expand' => array(),
-        'pin' => array('131')
+        'pin' => $importShortcutVisiblePins
     ),
     array(
         'User Record Log',

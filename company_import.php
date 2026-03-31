@@ -1,5 +1,5 @@
 <?php
-$pageTitle = "Company Import";
+$pageTitle = '';
 
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
@@ -14,6 +14,8 @@ if ($parentPageTitle === '') {
     $parentPageTitle = 'Company';
 }
 $breadcrumbTitle = $parentPageTitle . ' Import';
+$pageTitle = $breadcrumbTitle;
+$pageHeading = 'Import & Bulk Edit ' . $parentPageTitle;
 
 $pinAccess = checkPinByGroupId($connect, $parentPagePinGroupId);
 if (!is_array($pinAccess)) {
@@ -460,6 +462,7 @@ else if ($action === 'update') {
 <!DOCTYPE html>
 <html>
 <head>
+    <title><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></title>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
     <style>
         .highlight-change { background-color: #fff3cd !important; border-color: #ffecb5 !important; color: #664d03 !important; font-weight: bold; }
@@ -472,27 +475,25 @@ else if ($action === 'update') {
 <div class="page-load-cover">
     <div class="container-fluid mt-3 mb-5 d-flex justify-content-center">
         <div class="col-12 col-md-11">
-            <div class="d-flex flex-column mb-3">
-                <div class="row">
-                    <p>
-                        <a href="<?= $SITEURL ?>/dashboard.php">Dashboard</a>
-                        <i class="fa-solid fa-chevron-right fa-xs"></i>
-                        <?= htmlspecialchars($breadcrumbTitle, ENT_QUOTES, 'UTF-8') ?>
-                    </p>
-                </div>
-                <div class="row">
-                    <div class="col-12 d-flex justify-content-between flex-wrap align-items-center gap-2">
-                        <h2>Import & Bulk Edit Companies</h2>
-                        <div class="d-flex flex-wrap gap-2">
-                            <a class="btn btn-sm btn-rounded btn-primary" href="<?= $redirect_page ?>"><i class="fa-solid fa-arrow-left"></i> Back To Table</a>
-                            <a class="btn btn-sm btn-rounded btn-primary" href="<?= $shortcut_page ?>">Back To Shortcuts</a>
-                        </div>
+            <div class="row mb-3">
+                <p>
+                    <a href="<?= $SITEURL ?>/dashboard.php">Dashboard</a>
+                    <i class="fa-solid fa-chevron-right fa-xs"></i>
+                    <?= htmlspecialchars($breadcrumbTitle, ENT_QUOTES, 'UTF-8') ?>
+                </p>
+            </div>
+            <div class="row mb-4">
+                <div class="col-12 d-flex justify-content-between flex-wrap align-items-center gap-2">
+                    <h2><?= htmlspecialchars($pageHeading, ENT_QUOTES, 'UTF-8') ?></h2>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $redirect_page ?>"><i class="fa-solid fa-arrow-left"></i> Back To Table</a>
+                        <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $shortcut_page ?>">BACK TO SHORTCUTS</a>
                     </div>
                 </div>
             </div>
 
             <?php if (!empty($importErrors)) { ?>
-                <div class="alert alert-danger">
+                <div class="alert alert-danger shadow-sm" role="alert">
                     <?php foreach ($importErrors as $error) { ?>
                         <div>- <?= htmlspecialchars((string) $error, ENT_QUOTES, 'UTF-8') ?></div>
                     <?php } ?>
@@ -500,7 +501,7 @@ else if ($action === 'update') {
             <?php } ?>
 
             <?php if (!empty($importWarnings)) { ?>
-                <div class="alert alert-warning">
+                <div class="alert alert-warning shadow-sm" role="alert">
                     <?php foreach ($importWarnings as $warning) { ?>
                         <div>- <?= htmlspecialchars((string) $warning, ENT_QUOTES, 'UTF-8') ?></div>
                     <?php } ?>
@@ -545,18 +546,17 @@ else if ($action === 'update') {
                     </div>
                 </div>
             <?php } else { ?>
-                <div class="card">
+                <div class="card mb-4 shadow-sm border-0">
                     <div class="card-body">
-                        <h3 class="mb-3">Step 1: Upload Edited Excel File</h3>
-                        <p class="text-muted mb-3">Upload Excel (.xlsx) with headers: NAME, CODE, ID_NO, ADDRESS1, ADDRESS2, ADDRESS3, ADDRESS4, POSTCODE, CITY, STATE, COUNTRY, PHONE1, TIN, ID_TYPE, SUBMISSION_TYPE, IRBM_CLASSIFICATION, SQL_ACCOUNT and optional SALES_TAX_NO, SERVICE_TAX_NO, TOURISM_NO, SIC, INCOME, TAX_EXEMPTION_REASON, REMARK.</p>
+                        <h5 class="card-title mb-3">Step 1: Upload Edited Excel File</h5>
                         <form method="post" enctype="multipart/form-data" autocomplete="off">
                             <div class="row g-3 align-items-end">
-                                <div class="col-12 col-lg-8">
+                                <div class="col-12 col-md-8">
                                     <label class="form-label" for="import_file"><b>Select Excel (.xlsx) File</b></label>
                                     <input class="form-control" type="file" name="import_file" id="import_file" accept=".xlsx" required>
                                 </div>
-                                <div class="col-12 col-lg-4 d-grid">
-                                    <button class="btn btn-sm btn-rounded btn-primary" type="submit" name="actionBtn" value="preview"><i class="fa-solid fa-magnifying-glass"></i> Scan & Preview File</button>
+                                <div class="col-12 col-md-4 d-grid">
+                                    <button class="btn btn-lg btn-rounded btn-primary w-100 px-4" type="submit" name="actionBtn" value="preview"><i class="fa-solid fa-magnifying-glass"></i> Scan & Preview File</button>
                                 </div>
                             </div>
                         </form>
@@ -568,5 +568,8 @@ else if ($action === 'update') {
 </div>
 
 <script src="<?= $SITEURL ?>/js/company_import.js"></script>
+<script>
+    document.title = <?= json_encode($pageTitle, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+</script>
 </body>
 </html>

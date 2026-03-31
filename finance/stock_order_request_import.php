@@ -1,5 +1,5 @@
 <?php
-$pageTitle = 'Stock Order Request Import';
+$pageTitle = '';
 $isFinance = 1;
 
 include_once '../menuHeader.php';
@@ -12,6 +12,8 @@ if ($parentPageTitle === '') {
     $parentPageTitle = 'Stock Order Request';
 }
 $breadcrumbTitle = $parentPageTitle . ' Import';
+$pageTitle = $breadcrumbTitle;
+$pageHeading = $parentPageTitle . ' Import';
 
 $pinAccess = checkPinByGroupId($connect, $parentPagePinGroupId);
 if (!is_array($pinAccess) || count($pinAccess) === 0 || !isActionAllowed('Import', $pinAccess)) {
@@ -2003,6 +2005,7 @@ if ($existingInvoiceRst) {
 <!DOCTYPE html>
 <html>
 <head>
+    <title><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></title>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
     <script src="header/js/pdf.min.js"></script>
     <script src="header/js/tesseract.min.js"></script>
@@ -2055,7 +2058,7 @@ if ($existingInvoiceRst) {
 
             <div class="row mb-4">
                 <div class="col-12 d-flex justify-content-between flex-wrap align-items-center gap-2">
-                    <h2>Stock Order Request PDF Import</h2>
+                    <h2><?= htmlspecialchars($pageHeading, ENT_QUOTES, 'UTF-8') ?></h2>
                     <div class="d-flex gap-2 flex-wrap">
                         <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $tablePage ?>">Back To Table</a>
                         <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $shortcutPage ?>">BACK TO SHORTCUTS</a>
@@ -2300,6 +2303,7 @@ if ($existingInvoiceRst) {
 </div>
 
 <script>
+    document.title = <?= json_encode($pageTitle, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     setButtonColor();
     preloader(300, '');
 

@@ -1,5 +1,5 @@
 <?php
-$pageTitle = "Package Import";
+$pageTitle = '';
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
 
@@ -11,6 +11,8 @@ if ($parentPageTitle === '') {
     $parentPageTitle = 'Package';
 }
 $breadcrumbTitle = $parentPageTitle . ' Import';
+$pageTitle = $breadcrumbTitle;
+$pageHeading = 'Import & Bulk Edit ' . $parentPageTitle;
 
 $pinAccess = checkPinByGroupId($connect, $parentPagePinGroupId);
 if (!is_array($pinAccess)) {
@@ -637,6 +639,7 @@ else if ($action === 'update') {
 <!DOCTYPE html>
 <html>
 <head>
+    <title><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></title>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
     <style>
         .highlight-change { background-color: #fff3cd !important; border-color: #ffecb5 !important; color: #664d03 !important; font-weight: bold; }
@@ -659,7 +662,7 @@ else if ($action === 'update') {
                 </div>
                 <div class="row mb-4">
                     <div class="col-12 d-flex justify-content-between flex-wrap align-items-center gap-2">
-                        <h2>Import & Bulk Edit Packages</h2>
+                        <h2><?= htmlspecialchars($pageHeading, ENT_QUOTES, 'UTF-8') ?></h2>
                         <div class="d-flex gap-2 flex-wrap">
                             <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $redirect_page ?>"><i class="fa-solid fa-arrow-left"></i> Back To Table</a>
                             <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $shortcut_page ?>">BACK TO SHORTCUTS</a>
@@ -809,6 +812,7 @@ else if ($action === 'update') {
     </div>
 </body>
 <script>
+    document.title = <?= json_encode($pageTitle, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     setButtonColor();
     preloader(300, '');
     window.__PACKAGE_IMPORT_CONFIG = {

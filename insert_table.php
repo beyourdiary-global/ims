@@ -3,9 +3,9 @@
 include_once 'init.php'; 
 
 // --- SECURITY CHECK: Ensure only logged-in users can run this script ---
-// if (!isset($_SESSION['userid']) || empty($_SESSION['userid'])) {
-//     die("<h3 style='color:red;'> Unauthorized access! You must be logged in to run this script.</h3>");
-// }
+if (!isset($_SESSION['userid']) || empty($_SESSION['userid'])) {
+    die("<h3 style='color:red;'> Unauthorized access! You must be logged in to run this script.</h3>");
+}
 
 // 1. Database Credentials (loaded from init.php)
 $dbhost     = dbhost;

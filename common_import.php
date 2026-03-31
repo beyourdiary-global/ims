@@ -1,33 +1,52 @@
 <?php
 $pageTitle = "Import Shortcut";
 
-$importShortcutPinGroupId = 131;
-
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
 
-$importShortcutPinGroupName = getPinGroupNameById($connect, $importShortcutPinGroupId);
-if ($importShortcutPinGroupName !== '') {
-    $pageTitle = $importShortcutPinGroupName;
-}
-
-// Enforce page-level pin access for the Import Shortcut page itself
-$pagePinAccess = checkPinByGroupId($connect, $importShortcutPinGroupId);
-if (empty($pagePinAccess) || !isActionAllowed('View', $pagePinAccess)) {
-    echo '<script>alert("No permission.");location.href = "' . $SITEURL . '/dashboard.php";</script>';
-    exit;
+function getImportCardTitleByPinGroupId($connect, $pinGroupId, $fallbackParentTitle)
+{
+    $resolvedParentTitle = getPinGroupNameById($connect, (int) $pinGroupId);
+    $parentTitle = $resolvedParentTitle !== '' ? $resolvedParentTitle : $fallbackParentTitle;
+    return $parentTitle . ' Import';
 }
  
 $shopeeAdsPinAccess = checkPinByGroupId($connect, 77);
 $facebookAdsPinAccess = checkPinByGroupId($connect, 50);
 $shopeeOrderPinAccess = array();
+$shopeeOrderParentTitle = '';
+$shopeeOrderFallbackParentTitle = '';
+$canShopeeOrderImport = false;
 foreach (array(130, 129, 128) as $shopeeOrderPinGroupId) {
+    $candidateName = getPinGroupNameById($connect, $shopeeOrderPinGroupId);
+    if ($shopeeOrderFallbackParentTitle === '' && $candidateName !== '') {
+        $shopeeOrderFallbackParentTitle = $candidateName;
+    }
+
     $candidateAccess = checkPinByGroupId($connect, $shopeeOrderPinGroupId);
-    if (!empty($candidateAccess)) {
+    if (is_array($candidateAccess) && isActionAllowed('Import', $candidateAccess)) {
         $shopeeOrderPinAccess = $candidateAccess;
+        if ($candidateName !== '') {
+            $shopeeOrderParentTitle = $candidateName;
+        }
+        $canShopeeOrderImport = true;
         break;
     }
 }
+if ($shopeeOrderParentTitle === '') {
+    $shopeeOrderParentTitle = $shopeeOrderFallbackParentTitle !== '' ? $shopeeOrderFallbackParentTitle : 'Shopee Order Request';
+}
+
+$shopeeAdsImportTitle = getImportCardTitleByPinGroupId($connect, 77, 'Shopee Ads Top Up Transaction');
+$facebookAdsImportTitle = getImportCardTitleByPinGroupId($connect, 50, 'Facebook Ads Top Up Transaction');
+$shopeeOrderImportTitle = $shopeeOrderParentTitle . ' Import';
+$packageImportTitle = getImportCardTitleByPinGroupId($connect, 21, 'Package');
+$stockInImportTitle = getImportCardTitleByPinGroupId($connect, 125, 'Stock In');
+$productImportTitle = getImportCardTitleByPinGroupId($connect, 20, 'Product');
+$stockOrderImportTitle = getImportCardTitleByPinGroupId($connect, 126, 'Stock Order Request');
+$jtBackupImportTitle = getImportCardTitleByPinGroupId($connect, 88, 'J&T Transaction Backup Record');
+$companyImportTitle = getImportCardTitleByPinGroupId($connect, 127, 'Company');
+$purchaseOrderImportTitle = getImportCardTitleByPinGroupId($connect, 135, 'Purchase Order');
 $packagePinAccess = checkPinByGroupId($connect, 21);
 $stockInPinAccess = checkPinByGroupId($connect, 125);
 $productPinAccess = checkPinByGroupId($connect, 20);
@@ -38,7 +57,6 @@ $purchaseOrderPinAccess = checkPinByGroupId($connect, 135);
 
 $canShopeeAdsImport = is_array($shopeeAdsPinAccess) && isActionAllowed('Import', $shopeeAdsPinAccess);
 $canFacebookAdsImport = is_array($facebookAdsPinAccess) && isActionAllowed('Import', $facebookAdsPinAccess);
-$canShopeeOrderImport = is_array($shopeeOrderPinAccess) && isActionAllowed('Import', $shopeeOrderPinAccess);
 $canPackageImport = is_array($packagePinAccess) && isActionAllowed('Import', $packagePinAccess);
 $canStockInImport = is_array($stockInPinAccess) && isActionAllowed('Import', $stockInPinAccess);
 $canProductImport = is_array($productPinAccess) && isActionAllowed('Import', $productPinAccess);
@@ -50,96 +68,95 @@ $canPurchaseOrderImport = is_array($purchaseOrderPinAccess) && isActionAllowed('
 // Configuration Array for all shortcut cards
 $shortcutCards = array(
     array(
-        'title' => 'Shopee Ads Topup Import',
+        'title' => $shopeeAdsImportTitle,
         'desc' => 'Import Shopee ads topup receipts.',
         'canImport' => $canShopeeAdsImport,
-        'canViewBack' => ($canShopeeAdsImport),
         'importUrl' => $SITEURL . '/shopee_ads_topup_import.php',
         'backUrl' => $SITEURL . '/shopee/shopee_ads_topup_trans_table.php',
         'backText' => 'Back To Shopee Ads Page'
     ),
     array(
-        'title' => 'Facebook Ads Topup Import',
+        'title' => $facebookAdsImportTitle,
         'desc' => 'Import Facebook ads receipts (PDF/ZIP).',
         'canImport' => $canFacebookAdsImport,
-        'canViewBack' => ($canFacebookAdsImport),
         'importUrl' => $SITEURL . '/facebook_ads_topup_import.php',
         'backUrl' => $SITEURL . '/finance/fb_ads_topup_trans_table.php',
         'backText' => 'Back To Facebook Ads Page'
     ),
     array(
-        'title' => 'Shopee Order Import',
+        'title' => $shopeeOrderImportTitle,
         'desc' => 'Import Shopee order request HTML data.',
         'canImport' => $canShopeeOrderImport,
-        'canViewBack' => ($canShopeeOrderImport),
         'importUrl' => $SITEURL . '/shopee_order_import.php',
         'backUrl' => $SITEURL . '/shopee/shopee_order_req_table.php',
         'backText' => 'Back To Shopee Order Page'
     ),
     array(
-        'title' => 'Package Import',
+        'title' => $packageImportTitle,
         'desc' => 'Import package data.',
         'canImport' => $canPackageImport,
-        'canViewBack' => ($canPackageImport),
         'importUrl' => $SITEURL . '/package_import.php',
         'backUrl' => $SITEURL . '/package_table.php',
         'backText' => 'Back To Package Page'
     ),
     array(
-        'title' => 'Stock In Import',
+        'title' => $stockInImportTitle,
         'desc' => 'Import stock in data.',
         'canImport' => $canStockInImport,
-        'canViewBack' => ($canStockInImport),
         'importUrl' => $SITEURL . '/warehouse_stock_in_import.php',
         'backUrl' => $SITEURL . '/warehouse_stock_in_table.php',
         'backText' => 'Back To Stock In Page'
     ),
     array(
-        'title' => 'Product Import',
+        'title' => $productImportTitle,
         'desc' => 'Import product data.',
         'canImport' => $canProductImport,
-        'canViewBack' => ($canProductImport),
         'importUrl' => $SITEURL . '/product_import.php',
         'backUrl' => $SITEURL . '/product_table.php',
         'backText' => 'Back To Product Page'
     ),
     array(
-        'title' => 'Stock Order Import',
+        'title' => $stockOrderImportTitle,
         'desc' => 'Import stock order request data.',
         'canImport' => $canStockOrderReqImport,
-        'canViewBack' => ($canStockOrderReqImport),
         'importUrl' => $SITEURL . '/finance/stock_order_request_import.php',
         'backUrl' => $SITEURL . '/finance/stock_order_request_table.php',
         'backText' => 'Back To Stock Order Page'
     ),
     array(
-        'title' => 'J&T Transaction Backup Import',
+        'title' => $jtBackupImportTitle,
         'desc' => 'Import J&T transaction backup PDF or ZIP files.',
         'canImport' => $canJtBackupImport,
-        'canViewBack' => ($canJtBackupImport),
         'importUrl' => $SITEURL . '/finance/j&t_trans_backup_import.php',
         'backUrl' => $SITEURL . '/finance/j&t_trans_backup_table.php',
         'backText' => 'Back To J&T Transaction Page'
     ),
     array(
-        'title' => 'Company Import',
+        'title' => $companyImportTitle,
         'desc' => 'Import company data and update existing records by company code.',
         'canImport' => $canCompanyImport,
-        'canViewBack' => ($canCompanyImport),
         'importUrl' => $SITEURL . '/company_import.php',
         'backUrl' => $SITEURL . '/company_table.php',
         'backText' => 'Back To Company Page'
     ),
     array(
-        'title' => 'Purchase Order Import',
+        'title' => $purchaseOrderImportTitle,
         'desc' => 'Import purchase order data and update existing records by doc no + seq + item code.',
         'canImport' => $canPurchaseOrderImport,
-        'canViewBack' => ($canPurchaseOrderImport),
         'importUrl' => $SITEURL . '/purchase_order_import.php',
         'backUrl' => $SITEURL . '/purchase_order_table.php',
         'backText' => 'Back To Purchase Order Page'
     )
 );
+
+$shortcutCards = array_values(array_filter($shortcutCards, function ($card) {
+    return !empty($card['canImport']);
+}));
+
+if (empty($shortcutCards)) {
+    echo '<script>alert("No permission.");location.href = "' . $SITEURL . '/dashboard.php";</script>';
+    exit;
+}
 
 ?>
 <!DOCTYPE html>
@@ -171,19 +188,12 @@ $shortcutCards = array(
                                     <h5 class="card-title"><?= htmlspecialchars($card['title'], ENT_QUOTES, 'UTF-8') ?></h5>
                                     <p class="card-text"><?= htmlspecialchars($card['desc'], ENT_QUOTES, 'UTF-8') ?></p>
                                     <div class="mt-auto d-flex gap-2 flex-wrap">
-                                        <?php if ($card['canImport']) { ?>
-                                            <a class="btn btn-sm btn-rounded btn-primary" href="<?= $card['importUrl'] ?>">
-                                                <i class="fa-solid fa-file-import"></i> Import
-                                            </a>
-                                        <?php } ?>
-                                        
-                                        <?php if ($card['canViewBack']) { ?>
-                                            <a class="btn btn-sm btn-rounded btn-info text-white" href="<?= $card['backUrl'] ?>">
-                                                <?= htmlspecialchars($card['backText'], ENT_QUOTES, 'UTF-8') ?>
-                                            </a>
-                                        <?php } else { ?>
-                                            <button class="btn btn-sm btn-rounded btn-secondary" disabled>No Permission</button>
-                                        <?php } ?>
+                                        <a class="btn btn-sm btn-rounded btn-primary" href="<?= $card['importUrl'] ?>">
+                                            <i class="fa-solid fa-file-import"></i> Import
+                                        </a>
+                                        <a class="btn btn-sm btn-rounded btn-info text-white" href="<?= $card['backUrl'] ?>">
+                                            <?= htmlspecialchars($card['backText'], ENT_QUOTES, 'UTF-8') ?>
+                                        </a>
                                     </div>
                                 </div>
                             </div>
