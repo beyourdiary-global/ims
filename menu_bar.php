@@ -579,14 +579,6 @@ $menuList = array(
         'pin' => $importShortcutVisiblePins
     ),
     array(
-        'User Record Log',
-        'mdi mdi-text-box-outline',
-        $SITEURL . '/user_record_log.php',
-        'n',
-        'expand' => array(),
-        'pin' => array('136')
-    ),
-    array(
         'Audit Log',
         'mdi mdi-text-box-search-outline',
         $SITEURL . '/audit_log.php',

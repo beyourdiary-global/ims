@@ -4,6 +4,7 @@ $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+include_once ROOT . '/include/user_record_log.php';
 
 $tblName = SHOPEE_CUST_INFO;
 
@@ -765,23 +766,46 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                         </div>
                     </div>
                     <?php } ?>
-
-
-                        <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
-                            <?php
-                                switch ($act) {
-                                    case 'I':
-                                        echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="addRecord">Add Record</button>';
-                                        break;
-                                    case 'E':
-                                        echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="updRecord">Edit Record</button>';
-                                        break;
-                                }
-                                ?>
-                        <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn"
-                            id="actionBtn" value="back">Back</button>
-                    </div>
                 </form>
+
+                <?php
+                if ($dataID) {
+                    $customerLogReturnUrl = $SITEURL . '/shopee/shopee_cust_info.php?id=' . (int) $dataID;
+                    if ($act !== '') {
+                        $customerLogReturnUrl .= '&act=' . urlencode((string) $act);
+                    }
+
+                    $customerLogContext = urlResolveUserRecordLogContext($connect, $finance_connect, array(
+                        'customer_id' => (int) $dataID,
+                        'customer_label' => isset($row['buyer_username']) ? $row['buyer_username'] : '',
+                        'return_url' => $customerLogReturnUrl,
+                        'ajax_url' => $SITEURL . '/user_record_log.php',
+                        'customer_only' => true,
+                    ));
+
+                    urlRenderUserRecordLogModule($connect, $finance_connect, array(
+                        'table_name' => USER_RECORD_LOG,
+                        'context' => $customerLogContext,
+                        'section_heading' => 'User Record Log',
+                        'show_scope_note' => true,
+                    ));
+                }
+                ?>
+
+                <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
+                    <?php
+                    switch ($act) {
+                        case 'I':
+                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" type="submit" form="SCRForm" name="actionBtn" id="actionBtn" value="addRecord">Add Record</button>';
+                            break;
+                        case 'E':
+                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" type="submit" form="SCRForm" name="actionBtn" id="actionBtn" value="updRecord">Edit Record</button>';
+                            break;
+                    }
+                    ?>
+                    <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" type="submit" form="SCRForm" name="actionBtn"
+                        id="actionBtn" value="back">Back</button>
+                </div>
             </div>
         </div>
     </div>
@@ -835,9 +859,32 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         var page = "<?= $pageTitle ?>";
         var action = "<?php echo isset($act) ? $act : ''; ?>";
 
+        function setShopeeCustomerFormAutofocus(currentAction) {
+            if (currentAction !== 'I' && currentAction !== 'E') {
+                return;
+            }
+
+            var $firstInput = jQuery('#SCRForm')
+                .find("input[type='text']:visible:enabled:not(:checkbox,:radio,:hidden,[readonly]), textarea:visible:enabled:not(:hidden,[readonly]), input[type='number']:visible:enabled:not(:hidden,[readonly])")
+                .filter(function () {
+                    return jQuery.trim(jQuery(this).val()) === '';
+                })
+                .first();
+
+            if (!$firstInput.length) {
+                $firstInput = jQuery('#SCRForm').find("input[type='text']:visible:enabled:not(:checkbox,:radio,:hidden,[readonly]), textarea:visible:enabled:not(:hidden,[readonly]), input[type='number']:visible:enabled:not(:hidden,[readonly])").first();
+            }
+
+            if ($firstInput.length) {
+                $firstInput.trigger('focus');
+            }
+
+            window.scrollTo(0, 0);
+        }
+
         if (typeof checkCurrentPage === 'function') checkCurrentPage(page, action);
         if (typeof centerAlignment === 'function') centerAlignment("SCRformContainer");
-        if (typeof setAutofocus === 'function') setAutofocus(action);
+        setShopeeCustomerFormAutofocus(action);
         if (typeof setButtonColor === 'function') setButtonColor();
     </script>
 </body>
