@@ -19,7 +19,7 @@ if (empty($pagePinAccess) || !isActionAllowed('View', $pagePinAccess)) {
 }
  
 $shopeeAdsPinAccess = checkPinByGroupId($connect, 77);
-$facebookAdsPinAccess = checkPinByGroupId($connect, 48);
+$facebookAdsPinAccess = checkPinByGroupId($connect, 50);
 $shopeeOrderPinAccess = array();
 foreach (array(130, 129, 128) as $shopeeOrderPinGroupId) {
     $candidateAccess = checkPinByGroupId($connect, $shopeeOrderPinGroupId);

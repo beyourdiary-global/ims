@@ -4,7 +4,7 @@ if (!defined('IMPORT_FORCE_MODULE')) {
 }
 
 $pageTitle = "Facebook Ads Topup Import";
-$parentPagePinGroupId = 48;
+$parentPagePinGroupId = 50;
 $parentPageTitle = "Facebook Ads Top Up Transaction";
 
 include_once 'menuHeader.php';
