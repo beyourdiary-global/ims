@@ -53,6 +53,12 @@ $(".submitBtn").on("click", function (event) {
   event.preventDefault();
   $(".error-message").remove();
   var $form = $(this).closest("form");
+  if (!$form.length) {
+    var formId = $(this).attr("form");
+    if (formId) {
+      $form = $("#" + formId);
+    }
+  }
   var clickedAction = $(this).val() || $(this).attr("value") || "";
 
   var name_chk = 0;
@@ -156,6 +162,9 @@ $(".submitBtn").on("click", function (event) {
   ) {
     // Programmatic submit does not include clicked submit button value.
     // Keep it in a hidden field so backend can read the intended action.
+    if (!$form.length) {
+      return false;
+    }
     var $actionHidden = $form.find("input[name='actionBtnHidden']");
     if (!$actionHidden.length) {
       $actionHidden = $('<input type="hidden" name="actionBtnHidden">');

@@ -861,6 +861,35 @@ if (!$conn->select_db($db_fin)) {
 
 // echo "<h3>Stock Order Request financial schema setup complete.</h3>";
 
+function migrationTableExists($conn, $dbName, $tableName)
+{
+    $safeDb = $conn->real_escape_string($dbName);
+    $safeTable = $conn->real_escape_string($tableName);
+    $sql = "SELECT 1 FROM information_schema.tables WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' LIMIT 1";
+    $rst = $conn->query($sql);
+    return ($rst && $rst->num_rows > 0);
+}
+
+function migrationColumnExists($conn, $dbName, $tableName, $columnName)
+{
+    $safeDb = $conn->real_escape_string($dbName);
+    $safeTable = $conn->real_escape_string($tableName);
+    $safeColumn = $conn->real_escape_string($columnName);
+    $sql = "SELECT 1 FROM information_schema.columns WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' AND column_name='" . $safeColumn . "' LIMIT 1";
+    $rst = $conn->query($sql);
+    return ($rst && $rst->num_rows > 0);
+}
+
+function migrationIndexExists($conn, $dbName, $tableName, $indexName)
+{
+    $safeDb = $conn->real_escape_string($dbName);
+    $safeTable = $conn->real_escape_string($tableName);
+    $safeIndex = $conn->real_escape_string($indexName);
+    $sql = "SELECT 1 FROM information_schema.statistics WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' AND index_name='" . $safeIndex . "' LIMIT 1";
+    $rst = $conn->query($sql);
+    return ($rst && $rst->num_rows > 0);
+}
+
 function removePinAccessIds($pinList, $removeIds = array(7, 8))
 {
     $values = array_filter(array_map('trim', explode(',', (string) $pinList)), 'strlen');
@@ -901,6 +930,131 @@ function removeAccessFromPinBlock($allPins, $targetPinId, $removeIds = array(7, 
     }
 
     return implode('+', $rebuilt);
+}
+
+function removePinBlockById($allPins, $targetPinId)
+{
+    $targetPinId = (string) ((int) $targetPinId);
+    $entries = array_filter(array_map('trim', explode('+', (string) $allPins)), 'strlen');
+    $rebuilt = array();
+
+    foreach ($entries as $entry) {
+        $trimmedEntry = trim($entry, '[]');
+        $parts = explode(':', $trimmedEntry, 2);
+        if (count($parts) !== 2) {
+            continue;
+        }
+
+        $pinId = trim($parts[0]);
+        if ($pinId === $targetPinId) {
+            continue;
+        }
+
+        $rebuilt[] = '[' . $pinId . ':' . trim($parts[1]) . ']';
+    }
+
+    return implode('+', $rebuilt);
+}
+
+$existingShopeeCustomerIds = array();
+if ($conn->select_db($db_fin)) {
+    $financeShopeeSql = "SELECT `id` FROM `" . SHOPEE_CUST_INFO . "` ORDER BY `id` ASC";
+    $financeShopeeRst = $conn->query($financeShopeeSql);
+    if ($financeShopeeRst) {
+        while ($financeShopeeRow = $financeShopeeRst->fetch_assoc()) {
+            if (isset($financeShopeeRow['id'])) {
+                $existingShopeeCustomerIds[] = (int) $financeShopeeRow['id'];
+            }
+        }
+        echo "<p style='color:green;'>Verified fetched " . count($existingShopeeCustomerIds) . " Shopee customer record(s) from `" . SHOPEE_CUST_INFO . "` for user record log linking.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed reading `" . SHOPEE_CUST_INFO . "`: " . $conn->error . "</p>";
+    }
+} else {
+    echo "<p style='color:red;'>Failed selecting financial database for Shopee customer log migration.</p>";
+}
+
+if ($conn->select_db($db_fin)) {
+    $createUserRecordLogTableSql = "CREATE TABLE IF NOT EXISTS `" . USER_RECORD_LOG . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `customer_id` INT DEFAULT NULL,
+        `content` TEXT NOT NULL,
+        `attachment` VARCHAR(255) DEFAULT NULL,
+        `created_by` VARCHAR(30) DEFAULT NULL,
+        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        `updated_by` VARCHAR(30) DEFAULT NULL,
+        `updated_at` DATETIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_url_created_at` (`created_at`),
+        KEY `idx_url_created_by` (`created_by`),
+        KEY `idx_url_customer_id` (`customer_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createUserRecordLogTableSql)) {
+        echo "<p style='color:blue;'>Table `" . USER_RECORD_LOG . "` is ready.</p>";
+    } else {
+        echo "<p style='color:red;'>Error creating `" . USER_RECORD_LOG . "`: " . $conn->error . "</p>";
+    }
+
+    if (!migrationColumnExists($conn, $db_fin, USER_RECORD_LOG, 'customer_id')) {
+        if ($conn->query("ALTER TABLE `" . USER_RECORD_LOG . "` ADD COLUMN `customer_id` INT DEFAULT NULL AFTER `id`")) {
+            echo "<p style='color:blue;'>Added column `customer_id` to `" . USER_RECORD_LOG . "`.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed adding `customer_id` to `" . USER_RECORD_LOG . "`: " . $conn->error . "</p>";
+        }
+    } else {
+        echo "<p style='color:green;'>Verified column `customer_id` already exists in `" . USER_RECORD_LOG . "`.</p>";
+    }
+
+    if (!migrationIndexExists($conn, $db_fin, USER_RECORD_LOG, 'idx_url_customer_id')) {
+        if ($conn->query("ALTER TABLE `" . USER_RECORD_LOG . "` ADD INDEX `idx_url_customer_id` (`customer_id`)")) {
+            echo "<p style='color:blue;'>Added index `idx_url_customer_id` to `" . USER_RECORD_LOG . "`.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed adding index `idx_url_customer_id` to `" . USER_RECORD_LOG . "`: " . $conn->error . "</p>";
+        }
+    } else {
+        echo "<p style='color:green;'>Verified index `idx_url_customer_id` already exists in `" . USER_RECORD_LOG . "`.</p>";
+    }
+
+    echo "<p style='color:green;'>Verified `" . USER_RECORD_LOG . "` uses direct `customer_id` mapping for " . count($existingShopeeCustomerIds) . " Shopee customer record(s) in the financial database.</p>";
+} else {
+    echo "<p style='color:red;'>Failed selecting financial database for user record log migration.</p>";
+}
+
+if ($conn->select_db($db_cms)) {
+    $userGroup136Result = $conn->query("SELECT `id`, `pins` FROM `user_group`");
+    if ($userGroup136Result) {
+        $removed136Count = 0;
+        while ($userGroup136Row = $userGroup136Result->fetch_assoc()) {
+            $currentPins = isset($userGroup136Row['pins']) ? (string) $userGroup136Row['pins'] : '';
+            $updatedPins = removePinBlockById($currentPins, 136);
+            if ($updatedPins !== $currentPins) {
+                $safePins = $conn->real_escape_string($updatedPins);
+                $groupId = (int) $userGroup136Row['id'];
+                if ($conn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . $groupId)) {
+                    $removed136Count++;
+                } else {
+                    echo "<p style='color:red;'>Failed removing pin block [136:*] from `user_group` id " . $groupId . ": " . $conn->error . "</p>";
+                }
+            }
+        }
+        echo "<p style='color:green;'>Verified obsolete pin block [136:*] removed from user groups where applicable. Updated rows: " . $removed136Count . ".</p>";
+    } else {
+        echo "<p style='color:red;'>Failed reading `user_group` for pin 136 cleanup: " . $conn->error . "</p>";
+    }
+
+    $pinGroup136Result = $conn->query("SELECT `id` FROM `pin_group` WHERE `id` = 136 LIMIT 1");
+    if ($pinGroup136Result && $pinGroup136Result->num_rows > 0) {
+        if ($conn->query("DELETE FROM `pin_group` WHERE `id` = 136")) {
+            echo "<p style='color:green;'>Verified obsolete `pin_group` id 136 (User Record Log) removed.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed removing `pin_group` id 136: " . $conn->error . "</p>";
+        }
+    } else {
+        echo "<p style='color:green;'>Verified obsolete `pin_group` id 136 (User Record Log) is already removed.</p>";
+    }
+} else {
+    echo "<p style='color:red;'>Failed selecting CMS database for pin 136 cleanup.</p>";
 }
 
 if ($conn->select_db($db_cms)) {
