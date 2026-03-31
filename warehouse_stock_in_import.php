@@ -1,5 +1,5 @@
 <?php
-$pageTitle = 'Stock In Import';
+$pageTitle = '';
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
@@ -18,6 +18,8 @@ if ($parentPageTitle === '') {
     $parentPageTitle = 'Stock In';
 }
 $breadcrumbTitle = $parentPageTitle . ' Import';
+$pageTitle = $breadcrumbTitle;
+$pageHeading = 'Import & Bulk Edit ' . $parentPageTitle;
 
 $pinAccess = checkPinByGroupId($connect, $parentPagePinGroupId);
 if (!is_array($pinAccess)) {
@@ -611,6 +613,7 @@ $previewData = isset($_SESSION['si_import_preview']) ? $_SESSION['si_import_prev
 <!DOCTYPE html>
 <html>
 <head>
+    <title><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></title>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
     <style>
         .highlight-change { background-color: #fff3cd !important; border-color: #ffecb5 !important; color: #664d03 !important; }
@@ -661,7 +664,7 @@ $previewData = isset($_SESSION['si_import_preview']) ? $_SESSION['si_import_prev
             </div>
             <div class="row mb-4">
                 <div class="col-12 d-flex justify-content-between flex-wrap align-items-center gap-2">
-                    <h2>Import &amp; Bulk Edit Stock In</h2>
+                    <h2><?= htmlspecialchars($pageHeading, ENT_QUOTES, 'UTF-8') ?></h2>
                     <div class="d-flex gap-2 flex-wrap">
                         <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $tablePage ?>"><i class="fa-solid fa-arrow-left"></i> Back To Table</a>
                         <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $shortcutPage ?>">BACK TO SHORTCUTS</a>
@@ -824,6 +827,7 @@ $previewData = isset($_SESSION['si_import_preview']) ? $_SESSION['si_import_prev
 </div>
 
 <script>
+    document.title = <?= json_encode($pageTitle, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     // Pass PHP data to the external Javascript file
     window.__WAREHOUSE_STOCK_IN_IMPORT_CONFIG = {
         siteUrl: <?php echo json_encode($SITEURL); ?>,

@@ -3,9 +3,9 @@ if (!defined('IMPORT_FORCE_MODULE')) {
     define('IMPORT_FORCE_MODULE', 'shopee_ads_topup');
 }
 
-$pageTitle = "Shopee Ads Topup Import";
 $parentPagePinGroupId = 77;
 $parentPageTitle = "Shopee Ads Top Up Transaction";
+$pageTitle = '';
 
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
@@ -15,6 +15,8 @@ if ($resolvedParentPageTitle !== '') {
     $parentPageTitle = $resolvedParentPageTitle;
 }
 $breadcrumbTitle = $parentPageTitle . ' Import';
+$pageTitle = $breadcrumbTitle;
+$pageHeading = $parentPageTitle . ' Import';
 
 $pinAccess = checkPinByGroupId($connect, $parentPagePinGroupId);
 if (!is_array($pinAccess) || count($pinAccess) === 0 || !isActionAllowed('Import', $pinAccess)) {
@@ -849,6 +851,7 @@ function validateShopeeAdsPreview($previewData, &$importErrors, $shopeeAccounts,
 <html>
 
 <head>
+    <title><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></title>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
 </head>
 
@@ -869,7 +872,7 @@ function validateShopeeAdsPreview($previewData, &$importErrors, $shopeeAccounts,
 
                     <div class="row mb-4">
                         <div class="col-12 d-flex justify-content-between flex-wrap align-items-center gap-2">
-                            <h2>Shopee Ads Top Up Import</h2>
+                            <h2><?= htmlspecialchars($pageHeading, ENT_QUOTES, 'UTF-8') ?></h2>
                             <div class="d-flex gap-2 flex-wrap">
                                 <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $shopeeRedirectPage ?>">Back To Shopee Ads Page</a>
                                 <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $redirect_page ?>">Back To Shortcuts</a>
@@ -999,6 +1002,7 @@ function validateShopeeAdsPreview($previewData, &$importErrors, $shopeeAccounts,
 </body>
 
 <script>
+    document.title = <?= json_encode($pageTitle, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     preloader(0, '');
     setButtonColor();
 </script>
