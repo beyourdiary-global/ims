@@ -65,7 +65,7 @@ jobs:
           username: ${{ env.FTP_USERNAME }}
           password: ${{ env.FTP_PASSWORD }}
           local-dir: ./            # ✅ 关键：只上传 crm
-          server-dir: /public_html/crm/            # ✅ 关键：目标目录（必须 / 结尾）
+          server-dir: /           # ✅ 关键：目标目录（必须 / 结尾）
           port: 21
           security: loose
           dry-run: false
