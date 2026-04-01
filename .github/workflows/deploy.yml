@@ -67,7 +67,7 @@ jobs:
           username: ${{ env.FTP_USERNAME }}
           password: ${{ env.FTP_PASSWORD }}
           local-dir: ./           # 根据实际部署目录修改
-          server-dir: ${{ secrets.FTP_PATH }}
+          server-dir: ${{ secrets.FTP_PATH }}/
           port: 21
           security: loose
           dry-run: true
@@ -96,7 +96,7 @@ jobs:
           username: ${{ env.FTP_USERNAME }}
           password: ${{ env.FTP_PASSWORD }}
           local-dir: ./           # 根据实际部署目录修改
-          server-dir: ${{ secrets.FTP_PATH }}
+          server-dir: ${{ secrets.FTP_PATH }}/
           port: 21
           security: loose
           dry-run: false
