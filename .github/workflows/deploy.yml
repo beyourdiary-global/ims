@@ -1,75 +1,49 @@
-name: FTP Deploy CRM STABLE
+name: FTP Deploy CRM FAST
 
 on:
   push:
     branches:
       - main
       - uat
-  workflow_dispatch:
-    inputs:
-      branch:
-        description: 'Select branch to deploy (main or uat)'
-        required: true
-        default: 'uat'
-        type: choice
-        options:
-          - main
-          - uat
 
 jobs:
   ftp-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # 0️⃣ 设置分支和 FTP 凭据
+      # 1️⃣ 选择分支 + 凭据
       - name: Set branch and FTP credentials
         run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            DEPLOY_BRANCH="${{ github.event.inputs.branch }}"
-          else
-            DEPLOY_BRANCH="${GITHUB_REF##*/}"
-          fi
-
-          echo "🚀 Deploy branch: $DEPLOY_BRANCH"
+          DEPLOY_BRANCH="${GITHUB_REF##*/}"
+          echo "DEPLOY_BRANCH=$DEPLOY_BRANCH" >> $GITHUB_ENV
 
           if [[ "$DEPLOY_BRANCH" == "main" ]]; then
             echo "FTP_USERNAME=${{ secrets.FTP_USERNAME }}" >> $GITHUB_ENV
             echo "FTP_PASSWORD=${{ secrets.FTP_PASSWORD }}" >> $GITHUB_ENV
-          elif [[ "$DEPLOY_BRANCH" == "uat" ]]; then
+          else
             echo "FTP_USERNAME=${{ secrets.FTP_USERNAME_UAT }}" >> $GITHUB_ENV
             echo "FTP_PASSWORD=${{ secrets.FTP_PASSWORD_UAT }}" >> $GITHUB_ENV
-          else
-            echo "❌ Unsupported branch"
-            exit 1
           fi
 
-          echo "DEPLOY_BRANCH=$DEPLOY_BRANCH" >> $GITHUB_ENV
-
-      # 1️⃣ Checkout
+      # 2️⃣ Checkout
       - name: Checkout code
         uses: actions/checkout@v3
-        with:
-          ref: ${{ env.DEPLOY_BRANCH }}
 
-      # 2️⃣ Debug（非常重要）
-      - name: Debug project structure
-        run: |
-          echo "==== PROJECT STRUCTURE ===="
-          ls -R
-
-      # 3️⃣ FTP 上传（稳定版）
-      - name: Deploy CRM via FTP
+      # 3️⃣ Deploy（🔥只上传变更文件）
+      - name: Deploy via FTP (incremental)
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
-          server: ${{ secrets.FTP_HOST }}          # 例如 ftp.xxx.com
+          server: ${{ secrets.FTP_HOST }}
           username: ${{ env.FTP_USERNAME }}
           password: ${{ env.FTP_PASSWORD }}
-          local-dir: ./            # ✅ 关键：只上传 crm
-          server-dir: /           # ✅ 关键：目标目录（必须 / 结尾）
-          port: 21
-          security: loose
+
+          local-dir: ./                # ⚠️ 按你实际路径改
+          server-dir: /  # ⚠️ 必须有 /
+
+          state-name: .ftp-deploy-sync-state.json   # 🔥关键
           dry-run: false
-          log-level: verbose
+          log-level: minimal
+
           exclude: |
             .git/**
             .github/**
