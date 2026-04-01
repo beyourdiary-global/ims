@@ -1,4 +1,4 @@
-name: FTP Deploy CRM FINAL (Git Diff + Sync Delete)
+name: FTP Deploy CRM STABLE
 
 on:
   push:
@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 0️⃣ 设置分支 + FTP 账号
+      # 0️⃣ 设置分支和 FTP 凭据
       - name: Set branch and FTP credentials
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
@@ -45,92 +45,32 @@ jobs:
 
           echo "DEPLOY_BRANCH=$DEPLOY_BRANCH" >> $GITHUB_ENV
 
-      # 1️⃣ Checkout（必须 fetch 历史）
+      # 1️⃣ Checkout
       - name: Checkout code
         uses: actions/checkout@v3
         with:
           ref: ${{ env.DEPLOY_BRANCH }}
-          fetch-depth: 2
 
-      # 2️⃣ Debug（确认目录）
+      # 2️⃣ Debug（非常重要）
       - name: Debug project structure
         run: |
           echo "==== PROJECT STRUCTURE ===="
           ls -R
 
-      # 3️⃣ 获取变更（新增/修改/删除）
-      - name: Get changed files
-        run: |
-          echo "📦 Getting git changes..."
-
-          git diff --name-status HEAD^ HEAD > changes.txt
-
-          echo "---- ALL CHANGES ----"
-          cat changes.txt
-
-          # 上传文件
-          grep '^[AM]' changes.txt | awk '{print $2}' > deploy_files.txt || true
-
-          # 删除文件
-          grep '^D' changes.txt | awk '{print $2}' > delete_files.txt || true
-
-          echo "---- FILES TO UPLOAD ----"
-          cat deploy_files.txt || true
-
-          echo "---- FILES TO DELETE ----"
-          cat delete_files.txt || true
-
-      # 4️⃣ 准备 deploy 目录（只放 crm）
-      - name: Prepare deploy folder
-        run: |
-          mkdir -p deploy
-
-          while read file; do
-            if [[ "$file" == public_html/crm/* && -f "$file" ]]; then
-              TARGET="deploy/${file#public_html/crm/}"
-              mkdir -p "$(dirname "$TARGET")"
-              cp "$file" "$TARGET"
-            fi
-          done < deploy_files.txt
-
-          echo "==== DEPLOY FILES ===="
-          ls -R deploy || echo "No files"
-
-      # 5️⃣ 上传变更文件
-      - name: Upload changed files via FTP
-        if: success()
+      # 3️⃣ FTP 上传（稳定版）
+      - name: Deploy CRM via FTP
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
-          server: ${{ secrets.FTP_HOST }}
+          server: ${{ secrets.FTP_HOST }}          # 例如 ftp.xxx.com
           username: ${{ env.FTP_USERNAME }}
           password: ${{ env.FTP_PASSWORD }}
-          local-dir: ./deploy/
-          server-dir: /public_html/crm/
+          local-dir: ./public_html/crm             # ✅ 关键：只上传 crm
+          server-dir: /public_html/crm/            # ✅ 关键：目标目录（必须 / 结尾）
           port: 21
           security: loose
           dry-run: false
           log-level: verbose
-
-      # 6️⃣ 删除远程已删除文件 🔥
-      - name: Delete removed files from server
-        run: |
-          if [ -s delete_files.txt ]; then
-            echo "🗑 Deleting files on server..."
-
-            sudo apt-get update
-            sudo apt-get install -y lftp
-
-            while read file; do
-              if [[ "$file" == public_html/crm/* ]]; then
-                REMOTE_PATH="/public_html/crm/${file#public_html/crm/}"
-                echo "Deleting $REMOTE_PATH"
-
-                lftp -u "${{ env.FTP_USERNAME }},${{ env.FTP_PASSWORD }}" ${{ secrets.FTP_HOST }} <<EOF
-                rm "$REMOTE_PATH"
-                bye
-EOF
-              fi
-            done < delete_files.txt
-          else
-            echo "✅ No files to delete"
-          fi
+          exclude: |
+            .git/**
+            .github/**
+            node_modules/**
