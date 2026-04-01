@@ -1,5 +1,6 @@
-<?php
+﻿<?php
 $pageTitle = "Product Status";
+$currentPagePin = 15;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';

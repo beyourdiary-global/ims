@@ -1,5 +1,6 @@
-<?php
+﻿<?php
 $pageTitle = "Bank";
+$currentPagePin = 8;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';

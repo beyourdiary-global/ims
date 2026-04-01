@@ -1,5 +1,6 @@
-<?php
+﻿<?php
 $pageTitle = "Customer Segmentation";
+$currentPagePin = 29;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';

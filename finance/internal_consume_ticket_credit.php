@@ -1,5 +1,6 @@
 <?php
 $pageTitle = "Internal Consume Ticket/Credit";
+$currentPagePin = 65;
 $isFinance = 1;
 
 include_once '../menuHeader.php';
@@ -21,6 +22,7 @@ $clearLocalStorage = '<script>localStorage.clear();</script>';
 $pageAction = getPageAction($act);
 $pageActionTitle = $pageAction . " " . $pageTitle;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
+$row = array();
 
 //Attachment
 $allowed_ext = array("png", "jpg", "jpeg", "svg", "pdf");
@@ -35,14 +37,16 @@ if (!file_exists($img_path)) {
 if (!($dataID) && !($act) || !isActionAllowed($pageAction, $pinAccess))
     echo $redirectLink;
 
-//Get The Data From Database
-$rst = getData('*', "id = '$dataID'", '', $tblName, $finance_connect);
+//Get The Data From Database only when an existing record is expected
+if ($dataID) {
+    $rst = getData('*', "id = '$dataID'", '', $tblName, $finance_connect);
 
-//Checking Data Error When Retrieved From Database
-if (!$rst || !($row = $rst->fetch_assoc()) && $act != 'I') {
-    $errorExist = 1;
-    $_SESSION['tempValConfirmBox'] = true;
-    $act = "F";
+    //Checking Data Error When Retrieved From Database
+    if ($act != 'I' && (!$rst || !($row = $rst->fetch_assoc()))) {
+        $errorExist = 1;
+        $_SESSION['tempValConfirmBox'] = true;
+        $act = "F";
+    }
 }
 
 //Delete Data
@@ -329,11 +333,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 
                                 if (isset($echoVal)) {
                                     $user_rst = getData('name', "id = '$echoVal'", '', USR_USER, $connect);
-                                    if (!$user_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                        echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                                    }
-                                    $user_row = $user_rst->fetch_assoc();
+                                    $user_row = ($user_rst && $user_rst->num_rows > 0) ? $user_rst->fetch_assoc() : array('name' => '');
                                 }
                                 ?>
                                 <input class="form-control" type="text" required name="pic" id="pic" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $user_row['name'] : ''  ?>">

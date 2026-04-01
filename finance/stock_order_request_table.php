@@ -1,13 +1,14 @@
 <?php
 $pageTitle = 'Stock Order Request';
+$currentPagePin = 126;
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
 
-$pinAccess = checkPin($connect, 'Stock Order Request');
-if (!is_array($pinAccess) || count($pinAccess) === 0) {
-    $pinAccess = checkPin($connect, 'Stock List');
+$pinAccess = checkPinByGroupId($connect, $currentPagePin);
+if (!is_array($pinAccess)) {
+    $pinAccess = array();
 }
 $_SESSION['act'] = '';
 $_SESSION['viewChk'] = '';

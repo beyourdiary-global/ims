@@ -1,10 +1,11 @@
-<!-- courier AC
+﻿<!-- courier AC
 curr AC -->
 
 
 <?php
 ob_start();
 $pageTitle = "Delivery Fees Claim Record";
+$currentPagePin = 66;
 $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';

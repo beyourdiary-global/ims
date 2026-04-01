@@ -1,5 +1,6 @@
-<?php
+﻿<?php
 $pageTitle = "User";
+$currentPagePin = 90;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';

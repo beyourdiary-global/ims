@@ -1,5 +1,6 @@
-<?php
+﻿<?php
 $pageTitle = "Theme Setting";
+$currentPagePin = 23;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';

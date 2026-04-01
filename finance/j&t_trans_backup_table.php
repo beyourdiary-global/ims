@@ -1,6 +1,7 @@
-<?php
+﻿<?php
 ob_start();
 $pageTitle = "J&T Transaction Backup Record";
+$currentPagePin = 88;
 $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';

@@ -1,5 +1,6 @@
-<?php
+﻿<?php
 $pageTitle = "Token Setting";
+$currentPagePin = 133;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';

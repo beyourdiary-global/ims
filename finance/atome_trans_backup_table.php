@@ -1,6 +1,7 @@
-<?php
+﻿<?php
 ob_start();
 $pageTitle = "Atome Transaction Backup Record";
+$currentPagePin = 87;
 $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';

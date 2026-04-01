@@ -1,5 +1,6 @@
-<?php
+﻿<?php
 $pageTitle = "Warehouse";
+$currentPagePin = 16;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';

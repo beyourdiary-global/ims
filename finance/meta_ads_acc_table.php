@@ -1,5 +1,6 @@
-<?php
+﻿<?php
 $pageTitle = "Meta Ads Account";
+$currentPagePin = 48;
 $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';

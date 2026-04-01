@@ -1,5 +1,6 @@
-<?php
+﻿<?php
 $pageTitle = "Sales Person Report";
+$currentPagePin = 100;
 $isFinance = 1;
 
 include_once '../menuHeader.php';

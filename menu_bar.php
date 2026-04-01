@@ -221,38 +221,75 @@ $menuList = array(
         'javascript:void(0)',
         'y',
         'expand' => array(
-            array('Customer Info', 'mdi mdi-information-outline', $SITEURL . '/customerInfoTable.php', '38'),
-            array('Facebook Customer Record (Deals)', 'mdi mdi-deal-outline', $SITEURL . '/fb_cust_deals_table.php', '75'),
-            array('Website Customer Record (Deals)', 'mdi mdi-deal-outline', $SITEURL . '/website_customer_record_table.php', '84'),
-            array('Shopee Customer Record (Deals)', 'mdi mdi-deal-outline', $SITEURL . '/shopee/shopee_cust_info_table.php', '85'),
-            array('Lazada Customer Record (Deals)', 'mdi mdi-deal-outline', $SITEURL . '/lazada_cust_rcd_table.php', '91'),
+            array('Shopee Customer', 'mdi mdi-deal-outline', $SITEURL . '/shopee/shopee_cust_info_table.php', '85'),
+            array('Lazada Customer', 'mdi mdi-deal-outline', $SITEURL . '/lazada_cust_rcd_table.php', '91'),
+            array('Facebook Customer', 'mdi mdi-deal-outline', $SITEURL . '/fb_cust_deals_table.php', '75'),
+            array('Website Customer', 'mdi mdi-deal-outline', $SITEURL . '/website_customer_record_table.php', '84'),
+            array('Whatsapp Customer', 'mdi mdi-information-outline', $SITEURL . '/customerInfoTable.php', '38'),
+            array(
+                'Setting',
+                'mdi mdi-cog',
+                'javascript:void(0)',
+                'y',
+                'expand' => array(
+                    array('Customer Segmentation', 'mdi mdi-account-group-outline', $SITEURL . '/cus_segmentation_table.php', '29'),
+                    array('Tag', 'mdi mdi-account-group-outline', $SITEURL . '/tagTable.php', '35'),
+                ),
+                'pin' => array('29', '35'),
+            ),
         ),
-        'pin' => array('38', '75', '84', '85', '91')
+        'pin' => array('85', '91', '75', '84', '38', '29', '35')
     ),
     array(
-        'Orders',
+        'Order',
         'mdi mdi-cart-outline',
         'javascript:void(0)',
         'y',
         'expand' => array(
-            array('Facebook Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/finance/fb_order_req_table.php', '69'),
-            array('Shopee Order Request', 'mdi mdi-cart', $userShopeeLink, $userShopeePin),
-            array('Website Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/finance/website_order_request_table.php', '92'),
-            array('Lazada Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/lazada_order_req_table.php', '93'),
-            array('Stock Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/finance/stock_order_request_table.php', '126'),
-            array('Order Process List', 'mdi mdi-note-text-outline', $SITEURL . '/finance/order_process_list.php', '119'),
+            array('Shopee Order', 'mdi mdi-cart', $userShopeeLink, $userShopeePin),
+            array('Lazada Order', 'mdi mdi-note-text-outline', $SITEURL . '/lazada_order_req_table.php', '93'),
+            array('Facebook Order', 'mdi mdi-note-text-outline', $SITEURL . '/finance/fb_order_req_table.php', '69'),
+            array('Website Order', 'mdi mdi-note-text-outline', $SITEURL . '/finance/website_order_request_table.php', '92'),
+            array(
+                'Setting',
+                'mdi mdi-cog',
+                'javascript:void(0)',
+                'y',
+                'expand' => array(
+                    array('Shopee Account', 'mdi storefront-outline', $SITEURL . '/shopee/shopee_acc_table.php', '58'),
+                    array('Payment Method (Order)', 'mdi mdi-contactless-payment-circle', $SITEURL . '/shopee/payment_method_shopee_table.php', '80'),
+                    array('Shopee SG Setting', 'mdi mdi-contactless-payment-circle', $SITEURL . '/shopee/shopee_sg_setting_table.php', '82'),
+                    array('Shopee Service Charges Rate Setting', 'mdi storefront-outline', $SITEURL . '/shopee/shopee_service_charges_rate_setting_table.php', '83'),
+                ),
+                'pin' => array('58', '80', '82', '83'),
+            ),
         ),
-        'pin' => array('69', '128', '129', '130', '92', '93', '126', '119')
+        'pin' => array('128', '129', '130', '93', '69', '92', '58', '80', '82', '83')
     ),
     array(
-        'Distributor',
-        'mdi mdi-account-outline',
+        'Warehouse',
+        'mdi mdi-package-variant',
         'javascript:void(0)',
         'y',
         'expand' => array(
-            array('Agent', 'mdi mdi-information-outline', $SITEURL . '/finance/agent_table.php', '62'),
+            array('Warehouse', 'mdi mdi-warehouse', $SITEURL . '/warehouse_table.php', '16'),
+            array('Stock Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/finance/stock_order_request_table.php', '126'),
+            array('Stock In', 'mdi mdi-tray-arrow-down', $SITEURL . '/warehouse_stock_in_table.php', '125'),
+            array('Stock List', 'mdi mdi-package-variant', $SITEURL . '/stock_list_table.php', '120'),
+            array('Barcode Generate', 'mdi mdi-barcode', $SITEURL . '/barcode_generator.php', '22'),
+            array('Rate Checking', 'mdi mdi-package-variant', $SITEURL . '/rate_checking.php', '17'),
+            array(
+                'Setting',
+                'mdi mdi-cog',
+                'javascript:void(0)',
+                'y',
+                'expand' => array(
+                    array('Courier', 'mdi mdi-label-outline', $SITEURL . '/courier_table.php', '53'),
+                ),
+                'pin' => array('53'),
+            ),
         ),
-        'pin' => array('62')
+        'pin' => array('16', '126', '125', '120', '22', '17', '53')
     ),
     array(
         'Product',
@@ -262,83 +299,84 @@ $menuList = array(
         'expand' => array(
             array('Product', 'mdi mdi-package-variant', $SITEURL . '/product_table.php', '20'),
             array('Package', 'mdi mdi-package', $SITEURL . '/package_table.php', '21'),
+            array('Product Status', 'mdi mdi-package-variant-closed', $SITEURL . '/prod_status_table.php', '15'),
+            array('Brand', 'mdi mdi-label-outline', $SITEURL . '/brand_table.php', '9'),
+            array('Category', 'mdi mdi-label-outline', $SITEURL . '/product_category_table.php', '56'),
+            array('Brand Series', 'mdi mdi-label-outline', $SITEURL . '/brand_series_table.php', '74'),
         ),
-        'pin' => array('20', '21')
+        'pin' => array('20', '21', '15', '9', '56', '74')
     ),
     array(
-        'Finance',
+        'Expense',
         'mdi mdi-finance',
         'javascript:void(0)',
         'y',
         'expand' => array(
+            array('Shopee Ads Top Up Transaction', 'mdi storefront-outline', $SITEURL . '/shopee/shopee_ads_topup_trans_table.php', '77'),
+            array('Facebook Ads Top Up', 'mdi storefront-outline', $SITEURL . '/finance/fb_ads_topup_trans_table.php', '50'),
+            array('Delivery Fees Claim Record', 'mdi storefront-outline', $SITEURL . '/finance/del_fees_claim_table.php', '66'),
+            array('Internal Consume Ticket/Credit', 'mdi storefront-outline', $SITEURL . '/finance/internal_consume_ticket_credit_table.php', '65'),
+            array('Stock Credit Top Up Record', 'mdi storefront-outline', $SITEURL . '/finance/stock_credit_top_up_request_table.php', '78'),
+            array('J&T Transaction Backup Record', 'mdi storefront-outline', $SITEURL . '/finance/j&t_trans_backup_table.php', '88'),
             array(
-                'Accounting',
-                'mdi mdi-finance',
+                'Setting',
+                'mdi mdi-cog',
                 'javascript:void(0)',
                 'y',
                 'expand' => array(
-                    array('Merchant', 'mdi storefront-outline', $SITEURL . '/finance/merchant_table.php', '36'),
-                    array('Credit Notes (Invoice)', 'mdi storefront-outline', $SITEURL . '/finance/cred_notes_inv_table.php', '70'),
-                    array('Debit Notes (Invoice)', 'mdi storefront-outline', $SITEURL . '/finance/debit_notes_inv_table.php', '94'),
+                    array('Facebook Page Account', 'mdimdi-account-wrench-outline', $SITEURL . '/finance/fb_page_acc_table.php', '76'),
+                    array('Meta Ads Account', 'mdi storefront-outline', $SITEURL . '/finance/meta_ads_acc_table.php', '48'),
                 ),
-                'pin' => array('36', '70', '94'),
-            ),
-            array(
-                'Assets and Liabilities List',
-                'mdi mdi-finance',
-                'javascript:void(0)',
-                'y',
-                'expand' => array(
-                    array('Current Bank Account Transaction', 'mdi storefront-outline', $SITEURL . '/finance/curr_bank_trans_table.php', '43'),
-                    array('Investment Transaction', 'mdi storefront-outline', $SITEURL . '/finance/investment_trans_table.php', '40'),
-                    array('Inventories Transaction', 'mdi storefront-outline', $SITEURL . '/finance/invtr_trans_table.php', '41'),
-                    array('Sundry Debtors Transaction', 'mdi storefront-outline', $SITEURL . '/finance/sundry_debt_trans_table.php', '44'),
-                    array('Other Creditor Transaction', 'mdi storefront-outline', $SITEURL . '/finance/other_creditor_trans_table.php', '45'),
-                    array('Initial Capital Transaction', 'mdi storefront-outline', $SITEURL . '/finance/initial_capital_trans_table.php', '46'),
-                    array('Cash On Hand Transaction', 'mdi storefront-outline', $SITEURL . '/finance/cash_on_hand_trans_table.php', '47'),
-                    array('Monthly Bank Transaction Backup Record', 'mdi storefront-outline', $SITEURL . '/finance/bank_trans_backup_table.php', '59'),
-
-                ),
-                'pin' => array('43', '40', '41', '44', '45', '46', '47', '59'),
-
-
-            ),
-            array(
-                'Expense',
-                'mdi mdi-finance',
-                'javascript:void(0)',
-                'y',
-                'expand' => array(
-
-                ),
-                'pin' => array(''),
-            ),
-
-
-            array(
-                'Lazada',
-                'mdi mdi-finance',
-                'javascript:void(0)',
-                'y',
-                'expand' => array(
-
-                ),
-                'pin' => array(''),
-            ),
-            array(
-                'Record',
-                'mdi mdi-finance',
-                'javascript:void(0)',
-                'y',
-                'expand' => array(
-                    array('J&T Transaction Backup Record', 'mdi storefront-outline', $SITEURL . '/finance/j&t_trans_backup_table.php', '88'),
-                ),
-                'pin' => array('88'),
+                'pin' => array('48', '76'),
             ),
         ),
-
-        'pin' => array('36', '70', '94', '43', '40', '41', '44', '45', '46', '47', '59', '88')
-
+        'pin' => array('77', '50', '66', '65', '78', '88', '48', '76')
+    ),
+    array(
+        'Income',
+        'mdi mdi-finance',
+        'javascript:void(0)',
+        'y',
+        'expand' => array(
+            array('Shopee Withdrawal Transactions', 'mdi storefront-outline', $SITEURL . '/shopee/shopee_withdrawal_transactions_table.php', '51'),
+            array('Merchant Commission Record', 'mdi storefront-outline', $SITEURL . '/finance/merchant_comm_record_table.php', '61'),
+            array('Stripe Transaction Backup Record', 'mdi storefront-outline', $SITEURL . '/finance/stripe_trans_backup_table.php', '89'),
+            array('Atome Transaction Backup Record', 'mdi storefront-outline', $SITEURL . '/finance/atome_trans_backup_table.php', '87'),
+        ),
+        'pin' => array('51', '61', '89', '87')
+    ),
+    array(
+        'Accounting',
+        'mdi mdi-finance',
+        'javascript:void(0)',
+        'y',
+        'expand' => array(
+            array('Purchase Order', 'mdi mdi-file-document-outline', $SITEURL . '/purchase_order_table.php', '135'),
+            array('Credit Notes (Invoice)', 'mdi storefront-outline', $SITEURL . '/finance/cred_notes_inv_table.php', '70'),
+            array('Debit Notes (Invoice)', 'mdi storefront-outline', $SITEURL . '/finance/debit_notes_inv_table.php', '94'),
+            array('Current Bank Account Transaction', 'mdi storefront-outline', $SITEURL . '/finance/curr_bank_trans_table.php', '43'),
+            array('Investment Transaction', 'mdi storefront-outline', $SITEURL . '/finance/investment_trans_table.php', '40'),
+            array('Inventories Transaction', 'mdi storefront-outline', $SITEURL . '/finance/invtr_trans_table.php', '41'),
+            array('Sundry Debtors Transaction', 'mdi storefront-outline', $SITEURL . '/finance/sundry_debt_trans_table.php', '44'),
+            array('Other Creditor Transaction', 'mdi storefront-outline', $SITEURL . '/finance/other_creditor_trans_table.php', '45'),
+            array('Initial Capital Transaction', 'mdi storefront-outline', $SITEURL . '/finance/initial_capital_trans_table.php', '46'),
+            array('Cash On Hand Transaction', 'mdi storefront-outline', $SITEURL . '/finance/cash_on_hand_trans_table.php', '47'),
+            array('Monthly Bank Transaction Backup Record', 'mdi storefront-outline', $SITEURL . '/finance/bank_trans_backup_table.php', '59'),
+            array(
+                'Setting',
+                'mdi mdi-cog',
+                'javascript:void(0)',
+                'y',
+                'expand' => array(
+                    array('Tax', 'mdi mdi-contactless-payment-circle', $SITEURL . '/finance/tax_table.php', '57'),
+                    array('Expense Type', 'mdimdi-account-wrench-outline', $SITEURL . '/finance/expense_type_table.php', '49'),
+                    array('Payment Method (Finance)', 'mdimdi-account-wrench-outline', $SITEURL . '/finance/fin_payment_method_table.php', '60'),
+                    array('Payment Terms', 'mdimdi-account-wrench-outline', $SITEURL . '/finance/payment_terms_table.php', '63'),
+                ),
+                'pin' => array('57', '49', '60', '63'),
+            ),
+        ),
+        'pin' => array('135', '70', '94', '43', '40', '41', '44', '45', '46', '47', '59', '57', '49', '60', '63')
     ),
     array(
         'Report',
@@ -347,55 +385,21 @@ $menuList = array(
         'y',
         'expand' => array(
             array(
-                'Expense',
-                'mdi mdi-finance',
-                'javascript:void(0)',
-                'y',
-                'expand' => array(
-                    array('Facebook Ads Top Up Transaction', 'mdi storefront-outline', $SITEURL . '/finance/fb_ads_topup_trans_table.php', '50'),
-                    array('Delivery Fees Claim Record', 'mdi storefront-outline', $SITEURL . '/finance/del_fees_claim_table.php', '66'),
-                    array('Shopee Ads Top Up Transaction', 'mdi storefront-outline', $SITEURL . '/shopee/shopee_ads_topup_trans_table.php', '77'),
-                    array('Internal Consume Item', 'mdi storefront-outline', $SITEURL . '/finance/internal_consume_item_table.php', '67'),
-                    array('Internal Consume Ticket/Credit', 'mdi storefront-outline', $SITEURL . '/finance/internal_consume_ticket_credit_table.php', '65'),
-                    array('Stock Credit Top Up Record', 'mdi storefront-outline', $SITEURL . '/finance/stock_credit_top_up_request_table.php', '78'),
-                ),
-                'pin' => array('50', '66', '77', '67', '65', '78'),
-            ),
-            array(
                 'Income',
                 'mdi mdi-finance',
                 'javascript:void(0)',
                 'y',
                 'expand' => array(
-                    array('Shopee Withdrawal Transactions', 'mdi storefront-outline', $SITEURL . '/shopee/shopee_withdrawal_transactions_table.php', '51'),
-                    array('Merchant Commission Record', 'mdi storefront-outline', $SITEURL . '/finance/merchant_comm_record_table.php', '61'),
-                    array('Downline Top Up Record', 'mdi storefront-outline', $SITEURL . '/finance/downline_top_up_record_table.php', '68'),
-                    array('Stripe Transaction Backup Record', 'mdi storefront-outline', $SITEURL . '/finance/stripe_trans_backup_table.php', '89'),
-                    array('Atome Transaction Backup Record', 'mdi storefront-outline', $SITEURL . '/finance/atome_trans_backup_table.php', '87'),
-                    array('Facebook Order Request', 'mdi storefront-outline', $SITEURL . '/finance/fb_order_req_income_table.php', '69'),
                     array('Shopee Order Report', 'mdi storefront-outline', $SITEURL . '/shopee/shopeeOrder_request_income.php', '123'),
+                    array('Facebook Order Request', 'mdi storefront-outline', $SITEURL . '/finance/fb_order_req_income_table.php', '69'),
                     array('Website Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/finance/website_order_request_income_table.php', '92'),
                     array('Lazada Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/lazadaOrder_request_income.php', '93'),
-
-                ),
-                'pin' => array('51', '61', '68', '89', '87', '69', '123', '92', '93'),
-            ),
-            array(
-                'Group by',
-                'mdi mdi-finance',
-                'javascript:void(0)',
-                'y',
-                'expand' => array(
                     array('Sales Person Report', 'mdi mdi-note-text-outline', $SITEURL . '/finance/sales_person_report_table.php', '100'),
-                    array('Payment Method Report', 'mdi mdi-note-text-outline', $SITEURL . '/finance/payment_method_report_table.php', '101'),
-                    array('Package Report', 'mdi mdi-note-text-outline', $SITEURL . '/finance/package_report_table.php', '102'),
-                    array('Brand Report', 'mdi mdi-note-text-outline', $SITEURL . '/finance/brand_report_table.php', '103'),
-                    array('Stock Report', 'mdi mdi-note-text-outline', $SITEURL . '/finance/stock_report.php', '105'),
                 ),
-                'pin' => array('100', '101', '102', '103', '105'),
+                'pin' => array('123', '69', '92', '93', '100'),
             ),
         ),
-        'pin' => array('50', '66', '77', '67', '65', '78', '51', '61', '68', '89', '87', '69', '123', '92', '93', '100', '101', '102', '103', '105')
+        'pin' => array('123', '69', '92', '93', '100')
     ),
     array(
         'Other',
@@ -403,38 +407,38 @@ $menuList = array(
         'javascript:void(0)',
         'y',
         'expand' => array(
-            array('Barcode Generator', 'mdi mdi-barcode', $SITEURL . '/barcode_generator.php', '22'),
-            array('Rate Checking', 'mdi mdi-package-variant', $SITEURL . '/rate_checking.php', '17'),
-            array('SQL Account', 'mdi mdi-database', $SITEURL . '/sql_account_table.php', '132'),
-            array('Theme Setting', 'mdi mdi-brush-variant', $SITEURL . '/theme_setting.php', '23'),
-            array('System Setting', 'mdi mdi-brush-variant', $SITEURL . '/system_setting.php', '39'),
-
+            array('Merchant', 'mdi storefront-outline', $SITEURL . '/finance/merchant_table.php', '36'),
+            array('Agent', 'mdi mdi-information-outline', $SITEURL . '/finance/agent_table.php', '62'),
         ),
-        'pin' => array('22', '17', '132', '23', '39')
+        'pin' => array('36', '62')
     ),
     array(
-        'Settings',
+        'Setting',
         'mdi mdi-cog',
         'javascript:void(0)',
         'y',
         'expand' => array(
+            array('Sql Account', 'mdi mdi-database', $SITEURL . '/sql_account_table.php', '132'),
+            array('Token Setting', 'mdi mdi-key-chain', $SITEURL . '/token_setting_table.php', '133'),
+            array('Theme Setting', 'mdi mdi-brush-variant', $SITEURL . '/theme_setting.php', '23'),
+            array('System Setting', 'mdi mdi-brush-variant', $SITEURL . '/system_setting.php', '39'),
             array(
                 'User Management',
                 'mdi mdi-folder-account',
                 'javascript:void(0)',
                 'y',
                 'expand' => array(
-                    array('Pin', 'mdi mdi-pin', $SITEURL . '/pin_table.php', '1'),
-                    array('Pin Group', 'mdi mdi-ungroup', $SITEURL . '/pin_group_table.php', '2'),
                     array('User', 'mdi mdi-account-wrench-outline', $SITEURL . '/user_table.php', '90'),
                     array('User Group', 'mdi mdi-account-wrench-outline', $SITEURL . '/user_group_table.php', '3'),
+                    array('Pin', 'mdi mdi-pin', $SITEURL . '/pin_table.php', '1'),
+                    array('Pin Group', 'mdi mdi-ungroup', $SITEURL . '/pin_group_table.php', '2'),
 
                 ),
                 'pin' => array('1', '2', '90', '3'),
 
             ),
             array(
-                'User Administration Setting',
+                'Administration Setting',
                 'mdi mdi-account-key',
                 'javascript:void(0)',
                 'y',
@@ -443,132 +447,14 @@ $menuList = array(
                     array('Currencies', 'mdi mdi-swap-horizontal', $SITEURL . '/currencies_table.php', '11'),
                     array('Currency Unit', 'mdi mdi-currency-usd', $SITEURL . '/currency_unit_table.php', '10'),
                     array('Platform', 'mdi mdi-home-outline', $SITEURL . '/platform_table.php', '14'),
-                    array('Warehouse', 'mdi mdi-warehouse', $SITEURL . '/warehouse.php', '16'),
                     array('Weight Unit', 'mdi mdi-weight', $SITEURL . '/weight_unit_table.php', '19'),
-                    array('Change Password', 'mdi mdi-key-change', $SITEURL . '/changePassword.php', '25'),
                     array('Chanel (Social Media)', 'mdi storefront-outline', $SITEURL . '/finance/chanel_social_media_table.php', '79'),
-                ),
-                'pin' => array('8', '11', '10', '14', '16', '19', '25', '79'),
-            ),
-            array(
-                'Product Administration Setting',
-                'mdi mdi-archive-settings-outline',
-                'javascript:void(0)',
-                'y',
-                'expand' => array(
-                    array('Product Status', 'mdi mdi-package-variant-closed', $SITEURL . '/prod_status_table.php', '15'),
-                    array('Brand', 'mdi mdi-label-outline', $SITEURL . '/brand_table.php', '9'),
                     array('Company', 'mdi mdi-office-building-outline', $SITEURL . '/company_table.php', '127'),
-                    array('Purchase Order', 'mdi mdi-file-document-outline', $SITEURL . '/purchase_order_table.php', '135'),
-                    array('Courier Account', 'mdi mdi-label-outline', $SITEURL . '/courier_table.php', '53'),
-                    array('Category', 'mdi mdi-label-outline', $SITEURL . '/product_category_table.php', '56'),
-                    array('Brand Series', 'mdi mdi-label-outline', $SITEURL . '/brand_series_table.php', '74'),
                 ),
-
-                'pin' => array('15', '9', '127', '135', '53', '56', '74'),
-
+                'pin' => array('8', '11', '10', '14', '19', '79', '127'),
             ),
-            array(
-                'Employee Administration Setting',
-                'mdi mdi-account-wrench-outline',
-                'javascript:void(0)',
-                'y',
-                'expand' => array(
-                    array('Employment Type Status', 'mdi mdi-account-question-outline', $SITEURL . '/em_type_status_table.php', '12'),
-                    array('Marital Status', 'mdi mdi-account-heart-outline', $SITEURL . '/marital_status_table.php', '13'),
-                    array('Holidays', 'mdi mdi-calendar-star', $SITEURL . '/holiday_table.php', '6'),
-                    array('Leave Type', 'mdi mdi-run-fast', $SITEURL . '/leave_type_table.php', '24'),
-                    array('Identity Type', 'mdi mdi-book-search-outline', $SITEURL . '/identityTypeTable.php', '26'),
-                    array('Leave Status', 'mdi mdi-run-fast', $SITEURL . '/leave_status_table.php', '27'),
-                    array('Race', 'mdi mdi-account-star-outline', $SITEURL . '/race_table.php', '28'),
-                    array('Socso Category', 'mdi mdi-google-fit', $SITEURL . '/socso_category_table.php', '30'),
-                    array('Employer EPF Rate', 'mdi mdi-account-star-outline', $SITEURL . '/employer_epf_rate_table.php', '32'),
-                    array('Employee EPF Rate', 'mdi mdi-account-supervisor', $SITEURL . '/employee_epf_rate_table.php', '31'),
-
-                ),
-                'pin' => array('12', '13', '6', '24', '26', '27', '28', '30', '31', '32'),
-            ),
-            array(
-                'Customer Administration Setting',
-                'mdi mdi-account-wrench-outline',
-                'javascript:void(0)',
-                'y',
-                'expand' => array(
-                    array('Customer Segmentation', 'mdi mdi-account-group-outline', $SITEURL . '/cus_segmentation_table.php', '29'),
-                    array('Tag', 'mdi mdi-account-group-outline', $SITEURL . '/tagTable.php', '35'),
-                ),
-                'pin' => array('29', '35'),
-            ),
-            array(
-                'Payroll Administration  Setting',
-                'mdi mdi-cash-multiple',
-                'javascript:void(0)',
-                'y',
-                'expand' => array(
-                    array('Payment Method', 'mdi mdi-contactless-payment-circle', $SITEURL . '/payment_method_table.php', '33'),
-                    array('Tax Setting', 'mdi mdi-contactless-payment-circle', $SITEURL . '/finance/tax_table.php', '57'),
-                ),
-                'pin' => array('33', '57'),
-            ),
-            array(
-                'Finance Administration  Setting',
-                'mdi mdi-account-wrench-outline',
-                'javascript:void(0)',
-                'y',
-                'expand' => array(
-                    array('Expense Type', 'mdimdi-account-wrench-outline', $SITEURL . '/finance/expense_type_table.php', '49'),
-                    array('Payment Method (Finance)', 'mdimdi-account-wrench-outline', $SITEURL . '/finance/fin_payment_method_table.php', '60'),
-                    array('Payment Terms', 'mdimdi-account-wrench-outline', $SITEURL . '/finance/payment_terms_table.php', '63'),
-                ),
-                'pin' => array('49', '60', '63'),
-            ),
-
-            array(
-                'Social Administration  Setting',
-                'mdi mdi-account-wrench-outline',
-                'javascript:void(0)',
-                'y',
-                'expand' => array(
-                    array('Facebook Page Account', 'mdimdi-account-wrench-outline', $SITEURL . '/finance/fb_page_acc_table.php', '76'),
-                    array('Meta Ads Account', 'mdi storefront-outline', $SITEURL . '/finance/meta_ads_acc_table.php', '48'),
-
-
-                ),
-                'pin' => array('48', '76'),
-            ),
-
-            array(
-                'Order Administration  Setting',
-                'mdi mdi-cash-multiple',
-                'javascript:void(0)',
-                'y',
-                'expand' => array(
-                    array('Payment Method (Shopee)', 'mdi mdi-contactless-payment-circle', $SITEURL . '/shopee/payment_method_shopee_table.php', '80'),
-                    array('Shopee SG Setting', 'mdi mdi-contactless-payment-circle', $SITEURL . '/shopee/shopee_sg_setting_table.php', '82'),
-                    array('Shopee Service Charges Rate Setting', 'mdi storefront-outline', $SITEURL . '/shopee/shopee_service_charges_rate_setting_table.php', '83'),
-                    array('Shopee Account Management', 'mdi storefront-outline', $SITEURL . '/shopee/shopee_acc_table.php', '58'),
-                    array('Lazada Account Management', 'mdi storefront-outline', $SITEURL . '/finance/lazada_acc_table.php', '81'),
-                    array('Goal Target', 'mdi mdi-contactless-payment-circle', $SITEURL . '/goalTarget_table.php', '121'),
-                ),
-                'pin' => array('80', '82', '83', '58', '81', '121'),
-            ),
-            array('Token Setting', 'mdi mdi-key-chain', $SITEURL . '/token_setting_table.php', '133'),
         ),
-        'pin' => array('1', '2', '90', '3', '8', '11', '10', '14', '16', '19', '25', '79', '15', '9', '127', '135', '53', '56', '74', '12', '13', '6', '24', '26', '27', '28', '30', '31', '32', '29', '35', '33', '57', '49', '60', '63', '48', '76', '80', '82', '83', '58', '81', '121', '133')
-    ),
-    array(
-        'Warehouse',
-        'mdi mdi-package-variant',
-        'javascript:void(0)',
-        'y',
-        'expand' => array(
-            array('Warehouse', 'mdi mdi-warehouse', $SITEURL . '/warehouse_table.php', '16'),
-            array('Stock In', 'mdi mdi-tray-arrow-down', $SITEURL . '/warehouse_stock_in_table.php', '125'),
-            array('Stock List', 'mdi mdi-package-variant', $SITEURL . '/stock_list_table.php', '120'),
-            array('Stock Costing Setting', 'mdi mdi-package-variant', $SITEURL . '/stockCosting.php?act=I', '106'),
-
-        ),
-        'pin' => array('16', '120','125', '106')
+        'pin' => array('132', '133', '23', '39', '1', '2', '90', '3', '8', '11', '10', '14', '19', '79', '127')
     ),
     array(
         'Import Shortcut',
@@ -647,7 +533,8 @@ $menuList = array(
                             }
                         } else {
                             if (in_array($url[3], GlobalPin)) {
-                                echo "<li><a class=\"dropdown-item\" href=\"$url[2]\">$url[0]</a></li>";
+                                $urlTitle = getMenuTitleByPinGroupId($connect, $url[0], $url[3]);
+                                echo "<li><a class=\"dropdown-item\" href=\"$url[2]\">$urlTitle</a></li>";
                             }
                         }
                     }
@@ -706,7 +593,8 @@ $menuList = array(
                                 }
                             } else {
                                 if (in_array($url[3], GlobalPin)) {
-                                    echo "<li><a class=\"nav-link\" href=\"$url[2]\"><i class=\"$url[1]\"></i><span> $url[0]<span></a></li>";
+                                    $urlTitle = getMenuTitleByPinGroupId($connect, $url[0], $url[3]);
+                                    echo "<li><a class=\"nav-link\" href=\"$url[2]\"><i class=\"$url[1]\"></i><span> $urlTitle<span></a></li>";
                                 }
                             }
 

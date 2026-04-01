@@ -1,5 +1,6 @@
-<?php
+﻿<?php
 $pageTitle = "Merchant";
+$currentPagePin = 36;
 $isFinance = 1;
 
 include '../menuHeader.php';

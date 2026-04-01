@@ -1,5 +1,6 @@
-<?php
+﻿<?php
 $pageTitle = "Tax";
+$currentPagePin = 57;
 $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';

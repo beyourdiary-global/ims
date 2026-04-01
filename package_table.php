@@ -1,6 +1,7 @@
-<?php
+﻿<?php
 ob_start();
 $pageTitle = "Package";
+$currentPagePin = 21;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';

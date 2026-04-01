@@ -1,6 +1,7 @@
-<?php
+﻿<?php
 ob_start();
 $pageTitle = "Product";
+$currentPagePin = 20;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';

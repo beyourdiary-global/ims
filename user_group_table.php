@@ -1,5 +1,6 @@
-<?php
+﻿<?php
 $pageTitle = "User Group";
+$currentPagePin = 3;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';

@@ -1,5 +1,6 @@
-<?php
+﻿<?php
 $pageTitle = "Sundry Debtors Transaction";
+$currentPagePin = 44;
 $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';

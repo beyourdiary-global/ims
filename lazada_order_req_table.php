@@ -1,5 +1,6 @@
-<?php
+﻿<?php
 $pageTitle = "Lazada Order Request";
+$currentPagePin = 93;
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
 

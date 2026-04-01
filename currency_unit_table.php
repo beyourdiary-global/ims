@@ -1,5 +1,6 @@
-<?php
+﻿<?php
 $pageTitle = "Currency Unit";
+$currentPagePin = 10;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';

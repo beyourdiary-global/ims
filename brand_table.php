@@ -1,5 +1,6 @@
-<?php
+﻿<?php
 $pageTitle = "Brand";
+$currentPagePin = 9;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';

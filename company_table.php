@@ -1,6 +1,7 @@
-<?php
+﻿<?php
 ob_start();
 $pageTitle = "Company";
+$currentPagePin = 127;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';

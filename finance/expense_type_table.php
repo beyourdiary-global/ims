@@ -1,5 +1,6 @@
-<?php
+﻿<?php
 $pageTitle = "Expense Type";
+$currentPagePin = 49;
 $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';

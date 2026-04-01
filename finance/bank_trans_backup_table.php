@@ -1,6 +1,7 @@
-<?php
+﻿<?php
 ob_start();
 $pageTitle = "Monthly Bank Transaction Backup Record";
+$currentPagePin = 59;
 $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';

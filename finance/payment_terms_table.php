@@ -1,5 +1,6 @@
-<?php
+﻿<?php
 $pageTitle = "Payment Terms";
+$currentPagePin = 63;
 $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';

@@ -1,5 +1,6 @@
-<?php
+﻿<?php
 $pageTitle = "Shopee Account";
+$currentPagePin = 58;
 $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';

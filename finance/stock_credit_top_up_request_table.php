@@ -1,6 +1,7 @@
 <?php
 ob_start();
 $pageTitle = "Stock Credit Top Up Record";
+$currentPagePin = 78;
 $isFinance = 1;
 
 include '../menuHeader.php';
@@ -166,11 +167,6 @@ $redirect_page = $SITEURL . '/finance/stock_credit_top_up_request.php';
 $deleteRedirectPage = $SITEURL . '/finance/stock_credit_top_up_request_table.php';
 
 $result = getData('*', '', '', $tblName, $finance_connect);
-
-if (!$result) {
-    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-}
 ?>
 
 <!DOCTYPE html>
@@ -182,7 +178,7 @@ if (!$result) {
 
 <script>
     $(document).ready(() => {
-        createSortingTable('table');
+        createSortingTable('stock_credit_table');
     });
 </script>
 
@@ -310,7 +306,7 @@ if (!$result) {
                             $counters = 1;
             
                             function generateTableRow($id, &$counters, $key, $topupAmt) {
-                                echo '<tr onclick="window.location=\'internal_consume_item_table_summary.php?ids=' . urlencode($id) . '\';" style="cursor:pointer;">';
+                                echo '<tr onclick="window.location=\'stock_credit_top_up_request_table_summary.php?ids=' . urlencode($id) . '\';" style="cursor:pointer;">';
                                 echo ' <th class="text-center"><input type="checkbox" class="export" value="' . $id . '"></th>';
                                 echo '<th class="hideColumn" scope="row">' . $id . '</th>';
                                 echo '<th scope="row">' . $counters++ . '</th>';
@@ -321,19 +317,20 @@ if (!$result) {
                           
                             $groupedRows = [];
                         
+                        if ($result) {
                         while ($row = $result->fetch_assoc()) {    
                             $viewActMsg = '';
                             $sql = '';
                            if (isset($row['id']) && !empty($row['id'])) {
 
                             $merchants = getData('name', "id='" . $row['merchant'] . "'", '', MERCHANT, $finance_connect);
-                            $row3 = $merchants->fetch_assoc();
+                            $row3 = ($merchants && $merchants->num_rows > 0) ? $merchants->fetch_assoc() : array('name' => '');
 
                             $resultBrand = getData('name', "id='" . $row['brand'] . "'", '', BRAND, $connect);
-                            $rowBrand = $resultBrand->fetch_assoc();
+                            $rowBrand = ($resultBrand && $resultBrand->num_rows > 0) ? $resultBrand->fetch_assoc() : array('name' => '');
 
                             $currency = getData('unit', "id='" . $row['currency_unit'] . "'", '', CUR_UNIT, $connect);
-                            $row2 = $currency->fetch_assoc();
+                            $row2 = ($currency && $currency->num_rows > 0) ? $currency->fetch_assoc() : array('unit' => '');
 
                             $merchant = isset($row3['name']) ? $row3['name'] : '';;
                             $brand = isset($rowBrand['name']) ? $rowBrand['name'] : '';
@@ -469,6 +466,7 @@ if (!$result) {
                                 echo '</tr>';
                             }
                         }
+                        }
                         ?>
                 </tbody>
                 <tfoot>
@@ -522,7 +520,7 @@ if (!$result) {
         //to solve the issue of dropdown menu displaying inside the table when table class include table-responsive
         dropdownMenuDispFix();
         //to resize table with bootstrap 5 classes
-        datatableAlignment('table');
+    datatableAlignment('stock_credit_table');
         setButtonColor();
     </script>
 

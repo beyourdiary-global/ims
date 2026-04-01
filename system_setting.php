@@ -1,5 +1,6 @@
-<?php
+﻿<?php
 $pageTitle = "System Setting";
+$currentPagePin = 39;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';

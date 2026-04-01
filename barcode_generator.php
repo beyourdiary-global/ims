@@ -1,6 +1,7 @@
-<?php
+﻿<?php
 
 $pageTitle = "Barcode Generator";
+$currentPagePin = 22;
 include 'menuHeader.php';
 include "./header/phpqrcode/qrlib.php";
 include 'checkCurrentPagePin.php';

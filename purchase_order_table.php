@@ -1,6 +1,7 @@
-<?php
+﻿<?php
 ob_start();
 $pageTitle = "Purchase Order";
+$currentPagePin = 135;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';

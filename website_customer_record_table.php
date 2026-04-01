@@ -1,5 +1,6 @@
-<?php
+﻿<?php
 $pageTitle = "Website Customer Record (Deals)";
+$currentPagePin = 84;
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
 

@@ -1,5 +1,6 @@
-<?php
+﻿<?php
 $pageTitle = "Category";
+$currentPagePin = 56;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';

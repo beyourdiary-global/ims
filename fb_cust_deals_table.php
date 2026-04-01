@@ -1,5 +1,7 @@
 <?php
 $pageTitle = "Facebook Customer Record (Deals)";
+$currentPagePin = 75;
+$disablePinGroupPageTitleSync = true;
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
 

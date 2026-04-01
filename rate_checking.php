@@ -1,5 +1,6 @@
-<?php
+﻿<?php
 $pageTitle = "Rate Checking";
+$currentPagePin = 17;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
