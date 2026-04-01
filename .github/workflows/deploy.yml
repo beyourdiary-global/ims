@@ -61,10 +61,10 @@ jobs:
       - name: Deploy CRM via FTP
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
-          server: ${{ secrets.FTP_HOST }}/          # 例如 ftp.xxx.com
+          server: ${{ secrets.FTP_HOST }}          # 例如 ftp.xxx.com
           username: ${{ env.FTP_USERNAME }}
           password: ${{ env.FTP_PASSWORD }}
-          local-dir: ./public_html/crm             # ✅ 关键：只上传 crm
+          local-dir: ./public_html/crm/             # ✅ 关键：只上传 crm
           server-dir: /public_html/crm/            # ✅ 关键：目标目录（必须 / 结尾）
           port: 21
           security: loose
