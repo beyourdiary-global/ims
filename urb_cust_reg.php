@@ -1,6 +1,5 @@
 <?php
 $pageTitle = "Urbanism Member Registration";
-$initial_page = "Facebook Customer Record (Deals)";
 
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
@@ -16,8 +15,21 @@ $pageAction = getPageAction($act);
 
 $allowed_ext = array("png", "jpg", "jpeg", "svg", "pdf");
 
+$default_initial_page = "Facebook Customer Record (Deals)";
+$default_redirect_path = '/fb_cust_deals_table.php';
+$returnPageInput = trim((string) input('return_page'));
+$returnLabelInput = trim((string) input('return_label'));
 
-$redirect_page = $SITEURL . '/fb_cust_deals_table.php';
+$redirect_path = $default_redirect_path;
+if ($returnPageInput !== '') {
+    $candidatePath = ltrim(str_replace('\\', '/', $returnPageInput), '/');
+    if ($candidatePath !== '' && strpos($candidatePath, '..') === false && preg_match('/^[A-Za-z0-9_\/.\-]+\.php$/', $candidatePath)) {
+        $redirect_path = '/' . $candidatePath;
+    }
+}
+
+$initial_page = $returnLabelInput !== '' ? $returnLabelInput : $default_initial_page;
+$redirect_page = $SITEURL . $redirect_path;
 $redirectLink = ("<script>location.href = '$redirect_page';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
@@ -26,24 +38,32 @@ if (!file_exists($img_path)) {
     mkdir($img_path, 0777, true);
 }
 
+$urbanismSeedName = trim((string) $dataID);
+
 if ($dataID && $act== 'I') { //edit/remove/view
-    $rst = getData('*', "id='" . $dataID . "'", 'LIMIT 1', $tblName, $connect);
- 
-    if ($rst != false && $rst->num_rows > 0) {
-        $dataExisted = 1;
-        $row = $rst->fetch_assoc();
+    $lookupCondition = "";
+    if (ctype_digit((string) $dataID)) {
+        $lookupCondition = "id='" . ((int) $dataID) . "'";
     } else {
-        // If $rst is false or no data found ($act==null)
-        $errorExist = 1;
-        $_SESSION['tempValConfirmBox'] = true;
-        $act = "F";
+        $escapedSeed = mysqli_real_escape_string($connect, (string) $dataID);
+        $lookupCondition = "name='" . $escapedSeed . "'";
+    }
+
+    $rst = getData('*', $lookupCondition, 'LIMIT 1', $tblName, $connect);
+    if ($rst != false && $rst->num_rows > 0) {
+        $sourceRow = $rst->fetch_assoc();
+        if (isset($sourceRow['name']) && trim((string) $sourceRow['name']) !== '') {
+            $urbanismSeedName = trim((string) $sourceRow['name']);
+        }
     }
 }else if ($dataID) { //edit/remove/view
-    $rst = getData('*', "name='" . $dataID . "'", 'LIMIT 1', $reg_tblName, $connect);
+    $escapedDataID = mysqli_real_escape_string($connect, (string) $dataID);
+    $rst = getData('*', "name='" . $escapedDataID . "'", 'LIMIT 1', $reg_tblName, $connect);
  
     if ($rst != false && $rst->num_rows > 0) {
         $dataExisted = 1;
         $row = $rst->fetch_assoc();
+        $urbanismSeedName = trim((string) $row['name']);
     } else {
         // If $rst is false or no data found ($act==null)
         $errorExist = 1;
@@ -168,14 +188,13 @@ if (post('actionBtn')) {
             } else {
                 try {
                     // take old value
-                    $rst = getData('*', "name = '$dataID'", 'LIMIT 1', $reg_tblName, $connect);
-                    $rst2 = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $connect);
+                    $escapedDataID = mysqli_real_escape_string($connect, (string) $dataID);
+                    $rst = getData('*', "name = '$escapedDataID'", 'LIMIT 1', $reg_tblName, $connect);
                     $row = $rst->fetch_assoc();
-                    $row2 = $rst->fetch_assoc();
 
                     // check value
-                    if ($row2['name'] != $umr_name) {
-                        array_push($oldvalarr, $row2['name']);
+                    if ($row['name'] != $umr_name) {
+                        array_push($oldvalarr, $row['name']);
                         array_push($chgvalarr, $umr_name);
                         array_push($datafield, 'name');
                     }
@@ -210,7 +229,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
-                        $query = "UPDATE " . $reg_tblName . " SET name = '$umr_name', ic = '$umr_ic', address = '$umr_add', reg_date = '$umr_date', attachment = '$umr_attach', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE name = '$dataID'";
+                        $query = "UPDATE " . $reg_tblName . " SET name = '$umr_name', ic = '$umr_ic', address = '$umr_add', reg_date = '$umr_date', attachment = '$umr_attach', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE name = '$escapedDataID'";
                         $returnData = mysqli_query($connect, $query);
 
                     } else {
@@ -232,18 +251,18 @@ if (post('actionBtn')) {
                     'uid' => USER_ID,
                     'cby' => USER_ID,
                     'query_rec' => $query,
-                    'query_table' => $tblName,
+                    'query_table' => $reg_tblName,
                     'page' => $pageTitle,
                     'connect' => $connect,
                 ];
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $reg_tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval'] = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $reg_tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
             }
@@ -254,6 +273,15 @@ if (post('actionBtn')) {
             echo $clearLocalStorage . ' ' . $redirectLink;
             break;
     }
+}
+
+$urbanismFormName = '';
+if (isset($umr_name) && trim((string) $umr_name) !== '') {
+    $urbanismFormName = trim((string) $umr_name);
+} else if (isset($row['name']) && trim((string) $row['name']) !== '') {
+    $urbanismFormName = trim((string) $row['name']);
+} else if ($urbanismSeedName !== '') {
+    $urbanismFormName = $urbanismSeedName;
 }
 
 ?>
@@ -306,15 +334,9 @@ if (post('actionBtn')) {
                             <div class="col-md-6 mb-3">
                                 <label class="form-label form_lbl" id="umr_name_lbl" for="umr_name">Name<span
                                         class="requireRed">*</span></label>
-                                <input class="form-control" type="text" name="umr_name" id="umr_name" value="<?php
-                                $name_rst = getData('*', "id='" . $dataID . "'", 'LIMIT 1', $tblName, $connect);
-                              
-                                if ($name_row = $name_rst->fetch_assoc()) {
-                                    echo $name_row['name'];
-                                }
-                                ?>" <?php echo 'disabled' ?>>
+                                <input class="form-control" type="text" name="umr_name" id="umr_name" value="<?php echo htmlspecialchars($urbanismFormName, ENT_QUOTES, 'UTF-8'); ?>" <?php echo 'disabled' ?>>
                                 <input type="hidden" name="umr_name_hidden" id="umr_name_hidden"
-                                    value="<?php echo $dataID; ?>">
+                                    value="<?php echo htmlspecialchars($urbanismFormName, ENT_QUOTES, 'UTF-8'); ?>">
                                 <?php if (isset($name_err)) { ?>
                                     <div id="err_msg">
                                         <span class="mt-n1">

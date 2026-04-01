@@ -471,10 +471,9 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         if (isset($echoVal)) {
             $user_rst = getData('name', "id = '$echoVal'", '', USR_USER, $connect);
             if (!$user_rst) {
-                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                // Graceful fallback: keep form usable even when lookup query is unavailable.
             }
-            $user_row = $user_rst->fetch_assoc();
+            $user_row = ($user_rst && $user_rst->num_rows > 0) ? $user_rst->fetch_assoc() : array();
         }
     ?>
     <input class="form-control" type="text" name="lcr_pic" id="lcr_pic" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $user_row['name'] : '' ?>">
@@ -488,7 +487,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
     // Retrieve details of the logged-in user
     $user_rst = getData('name', "id = '$loggedInUserId'", '', USR_USER, $connect);
     if ($user_rst && $user_rst->num_rows > 0) {
-        $user_row = $user_rst->fetch_assoc();
+        $user_row = ($user_rst && $user_rst->num_rows > 0) ? $user_rst->fetch_assoc() : array();
         $defaultUser = $user_row['name'];
     }
     ?>
@@ -515,10 +514,9 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
             if (isset($echoVal)) {
                 $country_rst = getData('nicename', "id = '$echoVal'", '', COUNTRIES, $connect);
                 if (!$country_rst) {
-                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                    // Graceful fallback: keep form usable even when lookup query is unavailable.
                 }
-                $country_row = $country_rst->fetch_assoc();
+                $country_row = ($country_rst && $country_rst->num_rows > 0) ? $country_rst->fetch_assoc() : array();
             }
             ?>
             <input class="form-control" type="text" name="lcr_country" id="lcr_country" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $country_row['nicename'] : '' ?>">
@@ -543,10 +541,9 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
             if (isset($echoVal)) {
                 $brand_rst = getData('name', "id = '$echoVal'", '', BRAND, $connect);
                 if (!$brand_rst) {
-                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                    // Graceful fallback: keep form usable even when lookup query is unavailable.
                 }
-                $brand_row = $brand_rst->fetch_assoc();
+                $brand_row = ($brand_rst && $brand_rst->num_rows > 0) ? $brand_rst->fetch_assoc() : array();
             }
             ?>
             <input class="form-control" type="text" name="lcr_brand" id="lcr_brand" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $brand_row['name'] : '' ?>">

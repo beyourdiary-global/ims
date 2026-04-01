@@ -222,8 +222,55 @@ function getPageAction($act)
     return $validActions[$act] ?? 'View';
 }
 
+function auditCurrentTableView($connect)
+{
+    static $hasLoggedTableView = false;
+    if ($hasLoggedTableView) {
+        return;
+    }
+
+    if (!($connect instanceof mysqli) || !defined('USER_ID') || !USER_ID) {
+        return;
+    }
+
+    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+        return;
+    }
+
+    $scriptName = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    if ($scriptName === '' || stripos($scriptName, 'table') === false) {
+        return;
+    }
+
+    if (in_array(strtolower($scriptName), array('insert_table.php'), true)) {
+        return;
+    }
+
+    $resolvedPage = isset($GLOBALS['pageTitle']) && is_string($GLOBALS['pageTitle']) && trim($GLOBALS['pageTitle']) !== ''
+        ? trim($GLOBALS['pageTitle'])
+        : $scriptName;
+
+    $viewActMsg = USER_NAME . " viewed the table page <b>" . $resolvedPage . "</b>.";
+
+    $log = array(
+        'log_act' => 'view',
+        'cdate' => date('Y-m-d'),
+        'ctime' => date('H:i:s'),
+        'uid' => USER_ID,
+        'cby' => USER_ID,
+        'act_msg' => $viewActMsg,
+        'page' => $resolvedPage,
+        'connect' => $connect,
+    );
+
+    audit_log($log);
+    $hasLoggedTableView = true;
+}
+
 if (isset($connect) && isset($GLOBALS['pageTitle']) && is_string($GLOBALS['pageTitle'])) {
     $resolvedPageTitle = syncPageTitleWithPinGroupName($connect, $GLOBALS['pageTitle']);
+
+    auditCurrentTableView($connect);
 
     // Some pages render <title> before this file is included; keep browser tab title in sync.
     if ($resolvedPageTitle !== '') {
