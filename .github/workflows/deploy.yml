@@ -1,4 +1,4 @@
-name: FTP Deploy CRM LIVE-0911
+name: FTP Deploy CRM LIVE
 
 on:
   push:
@@ -58,8 +58,9 @@ jobs:
           ls -R
           echo "========================"
 
-      # 2️⃣ 测试 FTP 连接（dry-run），显示准备上传的文件
+      # 2️⃣ 测试 FTP 连接（dry-run）并保存上传文件列表
       - name: Test FTP connection (dry-run)
+        id: dryrun
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
           server: ${{ secrets.FTP_HOST }}
@@ -70,10 +71,25 @@ jobs:
           port: 21
           security: loose
           dry-run: true
-          exclude: "**/.git*/**,**/.github*/**"
           log-level: verbose
+          output-file: dryrun-files.txt
+          exclude: |
+            .git/**
+            .github/**
+            node_modules/**
 
-      # 3️⃣ 上传文件
+      # 2.1️⃣ 安全检查：如果 dry-run 没有文件，直接失败
+      - name: Fail if no files to upload
+        run: |
+          if [ ! -s dryrun-files.txt ]; then
+            echo "❌ No files detected for upload. Aborting deployment."
+            exit 1
+          else
+            echo "✅ Files detected for upload:"
+            cat dryrun-files.txt
+          fi
+
+      # 3️⃣ 正式上传（只上传变化文件）
       - name: Deploy /crm via FTP
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
@@ -85,12 +101,9 @@ jobs:
           port: 21
           security: loose
           dry-run: false
-          exclude: "**/.git*/**,**/.github*/**"
           log-level: verbose
-
-      # 3.1️⃣ 再次列出本地文件，确认上传前文件存在
-      - name: Confirm files before upload
-        run: |
-          echo "====== Confirm files exist ======"
-          ls -R
-          echo "==============================="
+          only-changed: true
+          exclude: |
+            .git/**
+            .github/**
+            node_modules/**
