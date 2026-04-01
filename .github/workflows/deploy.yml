@@ -3,51 +3,72 @@ name: FTP Deploy CRM LIVE
 on:
   push:
     branches:
-      - main          # 主分支
-      - uat           # UAT 分支
-  workflow_dispatch:   # 支持手动触发
+      - main
+      - uat
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: 'Select branch to deploy (main or uat)'
+        required: true
+        default: 'uat'
+        type: choice
+        options:
+          - main
+          - uat
 
 jobs:
   ftp-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      # 0️⃣ 检查分支并设置环境变量
-      - name: Set FTP credentials based on branch
+      # 0️⃣ 设置分支和 FTP 凭据
+      - name: Set branch and FTP credentials
         run: |
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            DEPLOY_BRANCH="${{ github.event.inputs.branch }}"
+          else
+            DEPLOY_BRANCH="${GITHUB_REF##*/}"
+          fi
+
+          echo "部署分支: $DEPLOY_BRANCH"
+
+          # 只允许 main 或 uat
+          if [[ "$DEPLOY_BRANCH" == "main" ]]; then
             echo "FTP_USERNAME=${{ secrets.FTP_USERNAME }}" >> $GITHUB_ENV
             echo "FTP_PASSWORD=${{ secrets.FTP_PASSWORD }}" >> $GITHUB_ENV
-            echo "DEPLOY_BRANCH=main" >> $GITHUB_ENV
-          elif [[ "${{ github.ref }}" == "refs/heads/uat" ]]; then
+          elif [[ "$DEPLOY_BRANCH" == "uat" ]]; then
             echo "FTP_USERNAME=${{ secrets.FTP_USERNAME_UAT }}" >> $GITHUB_ENV
             echo "FTP_PASSWORD=${{ secrets.FTP_PASSWORD_UAT }}" >> $GITHUB_ENV
-            echo "DEPLOY_BRANCH=uat" >> $GITHUB_ENV
+          else
+            echo "Error: Unsupported branch $DEPLOY_BRANCH"
+            exit 1
           fi
-          echo "当前分支: ${{ github.ref }}"
-      
-      # 1️⃣ Checkout 仓库代码
+
+          echo "DEPLOY_BRANCH=$DEPLOY_BRANCH" >> $GITHUB_ENV
+
+      # 1️⃣ Checkout 对应分支代码
       - name: Checkout code
         uses: actions/checkout@v3
+        with:
+          ref: ${{ env.DEPLOY_BRANCH }}
 
-      # 2️⃣ 测试 FTP 连接（dry-run: true）
+      # 2️⃣ 测试 FTP 连接（dry-run）
       - name: Test FTP connection (dry-run)
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
           server: ${{ secrets.FTP_HOST }}
           username: ${{ env.FTP_USERNAME }}
           password: ${{ env.FTP_PASSWORD }}
-          local-dir: ./                   # 本地 crm 文件夹，末尾一定要有 /
-          server-dir: ${{ secrets.FTP_PATH }}/   # 远程路径，末尾一定要有 /
+          local-dir: ./           # 本地目录
+          server-dir: ${{ secrets.FTP_PATH }}/
           port: 21
-          security: loose                      # FTP，不是 SFTP
-          dry-run: true                        # 先测试连接，不上传文件
+          security: loose
+          dry-run: true
           exclude: "**/.git*/**,**/.github*/**"
-          log-level: verbose                   # 输出详细日志
+          log-level: verbose
 
-      # 3️⃣ 正式上传（dry-run: false）
+      # 3️⃣ 正式上传
       - name: Deploy /crm via FTP
-        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/uat'
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
           server: ${{ secrets.FTP_HOST }}
