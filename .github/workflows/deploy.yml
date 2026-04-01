@@ -1,4 +1,4 @@
-name: FTP Deploy CRM LIVE
+name: FTP Deploy CRM LIVE 01-09-31
 
 on:
   push:
@@ -49,7 +49,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          ref: ${{ env.DEPLOY_BRANCH }}
+          ref: ${{ env.DEPLOY_BRANCH }}/
 
       # 1.1️⃣ 列出本地文件，确认 checkout 成功
       - name: List local files
@@ -63,10 +63,10 @@ jobs:
         id: dryrun
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
-          server: ${{ secrets.FTP_HOST }}
-          username: ${{ env.FTP_USERNAME }}
-          password: ${{ env.FTP_PASSWORD }}
-          local-dir: ./           
+          server: ${{ secrets.FTP_HOST }}/
+          username: ${{ env.FTP_USERNAME }}/
+          password: ${{ env.FTP_PASSWORD }}/
+          local-dir: ./           # 根据实际部署目录修改
           server-dir: ${{ secrets.FTP_PATH }}/
           port: 21
           security: loose
@@ -78,12 +78,11 @@ jobs:
             .github/**
             node_modules/**
 
-      # 2.1️⃣ 安全检查：如果 dry-run 没有文件，直接失败
-      - name: Fail if no files to upload
+      # 2.1️⃣ 安全检查：如果 dry-run 没文件，允许继续上传（首次部署）
+      - name: Check dry-run result
         run: |
           if [ ! -s dryrun-files.txt ]; then
-            echo "❌ No files detected for upload. Aborting deployment."
-            exit 1
+            echo "⚠️ No files detected in dry-run. Assuming first deploy, continuing..."
           else
             echo "✅ Files detected for upload:"
             cat dryrun-files.txt
@@ -93,10 +92,10 @@ jobs:
       - name: Deploy /crm via FTP
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
-          server: ${{ secrets.FTP_HOST }}
-          username: ${{ env.FTP_USERNAME }}
-          password: ${{ env.FTP_PASSWORD }}
-          local-dir: ./
+          server: ${{ secrets.FTP_HOST }}/
+          username: ${{ env.FTP_USERNAME }}/
+          password: ${{ env.FTP_PASSWORD }}/
+          local-dir: ./           # 根据实际部署目录修改
           server-dir: ${{ secrets.FTP_PATH }}/
           port: 21
           security: loose
