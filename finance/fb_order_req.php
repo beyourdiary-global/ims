@@ -481,6 +481,42 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 
     audit_log($log);
 }
+
+$urbanismBadgeSeedName = '';
+$urbanismBadgeSeedId = '';
+$urbanismFbLink = '';
+
+if (isset($row['name']) && trim((string) $row['name']) !== '') {
+    $urbanismBadgeSeedName = trim((string) $row['name']);
+}
+if ($urbanismBadgeSeedName === '' && postSpaceFilter('for_name') !== '') {
+    $urbanismBadgeSeedName = trim((string) postSpaceFilter('for_name'));
+}
+
+if (isset($row['fb_link']) && trim((string) $row['fb_link']) !== '') {
+    $urbanismFbLink = trim((string) $row['fb_link']);
+}
+if ($urbanismFbLink === '' && postSpaceFilter('for_link') !== '') {
+    $urbanismFbLink = trim((string) postSpaceFilter('for_link'));
+}
+
+if ($urbanismBadgeSeedName !== '' && $urbanismFbLink !== '') {
+    $safeFbName = mysqli_real_escape_string($connect, $urbanismBadgeSeedName);
+    $safeFbLink = mysqli_real_escape_string($connect, $urbanismFbLink);
+    $dealRst = getData('id', "name='" . $safeFbName . "' AND fb_link='" . $safeFbLink . "'", 'LIMIT 1', FB_CUST_DEALS, $connect);
+    if ($dealRst && $dealRst->num_rows > 0) {
+        $dealRow = $dealRst->fetch_assoc();
+        $urbanismBadgeSeedId = (string) ((int) $dealRow['id']);
+    }
+}
+
+$urbanismBadgeAction = getUrbanismMemberActionData(
+    $connect,
+    $urbanismBadgeSeedId,
+    $urbanismBadgeSeedName,
+    $redirect_page,
+    $pageTitle
+);
 ?>
 
 <!DOCTYPE html>
@@ -511,11 +547,16 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         <div class="col-6 col-md-6 formWidthAdjust">
             <form id="FORForm" method="post" action="" enctype="multipart/form-data">
                 <div class="form-group mb-5">
-                    <h2>
-                        <?php
-                        echo displayPageAction($act, $pageTitle);
-                        ?>
-                    </h2>
+                    <div class="order-title-row">
+                        <h2 class="mb-0"><?php echo displayPageAction($act, $pageTitle); ?></h2>
+                    </div>
+                    <div class="order-badge-row text-end mt-2">
+                        <a
+                            class="btn btn-sm <?= $urbanismBadgeAction['is_member'] ? 'btn-success' : 'btn-outline-secondary' ?> <?= $urbanismBadgeAction['disabled'] ? 'disabled' : '' ?>"
+                            href="<?= htmlspecialchars($urbanismBadgeAction['url'], ENT_QUOTES, 'UTF-8') ?>"
+                            title="<?= htmlspecialchars($urbanismBadgeAction['title'], ENT_QUOTES, 'UTF-8') ?>"
+                            <?= $urbanismBadgeAction['disabled'] ? 'onclick="return false;" aria-disabled="true"' : '' ?>><i class="fa-solid fa-id-badge"></i></a>
+                    </div>
                 </div>
 
                 <div id="err_msg" class="mb-3">
@@ -606,14 +647,13 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 if (isset($echoVal)) {
                                     $user_rst = getData('name', "id = '$echoVal'", '', USR_USER, $connect);
                                     if (!$user_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                        echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                        // Graceful fallback: keep form usable even when lookup query is unavailable.
                                     }
-                                    $user_row = $user_rst->fetch_assoc();
+                                    $user_row = ($user_rst && $user_rst->num_rows > 0) ? $user_rst->fetch_assoc() : array();
                                 }
                                 ?>
                                 <input class="form-control" type="text" name="for_pic" id="for_pic" <?php if ($act == '')
-                                    echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $user_row['name'] : '' ?>">
+                                    echo 'disabled' ?> value="<?php echo !empty($echoVal) ? (isset($user_row['name']) ? $user_row['name'] : '') : '' ?>">
                                 <input type="hidden" name="for_pic_hidden" id="for_pic_hidden"
                                     value="<?php echo (isset($row['sales_pic'])) ? $row['sales_pic'] : ''; ?>">
                                 <?php } ?>
@@ -626,7 +666,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                     // Retrieve details of the logged-in user
                                     $user_rst = getData('name', "id = '$loggedInUserId'", '', USR_USER, $connect);
                                     if ($user_rst && $user_rst->num_rows > 0) {
-                                        $user_row = $user_rst->fetch_assoc();
+                                        $user_row = ($user_rst && $user_rst->num_rows > 0) ? $user_rst->fetch_assoc() : array();
                                         $defaultUser = $user_row['name'];
                                     }
                                     
@@ -656,15 +696,14 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 if (isset($echoVal)) {
                                     $country_rst = getData('nicename', "id = '$echoVal'", '', COUNTRIES, $connect);
                                     if (!$country_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                        echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                        // Graceful fallback: keep form usable even when lookup query is unavailable.
                                     }
-                                    $country_row = $country_rst->fetch_assoc();
+                                    $country_row = ($country_rst && $country_rst->num_rows > 0) ? $country_rst->fetch_assoc() : array();
                                 }
                                 ?>
                                 <input class="form-control" type="text" name="for_country" id="for_country" <?php if ($act == '')
                                     echo 'disabled' ?>
-                                        value="<?php echo !empty($echoVal) ? $country_row['nicename'] : '' ?>">
+                                        value="<?php echo !empty($echoVal) ? (isset($country_row['nicename']) ? $country_row['nicename'] : '') : '' ?>">
                                 <input type="hidden" name="for_country_hidden" id="for_country_hidden"
                                     value="<?php echo (isset($row['country'])) ? $row['country'] : ''; ?>">
 
@@ -690,15 +729,14 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 if (isset($echoVal)) {
                                     $brand_rst = getData('name', "id = '$echoVal'", '', BRAND, $connect);
                                     if (!$brand_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                        echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                        // Graceful fallback: keep form usable even when lookup query is unavailable.
                                     }
-                                    $brand_row = $brand_rst->fetch_assoc();
+                                    $brand_row = ($brand_rst && $brand_rst->num_rows > 0) ? $brand_rst->fetch_assoc() : array();
                                 }
                                 ?>
                                 <input class="form-control" type="text" name="for_brand" id="for_brand" <?php if ($act == '')
                                     echo 'disabled' ?>
-                                        value="<?php echo !empty($echoVal) ? $brand_row['name'] : '' ?>">
+                                        value="<?php echo !empty($echoVal) ? (isset($brand_row['name']) ? $brand_row['name'] : '') : '' ?>">
                                 <input type="hidden" name="for_brand_hidden" id="for_brand_hidden"
                                     value="<?php echo (isset($row['brand'])) ? $row['brand'] : ''; ?>">
 
@@ -728,16 +766,15 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 
                                 if (isset($echoVal)) {
                                     $series_rst = getData('name', "id = '$echoVal'", '', BRD_SERIES, $connect);
-                                    if (!$brand_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                        echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                    if (!$series_rst) {
+                                        // Graceful fallback: keep form usable even when lookup query is unavailable.
                                     }
-                                    $series_row = $series_rst->fetch_assoc();
+                                    $series_row = ($series_rst && $series_rst->num_rows > 0) ? $series_rst->fetch_assoc() : array();
                                 }
                                 ?>
                                 <input class="form-control" type="text" name="for_series" id="for_series" <?php if ($act == '')
                                     echo 'disabled' ?>
-                                        value="<?php echo !empty($echoVal) ? $series_row['name'] : '' ?>">
+                                        value="<?php echo !empty($echoVal) ? (isset($series_row['name']) ? $series_row['name'] : '') : '' ?>">
                                 <input type="hidden" name="for_series_hidden" id="for_series_hidden"
                                     value="<?php echo (isset($row['series'])) ? $row['series'] : ''; ?>">
 
@@ -762,14 +799,13 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 if (isset($echoVal)) {
                                     $pkg_rst = getData('name', "id = '$echoVal'", '', PKG, $connect);
                                     if (!$pkg_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                        echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                        // Graceful fallback: keep form usable even when lookup query is unavailable.
                                     }
-                                    $pkg_row = $pkg_rst->fetch_assoc();
+                                    $pkg_row = ($pkg_rst && $pkg_rst->num_rows > 0) ? $pkg_rst->fetch_assoc() : array();
                                 }
                                 ?>
                                 <input class="form-control" type="text" name="for_pkg" id="for_pkg" <?php if ($act == '')
-                                    echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $pkg_row['name'] : '' ?>">
+                                    echo 'disabled' ?> value="<?php echo !empty($echoVal) ? (isset($pkg_row['name']) ? $pkg_row['name'] : '') : '' ?>">
                                 <input type="hidden" name="for_pkg_hidden" id="for_pkg_hidden"
                                     value="<?php echo (isset($row['package'])) ? $row['package'] : ''; ?>">
 
@@ -794,15 +830,14 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 if (isset($echoVal)) {
                                     $fbpage_rst = getData('name', "id = '$echoVal'", '', FB_PAGE_ACC, $finance_connect);
                                     if (!$fbpage_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                        echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                        // Graceful fallback: keep form usable even when lookup query is unavailable.
                                     }
-                                    $fbpage_row = $fbpage_rst->fetch_assoc();
+                                    $fbpage_row = ($fbpage_rst && $fbpage_rst->num_rows > 0) ? $fbpage_rst->fetch_assoc() : array();
                                 }
                                 ?>
                                 <input class="form-control" type="text" name="for_fbpage" id="for_fbpage" <?php if ($act == '')
                                     echo 'disabled' ?>
-                                        value="<?php echo !empty($echoVal) ? $brand_row['name'] : '' ?>">
+                                        value="<?php echo !empty($echoVal) ? (isset($fbpage_row['name']) ? $fbpage_row['name'] : '') : '' ?>">
                                 <input type="hidden" name="for_fbpage_hidden" id="for_fbpage_hidden"
                                     value="<?php echo (isset($row['fb_page'])) ? $row['fb_page'] : ''; ?>">
 
@@ -831,15 +866,14 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 if (isset($echoVal)) {
                                     $channel_rst = getData('*', "id = '$echoVal'", '', CHANEL_SC_MD, $finance_connect);
                                     if (!$channel_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                        echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                        // Graceful fallback: keep form usable even when lookup query is unavailable.
                                     }
-                                    $channel_row = $channel_rst->fetch_assoc();
+                                    $channel_row = ($channel_rst && $channel_rst->num_rows > 0) ? $channel_rst->fetch_assoc() : array();
                                 }
 
                                 ?>
                                 <input class="form-control" type="text" name="for_channel" id="for_channel" <?php if ($act == '')
-                                    echo 'disabled' ?> value="<?php echo (isset($row['channel'])) ? $row['channel'] : (isset($channel_row) ? $channel_row['name'] : ''); ?>">
+                                    echo 'disabled' ?> value="<?php echo !empty($echoVal) ? (isset($channel_row['name']) ? $channel_row['name'] : '') : ''; ?>">
                                 <input type="hidden" name="for_channel_hidden" id="for_channel_hidden"
                                 value="<?php echo (isset($row['channel'])) ? $row['channel'] : (isset($channel_row) ? $channel_row['id'] : ''); ?>">
 
@@ -880,15 +914,14 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 if (isset($echoVal)) {
                                     $pay_rst = getData('name', "id = '$echoVal'", '', FIN_PAY_METH, $finance_connect);
                                     if (!$pay_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                        echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                        // Graceful fallback: keep form usable even when lookup query is unavailable.
                                     }
-                                    $pay_row = $pay_rst->fetch_assoc();
+                                    $pay_row = ($pay_rst && $pay_rst->num_rows > 0) ? $pay_rst->fetch_assoc() : array();
                                 }
                                 ?>
                                 <input class="form-control" type="text" name="for_pay_meth" id="for_pay_meth" <?php if ($act == '')
                                     echo 'disabled' ?>
-                                        value="<?php echo !empty($echoVal) ? $pay_row['name'] : '' ?>">
+                                        value="<?php echo !empty($echoVal) ? (isset($pay_row['name']) ? $pay_row['name'] : '') : '' ?>">
                                 <input type="hidden" name="for_pay_meth_hidden" id="for_pay_meth_hidden"
                                     value="<?php echo (isset($row['pay_method'])) ? $row['pay_method'] : ''; ?>">
 
@@ -1058,15 +1091,14 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                             $courier_rst2 = getData('courier_id', "order_id = '$echoVal'", '', OFFICIAL_PROCESS_ORDER, $connect);
 
                             if (!$courier_rst2) {
-                                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                // Graceful fallback: keep form usable even when lookup query is unavailable.
                             }
                             $courier_row2 = $courier_rst2->fetch_assoc();
                             if ($courier_row2['courier_id'])
                             $echoVal2 = $courier_row2['courier_id'];
                        
                             $courier_rst = getData('name', "id = '$echoVal2'", '', COURIER, $connect);
-                            $courier_row = $courier_rst->fetch_assoc();
+                            $courier_row = ($courier_rst && $courier_rst->num_rows > 0) ? $courier_rst->fetch_assoc() : array();
                       
                             if (isset($courier_row['name'])) {
                                 $courier_name = $courier_row['name'];
@@ -1090,10 +1122,9 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                             <?php
                              $tracking_rst = getData('tracking_id', "order_id = '$echoVal'", '', OFFICIAL_PROCESS_ORDER, $connect);
                              if (!$tracking_rst) {
-                                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                // Graceful fallback: keep form usable even when lookup query is unavailable.
                             }
-                            $tracking_row = $tracking_rst->fetch_assoc();
+                            $tracking_row = ($tracking_rst && $tracking_rst->num_rows > 0) ? $tracking_rst->fetch_assoc() : array();
                             if (isset($tracking_row['tracking_id'])) {
                                 $tracking_id = $tracking_row['tracking_id'];
                             } else {
@@ -1115,8 +1146,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                    
                             $tracking_rst2 = getData('tracking_link', "id = '$echoVal2'", '', COURIER, $connect);
                             if (!$tracking_rst2) {
-                                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                // Graceful fallback: keep form usable even when lookup query is unavailable.
                             }
                             $track_row = $tracking_rst2->fetch_assoc();
                       

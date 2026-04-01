@@ -514,7 +514,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
     // Retrieve details of the logged-in user
     $user_rst = getData('name', "id = '$loggedInUserId'", '', USR_USER, $connect);
     if ($user_rst && $user_rst->num_rows > 0) {
-        $user_row = $user_rst->fetch_assoc();
+        $user_row = ($user_rst && $user_rst->num_rows > 0) ? $user_rst->fetch_assoc() : array();
         $defaultUser = $user_row['name'];
     }
     ?>
@@ -532,10 +532,9 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                     
                                     $pic_rst = getData('name', "id = '$echoVal'", '', USR_USER, $connect);
                                     if (!$pic_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                        echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                        // Graceful fallback: keep form usable even when lookup query is unavailable.
                                     }
-                                    $pic_row = $pic_rst->fetch_assoc();
+                                    $pic_row = ($pic_rst && $pic_rst->num_rows > 0) ? $pic_rst->fetch_assoc() : array();
                            
                                 }
                                 ?>
@@ -566,10 +565,9 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
             if (isset($echoVal)) {
                 $country_rst = getData('nicename', "id = '$echoVal'", '', COUNTRIES, $connect);
                 if (!$country_rst) {
-                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                    // Graceful fallback: keep form usable even when lookup query is unavailable.
                 }
-                $country_row = $country_rst->fetch_assoc();
+                $country_row = ($country_rst && $country_rst->num_rows > 0) ? $country_rst->fetch_assoc() : array();
             }
             ?>
             <input class="form-control" type="text" name="wcr_country" id="wcr_country" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $country_row['nicename'] : '' ?>">
@@ -594,10 +592,9 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
             if (isset($echoVal)) {
                 $brand_rst = getData('name', "id = '$echoVal'", '', BRAND, $connect);
                 if (!$brand_rst) {
-                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                    // Graceful fallback: keep form usable even when lookup query is unavailable.
                 }
-                $brand_row = $brand_rst->fetch_assoc();
+                $brand_row = ($brand_rst && $brand_rst->num_rows > 0) ? $brand_rst->fetch_assoc() : array();
             }
             ?>
             <input class="form-control" type="text" name="wcr_brand" id="wcr_brand" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $brand_row['name'] : '' ?>">
@@ -622,10 +619,9 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         if (isset($echoVal)) {
             $series_rst = getData('name', "id = '$echoVal'", '', BRD_SERIES, $connect);
         if (!$series_rst) {
-            echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-            echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+            // Graceful fallback: keep form usable even when lookup query is unavailable.
         }
-            $series_row = $series_rst->fetch_assoc();
+            $series_row = ($series_rst && $series_rst->num_rows > 0) ? $series_rst->fetch_assoc() : array();
         }
         ?>
 

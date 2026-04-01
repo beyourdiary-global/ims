@@ -543,6 +543,22 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 
     audit_log($log);
 }
+
+$urbanismBadgeSeedName = '';
+if (isset($row['cust_name']) && trim((string) $row['cust_name']) !== '') {
+    $urbanismBadgeSeedName = trim((string) $row['cust_name']);
+}
+if ($urbanismBadgeSeedName === '' && postSpaceFilter('wor_cust_name') !== '') {
+    $urbanismBadgeSeedName = trim((string) postSpaceFilter('wor_cust_name'));
+}
+
+$urbanismBadgeAction = getUrbanismMemberActionData(
+    $connect,
+    '',
+    $urbanismBadgeSeedName,
+    $redirect_page,
+    $pageTitle
+);
 ?>
 
 <!DOCTYPE html>
@@ -573,11 +589,16 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         <div class="col-6 col-md-6 formWidthAdjust">
             <form id="FORForm" method="post" action="" enctype="multipart/form-data">
                 <div class="form-group mb-5">
-                    <h2>
-                        <?php
-                        echo displayPageAction($act, $pageTitle);
-                        ?>
-                    </h2>
+                    <div class="order-title-row">
+                        <h2 class="mb-0"><?php echo displayPageAction($act, $pageTitle); ?></h2>
+                    </div>
+                    <div class="order-badge-row text-end mt-2">
+                        <a
+                            class="btn btn-sm <?= $urbanismBadgeAction['is_member'] ? 'btn-success' : 'btn-outline-secondary' ?> <?= $urbanismBadgeAction['disabled'] ? 'disabled' : '' ?>"
+                            href="<?= htmlspecialchars($urbanismBadgeAction['url'], ENT_QUOTES, 'UTF-8') ?>"
+                            title="<?= htmlspecialchars($urbanismBadgeAction['title'], ENT_QUOTES, 'UTF-8') ?>"
+                            <?= $urbanismBadgeAction['disabled'] ? 'onclick="return false;" aria-disabled="true"' : '' ?>><i class="fa-solid fa-id-badge"></i></a>
+                    </div>
                 </div>
 
                 <div id="err_msg" class="mb-3">

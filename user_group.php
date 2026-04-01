@@ -212,8 +212,88 @@ if (post('actionBtn')) {
                     }
 
                     if ($row['pins'] != $permission_grp) {
-                        array_push($oldvalarr, $row['pins']);
-                        array_push($chgvalarr, $permission_grp);
+                        $parsePinGroupMap = function ($pinsExpr) {
+                            $map = array();
+                            foreach (explode('+', (string) $pinsExpr) as $part) {
+                                $part = trim((string) $part);
+                                if ($part === '') {
+                                    continue;
+                                }
+
+                                $part = trim($part, '[]');
+                                if ($part === '' || strpos($part, ':') === false) {
+                                    continue;
+                                }
+
+                                list($grp, $pins) = explode(':', $part, 2);
+                                $grp = trim((string) $grp);
+                                if ($grp === '') {
+                                    continue;
+                                }
+
+                                $pinList = array();
+                                foreach (explode(',', (string) $pins) as $pinVal) {
+                                    $pinVal = trim((string) $pinVal);
+                                    if ($pinVal !== '') {
+                                        $pinList[] = $pinVal;
+                                    }
+                                }
+                                $map[$grp] = $pinList;
+                            }
+
+                            return $map;
+                        };
+
+                        $formatPinBlock = function ($groupId, $pins) {
+                            $pins = is_array($pins) ? $pins : array();
+                            if (empty($pins)) {
+                                return '[]';
+                            }
+                            return '[' . $groupId . ':' . implode(',', $pins) . ']';
+                        };
+
+                        $oldMap = $parsePinGroupMap($row['pins']);
+                        $newMap = $parsePinGroupMap($permission_grp);
+
+                        $changedOldBlocks = array();
+                        $changedNewBlocks = array();
+                        $addedBlocks = array();
+
+                        $allGroups = array_values(array_unique(array_merge(array_keys($oldMap), array_keys($newMap))));
+                        sort($allGroups, SORT_NATURAL);
+
+                        foreach ($allGroups as $groupId) {
+                            $oldPins = isset($oldMap[$groupId]) ? $oldMap[$groupId] : array();
+                            $newPins = isset($newMap[$groupId]) ? $newMap[$groupId] : array();
+
+                            if (implode(',', $oldPins) === implode(',', $newPins)) {
+                                continue;
+                            }
+
+                            if (empty($oldPins) && !empty($newPins)) {
+                                $addedBlocks[] = '[' . $groupId . ':' . implode(',', $newPins) . ']';
+                                continue;
+                            }
+
+                            $changedOldBlocks[] = '[' . $groupId . ':' . implode(',', $oldPins) . ']';
+                            $changedNewBlocks[] = $formatPinBlock($groupId, $newPins);
+                        }
+
+                        if (empty($changedOldBlocks) && !empty($addedBlocks)) {
+                            $oldPinAudit = 'added ' . implode(',', $addedBlocks) . '.';
+                            $newPinAudit = '';
+                        } else {
+                            foreach ($addedBlocks as $addedBlock) {
+                                $changedOldBlocks[] = '[]';
+                                $changedNewBlocks[] = $addedBlock;
+                            }
+
+                            $oldPinAudit = implode(',', $changedOldBlocks);
+                            $newPinAudit = implode(',', $changedNewBlocks);
+                        }
+
+                        array_push($oldvalarr, $oldPinAudit);
+                        array_push($chgvalarr, $newPinAudit);
                         array_push($datafield, 'pins');
                     }
 
@@ -291,6 +371,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
         .permission-toolbar {
             display: flex;
             justify-content: space-between;
+            align-items: center;
             gap: 12px;
             margin-bottom: 14px;
             flex-wrap: wrap;
@@ -307,6 +388,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
             min-width: 240px;
             max-width: 360px;
             width: 100%;
+            margin-left: auto;
         }
 
         .permission-grid {
@@ -379,6 +461,23 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                 grid-template-columns: 1fr;
             }
         }
+
+        @media (max-width: 767px) {
+            .permission-toolbar {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .permission-actions {
+                justify-content: flex-start;
+            }
+
+            .permission-search {
+                max-width: none;
+                min-width: 0;
+                margin-left: 0;
+            }
+        }
     </style>
 </head>
 
@@ -418,7 +517,12 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                 <button class="btn btn-sm btn-outline-secondary" type="button" id="toggleAllPermissionsBtn">Toggle All</button>
                                 <button class="btn btn-sm btn-outline-primary" type="button" id="tickAllPinsBtn" <?php if ($act == '') echo 'disabled'; ?>>Tick All Pins</button>
                             </div>
-                            <input class="form-control permission-search" type="text" id="permissionSearch" placeholder="Search page permissions..." autocomplete="off">
+                            <div class="permission-search position-relative">
+                                <input class="form-control" type="text" id="permissionSearch" placeholder="Search page permissions..." autocomplete="off" style="padding-right: 35px;">
+                                <button class="btn shadow-none" type="button" id="clearSearchBtn" title="Clear Search" style="position: absolute; right: 0; top: 0; bottom: 0; z-index: 10; color: #999; border: none; background: transparent; display: none;">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
                         </div>
 
                         <div class="permission-grid" id="permissionGrid">
@@ -557,6 +661,14 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 
         var permissionSearch = document.getElementById('permissionSearch');
         if (permissionSearch) {
+            var clearSearchBtn = document.getElementById('clearSearchBtn');
+
+            function toggleClearSearchButton() {
+                if (!clearSearchBtn) return;
+                var hasKeyword = String(permissionSearch.value || '').trim() !== '';
+                clearSearchBtn.style.display = hasKeyword ? '' : 'none';
+            }
+
             permissionSearch.addEventListener('input', function () {
                 var keyword = String(permissionSearch.value || '').toLowerCase().trim();
                 document.querySelectorAll('.permission-card').forEach(function (card) {
@@ -567,7 +679,19 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                     var matched = keyword === '' || groupName.indexOf(keyword) !== -1 || itemText.indexOf(keyword) !== -1;
                     card.style.display = matched ? '' : 'none';
                 });
+
+                toggleClearSearchButton();
             });
+
+            if (clearSearchBtn) {
+                clearSearchBtn.addEventListener('click', function () {
+                    permissionSearch.value = ''; // Empty the text
+                    permissionSearch.dispatchEvent(new Event('input')); // Reset the UI cards
+                    permissionSearch.focus(); // Put cursor back in the box
+                });
+            }
+
+            toggleClearSearchButton();
         }
     </script>
 
