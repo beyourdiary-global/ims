@@ -343,12 +343,12 @@ if (!function_exists('siBuildStockInExportZip')) {
 }
 
 if (!function_exists('siAuditExportAction')) {
-    function siAuditExportAction($connect, $pageTitle, $targetTable, $idsText)
+    function siAuditExportAction($connect, $pageTitle, $targetTable, $idsText, $cdate, $ctime)
     {
         $log = array(
             'log_act' => 'Export',
-            'cdate' => date('Y-m-d'),
-            'ctime' => date('H:i:s'),
+            'cdate' => $cdate,
+            'ctime' => $ctime,
             'uid' => USER_ID,
             'cby' => USER_ID,
             'query_rec' => 'Export IDs: ' . (string) $idsText,
@@ -387,10 +387,10 @@ if (input('export') === 'excel') {
             echo "<script>alert('No selected stock-in rows found to export.'); location.href='" . $tablePage . "';</script>";
             exit;
         }
-        siAuditExportAction($connect, $pageTitle, $stockInItemTable, implode(',', $exportIds));
+        siAuditExportAction($connect, $pageTitle, $stockInItemTable, implode(',', $exportIds), $cdate, $ctime);
     } else {
         $rows = siFetchAssocRows($finance_connect, $connect, $stockInOrderTable, $stockInItemTable, $warehouseNameMap, $productNameMap, $packageNameMap);
-        siAuditExportAction($connect, $pageTitle, $stockInItemTable, 'ALL');
+        siAuditExportAction($connect, $pageTitle, $stockInItemTable, 'ALL', $cdate, $ctime);
     }
 
     $tempDir = rtrim((string) ROOT, '/\\') . '/temp/stock_in_export/';
@@ -586,11 +586,13 @@ foreach ($listRows as $row) {
     var action = '';
     checkCurrentPage(page, action);
     dropdownMenuDispFix();
-    createSortingTable('stockInListTable', {
-        order: [[7, 'desc']], // Stock In Date descending
-        columnDefs: [
-            { orderable: false, targets: [1, 3] } // checkbox, action columns
-        ]
+    // Bypass the custom wrapper and initialize DataTables directly so options apply correctly
+    $('#stockInListTable').DataTable({
+        "order": [[7, 'desc']], // Stock In Date descending
+        "columnDefs": [
+            { "orderable": false, "targets": [1, 3] } // checkbox, action columns
+        ],
+        "autoWidth": false
     });
     datatableAlignment('stockInListTable');
     setButtonColor();

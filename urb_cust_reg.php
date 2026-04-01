@@ -28,7 +28,8 @@ if ($returnPageInput !== '') {
     }
 }
 
-$initial_page = $returnLabelInput !== '' ? $returnLabelInput : $default_initial_page;
+$initial_page_raw = $returnLabelInput !== '' ? $returnLabelInput : $default_initial_page;
+$initial_page = htmlspecialchars($initial_page_raw, ENT_QUOTES, 'UTF-8');
 $redirect_page = $SITEURL . $redirect_path;
 $redirectLink = ("<script>location.href = '$redirect_page';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';

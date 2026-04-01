@@ -979,7 +979,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                                 ?>
                                 <input class="form-control" type="text" name="lor_brand" id="lor_brand" <?php if ($act == '')
                                     echo 'disabled' ?>
-                                        value="<?php echo !empty($echoVal) ? $brand_row['name'] : '' ?>">
+                                        value="<?php echo !empty($echoVal) ? ($brand_row['name'] ?? '') : '' ?>">
                                 <input type="hidden" name="lor_brand_hidden" id="lor_brand_hidden"
                                     value="<?php echo (isset($row['brand'])) ? $row['brand'] : ''; ?>">
                                 <?php if (isset($brand_err)) { ?>

@@ -222,7 +222,7 @@ function getPageAction($act)
     return $validActions[$act] ?? 'View';
 }
 
-function auditCurrentTableView($connect)
+function auditCurrentTableView($connect, $cdate, $ctime)
 {
     static $hasLoggedTableView = false;
     if ($hasLoggedTableView) {
@@ -250,12 +250,16 @@ function auditCurrentTableView($connect)
         ? trim($GLOBALS['pageTitle'])
         : $scriptName;
 
-    $viewActMsg = USER_NAME . " viewed the table page <b>" . $resolvedPage . "</b>.";
+    // --- FIX: Escape dynamic variables to prevent XSS injection ---
+    $safeUserName = htmlspecialchars(USER_NAME, ENT_QUOTES, 'UTF-8');
+    $safePageName = htmlspecialchars($resolvedPage, ENT_QUOTES, 'UTF-8');
+    
+    $viewActMsg = $safeUserName . " viewed the table page <b>" . $safePageName . "</b>.";
 
     $log = array(
         'log_act' => 'view',
-        'cdate' => date('Y-m-d'),
-        'ctime' => date('H:i:s'),
+        'cdate' => $cdate,
+        'ctime' => $ctime,
         'uid' => USER_ID,
         'cby' => USER_ID,
         'act_msg' => $viewActMsg,
@@ -270,7 +274,7 @@ function auditCurrentTableView($connect)
 if (isset($connect) && isset($GLOBALS['pageTitle']) && is_string($GLOBALS['pageTitle'])) {
     $resolvedPageTitle = syncPageTitleWithPinGroupName($connect, $GLOBALS['pageTitle']);
 
-    auditCurrentTableView($connect);
+    auditCurrentTableView($connect, $cdate, $ctime);
 
     // Some pages render <title> before this file is included; keep browser tab title in sync.
     if ($resolvedPageTitle !== '') {
