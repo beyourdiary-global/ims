@@ -31,7 +31,6 @@ include "header.php";
 </head>
 
 <body>
-    hi
     <div class="container d-flex justify-content-center mt-2">
         <div class="col-12 col-md-5">
             <div class="row">
