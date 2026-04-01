@@ -1086,16 +1086,19 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                             <label class="form-label form_lbl" id="sor_courier_lbl" for="sor_courier">Courier</label>
                             <?php
                            
-                            if (isset($row['id']))
-                            $echoVal = $row['id'];
+                            if (isset($row['id'])) {
+                                $echoVal = $row['id'];
+                            }
+                            
+                            $echoVal2 = ''; // Initialize safely
                             $courier_rst2 = getData('courier_id', "order_id = '$echoVal'", '', OFFICIAL_PROCESS_ORDER, $connect);
 
-                            if (!$courier_rst2) {
-                                // Graceful fallback: keep form usable even when lookup query is unavailable.
+                            if ($courier_rst2 && $courier_rst2->num_rows > 0) {
+                                $courier_row2 = $courier_rst2->fetch_assoc();
+                                if (isset($courier_row2['courier_id'])) {
+                                    $echoVal2 = $courier_row2['courier_id'];
+                                }
                             }
-                            $courier_row2 = $courier_rst2->fetch_assoc();
-                            if ($courier_row2['courier_id'])
-                            $echoVal2 = $courier_row2['courier_id'];
                        
                             $courier_rst = getData('name', "id = '$echoVal2'", '', COURIER, $connect);
                             $courier_row = ($courier_rst && $courier_rst->num_rows > 0) ? $courier_rst->fetch_assoc() : array();
@@ -1144,17 +1147,14 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                             <label>&nbsp;</label><br>
                             <?php
                    
+                            $tracking_link = ''; // Initialize safely
                             $tracking_rst2 = getData('tracking_link', "id = '$echoVal2'", '', COURIER, $connect);
-                            if (!$tracking_rst2) {
-                                // Graceful fallback: keep form usable even when lookup query is unavailable.
-                            }
-                            $track_row = $tracking_rst2->fetch_assoc();
-                      
-                            if (isset($track_row['tracking_link'])) {
-                                $tracking_link = $track_row['tracking_link'];
-                                
-                            } else {
-                                $tracking_link = '';
+                            
+                            if ($tracking_rst2 && $tracking_rst2->num_rows > 0) {
+                                $track_row = $tracking_rst2->fetch_assoc();
+                                if (isset($track_row['tracking_link'])) {
+                                    $tracking_link = $track_row['tracking_link'];
+                                }
                             }
                             ?>
                             

@@ -540,7 +540,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 ?>
 
                                 <input class="form-control" type="text" name="wcr_pic" id="wcr_pic" <?php if ($act == '')
-                                    echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $pic_row['name'] : '' ?>">
+                                    echo 'disabled' ?> value="<?php echo !empty($echoVal) ? ($pic_row['name'] ?? '') : '' ?>">
 
                                 <input type="hidden" name="wcr_pic_hidden" id="wcr_pic_hidden"
                                     value="<?php echo (isset($row['sales_pic'])) ? $row['sales_pic'] : ''; ?>">
@@ -570,7 +570,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                 $country_row = ($country_rst && $country_rst->num_rows > 0) ? $country_rst->fetch_assoc() : array();
             }
             ?>
-            <input class="form-control" type="text" name="wcr_country" id="wcr_country" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $country_row['nicename'] : '' ?>">
+            <input class="form-control" type="text" name="wcr_country" id="wcr_country" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? ($country_row['nicename'] ?? '') : '' ?>">
             <input type="hidden" name="wcr_country_hidden" id="wcr_country_hidden" value="<?php echo (isset($row['country'])) ? $row['country'] : ''; ?>">
             <?php if (isset($country_err)) { ?>
                 <div id="err_msg">
@@ -597,7 +597,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                 $brand_row = ($brand_rst && $brand_rst->num_rows > 0) ? $brand_rst->fetch_assoc() : array();
             }
             ?>
-            <input class="form-control" type="text" name="wcr_brand" id="wcr_brand" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $brand_row['name'] : '' ?>">
+            <input class="form-control" type="text" name="wcr_brand" id="wcr_brand" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? ($brand_row['name'] ?? '') : '' ?>">
             <input type="hidden" name="wcr_brand_hidden" id="wcr_brand_hidden" value="<?php echo (isset($row['brand'])) ? $row['brand'] : ''; ?>">
             <?php if (isset($brand_err)) { ?>
                 <div id="err_msg">
@@ -626,7 +626,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         ?>
 
         <input class="form-control" type="text" name="wcr_series" id="wcr_series" <?php if ($act == '')
-            echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $series_row['name'] : '' ?>">
+            echo 'disabled' ?> value="<?php echo !empty($echoVal) ? ($series_row['name'] ?? '') : '' ?>">
 
         <input type="hidden" name="wcr_series_hidden" id="wcr_series_hidden" value="<?php echo (isset($row['series'])) ? $row['series'] : ''; ?>">
             <?php if (isset($wcr_series_err)) { ?>

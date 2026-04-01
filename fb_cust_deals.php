@@ -478,7 +478,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 }
                                 ?>
                                 <input class="form-control" type="text" name="fcb_pic" id="fcb_pic" <?php if ($act == '')
-                                    echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $user_row['name'] : '' ?>">
+                                    echo 'disabled' ?> value="<?php echo !empty($echoVal) ? ($user_row['name'] ?? '') : '' ?>">
                                 <input type="hidden" name="fcb_pic_hidden" id="fcb_pic_hidden"
                                     value="<?php echo (isset($row['sales_pic'])) ? $row['sales_pic'] : ''; ?>">
                                 <?php }?>
@@ -529,7 +529,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 ?>
                                 <input class="form-control" type="text" name="fcb_country" id="fcb_country" <?php if ($act == '')
                                     echo 'disabled' ?>
-                                        value="<?php echo !empty($echoVal) ? $country_row['nicename'] : '' ?>">
+                                        value="<?php echo !empty($echoVal) ? ($country_row['nicename'] ?? '') : '' ?>">
                                 <input type="hidden" name="fcb_country_hidden" id="fcb_country_hidden"
                                     value="<?php echo (isset($row['country'])) ? $row['country'] : ''; ?>">
 
@@ -562,7 +562,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 ?>
                                 <input class="form-control" type="text" name="fcb_brand" id="fcb_brand" <?php if ($act == '')
                                     echo 'disabled' ?>
-                                        value="<?php echo !empty($echoVal) ? $brand_row['name'] : '' ?>">
+                                        value="<?php echo !empty($echoVal) ? ($brand_row['name'] ?? '') : '' ?>">
                                 <input type="hidden" name="fcb_brand_hidden" id="fcb_brand_hidden"
                                     value="<?php echo (isset($row['brand'])) ? $row['brand'] : ''; ?>">
 

@@ -146,8 +146,8 @@ if (post('actionBtn')) {
                     $auditErr = $ok ? '' : 'Update failed.';
                     $log = array(
                         'log_act' => 'edit',
-                        'cdate' => date('Y-m-d'),
-                        'ctime' => date('H:i:s'),
+                        'cdate' => $cdate,
+                        'ctime' => $ctime,
                         'uid' => USER_ID,
                         'cby' => USER_ID,
                         'query_rec' => $query,

@@ -452,11 +452,22 @@ if (!function_exists('auditLogEscape')) {
 
 function audit_log($data = array())
 {
-    if (!is_array($data) || empty($data) || !isset($data['connect']) || !($data['connect'] instanceof mysqli)) {
+    if (!is_array($data) || empty($data)) {
         return;
     }
 
-    $connect = $data['connect'];
+    // --- BACKWARD COMPATIBILITY FIX ---
+    // Try to use the passed connection. If missing, fall back to the global $connect.
+    $connect = (isset($data['connect']) && $data['connect'] instanceof mysqli) 
+        ? $data['connect'] 
+        : (isset($GLOBALS['connect']) ? $GLOBALS['connect'] : null);
+
+    // Abort if no valid database connection can be found at all
+    if (!($connect instanceof mysqli)) {
+        return;
+    }
+    // ----------------------------------
+
     $logAct = strtolower(trim((string) ($data['log_act'] ?? '')));
     $actionId = get_allowed_audit_actions($logAct);
 
@@ -1120,19 +1131,42 @@ if (!function_exists('getUrbanismMemberActionData')) {
         $memberRow = null;
 
         if ($connect instanceof mysqli) {
+            static $memberCacheById = array();
+            static $memberCacheByName = array();
+            
             if ($seedId !== '') {
-                $safeSeedId = mysqli_real_escape_string($connect, $seedId);
-                $memberRst = getData('*', "name='" . $safeSeedId . "'", 'LIMIT 1', URBAN_CUST_REG, $connect);
-                if ($memberRst && $memberRst->num_rows > 0) {
-                    $memberRow = $memberRst->fetch_assoc();
+                if (array_key_exists($seedId, $memberCacheById)) {
+                    $memberRow = $memberCacheById[$seedId];
+                } else {
+                    $safeSeedId = mysqli_real_escape_string($connect, $seedId);
+                    $memberRst = getData('*', "name='" . $safeSeedId . "'", 'LIMIT 1', URBAN_CUST_REG, $connect);
+                    if ($memberRst && $memberRst->num_rows > 0) {
+                        $memberRow = $memberRst->fetch_assoc();
+                    } else {
+                        $memberRow = null;
+                    }
+                    $memberCacheById[$seedId] = $memberRow;
+                    if ($memberRow !== null && $seedName !== '') {
+                        $memberCacheByName[$seedName] = $memberRow;
+                    }
                 }
             }
 
             if ($memberRow === null && $seedName !== '') {
-                $safeSeedName = mysqli_real_escape_string($connect, $seedName);
-                $memberRst = getData('*', "name='" . $safeSeedName . "'", 'LIMIT 1', URBAN_CUST_REG, $connect);
-                if ($memberRst && $memberRst->num_rows > 0) {
-                    $memberRow = $memberRst->fetch_assoc();
+                if (array_key_exists($seedName, $memberCacheByName)) {
+                    $memberRow = $memberCacheByName[$seedName];
+                } else {
+                    $safeSeedName = mysqli_real_escape_string($connect, $seedName);
+                    $memberRst = getData('*', "name='" . $safeSeedName . "'", 'LIMIT 1', URBAN_CUST_REG, $connect);
+                    if ($memberRst && $memberRst->num_rows > 0) {
+                        $memberRow = $memberRst->fetch_assoc();
+                    } else {
+                        $memberRow = null;
+                    }
+                    $memberCacheByName[$seedName] = $memberRow;
+                    if ($memberRow !== null && $seedId !== '') {
+                        $memberCacheById[$seedId] = $memberRow;
+                    }
                 }
             }
         }

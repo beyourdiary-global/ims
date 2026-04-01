@@ -476,7 +476,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
             $user_row = ($user_rst && $user_rst->num_rows > 0) ? $user_rst->fetch_assoc() : array();
         }
     ?>
-    <input class="form-control" type="text" name="lcr_pic" id="lcr_pic" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $user_row['name'] : '' ?>">
+    <input class="form-control" type="text" name="lcr_pic" id="lcr_pic" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? ($user_row['name'] ?? '') : '' ?>">
     <input type="hidden" name="lcr_pic_hidden" id="lcr_pic_hidden" value="<?php echo (isset($row['sales_pic'])) ? $row['sales_pic'] : ''; ?>">
     <?php }?>
     <?php
@@ -519,7 +519,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                 $country_row = ($country_rst && $country_rst->num_rows > 0) ? $country_rst->fetch_assoc() : array();
             }
             ?>
-            <input class="form-control" type="text" name="lcr_country" id="lcr_country" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $country_row['nicename'] : '' ?>">
+            <input class="form-control" type="text" name="lcr_country" id="lcr_country" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? ($country_row['nicename'] ?? '') : '' ?>">
             <input type="hidden" name="lcr_country_hidden" id="lcr_country_hidden" value="<?php echo (isset($row['country'])) ? $row['country'] : ''; ?>">
             <?php if (isset($country_err)) { ?>
                 <div id="err_msg">
@@ -546,7 +546,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                 $brand_row = ($brand_rst && $brand_rst->num_rows > 0) ? $brand_rst->fetch_assoc() : array();
             }
             ?>
-            <input class="form-control" type="text" name="lcr_brand" id="lcr_brand" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $brand_row['name'] : '' ?>">
+            <input class="form-control" type="text" name="lcr_brand" id="lcr_brand" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? ($brand_row['name'] ?? '') : '' ?>">
             <input type="hidden" name="lcr_brand_hidden" id="lcr_brand_hidden" value="<?php echo (isset($row['brand'])) ? $row['brand'] : ''; ?>">
             <?php if (isset($brand_err)) { ?>
                 <div id="err_msg">
