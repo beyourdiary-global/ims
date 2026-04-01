@@ -1,4 +1,4 @@
-name: FTP Deploy CRM LIVE 01-09-31
+name: FTP Deploy CRM LIVE 09-58pm
 
 on:
   push:
@@ -58,50 +58,48 @@ jobs:
           ls -R
           echo "========================"
 
-      # 2️⃣ 测试 FTP 连接（dry-run）并保存上传文件列表
+      # 2️⃣ 测试 FTP 连接（dry-run）
       - name: Test FTP connection (dry-run)
         id: dryrun
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
-          server: ${{ secrets.FTP_HOST }}
+          server: ${{ secrets.FTP_HOST }}         # 例如 ftp.example.com
           username: ${{ env.FTP_USERNAME }}
           password: ${{ env.FTP_PASSWORD }}
-          local-dir: ./           # 根据实际部署目录修改
-          server-dir: ${{ secrets.FTP_PATH }}/
+          local-dir: ./crm                        # 改为你实际部署目录
+          server-dir: ${{ secrets.FTP_PATH }}/    # 确保以 / 结尾，例如 /crm/
           port: 21
           security: loose
           dry-run: true
           log-level: verbose
-          output-file: dryrun-files.txt
           exclude: |
             .git/**
             .github/**
             node_modules/**
 
-      # 2.1️⃣ 安全检查：如果 dry-run 没文件，允许继续上传（首次部署）
+      # 2.1️⃣ 安全检查：首次部署或 dry-run 空文件允许继续
       - name: Check dry-run result
         run: |
-          if [ ! -s dryrun-files.txt ]; then
-            echo "⚠️ No files detected in dry-run. Assuming first deploy, continuing..."
+          if [ ! -s ./.ftp-deploy-sync-state.json ]; then
+            echo "⚠️ First deploy or state file missing. Will upload all files."
           else
-            echo "✅ Files detected for upload:"
-            cat dryrun-files.txt
+            echo "✅ Dry-run complete. Files will be uploaded incrementally based on changes."
           fi
 
-      # 3️⃣ 正式上传（只上传变化文件）
+      # 3️⃣ 正式上传
       - name: Deploy /crm via FTP
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
           server: ${{ secrets.FTP_HOST }}
           username: ${{ env.FTP_USERNAME }}
           password: ${{ env.FTP_PASSWORD }}
-          local-dir: ./           # 根据实际部署目录修改
-          server-dir: ${{ secrets.FTP_PATH }}/
+          local-dir: ./crm                        # 改为你实际部署目录
+          server-dir: ${{ secrets.FTP_PATH }}/    # 以 / 结尾
           port: 21
           security: loose
           dry-run: false
           log-level: verbose
-          only-changed: true
+          only-changed: true                       # 首次部署状态文件不存在会全量上传
           exclude: |
             .git/**
             .github/**
