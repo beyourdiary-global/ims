@@ -1,4 +1,4 @@
-name: FTP Deploy CRM LIVE 09-58pm
+name: FTP Deploy CRM FINAL (Git Diff + Sync Delete)
 
 on:
   push:
@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 0️⃣ 设置部署分支和 FTP 凭据
+      # 0️⃣ 设置分支 + FTP 账号
       - name: Set branch and FTP credentials
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
@@ -30,7 +30,7 @@ jobs:
             DEPLOY_BRANCH="${GITHUB_REF##*/}"
           fi
 
-          echo "部署分支: $DEPLOY_BRANCH"
+          echo "🚀 Deploy branch: $DEPLOY_BRANCH"
 
           if [[ "$DEPLOY_BRANCH" == "main" ]]; then
             echo "FTP_USERNAME=${{ secrets.FTP_USERNAME }}" >> $GITHUB_ENV
@@ -39,68 +39,98 @@ jobs:
             echo "FTP_USERNAME=${{ secrets.FTP_USERNAME_UAT }}" >> $GITHUB_ENV
             echo "FTP_PASSWORD=${{ secrets.FTP_PASSWORD_UAT }}" >> $GITHUB_ENV
           else
-            echo "Error: Unsupported branch $DEPLOY_BRANCH"
+            echo "❌ Unsupported branch"
             exit 1
           fi
 
           echo "DEPLOY_BRANCH=$DEPLOY_BRANCH" >> $GITHUB_ENV
 
-      # 1️⃣ Checkout 对应分支代码
+      # 1️⃣ Checkout（必须 fetch 历史）
       - name: Checkout code
         uses: actions/checkout@v3
         with:
           ref: ${{ env.DEPLOY_BRANCH }}
+          fetch-depth: 2
 
-      # 1.1️⃣ 列出本地文件，确认 checkout 成功
-      - name: List local files
+      # 2️⃣ Debug（确认目录）
+      - name: Debug project structure
         run: |
-          echo "====== Local files ======"
+          echo "==== PROJECT STRUCTURE ===="
           ls -R
-          echo "========================"
 
-      # 2️⃣ 测试 FTP 连接（dry-run）
-      - name: Test FTP connection (dry-run)
-        id: dryrun
-        uses: SamKirkland/FTP-Deploy-Action@4.3.0
-        with:
-          server: ${{ secrets.FTP_HOST }}         # 例如 ftp.example.com
-          username: ${{ env.FTP_USERNAME }}
-          password: ${{ env.FTP_PASSWORD }}
-          local-dir: ./crm                        # 改为你实际部署目录
-          server-dir: ${{ secrets.FTP_PATH }}/    # 确保以 / 结尾，例如 /crm/
-          port: 21
-          security: loose
-          dry-run: true
-          log-level: verbose
-          exclude: |
-            .git/**
-            .github/**
-            node_modules/**
-
-      # 2.1️⃣ 安全检查：首次部署或 dry-run 空文件允许继续
-      - name: Check dry-run result
+      # 3️⃣ 获取变更（新增/修改/删除）
+      - name: Get changed files
         run: |
-          if [ ! -s ./.ftp-deploy-sync-state.json ]; then
-            echo "⚠️ First deploy or state file missing. Will upload all files."
-          else
-            echo "✅ Dry-run complete. Files will be uploaded incrementally based on changes."
-          fi
+          echo "📦 Getting git changes..."
 
-      # 3️⃣ 正式上传
-      - name: Deploy /crm via FTP
+          git diff --name-status HEAD^ HEAD > changes.txt
+
+          echo "---- ALL CHANGES ----"
+          cat changes.txt
+
+          # 上传文件
+          grep '^[AM]' changes.txt | awk '{print $2}' > deploy_files.txt || true
+
+          # 删除文件
+          grep '^D' changes.txt | awk '{print $2}' > delete_files.txt || true
+
+          echo "---- FILES TO UPLOAD ----"
+          cat deploy_files.txt || true
+
+          echo "---- FILES TO DELETE ----"
+          cat delete_files.txt || true
+
+      # 4️⃣ 准备 deploy 目录（只放 crm）
+      - name: Prepare deploy folder
+        run: |
+          mkdir -p deploy
+
+          while read file; do
+            if [[ "$file" == public_html/crm/* && -f "$file" ]]; then
+              TARGET="deploy/${file#public_html/crm/}"
+              mkdir -p "$(dirname "$TARGET")"
+              cp "$file" "$TARGET"
+            fi
+          done < deploy_files.txt
+
+          echo "==== DEPLOY FILES ===="
+          ls -R deploy || echo "No files"
+
+      # 5️⃣ 上传变更文件
+      - name: Upload changed files via FTP
+        if: success()
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
           server: ${{ secrets.FTP_HOST }}
           username: ${{ env.FTP_USERNAME }}
           password: ${{ env.FTP_PASSWORD }}
-          local-dir: ./crm                        # 改为你实际部署目录
-          server-dir: ${{ secrets.FTP_PATH }}/    # 以 / 结尾
+          local-dir: ./deploy/
+          server-dir: /public_html/crm/
           port: 21
           security: loose
           dry-run: false
           log-level: verbose
-          only-changed: true                       # 首次部署状态文件不存在会全量上传
-          exclude: |
-            .git/**
-            .github/**
-            node_modules/**
+
+      # 6️⃣ 删除远程已删除文件 🔥
+      - name: Delete removed files from server
+        run: |
+          if [ -s delete_files.txt ]; then
+            echo "🗑 Deleting files on server..."
+
+            sudo apt-get update
+            sudo apt-get install -y lftp
+
+            while read file; do
+              if [[ "$file" == public_html/crm/* ]]; then
+                REMOTE_PATH="/public_html/crm/${file#public_html/crm/}"
+                echo "Deleting $REMOTE_PATH"
+
+                lftp -u "${{ env.FTP_USERNAME }},${{ env.FTP_PASSWORD }}" ${{ secrets.FTP_HOST }} <<EOF
+                rm "$REMOTE_PATH"
+                bye
+EOF
+              fi
+            done < delete_files.txt
+          else
+            echo "✅ No files to delete"
+          fi
