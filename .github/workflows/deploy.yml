@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 0️⃣ 设置分支和 FTP 凭据
+      # 0️⃣ 设置部署分支和 FTP 凭据
       - name: Set branch and FTP credentials
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
@@ -32,7 +32,6 @@ jobs:
 
           echo "部署分支: $DEPLOY_BRANCH"
 
-          # 只允许 main 或 uat
           if [[ "$DEPLOY_BRANCH" == "main" ]]; then
             echo "FTP_USERNAME=${{ secrets.FTP_USERNAME }}" >> $GITHUB_ENV
             echo "FTP_PASSWORD=${{ secrets.FTP_PASSWORD }}" >> $GITHUB_ENV
@@ -52,14 +51,21 @@ jobs:
         with:
           ref: ${{ env.DEPLOY_BRANCH }}
 
-      # 2️⃣ 测试 FTP 连接（dry-run）
+      # 1.1️⃣ 列出本地文件，确认 checkout 成功
+      - name: List local files
+        run: |
+          echo "====== Local files ======"
+          ls -R
+          echo "========================"
+
+      # 2️⃣ 测试 FTP 连接（dry-run），显示准备上传的文件
       - name: Test FTP connection (dry-run)
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
           server: ${{ secrets.FTP_HOST }}
           username: ${{ env.FTP_USERNAME }}
           password: ${{ env.FTP_PASSWORD }}
-          local-dir: ./           # 本地目录
+          local-dir: ./           
           server-dir: ${{ secrets.FTP_PATH }}/
           port: 21
           security: loose
@@ -67,7 +73,7 @@ jobs:
           exclude: "**/.git*/**,**/.github*/**"
           log-level: verbose
 
-      # 3️⃣ 正式上传
+      # 3️⃣ 上传文件
       - name: Deploy /crm via FTP
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
@@ -81,3 +87,10 @@ jobs:
           dry-run: false
           exclude: "**/.git*/**,**/.github*/**"
           log-level: verbose
+
+      # 3.1️⃣ 再次列出本地文件，确认上传前文件存在
+      - name: Confirm files before upload
+        run: |
+          echo "====== Confirm files exist ======"
+          ls -R
+          echo "==============================="
