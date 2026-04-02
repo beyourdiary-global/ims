@@ -203,8 +203,6 @@ if ($getYearlyGoalTargetByYear != false && $getYearlyGoalTargetByYear->num_rows 
 
 <body>
     <div class="container-xxl">
-
-        Sally ENV
         <?php
         function generateSalesData($label, $income, $goal) {
             return [
