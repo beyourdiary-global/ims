@@ -1,11 +1,12 @@
 <?php
 ob_start();
-$pageTitle = "Internal Consume Ticket/Credit ";
+$pageTitle = "Internal Consume Ticket/Credit";
 $currentPagePin = 65;
 $isFinance = 1;
 
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';

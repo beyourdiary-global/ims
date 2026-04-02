@@ -1,9 +1,10 @@
-﻿<?php
+<?php
 $pageTitle = "Customer Info";
 $currentPagePin = 38;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = CUS_INFO;
 $pinAccess = checkCurrentPin($connect, $pageTitle);

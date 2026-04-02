@@ -1,7 +1,9 @@
 <?php
+$currentPagePin = 0;
 $pageTitle = "Official Process Order";
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = OFFICIAL_PROCESS_ORDER;
 

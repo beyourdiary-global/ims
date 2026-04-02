@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 51;
 $pageTitle = "Shopee Withdrawal Transactions";
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = SHOPEE_WDL_TRANS;
 

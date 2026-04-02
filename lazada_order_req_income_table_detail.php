@@ -1,8 +1,10 @@
 <?php
+$currentPagePin = 0;
 ob_start();
 $pageTitle = 'Lazada Order Request';
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 require_once 'header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . '_list.xlsx';

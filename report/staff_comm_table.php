@@ -4,6 +4,7 @@ $isFinance = 1;
 $currentPagePin = 124;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 include ROOT.'/include/access.php';
 
 $_SESSION['act'] = '';

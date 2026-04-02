@@ -1,8 +1,10 @@
 <?php
+$currentPagePin = 90;
 $pageTitle = "User";
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = USR_USER;
 

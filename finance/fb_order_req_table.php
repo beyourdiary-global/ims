@@ -1,10 +1,11 @@
-﻿<?php
+<?php
 $pageTitle = "Facebook Order Request";
 $currentPagePin = 69;
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 $_SESSION['act'] = '';

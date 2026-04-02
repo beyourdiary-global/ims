@@ -1,10 +1,11 @@
-﻿<?php
+<?php
 ob_start();
 $pageTitle = "Company";
 $currentPagePin = 127;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = COMPANY;
 $pinAccess = checkCurrentPin($connect, $pageTitle);

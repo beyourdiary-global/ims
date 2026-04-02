@@ -1,9 +1,10 @@
-﻿<?php
+<?php
 $pageTitle = "Warehouse";
 $currentPagePin = 16;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = WHSE;
 $pinAccess = checkCurrentPin($connect, $pageTitle);

@@ -1,7 +1,9 @@
 <?php
+$currentPagePin = 0;
 $pageTitle = 'Goal Target';
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 $redirect_page = $SITEURL . '/goalTarget_table.php';
 
 // Get the `act` parameter (I for Insert, E for Edit)

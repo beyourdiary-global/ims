@@ -1,7 +1,9 @@
 <?php
+$currentPagePin = 21;
 $pageTitle = '';
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $redirect_page = $SITEURL . '/package_table.php';
 $shortcut_page = $SITEURL . '/common_import.php';

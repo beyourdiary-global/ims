@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 88;
 $pageTitle = '';
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $parentPagePinGroupId = 88;
 $parentPageTitle = getPinGroupNameById($connect, $parentPagePinGroupId);

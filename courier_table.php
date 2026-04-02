@@ -1,8 +1,9 @@
-﻿<?php
+<?php
 $pageTitle = "Courier";
 $currentPagePin = 53;
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 $_SESSION['act'] = '';

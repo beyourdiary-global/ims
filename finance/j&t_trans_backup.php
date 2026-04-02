@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 88;
 $pageTitle = "J&T Transaction Backup Record";
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = 'jt_transaction_backup';
 $itemTable = JT_TRANS_ITEM;

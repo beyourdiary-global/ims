@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 92;
 $pageTitle = "Website Order Request";
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = WEB_ORDER_REQ;
 

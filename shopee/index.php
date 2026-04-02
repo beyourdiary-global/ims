@@ -1,8 +1,10 @@
 <?php
+$currentPagePin = 0;
 $pageTitle = 'Shopee Router';
 $isFinance = 1;
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 // 1. Check if they are a Superadmin (Pin 130)
 if (is_array(checkPin($connect, 'Shopee All Orders'))) {

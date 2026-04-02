@@ -1,9 +1,10 @@
-﻿<?php
+<?php
 $pageTitle = "Facebook Page Account";
 $currentPagePin = 76;
 $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 $_SESSION['act'] = '';

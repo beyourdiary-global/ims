@@ -4,6 +4,7 @@ $pageTitle = "Merchant Commission Record";
 $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
@@ -193,6 +194,7 @@ $result = getData('*', '', '', MRCHT_COMM, $finance_connect);
                         <h2><?php echo $pageTitle . " Detail"; ?></h2>
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)) : ?>
+$currentPagePin = 61;
                                 <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                     Transaction </a>
                             <?php endif; ?>

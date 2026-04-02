@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 85;
 $pageTitle = "Shopee Customer Record";
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 include_once ROOT . '/include/user_record_log.php';
 
 $tblName = SHOPEE_CUST_INFO;

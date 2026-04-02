@@ -1,8 +1,10 @@
 <?php
+$currentPagePin = 0;
 $pageTitle = "Marital Status";
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = MRTL_STATUS;
 

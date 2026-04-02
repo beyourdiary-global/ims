@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 0;
 $pageTitle = "Debit Notes (Invoice)";
 $isFinance = 1;
 
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = DEBIT_NOTES_INV;
 //Current Page Action And Data ID

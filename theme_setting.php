@@ -1,9 +1,10 @@
-﻿<?php
+<?php
 $pageTitle = "Theme Setting";
 $currentPagePin = 23;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = PROJ;
 

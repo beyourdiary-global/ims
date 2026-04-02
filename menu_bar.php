@@ -324,7 +324,7 @@ $menuList = array(
                 'javascript:void(0)',
                 'y',
                 'expand' => array(
-                    array('Facebook Page Account', 'mdimdi-account-wrench-outline', $SITEURL . '/finance/fb_page_acc_table.php', '76'),
+                    array('Facebook Page Account', 'mdi mdi-account-wrench-outline', $SITEURL . '/finance/fb_page_acc_table.php', '76'),
                     array('Meta Ads Account', 'mdi storefront-outline', $SITEURL . '/finance/meta_ads_acc_table.php', '48'),
                 ),
                 'pin' => array('48', '76'),
@@ -369,9 +369,9 @@ $menuList = array(
                 'y',
                 'expand' => array(
                     array('Tax', 'mdi mdi-contactless-payment-circle', $SITEURL . '/finance/tax_table.php', '57'),
-                    array('Expense Type', 'mdimdi-account-wrench-outline', $SITEURL . '/finance/expense_type_table.php', '49'),
-                    array('Payment Method (Finance)', 'mdimdi-account-wrench-outline', $SITEURL . '/finance/fin_payment_method_table.php', '60'),
-                    array('Payment Terms', 'mdimdi-account-wrench-outline', $SITEURL . '/finance/payment_terms_table.php', '63'),
+                    array('Expense Type', 'mdi mdi-account-wrench-outline', $SITEURL . '/finance/expense_type_table.php', '49'),
+                    array('Payment Method (Finance)', 'mdi mdi-account-wrench-outline', $SITEURL . '/finance/fin_payment_method_table.php', '60'),
+                    array('Payment Terms', 'mdi mdi-account-wrench-outline', $SITEURL . '/finance/payment_terms_table.php', '63'),
                 ),
                 'pin' => array('57', '49', '60', '63'),
             ),
@@ -570,7 +570,8 @@ $menuList = array(
                         foreach ($innerList['expand'] as $url) {
                             if (isset($url['expand'])) {
                                 if (!empty(array_intersect($url['pin'], GlobalPin))) {
-                                    $idCollapse = str_replace(" ", "-", $url[0]);
+                                    // FIX: Prefix with parent menu name to prevent duplicate IDs for menus like 'Setting'
+                                    $idCollapse = str_replace(" ", "-", $innerList[0] . "-" . $url[0]);
 
                                     $li = $url[3] == 'y' ? "class=\"nav-item dropdown\"" : "class=\"nav-item\"";
                                     $a = $url[3] == 'y' ? "class=\"nav-link dropdown-toggle\" data-bs-toggle=\"collapse\" data-bs-target=\"#$idCollapse-collapse\" aria-expanded=\"false\"" : "class=\"nav-link\" href=\"$url[2]\"";

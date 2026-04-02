@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 126;
 $pageTitle = '';
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 include_once ROOT . '/header/phpqrcode/qrlib.php';
 
 $parentPagePinGroupId = 126;
@@ -578,7 +580,7 @@ if (!function_exists('sorImpMatchChinesePackageName')) {
         $text = (string) $text;
         if ($text === '') return null;
 
-        // Extract buy/free qty pattern: 买X送Y
+        // Extract buy/free quantity pattern from Chinese promo text
         $buyQty = 0;
         $freeQty = 0;
         if (preg_match('/\x{4e70}\s*(\d+)\s*\x{9001}\s*(\d+)/u', $text, $m)) {
@@ -601,7 +603,7 @@ if (!function_exists('sorImpMatchChinesePackageName')) {
             $promoCode = '3.8';
         }
 
-        // Extract year suffix (e.g. "2026" → "26")
+        // Extract year suffix (e.g. "2026" -> "26")
         $yearSuffix = '';
         if (preg_match('/\b(20\d{2})\b/', $text, $ym)) {
             $yearSuffix = substr($ym[1], 2);
@@ -623,11 +625,11 @@ if (!function_exists('sorImpMatchChinesePackageName')) {
             }
             if ($score === 0) continue; // Must match at least one English product word
 
-            // Check buy qty pattern (e.g. "2 box" matches 买2)
+            // Check buy quantity pattern (e.g. "2 box")
             if ($buyQty > 0 && preg_match('/\b' . $buyQty . '\s*box\b/i', $pkgName)) {
                 $score += 5;
             }
-            // Check free qty pattern (e.g. "FREE ... 1 box" matches 送1)
+            // Check free quantity pattern (e.g. "FREE ... 1 box")
             if ($freeQty > 0 && preg_match('/free.*\b' . $freeQty . '\s*box\b/i', $pkgName)) {
                 $score += 5;
             }
@@ -772,7 +774,7 @@ if (!function_exists('sorImpSanitizeExtractedName')) {
     {
         $text = trim((string) $text);
         if ($text === '') return '';
-        $text = str_replace(array('*', '+', '•', '·'), '', $text);
+        $text = str_replace(array('*', '+', 'â€¢', 'Â·'), '', $text);
         $text = preg_replace('/(?:\s+(?:RM|MYR|SGD|USD))+\s*$/i', '', $text);
         $text = preg_replace('/\s+/', ' ', (string) $text);
         return trim((string) $text);
@@ -2320,4 +2322,3 @@ if ($existingInvoiceRst) {
 </script>
 </body>
 </html>
-

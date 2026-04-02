@@ -1,8 +1,10 @@
 <?php
+$currentPagePin = 93;
 $pageTitle = "Lazada Order Request";
 
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = LAZADA_ORDER_REQ;
 

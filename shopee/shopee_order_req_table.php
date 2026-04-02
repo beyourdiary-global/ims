@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 0;
 $pageTitle = "Shopee All Orders";
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $processingPageName = getPinGroupNameById($connect, 128);
 $verifyPageName = getPinGroupNameById($connect, 129);

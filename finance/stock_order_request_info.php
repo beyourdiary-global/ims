@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 0;
 $pageTitle = 'Stock Order Request Info';
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $pinAccess = checkPin($connect, 'Stock Order Request');
 if (!is_array($pinAccess) || count($pinAccess) === 0 || !isActionAllowed('View', $pinAccess)) {

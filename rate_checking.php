@@ -1,9 +1,10 @@
-﻿<?php
+<?php
 $pageTitle = "Rate Checking";
 $currentPagePin = 17;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $redirect_page = $SITEURL . '/dashboard.php';
 $redirectLink = ("<script>location.href = '$redirect_page';</script>");

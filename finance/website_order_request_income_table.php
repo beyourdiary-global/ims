@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 ob_start();
 $pageTitle = "Website Order Request";
 $currentPagePin = 92;
@@ -6,6 +6,7 @@ $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . "_list.xlsx";
 $img_path = '../' . img_server . 'finance/website_order_request/';

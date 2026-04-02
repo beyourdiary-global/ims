@@ -1,9 +1,10 @@
-﻿<?php
+<?php
 $pageTitle = "Investment Transaction";
 $currentPagePin = 40;
 $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 

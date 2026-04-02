@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 89;
 $pageTitle = "Stripe Transaction Backup Record";
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = STRIPE_TRANS_BACKUP;
 

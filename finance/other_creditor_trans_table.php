@@ -1,9 +1,10 @@
-﻿<?php
+<?php
 $pageTitle = "Other Creditor Transaction";
 $currentPagePin = 45;
 $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 $_SESSION['act'] = '';

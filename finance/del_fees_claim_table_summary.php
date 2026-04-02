@@ -3,11 +3,13 @@ curr AC -->
 
 
 <?php
+$currentPagePin = 66;
 ob_start();
 $pageTitle = "Delivery Fees Claim Record";
 $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';

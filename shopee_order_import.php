@@ -1,4 +1,5 @@
 <?php
+$currentPagePin = 0;
 if (!defined('IMPORT_FORCE_MODULE')) {
     define('IMPORT_FORCE_MODULE', 'shopee_order_req');
 }
@@ -9,6 +10,7 @@ $shopeeOrderPinGroupIds = array(130, 129, 128);
 
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $pinAccess = array();
 $parentPagePinGroupId = 0;
@@ -1033,6 +1035,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
 </script>
 
 </html>
+
 
 
 

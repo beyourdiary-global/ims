@@ -1,8 +1,10 @@
 <?php
+$currentPagePin = 135;
 $pageTitle = "Purchase Order";
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = PURCHASE_ORDER;
 $companyTbl = COMPANY;

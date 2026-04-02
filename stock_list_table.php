@@ -1,9 +1,10 @@
-﻿<?php
+<?php
 $pageTitle = "Stock List";
 $currentPagePin = 120;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = STK_REC;
 $pinAccess = checkCurrentPin($connect, $pageTitle);

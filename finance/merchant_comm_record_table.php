@@ -1,10 +1,11 @@
-﻿<?php
+<?php
 ob_start();
 $pageTitle = "Merchant Commission Record";
 $currentPagePin = 61;
 $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';

@@ -3,6 +3,7 @@ $pageTitle = "Pin Group";
 $currentPagePin = 2;
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 include ROOT.'/include/access.php';
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);

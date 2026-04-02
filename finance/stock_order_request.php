@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 126;
 $pageTitle = "Stock Order Request";
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 include_once ROOT . '/header/phpqrcode/qrlib.php';
 
 $permissionPage = 'Stock Order Request';
@@ -11,6 +13,8 @@ $pinAccess = checkPin($connect, $permissionPage);
 if (!is_array($pinAccess) || count($pinAccess) === 0) {
     $pinAccess = checkPin($connect, 'Stock List');
 }
+
+$tblName = STOCK_ORDER_REQ;
 
 $dataID = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
@@ -192,10 +196,56 @@ if (!empty($itemRows)) {
 }
 
 if ($act == 'D' && $dataID) {
-    mysqli_query($finance_connect, "UPDATE " . STOCK_ORDER_REQ . " SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . (int) $dataID . "'");
-    mysqli_query($finance_connect, "UPDATE " . STOCK_ORDER_REQ_ITEM . " SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE request_id='" . (int) $dataID . "'");
+    $deleteHeaderQuery = "UPDATE " . STOCK_ORDER_REQ . " SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . (int) $dataID . "'";
+    $deleteItemQuery = "UPDATE " . STOCK_ORDER_REQ_ITEM . " SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE request_id='" . (int) $dataID . "'";
+    $deleteHeaderResult = mysqli_query($finance_connect, $deleteHeaderQuery);
+    $deleteItemResult = mysqli_query($finance_connect, $deleteItemQuery);
+
+    $orderNoForLog = isset($row['invoice_no']) ? normalizeAuditLogValue($row['invoice_no']) : 'SOR-' . (int) $dataID;
+    $delErrMsg = '';
+    if (!$deleteHeaderResult || !$deleteItemResult) {
+        $delErrMsg = mysqli_error($finance_connect);
+    }
+
+    $log = [
+        'log_act' => $pageAction,
+        'cdate' => $cdate,
+        'ctime' => $ctime,
+        'uid' => USER_ID,
+        'cby' => USER_ID,
+        'query_rec' => $deleteHeaderQuery . '; ' . $deleteItemQuery,
+        'query_table' => $tblName . ', ' . STOCK_ORDER_REQ_ITEM,
+        'oldval' => 'Order No: ' . $orderNoForLog,
+        'act_msg' => USER_NAME . ' ' . (!$deleteHeaderResult || !$deleteItemResult ? 'failed to delete' : 'deleted') . ' Stock Order Request [<b>ID = ' . (int) $dataID . '</b>] from <b><i>' . $tblName . '</i></b>' . ($delErrMsg !== '' ? ' (' . $delErrMsg . ')' : '.') ,
+        'page' => $pageTitle,
+        'connect' => $connect,
+    ];
+    audit_log($log);
+
+    $_SESSION['delChk'] = 1;
     echo "<script>location.href='$redirect_page';</script>";
     exit;
+}
+
+if ($dataID && !$act && USER_ID && empty($_SESSION['viewChk']) && empty($_SESSION['delChk'])) {
+    $_SESSION['viewChk'] = 1;
+
+    $viewActMsg = USER_NAME . " viewed the data [<b>ID = " . (int) $dataID . "</b>] from <b><i>" . $tblName . " Table</i></b>.";
+    if (empty($row)) {
+        $viewActMsg = USER_NAME . " failed to view the data [<b>ID = " . (int) $dataID . "</b>] from <b><i>" . $tblName . " Table</i></b>.";
+    }
+
+    $log = [
+        'log_act' => 'View',
+        'cdate' => $cdate,
+        'ctime' => $ctime,
+        'uid' => USER_ID,
+        'cby' => USER_ID,
+        'act_msg' => $viewActMsg,
+        'page' => $pageTitle,
+        'connect' => $connect,
+    ];
+    audit_log($log);
 }
 
 $showQrPanel = false;
@@ -427,6 +477,13 @@ if (post('actionBtn')) {
             }
 
             if (!isset($err)) {
+                $auditDataField = array();
+                $auditOldValArr = array();
+                $auditNewValArr = array();
+                $auditChgValArr = array();
+                $auditOldRow = is_array($row) ? $row : array();
+                $auditOldItemSnapshot = sorBuildAuditItemSnapshot($itemRows);
+
                 $safeWarehouse = mysqli_real_escape_string($finance_connect, $sor_warehouse);
                 $safeInvoiceNo = mysqli_real_escape_string($finance_connect, $sor_invoice_no);
                 $safeInvoiceDate = mysqli_real_escape_string($finance_connect, $sor_invoice_date);
@@ -439,6 +496,22 @@ if (post('actionBtn')) {
                 $courierSqlValue = ($safeCourier === '' ? "NULL" : "'" . $safeCourier . "'");
 
                 if ($action === 'addRecord') {
+                    $auditDataField = array('warehouse_id', 'company_id', 'brand_id', 'invoice_no', 'invoice_date', 'request_date', 'courier_id', 'tracking_no', 'total_price', 'attachment', 'remark', 'item_snapshot');
+                    $auditNewValArr = array(
+                        normalizeAuditLogValue($sor_warehouse),
+                        normalizeAuditLogValue($requestCompanyId),
+                        normalizeAuditLogValue($requestBrandId),
+                        normalizeAuditLogValue($sor_invoice_no),
+                        normalizeAuditLogValue($sor_invoice_date),
+                        normalizeAuditLogValue($sor_request_date),
+                        normalizeAuditLogValue($sor_courier),
+                        normalizeAuditLogValue($sor_tracking_no),
+                        normalizeAuditLogValue($safeTotalPrice),
+                        normalizeAuditLogValue($sor_attachment),
+                        normalizeAuditLogValue($sor_remark),
+                        normalizeAuditLogValue(sorBuildAuditItemSnapshot($items)),
+                    );
+
                     $query = "INSERT INTO " . STOCK_ORDER_REQ . "
                                                                 (warehouse_id, company_id, brand_id, invoice_no, invoice_date, request_date, courier_id, tracking_no, total_price, attachment, remark, create_by, create_date, create_time)
                               VALUES
@@ -462,6 +535,34 @@ if (post('actionBtn')) {
                                   update_date = CURDATE(),
                                   update_time = CURTIME()
                               WHERE id = '" . (int) $dataID . "'";
+
+                    $auditPairs = array(
+                        'warehouse_id' => array(isset($auditOldRow['warehouse_id']) ? $auditOldRow['warehouse_id'] : '', $sor_warehouse),
+                        'company_id' => array(isset($auditOldRow['company_id']) ? $auditOldRow['company_id'] : '', $requestCompanyId),
+                        'brand_id' => array(isset($auditOldRow['brand_id']) ? $auditOldRow['brand_id'] : '', $requestBrandId),
+                        'invoice_no' => array(isset($auditOldRow['invoice_no']) ? $auditOldRow['invoice_no'] : '', $sor_invoice_no),
+                        'invoice_date' => array(isset($auditOldRow['invoice_date']) ? $auditOldRow['invoice_date'] : '', $sor_invoice_date),
+                        'request_date' => array(isset($auditOldRow['request_date']) ? $auditOldRow['request_date'] : '', $sor_request_date),
+                        'courier_id' => array(isset($auditOldRow['courier_id']) ? $auditOldRow['courier_id'] : '', $sor_courier),
+                        'tracking_no' => array(isset($auditOldRow['tracking_no']) ? $auditOldRow['tracking_no'] : '', $sor_tracking_no),
+                        'total_price' => array(isset($auditOldRow['total_price']) ? $auditOldRow['total_price'] : '', $safeTotalPrice),
+                        'attachment' => array(isset($auditOldRow['attachment']) ? $auditOldRow['attachment'] : '', $sor_attachment),
+                        'remark' => array(isset($auditOldRow['remark']) ? $auditOldRow['remark'] : '', $sor_remark),
+                        'item_snapshot' => array($auditOldItemSnapshot, sorBuildAuditItemSnapshot($items)),
+                    );
+
+                    foreach ($auditPairs as $field => $pair) {
+                        $oldVal = normalizeAuditLogValue($pair[0]);
+                        $newVal = normalizeAuditLogValue($pair[1]);
+                        $oldCmpVal = sorCanonicalAuditValue($field, $pair[0]);
+                        $newCmpVal = sorCanonicalAuditValue($field, $pair[1]);
+                        if ($oldCmpVal !== $newCmpVal) {
+                            $auditDataField[] = $field;
+                            $auditOldValArr[] = $oldVal;
+                            $auditChgValArr[] = $newVal;
+                        }
+                    }
+
                     $returnData = mysqli_query($finance_connect, $query);
                 }
 
@@ -576,6 +677,31 @@ if (post('actionBtn')) {
                     $safeQr = mysqli_real_escape_string($finance_connect, $qrWebPath);
                     mysqli_query($finance_connect, "UPDATE " . STOCK_ORDER_REQ . " SET order_link_token='$safeToken', qr_image='$safeQr' WHERE id='" . (int) $dataID . "'");
 
+                    $log = [
+                        'log_act' => $pageAction,
+                        'cdate' => $cdate,
+                        'ctime' => $ctime,
+                        'uid' => USER_ID,
+                        'cby' => USER_ID,
+                        'query_rec' => $query,
+                        'query_table' => $tblName,
+                        'page' => $pageTitle,
+                        'connect' => $connect,
+                    ];
+
+                    if ($pageAction === 'Add') {
+                        $log['newval'] = implodeWithComma($auditNewValArr);
+                        $log['act_msg'] = actMsgLog($dataID, $auditDataField, $auditNewValArr, array(), array(), $tblName, $pageAction, '');
+                        audit_log($log);
+                    } else if ($pageAction === 'Edit') {
+                        if (!empty($auditDataField) && !empty($auditOldValArr) && !empty($auditChgValArr)) {
+                            $log['oldval'] = implodeWithComma($auditOldValArr);
+                            $log['changes'] = implodeWithComma($auditChgValArr);
+                            $log['act_msg'] = actMsgLog($dataID, $auditDataField, array(), $auditOldValArr, $auditChgValArr, $tblName, $pageAction, '');
+                            audit_log($log);
+                        }
+                    }
+
                     // Reload persisted header and item rows so add/edit success view exactly matches DB state.
                     $reloadRst = getData('*', "id='" . (int) $dataID . "'", 'LIMIT 1', STOCK_ORDER_REQ, $finance_connect);
                     if ($reloadRst && $reloadRst->num_rows > 0) {
@@ -632,6 +758,83 @@ if (post('actionBtn')) {
 function sorEcho($value)
 {
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
+}
+
+function sorBuildAuditItemSnapshot($rows)
+{
+    if (!is_array($rows) || empty($rows)) {
+        return '';
+    }
+
+    $snapshotRows = array();
+    foreach ($rows as $idx => $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+
+        $prodId = isset($item['product_id']) ? (int) $item['product_id'] : 0;
+        $pkgId = isset($item['package_id']) ? (int) $item['package_id'] : 0;
+        $pkgQty = isset($item['packageQty']) ? (int) $item['packageQty'] : 0;
+        $prodQty = isset($item['productQty']) ? (int) $item['productQty'] : 0;
+        $pkgPrice = isset($item['package_price']) ? number_format((float) $item['package_price'], 2, '.', '') : '0.00';
+        $groupKey = isset($item['package_group_key']) ? trim((string) $item['package_group_key']) : ('idx_' . $idx);
+
+        $snapshotRows[] = $groupKey . ':' . $prodId . ':' . $pkgId . ':' . $pkgQty . ':' . $prodQty . ':' . $pkgPrice;
+    }
+
+    sort($snapshotRows);
+    return implode('|', $snapshotRows);
+}
+
+function sorCanonicalAuditValue($field, $value)
+{
+    $field = trim((string) $field);
+    $normalized = normalizeAuditLogValue($value);
+
+    if ($field === 'warehouse_id' || $field === 'company_id' || $field === 'brand_id' || $field === 'courier_id') {
+        return (string) ((int) $normalized);
+    }
+
+    if ($field === 'total_price') {
+        return number_format((float) $normalized, 2, '.', '');
+    }
+
+    if ($field === 'invoice_no') {
+        return ltrim(trim((string) $normalized), "'");
+    }
+
+    if ($field === 'item_snapshot') {
+        $raw = trim((string) $normalized);
+        if ($raw === '' || $raw === 'Empty Value') {
+            return '';
+        }
+
+        $rows = explode('|', $raw);
+        $canonicalRows = array();
+        foreach ($rows as $row) {
+            $row = trim((string) $row);
+            if ($row === '') {
+                continue;
+            }
+
+            $parts = explode(':', $row);
+            if (count($parts) >= 6) {
+                $prodId = isset($parts[1]) ? (int) $parts[1] : 0;
+                $pkgId = isset($parts[2]) ? (int) $parts[2] : 0;
+                $pkgQty = isset($parts[3]) ? (int) $parts[3] : 0;
+                $prodQty = isset($parts[4]) ? (int) $parts[4] : 0;
+                $price = isset($parts[5]) ? number_format((float) $parts[5], 2, '.', '') : '0.00';
+                $canonicalRows[] = $prodId . ':' . $pkgId . ':' . $pkgQty . ':' . $prodQty . ':' . $price;
+            } else {
+                $canonicalRows[] = $row;
+            }
+        }
+
+        sort($canonicalRows);
+        return implode('|', $canonicalRows);
+    }
+
+    return trim((string) $normalized);
 }
 
 function sorQrSrc($path, $siteUrl)

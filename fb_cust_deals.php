@@ -5,6 +5,7 @@ $disablePinGroupPageTitleSync = true;
 
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = FB_CUST_DEALS;
 

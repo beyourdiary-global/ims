@@ -22,6 +22,7 @@ list($packageNameMap, $packageNameToId) = siBuildNameMaps($packages);
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 if (!is_array($pinAccess)) {

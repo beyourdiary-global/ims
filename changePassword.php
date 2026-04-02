@@ -1,4 +1,5 @@
 <?php
+$currentPagePin = 0;
 $pageTitle = "Change Password";
 
 include_once 'include/connection.php';
@@ -14,6 +15,7 @@ else
 // Load full authenticated layout only for in-session password change.
 if ($pageMode == 'userChgPassword') {
     include 'menuHeader.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 }
 
 $sendEmail = '';
