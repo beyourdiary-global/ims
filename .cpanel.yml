@@ -1,0 +1,4 @@
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/beyourdi/public_html
+    - /bin/cp -R * $DEPLOYPATH
