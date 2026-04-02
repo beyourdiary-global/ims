@@ -1,9 +1,11 @@
 <?php
 $pageTitle = "Website Order Request";
+$currentPagePin = 92;
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 $_SESSION['act'] = '';

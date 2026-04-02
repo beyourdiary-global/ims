@@ -1,8 +1,10 @@
 <?php
 $pageTitle = "SQL Account";
+$currentPagePin = 132;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = SQL_ACC;
 $pinAccess = checkCurrentPin($connect, $pageTitle);

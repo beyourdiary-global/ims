@@ -6,6 +6,7 @@ $currentPagePin = 123;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 include_once '../finance/submodel/filterDateFunction.php';
 include_once '../finance/submodel/convertDBnaming.php';
 include_once '../finance/submodel/generateGroupByDropdown.php';

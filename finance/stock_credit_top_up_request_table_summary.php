@@ -1,10 +1,12 @@
 <?php
+$currentPagePin = 78;
 ob_start();
 $pageTitle = "Stock Credit Top Up Record";
 $isFinance = 1;
 
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . "_list.xlsx";

@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 79;
 $pageTitle = "Chanel (Social Media)";
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = CHANEL_SC_MD;
 

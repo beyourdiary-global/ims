@@ -1,8 +1,10 @@
 <?php
 $pageTitle = "Token Setting";
+$currentPagePin = 133;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = TOKEN_SETT;
 $pinAccess = checkCurrentPin($connect, $pageTitle);

@@ -1,7 +1,9 @@
 <?php
 $pageTitle = "Lazada Customer Record (Deals)";
+$currentPagePin = 91;
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 $_SESSION['act'] = '';

@@ -1,8 +1,10 @@
 <?php
+$currentPagePin = 0;
 $pageTitle = "Race";
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = RACE;
 $pinAccess = checkCurrentPin($connect, $pageTitle);

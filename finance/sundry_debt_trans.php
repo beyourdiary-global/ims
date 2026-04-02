@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 44;
 $pageTitle = "Sundry Debtors Transaction";
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = SD_TRANS;
 

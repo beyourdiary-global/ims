@@ -1,4 +1,5 @@
 <?php
+$currentPagePin = 0;
 if (!defined('IMPORT_FORCE_MODULE')) {
     define('IMPORT_FORCE_MODULE', 'fb_ads_topup');
 }
@@ -9,6 +10,7 @@ $pageTitle = '';
 
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $resolvedParentPageTitle = getPinGroupNameById($connect, $parentPagePinGroupId);
 if ($resolvedParentPageTitle !== '') {

@@ -1,8 +1,10 @@
 <?php
 $pageTitle = "Platform";
+$currentPagePin = 14;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = PLTF;
 $pinAccess = checkCurrentPin($connect, $pageTitle);

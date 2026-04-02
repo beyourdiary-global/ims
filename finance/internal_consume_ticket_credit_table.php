@@ -1,10 +1,12 @@
 <?php
 ob_start();
-$pageTitle = "Internal Consume Ticket/Credit ";
+$pageTitle = "Internal Consume Ticket/Credit";
+$currentPagePin = 65;
 $isFinance = 1;
 
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
@@ -166,11 +168,7 @@ $redirect_page = $SITEURL . '/finance/internal_consume_ticket_credit.php';
 $deleteRedirectPage = $SITEURL . '/finance/internal_consume_ticket_credit_table.php';
 
 $result = getData('*', '', '', $tblName, $finance_connect);
-
-if (!$result) {
-    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-}
+$result = ($result) ? $result : null;
 ?>
 
 <!DOCTYPE html>
@@ -182,7 +180,7 @@ if (!$result) {
 
 <script>
     $(document).ready(() => {
-        createSortingTable('table');
+        createSortingTable('internal_consume_ticket_credit_table');
     });
 </script>
 
@@ -311,7 +309,7 @@ if (!$result) {
                          $counters = 1;
          
                          function generateTableRow($id, &$counters, $key, $topupAmt) {
-                             echo '<tr onclick="window.location=\'internal_consume_item_table_summary.php?ids=' . urlencode($id) . '\';" style="cursor:pointer;">';
+                             echo '<tr onclick="window.location=\'internal_consume_ticket_credit_table_summary.php?ids=' . urlencode($id) . '\';" style="cursor:pointer;">';
                              echo '<th class="hideColumn" scope="row">' . $id . '</th>';
                              echo ' <th class="text-center"><input type="checkbox" class="export" value="' . $id . '"></th>';
                              echo '<th scope="row">' . $counters++ . '</th>';
@@ -321,18 +319,19 @@ if (!$result) {
                          }
                        
                          $groupedRows = [];
-                        
+
+                        if ($result) {
                         while ($row = $result->fetch_assoc()) {    
                            
                            if (isset($row['id']) && !empty($row['id'])) {
 
                             $picResult = getData('name', "id='" . $row['PIC'] . "'", '', USR_USER, $connect);
-                            $picRow = $picResult->fetch_assoc();
+                            $picRow = ($picResult && $picResult->num_rows > 0) ? $picResult->fetch_assoc() : array('name' => '');
                             $brandResult = getData('name', "id='" . $row['brand'] . "'", '', BRAND, $connect);
-                            $brandRow = $brandResult->fetch_assoc();
+                            $brandRow = ($brandResult && $brandResult->num_rows > 0) ? $brandResult->fetch_assoc() : array('name' => '');
 
                             $currResult = getData('unit', "id='" . $row['currency_unit'] . "'", '', CUR_UNIT, $connect);
-                            $currRow = $currResult->fetch_assoc();
+                            $currRow = ($currResult && $currResult->num_rows > 0) ? $currResult->fetch_assoc() : array('unit' => '');
                             $person = isset($picRow['name']) ? $picRow['name'] : '';;
                             $brand = isset($brandRow['name']) ? $brandRow['name'] : '';
                             $curr = isset($currRow['unit']) ? $currRow['unit'] : '';
@@ -468,6 +467,7 @@ if (!$result) {
                                 echo '</tr>';
                             }
                         }
+                        }
                             
                     ?>
                     
@@ -523,7 +523,7 @@ if (!$result) {
         //to solve the issue of dropdown menu displaying inside the table when table class include table-responsive
         dropdownMenuDispFix();
         //to resize table with bootstrap 5 classes
-        datatableAlignment('table');
+        datatableAlignment('internal_consume_ticket_credit_table');
         setButtonColor();
     </script>
 

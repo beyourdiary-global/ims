@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 63;
 $pageTitle = "Payment Terms";
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = FIN_PAY_TERMS;
 

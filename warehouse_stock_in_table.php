@@ -1,6 +1,7 @@
 <?php
 ob_start();
 $pageTitle = 'Stock In';
+$currentPagePin = 125;
 
 include_once 'include/connection.php';
 include_once ROOT . '/include/common.php';
@@ -21,8 +22,9 @@ list($packageNameMap, $packageNameToId) = siBuildNameMaps($packages);
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$pinAccess = checkCurrentPin($connect, 'Stock In');
+$pinAccess = checkCurrentPin($connect, $pageTitle);
 if (!is_array($pinAccess)) {
     $pinAccess = array();
 }

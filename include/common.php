@@ -250,11 +250,20 @@ function isDuplicateRecordWithConditions($fields, $values, $tbl, $connect, $prim
 	if ($primaryKeyValue)
 		$conditions['id !='] = $primaryKeyValue; // Exclude current record if editing
 
-	$whereClause = implode(' AND ', array_map(
-		fn($key, $value) => "`$key` = '" . mysqli_real_escape_string($connect, $value) . "'",
-		array_keys($conditions),
-		$conditions
-	));
+    $whereParts = array();
+    foreach ($conditions as $key => $value) {
+        $operator = '=';
+        $field = trim((string) $key);
+
+        if (preg_match('/^(.+?)\s*(>=|<=|!=|<>|=|>|<)$/', $field, $matches)) {
+            $field = trim((string) $matches[1]);
+            $operator = $matches[2];
+        }
+
+        $whereParts[] = "`$field` $operator '" . mysqli_real_escape_string($connect, (string) $value) . "'";
+    }
+
+    $whereClause = implode(' AND ', $whereParts);
 
 	$query = "SELECT COUNT(*) as count FROM `$tbl` WHERE $whereClause";
 	$result = mysqli_query($connect, $query);

@@ -2,6 +2,7 @@
 $pageTitle = 'Dashboard';
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 include 'include/dashboardPanel.php';
 
 $currentPagePin = 7;

@@ -1,8 +1,10 @@
 <?php
+$currentPagePin = 0;
 $pageTitle = "Leave Status";
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = L_STS;
 

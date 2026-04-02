@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 87;
 ob_start();
 $pageTitle = "Atome Transaction Backup Record Detail";
 $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . "_list.xlsx";
 $img_path = '../' . img_server . 'finance/atome_trans_backup/';

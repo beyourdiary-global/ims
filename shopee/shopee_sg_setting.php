@@ -1,8 +1,10 @@
 <?php
+$currentPagePin = 82;
 $pageTitle = "Shopee SG Setting";
 $isFinance = 1;
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = SHOPEE_SG_SETT;
 

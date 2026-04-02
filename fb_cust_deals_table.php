@@ -1,7 +1,10 @@
 <?php
 $pageTitle = "Facebook Customer Record (Deals)";
+$currentPagePin = 75;
+$disablePinGroupPageTitleSync = true;
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 $_SESSION['act'] = '';

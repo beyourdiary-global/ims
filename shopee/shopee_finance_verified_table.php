@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 0;
 $pageTitle = "Shopee Order Request";
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 $_SESSION['act'] = '';
@@ -28,15 +30,16 @@ if (isset($_GET['verify_id'])) {
             $updateResult = mysqli_query($finance_connect, $updateSql);
 
             if ($updateResult) {
-                $verifyMessage = "✅ Order #$orderId has been successfully verified.";
+                $verifyMessage = "Γ£à Order #$orderId has been successfully verified.";
             } else {
-                $verifyMessage = "❌ Failed to update order #$orderId.";
+                $verifyMessage = "Γ¥î Failed to update order #$orderId.";
             }
         } else {
-            $verifyMessage = "⚠️ Order #$orderId is not in 'OC' status.";
+            $verifyMessage = "ΓÜá∩╕�
+ Order #$orderId is not in 'OC' status.";
         }
     } else {
-        $verifyMessage = "❌ Order #$orderId not found.";
+        $verifyMessage = "Γ¥î Order #$orderId not found.";
     }
 }
 

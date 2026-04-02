@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 50;
 ob_start();
 $pageTitle = "Facebook Ads Top Up Transaction";
 $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . "_list.xlsx";

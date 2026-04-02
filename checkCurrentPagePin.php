@@ -67,9 +67,27 @@ function findPinGroupRowByPage($connect, $currentPage)
     return null;
 }
 
-function syncPageTitleWithPinGroupName($connect, $currentPage)
+function findPinGroupRowById($connect, $pinGroupId)
 {
-    $pinGroup = findPinGroupRowByPage($connect, $currentPage);
+    $pinGroupId = (int) $pinGroupId;
+    if ($pinGroupId <= 0) {
+        return null;
+    }
+
+    $result = getData('*', "id = '$pinGroupId'", 'LIMIT 1', PIN_GRP, $connect);
+    if ($result && $result->num_rows > 0) {
+        return $result->fetch_assoc();
+    }
+
+    return null;
+}
+
+function syncPageTitleWithPinGroupName($connect, $currentPage, $currentPagePin = 0)
+{
+    $pinGroup = findPinGroupRowById($connect, $currentPagePin);
+    if (!$pinGroup) {
+        $pinGroup = findPinGroupRowByPage($connect, $currentPage);
+    }
 
     if (!empty($pinGroup['name'])) {
         $GLOBALS['pageTitle'] = $pinGroup['name'];
@@ -161,10 +179,15 @@ function getPinAccessFromPinGroupRow($connect, $resultPin)
 
 function checkCurrentPin($connect, $currentPage)
 {
-    $resultPin = findPinGroupRowByPage($connect, $currentPage);
+    $disableTitleSync = !empty($GLOBALS['disablePinGroupPageTitleSync']);
+    $currentPagePin = isset($GLOBALS['currentPagePin']) ? (int) $GLOBALS['currentPagePin'] : 0;
+    $resultPin = findPinGroupRowById($connect, $currentPagePin);
+    if (!$resultPin) {
+        $resultPin = findPinGroupRowByPage($connect, $currentPage);
+    }
 
     if ($resultPin) {
-        if (!empty($resultPin['name'])) {
+        if (!$disableTitleSync && !empty($resultPin['name'])) {
             $GLOBALS['pageTitle'] = $resultPin['name'];
         }
 
@@ -272,7 +295,13 @@ function auditCurrentTableView($connect, $cdate, $ctime)
 }
 
 if (isset($connect) && isset($GLOBALS['pageTitle']) && is_string($GLOBALS['pageTitle'])) {
-    $resolvedPageTitle = syncPageTitleWithPinGroupName($connect, $GLOBALS['pageTitle']);
+    $disableTitleSync = !empty($GLOBALS['disablePinGroupPageTitleSync']);
+    $resolvedPageTitle = $GLOBALS['pageTitle'];
+
+    if (!$disableTitleSync) {
+        $currentPagePin = isset($GLOBALS['currentPagePin']) ? (int) $GLOBALS['currentPagePin'] : 0;
+        $resolvedPageTitle = syncPageTitleWithPinGroupName($connect, $GLOBALS['pageTitle'], $currentPagePin);
+    }
 
     auditCurrentTableView($connect, $cdate, $ctime);
 

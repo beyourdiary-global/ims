@@ -1,9 +1,11 @@
 <?php
 $pageTitle = "Stock Credit Top Up Record";
+$currentPagePin = 78;
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = STK_CDT_TOPUP_RCD;
 
@@ -21,6 +23,7 @@ $clearLocalStorage = '<script>localStorage.clear();</script>';
 $pageAction = getPageAction($act);
 $pageActionTitle = $pageAction . " " . $pageTitle;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
+$row = array();
 
 //Attachment
 $allowed_ext = array("png", "jpg", "jpeg", "svg", "pdf");
@@ -35,14 +38,16 @@ if (!file_exists($img_path)) {
 if (!($dataID) && !($act) || !isActionAllowed($pageAction, $pinAccess))
     echo $redirectLink;
 
-//Get The Data From Database
-$rst = getData('*', "id = '$dataID'", '', $tblName, $finance_connect);
+//Get The Data From Database only when an existing record is expected
+if ($dataID) {
+    $rst = getData('*', "id = '$dataID'", '', $tblName, $finance_connect);
 
-//Checking Data Error When Retrieved From Database
-if (!$rst || !($row = $rst->fetch_assoc()) && $act != 'I') {
-    $errorExist = 1;
-    $_SESSION['tempValConfirmBox'] = true;
-    $act = "F";
+    //Checking Data Error When Retrieved From Database
+    if ($act != 'I' && (!$rst || !($row = $rst->fetch_assoc()))) {
+        $errorExist = 1;
+        $_SESSION['tempValConfirmBox'] = true;
+        $act = "F";
+    }
 }
 
 //Delete Data
@@ -112,6 +117,10 @@ if (post('actionBtn')) {
            
             if (empty($amount)) {
                 $amt_err = "Amount is required!";
+            }
+
+            if (empty($sc_mrcht) || empty($brand) || empty($sc_currency) || empty($amount)) {
+                break;
             }
 
             if (isDuplicateRecordWithConditions($fields, $values, $tblName, $finance_connect, $dataID)) {
@@ -303,11 +312,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 
         if (isset($echoVal)) {
             $mrcht_rst = getData('name', "id = '$echoVal'", '', MERCHANT, $finance_connect);
-            if (!$mrcht_rst) {
-                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-            }
-            $mrcht_row = $mrcht_rst->fetch_assoc();
+            $mrcht_row = ($mrcht_rst && $mrcht_rst->num_rows > 0) ? $mrcht_rst->fetch_assoc() : array('name' => '');
         }
         ?>
         <input class="form-control" type="text" name="sc_mrcht" id="sc_mrcht" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $mrcht_row['name'] : '' ?>" <?php if ($act == '') echo 'readonly' ?> required>
@@ -331,8 +336,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 
             if (isset($echoVal)) {
                 $brand_result = getData('name', "id = '$echoVal'", '', BRAND, $connect);
-
-                $brand_row = $brand_result->fetch_assoc();
+                $brand_row = ($brand_result && $brand_result->num_rows > 0) ? $brand_result->fetch_assoc() : array('name' => '');
             }
             ?>
             <input class="form-control" type="text" name="brand" id="brand" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $brand_row['name'] : '' ?>" <?php if ($act == '') echo 'readonly' ?> required>
@@ -357,11 +361,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 
         if (isset($echoVal)) {
             $currency_rst = getData('unit', "id = '$echoVal'", '', CUR_UNIT, $connect);
-            if (!$currency_rst) {
-                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-            }
-            $currency_row = $currency_rst->fetch_assoc();
+            $currency_row = ($currency_rst && $currency_rst->num_rows > 0) ? $currency_rst->fetch_assoc() : array('unit' => '');
         }
         ?>
         <input class="form-control" type="text" name="sc_currency" id="sc_currency" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $currency_row['unit'] : '' ?>" <?php if ($act == '') echo 'readonly' ?> required>

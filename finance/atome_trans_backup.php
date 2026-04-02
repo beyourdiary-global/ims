@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 87;
 $pageTitle = "Atome Transaction Backup Record";
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = ATOME_TRANS_BACKUP;
 

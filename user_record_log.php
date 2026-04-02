@@ -1,4 +1,5 @@
 <?php
+$currentPagePin = 0;
 $pageTitle = 'User Record Log';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -14,6 +15,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 include_once 'menuHeader.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 include_once ROOT . '/include/user_record_log.php';
 
 $context = urlResolveUserRecordLogContext($connect, $finance_connect, array(

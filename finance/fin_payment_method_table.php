@@ -1,8 +1,10 @@
 <?php
 $pageTitle = "Payment Method (Finance)";
+$currentPagePin = 60;
 $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = FIN_PAY_METH;
 $pinAccess = checkCurrentPin($connect, $pageTitle);

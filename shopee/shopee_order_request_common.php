@@ -1,6 +1,8 @@
 <?php
+$currentPagePin = 0;
 $isProcess = 1;
 include_once '../../menuHeader.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['id'])) {
     $orderId = intval($_POST['id']);

@@ -1,6 +1,8 @@
 <?php
+$currentPagePin = 0;
 $pageTitle = "Stock Out";
 include 'menuHeader.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $barcode = input('barcode');
 $prod_id = input('pkg_id');

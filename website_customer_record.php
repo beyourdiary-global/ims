@@ -1,8 +1,10 @@
 <?php
+$currentPagePin = 84;
 $pageTitle = "Website Customer Record (Deals)";
 
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = WEB_CUST_RCD;
 

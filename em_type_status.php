@@ -1,8 +1,10 @@
 <?php
+$currentPagePin = 0;
 $pageTitle = "Employment Type Status";
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = EM_TYPE_STATUS;
 

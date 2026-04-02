@@ -1,8 +1,10 @@
 <?php
 $pageTitle = "Category";
+$currentPagePin = 56;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = PROD_CATEGORY;
 $pinAccess = checkCurrentPin($connect, $pageTitle);

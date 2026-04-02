@@ -1,9 +1,11 @@
 <?php
 ob_start();
 $pageTitle = "Product";
+$currentPagePin = 20;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = PROD;
 $pinAccess = checkCurrentPin($connect, $pageTitle);

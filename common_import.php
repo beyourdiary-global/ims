@@ -1,8 +1,10 @@
 <?php
+$currentPagePin = 0;
 $pageTitle = "Import Shortcut";
 
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 function getImportCardTitleByPinGroupId($connect, $pinGroupId, $fallbackParentTitle)
 {

@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 0;
 $pageTitle = "Credit Notes (Invoice)";
 $isFinance = 1;
 
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = CRED_NOTES_INV;
 //Current Page Action And Data ID

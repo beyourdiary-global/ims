@@ -325,6 +325,26 @@ input {
   .collapse-menu {
     background-color: #5d7b8a !important;
   }
+
+  .collapse-menu > li > .nav-link {
+    background-color: #5d7b8a !important;
+  }
+
+  .collapse-menu .collapse-menu {
+    background-color: #476674 !important;
+  }
+
+  .collapse-menu .collapse-menu > li > .nav-link {
+    background-color: #476674 !important;
+  }
+
+  .collapse-menu .collapse-menu .collapse-menu {
+    background-color: #35505d !important;
+  }
+
+  .collapse-menu .collapse-menu .collapse-menu > li > .nav-link {
+    background-color: #35505d !important;
+  }
 }
 
 .close {
@@ -467,9 +487,9 @@ input {
 }
 
 #addBtn {
-    box-shadow: 0 0 !important;
-    font-size: 18px;
-    text-transform: none !important;
+  box-shadow: 0 0 !important;
+  font-size: 18px;
+  text-transform: none !important;
 }
 
 #action_menu {

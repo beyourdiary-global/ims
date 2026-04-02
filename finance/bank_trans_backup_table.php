@@ -1,9 +1,11 @@
 <?php
 ob_start();
 $pageTitle = "Monthly Bank Transaction Backup Record";
+$currentPagePin = 59;
 $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . "_list.xlsx";
 $img_path = '../' . img_server . 'finance/bank_trans_backup/';

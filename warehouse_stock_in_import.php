@@ -1,8 +1,10 @@
 <?php
+$currentPagePin = 125;
 $pageTitle = '';
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 include_once ROOT . '/include/common.php';
 
 $stockInOrderTable = 'stock_in_order';

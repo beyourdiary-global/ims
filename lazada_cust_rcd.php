@@ -1,8 +1,10 @@
 <?php
+$currentPagePin = 91;
 $pageTitle = "Lazada Customer Record (Deals)";
 
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = LAZADA_CUST_RCD;
 

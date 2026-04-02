@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 66;
 $pageTitle = "Delivery Fees Claim Record";
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = DEL_FEES_CLAIM;
 
