@@ -654,7 +654,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                 if (reg.test(email)) {
                     return true;
                 } else {
-                    $("#emailMsg").text("Invalid email format∩╝ü").css("color", "red");
+                    $("#emailMsg").text("Invalid email format").css("color", "red");
                     return false;
                 }
             });

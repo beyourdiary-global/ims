@@ -813,6 +813,121 @@ function applyGlobalDataTableDefaults() {
   }
 }
 
+function ensureGlobalDataTableEmptyStateStyle() {
+  if (document.getElementById("global-dt-empty-state-style")) {
+    return;
+  }
+
+  var style = document.createElement("style");
+  style.id = "global-dt-empty-state-style";
+  style.textContent =
+    ".global-dt-hidden{display:none !important;}" +
+    ".global-dt-empty-state{padding:2.25rem 0;}";
+  document.head.appendChild(style);
+}
+
+function getDataTableApiFromSettings(settings) {
+  if (
+    !settings ||
+    typeof window.jQuery === "undefined" ||
+    !$.fn ||
+    !$.fn.dataTable
+  ) {
+    return null;
+  }
+
+  try {
+    return new $.fn.dataTable.Api(settings);
+  } catch (e) {
+    return null;
+  }
+}
+
+function syncGlobalDataTableEmptyState(dataTableApi) {
+  if (
+    !dataTableApi ||
+    !dataTableApi.settings ||
+    !dataTableApi.settings().length
+  ) {
+    return;
+  }
+
+  var settings = dataTableApi.settings()[0];
+  if (!settings || !settings.sTableId) {
+    return;
+  }
+
+  var tableId = settings.sTableId;
+  var wrapperId = tableId + "_wrapper";
+  var emptyStateId = tableId + "_global_no_result";
+  var wrapper = document.getElementById(wrapperId);
+
+  if (!wrapper || !wrapper.parentNode) {
+    return;
+  }
+
+  var recordsTotal = 0;
+  if (
+    typeof dataTableApi.page === "function" &&
+    typeof dataTableApi.page.info === "function"
+  ) {
+    var pageInfo = dataTableApi.page.info();
+    if (pageInfo && typeof pageInfo.recordsTotal === "number") {
+      recordsTotal = pageInfo.recordsTotal;
+    }
+  }
+
+  if (recordsTotal === 0 && typeof dataTableApi.rows === "function") {
+    recordsTotal = dataTableApi.rows().count();
+  }
+
+  var isEmpty = recordsTotal === 0;
+  var emptyStateNode = document.getElementById(emptyStateId);
+
+  if (!emptyStateNode) {
+    emptyStateNode = document.createElement("div");
+    emptyStateNode.id = emptyStateId;
+    emptyStateNode.className = "global-dt-empty-state";
+    emptyStateNode.innerHTML =
+      '<div class="text-center"><h4>No Result!</h4></div>';
+    wrapper.parentNode.insertBefore(emptyStateNode, wrapper.nextSibling);
+  }
+
+  wrapper.classList.toggle("global-dt-hidden", isEmpty);
+  emptyStateNode.style.display = isEmpty ? "block" : "none";
+}
+
+function bindGlobalDataTableEmptyStateHandlers() {
+  if (typeof window.jQuery === "undefined" || !$.fn || !$.fn.dataTable) {
+    return;
+  }
+
+  if (window.__globalDataTableEmptyStateHandlersBound) {
+    return;
+  }
+
+  ensureGlobalDataTableEmptyStateStyle();
+  window.__globalDataTableEmptyStateHandlersBound = true;
+
+  $(document).on("init.dt draw.dt", function (event, settings) {
+    var tableApi = getDataTableApiFromSettings(settings);
+    if (tableApi) {
+      syncGlobalDataTableEmptyState(tableApi);
+    }
+  });
+
+  var existingTables = $.fn.dataTable.tables({ api: true });
+  if (
+    existingTables &&
+    typeof existingTables.count === "function" &&
+    existingTables.count() > 0
+  ) {
+    existingTables.every(function () {
+      syncGlobalDataTableEmptyState(this);
+    });
+  }
+}
+
 function resolveActionLabel(element) {
   var titleAttr = (element.getAttribute("title") || "").trim();
   if (titleAttr !== "") {
@@ -1189,10 +1304,12 @@ function initMobileActionMenus() {
   });
 
   applyGlobalDataTableDefaults();
+  bindGlobalDataTableEmptyStateHandlers();
   convertTableActionButtonsForMobile();
 
   document.addEventListener("DOMContentLoaded", function () {
     applyGlobalDataTableDefaults();
+    bindGlobalDataTableEmptyStateHandlers();
     convertTableActionButtonsForMobile();
   });
 

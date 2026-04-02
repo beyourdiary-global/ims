@@ -3,6 +3,7 @@
   var page = config.page || "Stock Order Request";
   var siteURL = config.siteURL || "";
   var action = config.action || "";
+  var modalAct = config.modalAct || "";
 
   checkCurrentPage(page, action);
   centerAlignment("formContainer");
@@ -710,7 +711,7 @@
       '"></div>' +
       "</div></td>" +
       (isPackageHeader
-        ? "<td></td>"
+        ? '<td><input type="hidden" class="sor-item-prod-name" name="sor_item_prod_name[]" value=""><input type="hidden" class="sor-item-prod-id" name="sor_item_prod_id[]" value=""></td>'
         : '<td><div class="autocomplete"><input class="form-control sor-item-prod-name" type="text" id="sor_item_prod_name_' +
           rowKey +
           '" name="sor_item_prod_name[]" value="' +
@@ -727,6 +728,10 @@
       escapeAttr(qty || 1) +
       '" ' +
       (action === "" ? "readonly" : "") +
+      '"><input class="sor-item-id" type="hidden" name="sor_item_id[]" value="' +
+      "" +
+      '"><input class="sor-item-row-role" type="hidden" name="sor_item_row_role[]" value="' +
+      (isPackageHeader ? "package" : "product") +
       '"><input class="sor-item-package-qty" type="hidden" name="sor_item_package_qty[]" value="' +
       escapeAttr(qty || 1) +
       '"><input class="sor-item-base-qty" type="hidden" name="sor_item_base_qty[]" value="' +
@@ -1028,6 +1033,55 @@
       }
     });
   }
+
+  function getStatusModalTitle(actCode) {
+    if (actCode === "I") return "Successful Insert " + page;
+    if (actCode === "E") return "Successful Edit " + page;
+    if (actCode === "NC") return "No changes were made.";
+    return "";
+  }
+
+  function showStatusModalIfNeeded() {
+    var title = getStatusModalTitle(modalAct);
+    if (!title || typeof bootstrap === "undefined") {
+      return;
+    }
+
+    var modalElem = document.createElement("div");
+    modalElem.className = "modal fade";
+    modalElem.innerHTML =
+      '<div class="modal-dialog modal-dialog-centered" style="font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;">' +
+      '<div class="modal-content">' +
+      '<div class="modal-body fs-6 mt-3">' +
+      '<p style="text-align:center;font-weight:bold;font-size:25px;">' +
+      title +
+      "</p>" +
+      "</div>" +
+      '<div class="modal-footer d-flex justify-content-center mt-n3" style="border-top:0;">' +
+      '<button type="button" class="btn" id="sorStatusContinueBtn" style="border:1px solid #FF9B44;background-color:#FFFFFF;color:#FF9B44;box-shadow:0 0 !important;border-radius:24px;text-transform:none;">Continue</button>' +
+      "</div>" +
+      "</div>" +
+      "</div>";
+
+    document.body.appendChild(modalElem);
+    var modal = new bootstrap.Modal(modalElem, {
+      keyboard: false,
+      backdrop: "static",
+    });
+    modal.show();
+
+    modalElem.addEventListener("click", function (e) {
+      if (e.target && e.target.id === "sorStatusContinueBtn") {
+        modal.hide();
+      }
+    });
+
+    modalElem.addEventListener("hidden.bs.modal", function () {
+      modalElem.remove();
+    });
+  }
+
+  showStatusModalIfNeeded();
 
   if (config.showQrPanel) {
     var copyBtn = document.getElementById("copyOrderLinkBtn");
