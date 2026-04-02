@@ -11,39 +11,34 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1️⃣ 选择分支 + 凭据
       - name: Set branch and FTP credentials
         run: |
           DEPLOY_BRANCH="${GITHUB_REF##*/}"
           echo "DEPLOY_BRANCH=$DEPLOY_BRANCH" >> $GITHUB_ENV
-
           if [[ "$DEPLOY_BRANCH" == "main" ]]; then
             echo "FTP_USERNAME=${{ secrets.FTP_USERNAME }}" >> $GITHUB_ENV
             echo "FTP_PASSWORD=${{ secrets.FTP_PASSWORD }}" >> $GITHUB_ENV
+            echo "LOCAL_DIR=." >> $GITHUB_ENV               # **设置 main 上传根目录内容**
           else
             echo "FTP_USERNAME=${{ secrets.FTP_USERNAME_UAT }}" >> $GITHUB_ENV
             echo "FTP_PASSWORD=${{ secrets.FTP_PASSWORD_UAT }}" >> $GITHUB_ENV
+            echo "LOCAL_DIR=../../" >> $GITHUB_ENV               # **设置 uat 上传根目录内容**
           fi
 
-      # 2️⃣ Checkout
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # 3️⃣ Deploy（🔥只上传变更文件）
       - name: Deploy via FTP (incremental)
         uses: SamKirkland/FTP-Deploy-Action@4.3.0
         with:
           server: ${{ secrets.FTP_HOST }}
           username: ${{ env.FTP_USERNAME }}
           password: ${{ env.FTP_PASSWORD }}
-
-          local-dir: ./                # ⚠️ 按你实际路径改
-          server-dir: /  # ⚠️ 必须有 /
-
-          state-name: .ftp-deploy-sync-state.json   # 🔥关键
+          local-dir: ${{ env.LOCAL_DIR }}
+          server-dir: /
+          state-name: .ftp-deploy-sync-state.json
           dry-run: false
           log-level: minimal
-
           exclude: |
             .git/**
             .github/**
