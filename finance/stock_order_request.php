@@ -621,9 +621,8 @@ if (post('actionBtn')) {
             $sor_attachment = $existingAttachment;
 
             if (isset($_FILES['sor_attachment']) && $_FILES['sor_attachment']['error'] === UPLOAD_ERR_OK) {
-                $requestNoForPath = sorGenerateRequestNo($finance_connect);
                 $sqlAccountFolder = sorResolveSqlAccountFolderFromCompany($requestCompanyId, $companySqlAccountFolderMap);
-                $targetRelativeDir = 'attachment/' . $sqlAccountFolder . '/' . date('Y') . '/' . date('m') . '/' . basename(__FILE__, '.php') . '/';
+                $targetRelativeDir = 'attachment/' . $sqlAccountFolder . '/' . substr((string) comYMD, 0, 4) . '/' . substr((string) comYMD, 4, 2) . '/' . basename(__FILE__, '.php') . '/';
                 $targetFsDir = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . ltrim($targetRelativeDir, '/\\');
 
                 if (!file_exists($targetFsDir)) {
@@ -783,20 +782,17 @@ if (post('actionBtn')) {
                         }
                     } else {
                         $existingItemIds = array();
-                        $existingRst = mysqli_query($finance_connect, "SELECT id FROM " . STOCK_ORDER_REQ_ITEM . " WHERE request_id='" . (int) $dataID . "' AND status='A' ORDER BY id ASC");
+                        $existingRst = mysqli_query($finance_connect, "SELECT id FROM " . STOCK_ORDER_REQ_ITEM . " WHERE request_id='" . (int) $dataID . "' AND status='A'");
                         if ($existingRst) {
                             while ($existingRow = mysqli_fetch_assoc($existingRst)) {
-                                $existingItemIds[] = (int) $existingRow['id'];
+                                $existingItemIds[(int)$existingRow['id']] = true;
                             }
                         }
 
-                        $itemCount = count($items);
-                        $existingCount = count($existingItemIds);
-                        $updateCount = min($itemCount, $existingCount);
+                        $postedItemIds = array();
 
-                        for ($i = 0; $i < $updateCount; $i++) {
-                            $item = $items[$i];
-                            $itemId = (int) $existingItemIds[$i];
+                        foreach ($items as $item) {
+                            $itemId = (int) $item['item_id'];
                             $safeProdId = isset($item['product_id']) ? (int) $item['product_id'] : 0;
                             $safeBrandId = isset($item['brand_id']) ? (int) $item['brand_id'] : 0;
                             $safeCompanyId = isset($item['company_id']) ? (int) $item['company_id'] : 0;
@@ -807,45 +803,40 @@ if (post('actionBtn')) {
                             $safePackageQty = isset($item['packageQty']) ? (int) $item['packageQty'] : 1;
                             $safeProductQty = isset($item['productQty']) ? (int) $item['productQty'] : $safePackageQty;
 
-                            $updateItemSql = "UPDATE " . STOCK_ORDER_REQ_ITEM . "
-                                              SET product_id='" . $safeProdId . "',
-                                                  brand_id='" . $safeBrandId . "',
-                                                  company_id='" . $safeCompanyId . "',
-                                                  package_id='" . $safePkgId . "',
-                                                  package_group_key='" . $safePkgGroupKey . "',
-                                                  package_desc='" . $safeDesc . "',
-                                                  package_price='" . number_format($safePkgPrice, 2, '.', '') . "',
-                                                  packageQty='" . $safePackageQty . "',
-                                                  productQty='" . $safeProductQty . "',
-                                                  status='A',
-                                                  update_by='" . USER_ID . "',
-                                                  update_date=CURDATE(),
-                                                  update_time=CURTIME()
-                                              WHERE id='" . $itemId . "' AND request_id='" . (int) $dataID . "'";
-                            mysqli_query($finance_connect, $updateItemSql);
+                            if ($itemId > 0 && isset($existingItemIds[$itemId])) {
+                                // UPDATE existing record by its specific ID
+                                $updateItemSql = "UPDATE " . STOCK_ORDER_REQ_ITEM . "
+                                                  SET product_id='" . $safeProdId . "',
+                                                      brand_id='" . $safeBrandId . "',
+                                                      company_id='" . $safeCompanyId . "',
+                                                      package_id='" . $safePkgId . "',
+                                                      package_group_key='" . $safePkgGroupKey . "',
+                                                      package_desc='" . $safeDesc . "',
+                                                      package_price='" . number_format($safePkgPrice, 2, '.', '') . "',
+                                                      packageQty='" . $safePackageQty . "',
+                                                      productQty='" . $safeProductQty . "',
+                                                      status='A',
+                                                      update_by='" . USER_ID . "',
+                                                      update_date=CURDATE(),
+                                                      update_time=CURTIME()
+                                                  WHERE id='" . $itemId . "' AND request_id='" . (int) $dataID . "'";
+                                mysqli_query($finance_connect, $updateItemSql);
+                                $postedItemIds[] = $itemId;
+                            } else {
+                                // INSERT new record
+                                $insertItemSql = "INSERT INTO " . STOCK_ORDER_REQ_ITEM . "
+                                                  (request_id, product_id, brand_id, company_id, package_id, package_group_key, package_desc, package_price, packageQty, productQty, create_by, create_date, create_time)
+                                                  VALUES
+                                                  ('" . (int) $dataID . "', '" . $safeProdId . "', '" . $safeBrandId . "', '" . $safeCompanyId . "', '$safePkgId', '$safePkgGroupKey', '$safeDesc', '" . number_format($safePkgPrice, 2, '.', '') . "', '$safePackageQty', '$safeProductQty', '" . USER_ID . "', CURDATE(), CURTIME())";
+                                mysqli_query($finance_connect, $insertItemSql);
+                            }
                         }
 
-                        for ($i = $updateCount; $i < $itemCount; $i++) {
-                            $item = $items[$i];
-                            $safeProdId = isset($item['product_id']) ? (int) $item['product_id'] : 0;
-                            $safeBrandId = isset($item['brand_id']) ? (int) $item['brand_id'] : 0;
-                            $safeCompanyId = isset($item['company_id']) ? (int) $item['company_id'] : 0;
-                            $safePkgId = mysqli_real_escape_string($finance_connect, $item['package_id']);
-                            $safePkgGroupKey = mysqli_real_escape_string($finance_connect, isset($item['package_group_key']) ? (string) $item['package_group_key'] : '');
-                            $safeDesc = mysqli_real_escape_string($finance_connect, $item['package_desc']);
-                            $safePkgPrice = isset($item['package_price']) ? (float) $item['package_price'] : 0.00;
-                            $safePackageQty = isset($item['packageQty']) ? (int) $item['packageQty'] : 1;
-                            $safeProductQty = isset($item['productQty']) ? (int) $item['productQty'] : $safePackageQty;
-                            $insertItemSql = "INSERT INTO " . STOCK_ORDER_REQ_ITEM . "
-                                              (request_id, product_id, brand_id, company_id, package_id, package_group_key, package_desc, package_price, packageQty, productQty, create_by, create_date, create_time)
-                                              VALUES
-                                              ('" . (int) $dataID . "', '" . $safeProdId . "', '" . $safeBrandId . "', '" . $safeCompanyId . "', '$safePkgId', '$safePkgGroupKey', '$safeDesc', '" . number_format($safePkgPrice, 2, '.', '') . "', '$safePackageQty', '$safeProductQty', '" . USER_ID . "', CURDATE(), CURTIME())";
-                            mysqli_query($finance_connect, $insertItemSql);
-                        }
-
-                        for ($i = $itemCount; $i < $existingCount; $i++) {
-                            $itemId = (int) $existingItemIds[$i];
-                            mysqli_query($finance_connect, "UPDATE " . STOCK_ORDER_REQ_ITEM . " SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $itemId . "' AND request_id='" . (int) $dataID . "'");
+                        // DELETE any records that existed in the DB but were NOT posted back from the UI
+                        foreach ($existingItemIds as $id => $val) {
+                            if (!in_array($id, $postedItemIds)) {
+                                mysqli_query($finance_connect, "UPDATE " . STOCK_ORDER_REQ_ITEM . " SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $id . "' AND request_id='" . (int) $dataID . "'");
+                            }
                         }
                     }
 

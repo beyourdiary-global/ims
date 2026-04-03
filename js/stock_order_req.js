@@ -1049,19 +1049,43 @@
 
     var modalElem = document.createElement("div");
     modalElem.className = "modal fade";
-    modalElem.innerHTML =
-      '<div class="modal-dialog modal-dialog-centered" style="font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;">' +
-      '<div class="modal-content">' +
-      '<div class="modal-body fs-6 mt-3">' +
-      '<p style="text-align:center;font-weight:bold;font-size:25px;">' +
-      title +
-      "</p>" +
-      "</div>" +
-      '<div class="modal-footer d-flex justify-content-center mt-n3" style="border-top:0;">' +
-      '<button type="button" class="btn" id="sorStatusContinueBtn" style="border:1px solid #FF9B44;background-color:#FFFFFF;color:#FF9B44;box-shadow:0 0 !important;border-radius:24px;text-transform:none;">Continue</button>' +
-      "</div>" +
-      "</div>" +
-      "</div>";
+
+    // --- FIX: Build DOM elements safely to prevent XSS injection ---
+    var modalDialog = document.createElement("div");
+    modalDialog.className = "modal-dialog modal-dialog-centered";
+    modalDialog.style.cssText =
+      "font-family:Segoe UI,Tahoma,Geneva,Verdana,sans-serif;";
+
+    var modalContent = document.createElement("div");
+    modalContent.className = "modal-content";
+
+    var modalBody = document.createElement("div");
+    modalBody.className = "modal-body fs-6 mt-3";
+
+    var titleElem = document.createElement("p");
+    titleElem.style.cssText =
+      "text-align:center;font-weight:bold;font-size:25px;";
+    titleElem.textContent = title; // textContent safely escapes HTML
+    modalBody.appendChild(titleElem);
+
+    var modalFooter = document.createElement("div");
+    modalFooter.className = "modal-footer d-flex justify-content-center mt-n3";
+    modalFooter.style.cssText = "border-top:0;";
+
+    var continueBtn = document.createElement("button");
+    continueBtn.type = "button";
+    continueBtn.className = "btn";
+    continueBtn.id = "sorStatusContinueBtn";
+    continueBtn.style.cssText =
+      "border:1px solid #FF9B44;background-color:#FFFFFF;color:#FF9B44;box-shadow:0 0 !important;border-radius:24px;text-transform:none;";
+    continueBtn.textContent = "Continue";
+
+    modalFooter.appendChild(continueBtn);
+    modalContent.appendChild(modalBody);
+    modalContent.appendChild(modalFooter);
+    modalDialog.appendChild(modalContent);
+    modalElem.appendChild(modalDialog);
+    // ---------------------------------------------------------------
 
     document.body.appendChild(modalElem);
     var modal = new bootstrap.Modal(modalElem, {

@@ -93,7 +93,7 @@ if (!function_exists('jtImpSaveUploadedImportFile')) {
             $safePage = 'import_page';
         }
 
-        $relDir = 'attachment/sqlaccount/' . date('Y') . '/' . date('m') . '/' . $safePage . '/';
+        $relDir = 'attachment/sqlaccount/' . substr((string) comYMD, 0, 4) . '/' . substr((string) comYMD, 4, 2) . '/' . $safePage . '/';
         $absDir = ROOT . img_server . $relDir;
         if (!is_dir($absDir)) {
             @mkdir($absDir, 0777, true);
@@ -132,7 +132,7 @@ if (!function_exists('jtImpStoreAttachmentBinary')) {
             $safePage = 'import_page';
         }
 
-        $relDir = 'attachment/sqlaccount/' . date('Y') . '/' . date('m') . '/' . $safePage . '/';
+        $relDir = 'attachment/sqlaccount/' . substr((string) comYMD, 0, 4) . '/' . substr((string) comYMD, 4, 2) . '/' . $safePage . '/';
         $absDir = ROOT . img_server . $relDir;
         if (!is_dir($absDir)) {
             @mkdir($absDir, 0777, true);
