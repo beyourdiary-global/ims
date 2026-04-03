@@ -514,7 +514,7 @@ if ($urbanismBadgeSeedName !== '' && $urbanismFbLink !== '') {
 
 $urbanismBadgeAction = getUrbanismMemberActionData(
     $connect,
-    $urbanismBadgeSeedId,
+    '',
     $urbanismBadgeSeedName,
     $redirect_page,
     $pageTitle

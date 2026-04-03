@@ -64,6 +64,17 @@ if (!$result) {
     .btn-container {
         white-space: nowrap;
     }
+
+    .table-scroll-wrap {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-x;
+    }
+
+    .table-scroll-wrap table {
+        min-width: 680px;
+    }
 </style>
 
 <body>
@@ -91,6 +102,7 @@ if (!$result) {
                     </div>
                 </div>
 
+                <div class="table-scroll-wrap">
                 <table class="table table-striped" id="table">
                     <thead>
                         <tr>
@@ -129,6 +141,7 @@ if (!$result) {
                         </tr>
                     </tfoot>
                 </table>
+                </div>
             </div>
         </div>
     </div>

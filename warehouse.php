@@ -217,7 +217,7 @@ if ($isStockBalanceView) {
                     </div>
 
                     <div class="form-group mt-4 d-flex justify-content-center">
-                        <a class="btn btn-rounded btn-primary" href="<?= $tablePage ?>">Back</a>
+                        <a class="btn btn-rounded btn-primary" id="actionBtn" href="<?= $tablePage ?>">Back</a>
                     </div>
                 </div>
             </div>

@@ -5,6 +5,7 @@ $pageTitle = "Lazada Customer Record (Deals)";
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once ROOT . '/include/user_record_log.php';
 
 $tblName = LAZADA_CUST_RCD;
 
@@ -37,6 +38,32 @@ if (!($dataID) && !($act)) {
     alert("Invalid action.");
     window.location.href = "' . $redirect_page . '"; // Redirect to previous page
     </script>';
+}
+
+if ($dataID && isset($_GET['open_order_id'])) {
+    $openOrderId = (int) $_GET['open_order_id'];
+    if ($openOrderId > 0) {
+        $orderRst = getData('id,oder_number', "id='" . $openOrderId . "'", 'LIMIT 1', LAZADA_ORDER_REQ, $connect);
+        if ($orderRst && $orderRst->num_rows > 0) {
+            $orderRow = $orderRst->fetch_assoc();
+            $orderNo = isset($orderRow['oder_number']) ? $orderRow['oder_number'] : ('#' . $openOrderId);
+            $log = [
+                'log_act' => 'View',
+                'cdate' => $cdate,
+                'ctime' => $ctime,
+                'uid' => USER_ID,
+                'cby' => USER_ID,
+                'query_rec' => "order_id=" . $openOrderId,
+                'query_table' => LAZADA_ORDER_REQ,
+                'act_msg' => USER_NAME . " opened Lazada order detail [<b>" . $orderNo . "</b>] from <b><i>" . $pageTitle . "</i></b>.",
+                'page' => $pageTitle,
+                'connect' => $connect,
+            ];
+            audit_log($log);
+        }
+        echo "<script>location.href='" . $SITEURL . "/lazada_order_req.php?id=" . $openOrderId . "&act=E';</script>";
+        exit;
+    }
 }
 
 $series_list_result = getData('*', '', '', BRD_SERIES, $connect);
@@ -660,6 +687,91 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 echo $row['remark'] ?></textarea>
                             </div>
 
+                            <?php
+                            if ($dataID) {
+                                $orderRows = array();
+                                $sumFinalAmount = 0.00;
+                                $customerRowId = (int) $dataID;
+                                $customerCode = isset($row['lcr_id']) ? trim((string) $row['lcr_id']) : '';
+
+                                $orderWhere = "status='A' AND (cust_id='" . $customerRowId . "'";
+                                if ($customerCode !== '') {
+                                    $orderWhere .= " OR cust_id='" . mysqli_real_escape_string($connect, $customerCode) . "'";
+                                }
+                                $orderWhere .= ")";
+
+                                $orderSql = "SELECT * FROM " . LAZADA_ORDER_REQ . " WHERE " . $orderWhere . " ORDER BY id DESC";
+                                $orderRst = mysqli_query($connect, $orderSql);
+                                if ($orderRst && $orderRst->num_rows > 0) {
+                                    while ($orderRow = $orderRst->fetch_assoc()) {
+                                        $orderRows[] = $orderRow;
+                                        $sumFinalAmount += (float) (isset($orderRow['final_income']) ? $orderRow['final_income'] : 0);
+                                    }
+                                } else if (!$orderRst) {
+                                    error_log("Lazada order list query failed: " . mysqli_error($connect) . " SQL: " . $orderSql);
+                                }
+                            ?>
+                            <div class="form-group mt-3">
+                                <h5 class="mb-3">Order Records</h5>
+                                <div class="table-responsive">
+                                    <table class="table table-striped table-bordered mb-0" id="lcr_order_tbl">
+                                        <thead>
+                                            <tr>
+                                                <th width="60">S/N</th>
+                                                <th width="200">Action</th>
+                                                <th>Order ID</th>
+                                                <th>Date</th>
+                                                <th>Package</th>
+                                                <th>Buyer Payment Method</th>
+                                                <th>Charges &amp; Fees</th>
+                                                <th>Final Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php if (!empty($orderRows)) {
+                                                $orderSN = 1;
+                                                foreach ($orderRows as $orderRow) {
+                                                    $orderId = isset($orderRow['id']) ? (int) $orderRow['id'] : 0;
+                                                    $orderNo = isset($orderRow['oder_number']) ? $orderRow['oder_number'] : '';
+                                                    $orderDate = isset($orderRow['create_date']) ? $orderRow['create_date'] : '';
+                                                    $orderPackage = commonResolvePackageNamesFromCsv(isset($orderRow['pkg']) ? $orderRow['pkg'] : '', $connect);
+                                                    $buyerPayMethod = commonResolvePaymentMethodName(isset($orderRow['pay_meth']) ? $orderRow['pay_meth'] : '', $finance_connect);
+                                                    $orderFees = isset($orderRow['pay_fee']) ? $orderRow['pay_fee'] : '0.00';
+                                                    $finalAmount = isset($orderRow['final_income']) ? $orderRow['final_income'] : '0.00';
+                                                    ?>
+                                                    <tr>
+                                                        <td><?= $orderSN++ ?></td>
+                                                        <td>
+                                                            <a class="btn btn-sm btn-rounded btn-primary"
+                                                               href="<?= $SITEURL . '/lazada_cust_rcd.php?id=' . (int) $dataID . '&act=' . $act_2 . '&open_order_id=' . $orderId ?>">
+                                                                Show Order Detail
+                                                            </a>
+                                                        </td>
+                                                        <td><?= htmlspecialchars((string) $orderNo, ENT_QUOTES, 'UTF-8') ?></td>
+                                                        <td><?= htmlspecialchars((string) $orderDate, ENT_QUOTES, 'UTF-8') ?></td>
+                                                        <td><?= htmlspecialchars((string) $orderPackage, ENT_QUOTES, 'UTF-8') ?></td>
+                                                        <td><?= htmlspecialchars((string) $buyerPayMethod, ENT_QUOTES, 'UTF-8') ?></td>
+                                                        <td><?= commonFormatAmountRm($orderFees) ?></td>
+                                                        <td><?= commonFormatAmountRm($finalAmount) ?></td>
+                                                    </tr>
+                                                <?php }
+                                            } else { ?>
+                                                <tr>
+                                                    <td colspan="8" class="text-center">No order records found.</td>
+                                                </tr>
+                                            <?php } ?>
+                                        </tbody>
+                                        <tfoot>
+                                            <tr>
+                                                <th colspan="7" class="text-end">Sub-Total (RM)</th>
+                                                <th><?= commonFormatAmountRm($sumFinalAmount) ?></th>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </div>
+                            <?php } ?>
+
                             <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
                                 <?php
                             switch ($act) {
@@ -675,6 +787,31 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 id="actionBtn" value="back">Back</button>
                         </div>
                 </form>
+
+                <?php
+                if ($dataID) {
+                    $customerLogReturnUrl = $SITEURL . '/lazada_cust_rcd.php?id=' . (int) $dataID;
+                    if ($act !== '') {
+                        $customerLogReturnUrl .= '&act=' . urlencode((string) $act);
+                    }
+
+                    $customerLogContext = urlResolveUserRecordLogContext($connect, $connect, array(
+                        'customer_id' => (int) $dataID,
+                        'customer_column' => 'lazada_cust_id',
+                        'customer_label' => isset($row['name']) ? $row['name'] : '',
+                        'return_url' => $customerLogReturnUrl,
+                        'ajax_url' => $SITEURL . '/user_record_log.php',
+                        'customer_only' => true,
+                    ));
+
+                    urlRenderUserRecordLogModule($connect, $connect, array(
+                        'table_name' => USER_RECORD_LOG,
+                        'context' => $customerLogContext,
+                        'section_heading' => 'User Record Log',
+                        'show_scope_note' => true,
+                    ));
+                }
+                ?>
             </div>
         </div>
     </div>

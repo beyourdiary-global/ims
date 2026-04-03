@@ -2,14 +2,39 @@
 $currentPagePin = 0;
 $pageTitle = 'User Record Log';
 
+$requestedCustomerColumn = '';
+if (isset($_REQUEST['customer_column'])) {
+    $requestedCustomerColumn = trim((string) $_REQUEST['customer_column']);
+}
+
+$allowedCustomerColumns = array('shopee_cust_id', 'facebook_cust_id', 'website_cust_id', 'lazada_cust_id', 'urbanism_member_id');
+if (!in_array($requestedCustomerColumn, $allowedCustomerColumns, true)) {
+    $requestedCustomerColumn = '';
+}
+
+$returnUrlParams = array();
+if (!empty($_GET['customer_id'])) {
+    $returnUrlParams['customer_id'] = (int) $_GET['customer_id'];
+}
+if ($requestedCustomerColumn !== '') {
+    $returnUrlParams['customer_column'] = $requestedCustomerColumn;
+}
+
+$returnUrl = '/user_record_log.php';
+if (!empty($returnUrlParams)) {
+    $returnUrl .= '?' . http_build_query($returnUrlParams);
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     include_once 'include/connection.php';
     include_once ROOT . '/include/common.php';
     include_once ROOT . '/include/common_variable.php';
     include_once ROOT . '/include/user_record_log.php';
-    urlHandleUserRecordLogRequest($connect, $finance_connect, array(
+    urlHandleUserRecordLogRequest($connect, $connect, array(
         'table_name' => USER_RECORD_LOG,
         'page_title' => $pageTitle,
+        'customer_column' => $requestedCustomerColumn,
+        'customer_lookup_connect' => $finance_connect,
     ));
     exit;
 }
@@ -18,9 +43,11 @@ include_once 'menuHeader.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 include_once ROOT . '/include/user_record_log.php';
 
-$context = urlResolveUserRecordLogContext($connect, $finance_connect, array(
-    'return_url' => $SITEURL . '/user_record_log.php' . (!empty($_GET['customer_id']) ? ('?customer_id=' . (int) $_GET['customer_id']) : ''),
+$context = urlResolveUserRecordLogContext($connect, $connect, array(
+    'return_url' => $returnUrl,
     'ajax_url' => $SITEURL . '/user_record_log.php',
+    'customer_column' => $requestedCustomerColumn,
+    'customer_lookup_connect' => $finance_connect,
 ));
 
 $pageHeading = $pageTitle;
@@ -48,7 +75,7 @@ if (!empty($context['customer_label'])) {
                 </div>
             </div>
             <?php
-            urlRenderUserRecordLogModule($connect, $finance_connect, array(
+            urlRenderUserRecordLogModule($connect, $connect, array(
                 'table_name' => USER_RECORD_LOG,
                 'context' => $context,
                 'section_heading' => '',

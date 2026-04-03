@@ -647,17 +647,6 @@ if (post('actionBtn')) {
                         $err = 'Failed to upload attachment.';
                     } else {
                         $sor_attachment = sorNormalizeAttachmentRelativePath($targetRelativeDir . $newName);
-
-                        if ($existingAttachment !== '' && $existingAttachment !== $sor_attachment) {
-                            $oldRelativePath = ltrim((string) sorNormalizeAttachmentRelativePath($existingAttachment), '/\\');
-                            $oldAttachmentAbsPath = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . ltrim($oldRelativePath, '/\\');
-                            if (!is_file($oldAttachmentAbsPath)) {
-                                $oldAttachmentAbsPath = ROOT . img_server . $oldRelativePath;
-                            }
-                            if (is_file($oldAttachmentAbsPath)) {
-                                @unlink($oldAttachmentAbsPath);
-                            }
-                        }
                     }
                 }
             }
@@ -1289,7 +1278,7 @@ function sorAttachmentUrl($relativePath, $siteUrl)
                                             <button type="button" class="btn btn-sm btn-rounded btn-primary" id="copyOrderLinkBtn">Copy Link</button>
                                         </div>
                                         <a class="btn btn-sm btn-rounded btn-primary me-2" href="<?= sorEcho(sorQrSrc($qrWebPath, $SITEURL)) ?>" download>Download QR</a>
-                                        <a class="btn btn-sm btn-rounded btn-primary" href="<?= sorEcho($orderLink) ?>" target="_blank">Open Order Link</a>
+                                        <a class="btn btn-sm btn-rounded btn-primary" id="actionBtn" href="<?= sorEcho($orderLink) ?>" target="_blank">Open Order Link</a>
                                     </div>
                                 </div>
                             </div>

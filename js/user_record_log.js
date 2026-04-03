@@ -9,6 +9,7 @@
     var cfg = window.__USER_RECORD_LOG_CONFIG || {};
     var ajaxUrl = cfg.ajaxUrl || "user_record_log.php";
     var customerId = parseInt(cfg.customerId || "0", 10) || 0;
+    var customerColumn = String(cfg.customerColumn || "");
     var pathReturn = cfg.pathReturn || window.location.href;
     var confirmationPageName = cfg.confirmationPageName || "User Record Log";
 
@@ -70,6 +71,7 @@
         page: currentPage,
         page_size: currentPageSize,
         customer_id: customerId,
+        customer_column: customerColumn,
         return_url: pathReturn,
       };
     }
@@ -267,6 +269,7 @@
       var formData = new FormData(formEl);
       formData.set("url_action", "save");
       formData.set("customer_id", String(customerId || 0));
+      formData.set("customer_column", customerColumn);
       formData.set("return_url", pathReturn);
 
       setLoading(true);

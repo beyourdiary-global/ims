@@ -135,7 +135,7 @@ if ($resetpass_btn == 1) {
                     <table class="middle" style="border-spacing: 0;width: 100%;height: 600px;background-color: #FFFFFF;border-radius: 18px;">
                         <tr class="resetpass_row">
                             <td class="resetpass_pic" align="center" style="padding: 0;height: 360px;">
-                                <img src="' . img . 'password_reset.png" style="border: 0;width: 310px;min-width: 310px;height: auto;">
+                                <img src="' . $SITEURL . '/header/js/select2-4.0.13/docs/themes/site/images/favicon-32x32.png" alt="Reset Password Icon" style="border: 0;width: 64px;min-width: 64px;height: 64px;">
                             </td>
                         </tr>
                         <tr class="content_row">

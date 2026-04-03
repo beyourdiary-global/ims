@@ -7,7 +7,7 @@ include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
-$fileName = date('Y-m-d H:i:s') . "_list.xlsx";
+$fileName = date('Y-m-d_H-i-s') . "_list.xlsx";
 $img_path = '../' . img_server . 'finance/j&t_trans_backup/';
 $tblName = 'jt_transaction_backup';
 
@@ -56,7 +56,11 @@ if (!empty($checkboxIds)) {
             if (isset($row2['attachment']) && !empty($row2['attachment'])) {
                 $attachmentRelPath = trim(str_replace('\\', '/', (string) $row2['attachment']), '/');
                 if (strpos($attachmentRelPath, '/') !== false) {
-                    $attachmentSourcePath = '../' . img_server . $attachmentRelPath;
+                    if (strpos($attachmentRelPath, 'attachment/') === 0) {
+                        $attachmentSourcePath = '../' . $attachmentRelPath;
+                    } else {
+                        $attachmentSourcePath = '../' . img_server . $attachmentRelPath;
+                    }
                 } else {
                     $attachmentSourcePath = $img_path . $attachmentRelPath;
                 }
@@ -319,12 +323,15 @@ $img_path = SITEURL . img_server . 'finance/j&t_trans_backup/';
                                         <?php
                                         if (isset($row['attachment']) && trim((string) $row['attachment']) !== '') {
                                             $attachmentRel = trim(str_replace('\\', '/', (string) $row['attachment']), '/');
+                                            $attachmentLabel = basename($attachmentRel);
                                             $attachmentHref = (strpos($attachmentRel, '/') !== false)
-                                                ? (SITEURL . img_server . $attachmentRel)
+                                                ? ((strpos($attachmentRel, 'attachment/') === 0)
+                                                    ? (rtrim((string) SITEURL, '/') . '/' . ltrim($attachmentRel, '/'))
+                                                    : (SITEURL . img_server . $attachmentRel))
                                                 : ($img_path . $attachmentRel);
                                         ?>
                                             <a href="<?= $attachmentHref ?>" target="_blank">
-                                                <?= htmlspecialchars((string) $row['attachment'], ENT_QUOTES, 'UTF-8') ?>
+                                                <?= htmlspecialchars((string) $attachmentLabel, ENT_QUOTES, 'UTF-8') ?>
                                             </a>
                                         <?php } ?>
                                     </td>

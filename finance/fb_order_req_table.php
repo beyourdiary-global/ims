@@ -60,7 +60,7 @@ function fbReqFetchAssoc($rst)
                         <h2>
                             <?php echo $pageTitle ?>
                         </h2>
-                        <?php if ($result) { ?>
+                        
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
@@ -68,7 +68,7 @@ function fbReqFetchAssoc($rst)
                                         Request </a>
                                 <?php endif; ?>
                             </div>
-                        <?php } ?>
+                        
                     </div>
                 </div>
             </div>
@@ -153,7 +153,7 @@ function fbReqFetchAssoc($rst)
                                     $dealId = isset($dealRow['id']) ? (string) ((int) $dealRow['id']) : '';
                                     $urbanismAction = getUrbanismMemberActionData(
                                         $connect,
-                                        $dealId,
+                                        '',
                                         isset($row['name']) ? (string) $row['name'] : '',
                                         $deleteRedirectPage,
                                         $pageTitle

@@ -68,6 +68,17 @@ $result = getData('*', '', '', $tblName, $connect);
     .btn-container {
         white-space: nowrap;
     }
+
+    .table-scroll-wrap {
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        touch-action: pan-x;
+    }
+
+    .table-scroll-wrap table {
+        min-width: 680px;
+    }
 </style>
 
 <body>
@@ -102,6 +113,7 @@ $result = getData('*', '', '', $tblName, $connect);
                 <?php if (!$result) {
                     echo '<div class="text-center"><h4>No Result!</h4></div>';
                 } else { ?>
+                    <div class="table-scroll-wrap">
                     <table class="table table-striped" id="table">
                         <thead>
                             <tr>
@@ -143,7 +155,8 @@ $result = getData('*', '', '', $tblName, $connect);
                                 <th scope="col">Name</th>
                             </tr>
                         </tfoot>
-                    </table><?php } ?>
+                    </table>
+                    </div><?php } ?>
             </div>
         </div>
     </div>

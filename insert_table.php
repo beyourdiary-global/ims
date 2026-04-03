@@ -956,28 +956,24 @@ function removePinBlockById($allPins, $targetPinId)
     return implode('+', $rebuilt);
 }
 
-$existingShopeeCustomerIds = array();
 if ($conn->select_db($db_fin)) {
-    $financeShopeeSql = "SELECT `id` FROM `" . SHOPEE_CUST_INFO . "` ORDER BY `id` ASC";
-    $financeShopeeRst = $conn->query($financeShopeeSql);
-    if ($financeShopeeRst) {
-        while ($financeShopeeRow = $financeShopeeRst->fetch_assoc()) {
-            if (isset($financeShopeeRow['id'])) {
-                $existingShopeeCustomerIds[] = (int) $financeShopeeRow['id'];
-            }
-        }
-        echo "<p style='color:green;'>Verified fetched " . count($existingShopeeCustomerIds) . " Shopee customer record(s) from `" . SHOPEE_CUST_INFO . "` for user record log linking.</p>";
+    if ($conn->query("DROP TABLE IF EXISTS `" . USER_RECORD_LOG . "`")) {
+        echo "<p style='color:green;'>Verified dropped `" . USER_RECORD_LOG . "` from financial database.</p>";
     } else {
-        echo "<p style='color:red;'>Failed reading `" . SHOPEE_CUST_INFO . "`: " . $conn->error . "</p>";
+        echo "<p style='color:red;'>Failed dropping `" . USER_RECORD_LOG . "` from financial database: " . $conn->error . "</p>";
     }
 } else {
-    echo "<p style='color:red;'>Failed selecting financial database for Shopee customer log migration.</p>";
+    echo "<p style='color:red;'>Failed selecting financial database for user record log cleanup.</p>";
 }
 
-if ($conn->select_db($db_fin)) {
+if ($conn->select_db($db_cms)) {
     $createUserRecordLogTableSql = "CREATE TABLE IF NOT EXISTS `" . USER_RECORD_LOG . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
-        `customer_id` INT DEFAULT NULL,
+        `shopee_cust_id` INT DEFAULT NULL,
+        `facebook_cust_id` INT DEFAULT NULL,
+        `website_cust_id` INT DEFAULT NULL,
+        `lazada_cust_id` INT DEFAULT NULL,
+        `urbanism_member_id` INT DEFAULT NULL,
         `content` TEXT NOT NULL,
         `attachment` VARCHAR(255) DEFAULT NULL,
         `created_by` VARCHAR(30) DEFAULT NULL,
@@ -987,38 +983,82 @@ if ($conn->select_db($db_fin)) {
         `status` CHAR(1) NOT NULL DEFAULT 'A',
         KEY `idx_url_created_at` (`created_at`),
         KEY `idx_url_created_by` (`created_by`),
-        KEY `idx_url_customer_id` (`customer_id`)
+        KEY `idx_url_shopee_cust_id` (`shopee_cust_id`),
+        KEY `idx_url_facebook_cust_id` (`facebook_cust_id`),
+        KEY `idx_url_website_cust_id` (`website_cust_id`),
+        KEY `idx_url_lazada_cust_id` (`lazada_cust_id`),
+        KEY `idx_url_urbanism_member_id` (`urbanism_member_id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
     if ($conn->query($createUserRecordLogTableSql)) {
-        echo "<p style='color:blue;'>Table `" . USER_RECORD_LOG . "` is ready.</p>";
+        echo "<p style='color:blue;'>Table `" . USER_RECORD_LOG . "` is ready in CMS database.</p>";
     } else {
-        echo "<p style='color:red;'>Error creating `" . USER_RECORD_LOG . "`: " . $conn->error . "</p>";
+        echo "<p style='color:red;'>Error creating `" . USER_RECORD_LOG . "` in CMS database: " . $conn->error . "</p>";
     }
 
-    if (!migrationColumnExists($conn, $db_fin, USER_RECORD_LOG, 'customer_id')) {
-        if ($conn->query("ALTER TABLE `" . USER_RECORD_LOG . "` ADD COLUMN `customer_id` INT DEFAULT NULL AFTER `id`")) {
-            echo "<p style='color:blue;'>Added column `customer_id` to `" . USER_RECORD_LOG . "`.</p>";
+    $userRecordLogCustomerColumns = array(
+        'shopee_cust_id' => 'id',
+        'facebook_cust_id' => 'shopee_cust_id',
+        'website_cust_id' => 'facebook_cust_id',
+        'lazada_cust_id' => 'website_cust_id',
+        'urbanism_member_id' => 'lazada_cust_id',
+    );
+    foreach ($userRecordLogCustomerColumns as $customerColumn => $afterColumn) {
+        if (!migrationColumnExists($conn, $db_cms, USER_RECORD_LOG, $customerColumn)) {
+            if ($conn->query("ALTER TABLE `" . USER_RECORD_LOG . "` ADD COLUMN `" . $customerColumn . "` INT DEFAULT NULL AFTER `" . $afterColumn . "`")) {
+                echo "<p style='color:blue;'>Added column `" . $customerColumn . "` to `" . USER_RECORD_LOG . "` in CMS database.</p>";
+            } else {
+                echo "<p style='color:red;'>Failed adding `" . $customerColumn . "` to `" . USER_RECORD_LOG . "` in CMS database: " . $conn->error . "</p>";
+            }
         } else {
-            echo "<p style='color:red;'>Failed adding `customer_id` to `" . USER_RECORD_LOG . "`: " . $conn->error . "</p>";
+            echo "<p style='color:green;'>Verified column `" . $customerColumn . "` already exists in `" . USER_RECORD_LOG . "` in CMS database.</p>";
         }
-    } else {
-        echo "<p style='color:green;'>Verified column `customer_id` already exists in `" . USER_RECORD_LOG . "`.</p>";
-    }
 
-    if (!migrationIndexExists($conn, $db_fin, USER_RECORD_LOG, 'idx_url_customer_id')) {
-        if ($conn->query("ALTER TABLE `" . USER_RECORD_LOG . "` ADD INDEX `idx_url_customer_id` (`customer_id`)")) {
-            echo "<p style='color:blue;'>Added index `idx_url_customer_id` to `" . USER_RECORD_LOG . "`.</p>";
+        $customerIndex = 'idx_url_' . $customerColumn;
+        if (!migrationIndexExists($conn, $db_cms, USER_RECORD_LOG, $customerIndex)) {
+            if ($conn->query("ALTER TABLE `" . USER_RECORD_LOG . "` ADD INDEX `" . $customerIndex . "` (`" . $customerColumn . "`)")) {
+                echo "<p style='color:blue;'>Added index `" . $customerIndex . "` to `" . USER_RECORD_LOG . "` in CMS database.</p>";
+            } else {
+                echo "<p style='color:red;'>Failed adding index `" . $customerIndex . "` to `" . USER_RECORD_LOG . "` in CMS database: " . $conn->error . "</p>";
+            }
         } else {
-            echo "<p style='color:red;'>Failed adding index `idx_url_customer_id` to `" . USER_RECORD_LOG . "`: " . $conn->error . "</p>";
+            echo "<p style='color:green;'>Verified index `" . $customerIndex . "` already exists in `" . USER_RECORD_LOG . "` in CMS database.</p>";
         }
-    } else {
-        echo "<p style='color:green;'>Verified index `idx_url_customer_id` already exists in `" . USER_RECORD_LOG . "`.</p>";
     }
 
-    echo "<p style='color:green;'>Verified `" . USER_RECORD_LOG . "` uses direct `customer_id` mapping for " . count($existingShopeeCustomerIds) . " Shopee customer record(s) in the financial database.</p>";
+    if (migrationColumnExists($conn, $db_cms, USER_RECORD_LOG, 'customer_id') && migrationColumnExists($conn, $db_cms, USER_RECORD_LOG, 'shopee_cust_id')) {
+        if ($conn->query("UPDATE `" . USER_RECORD_LOG . "` SET `shopee_cust_id` = `customer_id` WHERE IFNULL(`shopee_cust_id`,0)=0 AND IFNULL(`customer_id`,0)>0")) {
+            echo "<p style='color:green;'>Verified migrated legacy `customer_id` values into `shopee_cust_id` in `" . USER_RECORD_LOG . "`.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed migrating legacy `customer_id` values into `shopee_cust_id` in `" . USER_RECORD_LOG . "`: " . $conn->error . "</p>";
+        }
+    }
+
+    if (migrationColumnExists($conn, $db_cms, USER_RECORD_LOG, 'cust_id') && migrationColumnExists($conn, $db_cms, USER_RECORD_LOG, 'shopee_cust_id')) {
+        if ($conn->query("UPDATE `" . USER_RECORD_LOG . "` SET `shopee_cust_id` = `cust_id` WHERE IFNULL(`shopee_cust_id`,0)=0 AND IFNULL(`cust_id`,0)>0")) {
+            echo "<p style='color:green;'>Verified migrated legacy `cust_id` values into `shopee_cust_id` in `" . USER_RECORD_LOG . "`.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed migrating legacy `cust_id` values into `shopee_cust_id` in `" . USER_RECORD_LOG . "`: " . $conn->error . "</p>";
+        }
+    }
+
+    if (migrationIndexExists($conn, $db_cms, USER_RECORD_LOG, 'idx_url_cust_id')) {
+        if ($conn->query("ALTER TABLE `" . USER_RECORD_LOG . "` DROP INDEX `idx_url_cust_id`")) {
+            echo "<p style='color:blue;'>Dropped legacy index `idx_url_cust_id` from `" . USER_RECORD_LOG . "` in CMS database.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed dropping legacy index `idx_url_cust_id` from `" . USER_RECORD_LOG . "` in CMS database: " . $conn->error . "</p>";
+        }
+    }
+
+    if (migrationColumnExists($conn, $db_cms, USER_RECORD_LOG, 'cust_id')) {
+        if ($conn->query("ALTER TABLE `" . USER_RECORD_LOG . "` DROP COLUMN `cust_id`")) {
+            echo "<p style='color:blue;'>Dropped legacy column `cust_id` from `" . USER_RECORD_LOG . "` in CMS database.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed dropping legacy column `cust_id` from `" . USER_RECORD_LOG . "` in CMS database: " . $conn->error . "</p>";
+        }
+    }
 } else {
-    echo "<p style='color:red;'>Failed selecting financial database for user record log migration.</p>";
+    echo "<p style='color:red;'>Failed selecting CMS database for user record log migration.</p>";
 }
 
 if ($conn->select_db($db_cms)) {

@@ -61,7 +61,7 @@ $result = getData('*', '', '', WEB_CUST_RCD, $connect);
                         <h2>
                             <?php echo $pageTitle ?>
                         </h2>
-                        <?php if ($result) { ?>
+                        
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
@@ -69,7 +69,7 @@ $result = getData('*', '', '', WEB_CUST_RCD, $connect);
                                         Record </a>
                                 <?php endif; ?>
                             </div>
-                        <?php } ?>
+                        
                     </div>
                 </div>
             </div>

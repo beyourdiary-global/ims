@@ -262,7 +262,7 @@ if (!function_exists('siResolveAttachmentAbsPath')) {
         if (strpos($normalizedPath, $normalizedImgServer . '/') === 0) {
             $candidates[] = $root . '/' . $normalizedPath;
         }
-        if (strpos($normalizedPath, 'attachment/sqlaccount/') === 0 || strpos($normalizedPath, 'finance/stock_in/') === 0) {
+        if (strpos($normalizedPath, 'attachment/') === 0 || strpos($normalizedPath, 'finance/stock_in/') === 0) {
             $candidates[] = $root . '/' . $imgBase . '/' . $normalizedPath;
             $candidates[] = $root . '/' . $normalizedPath;
         }

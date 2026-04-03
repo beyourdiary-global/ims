@@ -225,7 +225,7 @@ $menuList = array(
             array('Lazada Customer', 'mdi mdi-deal-outline', $SITEURL . '/lazada_cust_rcd_table.php', '91'),
             array('Facebook Customer', 'mdi mdi-deal-outline', $SITEURL . '/fb_cust_deals_table.php', '75'),
             array('Website Customer', 'mdi mdi-deal-outline', $SITEURL . '/website_customer_record_table.php', '84'),
-            array('Whatsapp Customer', 'mdi mdi-information-outline', $SITEURL . '/customerInfoTable.php', '38'),
+            array('Whatsapp Customer', 'mdi mdi-deal-outline', $SITEURL . '/customerInfoTable.php', '38'),
             array(
                 'Setting',
                 'mdi mdi-cog',
