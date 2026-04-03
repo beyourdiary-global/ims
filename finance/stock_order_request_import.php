@@ -70,6 +70,37 @@ if ($brandRst) {
     }
 }
 
+$sqlAccountNameMap = array();
+$sqlAccRst = mysqli_query($connect, "SELECT id, name FROM " . SQL_ACC . " WHERE status='A' ORDER BY id ASC");
+if ($sqlAccRst) {
+    while ($sa = mysqli_fetch_assoc($sqlAccRst)) {
+        $sqlAccId = isset($sa['id']) ? (int) $sa['id'] : 0;
+        if ($sqlAccId > 0) {
+            $sqlAccountNameMap[$sqlAccId] = isset($sa['name']) ? (string) $sa['name'] : '';
+        }
+    }
+}
+
+$companySqlAccountFolderMap = array();
+$companyRst = mysqli_query($connect, "SELECT id, sql_account_id FROM " . COMPANY . " WHERE status='A' ORDER BY id ASC");
+if ($companyRst) {
+    while ($co = mysqli_fetch_assoc($companyRst)) {
+        $companyId = isset($co['id']) ? (int) $co['id'] : 0;
+        $sqlAccId = isset($co['sql_account_id']) ? (int) $co['sql_account_id'] : 0;
+        if ($companyId <= 0 || $sqlAccId <= 0 || !isset($sqlAccountNameMap[$sqlAccId])) {
+            continue;
+        }
+
+        $folder = trim((string) $sqlAccountNameMap[$sqlAccId]);
+        $folder = strtolower(preg_replace('/[^a-zA-Z0-9_-]/', '_', $folder));
+        $folder = trim($folder, '_');
+        if ($folder === '') {
+            $folder = 'sqlaccount';
+        }
+        $companySqlAccountFolderMap[$companyId] = $folder;
+    }
+}
+
 $products = array();
 $productNameMap = array();
 $productNameToId = array();
@@ -373,8 +404,8 @@ if (!function_exists('sorImpSaveAttachmentBinary')) {
             $safePage = 'import_page';
         }
 
-        $relDir = 'attachment/sqlaccount/' . date('Y') . '/' . date('m') . '/' . $safePage . '/';
-        $absDir = ROOT . img_server . $relDir;
+        $relDir = 'attachment/sqlaccount/' . substr((string) comYMD, 0, 4) . '/' . substr((string) comYMD, 4, 2) . '/' . $safePage . '/';
+        $absDir = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . ltrim($relDir, '/\\');
         if (!is_dir($absDir)) {
             @mkdir($absDir, 0777, true);
         }
@@ -385,10 +416,38 @@ if (!function_exists('sorImpSaveAttachmentBinary')) {
         $newFile = $safeBase . '_' . date('Ymd_His') . '_' . mt_rand(1000, 9999) . ($ext !== '' ? '.' . $ext : '');
         $absPath = $absDir . $newFile;
         if (@file_put_contents($absPath, $binaryContent) !== false) {
-            return $relDir . $newFile;
+            return sorImpNormalizeAttachmentRelativePath($relDir . $newFile);
         }
 
         return '';
+    }
+}
+
+if (!function_exists('sorImpNormalizeAttachmentRelativePath')) {
+    function sorImpNormalizeAttachmentRelativePath($path)
+    {
+        $path = trim((string) $path);
+        if ($path === '') {
+            return '';
+        }
+
+        $path = str_replace('\\', '/', $path);
+        $path = preg_replace('#^https?://[^/]+/#i', '', $path);
+        $path = preg_replace('#^/?images_server/#i', '', $path);
+        $path = ltrim((string) $path, '/');
+
+        if (stripos($path, 'attachment/') !== 0) {
+            $pos = stripos($path, 'attachment/');
+            if ($pos !== false) {
+                $path = substr($path, $pos);
+            }
+        }
+
+        if (strpos($path, 'attachment/') !== 0) {
+            return '';
+        }
+
+        return $path;
     }
 }
 
@@ -402,6 +461,80 @@ if (!function_exists('sorImpGetPdfTextLines')) {
             if ($line !== '') $out[] = $line;
         }
         return $out;
+    }
+}
+
+if (!function_exists('sorImpResolveSqlAccountFolderByCompany')) {
+    function sorImpResolveSqlAccountFolderByCompany($companyId, $companySqlAccountFolderMap)
+    {
+        $companyId = (int) $companyId;
+        if ($companyId > 0 && isset($companySqlAccountFolderMap[$companyId])) {
+            $folder = trim((string) $companySqlAccountFolderMap[$companyId]);
+            if ($folder !== '') {
+                return $folder;
+            }
+        }
+        return 'sqlaccount';
+    }
+}
+
+if (!function_exists('sorImpRehomeAttachmentByCompany')) {
+    function sorImpRehomeAttachmentByCompany($sourceRelPath, $companyId, $companySqlAccountFolderMap, $pageName)
+    {
+        $sourceRelPath = sorImpNormalizeAttachmentRelativePath($sourceRelPath);
+        if ($sourceRelPath === '') {
+            return '';
+        }
+
+        $sourceAbsPath = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . ltrim($sourceRelPath, '/\\');
+        if (!is_file($sourceAbsPath)) {
+            $sourceAbsPath = ROOT . img_server . ltrim($sourceRelPath, '/\\');
+        }
+        if (!is_file($sourceAbsPath)) {
+            return sorImpNormalizeAttachmentRelativePath($sourceRelPath);
+        }
+
+        $safePage = preg_replace('/[^a-zA-Z0-9_-]/', '_', (string) $pageName);
+        if ($safePage === '') {
+            $safePage = 'import_page';
+        }
+
+        $sqlAccountFolder = sorImpResolveSqlAccountFolderByCompany($companyId, $companySqlAccountFolderMap);
+        $relDir = 'attachment/' . $sqlAccountFolder . '/' . substr((string) comYMD, 0, 4) . '/' . substr((string) comYMD, 4, 2) . '/' . $safePage . '/';
+        $absDir = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . ltrim($relDir, '/\\');
+        if (!is_dir($absDir)) {
+            @mkdir($absDir, 0777, true);
+        }
+        if (!is_dir($absDir)) {
+            return sorImpNormalizeAttachmentRelativePath($sourceRelPath);
+        }
+
+        $sourceBaseName = basename($sourceRelPath);
+        $targetName = $sourceBaseName;
+        $targetAbsPath = $absDir . $targetName;
+        if (is_file($targetAbsPath)) {
+            $ext = strtolower((string) pathinfo($sourceBaseName, PATHINFO_EXTENSION));
+            $base = (string) pathinfo($sourceBaseName, PATHINFO_FILENAME);
+            $targetName = $base . '_' . date('Ymd_His') . '_' . mt_rand(1000, 9999) . ($ext !== '' ? '.' . $ext : '');
+            $targetAbsPath = $absDir . $targetName;
+        }
+
+        $finalRelPath = sorImpNormalizeAttachmentRelativePath($relDir . $targetName);
+        if ($finalRelPath === $sourceRelPath) {
+            return $sourceRelPath;
+        }
+
+        // Move the temp parsed PDF into final path so only one copy remains.
+        if (@rename($sourceAbsPath, $targetAbsPath)) {
+            return $finalRelPath;
+        }
+
+        if (@copy($sourceAbsPath, $targetAbsPath)) {
+            @unlink($sourceAbsPath);
+            return $finalRelPath;
+        }
+
+        return sorImpNormalizeAttachmentRelativePath($sourceRelPath);
     }
 }
 
@@ -774,7 +907,7 @@ if (!function_exists('sorImpSanitizeExtractedName')) {
     {
         $text = trim((string) $text);
         if ($text === '') return '';
-        $text = str_replace(array('*', '+', 'â€¢', 'Â·'), '', $text);
+        $text = str_replace(array('*', '+', "\xE2\x80\xA2", "\xC2\xB7"), '', $text);
         $text = preg_replace('/(?:\s+(?:RM|MYR|SGD|USD))+\s*$/i', '', $text);
         $text = preg_replace('/\s+/', ' ', (string) $text);
         return trim((string) $text);
@@ -1473,8 +1606,8 @@ if (!function_exists('sorImpSaveUploadedImportFile')) {
             $safePage = 'import_page';
         }
 
-        $relDir = 'attachment/sqlaccount/' . date('Y') . '/' . date('m') . '/' . $safePage . '/';
-        $absDir = ROOT . img_server . $relDir;
+        $relDir = 'attachment/sqlaccount/' . substr((string) comYMD, 0, 4) . '/' . substr((string) comYMD, 4, 2) . '/' . $safePage . '/';
+        $absDir = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . ltrim($relDir, '/\\');
         if (!is_dir($absDir)) {
             @mkdir($absDir, 0777, true);
         }
@@ -1485,7 +1618,7 @@ if (!function_exists('sorImpSaveUploadedImportFile')) {
         $newFile = $safeBase . '_' . date('Ymd_His') . ($ext !== '' ? '.' . $ext : '');
         $absPath = $absDir . $newFile;
         if (@copy($tmpName, $absPath)) {
-            return $relDir . $newFile;
+            return sorImpNormalizeAttachmentRelativePath($relDir . $newFile);
         }
         return '';
     }
@@ -1565,7 +1698,6 @@ if ($action === 'parseStockOrderPdf') {
     if (!isset($_FILES['import_file']) || $_FILES['import_file']['error'] !== UPLOAD_ERR_OK) {
         $importErrors[] = 'Please choose a PDF or ZIP file.';
     } else {
-        sorImpSaveUploadedImportFile($_FILES['import_file'], basename(__FILE__, '.php'));
         $sourceFiles = sorImpCollectPdfFiles($_FILES['import_file'], $importErrors, $importWarnings);
         $previewRows = array();
 
@@ -1740,6 +1872,7 @@ if ($action === 'insertStockOrderPdf') {
                     'courier_id' => $courierId,
                     'company_id' => $rowCompanyId,
                     'company_ids' => $companyIds,
+                    'company_counts' => $rowCompanyId > 0 ? array($rowCompanyId => 1) : array(),
                     'invoice_no' => $invoiceNo,
                     'invoice_date' => $invoiceDate,
                     'request_date' => $invoiceDate,
@@ -1760,6 +1893,10 @@ if ($action === 'insertStockOrderPdf') {
 
             if ($rowCompanyId > 0) {
                 $grouped[$groupKey]['company_ids'][$rowCompanyId] = true;
+                if (!isset($grouped[$groupKey]['company_counts'][$rowCompanyId])) {
+                    $grouped[$groupKey]['company_counts'][$rowCompanyId] = 0;
+                }
+                $grouped[$groupKey]['company_counts'][$rowCompanyId]++;
             }
 
             $brandId = (int) $rowBrandId;
@@ -1819,7 +1956,15 @@ if ($action === 'insertStockOrderPdf') {
                     $resolvedBrandIds = array_keys(isset($g['brand_ids']) ? $g['brand_ids'] : array());
                     $mainBrandId = count($resolvedBrandIds) === 1 ? (int) $resolvedBrandIds[0] : 0;
                     $resolvedCompanyIds = array_keys(isset($g['company_ids']) ? $g['company_ids'] : array());
-                    $mainCompanyId = isset($g['company_id']) ? (int) $g['company_id'] : 0;
+                    $mainCompanyId = 0;
+                    $companyCounts = isset($g['company_counts']) && is_array($g['company_counts']) ? $g['company_counts'] : array();
+                    if (!empty($companyCounts)) {
+                        arsort($companyCounts);
+                        $mainCompanyId = (int) array_key_first($companyCounts);
+                    }
+                    if ($mainCompanyId <= 0) {
+                        $mainCompanyId = isset($g['company_id']) ? (int) $g['company_id'] : 0;
+                    }
                     if ($mainCompanyId <= 0 && count($resolvedCompanyIds) > 0) {
                         $mainCompanyId = (int) $resolvedCompanyIds[0];
                     }
@@ -1832,7 +1977,13 @@ if ($action === 'insertStockOrderPdf') {
                     $safeRequestDate = mysqli_real_escape_string($finance_connect, $g['request_date']);
                     $safeCourierId = mysqli_real_escape_string($finance_connect, (string) $g['courier_id']);
                     $safeRemark = mysqli_real_escape_string($finance_connect, 'Imported from PDF: ' . $g['source_file']);
-                    $safeAttachment = mysqli_real_escape_string($finance_connect, isset($g['source_attachment']) ? (string) $g['source_attachment'] : '');
+                    $resolvedAttachment = sorImpRehomeAttachmentByCompany(
+                        isset($g['source_attachment']) ? (string) $g['source_attachment'] : '',
+                        $mainCompanyId,
+                        $companySqlAccountFolderMap,
+                        basename(__FILE__, '.php')
+                    );
+                    $safeAttachment = mysqli_real_escape_string($finance_connect, $resolvedAttachment);
                     $finalTotalPrice = (float) (isset($g['computed_total_price']) ? $g['computed_total_price'] : 0);
                     if ($finalTotalPrice <= 0) {
                         $finalTotalPrice = (float) (isset($g['extracted_total_price']) ? $g['extracted_total_price'] : 0);

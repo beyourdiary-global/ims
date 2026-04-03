@@ -30,16 +30,15 @@ if (isset($_GET['verify_id'])) {
             $updateResult = mysqli_query($finance_connect, $updateSql);
 
             if ($updateResult) {
-                $verifyMessage = "Γ£à Order #$orderId has been successfully verified.";
+                $verifyMessage = "Success: Order #$orderId has been successfully verified.";
             } else {
-                $verifyMessage = "Γ¥î Failed to update order #$orderId.";
+                $verifyMessage = "Error: Failed to update order #$orderId.";
             }
         } else {
-            $verifyMessage = "ΓÜá∩╕�
- Order #$orderId is not in 'OC' status.";
+            $verifyMessage = "Warning: Order #$orderId is not in 'OC' status.";
         }
     } else {
-        $verifyMessage = "Γ¥î Order #$orderId not found.";
+        $verifyMessage = "Error: Order #$orderId not found.";
     }
 }
 
