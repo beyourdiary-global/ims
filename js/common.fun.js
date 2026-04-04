@@ -1066,6 +1066,7 @@ function convertTableActionButtonsForMobile() {
 
 function initMobileActionMenus() {
   var currentHoveredNode = null;
+  var hoverSyncIntervalId = null;
 
   var setHoveredNode = function (node) {
     if (currentHoveredNode === node) {
@@ -1175,6 +1176,10 @@ function initMobileActionMenus() {
 
   var closeAllMenus = function () {
     clearMobileHoverState();
+    if (hoverSyncIntervalId !== null) {
+      window.clearInterval(hoverSyncIntervalId);
+      hoverSyncIntervalId = null;
+    }
     document
       .querySelectorAll("td.btn-container.mobile-action-open")
       .forEach(function (cell) {
@@ -1244,6 +1249,10 @@ function initMobileActionMenus() {
         } else {
           actionCell.classList.add("mobile-action-open-left");
         }
+
+        if (hoverSyncIntervalId === null) {
+          hoverSyncIntervalId = window.setInterval(syncHoverFromCssState, 120);
+        }
       }
       return;
     }
@@ -1255,11 +1264,13 @@ function initMobileActionMenus() {
     closeAllMenus();
   });
 
-  document.addEventListener("mousemove", function (event) {
-    applyMobileHoverFromPoint(event.clientX, event.clientY);
-  });
-
   document.addEventListener("pointermove", function (event) {
+    if (!window.matchMedia("(max-width: 768px)").matches) {
+      return;
+    }
+    if (!document.querySelector("td.btn-container.mobile-action-open")) {
+      return;
+    }
     if (event.pointerType && event.pointerType !== "mouse") {
       return;
     }
@@ -1295,8 +1306,6 @@ function initMobileActionMenus() {
     }
     setHoveredNode(null);
   });
-
-  window.setInterval(syncHoverFromCssState, 120);
 
   window.addEventListener("resize", function () {
     closeAllMenus();

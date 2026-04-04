@@ -510,8 +510,6 @@ if ($urbanismOrderFbLink === '' && $urbanismFormName !== '') {
                                     echo $row['reg_date'];
                                 } else if (isset($umr_date)) {
                                     echo $umr_date;
-                                } else {
-                                    echo 'dd/mm/yyyy'; // Placeholder text
                                 }
                                 ?>" placeholder="YYYY-MM-DD" pattern="\d{4}-\d{2}-\d{2}" <?php if ($act == '')
                                     echo 'disabled' ?>>
@@ -844,14 +842,14 @@ if ($urbanismOrderFbLink === '' && $urbanismFormName !== '') {
                     <?php
                     switch ($act) {
                         case 'I':
-                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" form="FORForm" name="actionBtn" id="actionBtn" value="addRecord">Add Record</button>';
+                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" form="Form" name="actionBtn" id="actionBtn" value="addRecord">Add Record</button>';
                             break;
                         case 'E':
-                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" form="FORForm" name="actionBtn" id="actionBtn" value="updRecord">Edit Record</button>';
+                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" form="Form" name="actionBtn" id="actionBtn" value="updRecord">Edit Record</button>';
                             break;
                     }
                     ?>
-                    <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" form="FORForm" name="actionBtn" id="actionBtn" value="back">Back</button>
+                    <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" form="Form" name="actionBtn" id="actionBtn" value="back">Back</button>
                 </div>
             </div>
         </div>

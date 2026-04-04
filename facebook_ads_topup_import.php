@@ -26,6 +26,20 @@ if (!is_array($pinAccess) || count($pinAccess) === 0 || !isActionAllowed('Import
     exit;
 }
 
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
+    $log = [
+        'log_act' => 'View',
+        'cdate' => $cdate,
+        'ctime' => $ctime,
+        'uid' => USER_ID,
+        'cby' => USER_ID,
+        'act_msg' => USER_NAME . " viewed the page <b>" . $pageTitle . "</b>.",
+        'page' => $pageTitle,
+        'connect' => $connect,
+    ];
+    audit_log($log);
+}
+
 $module = 'fb_ads_topup';
 $redirect_page = $SITEURL . '/common_import.php';
 $facebookRedirectPage = $SITEURL . '/finance/fb_ads_topup_trans_table.php';

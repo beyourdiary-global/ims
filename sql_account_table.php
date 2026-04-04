@@ -91,7 +91,7 @@ if (!$result) {
                     </div>
                 </div>
 
-                <div class="table-scroll-wrap">
+                <div class="table-scroll-wrap mobile-scroll-wrap">
                 <table class="table table-striped" id="table">
                     <thead>
                         <tr>

@@ -32,6 +32,20 @@ if (!isActionAllowed('Import', $pinAccess)) {
     exit;
 }
 
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
+    $log = [
+        'log_act' => 'View',
+        'cdate' => $cdate,
+        'ctime' => $ctime,
+        'uid' => USER_ID,
+        'cby' => USER_ID,
+        'act_msg' => USER_NAME . " viewed the page <b>" . $pageTitle . "</b>.",
+        'page' => $pageTitle,
+        'connect' => $connect,
+    ];
+    audit_log($log);
+}
+
 $warehouses = siLoadWarehouses($connect);
 $products = siLoadProducts($connect);
 $packages = siLoadPackages($connect);

@@ -4,7 +4,6 @@ $pageTitle = "Import Shortcut";
 
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 function getImportCardTitleByPinGroupId($connect, $pinGroupId, $fallbackParentTitle)
 {
@@ -158,6 +157,20 @@ $shortcutCards = array_values(array_filter($shortcutCards, function ($card) {
 if (empty($shortcutCards)) {
     echo '<script>alert("No permission.");location.href = "' . $SITEURL . '/dashboard.php";</script>';
     exit;
+}
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
+    $log = [
+        'log_act' => 'View',
+        'cdate' => $cdate,
+        'ctime' => $ctime,
+        'uid' => USER_ID,
+        'cby' => USER_ID,
+        'act_msg' => USER_NAME . " viewed the page <b>" . $pageTitle . "</b>.",
+        'page' => $pageTitle,
+        'connect' => $connect,
+    ];
+    audit_log($log);
 }
 
 ?>

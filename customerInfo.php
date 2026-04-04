@@ -534,10 +534,6 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                             </div>
                         </fieldset>
 
-                        <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
-                            <?php echo ($act) ? '<button class="btn btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="actionBtn" value="' . $actionBtnValue . '">' . $pageActionTitle . '</button>' : ''; ?>
-                            <button class="btn btn-rounded btn-primary mx-2 mb-2 backBtn" name="actionBtn" id="actionBtn" value="back">Back</button>
-                        </div>
                     </div>
                 </form>
 
@@ -574,6 +570,11 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                         ));
                     }
                     ?>
+
+                <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
+                    <?php echo ($act) ? '<button class="btn btn-rounded btn-primary mx-2 mb-2" form="myForm" name="actionBtn" value="' . $actionBtnValue . '">' . $pageActionTitle . '</button>' : ''; ?>
+                    <button class="btn btn-rounded btn-primary mx-2 mb-2 backBtn" form="myForm" name="actionBtn" value="back">Back</button>
+                </div>
             </div>
         </div>
     </div>
@@ -656,7 +657,11 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                 return true;
             }
 
-            $("#actionBtn").on("click", function(event) {
+            $(document).on("click", "button[name='actionBtn']", function(event) {
+                if ($(this).val() === "back") {
+                    return true;
+                }
+
                 if (!validatePhoneCode()) {
                     event.preventDefault();
                 }
@@ -673,7 +678,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
             });
         });
 
-        $("#actionBtn").click(function() {
+        $(document).on("click", "button[name='actionBtn']", function() {
             var btnValue = $(this).val();
     
             if (btnValue === "back") {

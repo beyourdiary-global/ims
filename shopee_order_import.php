@@ -48,6 +48,20 @@ if (!is_array($pinAccess) || count($pinAccess) === 0 || !isActionAllowed('Import
     exit;
 }
 
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
+    $log = [
+        'log_act' => 'View',
+        'cdate' => $cdate,
+        'ctime' => $ctime,
+        'uid' => USER_ID,
+        'cby' => USER_ID,
+        'act_msg' => USER_NAME . " viewed the page <b>" . $pageTitle . "</b>.",
+        'page' => $pageTitle,
+        'connect' => $connect,
+    ];
+    audit_log($log);
+}
+
 $module = 'shopee_order_req';
 $redirect_page = $SITEURL . '/common_import.php';
 $shopeeOrderRedirectPage = $SITEURL . '/shopee/shopee_processing_order.php';
