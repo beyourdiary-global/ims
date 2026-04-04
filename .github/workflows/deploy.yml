@@ -1,4 +1,4 @@
-name: FTP Deploy CRM FAST04042025
+name: FTP Deploy CRM (Stable)
 
 on:
   push:
@@ -14,14 +14,13 @@ jobs:
   ftp-deploy:
     runs-on: ubuntu-latest
 
+    # 🔐 manual approval per branch
     environment:
       name: ${{ github.ref_name }}
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-        with:
-          fetch-depth: 0
 
       - name: Set branch config
         run: |
@@ -31,63 +30,44 @@ jobs:
           if [[ "$BRANCH" == "main" ]]; then
             echo "FTP_USERNAME=${{ secrets.FTP_USERNAME }}" >> $GITHUB_ENV
             echo "FTP_PASSWORD=${{ secrets.FTP_PASSWORD }}" >> $GITHUB_ENV
-            echo "SERVER_DIR=/production" >> $GITHUB_ENV
+            echo "SERVER_DIR=/production/" >> $GITHUB_ENV
           else
             echo "FTP_USERNAME=${{ secrets.FTP_USERNAME_UAT }}" >> $GITHUB_ENV
             echo "FTP_PASSWORD=${{ secrets.FTP_PASSWORD_UAT }}" >> $GITHUB_ENV
-            echo "SERVER_DIR=/uat" >> $GITHUB_ENV
+            echo "SERVER_DIR=/uat/" >> $GITHUB_ENV
           fi
 
-      - name: Detect changed folders
-        id: changes
-        run: |
-          if [ "${{ github.event.before }}" == "0000000000000000000000000000000000000000" ]; then
-            echo "changed_dirs=." >> $GITHUB_OUTPUT
-            exit 0
-          fi
-
-          CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.sha }})
-          DIRS=$(echo "$CHANGED_FILES" | awk -F/ '{print $1}' | sort -u)
-
-          echo "Changed folders:"
-          echo "$DIRS"
-
-          echo "changed_dirs=$DIRS" >> $GITHUB_OUTPUT
-
-      # 🧪 DRY RUN (TEST)
-      - name: Dry Run Deploy
-        run: |
-          for dir in ${{ steps.changes.outputs.changed_dirs }}
-          do
-            echo "🧪 Testing: $dir"
-
-            if [ -d "$dir" ]; then
-              npx ftp-deploy \
-                --server="${{ secrets.FTP_HOST }}" \
-                --username="${{ env.FTP_USERNAME }}" \
-                --password="${{ env.FTP_PASSWORD }}" \
-                --local-dir="$dir" \
-                --server-dir="${{ env.SERVER_DIR }}/$dir" \
-                --dry-run \
-                --log-level=standard
-            fi
-          done
+      # 🧪 DRY RUN (preview only)
+      - name: Dry Run Deploy (Preview)
+        uses: SamKirkland/FTP-Deploy-Action@4.3.0
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ env.FTP_USERNAME }}
+          password: ${{ env.FTP_PASSWORD }}
+          local-dir: ./
+          server-dir: ${{ env.SERVER_DIR }}
+          state-name: ${{ github.ref_name }}-ftp-state.json
+          dry-run: true
+          log-level: standard
+          exclude: |
+            .git/**
+            .github/**
+            node_modules/**
 
       # 🚀 REAL DEPLOY
-      - name: Deploy changed folders
+      - name: Deploy to Server
         if: success()
-        run: |
-          for dir in ${{ steps.changes.outputs.changed_dirs }}
-          do
-            echo "🚀 Deploying: $dir"
-
-            if [ -d "$dir" ]; then
-              npx ftp-deploy \
-                --server="${{ secrets.FTP_HOST }}" \
-                --username="${{ env.FTP_USERNAME }}" \
-                --password="${{ env.FTP_PASSWORD }}" \
-                --local-dir="$dir" \
-                --server-dir="${{ env.SERVER_DIR }}/$dir" \
-                --exclude=".git/**,.github/**,node_modules/**"
-            fi
-          done
+        uses: SamKirkland/FTP-Deploy-Action@4.3.0
+        with:
+          server: ${{ secrets.FTP_HOST }}
+          username: ${{ env.FTP_USERNAME }}
+          password: ${{ env.FTP_PASSWORD }}
+          local-dir: ./
+          server-dir: ${{ env.SERVER_DIR }}
+          state-name: ${{ github.ref_name }}-ftp-state.json
+          dry-run: false
+          log-level: minimal
+          exclude: |
+            .git/**
+            .github/**
+            node_modules/**
