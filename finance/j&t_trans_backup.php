@@ -20,10 +20,8 @@ $redirect_page = $SITEURL . '/finance/j&t_trans_backup_table.php';
 $redirectLink = ("<script>location.href = '$redirect_page';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
-$img_path = '../' . img_server . 'finance/j&t_trans_backup/';
-if (!file_exists($img_path)) {
-    mkdir($img_path, 0777, true);
-}
+$legacyImgPath = '../' . img_server . 'finance/j&t_trans_backup/';
+$legacyImgUrl = rtrim((string) SITEURL, '/') . '/' . trim((string) img_server, '/\\') . '/finance/j&t_trans_backup/';
 
 $deliveryRows = array(
     array(
@@ -131,6 +129,110 @@ if (!($dataID) && !($act)) {
     alert("Invalid action.");
     window.location.href = "' . $redirect_page . '"; // Redirect to previous page
     </script>';
+}
+
+if (!function_exists('jtBuildAttachmentDirByDate')) {
+    function jtBuildAttachmentDirByDate($dateValue)
+    {
+        $dateValue = trim((string) $dateValue);
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $dateValue)) {
+            $dateValue = date('Y-m-d');
+        }
+
+        return 'attachment/' . substr($dateValue, 0, 4) . '/' . substr($dateValue, 5, 2) . '/j&t_trans_backup_record/';
+    }
+}
+
+if (!function_exists('jtResolveLegacyAttachmentAbsolutePath')) {
+    function jtResolveLegacyAttachmentAbsolutePath($attachmentValue)
+    {
+        $attachmentValue = trim(str_replace('\\', '/', (string) $attachmentValue), '/');
+        if ($attachmentValue === '') {
+            return '';
+        }
+
+        $baseRoot = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR;
+        $candidateList = array();
+        $candidateList[] = $baseRoot . str_replace('/', DIRECTORY_SEPARATOR, $attachmentValue);
+
+        $imgServerPrefix = trim((string) img_server, '/\\');
+        if ($imgServerPrefix !== '') {
+            $candidateList[] = $baseRoot . str_replace('/', DIRECTORY_SEPARATOR, $imgServerPrefix . '/finance/j&t_trans_backup/' . basename($attachmentValue));
+        }
+
+        $legacyPhysicalPath = '../' . trim((string) img_server, '/\\') . '/finance/j&t_trans_backup/' . basename($attachmentValue);
+        $candidateList[] = str_replace('/', DIRECTORY_SEPARATOR, $legacyPhysicalPath);
+
+        foreach ($candidateList as $candidatePath) {
+            if ($candidatePath !== '' && file_exists($candidatePath) && is_file($candidatePath)) {
+                return $candidatePath;
+            }
+        }
+
+        return '';
+    }
+}
+
+if (!function_exists('jtNormalizeAttachmentForStorage')) {
+    function jtNormalizeAttachmentForStorage($attachmentValue, $dateValue, &$errorMessage = '')
+    {
+        $errorMessage = '';
+        $attachmentValue = trim(str_replace('\\', '/', (string) $attachmentValue), '/');
+        if ($attachmentValue === '') {
+            return '';
+        }
+
+        if (strpos($attachmentValue, 'attachment/') === 0) {
+            return $attachmentValue;
+        }
+
+        $sourcePath = jtResolveLegacyAttachmentAbsolutePath($attachmentValue);
+        if ($sourcePath === '') {
+            $errorMessage = 'Attachment file not found. Please upload the attachment again.';
+            return '';
+        }
+
+        $uploadDate = trim((string) $dateValue);
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $uploadDate)) {
+            $uploadDate = date('Y-m-d');
+        }
+
+        $targetRelDir = jtBuildAttachmentDirByDate($uploadDate);
+        $targetAbsDir = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, trim((string) $targetRelDir, '/')) . DIRECTORY_SEPARATOR;
+        if (!is_dir($targetAbsDir)) {
+            @mkdir($targetAbsDir, 0777, true);
+        }
+        if (!is_dir($targetAbsDir)) {
+            $errorMessage = 'Failed to create attachment directory.';
+            return '';
+        }
+
+        $ext = strtolower((string) pathinfo($sourcePath, PATHINFO_EXTENSION));
+        if ($ext === '') {
+            $ext = 'dat';
+        }
+
+        $highestNumber = 0;
+        $files = glob($targetAbsDir . $uploadDate . '_*.' . $ext);
+        if (is_array($files)) {
+            foreach ($files as $file) {
+                $filename = basename((string) $file);
+                if (preg_match('/^' . preg_quote($uploadDate, '/') . '_(\d+)\.' . preg_quote($ext, '/') . '$/', $filename, $matches)) {
+                    $number = (int) $matches[1];
+                    $highestNumber = max($highestNumber, $number);
+                }
+            }
+        }
+
+        $newFileName = $uploadDate . '_' . ($highestNumber + 1) . '.' . $ext;
+        $targetFilePath = $targetAbsDir . $newFileName;
+        if (!@copy($sourcePath, $targetFilePath)) {
+            $errorMessage = 'Failed to move attachment into attachment folder. Please upload the file again.';
+            return '';
+        }
+
+        return $targetRelDir . $newFileName;
+    }
 }
 
 if (post('actionBtn')) {
@@ -259,6 +361,7 @@ if (post('actionBtn')) {
     }
 
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
+    $uploadedNewAttachment = false;
 
     switch ($action) {
         case 'addTransaction':
@@ -271,30 +374,59 @@ if (post('actionBtn')) {
                 $img_ext_lc = strtolower($img_ext);
 
                 if (in_array($img_ext_lc, $allowed_ext)) {
+                    $uploadDate = trim((string) $jt_inv_date);
+                    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $uploadDate)) {
+                        $uploadDate = date('Y-m-d');
+                    }
+
+                    $targetRelDir = jtBuildAttachmentDirByDate($uploadDate);
+                    $targetAbsDir = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, trim((string) $targetRelDir, '/')) . DIRECTORY_SEPARATOR;
+                    if (!is_dir($targetAbsDir)) {
+                        @mkdir($targetAbsDir, 0777, true);
+                    }
+
+                    if (!is_dir($targetAbsDir)) {
+                        $err2 = "Failed to create attachment directory.";
+                        break;
+                    }
+
                     $highestNumber = 0;
-                    $files = glob($img_path . $jt_inv_date . '_' . $img_ext);
+                    $files = glob($targetAbsDir . $uploadDate . '_*.' . $img_ext_lc);
 
                     foreach ($files as $file) {
                         $filename = basename($file);
 
-                        // Adjust the regex to match the new file naming convention
-                        if (preg_match('/' . preg_quote($jt_inv_date . '_', '/') . '_(\d+)\.' . preg_quote($img_ext, '/') . '$/', $filename, $matches)) {
+                        if (preg_match('/^' . preg_quote($uploadDate, '/') . '_(\d+)\.' . preg_quote($img_ext_lc, '/') . '$/', $filename, $matches)) {
                             $number = (int)$matches[1];
                             $highestNumber = max($highestNumber, $number);
                         }
                     }
 
                     $unique_id = $highestNumber + 1;
-                    $new_file_name = $jt_inv_date . '_' . $unique_id . '.' . $img_ext_lc;
+                    $new_file_name = $uploadDate . '_' . $unique_id . '.' . $img_ext_lc;
 
                     // Move the uploaded file
-                    if (move_uploaded_file($jt_file_tmp_name, $img_path . $new_file_name)) {
-                        $jt_attach = $new_file_name; // Update jt_attach with the new filename
+                    if (move_uploaded_file($jt_file_tmp_name, $targetAbsDir . $new_file_name)) {
+                        $jt_attach = $targetRelDir . $new_file_name;
+                        $uploadedNewAttachment = true;
                     } else {
                         $err2 = "Failed to upload the file.";
                     }
                 } else {
                     $err2 = "Only allow PNG, JPG, JPEG, SVG or PDF file";
+                }
+            }
+
+            if (!$uploadedNewAttachment && trim((string) $jt_attach) !== '') {
+                $normalizeErr = '';
+                $normalizedAttachment = jtNormalizeAttachmentForStorage($jt_attach, $jt_inv_date, $normalizeErr);
+                if ($normalizedAttachment === '') {
+                    if ($normalizeErr !== '') {
+                        $attach_err = $normalizeErr;
+                        break;
+                    }
+                } else {
+                    $jt_attach = $normalizedAttachment;
                 }
             }
 
@@ -561,7 +693,7 @@ if (post('actionBtn')) {
                             throw new Exception(mysqli_error($finance_connect));
                         }
 
-                        $deleteItemsSql = "DELETE FROM `" . $itemTable . "` WHERE transaction_id='" . (int) $dataID . "'";
+$deleteItemsSql = "DELETE FROM `" . $itemTable . "` WHERE transaction_id='" . (int) $dataID . "'";
                         if (!mysqli_query($finance_connect, $deleteItemsSql)) {
                             throw new Exception(mysqli_error($finance_connect));
                         }
@@ -652,7 +784,6 @@ if (post('actionBtn')) {
             break;
     }
 }
-
 
 if (post('act') == 'D') {
     $id = post('id');
@@ -807,7 +938,6 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
     </div>
 </div>
 
-
                 <div class="form-group">
                     <div class="row">
                         <div class="col-md-6 mb-3">
@@ -834,9 +964,23 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 $attachmentSrc = '';
 
                                 if (isset($dataExisted) && isset($row['attachment']) && !isset($jt_attach)) {
-                                    $attachmentSrc = ($row['attachment'] == '' || $row['attachment'] == NULL) ? '' : $img_path . $row['attachment'];
+                                    if ($row['attachment'] == '' || $row['attachment'] == NULL) {
+                                        $attachmentSrc = '';
+                                    } else {
+                                        $storedAttachment = trim(str_replace('\\', '/', (string) $row['attachment']), '/');
+                                        if (strpos($storedAttachment, 'attachment/') === 0) {
+                                            $attachmentSrc = rtrim((string) SITEURL, '/') . '/' . $storedAttachment;
+                                        } else {
+                                            $attachmentSrc = $legacyImgUrl . basename($storedAttachment);
+                                        }
+                                    }
                                 } else if (isset($jt_attach)) {
-                                    $attachmentSrc = $img_path . $jt_attach;
+                                    $storedAttachment = trim(str_replace('\\', '/', (string) $jt_attach), '/');
+                                    if (strpos($storedAttachment, 'attachment/') === 0) {
+                                        $attachmentSrc = rtrim((string) SITEURL, '/') . '/' . $storedAttachment;
+                                    } else {
+                                        $attachmentSrc = $legacyImgUrl . basename($storedAttachment);
+                                    }
                                 }
                                 ?>
                                 <img id="jt_attach_preview" name="jt_attach_preview" src="<?php echo $attachmentSrc; ?>" class="img-thumbnail" alt="Attachment Preview">

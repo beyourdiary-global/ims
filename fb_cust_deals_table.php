@@ -61,7 +61,7 @@ $result = getData('*', '', '', FB_CUST_DEALS, $connect);
                         <h2>
                             <?php echo $pageTitle ?>
                         </h2>
-                        <?php if ($result) { ?>
+                        
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
@@ -69,7 +69,7 @@ $result = getData('*', '', '', FB_CUST_DEALS, $connect);
                                         Record </a>
                                 <?php endif; ?>
                             </div>
-                        <?php } ?>
+                        
                     </div>
                 </div>
             </div>
@@ -146,7 +146,7 @@ $result = getData('*', '', '', FB_CUST_DEALS, $connect);
                                 <?php
                                 $urbanismAction = getUrbanismMemberActionData(
                                     $connect,
-                                    isset($row['id']) ? (string) $row['id'] : '',
+                                    '',
                                     isset($row['name']) ? (string) $row['name'] : '',
                                     $deleteRedirectPage,
                                     $pageTitle

@@ -114,14 +114,14 @@ $result = getData('*', 'order_status="OC"', '', SHOPEE_SG_ORDER_REQ, $finance_co
                             <h2>
                             <?php echo $pageTitle ?>
                         </h2>
-                            <?php if ($result) { ?>
+                            
                                 <div class="mt-auto mb-auto">
                                     <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                         <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . " ?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         Request </a>
                                         <?php endif; ?>
                                 </div>
-                                <?php } ?>
+                                
                         </div>
                     </div>
                 </div>

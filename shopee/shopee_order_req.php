@@ -650,6 +650,21 @@ if ($urbanismBadgeSeedName === '' && postSpaceFilter('sor_user') !== '') {
     $urbanismBadgeSeedName = trim((string) postSpaceFilter('sor_user'));
 }
 
+// Some Shopee orders persist buyer as SHOPEE_CUST_INFO.id instead of username.
+// Resolve to buyer_username first so Urbanism member matching is stable.
+if ($urbanismBadgeSeedName !== '' && ctype_digit($urbanismBadgeSeedName)) {
+    $buyerId = (int) $urbanismBadgeSeedName;
+    if ($buyerId > 0) {
+        $buyerRst = getData('buyer_username', "id='" . $buyerId . "'", 'LIMIT 1', SHOPEE_CUST_INFO, $finance_connect);
+        if ($buyerRst && $buyerRst->num_rows > 0) {
+            $buyerRow = $buyerRst->fetch_assoc();
+            if (isset($buyerRow['buyer_username']) && trim((string) $buyerRow['buyer_username']) !== '') {
+                $urbanismBadgeSeedName = trim((string) $buyerRow['buyer_username']);
+            }
+        }
+    }
+}
+
 $urbanismBadgeAction = getUrbanismMemberActionData(
     $connect,
     '',
@@ -694,7 +709,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                             class="btn btn-sm <?= $urbanismBadgeAction['is_member'] ? 'btn-success' : 'btn-outline-secondary' ?> <?= $urbanismBadgeAction['disabled'] ? 'disabled' : '' ?>"
                             href="<?= htmlspecialchars($urbanismBadgeAction['url'], ENT_QUOTES, 'UTF-8') ?>"
                             title="<?= htmlspecialchars($urbanismBadgeAction['title'], ENT_QUOTES, 'UTF-8') ?>"
-                            <?= $urbanismBadgeAction['disabled'] ? 'onclick="return false;" aria-disabled="true"' : '' ?>><i class="fa-solid fa-id-badge"></i></a>
+                            <?= $urbanismBadgeAction['disabled'] ? 'onclick="return false;" aria-disabled="true"' : '' ?>><i class="<?= htmlspecialchars($urbanismBadgeAction['icon_class'], ENT_QUOTES, 'UTF-8') ?>"></i></a>
                     </div>
                   
                 </div>

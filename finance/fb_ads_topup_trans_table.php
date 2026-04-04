@@ -67,17 +67,28 @@ if (!empty($checkboxValues)) {
         
             if (isset($row2['attachment']) && !empty($row2['attachment'])) {
                 $attachmentRelPath = trim(str_replace('\\', '/', (string) $row2['attachment']), '/');
+                $attachmentSourcePath = '';
+
                 if (strpos($attachmentRelPath, '/') !== false) {
-                    $attachmentSourcePath = '../' . img_server . $attachmentRelPath;
+                    if (strpos($attachmentRelPath, 'attachment/') === 0) {
+                        $attachmentSourcePath = '../' . $attachmentRelPath;
+                    } else {
+                        $attachmentSourcePath = '../' . img_server . $attachmentRelPath;
+                    }
                 } else {
                     $attachmentSourcePath = $img_path . $attachmentRelPath;
                 }
-                if (file_exists($attachmentSourcePath)) {
+
+                if ($attachmentSourcePath !== '' && file_exists($attachmentSourcePath)) {
                     if (strpos($attachmentRelPath, '/') !== false) {
-                        $zipRelativePath = $attachmentRelPath;
+                        $pathForZip = ltrim($attachmentRelPath, '/');
+                        if (strpos($pathForZip, 'attachment/') === 0) {
+                            $pathForZip = substr($pathForZip, strlen('attachment/'));
+                        }
+                        $zipRelativePath = 'attachment/' . ltrim($pathForZip, '/');
                     } else {
                         $attachmentCreationDate = strtotime($row2['create_date']);
-                        $zipRelativePath = date('Y', $attachmentCreationDate) . '/' . date('m', $attachmentCreationDate) . '/' . $attachmentRelPath;
+                        $zipRelativePath = 'attachment/' . date('Y', $attachmentCreationDate) . '/' . date('m', $attachmentCreationDate) . '/' . $attachmentRelPath;
                     }
 
                     $attachmentDestPath = $tempAttachDir . $zipRelativePath;

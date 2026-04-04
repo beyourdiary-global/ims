@@ -91,6 +91,7 @@ if (!$result) {
                     </div>
                 </div>
 
+                <div class="table-scroll-wrap">
                 <table class="table table-striped" id="table">
                     <thead>
                         <tr>
@@ -129,6 +130,7 @@ if (!$result) {
                         </tr>
                     </tfoot>
                 </table>
+                </div>
             </div>
         </div>
     </div>

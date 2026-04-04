@@ -22,73 +22,6 @@ $dataID = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addRecord' : 'updRecord';
 
-if (!function_exists('formatAmountRm')) {
-    function formatAmountRm($val)
-    {
-        $num = is_numeric($val) ? (float) $val : 0;
-        return number_format($num, 2, '.', '');
-    }
-}
-
-if (!function_exists('resolvePackageNamesFromCsv')) {
-    function resolvePackageNamesFromCsv($packageCsv, $connect)
-    {
-        $packageCsv = trim((string) $packageCsv);
-        if ($packageCsv === '') {
-            return '';
-        }
-
-        $packageIds = array_filter(array_map('trim', explode(',', $packageCsv)), function ($v) {
-            return $v !== '';
-        });
-
-        // Collect numeric IDs and ensure uniqueness for the batched query
-        $numericIds = array();
-        foreach ($packageIds as $id) {
-            if (ctype_digit((string) $id)) {
-                $numericIds[] = (int) $id;
-            }
-        }
-        $numericIds = array_values(array_unique($numericIds));
-
-        if (empty($numericIds)) {
-            // No valid numeric IDs; mirror previous behavior by returning the original CSV
-            return $packageCsv; 
-        }
-
-        // Build a single batched query to fetch all package names
-        $idList = implode(',', $numericIds);
-        $sql = "SELECT id, name FROM " . PKG . " WHERE id IN (" . $idList . ")";
-        $result = mysqli_query($connect, $sql);
-
-        $idToName = array();
-        if ($result instanceof mysqli_result) {
-            while ($row = $result->fetch_assoc()) {
-                if (isset($row['id'])) {
-                    $idToName[(int) $row['id']] = isset($row['name']) ? $row['name'] : '';
-                }
-            }
-        }
-
-        $names = array();
-        // Preserve the original order (and duplicates) of IDs when building the name list
-        foreach ($packageIds as $id) {
-            if (!ctype_digit((string) $id)) {
-                continue;
-            }
-            $intId = (int) $id;
-            if (isset($idToName[$intId]) && $idToName[$intId] !== '') {
-                $names[] = $idToName[$intId];
-            }
-        }
-
-        if (empty($names)) {
-            return $packageCsv;
-        }
-        return implode(', ', $names);
-    }
-}
-
 $redirect_page = $SITEURL . '/shopee/shopee_cust_info_table.php';
 $redirectLink = ("<script>location.href = '$redirect_page';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
@@ -731,7 +664,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                             $orderId = isset($orderRow['id']) ? (int) $orderRow['id'] : 0;
                                             $orderNo = isset($orderRow['orderID']) ? $orderRow['orderID'] : '';
                                             $orderDate = isset($orderRow['date']) ? $orderRow['date'] : '';
-                                            $orderPackage = resolvePackageNamesFromCsv(isset($orderRow['package']) ? $orderRow['package'] : '', $connect);
+                                            $orderPackage = commonResolvePackageNamesFromCsv(isset($orderRow['package']) ? $orderRow['package'] : '', $connect);
                                             $buyerPayMethod = isset($orderRow['buyer_pay_meth']) ? $orderRow['buyer_pay_meth'] : '';
                                             $orderFees = isset($orderRow['fees']) ? $orderRow['fees'] : '0.00';
                                             $finalAmount = isset($orderRow['final_amt']) ? $orderRow['final_amt'] : '0.00';
@@ -748,8 +681,8 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                                 <td><?= htmlspecialchars((string) $orderDate, ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td><?= htmlspecialchars((string) $orderPackage, ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td><?= htmlspecialchars((string) $buyerPayMethod, ENT_QUOTES, 'UTF-8') ?></td>
-                                                <td><?= formatAmountRm($orderFees) ?></td>
-                                                <td><?= formatAmountRm($finalAmount) ?></td>
+                                                <td><?= commonFormatAmountRm($orderFees) ?></td>
+                                                <td><?= commonFormatAmountRm($finalAmount) ?></td>
                                             </tr>
                                         <?php }
                                     } else { ?>
@@ -761,7 +694,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 <tfoot>
                                     <tr>
                                         <th colspan="7" class="text-end">Sub-Total (RM)</th>
-                                        <th><?= formatAmountRm($sumFinalAmount) ?></th>
+                                        <th><?= commonFormatAmountRm($sumFinalAmount) ?></th>
                                     </tr>
                                 </tfoot>
                             </table>
@@ -777,15 +710,16 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                         $customerLogReturnUrl .= '&act=' . urlencode((string) $act);
                     }
 
-                    $customerLogContext = urlResolveUserRecordLogContext($connect, $finance_connect, array(
+                    $customerLogContext = urlResolveUserRecordLogContext($connect, $connect, array(
                         'customer_id' => (int) $dataID,
+                        'customer_column' => 'shopee_cust_id',
                         'customer_label' => isset($row['buyer_username']) ? $row['buyer_username'] : '',
                         'return_url' => $customerLogReturnUrl,
                         'ajax_url' => $SITEURL . '/user_record_log.php',
                         'customer_only' => true,
                     ));
 
-                    urlRenderUserRecordLogModule($connect, $finance_connect, array(
+                    urlRenderUserRecordLogModule($connect, $connect, array(
                         'table_name' => USER_RECORD_LOG,
                         'context' => $customerLogContext,
                         'section_heading' => 'User Record Log',

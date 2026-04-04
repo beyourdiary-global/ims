@@ -75,6 +75,81 @@ function xssFilter($url)
 	return $url;
 }
 
+if (!function_exists('commonFormatAmountRm')) {
+    function commonFormatAmountRm($val)
+    {
+        $num = is_numeric($val) ? (float) $val : 0;
+        return number_format($num, 2, '.', '');
+    }
+}
+
+if (!function_exists('commonResolvePackageNamesFromCsv')) {
+    function commonResolvePackageNamesFromCsv($packageCsv, $connect)
+    {
+        $packageCsv = trim((string) $packageCsv);
+        if ($packageCsv === '') {
+            return '';
+        }
+
+        $packageIds = array_filter(array_map('trim', explode(',', $packageCsv)), function ($v) {
+            return $v !== '';
+        });
+
+        $numericIds = array();
+        foreach ($packageIds as $id) {
+            if (ctype_digit((string) $id)) {
+                $numericIds[] = (int) $id;
+            }
+        }
+
+        $numericIds = array_values(array_unique($numericIds));
+        if (empty($numericIds)) {
+            return $packageCsv;
+        }
+
+        $sql = "SELECT id, name FROM " . PKG . " WHERE id IN (" . implode(',', $numericIds) . ")";
+        $result = mysqli_query($connect, $sql);
+
+        $idToName = array();
+        if ($result instanceof mysqli_result) {
+            while ($row = $result->fetch_assoc()) {
+                $idToName[(int) $row['id']] = isset($row['name']) ? $row['name'] : '';
+            }
+        }
+
+        $names = array();
+        foreach ($packageIds as $id) {
+            if (!ctype_digit((string) $id)) {
+                continue;
+            }
+            $intId = (int) $id;
+            if (isset($idToName[$intId]) && $idToName[$intId] !== '') {
+                $names[] = $idToName[$intId];
+            }
+        }
+
+        return empty($names) ? $packageCsv : implode(', ', $names);
+    }
+}
+
+if (!function_exists('commonResolvePaymentMethodName')) {
+    function commonResolvePaymentMethodName($payMethodId, $financeConnect)
+    {
+        $payMethodId = trim((string) $payMethodId);
+        if ($payMethodId === '' || !ctype_digit($payMethodId)) {
+            return $payMethodId;
+        }
+
+        $rst = getData('name', "id='" . mysqli_real_escape_string($financeConnect, $payMethodId) . "'", 'LIMIT 1', FIN_PAY_METH, $financeConnect);
+        if ($rst && $rst->num_rows > 0) {
+            $row = $rst->fetch_assoc();
+            return isset($row['name']) ? (string) $row['name'] : $payMethodId;
+        }
+
+        return $payMethodId;
+    }
+}
+
 function redirect($addr, $alert = '')
 {
 	global $siteOrlocalMode;
@@ -1142,46 +1217,76 @@ if (!function_exists('getUrbanismMemberActionData')) {
         if ($connect instanceof mysqli) {
             static $memberCacheById = array();
             static $memberCacheByName = array();
-            
-            if ($seedId !== '') {
-                if (array_key_exists($seedId, $memberCacheById)) {
-                    $memberRow = $memberCacheById[$seedId];
+
+            $normalizedSeedName = strtolower(trim((string) $seedName));
+
+            if ($normalizedSeedName !== '') {
+                if (array_key_exists($normalizedSeedName, $memberCacheByName)) {
+                    $memberRow = $memberCacheByName[$normalizedSeedName];
                 } else {
-                    $safeSeedId = mysqli_real_escape_string($connect, $seedId);
-                    $memberRst = getData('*', "name='" . $safeSeedId . "'", 'LIMIT 1', URBAN_CUST_REG, $connect);
+                    $safeSeedName = mysqli_real_escape_string($connect, $normalizedSeedName);
+                    $memberSql = "SELECT * FROM " . URBAN_CUST_REG . " WHERE LOWER(TRIM(name))='" . $safeSeedName . "' LIMIT 1";
+                    $memberRst = mysqli_query($connect, $memberSql);
+
                     if ($memberRst && $memberRst->num_rows > 0) {
                         $memberRow = $memberRst->fetch_assoc();
                     } else {
                         $memberRow = null;
                     }
-                    $memberCacheById[$seedId] = $memberRow;
-                    if ($memberRow !== null && $seedName !== '') {
-                        $memberCacheByName[$seedName] = $memberRow;
+
+                    $memberCacheByName[$normalizedSeedName] = $memberRow;
+                    if ($memberRow !== null) {
+                        $memberIdKey = isset($memberRow['id']) ? trim((string) $memberRow['id']) : '';
+                        if ($memberIdKey !== '') {
+                            $memberCacheById[$memberIdKey] = $memberRow;
+                        }
+                        if ($seedId !== '') {
+                            $memberCacheById[$seedId] = $memberRow;
+                        }
                     }
                 }
             }
 
-            if ($memberRow === null && $seedName !== '') {
-                if (array_key_exists($seedName, $memberCacheByName)) {
-                    $memberRow = $memberCacheByName[$seedName];
+            if ($memberRow === null && $seedId !== '' && $normalizedSeedName === '') {
+                if (array_key_exists($seedId, $memberCacheById)) {
+                    $memberRow = $memberCacheById[$seedId];
                 } else {
-                    $safeSeedName = mysqli_real_escape_string($connect, $seedName);
-                    $memberRst = getData('*', "name='" . $safeSeedName . "'", 'LIMIT 1', URBAN_CUST_REG, $connect);
+                    $memberRst = null;
+                    if (ctype_digit($seedId)) {
+                        $memberRst = getData('*', "id='" . ((int) $seedId) . "'", 'LIMIT 1', URBAN_CUST_REG, $connect);
+                    }
+
+                    if ($memberRst === null) {
+                        $safeSeedId = mysqli_real_escape_string($connect, strtolower(trim((string) $seedId)));
+                        $memberSql = "SELECT * FROM " . URBAN_CUST_REG . " WHERE LOWER(TRIM(name))='" . $safeSeedId . "' LIMIT 1";
+                        $memberRst = mysqli_query($connect, $memberSql);
+                    }
+
                     if ($memberRst && $memberRst->num_rows > 0) {
                         $memberRow = $memberRst->fetch_assoc();
                     } else {
                         $memberRow = null;
                     }
-                    $memberCacheByName[$seedName] = $memberRow;
-                    if ($memberRow !== null && $seedId !== '') {
-                        $memberCacheById[$seedId] = $memberRow;
+
+                    $memberCacheById[$seedId] = $memberRow;
+                    if ($memberRow !== null) {
+                        $memberIdKey = isset($memberRow['id']) ? trim((string) $memberRow['id']) : '';
+                        if ($memberIdKey !== '') {
+                            $memberCacheById[$memberIdKey] = $memberRow;
+                        }
+                        $memberNameKey = strtolower(trim((string) (isset($memberRow['name']) ? $memberRow['name'] : '')));
+                        if ($memberNameKey !== '') {
+                            $memberCacheByName[$memberNameKey] = $memberRow;
+                        }
                     }
                 }
             }
         }
 
         $isMember = is_array($memberRow);
-        $targetId = $isMember ? (string) ($memberRow['name'] ?? '') : ($seedId !== '' ? $seedId : $seedName);
+        $targetId = $isMember
+            ? trim((string) ($memberRow['id'] ?? ''))
+            : trim((string) ($seedName !== '' ? $seedName : $seedId));
 
         $params = array(
             'id' => $targetId,

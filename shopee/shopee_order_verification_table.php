@@ -64,7 +64,7 @@ $result = getData('*', 'order_status ="OC"', '', SHOPEE_SG_ORDER_REQ, $finance_c
                         <h2>
                             <?php echo $pageTitle ?>
                         </h2>
-                        <?php if ($result) { ?>
+                        
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
@@ -72,7 +72,7 @@ $result = getData('*', 'order_status ="OC"', '', SHOPEE_SG_ORDER_REQ, $finance_c
                                         Request </a>
                                 <?php endif; ?>
                             </div>
-                        <?php } ?>
+                        
                     </div>
                 </div>
             </div>

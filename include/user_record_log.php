@@ -96,6 +96,80 @@ if (!function_exists('urlGetUserRecordLogTableName')) {
     }
 }
 
+if (!function_exists('urlGetUserRecordLogCustomerColumn')) {
+    function urlGetUserRecordLogCustomerColumn($dbConnect, $tableName, $preferredColumn = '')
+    {
+        static $cache = array();
+
+        $allowedColumns = array('cust_id', 'shopee_cust_id', 'facebook_cust_id', 'website_cust_id', 'lazada_cust_id', 'urbanism_member_id');
+        $preferredColumn = trim((string) $preferredColumn);
+        if (!in_array($preferredColumn, $allowedColumns, true)) {
+            $preferredColumn = '';
+        }
+
+        if (!($dbConnect instanceof mysqli)) {
+            return $preferredColumn !== '' ? $preferredColumn : 'shopee_cust_id';
+        }
+
+        $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', (string) $tableName);
+        if ($safeTable === '') {
+            return $preferredColumn !== '' ? $preferredColumn : 'shopee_cust_id';
+        }
+
+        $cacheKey = spl_object_hash($dbConnect) . '|' . $safeTable . '|' . $preferredColumn;
+        if (isset($cache[$cacheKey])) {
+            return $cache[$cacheKey];
+        }
+
+        $candidateColumns = array();
+        if ($preferredColumn !== '') {
+            $candidateColumns[] = $preferredColumn;
+        }
+        foreach ($allowedColumns as $allowedColumn) {
+            if (!in_array($allowedColumn, $candidateColumns, true)) {
+                $candidateColumns[] = $allowedColumn;
+            }
+        }
+
+        foreach ($candidateColumns as $candidateColumn) {
+            $columnRst = mysqli_query($dbConnect, "SHOW COLUMNS FROM `" . $safeTable . "` LIKE '" . $candidateColumn . "'");
+            if ($columnRst && $columnRst->num_rows > 0) {
+                $cache[$cacheKey] = $candidateColumn;
+                return $candidateColumn;
+            }
+        }
+
+        $legacyCustomerIdRst = mysqli_query($dbConnect, "SHOW COLUMNS FROM `" . $safeTable . "` LIKE 'customer_id'");
+        if ($legacyCustomerIdRst && $legacyCustomerIdRst->num_rows > 0) {
+            $cache[$cacheKey] = 'customer_id';
+            return 'customer_id';
+        }
+
+        $legacyCustIdRst = mysqli_query($dbConnect, "SHOW COLUMNS FROM `" . $safeTable . "` LIKE 'cust_id'");
+        if ($legacyCustIdRst && $legacyCustIdRst->num_rows > 0) {
+            $cache[$cacheKey] = 'cust_id';
+            return 'cust_id';
+        }
+
+        $fallbackColumn = $preferredColumn !== '' ? $preferredColumn : 'shopee_cust_id';
+        $cache[$cacheKey] = $fallbackColumn;
+        return $fallbackColumn;
+    }
+}
+
+if (!function_exists('urlSanitizeUserRecordLogCustomerColumn')) {
+    function urlSanitizeUserRecordLogCustomerColumn($column)
+    {
+        $column = trim((string) $column);
+        $allowedColumns = array('cust_id', 'shopee_cust_id', 'facebook_cust_id', 'website_cust_id', 'lazada_cust_id', 'urbanism_member_id');
+        if (in_array($column, $allowedColumns, true)) {
+            return $column;
+        }
+
+        return '';
+    }
+}
+
 if (!function_exists('urlGetUserRecordLogUploadWebDir')) {
     function urlGetUserRecordLogUploadWebDir()
     {
@@ -174,24 +248,33 @@ if (!function_exists('urlResolveUserRecordLogContext')) {
 
         $ajaxUrl = isset($options['ajax_url']) ? trim((string) $options['ajax_url']) : (rtrim((string) $GLOBALS['SITEURL'], '/') . '/user_record_log.php');
         $customerLabel = isset($options['customer_label']) ? trim((string) $options['customer_label']) : '';
+        $customerColumn = '';
+        if (isset($options['customer_column'])) {
+            $customerColumn = urlSanitizeUserRecordLogCustomerColumn($options['customer_column']);
+        } else if (isset($_REQUEST['customer_column'])) {
+            $customerColumn = urlSanitizeUserRecordLogCustomerColumn($_REQUEST['customer_column']);
+        }
         $customerOnly = isset($options['customer_only']) ? (bool) $options['customer_only'] : ($customerId > 0);
         $customerRow = array();
+        $customerLookupConnect = isset($options['customer_lookup_connect']) && ($options['customer_lookup_connect'] instanceof mysqli)
+            ? $options['customer_lookup_connect']
+            : $financeConnect;
 
-        if ($customerId > 0) {
-            $customerRow = urlFetchShopeeCustomerRow($financeConnect, $customerId);
-            if (!empty($customerRow)) {
-                if ($customerLabel === '') {
-                    $customerLabel = urlGetShopeeCustomerLabel($customerRow, $customerId);
-                }
-            } else {
-                $customerId = 0;
-                $customerOnly = false;
+        if ($customerId > 0 && $customerLabel === '' && $customerLookupConnect instanceof mysqli) {
+            $customerRow = urlFetchShopeeCustomerRow($customerLookupConnect, $customerId);
+            if (!empty($customerRow) && $customerLabel === '') {
+                $customerLabel = urlGetShopeeCustomerLabel($customerRow, $customerId);
             }
+        }
+
+        if ($customerId > 0 && $customerLabel === '') {
+            $customerLabel = 'Customer #' . $customerId;
         }
 
         return array(
             'customer_id' => $customerId,
             'customer_label' => $customerLabel,
+            'customer_column' => $customerColumn,
             'customer_row' => $customerRow,
             'return_url' => $returnUrl,
             'ajax_url' => $ajaxUrl,
@@ -203,6 +286,7 @@ if (!function_exists('urlResolveUserRecordLogContext')) {
 if (!function_exists('urlBuildListHtml')) {
     function urlBuildListHtml($connect, $financeConnect, $tblName, $context = array())
     {
+        $dbConnect = $financeConnect instanceof mysqli ? $financeConnect : $connect;
         $uploadWebDir = urlGetUserRecordLogUploadWebDir();
         $keyword = isset($_POST['keyword']) ? trim((string) $_POST['keyword']) : '';
         $filterDate = isset($_POST['filter_date']) ? trim((string) $_POST['filter_date']) : '';
@@ -211,20 +295,24 @@ if (!function_exists('urlBuildListHtml')) {
         $page = isset($_POST['page']) ? (int) $_POST['page'] : 1;
         $pageSize = isset($_POST['page_size']) ? (int) $_POST['page_size'] : 10;
         $customerId = isset($context['customer_id']) ? (int) $context['customer_id'] : 0;
+        $customerColumn = isset($context['customer_column']) ? trim((string) $context['customer_column']) : 'cust_id';
+        if ($customerColumn === '') {
+            $customerColumn = 'cust_id';
+        }
         $customerOnly = !empty($context['customer_only']);
 
         if ($page < 1) {
             $page = 1;
         }
 
-        $allowedPageSizes = array(10, 25, 50, 100);
+        $allowedPageSizes = array(10, 25, 50, 100, -1);
         if (!in_array($pageSize, $allowedPageSizes, true)) {
             $pageSize = 10;
         }
 
         $where = array("status='A'");
         if ($customerId > 0) {
-            $where[] = "customer_id='" . $customerId . "'";
+            $where[] = $customerColumn . "='" . $customerId . "'";
         } else if ($customerOnly) {
             return array(
                 'count' => 0,
@@ -237,13 +325,13 @@ if (!function_exists('urlBuildListHtml')) {
         }
 
         if ($keyword !== '') {
-            $where[] = "content LIKE '%" . urlEsc($financeConnect, $keyword) . "%'";
+            $where[] = "content LIKE '%" . urlEsc($dbConnect, $keyword) . "%'";
         }
         if ($filterDate !== '') {
-            $where[] = "DATE(created_at)='" . urlEsc($financeConnect, $filterDate) . "'";
+            $where[] = "DATE(created_at)='" . urlEsc($dbConnect, $filterDate) . "'";
         }
         if ($filterUser !== '') {
-            $where[] = "created_by='" . urlEsc($financeConnect, $filterUser) . "'";
+            $where[] = "created_by='" . urlEsc($dbConnect, $filterUser) . "'";
         }
         if ($filterAttachment === 'Y') {
             $where[] = "IFNULL(attachment,'') <> ''";
@@ -253,7 +341,7 @@ if (!function_exists('urlBuildListHtml')) {
 
         $whereSql = implode(' AND ', $where);
         $countSql = "SELECT COUNT(*) AS total_count FROM " . $tblName . " WHERE " . $whereSql;
-        $countRst = mysqli_query($financeConnect, $countSql);
+        $countRst = mysqli_query($dbConnect, $countSql);
         $totalCount = 0;
         if ($countRst && $countRst->num_rows > 0) {
             $countRow = $countRst->fetch_assoc();
@@ -271,17 +359,26 @@ if (!function_exists('urlBuildListHtml')) {
             );
         }
 
-        $totalPages = (int) ceil($totalCount / $pageSize);
-        if ($totalPages < 1) {
+        if ($pageSize === -1) {
+            $page = 1;
             $totalPages = 1;
-        }
-        if ($page > $totalPages) {
-            $page = $totalPages;
-        }
+            $offset = 0;
+            $effectivePageSize = $totalCount;
+            $sql = "SELECT * FROM " . $tblName . " WHERE " . $whereSql . " ORDER BY created_at DESC, id DESC";
+        } else {
+            $totalPages = (int) ceil($totalCount / $pageSize);
+            if ($totalPages < 1) {
+                $totalPages = 1;
+            }
+            if ($page > $totalPages) {
+                $page = $totalPages;
+            }
 
-        $offset = ($page - 1) * $pageSize;
-        $sql = "SELECT * FROM " . $tblName . " WHERE " . $whereSql . " ORDER BY created_at DESC, id DESC LIMIT " . $pageSize . " OFFSET " . $offset;
-        $rst = mysqli_query($financeConnect, $sql);
+            $offset = ($page - 1) * $pageSize;
+            $effectivePageSize = $pageSize;
+            $sql = "SELECT * FROM " . $tblName . " WHERE " . $whereSql . " ORDER BY created_at DESC, id DESC LIMIT " . $pageSize . " OFFSET " . $offset;
+        }
+        $rst = mysqli_query($dbConnect, $sql);
         if (!$rst || $rst->num_rows === 0) {
             return array(
                 'count' => 0,
@@ -294,6 +391,7 @@ if (!function_exists('urlBuildListHtml')) {
         }
 
         $html = '';
+        $displayNo = $offset + 1;
         $count = 0;
         while ($row = $rst->fetch_assoc()) {
             $count++;
@@ -319,7 +417,7 @@ if (!function_exists('urlBuildListHtml')) {
 
             $html .= '<div class="card mb-3">';
             $html .= '  <div class="card-header d-flex justify-content-between align-items-center">';
-            $html .= '    <div><strong>#' . $recordId . '</strong> <span class="ms-2 text-muted">Created: ' . htmlspecialchars((string) $createdAt, ENT_QUOTES, 'UTF-8') . ' by ' . htmlspecialchars((string) $createdBy, ENT_QUOTES, 'UTF-8') . '</span></div>';
+            $html .= '    <div><strong>#' . $displayNo . '</strong> <span class="ms-2 text-muted">Created: ' . htmlspecialchars((string) $createdAt, ENT_QUOTES, 'UTF-8') . ' by ' . htmlspecialchars((string) $createdBy, ENT_QUOTES, 'UTF-8') . '</span></div>';
             $html .= '    <div>';
             $html .= '      <button type="button" class="btn btn-sm btn-rounded btn-info text-white url-toggle-btn" data-target="url-body-' . $recordId . '">Collapse/Expand</button> ';
             $html .= $editBtn;
@@ -333,6 +431,8 @@ if (!function_exists('urlBuildListHtml')) {
             $html .= '    <input type="hidden" class="url-edit-attachment" value="' . htmlspecialchars((string) $attachment, ENT_QUOTES, 'UTF-8') . '">';
             $html .= '  </div>';
             $html .= '</div>';
+
+            $displayNo++;
         }
 
         return array(
@@ -340,6 +440,7 @@ if (!function_exists('urlBuildListHtml')) {
             'total' => $totalCount,
             'page' => $page,
             'page_size' => $pageSize,
+            'effective_page_size' => $effectivePageSize,
             'total_pages' => $totalPages,
             'html' => $html,
         );
@@ -351,7 +452,16 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
     {
         $tblName = isset($options['table_name']) ? $options['table_name'] : urlGetUserRecordLogTableName();
         $pageTitle = isset($options['page_title']) ? (string) $options['page_title'] : 'User Record Log';
+        $dbConnect = $connect instanceof mysqli ? $connect : $financeConnect;
+        $requestedCustomerColumn = '';
+        if (isset($options['customer_column'])) {
+            $requestedCustomerColumn = urlSanitizeUserRecordLogCustomerColumn($options['customer_column']);
+        } else if (isset($_REQUEST['customer_column'])) {
+            $requestedCustomerColumn = urlSanitizeUserRecordLogCustomerColumn($_REQUEST['customer_column']);
+        }
+        $customerColumn = urlGetUserRecordLogCustomerColumn($dbConnect, $tblName, $requestedCustomerColumn);
         $context = urlResolveUserRecordLogContext($connect, $financeConnect, $options);
+        $context['customer_column'] = $customerColumn;
         $uploadMeta = urlEnsureUserRecordLogUploadDirectory();
         $uploadDir = $uploadMeta['upload_dir'];
         $urlAction = '';
@@ -369,13 +479,14 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
         }
 
         if ($urlAction === 'list') {
-            $payload = urlBuildListHtml($connect, $financeConnect, $tblName, $context);
+            $payload = urlBuildListHtml($connect, $dbConnect, $tblName, $context);
             urlJsonResponse(array(
                 'ok' => 1,
                 'count' => isset($payload['count']) ? (int) $payload['count'] : 0,
                 'total' => isset($payload['total']) ? (int) $payload['total'] : 0,
                 'page' => isset($payload['page']) ? (int) $payload['page'] : 1,
                 'page_size' => isset($payload['page_size']) ? (int) $payload['page_size'] : 10,
+                'effective_page_size' => isset($payload['effective_page_size']) ? (int) $payload['effective_page_size'] : 10,
                 'total_pages' => isset($payload['total_pages']) ? (int) $payload['total_pages'] : 1,
                 'html' => isset($payload['html']) ? $payload['html'] : ''
             ));
@@ -461,7 +572,7 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
         }
 
         if ($recordId > 0) {
-            $currentRst = getData('*', "id='" . $recordId . "' AND status='A'", 'LIMIT 1', $tblName, $financeConnect);
+            $currentRst = getData('*', "id='" . $recordId . "' AND status='A'", 'LIMIT 1', $tblName, $dbConnect);
             if (!$currentRst || $currentRst->num_rows === 0) {
                 if ($urlIsFallback) {
                     urlFallbackResponse('Record not found.', false, $context['return_url']);
@@ -470,7 +581,7 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
             }
 
             $currentRow = $currentRst->fetch_assoc();
-            $currentCustomerId = isset($currentRow['customer_id']) ? (int) $currentRow['customer_id'] : 0;
+            $currentCustomerId = isset($currentRow[$customerColumn]) ? (int) $currentRow[$customerColumn] : 0;
             if (!empty($context['customer_only']) && (int) $context['customer_id'] !== $currentCustomerId) {
                 if ($urlIsFallback) {
                     urlFallbackResponse('Record not found.', false, $context['return_url']);
@@ -485,12 +596,12 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
             }
 
             $sql = "UPDATE " . $tblName . " SET
-                content='" . urlEsc($financeConnect, $content) . "',
-                attachment='" . urlEsc($financeConnect, $attachmentName) . "',
-                updated_by='" . urlEsc($financeConnect, USER_ID) . "',
+                content='" . urlEsc($dbConnect, $content) . "',
+                attachment='" . urlEsc($dbConnect, $attachmentName) . "',
+                updated_by='" . urlEsc($dbConnect, USER_ID) . "',
                 updated_at=NOW()
                 WHERE id='" . $recordId . "'";
-            $ok = mysqli_query($financeConnect, $sql);
+            $ok = mysqli_query($dbConnect, $sql);
 
             $editFields = array();
             $editOld = array();
@@ -508,6 +619,12 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
                 $editNew[] = $attachmentName;
             }
 
+            $customerAuditValue = $currentCustomerId > 0 ? (string) $currentCustomerId : 'Empty Value';
+            $baseEditActMsg = function_exists('actMsgLog')
+                ? actMsgLog($recordId, $editFields, '', $editOld, $editNew, $tblName, 'Edit', (!empty($ok) ? '' : mysqli_error($dbConnect)))
+                : (USER_NAME . ' edited User Record Log [ID=' . $recordId . ']');
+            $editActMsg = rtrim($baseEditActMsg) . ' [' . $customerColumn . ' : ' . $customerAuditValue . ']';
+
             $log = array(
                 'log_act' => 'Edit',
                 'cdate' => $GLOBALS['cdate'],
@@ -519,9 +636,7 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
                 'oldval' => implodeWithComma($editOld),
                 'changes' => implodeWithComma($editNew),
                 'newval' => '',
-                'act_msg' => function_exists('actMsgLog')
-                    ? actMsgLog($recordId, $editFields, '', $editOld, $editNew, $tblName, 'Edit', (!empty($ok) ? '' : mysqli_error($financeConnect)))
-                    : (USER_NAME . ' edited User Record Log [ID=' . $recordId . ']'),
+                'act_msg' => $editActMsg,
                 'page' => $pageTitle,
                 'connect' => $connect,
             );
@@ -546,7 +661,7 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
         }
 
         $sql = "INSERT INTO " . $tblName . " (
-                customer_id,
+        " . $customerColumn . ",
                 content,
                 attachment,
                 created_by,
@@ -556,18 +671,23 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
                 status
             ) VALUES (
                 " . $customerIdSql . ",
-                '" . urlEsc($financeConnect, $content) . "',
-                '" . urlEsc($financeConnect, $attachmentName) . "',
-                '" . urlEsc($financeConnect, USER_ID) . "',
+                '" . urlEsc($dbConnect, $content) . "',
+                '" . urlEsc($dbConnect, $attachmentName) . "',
+                '" . urlEsc($dbConnect, USER_ID) . "',
                 NOW(),
-                '" . urlEsc($financeConnect, USER_ID) . "',
+                '" . urlEsc($dbConnect, USER_ID) . "',
                 NOW(),
                 'A'
             )";
-        $ok = mysqli_query($financeConnect, $sql);
-        $newId = (int) $financeConnect->insert_id;
+        $ok = mysqli_query($dbConnect, $sql);
+        $newId = (int) $dbConnect->insert_id;
         $addFields = array('content', 'attachment');
         $addNew = array($content, $attachmentName);
+        $customerAuditValue = (int) $context['customer_id'] > 0 ? (string) ((int) $context['customer_id']) : 'Empty Value';
+        $baseAddActMsg = function_exists('actMsgLog')
+            ? actMsgLog($newId, $addFields, $addNew, '', '', $tblName, 'Add', (!empty($ok) ? '' : mysqli_error($dbConnect)))
+            : (USER_NAME . ' added User Record Log [ID=' . $newId . ']');
+        $addActMsg = rtrim($baseAddActMsg) . ' [' . $customerColumn . ' : ' . $customerAuditValue . ']';
 
         $log = array(
             'log_act' => 'Add',
@@ -580,9 +700,7 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
             'oldval' => '',
             'changes' => '',
             'newval' => implodeWithComma($addNew),
-            'act_msg' => function_exists('actMsgLog')
-                ? actMsgLog($newId, $addFields, $addNew, '', '', $tblName, 'Add', (!empty($ok) ? '' : mysqli_error($financeConnect)))
-                : (USER_NAME . ' added User Record Log [ID=' . $newId . ']'),
+            'act_msg' => $addActMsg,
             'page' => $pageTitle,
             'connect' => $connect,
         );
@@ -606,16 +724,26 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
     function urlRenderUserRecordLogModule($connect, $financeConnect, $options = array())
     {
         $tblName = isset($options['table_name']) ? $options['table_name'] : urlGetUserRecordLogTableName();
+        $dbConnect = $connect instanceof mysqli ? $connect : $financeConnect;
+        $requestedCustomerColumn = '';
+        if (isset($options['customer_column'])) {
+            $requestedCustomerColumn = urlSanitizeUserRecordLogCustomerColumn($options['customer_column']);
+        } else if (isset($options['context']) && is_array($options['context']) && isset($options['context']['customer_column'])) {
+            $requestedCustomerColumn = urlSanitizeUserRecordLogCustomerColumn($options['context']['customer_column']);
+        }
+        $customerColumn = urlGetUserRecordLogCustomerColumn($dbConnect, $tblName, $requestedCustomerColumn);
         $context = isset($options['context']) && is_array($options['context'])
             ? $options['context']
             : urlResolveUserRecordLogContext($connect, $financeConnect, $options);
+        $context['customer_column'] = $customerColumn;
         $sectionHeading = isset($options['section_heading']) ? (string) $options['section_heading'] : '';
         $showScopeNote = !isset($options['show_scope_note']) || (bool) $options['show_scope_note'];
         $pathReturn = isset($context['return_url']) ? (string) $context['return_url'] : '';
-        $initialList = urlBuildListHtml($connect, $financeConnect, $tblName, $context);
+        $initialList = urlBuildListHtml($connect, $dbConnect, $tblName, $context);
         $config = array(
             'ajaxUrl' => isset($context['ajax_url']) ? (string) $context['ajax_url'] : (rtrim((string) $GLOBALS['SITEURL'], '/') . '/user_record_log.php'),
             'customerId' => isset($context['customer_id']) ? (int) $context['customer_id'] : 0,
+            'customerColumn' => isset($context['customer_column']) ? (string) $context['customer_column'] : '',
             'pathReturn' => $pathReturn,
             'confirmationPageName' => 'User Record Log',
         );
@@ -642,6 +770,7 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                         <input type="hidden" name="record_id" id="url_record_id" value="0">
                         <input type="hidden" name="existing_attachment" id="url_existing_attachment" value="">
                         <input type="hidden" name="customer_id" value="<?php echo isset($context['customer_id']) ? (int) $context['customer_id'] : 0; ?>">
+                        <input type="hidden" name="customer_column" value="<?php echo htmlspecialchars(isset($context['customer_column']) ? (string) $context['customer_column'] : '', ENT_QUOTES, 'UTF-8'); ?>">
                         <input type="hidden" name="return_url" value="<?php echo htmlspecialchars($pathReturn, ENT_QUOTES, 'UTF-8'); ?>">
 
                         <div class="mb-3">
@@ -715,6 +844,7 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                             <option value="25">25</option>
                             <option value="50">50</option>
                             <option value="100">100</option>
+                            <option value="-1">All</option>
                         </select>
                         entries
                     </label>

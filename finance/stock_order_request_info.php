@@ -456,7 +456,9 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
                 <div class="row">
                     <div class="col-12 d-flex justify-content-between flex-wrap align-items-center gap-2">
                         <h2><?= $pageTitle ?></h2>
-                        <a class="btn btn-sm btn-rounded btn-primary" href="<?= $redirectPage ?>">Back To Table</a>
+                        <form method="get" action="<?= $redirectPage ?>" class="m-0">
+                            <button class="btn btn-sm btn-rounded btn-primary" type="submit" id="actionBtn">Back To Table</button>
+                        </form>
                     </div>
                 </div>
             </div>

@@ -102,6 +102,7 @@ $result = getData('*', '', '', $tblName, $connect);
                 <?php if (!$result) {
                     echo '<div class="text-center"><h4>No Result!</h4></div>';
                 } else { ?>
+                    <div class="table-scroll-wrap">
                     <table class="table table-striped" id="table">
                         <thead>
                             <tr>
@@ -143,7 +144,8 @@ $result = getData('*', '', '', $tblName, $connect);
                                 <th scope="col">Name</th>
                             </tr>
                         </tfoot>
-                    </table><?php } ?>
+                    </table>
+                    </div><?php } ?>
             </div>
         </div>
     </div>
