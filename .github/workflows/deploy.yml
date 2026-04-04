@@ -30,11 +30,11 @@ jobs:
           if [[ "$BRANCH" == "main" ]]; then
             echo "FTP_USERNAME=${{ secrets.FTP_USERNAME }}" >> $GITHUB_ENV
             echo "FTP_PASSWORD=${{ secrets.FTP_PASSWORD }}" >> $GITHUB_ENV
-            echo "SERVER_DIR=/production/" >> $GITHUB_ENV
+            echo "SERVER_DIR=/" >> $GITHUB_ENV
           else
             echo "FTP_USERNAME=${{ secrets.FTP_USERNAME_UAT }}" >> $GITHUB_ENV
             echo "FTP_PASSWORD=${{ secrets.FTP_PASSWORD_UAT }}" >> $GITHUB_ENV
-            echo "SERVER_DIR=/uat/" >> $GITHUB_ENV
+            echo "SERVER_DIR=/" >> $GITHUB_ENV
           fi
 
       # 🧪 DRY RUN (preview only)
