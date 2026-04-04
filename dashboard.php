@@ -1,10 +1,9 @@
 <?php
 $pageTitle = 'Dashboard';
 include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
 $currentPagePin = 7;
-
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include 'checkCurrentPagePin.php';
 include 'include/dashboardPanel.php';
 
 
