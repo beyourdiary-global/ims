@@ -168,7 +168,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
         'ctime' => $ctime,
         'uid' => USER_ID,
         'cby' => USER_ID,
-        'act_msg' => $safeAuditUserName . " viewed the page " . $safeAuditPageTitle . ".",
+        'act_msg' => $safeAuditUserName . " viewed the page <b>" . $safeAuditPageTitle . "</b>.",
         'page' => $pageTitle,
         'connect' => $connect,
     ];

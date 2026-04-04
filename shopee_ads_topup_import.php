@@ -25,7 +25,6 @@ if (!is_array($pinAccess) || count($pinAccess) === 0 || !isActionAllowed('Import
     echo '<script>alert("No permission.");location.href = "' . $SITEURL . '/dashboard.php";</script>';
     exit;
 }
-
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
     $safeAuditUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
     $safeAuditPageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
@@ -35,7 +34,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
         'ctime' => $ctime,
         'uid' => USER_ID,
         'cby' => USER_ID,
-        'act_msg' => $safeAuditUserName . " viewed the page " . $safeAuditPageTitle . ".",
+        'act_msg' => $safeAuditUserName . " viewed the page <b>" . $safeAuditPageTitle . "</b>.",
         'page' => $pageTitle,
         'connect' => $connect,
     ];
