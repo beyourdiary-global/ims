@@ -27,13 +27,15 @@ if (!is_array($pinAccess) || count($pinAccess) === 0 || !isActionAllowed('Import
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
+    $safeAuditUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
+    $safeAuditPageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
     $log = [
         'log_act' => 'View',
         'cdate' => $cdate,
         'ctime' => $ctime,
         'uid' => USER_ID,
         'cby' => USER_ID,
-        'act_msg' => USER_NAME . " viewed the page <b>" . $pageTitle . "</b>.",
+        'act_msg' => $safeAuditUserName . " viewed the page " . $safeAuditPageTitle . ".",
         'page' => $pageTitle,
         'connect' => $connect,
     ];
