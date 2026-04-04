@@ -44,7 +44,20 @@ if (!($dataID) && !($act)) {
 if ($dataID && isset($_GET['open_order_id'])) {
     $openOrderId = (int) $_GET['open_order_id'];
     if ($openOrderId > 0) {
-        $orderRst = getData('id,name,fb_link', "id='" . $openOrderId . "'", 'LIMIT 1', FB_ORDER_REQ, $finance_connect);
+        $customerName = isset($row['name']) ? trim((string) $row['name']) : '';
+        $customerFbLink = isset($row['fb_link']) ? trim((string) $row['fb_link']) : '';
+
+        $orderWhere = "id='" . $openOrderId . "' AND status='A'";
+        if ($customerName !== '') {
+            $orderWhere .= " AND name='" . mysqli_real_escape_string($finance_connect, $customerName) . "'";
+            if ($customerFbLink !== '') {
+                $orderWhere .= " AND fb_link='" . mysqli_real_escape_string($finance_connect, $customerFbLink) . "'";
+            }
+        } else {
+            $orderWhere .= " AND 1=0";
+        }
+
+        $orderRst = getData('id,name,fb_link', $orderWhere, 'LIMIT 1', FB_ORDER_REQ, $finance_connect);
         if ($orderRst && $orderRst->num_rows > 0) {
             $orderRow = $orderRst->fetch_assoc();
             $orderNo = '#'. $openOrderId;
@@ -64,9 +77,10 @@ if ($dataID && isset($_GET['open_order_id'])) {
                 'connect' => $connect,
             ];
             audit_log($log);
+
+            echo "<script>location.href='" . $SITEURL . "/finance/fb_order_req.php?id=" . $openOrderId . "&act=E';</script>";
+            exit;
         }
-        echo "<script>location.href='" . $SITEURL . "/finance/fb_order_req.php?id=" . $openOrderId . "&act=E';</script>";
-        exit;
     }
 }
 
@@ -829,12 +843,25 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                         <tbody>
                                             <?php if (!empty($orderRows)) {
                                                 $orderSN = 1;
+                                                $packageNameCache = [];
+                                                $paymentMethodNameCache = [];
                                                 foreach ($orderRows as $orderRow) {
                                                     $orderId = isset($orderRow['id']) ? (int) $orderRow['id'] : 0;
                                                     $orderNo = 'FB-' . $orderId;
                                                     $orderDate = isset($orderRow['create_date']) ? $orderRow['create_date'] : '';
-                                                    $orderPackage = commonResolvePackageNamesFromCsv(isset($orderRow['package']) ? $orderRow['package'] : '', $connect);
-                                                    $buyerPayMethod = commonResolvePaymentMethodName(isset($orderRow['pay_method']) ? $orderRow['pay_method'] : '', $finance_connect);
+                                                    
+                                                    $packageCsv = isset($orderRow['package']) ? $orderRow['package'] : '';
+                                                    if (!array_key_exists($packageCsv, $packageNameCache)) {
+                                                        $packageNameCache[$packageCsv] = commonResolvePackageNamesFromCsv($packageCsv, $connect);
+                                                    }
+                                                    $orderPackage = $packageNameCache[$packageCsv];
+                                                    
+                                                    $payMethodKey = isset($orderRow['pay_method']) ? $orderRow['pay_method'] : '';
+                                                    if (!array_key_exists($payMethodKey, $paymentMethodNameCache)) {
+                                                        $paymentMethodNameCache[$payMethodKey] = commonResolvePaymentMethodName($payMethodKey, $finance_connect);
+                                                    }
+                                                    $buyerPayMethod = $paymentMethodNameCache[$payMethodKey];
+                                                    
                                                     $orderFees = '0.00';
                                                     $finalAmount = isset($orderRow['price']) ? $orderRow['price'] : '0.00';
                                                     ?>
@@ -871,20 +898,6 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                             </div>
                             <?php } ?>
 
-                            <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
-                                <?php
-                            switch ($act) {
-                                case 'I':
-                                    echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="addRecord">Add Record</button>';
-                                    break;
-                                case 'E':
-                                    echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="updRecord">Edit Record</button>';
-                                    break;
-                            }
-                            ?>
-                            <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn"
-                                id="actionBtn" value="back">Back</button>
-                        </div>
                 </form>
 
                 <?php
@@ -911,6 +924,20 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                     ));
                 }
                 ?>
+
+                <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
+                    <?php
+                    switch ($act) {
+                        case 'I':
+                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" form="FORForm" name="actionBtn" id="actionBtn" value="addRecord">Add Record</button>';
+                            break;
+                        case 'E':
+                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" form="FORForm" name="actionBtn" id="actionBtn" value="updRecord">Edit Record</button>';
+                            break;
+                    }
+                    ?>
+                    <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" form="FORForm" name="actionBtn" id="actionBtn" value="back">Back</button>
+                </div>
             </div>
         </div>
     </div>

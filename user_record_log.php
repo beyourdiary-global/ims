@@ -7,7 +7,7 @@ if (isset($_REQUEST['customer_column'])) {
     $requestedCustomerColumn = trim((string) $_REQUEST['customer_column']);
 }
 
-$allowedCustomerColumns = array('shopee_cust_id', 'facebook_cust_id', 'website_cust_id', 'lazada_cust_id', 'urbanism_member_id');
+$allowedCustomerColumns = array('cust_id', 'shopee_cust_id', 'facebook_cust_id', 'website_cust_id', 'lazada_cust_id', 'urbanism_member_id');
 if (!in_array($requestedCustomerColumn, $allowedCustomerColumns, true)) {
     $requestedCustomerColumn = '';
 }

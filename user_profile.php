@@ -437,7 +437,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
         })();
 
         <?php if ($_showProfileConfirmModal) { ?>
-        confirmationDialog("", "", "<?= addslashes((string) $pageTitle) ?>", "", "<?= addslashes((string) ($SITEURL . '/user_profile.php')) ?>", "<?= addslashes((string) $_profileConfirmAction) ?>");
+        confirmationDialog("", "", <?= json_encode((string) $pageTitle) ?>, "", <?= json_encode((string) ($SITEURL . '/user_profile.php')) ?>, <?= json_encode((string) $_profileConfirmAction) ?>);
         <?php } ?>
     </script>
 </body>

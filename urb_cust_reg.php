@@ -128,7 +128,17 @@ if ($urbanismSeedFbLink === '' && $urbanismSeedName !== '') {
 if ($dataID && isset($_GET['open_order_id'])) {
     $openOrderId = (int) $_GET['open_order_id'];
     if ($openOrderId > 0) {
-        $orderRst = getData('id,name,fb_link', "id='" . $openOrderId . "'", 'LIMIT 1', FB_ORDER_REQ, $finance_connect);
+        $orderWhere = "id='" . $openOrderId . "' AND status='A'";
+        if ($urbanismSeedName !== '') {
+            $orderWhere .= " AND name='" . mysqli_real_escape_string($finance_connect, $urbanismSeedName) . "'";
+            if ($urbanismSeedFbLink !== '') {
+                $orderWhere .= " AND fb_link='" . mysqli_real_escape_string($finance_connect, $urbanismSeedFbLink) . "'";
+            }
+        } else {
+            $orderWhere .= " AND 1=0";
+        }
+
+        $orderRst = getData('id,name,fb_link', $orderWhere, 'LIMIT 1', FB_ORDER_REQ, $finance_connect);
         if ($orderRst && $orderRst->num_rows > 0) {
             $orderRow = $orderRst->fetch_assoc();
             $orderNo = '#'. $openOrderId;
@@ -148,9 +158,10 @@ if ($dataID && isset($_GET['open_order_id'])) {
                 'connect' => $connect,
             ];
             audit_log($log);
+
+            echo "<script>location.href='" . $SITEURL . "/finance/fb_order_req.php?id=" . $openOrderId . "&act=E';</script>";
+            exit;
         }
-        echo "<script>location.href='" . $SITEURL . "/finance/fb_order_req.php?id=" . $openOrderId . "&act=E';</script>";
-        exit;
     }
 }
 
@@ -267,8 +278,22 @@ if (post('actionBtn')) {
                 try {
                     // take old value
                     $escapedDataID = mysqli_real_escape_string($connect, (string) $dataID);
-                    $rst = getData('*', "name = '$escapedDataID'", 'LIMIT 1', $reg_tblName, $connect);
+                    $currentWhere = '';
+                    if (ctype_digit((string) $dataID)) {
+                        $currentWhere = "id='" . ((int) $dataID) . "'";
+                    } else {
+                        $currentWhere = "name='" . $escapedDataID . "'";
+                    }
+
+                    $rst = getData('*', $currentWhere, 'LIMIT 1', $reg_tblName, $connect);
+                    if (!$rst || $rst->num_rows === 0) {
+                        throw new Exception('Urbanism member record not found.');
+                    }
                     $row = $rst->fetch_assoc();
+                    $currentRowId = isset($row['id']) ? (int) $row['id'] : 0;
+                    if ($currentRowId <= 0) {
+                        throw new Exception('Urbanism member record id is invalid.');
+                    }
 
                     // check value
                     if ($row['name'] != $umr_name) {
@@ -307,7 +332,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
-                        $query = "UPDATE " . $reg_tblName . " SET name = '$umr_name', ic = '$umr_ic', address = '$umr_add', reg_date = '$umr_date', attachment = '$umr_attach', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE name = '$escapedDataID'";
+                        $query = "UPDATE " . $reg_tblName . " SET name = '$umr_name', ic = '$umr_ic', address = '$umr_add', reg_date = '$umr_date', attachment = '$umr_attach', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id='" . $currentRowId . "'";
                         $returnData = mysqli_query($connect, $query);
 } else {
                         $act = 'NC';
@@ -781,20 +806,6 @@ if ($urbanismOrderFbLink === '' && $urbanismFormName !== '') {
                     </div>
                     <?php } ?>
 
-                    <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
-                        <?php
-                        switch ($act) {
-                            case 'I':
-                                echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="addRecord">Add Record</button>';
-                                break;
-                            case 'E':
-                                echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="updRecord">Edit Record</button>';
-                                break;
-                        }
-                        ?>
-                        <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn"
-                            id="actionBtn" value="back">Back</button>
-                    </div>
                 </form>
 
                 <?php
@@ -828,6 +839,20 @@ if ($urbanismOrderFbLink === '' && $urbanismFormName !== '') {
                     ));
                 }
                 ?>
+
+                <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
+                    <?php
+                    switch ($act) {
+                        case 'I':
+                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" form="FORForm" name="actionBtn" id="actionBtn" value="addRecord">Add Record</button>';
+                            break;
+                        case 'E':
+                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" form="FORForm" name="actionBtn" id="actionBtn" value="updRecord">Edit Record</button>';
+                            break;
+                    }
+                    ?>
+                    <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" form="FORForm" name="actionBtn" id="actionBtn" value="back">Back</button>
+                </div>
             </div>
         </div>
     </div>

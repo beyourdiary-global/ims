@@ -184,6 +184,8 @@ define('FB_CUST_DEALS', 'customer_facebook_deals_transaction');
 define('URBAN_CUST_REG', 'urbanism_customer_register_info');
 define('OFFICIAL_PROCESS_ORDER', 'official_process_order');
 define('YEARLYGOAL', 'yearly_goals');
+define('USER_RECORD_LOG', 'user_record_log');
+
 
 
 //finance
@@ -232,7 +234,6 @@ define('JT_TRANS_GST', 'jt_transaction_extra_charges');
 define('STRIPE_TRANS_BACKUP', 'stripe_transaction_backup');
 define('LAZADA_CUST_RCD', 'customer_lazada_deals_transaction');
 define('WEB_ORDER_REQ', 'website_order_request');
-define('USER_RECORD_LOG', 'user_record_log');
 // define('LAZADA_CUST_RCD', 'customer_lazada_deals_transaction');
 define('CRED_INV_PROD', 'cred_inv_products');
 define('DEBIT_NOTES_INV', 'debit_notes_invoice');

@@ -4,6 +4,7 @@ $pageTitle = "Customer Info";
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+include_once ROOT . '/include/user_record_log.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = CUS_INFO;
@@ -539,6 +540,40 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                         </div>
                     </div>
                 </form>
+
+                    <?php
+                    if ($dataID) {
+                        $customerLabel = '';
+                        if (isset($row['name']) && trim((string) $row['name']) !== '') {
+                            $customerLabel = trim((string) $row['name']);
+                            if (isset($row['last_name']) && trim((string) $row['last_name']) !== '') {
+                                $customerLabel .= ' ' . trim((string) $row['last_name']);
+                            }
+                        }
+
+                        $customerLogReturnUrl = $SITEURL . '/customerInfo.php?id=' . (int) $dataID;
+                        if ($act !== '') {
+                            $customerLogReturnUrl .= '&act=' . urlencode((string) $act);
+                        }
+
+                        $customerLogContext = urlResolveUserRecordLogContext($connect, $connect, array(
+                            'customer_id' => (int) $dataID,
+                            'customer_column' => 'cust_id',
+                            'customer_label' => $customerLabel,
+                            'return_url' => $customerLogReturnUrl,
+                            'ajax_url' => $SITEURL . '/user_record_log.php',
+                            'customer_only' => true,
+                            'customer_lookup_connect' => $connect,
+                        ));
+
+                        urlRenderUserRecordLogModule($connect, $connect, array(
+                            'table_name' => USER_RECORD_LOG,
+                            'context' => $customerLogContext,
+                            'section_heading' => 'User Record Log',
+                            'show_scope_note' => true,
+                        ));
+                    }
+                    ?>
             </div>
         </div>
     </div>

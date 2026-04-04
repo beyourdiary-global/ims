@@ -43,7 +43,15 @@ if (!($dataID) && !($act)) {
 if ($dataID && isset($_GET['open_order_id'])) {
     $openOrderId = (int) $_GET['open_order_id'];
     if ($openOrderId > 0) {
-        $orderRst = getData('id,oder_number', "id='" . $openOrderId . "'", 'LIMIT 1', LAZADA_ORDER_REQ, $connect);
+        $customerRowId = (int) $dataID;
+        $customerCode = (isset($row['lcr_id']) ? trim((string) $row['lcr_id']) : '');
+        $orderWhere = "id='" . $openOrderId . "' AND status='A' AND (cust_id='" . $customerRowId . "'";
+        if ($customerCode !== '') {
+            $orderWhere .= " OR cust_id='" . mysqli_real_escape_string($connect, $customerCode) . "'";
+        }
+        $orderWhere .= ")";
+
+        $orderRst = getData('id,oder_number', $orderWhere, 'LIMIT 1', LAZADA_ORDER_REQ, $connect);
         if ($orderRst && $orderRst->num_rows > 0) {
             $orderRow = $orderRst->fetch_assoc();
             $orderNo = isset($orderRow['oder_number']) ? $orderRow['oder_number'] : ('#' . $openOrderId);
@@ -60,9 +68,10 @@ if ($dataID && isset($_GET['open_order_id'])) {
                 'connect' => $connect,
             ];
             audit_log($log);
+
+            echo "<script>location.href='" . $SITEURL . "/lazada_order_req.php?id=" . $openOrderId . "&act=E';</script>";
+            exit;
         }
-        echo "<script>location.href='" . $SITEURL . "/lazada_order_req.php?id=" . $openOrderId . "&act=E';</script>";
-        exit;
     }
 }
 
@@ -691,6 +700,8 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                             if ($dataID) {
                                 $orderRows = array();
                                 $sumFinalAmount = 0.00;
+                                $orderPackageCache = array();
+                                $orderPayMethodCache = array();
                                 $customerRowId = (int) $dataID;
                                 $customerCode = isset($row['lcr_id']) ? trim((string) $row['lcr_id']) : '';
 
@@ -706,6 +717,18 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                     while ($orderRow = $orderRst->fetch_assoc()) {
                                         $orderRows[] = $orderRow;
                                         $sumFinalAmount += (float) (isset($orderRow['final_income']) ? $orderRow['final_income'] : 0);
+                                    }
+
+                                    foreach ($orderRows as $orderRow) {
+                                        $pkgCsv = isset($orderRow['pkg']) ? trim((string) $orderRow['pkg']) : '';
+                                        if (!isset($orderPackageCache[$pkgCsv])) {
+                                            $orderPackageCache[$pkgCsv] = commonResolvePackageNamesFromCsv($pkgCsv, $connect);
+                                        }
+
+                                        $payMethodId = isset($orderRow['pay_meth']) ? trim((string) $orderRow['pay_meth']) : '';
+                                        if (!isset($orderPayMethodCache[$payMethodId])) {
+                                            $orderPayMethodCache[$payMethodId] = commonResolvePaymentMethodName($payMethodId, $finance_connect);
+                                        }
                                     }
                                 } else if (!$orderRst) {
                                     error_log("Lazada order list query failed: " . mysqli_error($connect) . " SQL: " . $orderSql);
@@ -734,8 +757,10 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                                     $orderId = isset($orderRow['id']) ? (int) $orderRow['id'] : 0;
                                                     $orderNo = isset($orderRow['oder_number']) ? $orderRow['oder_number'] : '';
                                                     $orderDate = isset($orderRow['create_date']) ? $orderRow['create_date'] : '';
-                                                    $orderPackage = commonResolvePackageNamesFromCsv(isset($orderRow['pkg']) ? $orderRow['pkg'] : '', $connect);
-                                                    $buyerPayMethod = commonResolvePaymentMethodName(isset($orderRow['pay_meth']) ? $orderRow['pay_meth'] : '', $finance_connect);
+                                                    $pkgCsv = isset($orderRow['pkg']) ? trim((string) $orderRow['pkg']) : '';
+                                                    $payMethodId = isset($orderRow['pay_meth']) ? trim((string) $orderRow['pay_meth']) : '';
+                                                    $orderPackage = isset($orderPackageCache[$pkgCsv]) ? $orderPackageCache[$pkgCsv] : '';
+                                                    $buyerPayMethod = isset($orderPayMethodCache[$payMethodId]) ? $orderPayMethodCache[$payMethodId] : '';
                                                     $orderFees = isset($orderRow['pay_fee']) ? $orderRow['pay_fee'] : '0.00';
                                                     $finalAmount = isset($orderRow['final_income']) ? $orderRow['final_income'] : '0.00';
                                                     ?>
@@ -772,20 +797,6 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                             </div>
                             <?php } ?>
 
-                            <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
-                                <?php
-                            switch ($act) {
-                                case 'I':
-                                    echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="addRecord">Add Record</button>';
-                                    break;
-                                case 'E':
-                                    echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="updRecord">Edit Record</button>';
-                                    break;
-                            }
-                            ?>
-                            <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn"
-                                id="actionBtn" value="back">Back</button>
-                        </div>
                 </form>
 
                 <?php
@@ -812,6 +823,20 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                     ));
                 }
                 ?>
+
+                <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
+                    <?php
+                    switch ($act) {
+                        case 'I':
+                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" form="FORForm" name="actionBtn" id="actionBtn" value="addRecord">Add Record</button>';
+                            break;
+                        case 'E':
+                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" form="FORForm" name="actionBtn" id="actionBtn" value="updRecord">Edit Record</button>';
+                            break;
+                    }
+                    ?>
+                    <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" form="FORForm" name="actionBtn" id="actionBtn" value="back">Back</button>
+                </div>
             </div>
         </div>
     </div>

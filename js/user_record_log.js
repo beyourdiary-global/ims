@@ -18,6 +18,7 @@
     var $list = $("#url_list_container");
     var $loading = $("#url_loading");
     var $pageSize = $("#url_page_size");
+    var $pageSizeWrap = $("#url_dataTables_length");
     var $pagination = $("#url_pagination");
     var $pagingSummary = $("#url_paging_summary");
     var $recordId = $("#url_record_id");
@@ -86,8 +87,14 @@
         return;
       }
 
-      var startNo = (page - 1) * pageSize + 1;
-      var endNo = Math.min(total, page * pageSize);
+      var startNo = 1;
+      var endNo = total;
+
+      if (pageSize !== -1) {
+        startNo = (page - 1) * pageSize + 1;
+        endNo = Math.min(total, page * pageSize);
+      }
+
       $pagingSummary.text(
         "Showing " + startNo + " to " + endNo + " of " + total + " entries",
       );
@@ -224,9 +231,14 @@
             $pageSize.val(String(currentPageSize));
           }
 
+          var totalRecords = parseInt(res.total || 0, 10) || 0;
+          if ($pageSizeWrap.length) {
+            $pageSizeWrap.toggle(totalRecords > 10);
+          }
+
           $list.html(res.html || "");
           renderPagingSummary(
-            parseInt(res.total || 0, 10),
+            totalRecords,
             currentPage,
             parseInt(res.total_pages || 1, 10),
             currentPageSize,

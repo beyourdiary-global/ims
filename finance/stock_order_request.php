@@ -1278,7 +1278,7 @@ function sorAttachmentUrl($relativePath, $siteUrl)
                                             <button type="button" class="btn btn-sm btn-rounded btn-primary" id="copyOrderLinkBtn">Copy Link</button>
                                         </div>
                                         <a class="btn btn-sm btn-rounded btn-primary me-2" href="<?= sorEcho(sorQrSrc($qrWebPath, $SITEURL)) ?>" download>Download QR</a>
-                                        <a class="btn btn-sm btn-rounded btn-primary" id="actionBtn" href="<?= sorEcho($orderLink) ?>" target="_blank">Open Order Link</a>
+                                        <a class="btn btn-sm btn-rounded btn-primary" id="openOrderLinkBtn" href="<?= sorEcho($orderLink) ?>" target="_blank">Open Order Link</a>
                                     </div>
                                 </div>
                             </div>

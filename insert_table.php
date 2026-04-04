@@ -969,6 +969,7 @@ if ($conn->select_db($db_fin)) {
 if ($conn->select_db($db_cms)) {
     $createUserRecordLogTableSql = "CREATE TABLE IF NOT EXISTS `" . USER_RECORD_LOG . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `cust_id` INT DEFAULT NULL,
         `shopee_cust_id` INT DEFAULT NULL,
         `facebook_cust_id` INT DEFAULT NULL,
         `website_cust_id` INT DEFAULT NULL,
@@ -983,6 +984,7 @@ if ($conn->select_db($db_cms)) {
         `status` CHAR(1) NOT NULL DEFAULT 'A',
         KEY `idx_url_created_at` (`created_at`),
         KEY `idx_url_created_by` (`created_by`),
+        KEY `idx_url_cust_id` (`cust_id`),
         KEY `idx_url_shopee_cust_id` (`shopee_cust_id`),
         KEY `idx_url_facebook_cust_id` (`facebook_cust_id`),
         KEY `idx_url_website_cust_id` (`website_cust_id`),
@@ -997,6 +999,7 @@ if ($conn->select_db($db_cms)) {
     }
 
     $userRecordLogCustomerColumns = array(
+        'cust_id' => 'id',
         'shopee_cust_id' => 'id',
         'facebook_cust_id' => 'shopee_cust_id',
         'website_cust_id' => 'facebook_cust_id',
@@ -1042,21 +1045,6 @@ if ($conn->select_db($db_cms)) {
         }
     }
 
-    if (migrationIndexExists($conn, $db_cms, USER_RECORD_LOG, 'idx_url_cust_id')) {
-        if ($conn->query("ALTER TABLE `" . USER_RECORD_LOG . "` DROP INDEX `idx_url_cust_id`")) {
-            echo "<p style='color:blue;'>Dropped legacy index `idx_url_cust_id` from `" . USER_RECORD_LOG . "` in CMS database.</p>";
-        } else {
-            echo "<p style='color:red;'>Failed dropping legacy index `idx_url_cust_id` from `" . USER_RECORD_LOG . "` in CMS database: " . $conn->error . "</p>";
-        }
-    }
-
-    if (migrationColumnExists($conn, $db_cms, USER_RECORD_LOG, 'cust_id')) {
-        if ($conn->query("ALTER TABLE `" . USER_RECORD_LOG . "` DROP COLUMN `cust_id`")) {
-            echo "<p style='color:blue;'>Dropped legacy column `cust_id` from `" . USER_RECORD_LOG . "` in CMS database.</p>";
-        } else {
-            echo "<p style='color:red;'>Failed dropping legacy column `cust_id` from `" . USER_RECORD_LOG . "` in CMS database: " . $conn->error . "</p>";
-        }
-    }
 } else {
     echo "<p style='color:red;'>Failed selecting CMS database for user record log migration.</p>";
 }

@@ -101,7 +101,7 @@ if (!function_exists('urlGetUserRecordLogCustomerColumn')) {
     {
         static $cache = array();
 
-        $allowedColumns = array('shopee_cust_id', 'facebook_cust_id', 'website_cust_id', 'lazada_cust_id', 'urbanism_member_id');
+        $allowedColumns = array('cust_id', 'shopee_cust_id', 'facebook_cust_id', 'website_cust_id', 'lazada_cust_id', 'urbanism_member_id');
         $preferredColumn = trim((string) $preferredColumn);
         if (!in_array($preferredColumn, $allowedColumns, true)) {
             $preferredColumn = '';
@@ -161,7 +161,7 @@ if (!function_exists('urlSanitizeUserRecordLogCustomerColumn')) {
     function urlSanitizeUserRecordLogCustomerColumn($column)
     {
         $column = trim((string) $column);
-        $allowedColumns = array('shopee_cust_id', 'facebook_cust_id', 'website_cust_id', 'lazada_cust_id', 'urbanism_member_id');
+        $allowedColumns = array('cust_id', 'shopee_cust_id', 'facebook_cust_id', 'website_cust_id', 'lazada_cust_id', 'urbanism_member_id');
         if (in_array($column, $allowedColumns, true)) {
             return $column;
         }
@@ -305,7 +305,7 @@ if (!function_exists('urlBuildListHtml')) {
             $page = 1;
         }
 
-        $allowedPageSizes = array(10, 25, 50, 100);
+        $allowedPageSizes = array(10, 25, 50, 100, -1);
         if (!in_array($pageSize, $allowedPageSizes, true)) {
             $pageSize = 10;
         }
@@ -359,16 +359,25 @@ if (!function_exists('urlBuildListHtml')) {
             );
         }
 
-        $totalPages = (int) ceil($totalCount / $pageSize);
-        if ($totalPages < 1) {
+        if ($pageSize === -1) {
+            $page = 1;
             $totalPages = 1;
-        }
-        if ($page > $totalPages) {
-            $page = $totalPages;
-        }
+            $offset = 0;
+            $effectivePageSize = $totalCount;
+            $sql = "SELECT * FROM " . $tblName . " WHERE " . $whereSql . " ORDER BY created_at DESC, id DESC";
+        } else {
+            $totalPages = (int) ceil($totalCount / $pageSize);
+            if ($totalPages < 1) {
+                $totalPages = 1;
+            }
+            if ($page > $totalPages) {
+                $page = $totalPages;
+            }
 
-        $offset = ($page - 1) * $pageSize;
-        $sql = "SELECT * FROM " . $tblName . " WHERE " . $whereSql . " ORDER BY created_at DESC, id DESC LIMIT " . $pageSize . " OFFSET " . $offset;
+            $offset = ($page - 1) * $pageSize;
+            $effectivePageSize = $pageSize;
+            $sql = "SELECT * FROM " . $tblName . " WHERE " . $whereSql . " ORDER BY created_at DESC, id DESC LIMIT " . $pageSize . " OFFSET " . $offset;
+        }
         $rst = mysqli_query($dbConnect, $sql);
         if (!$rst || $rst->num_rows === 0) {
             return array(
@@ -382,6 +391,7 @@ if (!function_exists('urlBuildListHtml')) {
         }
 
         $html = '';
+        $displayNo = $offset + 1;
         $count = 0;
         while ($row = $rst->fetch_assoc()) {
             $count++;
@@ -407,7 +417,7 @@ if (!function_exists('urlBuildListHtml')) {
 
             $html .= '<div class="card mb-3">';
             $html .= '  <div class="card-header d-flex justify-content-between align-items-center">';
-            $html .= '    <div><strong>#' . $recordId . '</strong> <span class="ms-2 text-muted">Created: ' . htmlspecialchars((string) $createdAt, ENT_QUOTES, 'UTF-8') . ' by ' . htmlspecialchars((string) $createdBy, ENT_QUOTES, 'UTF-8') . '</span></div>';
+            $html .= '    <div><strong>#' . $displayNo . '</strong> <span class="ms-2 text-muted">Created: ' . htmlspecialchars((string) $createdAt, ENT_QUOTES, 'UTF-8') . ' by ' . htmlspecialchars((string) $createdBy, ENT_QUOTES, 'UTF-8') . '</span></div>';
             $html .= '    <div>';
             $html .= '      <button type="button" class="btn btn-sm btn-rounded btn-info text-white url-toggle-btn" data-target="url-body-' . $recordId . '">Collapse/Expand</button> ';
             $html .= $editBtn;
@@ -421,6 +431,8 @@ if (!function_exists('urlBuildListHtml')) {
             $html .= '    <input type="hidden" class="url-edit-attachment" value="' . htmlspecialchars((string) $attachment, ENT_QUOTES, 'UTF-8') . '">';
             $html .= '  </div>';
             $html .= '</div>';
+
+            $displayNo++;
         }
 
         return array(
@@ -428,6 +440,7 @@ if (!function_exists('urlBuildListHtml')) {
             'total' => $totalCount,
             'page' => $page,
             'page_size' => $pageSize,
+            'effective_page_size' => $effectivePageSize,
             'total_pages' => $totalPages,
             'html' => $html,
         );
@@ -473,6 +486,7 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
                 'total' => isset($payload['total']) ? (int) $payload['total'] : 0,
                 'page' => isset($payload['page']) ? (int) $payload['page'] : 1,
                 'page_size' => isset($payload['page_size']) ? (int) $payload['page_size'] : 10,
+                'effective_page_size' => isset($payload['effective_page_size']) ? (int) $payload['effective_page_size'] : 10,
                 'total_pages' => isset($payload['total_pages']) ? (int) $payload['total_pages'] : 1,
                 'html' => isset($payload['html']) ? $payload['html'] : ''
             ));
@@ -830,6 +844,7 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                             <option value="25">25</option>
                             <option value="50">50</option>
                             <option value="100">100</option>
+                            <option value="-1">All</option>
                         </select>
                         entries
                     </label>

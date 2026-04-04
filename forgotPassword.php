@@ -133,14 +133,9 @@ if ($resetpass_btn == 1) {
                     </table> <!-- End Header -->
 
                     <table class="middle" style="border-spacing: 0;width: 100%;height: 600px;background-color: #FFFFFF;border-radius: 18px;">
-                        <tr class="resetpass_row">
-                            <td class="resetpass_pic" align="center" style="padding: 0;height: 360px;">
-                                <img src="' . $SITEURL . '/header/js/select2-4.0.13/docs/themes/site/images/favicon-32x32.png" alt="Reset Password Icon" style="border: 0;width: 64px;min-width: 64px;height: 64px;">
-                            </td>
-                        </tr>
                         <tr class="content_row">
                             <td class="content" align="center" style="padding: 0;">
-                                <p class="h1" style="font-size: 22;font-weight: bold;margin-top: -60px;">Forgot Your Password?</p>
+                                <p class="h1" style="font-size: 22;font-weight: bold;">Forgot Your Password?</p>
                                 <p class="h2" style="font-size: 12;">Hi, <b>' . $name . '</b>,</p>
                                 <p class="center" style="font-size: 10;width: 60%;line-height: 1.4;margin-top: -8px;text-align: left !important;">
                                     You recently requested to reset your password for your [' . $to . '] account. Use the button below to reset it. <b>This password reset is only valid for the next 24 hours</b>.

@@ -43,7 +43,15 @@ if (!($dataID) && !($act)) {
 if ($dataID && isset($_GET['open_order_id'])) {
     $openOrderId = (int) $_GET['open_order_id'];
     if ($openOrderId > 0) {
-        $orderRst = getData('id,order_id', "id='" . $openOrderId . "'", 'LIMIT 1', WEB_ORDER_REQ, $finance_connect);
+        $customerRowId = (int) $dataID;
+        $customerCode = (isset($row['cust_id']) ? trim((string) $row['cust_id']) : '');
+        $orderWhere = "id='" . $openOrderId . "' AND status='A' AND (cust_id='" . $customerRowId . "'";
+        if ($customerCode !== '') {
+            $orderWhere .= " OR cust_id='" . mysqli_real_escape_string($finance_connect, $customerCode) . "'";
+        }
+        $orderWhere .= ")";
+
+        $orderRst = getData('id,order_id', $orderWhere, 'LIMIT 1', WEB_ORDER_REQ, $finance_connect);
         if ($orderRst && $orderRst->num_rows > 0) {
             $orderRow = $orderRst->fetch_assoc();
             $orderNo = isset($orderRow['order_id']) ? $orderRow['order_id'] : ('#' . $openOrderId);
@@ -60,9 +68,10 @@ if ($dataID && isset($_GET['open_order_id'])) {
                 'connect' => $connect,
             ];
             audit_log($log);
+
+            echo "<script>location.href='" . $SITEURL . "/finance/website_order_request.php?id=" . $openOrderId . "&act=E';</script>";
+            exit;
         }
-        echo "<script>location.href='" . $SITEURL . "/finance/website_order_request.php?id=" . $openOrderId . "&act=E';</script>";
-        exit;
     }
 }
 
@@ -750,6 +759,8 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                             if ($dataID) {
                                 $orderRows = array();
                                 $sumFinalAmount = 0.00;
+                                $orderPackageCache = array();
+                                $orderPayMethodCache = array();
                                 $customerRowId = (int) $dataID;
                                 $customerCode = isset($row['cust_id']) ? trim((string) $row['cust_id']) : '';
 
@@ -765,6 +776,18 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                     while ($orderRow = $orderRst->fetch_assoc()) {
                                         $orderRows[] = $orderRow;
                                         $sumFinalAmount += (float) (isset($orderRow['total']) ? $orderRow['total'] : 0);
+                                    }
+
+                                    foreach ($orderRows as $orderRow) {
+                                        $pkgCsv = isset($orderRow['pkg']) ? trim((string) $orderRow['pkg']) : '';
+                                        if (!isset($orderPackageCache[$pkgCsv])) {
+                                            $orderPackageCache[$pkgCsv] = commonResolvePackageNamesFromCsv($pkgCsv, $connect);
+                                        }
+
+                                        $payMethodId = isset($orderRow['pay_method']) ? trim((string) $orderRow['pay_method']) : '';
+                                        if (!isset($orderPayMethodCache[$payMethodId])) {
+                                            $orderPayMethodCache[$payMethodId] = commonResolvePaymentMethodName($payMethodId, $finance_connect);
+                                        }
                                     }
                                 } else if (!$orderRst) {
                                     error_log("Website order list query failed: " . mysqli_error($finance_connect) . " SQL: " . $orderSql);
@@ -793,8 +816,10 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                                     $orderId = isset($orderRow['id']) ? (int) $orderRow['id'] : 0;
                                                     $orderNo = isset($orderRow['order_id']) ? $orderRow['order_id'] : '';
                                                     $orderDate = isset($orderRow['create_date']) ? $orderRow['create_date'] : '';
-                                                    $orderPackage = commonResolvePackageNamesFromCsv(isset($orderRow['pkg']) ? $orderRow['pkg'] : '', $connect);
-                                                    $buyerPayMethod = commonResolvePaymentMethodName(isset($orderRow['pay_method']) ? $orderRow['pay_method'] : '', $finance_connect);
+                                                    $pkgCsv = isset($orderRow['pkg']) ? trim((string) $orderRow['pkg']) : '';
+                                                    $payMethodId = isset($orderRow['pay_method']) ? trim((string) $orderRow['pay_method']) : '';
+                                                    $orderPackage = isset($orderPackageCache[$pkgCsv]) ? $orderPackageCache[$pkgCsv] : '';
+                                                    $buyerPayMethod = isset($orderPayMethodCache[$payMethodId]) ? $orderPayMethodCache[$payMethodId] : '';
                                                     $orderFees = isset($orderRow['shipping']) ? $orderRow['shipping'] : '0.00';
                                                     $finalAmount = isset($orderRow['total']) ? $orderRow['total'] : '0.00';
                                                     ?>
@@ -831,20 +856,6 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                             </div>
                             <?php } ?>
 
-                            <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
-                                <?php
-                            switch ($act) {
-                                case 'I':
-                                    echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="addRecord">Add Record</button>';
-                                    break;
-                                case 'E':
-                                    echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="updRecord">Edit Record</button>';
-                                    break;
-                            }
-                            ?>
-                            <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn"
-                                id="actionBtn" value="back">Back</button>
-                        </div>
                 </form>
 
                 <?php
@@ -871,6 +882,20 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                     ));
                 }
                 ?>
+
+                <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
+                    <?php
+                    switch ($act) {
+                        case 'I':
+                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" form="FORForm" name="actionBtn" id="actionBtn" value="addRecord">Add Record</button>';
+                            break;
+                        case 'E':
+                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" form="FORForm" name="actionBtn" id="actionBtn" value="updRecord">Edit Record</button>';
+                            break;
+                    }
+                    ?>
+                    <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" form="FORForm" name="actionBtn" id="actionBtn" value="back">Back</button>
+                </div>
             </div>
         </div>
     </div>
