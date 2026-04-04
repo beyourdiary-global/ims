@@ -68,17 +68,6 @@ $result = getData('*', '', '', $tblName, $connect);
     .btn-container {
         white-space: nowrap;
     }
-
-    .table-scroll-wrap {
-        width: 100%;
-        overflow-x: auto;
-        -webkit-overflow-scrolling: touch;
-        touch-action: pan-x;
-    }
-
-    .table-scroll-wrap table {
-        min-width: 680px;
-    }
 </style>
 
 <body>

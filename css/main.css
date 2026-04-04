@@ -42,6 +42,17 @@ table {
   /* word-wrap: break-word; */
 }
 
+.table-scroll-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
+}
+
+.table-scroll-wrap table {
+  min-width: 680px;
+}
+
 @media (width < 768px) {
   /* padding-left: 0 !important;
     padding-right: 0 !important;
