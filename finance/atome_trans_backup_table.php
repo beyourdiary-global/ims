@@ -1,9 +1,11 @@
 <?php
 ob_start();
 $pageTitle = "Atome Transaction Backup Record";
+$currentPagePin = 87;
 $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . "_list.xlsx";
 $img_path = '../' . img_server . 'finance/atome_trans_backup/';
@@ -212,9 +214,7 @@ $img_path = SITEURL . img_server . 'finance/atome_trans_backup/';
                         <h2>
                             <?php echo $pageTitle ?>
                         </h2>
-                        <?php
-                        if ($result) {
-                            ?>
+                        
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
@@ -223,7 +223,7 @@ $img_path = SITEURL . img_server . 'finance/atome_trans_backup/';
                                 <?php endif; ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>
                             </div>
-                        <?php } ?>
+                        
                     </div>
                 </div>
             </div>

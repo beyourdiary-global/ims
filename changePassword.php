@@ -1,5 +1,6 @@
 <?php
 $pageTitle = "Change Password";
+$currentPagePin = 25;
 
 include_once 'include/connection.php';
 include_once 'include/common.php';
@@ -13,6 +14,7 @@ else
 
 // Load full authenticated layout only for in-session password change.
 if ($pageMode == 'userChgPassword') {
+    $pageTitle = getPinGroupNameById($connect, $currentPagePin);
     include 'menuHeader.php';
 }
 
@@ -198,7 +200,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                     <?php
                     switch ($pageMode) {
                         case 'userChgPassword':
-                            echo 'Change Password';
+                            echo $pageTitle;
                             break;
                         case 'emailRstPassword':
                             echo 'Reset Password';
@@ -282,7 +284,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                         <div class="row">
                             <div class="col-12">
                                 <div class="form-group mb-5">
-                                    <h2>Change Password</h2>
+                                    <h2><?php echo $pageTitle ?></h2>
                                 </div>
                             </div>
                         </div>

@@ -1,9 +1,10 @@
 <?php
-$pageTitle = "Urbanism Member Registration";
-$initial_page = "Facebook Customer Record (Deals)";
+$currentPagePin = 0;
+$pageTitle = "Urbanism Member";
 
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
+include_once ROOT . '/include/user_record_log.php';
 
 $tblName = FB_CUST_DEALS;
 $reg_tblName = URBAN_CUST_REG;
@@ -11,44 +12,98 @@ $reg_tblName = URBAN_CUST_REG;
 $dataID = input('id');
 $act = input('act');
 
-
 $pageAction = getPageAction($act);
 
 $allowed_ext = array("png", "jpg", "jpeg", "svg", "pdf");
 
+$default_initial_page = "Facebook Customer Record (Deals)";
+$default_redirect_path = '/fb_cust_deals_table.php';
+$returnPageInput = trim((string) input('return_page'));
+$returnLabelInput = trim((string) input('return_label'));
 
-$redirect_page = $SITEURL . '/fb_cust_deals_table.php';
+$urbanismOrderSource = 'all';
+$returnPageLower = strtolower($returnPageInput);
+if ($returnPageLower !== '') {
+    if (strpos($returnPageLower, 'shopee') !== false) {
+        $urbanismOrderSource = 'shopee';
+    } else if (strpos($returnPageLower, 'lazada') !== false) {
+        $urbanismOrderSource = 'lazada';
+    } else if (strpos($returnPageLower, 'website') !== false || strpos($returnPageLower, 'customerinfo') !== false) {
+        $urbanismOrderSource = 'website';
+    } else if (strpos($returnPageLower, 'fb_') !== false || strpos($returnPageLower, 'facebook') !== false) {
+        $urbanismOrderSource = 'facebook';
+    }
+}
+
+$redirect_path = $default_redirect_path;
+if ($returnPageInput !== '') {
+    $candidatePath = ltrim(str_replace('\\', '/', $returnPageInput), '/');
+    if ($candidatePath !== '' && strpos($candidatePath, '..') === false && preg_match('/^[A-Za-z0-9_\/.\-]+\.php$/', $candidatePath)) {
+        $redirect_path = '/' . $candidatePath;
+    }
+}
+
+$initial_page_raw = $returnLabelInput !== '' ? $returnLabelInput : $default_initial_page;
+$initial_page = htmlspecialchars($initial_page_raw, ENT_QUOTES, 'UTF-8');
+$redirect_page = $SITEURL . $redirect_path;
 $redirectLink = ("<script>location.href = '$redirect_page';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
 $img_path = img_server . 'urbanism_member_registration/';
-if (!file_exists($img_path)) {
-    mkdir($img_path, 0777, true);
+$img_url = rtrim((string) $SITEURL, '/') . '/' . trim((string) $img_path, '/\\') . '/';
+$img_fs_path = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . trim((string) $img_path, '/\\') . DIRECTORY_SEPARATOR;
+$legacyUploadDir = trim((string) img_server, '/\\') . '/urbanism_member_registration';
+if (!file_exists($img_fs_path)) {
+    mkdir($img_fs_path, 0777, true);
 }
 
+$urbanismSeedName = trim((string) $dataID);
+$urbanismSeedFbLink = '';
+
 if ($dataID && $act== 'I') { //edit/remove/view
-    $rst = getData('*', "id='" . $dataID . "'", 'LIMIT 1', $tblName, $connect);
- 
-    if ($rst != false && $rst->num_rows > 0) {
-        $dataExisted = 1;
-        $row = $rst->fetch_assoc();
+    $lookupCondition = "";
+    if (ctype_digit((string) $dataID)) {
+        $lookupCondition = "id='" . ((int) $dataID) . "'";
     } else {
-        // If $rst is false or no data found ($act==null)
-        $errorExist = 1;
-        $_SESSION['tempValConfirmBox'] = true;
-        $act = "F";
+        $escapedSeed = mysqli_real_escape_string($connect, (string) $dataID);
+        $lookupCondition = "name='" . $escapedSeed . "'";
+    }
+
+    $rst = getData('*', $lookupCondition, 'LIMIT 1', $tblName, $connect);
+    if ($rst != false && $rst->num_rows > 0) {
+        $sourceRow = $rst->fetch_assoc();
+        if (isset($sourceRow['name']) && trim((string) $sourceRow['name']) !== '') {
+            $urbanismSeedName = trim((string) $sourceRow['name']);
+        }
+        if (isset($sourceRow['fb_link']) && trim((string) $sourceRow['fb_link']) !== '') {
+            $urbanismSeedFbLink = trim((string) $sourceRow['fb_link']);
+        }
     }
 }else if ($dataID) { //edit/remove/view
-    $rst = getData('*', "name='" . $dataID . "'", 'LIMIT 1', $reg_tblName, $connect);
+    $lookupCondition = '';
+    if (ctype_digit((string) $dataID)) {
+        $lookupCondition = "id='" . ((int) $dataID) . "'";
+    } else {
+        $escapedDataID = mysqli_real_escape_string($connect, (string) $dataID);
+        $lookupCondition = "name='" . $escapedDataID . "'";
+    }
+
+    $rst = getData('*', $lookupCondition, 'LIMIT 1', $reg_tblName, $connect);
+
+    if (($rst == false || $rst->num_rows === 0) && !ctype_digit((string) $dataID)) {
+        $normalizedDataID = strtolower(trim((string) $dataID));
+        if ($normalizedDataID !== '') {
+            $rst = getData('*', "LOWER(TRIM(name))='" . mysqli_real_escape_string($connect, $normalizedDataID) . "'", 'LIMIT 1', $reg_tblName, $connect);
+        }
+    }
  
     if ($rst != false && $rst->num_rows > 0) {
         $dataExisted = 1;
         $row = $rst->fetch_assoc();
+        $urbanismSeedName = trim((string) $row['name']);
     } else {
-        // If $rst is false or no data found ($act==null)
-        $errorExist = 1;
-        $_SESSION['tempValConfirmBox'] = true;
-        $act = "F";
+        echo '<script>alert("Urbanism member record not found.");window.location.replace(' . json_encode($redirect_page) . ');</script>';
+        exit;
     }
 }
 
@@ -57,7 +112,59 @@ if (!($dataID) && !($act)) {
     alert("Invalid action.");
     window.location.href = "' . $redirect_page . '"; // Redirect to previous page
     </script>';
-} 
+}
+
+if ($urbanismSeedFbLink === '' && $urbanismSeedName !== '') {
+    $seedNameEsc = mysqli_real_escape_string($connect, (string) $urbanismSeedName);
+    $seedRst = getData('fb_link', "name='" . $seedNameEsc . "'", 'LIMIT 1', FB_CUST_DEALS, $connect);
+    if ($seedRst && $seedRst->num_rows > 0) {
+        $seedRow = $seedRst->fetch_assoc();
+        if (isset($seedRow['fb_link']) && trim((string) $seedRow['fb_link']) !== '') {
+            $urbanismSeedFbLink = trim((string) $seedRow['fb_link']);
+        }
+    }
+}
+
+if ($dataID && isset($_GET['open_order_id'])) {
+    $openOrderId = (int) $_GET['open_order_id'];
+    if ($openOrderId > 0) {
+        $orderWhere = "id='" . $openOrderId . "' AND status='A'";
+        if ($urbanismSeedName !== '') {
+            $orderWhere .= " AND name='" . mysqli_real_escape_string($finance_connect, $urbanismSeedName) . "'";
+            if ($urbanismSeedFbLink !== '') {
+                $orderWhere .= " AND fb_link='" . mysqli_real_escape_string($finance_connect, $urbanismSeedFbLink) . "'";
+            }
+        } else {
+            $orderWhere .= " AND 1=0";
+        }
+
+        $orderRst = getData('id,name,fb_link', $orderWhere, 'LIMIT 1', FB_ORDER_REQ, $finance_connect);
+        if ($orderRst && $orderRst->num_rows > 0) {
+            $orderRow = $orderRst->fetch_assoc();
+            $orderNo = '#'. $openOrderId;
+            if (!empty($orderRow['name'])) {
+                $orderNo .= ' - ' . $orderRow['name'];
+            }
+            $log = [
+                'log_act' => 'View',
+                'cdate' => $cdate,
+                'ctime' => $ctime,
+                'uid' => USER_ID,
+                'cby' => USER_ID,
+                'query_rec' => "order_id=" . $openOrderId,
+                'query_table' => FB_ORDER_REQ,
+                'act_msg' => USER_NAME . " opened Facebook order detail [<b>" . $orderNo . "</b>] from <b><i>" . $pageTitle . "</i></b>.",
+                'page' => $pageTitle,
+                'connect' => $connect,
+            ];
+            audit_log($log);
+
+            echo "<script>location.href='" . $SITEURL . "/finance/fb_order_req.php?id=" . $openOrderId . "&act=E';</script>";
+            exit;
+        }
+    }
+}
+
 if (post('actionBtn')) {
     
     $action = post('actionBtn');
@@ -75,6 +182,7 @@ if (post('actionBtn')) {
     }
 
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
+    $uploadedNewAttachment = false;
 
     switch ($action) {
         case 'addRecord':
@@ -89,7 +197,7 @@ if (post('actionBtn')) {
 
                 if (in_array($img_ext_lc, $allowed_ext)) {
                     $highestNumber = 0;
-                    $files = glob($img_path . $umr_name . '_' . $umr_ic . '_' . $umr_date . '_*.' . $img_ext);
+                    $files = glob($img_fs_path . $umr_name . '_' . $umr_ic . '_' . $umr_date . '_*.' . $img_ext);
 
                     foreach ($files as $file) {
                         $filename = basename($file);
@@ -105,8 +213,9 @@ if (post('actionBtn')) {
                     $new_file_name = $umr_name . '_' . $umr_ic . '_' . $umr_date . '_' . $unique_id . '.' . $img_ext_lc;
 
                     // Move the uploaded file
-                    if (move_uploaded_file($umr_file_tmp_name, $img_path . $new_file_name)) {
+                    if (move_uploaded_file($umr_file_tmp_name, $img_fs_path . $new_file_name)) {
                         $umr_attach = $new_file_name; // Update $umr_attach with the new filename
+                        $uploadedNewAttachment = true;
                     } else {
                         $err2 = "Failed to upload the file.";
                     }
@@ -168,14 +277,27 @@ if (post('actionBtn')) {
             } else {
                 try {
                     // take old value
-                    $rst = getData('*', "name = '$dataID'", 'LIMIT 1', $reg_tblName, $connect);
-                    $rst2 = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $connect);
+                    $escapedDataID = mysqli_real_escape_string($connect, (string) $dataID);
+                    $currentWhere = '';
+                    if (ctype_digit((string) $dataID)) {
+                        $currentWhere = "id='" . ((int) $dataID) . "'";
+                    } else {
+                        $currentWhere = "name='" . $escapedDataID . "'";
+                    }
+
+                    $rst = getData('*', $currentWhere, 'LIMIT 1', $reg_tblName, $connect);
+                    if (!$rst || $rst->num_rows === 0) {
+                        throw new Exception('Urbanism member record not found.');
+                    }
                     $row = $rst->fetch_assoc();
-                    $row2 = $rst->fetch_assoc();
+                    $currentRowId = isset($row['id']) ? (int) $row['id'] : 0;
+                    if ($currentRowId <= 0) {
+                        throw new Exception('Urbanism member record id is invalid.');
+                    }
 
                     // check value
-                    if ($row2['name'] != $umr_name) {
-                        array_push($oldvalarr, $row2['name']);
+                    if ($row['name'] != $umr_name) {
+                        array_push($oldvalarr, $row['name']);
                         array_push($chgvalarr, $umr_name);
                         array_push($datafield, 'name');
                     }
@@ -210,10 +332,9 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
-                        $query = "UPDATE " . $reg_tblName . " SET name = '$umr_name', ic = '$umr_ic', address = '$umr_add', reg_date = '$umr_date', attachment = '$umr_attach', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE name = '$dataID'";
+                        $query = "UPDATE " . $reg_tblName . " SET name = '$umr_name', ic = '$umr_ic', address = '$umr_add', reg_date = '$umr_date', attachment = '$umr_attach', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id='" . $currentRowId . "'";
                         $returnData = mysqli_query($connect, $query);
-
-                    } else {
+} else {
                         $act = 'NC';
                     }
                 } catch (Exception $e) {
@@ -232,18 +353,18 @@ if (post('actionBtn')) {
                     'uid' => USER_ID,
                     'cby' => USER_ID,
                     'query_rec' => $query,
-                    'query_table' => $tblName,
+                    'query_table' => $reg_tblName,
                     'page' => $pageTitle,
                     'connect' => $connect,
                 ];
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $reg_tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval'] = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $reg_tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
             }
@@ -253,6 +374,27 @@ if (post('actionBtn')) {
         case 'back':
             echo $clearLocalStorage . ' ' . $redirectLink;
             break;
+    }
+}
+
+$urbanismFormName = '';
+if (isset($umr_name) && trim((string) $umr_name) !== '') {
+    $urbanismFormName = trim((string) $umr_name);
+} else if (isset($row['name']) && trim((string) $row['name']) !== '') {
+    $urbanismFormName = trim((string) $row['name']);
+} else if ($urbanismSeedName !== '') {
+    $urbanismFormName = $urbanismSeedName;
+}
+
+$urbanismOrderFbLink = $urbanismSeedFbLink;
+if ($urbanismOrderFbLink === '' && $urbanismFormName !== '') {
+    $nameEsc = mysqli_real_escape_string($connect, (string) $urbanismFormName);
+    $dealRst = getData('fb_link', "name='" . $nameEsc . "'", 'LIMIT 1', FB_CUST_DEALS, $connect);
+    if ($dealRst && $dealRst->num_rows > 0) {
+        $dealRow = $dealRst->fetch_assoc();
+        if (isset($dealRow['fb_link']) && trim((string) $dealRow['fb_link']) !== '') {
+            $urbanismOrderFbLink = trim((string) $dealRow['fb_link']);
+        }
     }
 }
 
@@ -306,15 +448,9 @@ if (post('actionBtn')) {
                             <div class="col-md-6 mb-3">
                                 <label class="form-label form_lbl" id="umr_name_lbl" for="umr_name">Name<span
                                         class="requireRed">*</span></label>
-                                <input class="form-control" type="text" name="umr_name" id="umr_name" value="<?php
-                                $name_rst = getData('*', "id='" . $dataID . "'", 'LIMIT 1', $tblName, $connect);
-                              
-                                if ($name_row = $name_rst->fetch_assoc()) {
-                                    echo $name_row['name'];
-                                }
-                                ?>" <?php echo 'disabled' ?>>
+                                <input class="form-control" type="text" name="umr_name" id="umr_name" value="<?php echo htmlspecialchars($urbanismFormName, ENT_QUOTES, 'UTF-8'); ?>" <?php echo 'disabled' ?>>
                                 <input type="hidden" name="umr_name_hidden" id="umr_name_hidden"
-                                    value="<?php echo $dataID; ?>">
+                                    value="<?php echo htmlspecialchars($urbanismFormName, ENT_QUOTES, 'UTF-8'); ?>">
                                 <?php if (isset($name_err)) { ?>
                                     <div id="err_msg">
                                         <span class="mt-n1">
@@ -374,8 +510,6 @@ if (post('actionBtn')) {
                                     echo $row['reg_date'];
                                 } else if (isset($umr_date)) {
                                     echo $umr_date;
-                                } else {
-                                    echo 'dd/mm/yyyy'; // Placeholder text
                                 }
                                 ?>" placeholder="YYYY-MM-DD" pattern="\d{4}-\d{2}-\d{2}" <?php if ($act == '')
                                     echo 'disabled' ?>>
@@ -424,9 +558,23 @@ if (post('actionBtn')) {
                                     $attachmentSrc = '';
 
                                     if (isset($dataExisted) && isset($row['attachment']) && !isset($umr_attach)) {
-                                        $attachmentSrc = ($row['attachment'] == '' || $row['attachment'] == NULL) ? '' : $img_path . $row['attachment'];
+                                        if ($row['attachment'] == '' || $row['attachment'] == NULL) {
+                                            $attachmentSrc = '';
+                                        } else {
+                                            $storedAttachment = trim(str_replace('\\', '/', (string) $row['attachment']), '/');
+                                            if (strpos($storedAttachment, 'attachment/') === 0) {
+                                                $attachmentSrc = rtrim((string) $SITEURL, '/') . '/' . $storedAttachment;
+                                            } else {
+                                                $attachmentSrc = $img_url . basename($storedAttachment);
+                                            }
+                                        }
                                     } else if (isset($umr_attach)) {
-                                        $attachmentSrc = $img_path . $umr_attach;
+                                        $storedAttachment = trim(str_replace('\\', '/', (string) $umr_attach), '/');
+                                        if (strpos($storedAttachment, 'attachment/') === 0) {
+                                            $attachmentSrc = rtrim((string) $SITEURL, '/') . '/' . $storedAttachment;
+                                        } else {
+                                            $attachmentSrc = $img_url . basename($storedAttachment);
+                                        }
                                     }
                                     ?>
                                     <img id="umr_attach_preview" name="umr_attach_preview"
@@ -439,21 +587,270 @@ if (post('actionBtn')) {
                         </div>
                     </div>
 
-                    <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
-                        <?php
-                        switch ($act) {
-                            case 'I':
-                                echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="addRecord">Add Record</button>';
-                                break;
-                            case 'E':
-                                echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="updRecord">Edit Record</button>';
-                                break;
+                    <?php
+                    if ($act === 'E' && $dataID && $urbanismFormName !== '') {
+                        $orderRows = array();
+                        $sumFinalAmount = 0.00;
+                        $normalizedUrbanName = trim((string) $urbanismFormName);
+                        $safeUrbanName = mysqli_real_escape_string($finance_connect, $normalizedUrbanName);
+                        $safeUrbanNameCms = mysqli_real_escape_string($connect, $normalizedUrbanName);
+
+                        // 1) Facebook order requests
+                        if (($urbanismOrderSource === 'all' || $urbanismOrderSource === 'facebook') && $safeUrbanName !== '') {
+                            $fbWhere = array();
+                            $fbWhere[] = "name='" . $safeUrbanName . "'";
+                            if ($urbanismOrderFbLink !== '') {
+                                $fbWhere[] = "fb_link='" . mysqli_real_escape_string($finance_connect, trim((string) $urbanismOrderFbLink)) . "'";
+                            }
+
+                            $fbOrderSql = "SELECT * FROM " . FB_ORDER_REQ . " WHERE status='A' AND (" . implode(' OR ', $fbWhere) . ") ORDER BY id DESC";
+                            $fbOrderRst = mysqli_query($finance_connect, $fbOrderSql);
+                            if ($fbOrderRst && $fbOrderRst->num_rows > 0) {
+                                while ($fbOrderRow = $fbOrderRst->fetch_assoc()) {
+                                    $orderRows[] = array(
+                                        'source' => 'facebook',
+                                        'id' => isset($fbOrderRow['id']) ? (int) $fbOrderRow['id'] : 0,
+                                        'order_no' => 'FB-' . (isset($fbOrderRow['id']) ? (int) $fbOrderRow['id'] : 0),
+                                        'order_date' => isset($fbOrderRow['create_date']) ? (string) $fbOrderRow['create_date'] : '',
+                                        'package' => commonResolvePackageNamesFromCsv(isset($fbOrderRow['package']) ? $fbOrderRow['package'] : '', $connect),
+                                        'buyer_pay_method' => commonResolvePaymentMethodName(isset($fbOrderRow['pay_method']) ? $fbOrderRow['pay_method'] : '', $finance_connect),
+                                        'fees' => '0.00',
+                                        'final_amount' => isset($fbOrderRow['price']) ? (string) $fbOrderRow['price'] : '0.00',
+                                        'detail_url' => $SITEURL . '/finance/fb_order_req.php?id=' . (isset($fbOrderRow['id']) ? (int) $fbOrderRow['id'] : 0) . '&act=E',
+                                    );
+                                    $sumFinalAmount += (float) (isset($fbOrderRow['price']) ? $fbOrderRow['price'] : 0);
+                                }
+                            } else if (!$fbOrderRst) {
+                                error_log("Urbanism FB order list query failed: " . mysqli_error($finance_connect) . " SQL: " . $fbOrderSql);
+                            }
                         }
-                        ?>
-                        <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn"
-                            id="actionBtn" value="back">Back</button>
+
+                        // 2) Lazada order requests
+                        if (($urbanismOrderSource === 'all' || $urbanismOrderSource === 'lazada') && $safeUrbanNameCms !== '') {
+                            $lazadaWhere = "cust_name='" . $safeUrbanNameCms . "' OR ship_rec_name='" . $safeUrbanNameCms . "'";
+                            $lazadaOrderSql = "SELECT * FROM " . LAZADA_ORDER_REQ . " WHERE status='A' AND (" . $lazadaWhere . ") ORDER BY id DESC";
+                            $lazadaOrderRst = mysqli_query($connect, $lazadaOrderSql);
+                            if ($lazadaOrderRst && $lazadaOrderRst->num_rows > 0) {
+                                while ($lazadaOrderRow = $lazadaOrderRst->fetch_assoc()) {
+                                    $orderRows[] = array(
+                                        'source' => 'lazada',
+                                        'id' => isset($lazadaOrderRow['id']) ? (int) $lazadaOrderRow['id'] : 0,
+                                        'order_no' => isset($lazadaOrderRow['oder_number']) && trim((string) $lazadaOrderRow['oder_number']) !== ''
+                                            ? (string) $lazadaOrderRow['oder_number']
+                                            : ('LAZADA-' . (isset($lazadaOrderRow['id']) ? (int) $lazadaOrderRow['id'] : 0)),
+                                        'order_date' => isset($lazadaOrderRow['create_date']) ? (string) $lazadaOrderRow['create_date'] : '',
+                                        'package' => commonResolvePackageNamesFromCsv(isset($lazadaOrderRow['pkg']) ? $lazadaOrderRow['pkg'] : '', $connect),
+                                        'buyer_pay_method' => commonResolvePaymentMethodName(isset($lazadaOrderRow['pay_meth']) ? $lazadaOrderRow['pay_meth'] : '', $finance_connect),
+                                        'fees' => isset($lazadaOrderRow['pay_fee']) ? (string) $lazadaOrderRow['pay_fee'] : '0.00',
+                                        'final_amount' => isset($lazadaOrderRow['final_income']) ? (string) $lazadaOrderRow['final_income'] : '0.00',
+                                        'detail_url' => $SITEURL . '/lazada_order_req.php?id=' . (isset($lazadaOrderRow['id']) ? (int) $lazadaOrderRow['id'] : 0) . '&act=E',
+                                    );
+                                    $sumFinalAmount += (float) (isset($lazadaOrderRow['final_income']) ? $lazadaOrderRow['final_income'] : 0);
+                                }
+                            } else if (!$lazadaOrderRst) {
+                                error_log("Urbanism Lazada order list query failed: " . mysqli_error($connect) . " SQL: " . $lazadaOrderSql);
+                            }
+                        }
+
+                        // 3) Website order requests
+                        if (($urbanismOrderSource === 'all' || $urbanismOrderSource === 'website') && $safeUrbanName !== '') {
+                            $websiteWhere = "cust_name='" . $safeUrbanName . "' OR shipping_name='" . $safeUrbanName . "'";
+                            $websiteOrderSql = "SELECT * FROM " . WEB_ORDER_REQ . " WHERE status='A' AND (" . $websiteWhere . ") ORDER BY id DESC";
+                            $websiteOrderRst = mysqli_query($finance_connect, $websiteOrderSql);
+                            if ($websiteOrderRst && $websiteOrderRst->num_rows > 0) {
+                                while ($websiteOrderRow = $websiteOrderRst->fetch_assoc()) {
+                                    $orderRows[] = array(
+                                        'source' => 'website',
+                                        'id' => isset($websiteOrderRow['id']) ? (int) $websiteOrderRow['id'] : 0,
+                                        'order_no' => isset($websiteOrderRow['order_id']) && trim((string) $websiteOrderRow['order_id']) !== ''
+                                            ? (string) $websiteOrderRow['order_id']
+                                            : ('WEB-' . (isset($websiteOrderRow['id']) ? (int) $websiteOrderRow['id'] : 0)),
+                                        'order_date' => isset($websiteOrderRow['create_date']) ? (string) $websiteOrderRow['create_date'] : '',
+                                        'package' => commonResolvePackageNamesFromCsv(isset($websiteOrderRow['pkg']) ? $websiteOrderRow['pkg'] : '', $connect),
+                                        'buyer_pay_method' => commonResolvePaymentMethodName(isset($websiteOrderRow['pay_method']) ? $websiteOrderRow['pay_method'] : '', $finance_connect),
+                                        'fees' => isset($websiteOrderRow['shipping']) ? (string) $websiteOrderRow['shipping'] : '0.00',
+                                        'final_amount' => isset($websiteOrderRow['total']) ? (string) $websiteOrderRow['total'] : '0.00',
+                                        'detail_url' => $SITEURL . '/finance/website_order_request.php?id=' . (isset($websiteOrderRow['id']) ? (int) $websiteOrderRow['id'] : 0) . '&act=E',
+                                    );
+                                    $sumFinalAmount += (float) (isset($websiteOrderRow['total']) ? $websiteOrderRow['total'] : 0);
+                                }
+                            } else if (!$websiteOrderRst) {
+                                error_log("Urbanism Website order list query failed: " . mysqli_error($finance_connect) . " SQL: " . $websiteOrderSql);
+                            }
+                        }
+
+                        // 4) Shopee order requests (buyer may be username or SHOPEE_CUST_INFO.id)
+                        $shopeeBuyerIds = array();
+                        if (($urbanismOrderSource === 'all' || $urbanismOrderSource === 'shopee') && $safeUrbanName !== '') {
+                            $buyerMapSql = "SELECT id FROM " . SHOPEE_CUST_INFO . " WHERE buyer_username='" . $safeUrbanName . "'";
+                            $buyerMapRst = mysqli_query($finance_connect, $buyerMapSql);
+                            if ($buyerMapRst && $buyerMapRst->num_rows > 0) {
+                                while ($buyerMapRow = $buyerMapRst->fetch_assoc()) {
+                                    $mappedId = isset($buyerMapRow['id']) ? (int) $buyerMapRow['id'] : 0;
+                                    if ($mappedId > 0) {
+                                        $shopeeBuyerIds[] = (string) $mappedId;
+                                    }
+                                }
+                            }
+                        }
+
+                        $shopeeWhere = array();
+                        if (($urbanismOrderSource === 'all' || $urbanismOrderSource === 'shopee') && $safeUrbanName !== '') {
+                            $shopeeWhere[] = "buyer='" . $safeUrbanName . "'";
+                        }
+                        if (!empty($shopeeBuyerIds)) {
+                            $safeBuyerIds = array();
+                            foreach (array_unique($shopeeBuyerIds) as $buyerIdVal) {
+                                if (ctype_digit((string) $buyerIdVal) && (int) $buyerIdVal > 0) {
+                                    $safeBuyerIds[] = "'" . (int) $buyerIdVal . "'";
+                                }
+                            }
+                            if (!empty($safeBuyerIds)) {
+                                $shopeeWhere[] = "buyer IN (" . implode(',', $safeBuyerIds) . ")";
+                            }
+                        }
+
+                        if (!empty($shopeeWhere)) {
+                            $shopeeOrderSql = "SELECT * FROM " . SHOPEE_SG_ORDER_REQ . " WHERE status='A' AND (" . implode(' OR ', $shopeeWhere) . ") ORDER BY id DESC";
+                            $shopeeOrderRst = mysqli_query($finance_connect, $shopeeOrderSql);
+                            if ($shopeeOrderRst && $shopeeOrderRst->num_rows > 0) {
+                                while ($shopeeOrderRow = $shopeeOrderRst->fetch_assoc()) {
+                                    $orderRows[] = array(
+                                        'source' => 'shopee',
+                                        'id' => isset($shopeeOrderRow['id']) ? (int) $shopeeOrderRow['id'] : 0,
+                                        'order_no' => isset($shopeeOrderRow['orderID']) ? (string) $shopeeOrderRow['orderID'] : ('SHOPEE-' . (isset($shopeeOrderRow['id']) ? (int) $shopeeOrderRow['id'] : 0)),
+                                        'order_date' => isset($shopeeOrderRow['date']) ? (string) $shopeeOrderRow['date'] : '',
+                                        'package' => commonResolvePackageNamesFromCsv(isset($shopeeOrderRow['package']) ? $shopeeOrderRow['package'] : '', $connect),
+                                        'buyer_pay_method' => isset($shopeeOrderRow['buyer_pay_meth']) ? (string) $shopeeOrderRow['buyer_pay_meth'] : '',
+                                        'fees' => isset($shopeeOrderRow['fees']) ? (string) $shopeeOrderRow['fees'] : '0.00',
+                                        'final_amount' => isset($shopeeOrderRow['final_amt']) ? (string) $shopeeOrderRow['final_amt'] : '0.00',
+                                        'detail_url' => $SITEURL . '/shopee/shopee_order_req.php?id=' . (isset($shopeeOrderRow['id']) ? (int) $shopeeOrderRow['id'] : 0) . '&act=E',
+                                    );
+                                    $sumFinalAmount += (float) (isset($shopeeOrderRow['final_amt']) ? $shopeeOrderRow['final_amt'] : 0);
+                                }
+                            } else if (!$shopeeOrderRst) {
+                                error_log("Urbanism Shopee order list query failed: " . mysqli_error($finance_connect) . " SQL: " . $shopeeOrderSql);
+                            }
+                        }
+
+                        usort($orderRows, function ($a, $b) {
+                            $aDate = isset($a['order_date']) ? strtotime((string) $a['order_date']) : 0;
+                            $bDate = isset($b['order_date']) ? strtotime((string) $b['order_date']) : 0;
+                            if ($aDate === $bDate) {
+                                return (int) ($b['id'] ?? 0) <=> (int) ($a['id'] ?? 0);
+                            }
+                            return $bDate <=> $aDate;
+                        });
+                    ?>
+                    <div class="form-group mt-3">
+                        <h5 class="mb-3">Order Records</h5>
+                        <div class="table-responsive">
+                            <table class="table table-striped table-bordered mb-0" id="umr_order_tbl">
+                                <thead>
+                                    <tr>
+                                        <th width="60">S/N</th>
+                                        <th width="200">Action</th>
+                                        <th>Order ID</th>
+                                        <th>Date</th>
+                                        <th>Package</th>
+                                        <th>Buyer Payment Method</th>
+                                        <th>Charges &amp; Fees</th>
+                                        <th>Final Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if (!empty($orderRows)) {
+                                        $orderSN = 1;
+                                        foreach ($orderRows as $orderRow) {
+                                            $orderNo = isset($orderRow['order_no']) ? $orderRow['order_no'] : '';
+                                            $orderDate = isset($orderRow['order_date']) ? $orderRow['order_date'] : '';
+                                            $orderPackage = isset($orderRow['package']) ? $orderRow['package'] : '';
+                                            $buyerPayMethod = isset($orderRow['buyer_pay_method']) ? $orderRow['buyer_pay_method'] : '';
+                                            $orderFees = isset($orderRow['fees']) ? $orderRow['fees'] : '0.00';
+                                            $finalAmount = isset($orderRow['final_amount']) ? $orderRow['final_amount'] : '0.00';
+                                            $detailUrl = isset($orderRow['detail_url']) ? (string) $orderRow['detail_url'] : '';
+                                            ?>
+                                            <tr>
+                                                <td><?= $orderSN++ ?></td>
+                                                <td>
+                                                    <?php if ($detailUrl !== '') { ?>
+                                                        <a class="btn btn-sm btn-rounded btn-primary" href="<?= htmlspecialchars($detailUrl, ENT_QUOTES, 'UTF-8') ?>">Show Order Detail</a>
+                                                    <?php } else { ?>
+                                                        <span class="text-muted">N/A</span>
+                                                    <?php } ?>
+                                                </td>
+                                                <td><?= htmlspecialchars((string) $orderNo, ENT_QUOTES, 'UTF-8') ?></td>
+                                                <td><?= htmlspecialchars((string) $orderDate, ENT_QUOTES, 'UTF-8') ?></td>
+                                                <td><?= htmlspecialchars((string) $orderPackage, ENT_QUOTES, 'UTF-8') ?></td>
+                                                <td><?= htmlspecialchars((string) $buyerPayMethod, ENT_QUOTES, 'UTF-8') ?></td>
+                                                <td><?= commonFormatAmountRm($orderFees) ?></td>
+                                                <td><?= commonFormatAmountRm($finalAmount) ?></td>
+                                            </tr>
+                                        <?php }
+                                    } else { ?>
+                                        <tr>
+                                            <td colspan="8" class="text-center">No order records found.</td>
+                                        </tr>
+                                    <?php } ?>
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <th colspan="7" class="text-end">Sub-Total (RM)</th>
+                                        <th><?= commonFormatAmountRm($sumFinalAmount) ?></th>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
                     </div>
+                    <?php } ?>
+
                 </form>
+
+                <?php
+                $urbanCustomerId = (isset($dataExisted) && isset($row['id'])) ? (int) $row['id'] : 0;
+                if ($act === 'E' && $urbanCustomerId > 0) {
+                    $customerLogReturnUrl = $SITEURL . '/urb_cust_reg.php?id=' . urlencode((string) $dataID);
+                    if ($act !== '') {
+                        $customerLogReturnUrl .= '&act=' . urlencode((string) $act);
+                    }
+                    if ($returnPageInput !== '') {
+                        $customerLogReturnUrl .= '&return_page=' . urlencode((string) $returnPageInput);
+                    }
+                    if ($returnLabelInput !== '') {
+                        $customerLogReturnUrl .= '&return_label=' . urlencode((string) $returnLabelInput);
+                    }
+
+                    $customerLogContext = urlResolveUserRecordLogContext($connect, $connect, array(
+                        'customer_id' => $urbanCustomerId,
+                        'customer_column' => 'urbanism_member_id',
+                        'customer_label' => $urbanismFormName,
+                        'return_url' => $customerLogReturnUrl,
+                        'ajax_url' => $SITEURL . '/user_record_log.php',
+                        'customer_only' => true,
+                    ));
+
+                    urlRenderUserRecordLogModule($connect, $connect, array(
+                        'table_name' => USER_RECORD_LOG,
+                        'context' => $customerLogContext,
+                        'section_heading' => 'User Record Log',
+                        'show_scope_note' => true,
+                    ));
+                }
+                ?>
+
+                <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
+                    <?php
+                    switch ($act) {
+                        case 'I':
+                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" form="Form" name="actionBtn" id="actionBtn" value="addRecord">Add Record</button>';
+                            break;
+                        case 'E':
+                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" form="Form" name="actionBtn" id="actionBtn" value="updRecord">Edit Record</button>';
+                            break;
+                    }
+                    ?>
+                    <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" form="Form" name="actionBtn" id="actionBtn" value="back">Back</button>
+                </div>
             </div>
         </div>
     </div>
@@ -472,12 +869,51 @@ if (post('actionBtn')) {
     }
     ?>
     <script>
+        (function () {
+            function revealUrbanismPage() {
+                var preloaders = document.querySelectorAll('.preloader');
+                var preloadCenters = document.querySelectorAll('.pre-load-center');
+                var pageCovers = document.querySelectorAll('.page-load-cover');
+
+                for (var i = 0; i < preloaders.length; i++) {
+                    preloaders[i].style.display = 'none';
+                }
+                for (var j = 0; j < preloadCenters.length; j++) {
+                    preloadCenters[j].style.display = 'none';
+                }
+                for (var k = 0; k < pageCovers.length; k++) {
+                    pageCovers[k].style.display = 'block';
+                }
+            }
+
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', function () {
+                    setTimeout(revealUrbanismPage, 1200);
+                });
+            } else {
+                setTimeout(revealUrbanismPage, 1200);
+            }
+
+            window.addEventListener('load', function () {
+                setTimeout(revealUrbanismPage, 300);
+            });
+        })();
+    </script>
+    <script>
         var page = "<?= $pageTitle ?>";
         var action = "<?php echo isset($act) ? $act : ' '; ?>";
 
-        checkCurrentPage(page, action);
-        setButtonColor();
-        preloader(300, action);
+        if (typeof checkCurrentPage === 'function') {
+            checkCurrentPage(page, action);
+        }
+
+        if (typeof setButtonColor === 'function') {
+            setButtonColor();
+        }
+
+        if (typeof preloader === 'function') {
+            preloader(300, action);
+        }
 
         <?php
         include "./js/urb_cust_reg.js"

@@ -1,8 +1,10 @@
 <?php
 $pageTitle = "Warehouse";
+$currentPagePin = 16;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = WHSE;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
@@ -100,6 +102,7 @@ $result = getData('*', '', '', $tblName, $connect);
                 <?php if (!$result) {
                     echo '<div class="text-center"><h4>No Result!</h4></div>';
                 } else { ?>
+                    <div class="table-scroll-wrap mobile-scroll-wrap">
                     <table class="table table-striped" id="table">
                         <thead>
                             <tr>
@@ -141,7 +144,8 @@ $result = getData('*', '', '', $tblName, $connect);
                                 <th scope="col">Name</th>
                             </tr>
                         </tfoot>
-                    </table><?php } ?>
+                    </table>
+                    </div><?php } ?>
             </div>
         </div>
     </div>

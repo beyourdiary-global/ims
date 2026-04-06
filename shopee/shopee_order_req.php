@@ -1,4 +1,5 @@
 <?php
+$currentPagePin = 0;
 $pageTitle = "Shopee Order Request";
 $isFinance = 1;
 
@@ -637,6 +638,40 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 
     audit_log($log);
 }
+
+$urbanismBadgeSeedName = '';
+if (isset($row['buyer']) && trim((string) $row['buyer']) !== '') {
+    $urbanismBadgeSeedName = trim((string) $row['buyer']);
+}
+if ($urbanismBadgeSeedName === '' && postSpaceFilter('sor_user_hidden') !== '') {
+    $urbanismBadgeSeedName = trim((string) postSpaceFilter('sor_user_hidden'));
+}
+if ($urbanismBadgeSeedName === '' && postSpaceFilter('sor_user') !== '') {
+    $urbanismBadgeSeedName = trim((string) postSpaceFilter('sor_user'));
+}
+
+// Some Shopee orders persist buyer as SHOPEE_CUST_INFO.id instead of username.
+// Resolve to buyer_username first so Urbanism member matching is stable.
+if ($urbanismBadgeSeedName !== '' && ctype_digit($urbanismBadgeSeedName)) {
+    $buyerId = (int) $urbanismBadgeSeedName;
+    if ($buyerId > 0) {
+        $buyerRst = getData('buyer_username', "id='" . $buyerId . "'", 'LIMIT 1', SHOPEE_CUST_INFO, $finance_connect);
+        if ($buyerRst && $buyerRst->num_rows > 0) {
+            $buyerRow = $buyerRst->fetch_assoc();
+            if (isset($buyerRow['buyer_username']) && trim((string) $buyerRow['buyer_username']) !== '') {
+                $urbanismBadgeSeedName = trim((string) $buyerRow['buyer_username']);
+            }
+        }
+    }
+}
+
+$urbanismBadgeAction = getUrbanismMemberActionData(
+    $connect,
+    '',
+    $urbanismBadgeSeedName,
+    $redirect_page,
+    $pageTitle
+);
 ?>
 
 <!DOCTYPE html>
@@ -663,17 +698,19 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         <div class="col-6 col-md-6 formWidthAdjust">
             <form id="FORForm" method="post" action="" enctype="multipart/form-data">
                 <div class="form-group mb-5">
-                    <h2>
-                        <?php
-                        echo displayPageAction($act, $pageTitle);
-                        ?>
-                     
-                     <?php if ($act == 'E'): ?>
-                        <span style="float: right;" id="order-status">Order Status: <?= getOrderStatusLabel($row['order_status']) ?></span>
-                        
-                    <?php endif; ?>
-               
-                    </h2>
+                    <div class="order-title-row">
+                        <h2 class="mb-0"><?php echo displayPageAction($act, $pageTitle); ?></h2>
+                        <?php if ($act == 'E'): ?>
+                            <span id="order-status">Order Status: <?= getOrderStatusLabel($row['order_status']) ?></span>
+                        <?php endif; ?>
+                    </div>
+                    <div class="order-badge-row text-end mt-2">
+                        <a
+                            class="btn btn-sm <?= $urbanismBadgeAction['is_member'] ? 'btn-success' : 'btn-outline-secondary' ?> <?= $urbanismBadgeAction['disabled'] ? 'disabled' : '' ?>"
+                            href="<?= htmlspecialchars($urbanismBadgeAction['url'], ENT_QUOTES, 'UTF-8') ?>"
+                            title="<?= htmlspecialchars($urbanismBadgeAction['title'], ENT_QUOTES, 'UTF-8') ?>"
+                            <?= $urbanismBadgeAction['disabled'] ? 'onclick="return false;" aria-disabled="true"' : '' ?>><i class="<?= htmlspecialchars($urbanismBadgeAction['icon_class'], ENT_QUOTES, 'UTF-8') ?>"></i></a>
+                    </div>
                   
                 </div>
 

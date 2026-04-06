@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 51;
 $pageTitle = "Shopee Withdrawal Transactions";
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = SHOPEE_WDL_TRANS;
 
@@ -292,7 +294,7 @@ if (post('act') == 'D') {
         $dataID = $row['id'];
         
         //SET the record status to 'D'
-        deleteRecord($tblName, $dataID, $finance_connect, $connect, $cdate, $ctime, $pageTitle);
+        deleteRecord($tblName, '', $dataID, $dataID, $finance_connect, $connect, $cdate, $ctime, $pageTitle);
         $_SESSION['delChk'] = 1;
     } catch (Exception $e) {
         echo 'Message: ' . $e->getMessage();

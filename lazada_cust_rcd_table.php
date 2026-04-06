@@ -1,7 +1,9 @@
 <?php
 $pageTitle = "Lazada Customer Record (Deals)";
+$currentPagePin = 91;
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 $_SESSION['act'] = '';
@@ -134,6 +136,20 @@ $result = getData('*', '', '', LAZADA_CUST_RCD, $connect);
                                     <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
                                     <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
                                     <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                    <?php
+                                    $urbanismAction = getUrbanismMemberActionData(
+                                        $connect,
+                                        '',
+                                        isset($row['name']) ? (string) $row['name'] : '',
+                                        $deleteRedirectPage,
+                                        $pageTitle
+                                    );
+                                    ?>
+                                    <a
+                                        class="btn <?= $urbanismAction['is_member'] ? 'btn-success' : 'btn-secondary' ?> me-1 <?= $urbanismAction['disabled'] ? 'disabled' : '' ?>"
+                                        href="<?= htmlspecialchars($urbanismAction['url'], ENT_QUOTES, 'UTF-8') ?>"
+                                        title="<?= htmlspecialchars($urbanismAction['title'], ENT_QUOTES, 'UTF-8') ?>"
+                                        <?= $urbanismAction['disabled'] ? 'onclick="return false;" aria-disabled="true"' : '' ?>><i class="<?= $urbanismAction['icon_class'] ?>"></i></a>
                                 </td>
 
                                 <td scope="row">

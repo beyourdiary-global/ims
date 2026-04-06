@@ -1,8 +1,10 @@
 <?php
 $pageTitle = "SQL Account";
+$currentPagePin = 132;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = SQL_ACC;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
@@ -89,6 +91,7 @@ if (!$result) {
                     </div>
                 </div>
 
+                <div class="table-scroll-wrap mobile-scroll-wrap">
                 <table class="table table-striped" id="table">
                     <thead>
                         <tr>
@@ -127,6 +130,7 @@ if (!$result) {
                         </tr>
                     </tfoot>
                 </table>
+                </div>
             </div>
         </div>
     </div>

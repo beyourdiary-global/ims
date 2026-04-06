@@ -1,9 +1,11 @@
 <?php
 $pageTitle = "Facebook Order Request";
+$currentPagePin = 69;
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 $_SESSION['act'] = '';
@@ -13,7 +15,6 @@ $num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/finance/fb_order_req.php';
 $deleteRedirectPage = $SITEURL . '/finance/fb_order_req_table.php';
-$reg_member_page = $SITEURL . '/urb_cust_reg.php';
 $result = getData('*', '', '', FB_ORDER_REQ, $finance_connect);
 
 function fbReqFetchAssoc($rst)
@@ -59,7 +60,7 @@ function fbReqFetchAssoc($rst)
                         <h2>
                             <?php echo $pageTitle ?>
                         </h2>
-                        <?php if ($result) { ?>
+                        
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
@@ -67,7 +68,7 @@ function fbReqFetchAssoc($rst)
                                         Request </a>
                                 <?php endif; ?>
                             </div>
-                        <?php } ?>
+                        
                     </div>
                 </div>
             </div>
@@ -144,37 +145,25 @@ function fbReqFetchAssoc($rst)
                                     <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
                                     <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
                                     <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['contact'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
-                                    <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-bs-toggle="dropdown" aria-expanded="false">
-                                            <i class="fas fa-users"></i>
-                                        </button>
-                                        <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton">
-                                            <?php 
-                                            $safeMemberName = mysqli_real_escape_string($connect, (string) $row['name']);
-                                            $safeFbName = mysqli_real_escape_string($connect, (string) $row['name']);
-                                            $safeFbLink = mysqli_real_escape_string($connect, (string) $row['fb_link']);
-
-                                            $member_exist = getData('name', "name='" . $safeMemberName . "'", 'LIMIT 1', URBAN_CUST_REG, $connect);
-                                            $deal_row_rst = getData('id', "name='" . $safeFbName . "' AND fb_link='" . $safeFbLink . "'", 'LIMIT 1', FB_CUST_DEALS, $connect);
-                                            $deal_row = fbReqFetchAssoc($deal_row_rst);
-                                            $deal_id = isset($deal_row['id']) ? (int) $deal_row['id'] : 0;
-
-                                            if ($member_exist instanceof mysqli_result && $member_exist->num_rows > 0) {
-                                                $reg_url = $reg_member_page . "?id=" . urlencode((string) $row['name']) . '&act=' . (isset($act_2) ? $act_2 : 'E');
-                                                $menu_label = "Edit Member";
-                                            } else if ($deal_id > 0) {
-                                                $reg_url = $reg_member_page . "?id=" . $deal_id . '&act=' . (isset($act_1) ? $act_1 : 'I');
-                                                $menu_label = "Register Member";
-                                            } else {
-                                                $reg_url = '#';
-                                                $menu_label = "Register Member (Unavailable)";
-                                            }
-                                            ?>
-                                            <li>
-                                                <a class="dropdown-item" href="<?= htmlspecialchars($reg_url, ENT_QUOTES, 'UTF-8') ?>" <?= $reg_url === '#' ? 'onclick="return false;"' : '' ?>>
-                                                    <?= $menu_label ?>
-                                                </a>
-                                            </li>
-                                        </ul>
+                                    <?php
+                                    $safeFbName = mysqli_real_escape_string($connect, (string) $row['name']);
+                                    $safeFbLink = mysqli_real_escape_string($connect, (string) $row['fb_link']);
+                                    $dealRowRst = getData('id', "name='" . $safeFbName . "' AND fb_link='" . $safeFbLink . "'", 'LIMIT 1', FB_CUST_DEALS, $connect);
+                                    $dealRow = fbReqFetchAssoc($dealRowRst);
+                                    $dealId = isset($dealRow['id']) ? (string) ((int) $dealRow['id']) : '';
+                                    $urbanismAction = getUrbanismMemberActionData(
+                                        $connect,
+                                        '',
+                                        isset($row['name']) ? (string) $row['name'] : '',
+                                        $deleteRedirectPage,
+                                        $pageTitle
+                                    );
+                                    ?>
+                                    <a
+                                        class="btn <?= $urbanismAction['is_member'] ? 'btn-success' : 'btn-secondary' ?> me-1 <?= $urbanismAction['disabled'] ? 'disabled' : '' ?>"
+                                        href="<?= htmlspecialchars($urbanismAction['url'], ENT_QUOTES, 'UTF-8') ?>"
+                                        title="<?= htmlspecialchars($urbanismAction['title'], ENT_QUOTES, 'UTF-8') ?>"
+                                        <?= $urbanismAction['disabled'] ? 'onclick="return false;" aria-disabled="true"' : '' ?>><i class="<?= $urbanismAction['icon_class'] ?>"></i></a>
                                     </div>
                                     </td>
                                 <td>

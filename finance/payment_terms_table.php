@@ -1,8 +1,10 @@
 <?php
 $pageTitle = "Payment Terms";
+$currentPagePin = 63;
 $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = FIN_PAY_TERMS;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
@@ -52,14 +54,14 @@ $result = getData('*', '', '', $tblName, $finance_connect);
                     <div class="row">
                         <div class="col-12 d-flex justify-content-between flex-wrap">
                             <h2><?php echo $pageTitle ?></h2>
-                            <?php if ($result) { ?>
+                            
                                 <div class="mt-auto mb-auto">
                                     <?php if (isActionAllowed("Add", $pinAccess)) : ?>
                                         <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                             <?php echo $pageTitle ?> </a>
                                     <?php endif; ?>
                                 </div>
-                            <?php } ?>
+                            
                         </div>
                     </div>
                 </div>

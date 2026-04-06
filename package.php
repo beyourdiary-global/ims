@@ -4,6 +4,7 @@ $currentPagePin = 21;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 include ROOT.'/include/access.php';
 
 $tblName = PKG;

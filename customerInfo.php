@@ -1,8 +1,11 @@
 <?php
+$currentPagePin = 38;
 $pageTitle = "Customer Info";
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+include_once ROOT . '/include/user_record_log.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = CUS_INFO;
 
@@ -531,12 +534,47 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                             </div>
                         </fieldset>
 
-                        <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
-                            <?php echo ($act) ? '<button class="btn btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="actionBtn" value="' . $actionBtnValue . '">' . $pageActionTitle . '</button>' : ''; ?>
-                            <button class="btn btn-rounded btn-primary mx-2 mb-2 backBtn" name="actionBtn" id="actionBtn" value="back">Back</button>
-                        </div>
                     </div>
                 </form>
+
+                    <?php
+                    if ($dataID) {
+                        $customerLabel = '';
+                        if (isset($row['name']) && trim((string) $row['name']) !== '') {
+                            $customerLabel = trim((string) $row['name']);
+                            if (isset($row['last_name']) && trim((string) $row['last_name']) !== '') {
+                                $customerLabel .= ' ' . trim((string) $row['last_name']);
+                            }
+                        }
+
+                        $customerLogReturnUrl = $SITEURL . '/customerInfo.php?id=' . (int) $dataID;
+                        if ($act !== '') {
+                            $customerLogReturnUrl .= '&act=' . urlencode((string) $act);
+                        }
+
+                        $customerLogContext = urlResolveUserRecordLogContext($connect, $connect, array(
+                            'customer_id' => (int) $dataID,
+                            'customer_column' => 'cust_id',
+                            'customer_label' => $customerLabel,
+                            'return_url' => $customerLogReturnUrl,
+                            'ajax_url' => $SITEURL . '/user_record_log.php',
+                            'customer_only' => true,
+                            'customer_lookup_connect' => $connect,
+                        ));
+
+                        urlRenderUserRecordLogModule($connect, $connect, array(
+                            'table_name' => USER_RECORD_LOG,
+                            'context' => $customerLogContext,
+                            'section_heading' => 'User Record Log',
+                            'show_scope_note' => true,
+                        ));
+                    }
+                    ?>
+
+                <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
+                    <?php echo ($act) ? '<button class="btn btn-rounded btn-primary mx-2 mb-2" form="myForm" name="actionBtn" value="' . $actionBtnValue . '">' . $pageActionTitle . '</button>' : ''; ?>
+                    <button class="btn btn-rounded btn-primary mx-2 mb-2 backBtn" form="myForm" name="actionBtn" value="back">Back</button>
+                </div>
             </div>
         </div>
     </div>
@@ -619,7 +657,11 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                 return true;
             }
 
-            $("#actionBtn").on("click", function(event) {
+            $(document).on("click", "button[name='actionBtn']", function(event) {
+                if ($(this).val() === "back") {
+                    return true;
+                }
+
                 if (!validatePhoneCode()) {
                     event.preventDefault();
                 }
@@ -636,7 +678,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
             });
         });
 
-        $("#actionBtn").click(function() {
+        $(document).on("click", "button[name='actionBtn']", function() {
             var btnValue = $(this).val();
     
             if (btnValue === "back") {
@@ -652,7 +694,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                 if (reg.test(email)) {
                     return true;
                 } else {
-                    $("#emailMsg").text("Invalid email format！").css("color", "red");
+                    $("#emailMsg").text("Invalid email format").css("color", "red");
                     return false;
                 }
             });

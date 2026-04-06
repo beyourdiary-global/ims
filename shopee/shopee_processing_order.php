@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 0;
 $pageTitle = "Shopee Processing Order";
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $processingPageName = getPinGroupNameById($connect, 128);
 $verifyPageName = getPinGroupNameById($connect, 129);
@@ -67,15 +69,15 @@ if (isset($_GET['verify_id'])) {
                     'connect'     => $connect
                 );
                 audit_log($auditData);
-                $verifyMessage = "✅ Order #$orderId has been successfully verified.";
+                $verifyMessage = "Success: Order #$orderId has been successfully verified.";
             } else {
-                $verifyMessage = "❌ Failed to update order #$orderId.";
+                $verifyMessage = "Error: Failed to update order #$orderId.";
             }
         } else {
-            $verifyMessage = "⚠️ Order #$orderId is not in 'OC' status.";
+            $verifyMessage = "Warning: Order #$orderId is not in 'OC' status.";
         }
     } else {
-        $verifyMessage = "❌ Order #$orderId not found.";
+        $verifyMessage = "Error: Order #$orderId not found.";
     }
 }
 

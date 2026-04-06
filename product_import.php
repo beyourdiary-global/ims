@@ -1,7 +1,9 @@
 <?php
+$currentPagePin = 20;
 $pageTitle = '';
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $redirect_page = $SITEURL . '/product_table.php';
 $shortcut_page = $SITEURL . '/common_import.php';
@@ -21,6 +23,21 @@ if (!is_array($pinAccess)) {
 if (!isActionAllowed('Import', $pinAccess)) {
     echo '<script>alert("You do not have permission to import this page.");location.href = "' . $redirect_page . '";</script>';
     exit;
+}
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
+    $safeAuditUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
+    $safeAuditPageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
+    $log = [
+        'log_act' => 'View',
+        'cdate' => $cdate,
+        'ctime' => $ctime,
+        'uid' => USER_ID,
+        'cby' => USER_ID,
+        'act_msg' => $safeAuditUserName . " viewed the page <b>" . $safeAuditPageTitle . "</b>.",
+        'page' => $pageTitle,
+        'connect' => $connect,
+    ];
+    audit_log($log);
 }
 
 $action = post('actionBtn');

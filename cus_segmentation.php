@@ -1,8 +1,10 @@
 <?php
+$currentPagePin = 29;
 $pageTitle = "Customer Segmentation";
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = CUR_SEGMENTATION;
 

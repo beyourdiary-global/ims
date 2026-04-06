@@ -1,15 +1,16 @@
 <?php
 $pageTitle = "Facebook Customer Record (Deals)";
+$currentPagePin = 75;
+$disablePinGroupPageTitleSync = true;
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 $_SESSION['act'] = '';
 $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
-
-$reg_member_page = $SITEURL . '/urb_cust_reg.php';
 
 $redirect_page = $SITEURL . '/fb_cust_deals.php';
 $deleteRedirectPage = $SITEURL . '/fb_cust_deals_table.php';
@@ -60,7 +61,7 @@ $result = getData('*', '', '', FB_CUST_DEALS, $connect);
                         <h2>
                             <?php echo $pageTitle ?>
                         </h2>
-                        <?php if ($result) { ?>
+                        
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
@@ -68,7 +69,7 @@ $result = getData('*', '', '', FB_CUST_DEALS, $connect);
                                         Record </a>
                                 <?php endif; ?>
                             </div>
-                        <?php } ?>
+                        
                     </div>
                 </div>
             </div>
@@ -142,23 +143,20 @@ $result = getData('*', '', '', FB_CUST_DEALS, $connect);
                                 <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
                                 <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
                                 <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
-                                    <div class="dropdown">
-                                        <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-bs-toggle="dropdown" aria-expanded="false">
-                                            <i class="fas fa-users"></i>
-                                        </button>
-                                        <ul class="dropdown-menu" aria-labelledby="dropdownMenuButton">
-                                            <?php
-                                         $member_exist = getData('name', "name='" . $row['id'] . "'", '', URBAN_CUST_REG, $connect);
-
-                                         if ($member_exist && $member_exist->fetch_assoc()) {
-                                            $reg_url = $reg_member_page . "?id=" . $row['id'] . '&act=' . $act_2;
-                                         } else {
-                                            $reg_url = $reg_member_page . "?id=" . $row['id'] . '&act=' . $act_1;
-                                        }
-                                        ?>
-                                        <li><a class="dropdown-item" href="<?= $reg_url ?>">Urbanism Member</a></li>
-                                    </ul>
-                                </div>
+                                <?php
+                                $urbanismAction = getUrbanismMemberActionData(
+                                    $connect,
+                                    '',
+                                    isset($row['name']) ? (string) $row['name'] : '',
+                                    $deleteRedirectPage,
+                                    $pageTitle
+                                );
+                                ?>
+                                <a
+                                    class="btn <?= $urbanismAction['is_member'] ? 'btn-success' : 'btn-secondary' ?> me-1 <?= $urbanismAction['disabled'] ? 'disabled' : '' ?>"
+                                    href="<?= htmlspecialchars($urbanismAction['url'], ENT_QUOTES, 'UTF-8') ?>"
+                                    title="<?= htmlspecialchars($urbanismAction['title'], ENT_QUOTES, 'UTF-8') ?>"
+                                    <?= $urbanismAction['disabled'] ? 'onclick="return false;" aria-disabled="true"' : '' ?>><i class="<?= $urbanismAction['icon_class'] ?>"></i></a>
                             </div>
                         </td>
 

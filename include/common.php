@@ -75,6 +75,81 @@ function xssFilter($url)
 	return $url;
 }
 
+if (!function_exists('commonFormatAmountRm')) {
+    function commonFormatAmountRm($val)
+    {
+        $num = is_numeric($val) ? (float) $val : 0;
+        return number_format($num, 2, '.', '');
+    }
+}
+
+if (!function_exists('commonResolvePackageNamesFromCsv')) {
+    function commonResolvePackageNamesFromCsv($packageCsv, $connect)
+    {
+        $packageCsv = trim((string) $packageCsv);
+        if ($packageCsv === '') {
+            return '';
+        }
+
+        $packageIds = array_filter(array_map('trim', explode(',', $packageCsv)), function ($v) {
+            return $v !== '';
+        });
+
+        $numericIds = array();
+        foreach ($packageIds as $id) {
+            if (ctype_digit((string) $id)) {
+                $numericIds[] = (int) $id;
+            }
+        }
+
+        $numericIds = array_values(array_unique($numericIds));
+        if (empty($numericIds)) {
+            return $packageCsv;
+        }
+
+        $sql = "SELECT id, name FROM " . PKG . " WHERE id IN (" . implode(',', $numericIds) . ")";
+        $result = mysqli_query($connect, $sql);
+
+        $idToName = array();
+        if ($result instanceof mysqli_result) {
+            while ($row = $result->fetch_assoc()) {
+                $idToName[(int) $row['id']] = isset($row['name']) ? $row['name'] : '';
+            }
+        }
+
+        $names = array();
+        foreach ($packageIds as $id) {
+            if (!ctype_digit((string) $id)) {
+                continue;
+            }
+            $intId = (int) $id;
+            if (isset($idToName[$intId]) && $idToName[$intId] !== '') {
+                $names[] = $idToName[$intId];
+            }
+        }
+
+        return empty($names) ? $packageCsv : implode(', ', $names);
+    }
+}
+
+if (!function_exists('commonResolvePaymentMethodName')) {
+    function commonResolvePaymentMethodName($payMethodId, $financeConnect)
+    {
+        $payMethodId = trim((string) $payMethodId);
+        if ($payMethodId === '' || !ctype_digit($payMethodId)) {
+            return $payMethodId;
+        }
+
+        $rst = getData('name', "id='" . mysqli_real_escape_string($financeConnect, $payMethodId) . "'", 'LIMIT 1', FIN_PAY_METH, $financeConnect);
+        if ($rst && $rst->num_rows > 0) {
+            $row = $rst->fetch_assoc();
+            return isset($row['name']) ? (string) $row['name'] : $payMethodId;
+        }
+
+        return $payMethodId;
+    }
+}
+
 function redirect($addr, $alert = '')
 {
 	global $siteOrlocalMode;
@@ -250,11 +325,20 @@ function isDuplicateRecordWithConditions($fields, $values, $tbl, $connect, $prim
 	if ($primaryKeyValue)
 		$conditions['id !='] = $primaryKeyValue; // Exclude current record if editing
 
-	$whereClause = implode(' AND ', array_map(
-		fn($key, $value) => "`$key` = '" . mysqli_real_escape_string($connect, $value) . "'",
-		array_keys($conditions),
-		$conditions
-	));
+    $whereParts = array();
+    foreach ($conditions as $key => $value) {
+        $operator = '=';
+        $field = trim((string) $key);
+
+        if (preg_match('/^(.+?)\s*(>=|<=|!=|<>|=|>|<)$/', $field, $matches)) {
+            $field = trim((string) $matches[1]);
+            $operator = $matches[2];
+        }
+
+        $whereParts[] = "`$field` $operator '" . mysqli_real_escape_string($connect, (string) $value) . "'";
+    }
+
+    $whereClause = implode(' AND ', $whereParts);
 
 	$query = "SELECT COUNT(*) as count FROM `$tbl` WHERE $whereClause";
 	$result = mysqli_query($connect, $query);
@@ -421,60 +505,110 @@ function get_allowed_audit_actions($key = null) {
     return null;
 }
 
+if (!function_exists('normalizeAuditLogValue')) {
+    function normalizeAuditLogValue($value)
+    {
+        if (is_array($value)) {
+            $normalized = array_map('normalizeAuditLogValue', $value);
+            return implode(',', $normalized);
+        }
+
+        if ($value === null) {
+            return 'Empty Value';
+        }
+
+        $value = trim((string) $value);
+        return $value === '' ? 'Empty Value' : $value;
+    }
+}
+
+if (!function_exists('auditLogEscape')) {
+    function auditLogEscape($connect, $value)
+    {
+        if (!($connect instanceof mysqli)) {
+            return '';
+        }
+
+        return mysqli_real_escape_string($connect, normalizeAuditLogValue($value));
+    }
+}
+
 
 function audit_log($data = array())
 {
-	if (count($data) > 0) {
-		extract($data);
+    if (!is_array($data) || empty($data)) {
+        return;
+    }
 
-		switch (strtolower($log_act)) {
-			case 'view':
-				$query = "INSERT INTO " . AUDIT_LOG . " (log_action, screen_type, user_id, action_message, create_date, create_time, create_by) VALUES ('1', '$page', '$uid', '$act_msg', '$cdate', '$ctime', '$cby')";
-				break;
-			case 'edit':
-				$query = "INSERT INTO " . AUDIT_LOG . " (log_action, screen_type, query_record, query_table, old_value, changes, user_id, action_message, create_date, create_time, create_by) VALUES ('2', '$page', \"$query_rec\", '$query_table', '$oldval', '$changes', '$uid', \"$act_msg\", '$cdate', '$ctime', '$cby')";
-				break;
-			case 'delete':
-				$query = "INSERT INTO " . AUDIT_LOG . " (log_action, screen_type, query_record, query_table, user_id, action_message, create_date, create_time, create_by) VALUES ('3', '$page', \"$query_rec\", '$query_table', '$uid', '$act_msg', '$cdate', '$ctime', '$cby')";
-				break;
-			case 'add':
-				$query = "INSERT INTO " . AUDIT_LOG . " (log_action, screen_type, query_record, query_table, new_value, user_id, action_message, create_date, create_time, create_by) VALUES ('4', '$page', \"$query_rec\", '$query_table', '$newval', '$uid', '$act_msg', '$cdate', '$ctime', '$cby')";
-				break;
-			case 'import':
-				$query = "INSERT INTO " . AUDIT_LOG . " (log_action, screen_type, query_record, query_table, new_value, user_id, action_message, create_date, create_time, create_by) VALUES ('5', '$page', \"$query_rec\", '$query_table', '$newval', '$uid', '$act_msg', '$cdate', '$ctime', '$cby')";
-				break;
-			case 'export':
-				$query = "INSERT INTO " . AUDIT_LOG . " (log_action, screen_type, user_id, action_message, create_date, create_time, create_by) VALUES ('6', '$page', '$uid', '$act_msg', '$cdate', '$ctime', '$cby')";
-				break;
-			case 'login':
-				$query = "INSERT INTO " . AUDIT_LOG . " (screen_type, log_action, user_id, action_message, create_date, create_time, create_by) VALUES ('Login Screen', '7', '$uid', '$act_msg', '$cdate', '$ctime', '$cby')";
-				break;
-			case 'logout':
-				$query = "INSERT INTO " . AUDIT_LOG . " (screen_type, log_action, user_id, action_message, create_date, create_time, create_by) VALUES ('Login Screen', '8', '$uid', '$act_msg', '$cdate', '$ctime', '$cby')";
-				break;
-			case 'check':
-				$query = "INSERT INTO " . AUDIT_LOG . " (log_action, screen_type, user_id, action_message, create_date, create_time, create_by) VALUES ('9', '$page', '$uid', '$act_msg', '$cdate', '$ctime', '$cby')";
-				break;
-			case 'approval':
-				$query = "INSERT INTO " . AUDIT_LOG . " (log_action, screen_type, query_record, query_table, user_id, action_message, create_date, create_time, create_by) VALUES ('10', '$page', \"$query_rec\", '$query_table', '$uid', '$act_msg', '$cdate', '$ctime', '$cby')";
-				break;
-			case 'declined':
-				$query = "INSERT INTO " . AUDIT_LOG . " (log_action, screen_type, query_record, query_table, user_id, action_message, create_date, create_time, create_by) VALUES ('11', '$page', \"$query_rec\", '$query_table', '$uid', '$act_msg', '$cdate', '$ctime', '$cby')";
-				break;
-			case 'cancel':
-				$query = "INSERT INTO " . AUDIT_LOG . " (log_action, screen_type, query_record, query_table, user_id, action_message, create_date, create_time, create_by) VALUES ('12', '$page', \"$query_rec\", '$query_table', '$uid', '$act_msg', '$cdate', '$ctime', '$cby')";
-				break;
-			case 'search':
-				$query = "INSERT INTO " . AUDIT_LOG . " (log_action, screen_type, query_record, query_table, user_id, action_message, create_date, create_time, create_by) VALUES ('12', '$page', \"$query_rec\", '$query_table', '$uid', '$act_msg', '$cdate', '$ctime', '$cby')";
-				break;
-			case 'reset':
-				$query = "INSERT INTO " . AUDIT_LOG . " (log_action, screen_type, query_record, query_table, user_id, action_message, create_date, create_time, create_by) VALUES ('12', '$page', \"$query_rec\", '$query_table', '$uid', '$act_msg', '$cdate', '$ctime', '$cby')";
-				break;
-		}
+    // --- BACKWARD COMPATIBILITY FIX ---
+    // Try to use the passed connection. If missing, fall back to the global $connect.
+    $connect = (isset($data['connect']) && $data['connect'] instanceof mysqli) 
+        ? $data['connect'] 
+        : (isset($GLOBALS['connect']) ? $GLOBALS['connect'] : null);
 
-		if (isset($query))
-			mysqli_query($connect, $query);
-	}
+    // Abort if no valid database connection can be found at all
+    if (!($connect instanceof mysqli)) {
+        return;
+    }
+    // ----------------------------------
+
+    $logAct = strtolower(trim((string) ($data['log_act'] ?? '')));
+    $actionId = get_allowed_audit_actions($logAct);
+
+    if ($actionId === null) {
+        return;
+    }
+
+    $page = auditLogEscape($connect, $data['page'] ?? '');
+    $uid = auditLogEscape($connect, $data['uid'] ?? '');
+    $cby = auditLogEscape($connect, $data['cby'] ?? '');
+    $cdate = auditLogEscape($connect, $data['cdate'] ?? date('Y-m-d'));
+    $ctime = auditLogEscape($connect, $data['ctime'] ?? date('H:i:s'));
+    $actMsg = auditLogEscape($connect, $data['act_msg'] ?? '');
+    $queryRec = auditLogEscape($connect, $data['query_rec'] ?? '');
+    $queryTable = auditLogEscape($connect, $data['query_table'] ?? '');
+    $oldVal = auditLogEscape($connect, $data['oldval'] ?? '');
+    $newVal = auditLogEscape($connect, $data['newval'] ?? '');
+    $changes = auditLogEscape($connect, $data['changes'] ?? '');
+
+    $screenType = in_array($logAct, array('login', 'logout'), true) ? 'Login Screen' : $page;
+
+    $fields = array(
+        'log_action' => (string) $actionId,
+        'screen_type' => $screenType,
+        'user_id' => $uid,
+        'action_message' => $actMsg,
+        'create_date' => $cdate,
+        'create_time' => $ctime,
+        'create_by' => $cby,
+    );
+
+    if (in_array($logAct, array('add', 'import'), true)) {
+        $fields['query_record'] = $queryRec;
+        $fields['query_table'] = $queryTable;
+        $fields['new_value'] = $newVal;
+    }
+
+    if ($logAct === 'edit') {
+        $fields['query_record'] = $queryRec;
+        $fields['query_table'] = $queryTable;
+        $fields['old_value'] = $oldVal;
+        $fields['changes'] = $changes;
+    }
+
+    if (in_array($logAct, array('delete', 'approval', 'declined', 'cancel', 'search', 'reset'), true)) {
+        $fields['query_record'] = $queryRec;
+        $fields['query_table'] = $queryTable;
+    }
+
+    $columns = implode(', ', array_keys($fields));
+    $values = array();
+    foreach ($fields as $value) {
+        $values[] = "'" . $value . "'";
+    }
+
+    $query = "INSERT INTO " . AUDIT_LOG . " (" . $columns . ") VALUES (" . implode(', ', $values) . ")";
+    mysqli_query($connect, $query);
 }
 
 function formatTime($time)
@@ -804,7 +938,20 @@ function displayPageAction($act, $page)
 
 function implodeWithComma($data)
 {
-	return implode(",", $data);
+    if (!is_array($data)) {
+        return normalizeAuditLogValue($data);
+    }
+
+    $normalized = array_map('normalizeAuditLogValue', $data);
+    return implode(',', $normalized);
+}
+
+function sanitizeAuditMessageValue($value)
+{
+    $normalized = normalizeAuditLogValue($value);
+    $normalized = stripslashes((string) $normalized);
+    $normalized = str_replace(array("\\`", "\\'", '\\"'), array('`', "'", '"'), $normalized);
+    return trim($normalized);
 }
 
 
@@ -816,20 +963,32 @@ function actMsgLog($id, $datafield = array(), $newvalarr = array(), $oldvalarr =
 
 	switch ($action) {
 		case 'add':
-			for ($i = 0; $i < sizeof($datafield); $i++) {
+            $fieldCount = min(sizeof($datafield), sizeof($newvalarr));
+            for ($i = 0; $i < $fieldCount; $i++) {
+                $fieldName = sanitizeAuditMessageValue($datafield[$i]);
+                $newValue = htmlspecialchars(sanitizeAuditMessageValue($newvalarr[$i]), ENT_QUOTES, 'UTF-8');
 				if ($i == 0)
-					$actMsg .= " [ <b> " . $datafield[$i] . " </b> : <b>\'" . $newvalarr[$i] . "\'</b>  ]";
+                    $actMsg .= " [ <b> " . $fieldName . " </b> : <b>'" . $newValue . "'</b>  ]";
 				else
-					$actMsg .= " , [ <b> " . $datafield[$i] . " </b> : <b>\'" . $newvalarr[$i] . "\'</b> ]";
+                    $actMsg .= " , [ <b> " . $fieldName . " </b> : <b>'" . $newValue . "'</b> ]";
 			}
 			break;
 		case 'edit':
+            $fieldCount = sizeof($datafield);
+            for ($i = 0; $i < $fieldCount; $i++) {
+                $fieldName = sanitizeAuditMessageValue($datafield[$i]);
+                $oldValue = htmlspecialchars(sanitizeAuditMessageValue(isset($oldvalarr[$i]) ? $oldvalarr[$i] : 'Empty Value'), ENT_QUOTES, 'UTF-8');
+                $chgValue = htmlspecialchars(sanitizeAuditMessageValue(isset($chgvalarr[$i]) ? $chgvalarr[$i] : 'Empty Value'), ENT_QUOTES, 'UTF-8');
+                $segment = " [ <b> " . $fieldName . " </b> : <b>'" . $oldValue . "'</b>";
+                if (trim($chgValue) !== '' && strtolower(trim($chgValue)) !== 'empty value') {
+                    $segment .= " to <b>'" . $chgValue . "'</b>";
+                }
+                $segment .= " ]";
 
-			for ($i = 0; $i < sizeof($datafield); $i++) {
-				if ($i == 0)
-					$actMsg .= " [ <b> " . $datafield[$i] . " </b> : <b>\'" . $oldvalarr[$i] . "\'</b> to <b>\'" . $chgvalarr[$i] . "\'</b> ]";
-				else
-					$actMsg .= " , [ <b> " . $datafield[$i] . " </b> : <b>\'" . $oldvalarr[$i] . "\'</b> to <b>\'" . $chgvalarr[$i] . "\'</b> ]";
+                if ($i == 0)
+                    $actMsg .= $segment;
+                else
+                    $actMsg .= " ," . $segment;
 			}
 			break;
 	}
@@ -1018,6 +1177,144 @@ function renderDeleteButton($pinAccess, $rowId, $rowName, $rowRemark, $pageTitle
 
         // Output Delete button
         echo '<a class="btn btn-danger" onclick="' . $safeOnclick . '"><i class="fas fa-trash-alt"></i></a>';
+    }
+}
+
+if (!function_exists('getUrbanismMemberActionData')) {
+    function getUrbanismMemberActionData($connect, $seedId = '', $seedName = '', $returnPage = '', $returnLabel = '')
+    {
+        $seedId = trim((string) $seedId);
+        $seedName = trim((string) $seedName);
+        $returnPage = trim((string) $returnPage);
+        $returnLabel = trim((string) $returnLabel);
+
+        if ($returnPage !== '') {
+            if (preg_match('/^https?:\/\//i', $returnPage)) {
+                $parsedReturnPath = parse_url($returnPage, PHP_URL_PATH);
+                if (is_string($parsedReturnPath) && $parsedReturnPath !== '') {
+                    $returnPage = $parsedReturnPath;
+                }
+            }
+
+            $returnPage = str_replace('\\', '/', $returnPage);
+            $sitePathPrefix = '';
+            if (defined('SITEURL')) {
+                $siteParsedPath = parse_url(SITEURL, PHP_URL_PATH);
+                if (is_string($siteParsedPath) && $siteParsedPath !== '') {
+                    $sitePathPrefix = rtrim(str_replace('\\', '/', $siteParsedPath), '/');
+                }
+            }
+
+            if ($sitePathPrefix !== '' && strpos($returnPage, $sitePathPrefix . '/') === 0) {
+                $returnPage = substr($returnPage, strlen($sitePathPrefix) + 1);
+            }
+
+            $returnPage = ltrim($returnPage, '/');
+        }
+
+        $memberRow = null;
+
+        if ($connect instanceof mysqli) {
+            static $memberCacheById = array();
+            static $memberCacheByName = array();
+
+            $normalizedSeedName = strtolower(trim((string) $seedName));
+
+            if ($normalizedSeedName !== '') {
+                if (array_key_exists($normalizedSeedName, $memberCacheByName)) {
+                    $memberRow = $memberCacheByName[$normalizedSeedName];
+                } else {
+                    $safeSeedName = mysqli_real_escape_string($connect, $normalizedSeedName);
+                    $memberSql = "SELECT * FROM " . URBAN_CUST_REG . " WHERE LOWER(TRIM(name))='" . $safeSeedName . "' LIMIT 1";
+                    $memberRst = mysqli_query($connect, $memberSql);
+
+                    if ($memberRst && $memberRst->num_rows > 0) {
+                        $memberRow = $memberRst->fetch_assoc();
+                    } else {
+                        $memberRow = null;
+                    }
+
+                    $memberCacheByName[$normalizedSeedName] = $memberRow;
+                    if ($memberRow !== null) {
+                        $memberIdKey = isset($memberRow['id']) ? trim((string) $memberRow['id']) : '';
+                        if ($memberIdKey !== '') {
+                            $memberCacheById[$memberIdKey] = $memberRow;
+                        }
+                        if ($seedId !== '') {
+                            $memberCacheById[$seedId] = $memberRow;
+                        }
+                    }
+                }
+            }
+
+            if ($memberRow === null && $seedId !== '' && $normalizedSeedName === '') {
+                if (array_key_exists($seedId, $memberCacheById)) {
+                    $memberRow = $memberCacheById[$seedId];
+                } else {
+                    $memberRst = null;
+                    if (ctype_digit($seedId)) {
+                        $memberRst = getData('*', "id='" . ((int) $seedId) . "'", 'LIMIT 1', URBAN_CUST_REG, $connect);
+                    }
+
+                    if ($memberRst === null) {
+                        $safeSeedId = mysqli_real_escape_string($connect, strtolower(trim((string) $seedId)));
+                        $memberSql = "SELECT * FROM " . URBAN_CUST_REG . " WHERE LOWER(TRIM(name))='" . $safeSeedId . "' LIMIT 1";
+                        $memberRst = mysqli_query($connect, $memberSql);
+                    }
+
+                    if ($memberRst && $memberRst->num_rows > 0) {
+                        $memberRow = $memberRst->fetch_assoc();
+                    } else {
+                        $memberRow = null;
+                    }
+
+                    $memberCacheById[$seedId] = $memberRow;
+                    if ($memberRow !== null) {
+                        $memberIdKey = isset($memberRow['id']) ? trim((string) $memberRow['id']) : '';
+                        if ($memberIdKey !== '') {
+                            $memberCacheById[$memberIdKey] = $memberRow;
+                        }
+                        $memberNameKey = strtolower(trim((string) (isset($memberRow['name']) ? $memberRow['name'] : '')));
+                        if ($memberNameKey !== '') {
+                            $memberCacheByName[$memberNameKey] = $memberRow;
+                        }
+                    }
+                }
+            }
+        }
+
+        $isMember = is_array($memberRow);
+        $targetId = $isMember
+            ? trim((string) ($memberRow['id'] ?? ''))
+            : trim((string) ($seedName !== '' ? $seedName : $seedId));
+
+        $params = array(
+            'id' => $targetId,
+            'act' => $isMember ? 'E' : 'I',
+        );
+
+        if ($returnPage !== '') {
+            $params['return_page'] = $returnPage;
+        }
+
+        if ($returnLabel !== '') {
+            $params['return_label'] = $returnLabel;
+        }
+
+        $url = '#';
+        $disabled = true;
+        if ($targetId !== '' && defined('SITEURL')) {
+            $url = SITEURL . '/urb_cust_reg.php?' . http_build_query($params);
+            $disabled = false;
+        }
+
+        return array(
+            'url' => $url,
+            'is_member' => $isMember,
+            'disabled' => $disabled,
+            'icon_class' => $isMember ? 'fa-solid fa-address-card' : 'fas fa-users',
+            'title' => $isMember ? 'Urbanism Member' : 'Register Urbanism Member',
+        );
     }
 }
 

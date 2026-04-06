@@ -1,10 +1,12 @@
 <?php
+$currentPagePin = 93;
 ob_start();
 $pageTitle = "Lazada Order Request";
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 include_once 'submodel/filterDateFunction.php';
 include_once 'submodel/convertDBnaming.php';
 include_once 'submodel/generateGroupByDropdown.php';

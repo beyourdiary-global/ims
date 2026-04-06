@@ -1,8 +1,10 @@
 <?php
 $pageTitle = "Currency Unit";
+$currentPagePin = 10;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = CUR_UNIT;
 $pinAccess = checkCurrentPin($connect, $pageTitle);

@@ -794,20 +794,564 @@ function convertDate(date, current_Date) {
   } else return valid_date;
 }
 
-function createSortingTable(tableid) {
+function getDefaultDataTableLengthMenu() {
+  return [
+    [10, 25, 50, 100, -1],
+    [10, 25, 50, 100, "All"],
+  ];
+}
+
+function applyGlobalDataTableDefaults() {
+  if (typeof window.jQuery === "undefined" || !$.fn || !$.fn.dataTable) {
+    return;
+  }
+
+  if (!$.fn.dataTable.defaults.lengthMenu) {
+    $.extend(true, $.fn.dataTable.defaults, {
+      lengthMenu: getDefaultDataTableLengthMenu(),
+    });
+  }
+}
+
+function ensureGlobalDataTableEmptyStateStyle() {
+  if (document.getElementById("global-dt-empty-state-style")) {
+    return;
+  }
+
+  var style = document.createElement("style");
+  style.id = "global-dt-empty-state-style";
+  style.textContent =
+    ".global-dt-hidden{display:none !important;}" +
+    ".global-dt-empty-state{padding:2.25rem 0;}";
+  document.head.appendChild(style);
+}
+
+function getDataTableApiFromSettings(settings) {
+  if (
+    !settings ||
+    typeof window.jQuery === "undefined" ||
+    !$.fn ||
+    !$.fn.dataTable
+  ) {
+    return null;
+  }
+
+  try {
+    return new $.fn.dataTable.Api(settings);
+  } catch (e) {
+    return null;
+  }
+}
+
+function syncGlobalDataTableEmptyState(dataTableApi) {
+  if (
+    !dataTableApi ||
+    !dataTableApi.settings ||
+    !dataTableApi.settings().length
+  ) {
+    return;
+  }
+
+  var settings = dataTableApi.settings()[0];
+  if (!settings || !settings.sTableId) {
+    return;
+  }
+
+  var tableId = settings.sTableId;
+  var wrapperId = tableId + "_wrapper";
+  var emptyStateId = tableId + "_global_no_result";
+  var wrapper = document.getElementById(wrapperId);
+
+  if (!wrapper || !wrapper.parentNode) {
+    return;
+  }
+
+  var recordsTotal = 0;
+  if (
+    typeof dataTableApi.page === "function" &&
+    typeof dataTableApi.page.info === "function"
+  ) {
+    var pageInfo = dataTableApi.page.info();
+    if (pageInfo && typeof pageInfo.recordsTotal === "number") {
+      recordsTotal = pageInfo.recordsTotal;
+    }
+  }
+
+  if (recordsTotal === 0 && typeof dataTableApi.rows === "function") {
+    recordsTotal = dataTableApi.rows().count();
+  }
+
+  var isEmpty = recordsTotal === 0;
+  var emptyStateNode = document.getElementById(emptyStateId);
+
+  if (!emptyStateNode) {
+    emptyStateNode = document.createElement("div");
+    emptyStateNode.id = emptyStateId;
+    emptyStateNode.className = "global-dt-empty-state";
+    emptyStateNode.innerHTML =
+      '<div class="text-center"><h4>No Result!</h4></div>';
+    wrapper.parentNode.insertBefore(emptyStateNode, wrapper.nextSibling);
+  }
+
+  wrapper.classList.toggle("global-dt-hidden", isEmpty);
+  emptyStateNode.style.display = isEmpty ? "block" : "none";
+}
+
+function bindGlobalDataTableEmptyStateHandlers() {
+  if (typeof window.jQuery === "undefined" || !$.fn || !$.fn.dataTable) {
+    return;
+  }
+
+  if (window.__globalDataTableEmptyStateHandlersBound) {
+    return;
+  }
+
+  ensureGlobalDataTableEmptyStateStyle();
+  window.__globalDataTableEmptyStateHandlersBound = true;
+
+  $(document).on("init.dt draw.dt", function (event, settings) {
+    var tableApi = getDataTableApiFromSettings(settings);
+    if (tableApi) {
+      syncGlobalDataTableEmptyState(tableApi);
+    }
+  });
+
+  var existingTables = $.fn.dataTable.tables({ api: true });
+  if (
+    existingTables &&
+    typeof existingTables.count === "function" &&
+    existingTables.count() > 0
+  ) {
+    existingTables.every(function () {
+      syncGlobalDataTableEmptyState(this);
+    });
+  }
+}
+
+function resolveActionLabel(element) {
+  var titleAttr = (element.getAttribute("title") || "").trim();
+  if (titleAttr !== "") {
+    return titleAttr;
+  }
+
+  var textLabel = (element.textContent || "").trim();
+  if (textLabel !== "") {
+    return textLabel;
+  }
+
+  var icon = element.querySelector("i");
+  var iconClass = icon ? icon.className : "";
+  if (iconClass.indexOf("fa-eye") !== -1) return "View";
+  if (iconClass.indexOf("fa-edit") !== -1 || iconClass.indexOf("fa-pen") !== -1)
+    return "Edit";
+  if (iconClass.indexOf("fa-trash") !== -1) return "Delete";
+  if (iconClass.indexOf("fa-address-card") !== -1) return "Urbanism Member";
+  if (iconClass.indexOf("fa-user-plus") !== -1) return "Register Member";
+  return "Action";
+}
+
+function resolveActionType(element) {
+  var icon = element.querySelector("i");
+  var iconClass = icon ? icon.className : "";
+
+  if (iconClass.indexOf("fa-eye") !== -1) return "view";
+  if (iconClass.indexOf("fa-edit") !== -1 || iconClass.indexOf("fa-pen") !== -1)
+    return "edit";
+  if (iconClass.indexOf("fa-trash") !== -1) return "delete";
+  if (
+    iconClass.indexOf("fa-address-card") !== -1 ||
+    iconClass.indexOf("fa-user-plus") !== -1 ||
+    iconClass.indexOf("fa-id-badge") !== -1
+  )
+    return "member";
+
+  return "default";
+}
+
+function buildMobileActionItem(actionNode) {
+  var node = actionNode.cloneNode(true);
+  var actionLabel = resolveActionLabel(actionNode);
+  var actionType = resolveActionType(actionNode);
+  var iconNode = actionNode.querySelector("i");
+  var iconHtml = iconNode
+    ? iconNode.outerHTML
+    : '<i class="fas fa-circle"></i>';
+
+  node.className = "mobile-action-item mobile-action-item--" + actionType;
+  node.removeAttribute("id");
+  node.innerHTML = iconHtml + "<span>" + actionLabel + "</span>";
+  node.setAttribute("aria-label", actionLabel);
+
+  node.addEventListener("mouseenter", function () {
+    node.classList.add("is-hover");
+  });
+  node.addEventListener("mouseleave", function () {
+    node.classList.remove("is-hover");
+  });
+
+  if (node.tagName.toLowerCase() === "button" && !node.getAttribute("type")) {
+    node.setAttribute("type", "button");
+  }
+
+  return node;
+}
+
+function convertTableActionButtonsForMobile() {
+  var actionCells = document.querySelectorAll("td.btn-container");
+  var isMobileView = window.matchMedia("(max-width: 768px)").matches;
+
+  actionCells.forEach(function (cell) {
+    if (!cell.dataset.originalActionHtml) {
+      cell.dataset.originalActionHtml = cell.innerHTML;
+    }
+
+    if (!isMobileView) {
+      if (cell.classList.contains("mobile-action-ready")) {
+        cell.innerHTML = cell.dataset.originalActionHtml;
+        cell.classList.remove("mobile-action-ready", "mobile-action-open");
+      }
+      return;
+    }
+
+    if (cell.classList.contains("mobile-action-ready")) {
+      return;
+    }
+
+    var tempWrapper = document.createElement("div");
+    tempWrapper.innerHTML = cell.dataset.originalActionHtml;
+
+    var actionNodes = Array.prototype.slice
+      .call(tempWrapper.querySelectorAll("a, button"))
+      .filter(function (node) {
+        return (
+          !node.closest(".dropdown-menu") &&
+          !node.classList.contains("dropdown-toggle")
+        );
+      });
+
+    if (actionNodes.length === 0) {
+      return;
+    }
+
+    var wrapper = document.createElement("div");
+    wrapper.className = "mobile-action-wrapper";
+
+    var trigger = document.createElement("button");
+    trigger.type = "button";
+    trigger.className = "mobile-action-trigger";
+    trigger.setAttribute("aria-label", "Show row actions");
+    trigger.innerHTML = '<i class="fa-solid fa-eye"></i>';
+    trigger.addEventListener("mouseenter", function () {
+      trigger.classList.add("is-hover");
+    });
+    trigger.addEventListener("mouseleave", function () {
+      trigger.classList.remove("is-hover");
+    });
+
+    var menu = document.createElement("div");
+    menu.className = "mobile-action-menu";
+
+    actionNodes.forEach(function (node) {
+      menu.appendChild(buildMobileActionItem(node));
+    });
+
+    wrapper.appendChild(trigger);
+    wrapper.appendChild(menu);
+
+    cell.innerHTML = "";
+    cell.appendChild(wrapper);
+    cell.classList.add("mobile-action-ready");
+  });
+}
+
+function initMobileActionMenus() {
+  var currentHoveredNode = null;
+  var hoverSyncIntervalId = null;
+
+  var setHoveredNode = function (node) {
+    if (currentHoveredNode === node) {
+      return;
+    }
+
+    if (currentHoveredNode) {
+      currentHoveredNode.classList.remove("is-hover");
+    }
+
+    currentHoveredNode = node || null;
+    if (currentHoveredNode) {
+      currentHoveredNode.classList.add("is-hover");
+    }
+  };
+
+  var clearMobileHoverState = function () {
+    setHoveredNode(null);
+  };
+
+  var applyMobileHoverFromPoint = function (clientX, clientY) {
+    if (
+      typeof clientX !== "number" ||
+      typeof clientY !== "number" ||
+      clientX < 0 ||
+      clientY < 0
+    ) {
+      return;
+    }
+
+    var findHoverCandidateByRect = function () {
+      var candidates = document.querySelectorAll(
+        "td.btn-container.mobile-action-open .mobile-action-item, td.btn-container.mobile-action-open .mobile-action-trigger",
+      );
+
+      for (var i = 0; i < candidates.length; i++) {
+        var candidate = candidates[i];
+        var rect = candidate.getBoundingClientRect();
+        if (
+          clientX >= rect.left &&
+          clientX <= rect.right &&
+          clientY >= rect.top &&
+          clientY <= rect.bottom
+        ) {
+          return candidate;
+        }
+      }
+
+      return null;
+    };
+
+    var rectCandidate = findHoverCandidateByRect();
+    if (rectCandidate) {
+      setHoveredNode(rectCandidate);
+      return;
+    }
+
+    var target = document.elementFromPoint(clientX, clientY);
+    if (!target) {
+      return;
+    }
+
+    var hoveredItem = target.closest(".mobile-action-item");
+    if (hoveredItem) {
+      setHoveredNode(hoveredItem);
+      return;
+    }
+
+    var hoveredTrigger = target.closest(".mobile-action-trigger");
+    if (hoveredTrigger) {
+      setHoveredNode(hoveredTrigger);
+      return;
+    }
+
+    setHoveredNode(null);
+  };
+
+  var applyHoverByTarget = function (target) {
+    if (!target) {
+      setHoveredNode(null);
+      return;
+    }
+
+    var hoveredItem = target.closest(".mobile-action-item");
+    if (hoveredItem) {
+      setHoveredNode(hoveredItem);
+      return;
+    }
+
+    var hoveredTrigger = target.closest(".mobile-action-trigger");
+    if (hoveredTrigger) {
+      setHoveredNode(hoveredTrigger);
+      return;
+    }
+
+    setHoveredNode(null);
+  };
+
+  var isInsideMobileActionUi = function (node) {
+    if (!node || !(node instanceof Element)) {
+      return false;
+    }
+    return !!node.closest(
+      ".mobile-action-trigger, .mobile-action-menu, .mobile-action-item, td.btn-container.mobile-action-open",
+    );
+  };
+
+  var closeAllMenus = function () {
+    clearMobileHoverState();
+    if (hoverSyncIntervalId !== null) {
+      window.clearInterval(hoverSyncIntervalId);
+      hoverSyncIntervalId = null;
+    }
+    document
+      .querySelectorAll("td.btn-container.mobile-action-open")
+      .forEach(function (cell) {
+        cell.classList.remove(
+          "mobile-action-open",
+          "mobile-action-open-left",
+          "mobile-action-open-right",
+        );
+      });
+  };
+
+  var syncHoverFromCssState = function () {
+    if (!window.matchMedia("(max-width: 768px)").matches) {
+      return;
+    }
+
+    var openMenuExists = document.querySelector(
+      "td.btn-container.mobile-action-open",
+    );
+    if (!openMenuExists) {
+      return;
+    }
+
+    try {
+      var hoveredChain = document.querySelectorAll(":hover");
+      var hoveredTarget = hoveredChain.length
+        ? hoveredChain[hoveredChain.length - 1]
+        : null;
+
+      if (!hoveredTarget) {
+        setHoveredNode(null);
+        return;
+      }
+
+      var actionHoverTarget = hoveredTarget.closest(
+        ".mobile-action-item, .mobile-action-trigger",
+      );
+
+      if (actionHoverTarget) {
+        setHoveredNode(actionHoverTarget);
+      } else if (!isInsideMobileActionUi(hoveredTarget)) {
+        setHoveredNode(null);
+      }
+    } catch (e) {
+      // no-op
+    }
+  };
+
+  document.addEventListener("click", function (event) {
+    var trigger = event.target.closest(".mobile-action-trigger");
+    var insideMenu = event.target.closest(".mobile-action-menu");
+
+    if (trigger) {
+      var actionCell = trigger.closest("td.btn-container");
+      var shouldOpen =
+        actionCell && !actionCell.classList.contains("mobile-action-open");
+      closeAllMenus();
+      if (actionCell && shouldOpen) {
+        var menu = actionCell.querySelector(".mobile-action-menu");
+        var menuWidth = menu ? Math.max(menu.offsetWidth || 0, 160) : 160;
+        var triggerRect = trigger.getBoundingClientRect();
+        var spaceRight = window.innerWidth - triggerRect.right;
+
+        actionCell.classList.add("mobile-action-open");
+        if (spaceRight >= menuWidth + 12) {
+          actionCell.classList.add("mobile-action-open-right");
+        } else {
+          actionCell.classList.add("mobile-action-open-left");
+        }
+
+        if (hoverSyncIntervalId === null) {
+          hoverSyncIntervalId = window.setInterval(syncHoverFromCssState, 120);
+        }
+      }
+      return;
+    }
+
+    if (insideMenu) {
+      return;
+    }
+
+    closeAllMenus();
+  });
+
+  document.addEventListener("pointermove", function (event) {
+    if (!window.matchMedia("(max-width: 768px)").matches) {
+      return;
+    }
+    if (!document.querySelector("td.btn-container.mobile-action-open")) {
+      return;
+    }
+    if (event.pointerType && event.pointerType !== "mouse") {
+      return;
+    }
+    applyMobileHoverFromPoint(event.clientX, event.clientY);
+  });
+
+  document.addEventListener("mouseover", function (event) {
+    applyHoverByTarget(event.target);
+  });
+
+  document.addEventListener("mouseout", function (event) {
+    var toNode = event && event.relatedTarget ? event.relatedTarget : null;
+    if (isInsideMobileActionUi(toNode)) {
+      return;
+    }
+    setHoveredNode(null);
+  });
+
+  document.addEventListener("pointerover", function (event) {
+    if (event.pointerType && event.pointerType !== "mouse") {
+      return;
+    }
+    applyHoverByTarget(event.target);
+  });
+
+  document.addEventListener("pointerout", function (event) {
+    if (event.pointerType && event.pointerType !== "mouse") {
+      return;
+    }
+    var toNode = event && event.relatedTarget ? event.relatedTarget : null;
+    if (isInsideMobileActionUi(toNode)) {
+      return;
+    }
+    setHoveredNode(null);
+  });
+
+  window.addEventListener("resize", function () {
+    closeAllMenus();
+    convertTableActionButtonsForMobile();
+  });
+
+  applyGlobalDataTableDefaults();
+  bindGlobalDataTableEmptyStateHandlers();
+  convertTableActionButtonsForMobile();
+
+  document.addEventListener("DOMContentLoaded", function () {
+    applyGlobalDataTableDefaults();
+    bindGlobalDataTableEmptyStateHandlers();
+    convertTableActionButtonsForMobile();
+  });
+
+  if (typeof window.jQuery !== "undefined") {
+    $(document).on("draw.dt", function () {
+      convertTableActionButtonsForMobile();
+    });
+  }
+}
+
+initMobileActionMenus();
+
+function createSortingTable(tableid, options) {
+  options = options || {};
+
   let table = new DataTable("#" + tableid, {
     paging: $("#" + tableid + " tbody tr").length > 10,
     searching: $("#" + tableid + " tbody tr").length > 10,
     /* info: false, */
-    order: [[1, "asc"]], // 0 = db id column; 1 = numbering column
+    order: options.order || [[1, "asc"]], // 0 = db id column; 1 = numbering column
     /* responsive: true, */
+    lengthMenu: getDefaultDataTableLengthMenu(),
     autoWidth: false,
+    columnDefs: options.columnDefs || [],
   });
+
+  return table;
 }
 
 function createSortingMyLeaveTransactionTable(tableid) {
   let table = new DataTable("#" + tableid, {
     order: [[1, "asc"]],
+    lengthMenu: getDefaultDataTableLengthMenu(),
     autoWidth: false,
     columnDefs: [
       {
@@ -821,6 +1365,7 @@ function createSortingMyLeaveTransactionTable(tableid) {
 function createSortingLeaveTransactionTable(tableid) {
   let table = new DataTable("#" + tableid, {
     order: [[1, "asc"]],
+    lengthMenu: getDefaultDataTableLengthMenu(),
     autoWidth: false,
     columnDefs: [
       {

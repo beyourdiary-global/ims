@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 40;
 $pageTitle = "Investment Transaction";
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = INV_TRANS;
 

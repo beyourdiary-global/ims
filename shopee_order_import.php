@@ -1,4 +1,5 @@
 <?php
+$currentPagePin = 0;
 if (!defined('IMPORT_FORCE_MODULE')) {
     define('IMPORT_FORCE_MODULE', 'shopee_order_req');
 }
@@ -9,6 +10,7 @@ $shopeeOrderPinGroupIds = array(130, 129, 128);
 
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $pinAccess = array();
 $parentPagePinGroupId = 0;
@@ -44,6 +46,21 @@ $pageHeading = $parentPageTitle . ' Import';
 if (!is_array($pinAccess) || count($pinAccess) === 0 || !isActionAllowed('Import', $pinAccess)) {
     echo '<script>alert("No permission.");location.href = "' . $SITEURL . '/dashboard.php";</script>';
     exit;
+}
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
+    $safeAuditUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
+    $safeAuditPageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
+    $log = [
+        'log_act' => 'View',
+        'cdate' => $cdate,
+        'ctime' => $ctime,
+        'uid' => USER_ID,
+        'cby' => USER_ID,
+        'act_msg' => $safeAuditUserName . " viewed the page <b>" . $safeAuditPageTitle . "</b>.",
+        'page' => $pageTitle,
+        'connect' => $connect,
+    ];
+    audit_log($log);
 }
 
 $module = 'shopee_order_req';
@@ -1033,6 +1050,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
 </script>
 
 </html>
+
 
 
 

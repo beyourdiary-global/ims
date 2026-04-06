@@ -1,8 +1,10 @@
 <?php
 $pageTitle = "Token Setting";
+$currentPagePin = 133;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = TOKEN_SETT;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
@@ -86,6 +88,7 @@ if (!$result) {
                     </div>
                 </div>
 
+                <div class="table-scroll-wrap mobile-scroll-wrap">
                 <table class="table table-striped" id="table">
                     <thead>
                         <tr>
@@ -124,6 +127,7 @@ if (!$result) {
                         </tr>
                     </tfoot>
                 </table>
+                </div>
             </div>
         </div>
     </div>

@@ -1,10 +1,12 @@
 <?php
+$currentPagePin = 69;
 ob_start();
 $pageTitle = "Facebook Order Request";
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
@@ -226,7 +228,7 @@ $result = getData('*', '', '', FB_ORDER_REQ, $finance_connect);
                         <h2>
                             <?php echo $pageTitle ?> Detail
                         </h2>
-                        <?php if ($result) { ?>
+                        
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
@@ -235,7 +237,7 @@ $result = getData('*', '', '', FB_ORDER_REQ, $finance_connect);
                                 <?php endif; ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>
                             </div>
-                        <?php } ?>
+                        
                     </div>
                 </div>
             </div>

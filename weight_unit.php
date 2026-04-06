@@ -1,8 +1,10 @@
 <?php
+$currentPagePin = 19;
 $pageTitle = "Weight Unit";
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = WGT_UNIT;
 

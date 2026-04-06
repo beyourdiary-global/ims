@@ -1,8 +1,12 @@
 <?php
 $pageTitle = "Facebook Customer Record (Deals)";
+$currentPagePin = 75;
+$disablePinGroupPageTitleSync = true;
 
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once ROOT . '/include/user_record_log.php';
 
 $tblName = FB_CUST_DEALS;
 
@@ -35,6 +39,49 @@ if (!($dataID) && !($act)) {
     alert("Invalid action.");
     window.location.href = "' . $redirect_page . '"; // Redirect to previous page
     </script>';
+}
+
+if ($dataID && isset($_GET['open_order_id'])) {
+    $openOrderId = (int) $_GET['open_order_id'];
+    if ($openOrderId > 0) {
+        $customerName = isset($row['name']) ? trim((string) $row['name']) : '';
+        $customerFbLink = isset($row['fb_link']) ? trim((string) $row['fb_link']) : '';
+
+        $orderWhere = "id='" . $openOrderId . "' AND status='A'";
+        if ($customerName !== '') {
+            $orderWhere .= " AND name='" . mysqli_real_escape_string($finance_connect, $customerName) . "'";
+            if ($customerFbLink !== '') {
+                $orderWhere .= " AND fb_link='" . mysqli_real_escape_string($finance_connect, $customerFbLink) . "'";
+            }
+        } else {
+            $orderWhere .= " AND 1=0";
+        }
+
+        $orderRst = getData('id,name,fb_link', $orderWhere, 'LIMIT 1', FB_ORDER_REQ, $finance_connect);
+        if ($orderRst && $orderRst->num_rows > 0) {
+            $orderRow = $orderRst->fetch_assoc();
+            $orderNo = '#'. $openOrderId;
+            if (!empty($orderRow['name'])) {
+                $orderNo .= ' - ' . $orderRow['name'];
+            }
+            $log = [
+                'log_act' => 'View',
+                'cdate' => $cdate,
+                'ctime' => $ctime,
+                'uid' => USER_ID,
+                'cby' => USER_ID,
+                'query_rec' => "order_id=" . $openOrderId,
+                'query_table' => FB_ORDER_REQ,
+                'act_msg' => USER_NAME . " opened Facebook order detail [<b>" . $orderNo . "</b>] from <b><i>" . $pageTitle . "</i></b>.",
+                'page' => $pageTitle,
+                'connect' => $connect,
+            ];
+            audit_log($log);
+
+            echo "<script>location.href='" . $SITEURL . "/finance/fb_order_req.php?id=" . $openOrderId . "&act=E';</script>";
+            exit;
+        }
+    }
 }
 
 if (post('actionBtn')) {
@@ -472,14 +519,13 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 if (isset($echoVal)) {
                                     $user_rst = getData('name', "id = '$echoVal'", '', USR_USER, $connect);
                                     if (!$user_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                        echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                        // Graceful fallback: keep form usable even when lookup query is unavailable.
                                     }
-                                    $user_row = $user_rst->fetch_assoc();
+                                    $user_row = ($user_rst && $user_rst->num_rows > 0) ? $user_rst->fetch_assoc() : array();
                                 }
                                 ?>
                                 <input class="form-control" type="text" name="fcb_pic" id="fcb_pic" <?php if ($act == '')
-                                    echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $user_row['name'] : '' ?>">
+                                    echo 'disabled' ?> value="<?php echo !empty($echoVal) ? ($user_row['name'] ?? '') : '' ?>">
                                 <input type="hidden" name="fcb_pic_hidden" id="fcb_pic_hidden"
                                     value="<?php echo (isset($row['sales_pic'])) ? $row['sales_pic'] : ''; ?>">
                                 <?php }?>
@@ -492,7 +538,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                     // Retrieve details of the logged-in user
                                     $user_rst = getData('name', "id = '$loggedInUserId'", '', USR_USER, $connect);
                                     if ($user_rst && $user_rst->num_rows > 0) {
-                                        $user_row = $user_rst->fetch_assoc();
+                                        $user_row = ($user_rst && $user_rst->num_rows > 0) ? $user_rst->fetch_assoc() : array();
                                         $defaultUser = $user_row['name'];
                                     }
                                     
@@ -523,15 +569,14 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 if (isset($echoVal)) {
                                     $country_rst = getData('nicename', "id = '$echoVal'", '', COUNTRIES, $connect);
                                     if (!$country_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                        echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                        // Graceful fallback: keep form usable even when lookup query is unavailable.
                                     }
-                                    $country_row = $country_rst->fetch_assoc();
+                                    $country_row = ($country_rst && $country_rst->num_rows > 0) ? $country_rst->fetch_assoc() : array();
                                 }
                                 ?>
                                 <input class="form-control" type="text" name="fcb_country" id="fcb_country" <?php if ($act == '')
                                     echo 'disabled' ?>
-                                        value="<?php echo !empty($echoVal) ? $country_row['nicename'] : '' ?>">
+                                        value="<?php echo !empty($echoVal) ? ($country_row['nicename'] ?? '') : '' ?>">
                                 <input type="hidden" name="fcb_country_hidden" id="fcb_country_hidden"
                                     value="<?php echo (isset($row['country'])) ? $row['country'] : ''; ?>">
 
@@ -557,15 +602,14 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 if (isset($echoVal)) {
                                     $brand_rst = getData('name', "id = '$echoVal'", '', BRAND, $connect);
                                     if (!$brand_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                        echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                        // Graceful fallback: keep form usable even when lookup query is unavailable.
                                     }
-                                    $brand_row = $brand_rst->fetch_assoc();
+                                    $brand_row = ($brand_rst && $brand_rst->num_rows > 0) ? $brand_rst->fetch_assoc() : array();
                                 }
                                 ?>
                                 <input class="form-control" type="text" name="fcb_brand" id="fcb_brand" <?php if ($act == '')
                                     echo 'disabled' ?>
-                                        value="<?php echo !empty($echoVal) ? $brand_row['name'] : '' ?>">
+                                        value="<?php echo !empty($echoVal) ? ($brand_row['name'] ?? '') : '' ?>">
                                 <input type="hidden" name="fcb_brand_hidden" id="fcb_brand_hidden"
                                     value="<?php echo (isset($row['brand'])) ? $row['brand'] : ''; ?>">
 
@@ -595,10 +639,9 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 if (isset($echoVal)) {
                                     $fbpage_rst = getData('name', "id = '$echoVal'", '', FB_PAGE_ACC, $finance_connect);
                                     if (!$fbpage_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                        echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                        // Graceful fallback: keep form usable even when lookup query is unavailable.
                                     }
-                                    $fbpage_row = $fbpage_rst->fetch_assoc();
+                                    $fbpage_row = ($fbpage_rst && $fbpage_rst->num_rows > 0) ? $fbpage_rst->fetch_assoc() : array();
                                 }
                                 ?>
                                 <input class="form-control" type="text" name="fcb_fbpage" id="fcb_fbpage" <?php if ($act == '')
@@ -627,10 +670,9 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 if (isset($echoVal)) {
                                     $channel_rst = getData('*', "id = '$echoVal'", '', CHANEL_SC_MD, $finance_connect);
                                     if (!$channel_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                        echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                        // Graceful fallback: keep form usable even when lookup query is unavailable.
                                     }
-                                    $channel_row = $channel_rst->fetch_assoc();
+                                    $channel_row = ($channel_rst && $channel_rst->num_rows > 0) ? $channel_rst->fetch_assoc() : array();
                                 }
                               
                                 ?>
@@ -660,11 +702,10 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 
                                 if (isset($echoVal)) {
                                     $series_rst = getData('name', "id = '$echoVal'", '', BRD_SERIES, $connect);
-                                    if (!$brand_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                        echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                    if (!$series_rst) {
+                                        // Graceful fallback: keep form usable even when lookup query is unavailable.
                                     }
-                                    $series_row = $series_rst->fetch_assoc();
+                                    $series_row = ($series_rst && $series_rst->num_rows > 0) ? $series_rst->fetch_assoc() : array();
                                 }
                                 ?>
                                 <input class="form-control" type="text" name="fcb_series" id="fcb_series" <?php if ($act == '')
@@ -758,21 +799,145 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 echo $row['remark'] ?></textarea>
                             </div>
 
-                            <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
-                                <?php
-                            switch ($act) {
-                                case 'I':
-                                    echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="addRecord">Add Record</button>';
-                                    break;
-                                case 'E':
-                                    echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="updRecord">Edit Record</button>';
-                                    break;
-                            }
+                            <?php
+                            if ($dataID) {
+                                $orderRows = array();
+                                $sumFinalAmount = 0.00;
+                                $customerName = isset($row['name']) ? trim((string) $row['name']) : '';
+                                $customerFbLink = isset($row['fb_link']) ? trim((string) $row['fb_link']) : '';
+
+                                if ($customerName !== '') {
+                                    $orderWhere = "status='A' AND name='" . mysqli_real_escape_string($finance_connect, $customerName) . "'";
+                                    if ($customerFbLink !== '') {
+                                        $orderWhere .= " AND fb_link='" . mysqli_real_escape_string($finance_connect, $customerFbLink) . "'";
+                                    }
+
+                                    $orderSql = "SELECT * FROM " . FB_ORDER_REQ . " WHERE " . $orderWhere . " ORDER BY id DESC";
+                                    $orderRst = mysqli_query($finance_connect, $orderSql);
+                                    if ($orderRst && $orderRst->num_rows > 0) {
+                                        while ($orderRow = $orderRst->fetch_assoc()) {
+                                            $orderRows[] = $orderRow;
+                                            $sumFinalAmount += (float) (isset($orderRow['price']) ? $orderRow['price'] : 0);
+                                        }
+                                    } else if (!$orderRst) {
+                                        error_log("Facebook order list query failed: " . mysqli_error($finance_connect) . " SQL: " . $orderSql);
+                                    }
+                                }
                             ?>
-                            <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn"
-                                id="actionBtn" value="back">Back</button>
-                        </div>
+                            <div class="form-group mt-3">
+                                <h5 class="mb-3">Order Records</h5>
+                                <div class="table-responsive">
+                                    <table class="table table-striped table-bordered mb-0" id="fcb_order_tbl">
+                                        <thead>
+                                            <tr>
+                                                <th width="60">S/N</th>
+                                                <th width="200">Action</th>
+                                                <th>Order ID</th>
+                                                <th>Date</th>
+                                                <th>Package</th>
+                                                <th>Buyer Payment Method</th>
+                                                <th>Charges &amp; Fees</th>
+                                                <th>Final Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php if (!empty($orderRows)) {
+                                                $orderSN = 1;
+                                                $packageNameCache = [];
+                                                $paymentMethodNameCache = [];
+                                                foreach ($orderRows as $orderRow) {
+                                                    $orderId = isset($orderRow['id']) ? (int) $orderRow['id'] : 0;
+                                                    $orderNo = 'FB-' . $orderId;
+                                                    $orderDate = isset($orderRow['create_date']) ? $orderRow['create_date'] : '';
+                                                    
+                                                    $packageCsv = isset($orderRow['package']) ? $orderRow['package'] : '';
+                                                    if (!array_key_exists($packageCsv, $packageNameCache)) {
+                                                        $packageNameCache[$packageCsv] = commonResolvePackageNamesFromCsv($packageCsv, $connect);
+                                                    }
+                                                    $orderPackage = $packageNameCache[$packageCsv];
+                                                    
+                                                    $payMethodKey = isset($orderRow['pay_method']) ? $orderRow['pay_method'] : '';
+                                                    if (!array_key_exists($payMethodKey, $paymentMethodNameCache)) {
+                                                        $paymentMethodNameCache[$payMethodKey] = commonResolvePaymentMethodName($payMethodKey, $finance_connect);
+                                                    }
+                                                    $buyerPayMethod = $paymentMethodNameCache[$payMethodKey];
+                                                    
+                                                    $orderFees = '0.00';
+                                                    $finalAmount = isset($orderRow['price']) ? $orderRow['price'] : '0.00';
+                                                    ?>
+                                                    <tr>
+                                                        <td><?= $orderSN++ ?></td>
+                                                        <td>
+                                                            <a class="btn btn-sm btn-rounded btn-primary"
+                                                               href="<?= $SITEURL . '/fb_cust_deals.php?id=' . (int) $dataID . '&act=' . $act_2 . '&open_order_id=' . $orderId ?>">
+                                                                Show Order Detail
+                                                            </a>
+                                                        </td>
+                                                        <td><?= htmlspecialchars((string) $orderNo, ENT_QUOTES, 'UTF-8') ?></td>
+                                                        <td><?= htmlspecialchars((string) $orderDate, ENT_QUOTES, 'UTF-8') ?></td>
+                                                        <td><?= htmlspecialchars((string) $orderPackage, ENT_QUOTES, 'UTF-8') ?></td>
+                                                        <td><?= htmlspecialchars((string) $buyerPayMethod, ENT_QUOTES, 'UTF-8') ?></td>
+                                                        <td><?= commonFormatAmountRm($orderFees) ?></td>
+                                                        <td><?= commonFormatAmountRm($finalAmount) ?></td>
+                                                    </tr>
+                                                <?php }
+                                            } else { ?>
+                                                <tr>
+                                                    <td colspan="8" class="text-center">No order records found.</td>
+                                                </tr>
+                                            <?php } ?>
+                                        </tbody>
+                                        <tfoot>
+                                            <tr>
+                                                <th colspan="7" class="text-end">Sub-Total (RM)</th>
+                                                <th><?= commonFormatAmountRm($sumFinalAmount) ?></th>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </div>
+                            <?php } ?>
+
                 </form>
+
+                <?php
+                if ($dataID) {
+                    $customerLogReturnUrl = $SITEURL . '/fb_cust_deals.php?id=' . (int) $dataID;
+                    if ($act !== '') {
+                        $customerLogReturnUrl .= '&act=' . urlencode((string) $act);
+                    }
+
+                    $customerLogContext = urlResolveUserRecordLogContext($connect, $connect, array(
+                        'customer_id' => (int) $dataID,
+                        'customer_column' => 'facebook_cust_id',
+                        'customer_label' => isset($row['name']) ? $row['name'] : '',
+                        'return_url' => $customerLogReturnUrl,
+                        'ajax_url' => $SITEURL . '/user_record_log.php',
+                        'customer_only' => true,
+                    ));
+
+                    urlRenderUserRecordLogModule($connect, $connect, array(
+                        'table_name' => USER_RECORD_LOG,
+                        'context' => $customerLogContext,
+                        'section_heading' => 'User Record Log',
+                        'show_scope_note' => true,
+                    ));
+                }
+                ?>
+
+                <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
+                    <?php
+                    switch ($act) {
+                        case 'I':
+                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" form="FORForm" name="actionBtn" id="actionBtn" value="addRecord">Add Record</button>';
+                            break;
+                        case 'E':
+                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" form="FORForm" name="actionBtn" id="actionBtn" value="updRecord">Edit Record</button>';
+                            break;
+                    }
+                    ?>
+                    <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" form="FORForm" name="actionBtn" id="actionBtn" value="back">Back</button>
+                </div>
             </div>
         </div>
     </div>

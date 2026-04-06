@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 88;
 $pageTitle = '';
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $parentPagePinGroupId = 88;
 $parentPageTitle = getPinGroupNameById($connect, $parentPagePinGroupId);
@@ -18,6 +20,21 @@ $pinAccess = checkPinByGroupId($connect, $parentPagePinGroupId);
 if (!is_array($pinAccess) || count($pinAccess) === 0 || !isActionAllowed('Import', $pinAccess)) {
     echo '<script>alert("No permission.");location.href = "' . $SITEURL . '/dashboard.php";</script>';
     exit;
+}
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
+    $safeAuditUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
+    $safeAuditPageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
+    $log = [
+        'log_act' => 'View',
+        'cdate' => $cdate,
+        'ctime' => $ctime,
+        'uid' => USER_ID,
+        'cby' => USER_ID,
+        'act_msg' => $safeAuditUserName . " viewed the page <b>" . $safeAuditPageTitle . "</b>.",
+        'page' => $pageTitle,
+        'connect' => $connect,
+    ];
+    audit_log($log);
 }
 
 $tblName = 'jt_transaction_backup';
@@ -91,8 +108,8 @@ if (!function_exists('jtImpSaveUploadedImportFile')) {
             $safePage = 'import_page';
         }
 
-        $relDir = 'attachment/sqlaccount/' . date('Y') . '/' . date('m') . '/' . $safePage . '/';
-        $absDir = ROOT . img_server . $relDir;
+        $relDir = 'attachment/' . substr((string) comYMD, 0, 4) . '/' . substr((string) comYMD, 4, 2) . '/' . $safePage . '/';
+        $absDir = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . ltrim($relDir, '/\\');
         if (!is_dir($absDir)) {
             @mkdir($absDir, 0777, true);
         }
@@ -130,8 +147,8 @@ if (!function_exists('jtImpStoreAttachmentBinary')) {
             $safePage = 'import_page';
         }
 
-        $relDir = 'attachment/sqlaccount/' . date('Y') . '/' . date('m') . '/' . $safePage . '/';
-        $absDir = ROOT . img_server . $relDir;
+        $relDir = 'attachment/' . substr((string) comYMD, 0, 4) . '/' . substr((string) comYMD, 4, 2) . '/' . $safePage . '/';
+        $absDir = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . ltrim($relDir, '/\\');
         if (!is_dir($absDir)) {
             @mkdir($absDir, 0777, true);
         }

@@ -1,8 +1,10 @@
 <?php
+$currentPagePin = 0;
 ob_start();
 $pageTitle = 'Lazada Order Request';
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 require_once 'header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . '_list.xlsx';
@@ -270,7 +272,7 @@ $(document).ready(() => {
                         <h2>
                             <?php echo $pageTitle ?>
                         </h2>
-                        <?php if ($result) { ?>
+                        
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed('Add', $pinAccess)): ?>
                             <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
@@ -281,7 +283,7 @@ $(document).ready(() => {
                                 onclick="captureAndExport('<?php echo $tblName; ?>')"><i
                                     class="fa-solid fa-file-export"></i> Export</a>
                         </div>
-                        <?php } ?>
+                        
                     </div>
                 </div>
             </div>

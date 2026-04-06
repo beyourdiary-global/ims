@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 0;
 $pageTitle = "Shopee Order Request";
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 $_SESSION['act'] = '';
@@ -28,15 +30,15 @@ if (isset($_GET['verify_id'])) {
             $updateResult = mysqli_query($finance_connect, $updateSql);
 
             if ($updateResult) {
-                $verifyMessage = "✅ Order #$orderId has been successfully verified.";
+                $verifyMessage = "Success: Order #$orderId has been successfully verified.";
             } else {
-                $verifyMessage = "❌ Failed to update order #$orderId.";
+                $verifyMessage = "Error: Failed to update order #$orderId.";
             }
         } else {
-            $verifyMessage = "⚠️ Order #$orderId is not in 'OC' status.";
+            $verifyMessage = "Warning: Order #$orderId is not in 'OC' status.";
         }
     } else {
-        $verifyMessage = "❌ Order #$orderId not found.";
+        $verifyMessage = "Error: Order #$orderId not found.";
     }
 }
 
@@ -112,14 +114,14 @@ $result = getData('*', 'order_status="OC"', '', SHOPEE_SG_ORDER_REQ, $finance_co
                             <h2>
                             <?php echo $pageTitle ?>
                         </h2>
-                            <?php if ($result) { ?>
+                            
                                 <div class="mt-auto mb-auto">
                                     <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                         <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . " ?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         Request </a>
                                         <?php endif; ?>
                                 </div>
-                                <?php } ?>
+                                
                         </div>
                     </div>
                 </div>

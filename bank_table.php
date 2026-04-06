@@ -1,8 +1,10 @@
 <?php
 $pageTitle = "Bank";
+$currentPagePin = 8;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = BANK;
 $pinAccess = checkCurrentPin($connect, $pageTitle);

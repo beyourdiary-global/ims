@@ -1,9 +1,11 @@
 <?php
 ob_start();
 $pageTitle = "Shopee Ads Top Up Transaction";
+$currentPagePin = 77;
 $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 checkCurrentPin($connect, $pageTitle);
 $pinAccess = checkPin($connect, $pageTitle);
@@ -58,7 +60,11 @@ if (!empty($checkboxValues)) {
             if (isset($row2['attachment']) && !empty($row2['attachment'])) {
                 $attachmentRelPath = trim(str_replace('\\', '/', (string) $row2['attachment']), '/');
                 if (strpos($attachmentRelPath, '/') !== false) {
-                    $attachmentSourcePath = '../' . img_server . $attachmentRelPath;
+                    if (strpos($attachmentRelPath, 'attachment/') === 0) {
+                        $attachmentSourcePath = '../' . $attachmentRelPath;
+                    } else {
+                        $attachmentSourcePath = '../' . img_server . $attachmentRelPath;
+                    }
                 } else {
                     $attachmentSourcePath = $img_path . $attachmentRelPath;
                 }

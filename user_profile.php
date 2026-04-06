@@ -1,10 +1,12 @@
 <?php
+$currentPagePin = 0;
 $pageTitle = "User Profile";
 
 include_once 'include/connection.php';
 include_once 'include/common.php';
 include_once 'include/common_variable.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = USR_USER;
 $redirectPage = $SITEURL . '/dashboard.php';
@@ -88,7 +90,8 @@ if (post('actionBtn')) {
     }
 
     if ($action === 'saveProfile') {
-        if (!isActionAllowed('Edit', $pinAccess)) {
+        $canEditOwnProfile = ((int) USER_ID === (int) $userId);
+        if (!isActionAllowed('Edit', $pinAccess) && !$canEditOwnProfile) {
             $profileResultAction = 'F';
         } else {
             $name = postSpaceFilter('currentDataName');
@@ -146,8 +149,8 @@ if (post('actionBtn')) {
                     $auditErr = $ok ? '' : 'Update failed.';
                     $log = array(
                         'log_act' => 'edit',
-                        'cdate' => date('Y-m-d'),
-                        'ctime' => date('H:i:s'),
+                        'cdate' => $cdate,
+                        'ctime' => $ctime,
                         'uid' => USER_ID,
                         'cby' => USER_ID,
                         'query_rec' => $query,
@@ -200,12 +203,16 @@ if ($secondSupId > 0) {
     }
 }
 
+$showSupervisorInfo = !($mainSupName === '-' && $secondSupName === '-');
+
 include 'menuHeader.php';
 
+$_showProfileConfirmModal = false;
+$_profileConfirmAction = '';
 if (isset($_SESSION['tempValConfirmBox'])) {
     unset($_SESSION['tempValConfirmBox']);
-    $redirectSelf = $SITEURL . '/user_profile.php';
-    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectSelf . '","' . $profileResultAction . '");</script>';
+    $_showProfileConfirmModal = true;
+    $_profileConfirmAction = (string) $profileResultAction;
 }
 ?>
 <!DOCTYPE html>
@@ -230,36 +237,60 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                         <h2><?= $pageTitle ?></h2>
                     </div>
 
-                    <div class="form-group mb-3">
-                        <label class="form-label" for="currentDataName">Name*</label>
-                        <input class="form-control" type="text" name="currentDataName" id="currentDataName" value="<?= htmlspecialchars((string) $userRow['name'], ENT_QUOTES, 'UTF-8') ?>" required autocomplete="off">
-                        <div id="err_msg"><span class="mt-n1" id="err_currentDataName"></span></div>
+                    <div class="row align-items-end mb-2">
+                        <?php if ($showSupervisorInfo) { ?>
+                        <div class="col-12 col-lg-4">
+                            <div class="form-group mb-3">
+                                <label class="form-label">Main Report Supervisor</label>
+                                <label class="form-control"><?= htmlspecialchars($mainSupName, ENT_QUOTES, 'UTF-8') ?></label>
+                            </div>
+                        </div>
+
+                        <div class="col-12 col-lg-4">
+                            <div class="form-group mb-3">
+                                <label class="form-label">Second Report Supervisor</label>
+                                <label class="form-control"><?= htmlspecialchars($secondSupName, ENT_QUOTES, 'UTF-8') ?></label>
+                            </div>
+                        </div>
+
+                        <div class="col-12 col-lg-4">
+                            <div class="form-group mb-3">
+                                <a class="btn btn-sm btn-rounded btn-primary" id="actionBtn" href="<?= $SITEURL ?>/changePassword.php">Change Password</a>
+                            </div>
+                        </div>
+                        <?php } else { ?>
+                        <div class="col-12 col-lg-4 offset-lg-8">
+                            <div class="form-group mb-3">
+                                <a class="btn btn-sm btn-rounded btn-primary" id="actionBtn" href="<?= $SITEURL ?>/changePassword.php">Change Password</a>
+                            </div>
+                        </div>
+                        <?php } ?>
                     </div>
 
-                    <div class="form-group mb-3">
-                        <label class="form-label" for="dataUsername">Username*</label>
-                        <input class="form-control" type="text" name="dataUsername" id="dataUsername" value="<?= htmlspecialchars((string) $userRow['username'], ENT_QUOTES, 'UTF-8') ?>" required autocomplete="off">
-                        <div id="err_msg"><span class="mt-n1" id="err_dataUsername"></span></div>
-                    </div>
+                    <div class="row">
+                        <div class="col-12 col-md-4">
+                            <div class="form-group mb-3">
+                                <label class="form-label" for="currentDataName">Name*</label>
+                                <input class="form-control" type="text" name="currentDataName" id="currentDataName" value="<?= htmlspecialchars((string) $userRow['name'], ENT_QUOTES, 'UTF-8') ?>" required autocomplete="off">
+                                <div id="err_msg"><span class="mt-n1" id="err_currentDataName"></span></div>
+                            </div>
+                        </div>
 
-                    <div class="form-group mb-3">
-                        <label class="form-label" for="currentUserEmail">Email*</label>
-                        <input class="form-control" type="text" name="currentUserEmail" id="currentUserEmail" value="<?= htmlspecialchars((string) $userRow['email'], ENT_QUOTES, 'UTF-8') ?>" required autocomplete="off">
-                        <div id="err_msg"><span class="mt-n1" id="err_currentUserEmail"></span></div>
-                    </div>
+                        <div class="col-12 col-md-4">
+                            <div class="form-group mb-3">
+                                <label class="form-label" for="dataUsername">Username*</label>
+                                <input class="form-control" type="text" name="dataUsername" id="dataUsername" value="<?= htmlspecialchars((string) $userRow['username'], ENT_QUOTES, 'UTF-8') ?>" required autocomplete="off">
+                                <div id="err_msg"><span class="mt-n1" id="err_dataUsername"></span></div>
+                            </div>
+                        </div>
 
-                    <div class="form-group mb-3">
-                        <label class="form-label">Main Report Supervisor</label>
-                        <input class="form-control" type="text" value="<?= htmlspecialchars($mainSupName, ENT_QUOTES, 'UTF-8') ?>" readonly>
-                    </div>
-
-                    <div class="form-group mb-3">
-                        <label class="form-label">Second Report Supervisor</label>
-                        <input class="form-control" type="text" value="<?= htmlspecialchars($secondSupName, ENT_QUOTES, 'UTF-8') ?>" readonly>
-                    </div>
-
-                    <div class="form-group mb-4">
-                        <a class="btn btn-sm btn-rounded btn-primary" href="<?= $SITEURL ?>/changePassword.php">Change Password</a>
+                        <div class="col-12 col-md-4">
+                            <div class="form-group mb-3">
+                                <label class="form-label" for="currentUserEmail">Email*</label>
+                                <input class="form-control" type="text" name="currentUserEmail" id="currentUserEmail" value="<?= htmlspecialchars((string) $userRow['email'], ENT_QUOTES, 'UTF-8') ?>" required autocomplete="off">
+                                <div id="err_msg"><span class="mt-n1" id="err_currentUserEmail"></span></div>
+                            </div>
+                        </div>
                     </div>
 
                     <div class="form-group mt-4 d-flex justify-content-center flex-md-row flex-column">
@@ -282,8 +313,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 
         (function () {
             var form = document.getElementById('form');
-            var submitBtn = document.getElementById('actionBtn');
-            if (!form || !submitBtn) return;
+            if (!form) return;
 
             var allowSubmit = false;
             var fields = ['currentDataName', 'dataUsername', 'currentUserEmail'];
@@ -347,8 +377,24 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                     body: fd,
                     credentials: 'same-origin'
                 }).then(function (r) {
-                    return r.json();
-                }).then(function (res) {
+                    return r.text();
+                }).then(function (text) {
+                    var res = null;
+                    try {
+                        res = JSON.parse(text);
+                    } catch (e) {
+                        allowSubmit = true;
+
+                        var hiddenActionFallback = document.createElement('input');
+                        hiddenActionFallback.type = 'hidden';
+                        hiddenActionFallback.name = 'actionBtn';
+                        hiddenActionFallback.value = 'saveProfile';
+                        form.appendChild(hiddenActionFallback);
+
+                        form.submit();
+                        return;
+                    }
+
                     var dup = (res && res.errors) ? res.errors : {};
                     var dupHit = false;
 
@@ -377,10 +423,22 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                     
                     form.submit();
                 }).catch(function () {
-                    setFieldError('currentDataName', 'Unable to validate now. Please try again.');
+                    allowSubmit = true;
+
+                    var hiddenActionCatch = document.createElement('input');
+                    hiddenActionCatch.type = 'hidden';
+                    hiddenActionCatch.name = 'actionBtn';
+                    hiddenActionCatch.value = 'saveProfile';
+                    form.appendChild(hiddenActionCatch);
+
+                    form.submit();
                 });
             });
         })();
+
+        <?php if ($_showProfileConfirmModal) { ?>
+        confirmationDialog("", "", <?= json_encode((string) $pageTitle) ?>, "", <?= json_encode((string) ($SITEURL . '/user_profile.php')) ?>, <?= json_encode((string) $_profileConfirmAction) ?>);
+        <?php } ?>
     </script>
 </body>
 </html>

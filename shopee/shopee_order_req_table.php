@@ -1,4 +1,5 @@
 <?php
+$currentPagePin = 130;
 $pageTitle = "Shopee All Orders";
 $isFinance = 1;
 
@@ -8,6 +9,15 @@ include_once '../checkCurrentPagePin.php';
 $processingPageName = getPinGroupNameById($connect, 128);
 $verifyPageName = getPinGroupNameById($connect, 129);
 $allOrdersPageName = getPinGroupNameById($connect, 130);
+
+// Resolve page title based on Shopee role pin groups with safe fallback.
+if (!empty($allOrdersPageName)) {
+    $pageTitle = $allOrdersPageName;
+} else if (!empty($verifyPageName)) {
+    $pageTitle = $verifyPageName;
+} else if (!empty($processingPageName)) {
+    $pageTitle = $processingPageName;
+}
 
 $pinAccess = checkPin($connect, $allOrdersPageName);
 if (!is_array($pinAccess) || count($pinAccess) === 0) {
@@ -123,6 +133,7 @@ $whereSql = implode(" AND ", $whereConditions);
 $redirect_page = $SITEURL . '/shopee/shopee_order_req.php';
 $deleteRedirectPage = $SITEURL . '/shopee/shopee_order_req_table.php';
 $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_connect);
+$hasRows = ($result && mysqli_num_rows($result) > 0);
 ?>
 
 <!DOCTYPE html>
@@ -166,18 +177,16 @@ $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_con
                 <div class="row">
                     <div class="col-12 d-flex justify-content-between flex-wrap">
                         <h2><?php echo $pageTitle ?></h2>
-                        <?php if ($result) { ?>
-                            <div class="mt-auto mb-auto">
-                                     <?php if (isActionAllowed("Add", $pinAccess) || isActionAllowed("Import", $pinAccess)): ?>
-                                     <?php if (isActionAllowed("Add", $pinAccess)): ?>
-                                         <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Request </a>
-                                     <?php endif; ?>
-                                     <?php if (isActionAllowed("Import", $pinAccess)): ?>
-                                         <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="importBtn" id="importBtn" href="<?= $SITEURL ?>/shopee_order_import.php"><i class="fa-solid fa-file-import"></i> Import </a>
-                                     <?php endif; ?>
-                                <?php endif; ?>
-                            </div>
-                        <?php } ?>
+                        <div class="mt-auto mb-auto">
+                                 <?php if (isActionAllowed("Add", $pinAccess) || isActionAllowed("Import", $pinAccess)): ?>
+                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
+                                     <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Request </a>
+                                 <?php endif; ?>
+                                 <?php if (isActionAllowed("Import", $pinAccess)): ?>
+                                     <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="importBtn" id="importBtn" href="<?= $SITEURL ?>/shopee_order_import.php"><i class="fa-solid fa-file-import"></i> Import </a>
+                                 <?php endif; ?>
+                            <?php endif; ?>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -342,7 +351,7 @@ $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_con
                 </div>
             </div>
             <?php
-            if (!$result) {
+            if (!$hasRows) {
                 echo '<div class="text-center"><h4>No Result!</h4></div>';
             } else {
                 ?>

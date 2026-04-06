@@ -67,9 +67,27 @@ function findPinGroupRowByPage($connect, $currentPage)
     return null;
 }
 
-function syncPageTitleWithPinGroupName($connect, $currentPage)
+function findPinGroupRowById($connect, $pinGroupId)
 {
-    $pinGroup = findPinGroupRowByPage($connect, $currentPage);
+    $pinGroupId = (int) $pinGroupId;
+    if ($pinGroupId <= 0) {
+        return null;
+    }
+
+    $result = getData('*', "id = '$pinGroupId'", 'LIMIT 1', PIN_GRP, $connect);
+    if ($result && $result->num_rows > 0) {
+        return $result->fetch_assoc();
+    }
+
+    return null;
+}
+
+function syncPageTitleWithPinGroupName($connect, $currentPage, $currentPagePin = 0)
+{
+    $pinGroup = findPinGroupRowById($connect, $currentPagePin);
+    if (!$pinGroup) {
+        $pinGroup = findPinGroupRowByPage($connect, $currentPage);
+    }
 
     if (!empty($pinGroup['name'])) {
         $GLOBALS['pageTitle'] = $pinGroup['name'];
@@ -161,10 +179,15 @@ function getPinAccessFromPinGroupRow($connect, $resultPin)
 
 function checkCurrentPin($connect, $currentPage)
 {
-    $resultPin = findPinGroupRowByPage($connect, $currentPage);
+    $disableTitleSync = !empty($GLOBALS['disablePinGroupPageTitleSync']);
+    $currentPagePin = isset($GLOBALS['currentPagePin']) ? (int) $GLOBALS['currentPagePin'] : 0;
+    $resultPin = findPinGroupRowById($connect, $currentPagePin);
+    if (!$resultPin) {
+        $resultPin = findPinGroupRowByPage($connect, $currentPage);
+    }
 
     if ($resultPin) {
-        if (!empty($resultPin['name'])) {
+        if (!$disableTitleSync && !empty($resultPin['name'])) {
             $GLOBALS['pageTitle'] = $resultPin['name'];
         }
 
@@ -222,8 +245,65 @@ function getPageAction($act)
     return $validActions[$act] ?? 'View';
 }
 
+function auditCurrentTableView($connect, $cdate, $ctime)
+{
+    static $hasLoggedTableView = false;
+    if ($hasLoggedTableView) {
+        return;
+    }
+
+    if (!($connect instanceof mysqli) || !defined('USER_ID') || !USER_ID) {
+        return;
+    }
+
+    if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+        return;
+    }
+
+    $scriptName = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+    if ($scriptName === '' || stripos($scriptName, 'table') === false) {
+        return;
+    }
+
+    if (in_array(strtolower($scriptName), array('insert_table.php'), true)) {
+        return;
+    }
+
+    $resolvedPage = isset($GLOBALS['pageTitle']) && is_string($GLOBALS['pageTitle']) && trim($GLOBALS['pageTitle']) !== ''
+        ? trim($GLOBALS['pageTitle'])
+        : $scriptName;
+
+    // --- FIX: Escape dynamic variables to prevent XSS injection ---
+    $safeUserName = htmlspecialchars(USER_NAME, ENT_QUOTES, 'UTF-8');
+    $safePageName = htmlspecialchars($resolvedPage, ENT_QUOTES, 'UTF-8');
+    
+    $viewActMsg = $safeUserName . " viewed the table page <b>" . $safePageName . "</b>.";
+
+    $log = array(
+        'log_act' => 'view',
+        'cdate' => $cdate,
+        'ctime' => $ctime,
+        'uid' => USER_ID,
+        'cby' => USER_ID,
+        'act_msg' => $viewActMsg,
+        'page' => $resolvedPage,
+        'connect' => $connect,
+    );
+
+    audit_log($log);
+    $hasLoggedTableView = true;
+}
+
 if (isset($connect) && isset($GLOBALS['pageTitle']) && is_string($GLOBALS['pageTitle'])) {
-    $resolvedPageTitle = syncPageTitleWithPinGroupName($connect, $GLOBALS['pageTitle']);
+    $disableTitleSync = !empty($GLOBALS['disablePinGroupPageTitleSync']);
+    $resolvedPageTitle = $GLOBALS['pageTitle'];
+
+    if (!$disableTitleSync) {
+        $currentPagePin = isset($GLOBALS['currentPagePin']) ? (int) $GLOBALS['currentPagePin'] : 0;
+        $resolvedPageTitle = syncPageTitleWithPinGroupName($connect, $GLOBALS['pageTitle'], $currentPagePin);
+    }
+
+    auditCurrentTableView($connect, $cdate, $ctime);
 
     // Some pages render <title> before this file is included; keep browser tab title in sync.
     if ($resolvedPageTitle !== '') {

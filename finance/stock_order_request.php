@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 126;
 $pageTitle = "Stock Order Request";
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 include_once ROOT . '/header/phpqrcode/qrlib.php';
 
 $permissionPage = 'Stock Order Request';
@@ -11,6 +13,8 @@ $pinAccess = checkPin($connect, $permissionPage);
 if (!is_array($pinAccess) || count($pinAccess) === 0) {
     $pinAccess = checkPin($connect, 'Stock List');
 }
+
+$tblName = STOCK_ORDER_REQ;
 
 $dataID = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
@@ -71,6 +75,23 @@ $brandRst = mysqli_query($connect, "SELECT id, company FROM " . BRAND . " WHERE 
 if ($brandRst) {
     while ($brandRow = mysqli_fetch_assoc($brandRst)) {
         $brandCompanyMap[(int) $brandRow['id']] = isset($brandRow['company']) ? (int) $brandRow['company'] : 0;
+    }
+}
+
+$companySqlAccountFolderMap = array();
+$companySqlRst = mysqli_query($connect, "SELECT c.id AS company_id, s.name AS sql_account_name FROM " . COMPANY . " c LEFT JOIN " . SQL_ACC . " s ON c.sql_account_id = s.id WHERE c.status='A'");
+if ($companySqlRst) {
+    while ($companySqlRow = mysqli_fetch_assoc($companySqlRst)) {
+        $companyId = isset($companySqlRow['company_id']) ? (int) $companySqlRow['company_id'] : 0;
+        if ($companyId <= 0) {
+            continue;
+        }
+        $sqlAccountName = isset($companySqlRow['sql_account_name']) ? trim((string) $companySqlRow['sql_account_name']) : '';
+        $folder = strtolower(preg_replace('/[^a-zA-Z0-9_-]/', '_', $sqlAccountName));
+        $folder = trim((string) $folder, '_');
+        if ($folder !== '') {
+            $companySqlAccountFolderMap[$companyId] = $folder;
+        }
     }
 }
 
@@ -192,15 +213,72 @@ if (!empty($itemRows)) {
 }
 
 if ($act == 'D' && $dataID) {
-    mysqli_query($finance_connect, "UPDATE " . STOCK_ORDER_REQ . " SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . (int) $dataID . "'");
-    mysqli_query($finance_connect, "UPDATE " . STOCK_ORDER_REQ_ITEM . " SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE request_id='" . (int) $dataID . "'");
+    $deleteHeaderQuery = "UPDATE " . STOCK_ORDER_REQ . " SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . (int) $dataID . "'";
+    $deleteItemQuery = "UPDATE " . STOCK_ORDER_REQ_ITEM . " SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE request_id='" . (int) $dataID . "'";
+    $deleteHeaderResult = mysqli_query($finance_connect, $deleteHeaderQuery);
+    $deleteItemResult = mysqli_query($finance_connect, $deleteItemQuery);
+
+    $orderNoForLog = isset($row['invoice_no']) ? normalizeAuditLogValue($row['invoice_no']) : 'SOR-' . (int) $dataID;
+    $delErrMsg = '';
+    if (!$deleteHeaderResult || !$deleteItemResult) {
+        $delErrMsg = mysqli_error($finance_connect);
+    }
+
+    $log = [
+        'log_act' => $pageAction,
+        'cdate' => $cdate,
+        'ctime' => $ctime,
+        'uid' => USER_ID,
+        'cby' => USER_ID,
+        'query_rec' => $deleteHeaderQuery . '; ' . $deleteItemQuery,
+        'query_table' => $tblName . ', ' . STOCK_ORDER_REQ_ITEM,
+        'oldval' => 'Order No: ' . $orderNoForLog,
+        'act_msg' => USER_NAME . ' ' . (!$deleteHeaderResult || !$deleteItemResult ? 'failed to delete' : 'deleted') . ' Stock Order Request [<b>ID = ' . (int) $dataID . '</b>] from <b><i>' . $tblName . '</i></b>' . ($delErrMsg !== '' ? ' (' . $delErrMsg . ')' : '.') ,
+        'page' => $pageTitle,
+        'connect' => $connect,
+    ];
+    audit_log($log);
+
+    $_SESSION['delChk'] = 1;
     echo "<script>location.href='$redirect_page';</script>";
     exit;
+}
+
+if ($dataID && !$act && USER_ID && empty($_SESSION['viewChk']) && empty($_SESSION['delChk'])) {
+    $_SESSION['viewChk'] = 1;
+
+    $viewActMsg = USER_NAME . " viewed the data [<b>ID = " . (int) $dataID . "</b>] from <b><i>" . $tblName . " Table</i></b>.";
+    if (empty($row)) {
+        $viewActMsg = USER_NAME . " failed to view the data [<b>ID = " . (int) $dataID . "</b>] from <b><i>" . $tblName . " Table</i></b>.";
+    }
+
+    $log = [
+        'log_act' => 'View',
+        'cdate' => $cdate,
+        'ctime' => $ctime,
+        'uid' => USER_ID,
+        'cby' => USER_ID,
+        'act_msg' => $viewActMsg,
+        'page' => $pageTitle,
+        'connect' => $connect,
+    ];
+    audit_log($log);
 }
 
 $showQrPanel = false;
 $orderLink = '';
 $qrWebPath = '';
+$modalAct = '';
+$existingItemPairById = array();
+foreach ($itemRows as $existingItemRow) {
+    $existingId = isset($existingItemRow['id']) ? (int) $existingItemRow['id'] : 0;
+    if ($existingId > 0) {
+        $existingItemPairById[$existingId] = array(
+            'product_id' => isset($existingItemRow['product_id']) ? (int) $existingItemRow['product_id'] : 0,
+            'package_id' => isset($existingItemRow['package_id']) ? (int) $existingItemRow['package_id'] : 0,
+        );
+    }
+}
 
 if (post('actionBtn')) {
     $action = post('actionBtn');
@@ -223,6 +301,8 @@ if (post('actionBtn')) {
         $sor_remark = postSpaceFilter('sor_remark');
 
         $prodIdArr = isset($_POST['sor_item_prod_id']) ? postSpaceFilter('sor_item_prod_id') : array();
+        $itemIdArr = isset($_POST['sor_item_id']) ? postSpaceFilter('sor_item_id') : array();
+        $rowRoleArr = isset($_POST['sor_item_row_role']) ? postSpaceFilter('sor_item_row_role') : array();
         $prodNameArr = isset($_POST['sor_item_prod_name']) ? postSpaceFilter('sor_item_prod_name') : array();
         $pkgIdArr = isset($_POST['sor_item_pkg_id']) ? postSpaceFilter('sor_item_pkg_id') : array();
         $pkgNameArr = isset($_POST['sor_item_pkg_name']) ? postSpaceFilter('sor_item_pkg_name') : array();
@@ -233,6 +313,8 @@ if (post('actionBtn')) {
         $packagePriceArr = isset($_POST['sor_item_package_price']) ? postSpaceFilter('sor_item_package_price') : array();
 
         if (!is_array($prodIdArr)) $prodIdArr = array();
+        if (!is_array($itemIdArr)) $itemIdArr = array();
+        if (!is_array($rowRoleArr)) $rowRoleArr = array();
         if (!is_array($prodNameArr)) $prodNameArr = array();
         if (!is_array($pkgIdArr)) $pkgIdArr = array();
         if (!is_array($pkgNameArr)) $pkgNameArr = array();
@@ -263,11 +345,37 @@ if (post('actionBtn')) {
         $mismatchItems = array();
         $computedTotal = 0.00;
         $countedPackageTotals = array();
-        $resolvedBrandIds = array();
-        $resolvedCompanyIds = array();
+        $resolvedBrandCounts = array();
+        $resolvedCompanyCounts = array();
+        $resolvedBrandFirstOrder = array();
+        $resolvedCompanyFirstOrder = array();
         $maxCount = max(count($prodIdArr), count($prodNameArr), count($pkgIdArr), count($pkgNameArr), count($pkgDescArr), count($pkgQtyArr), count($productQtyArr));
+
+        // Resolve one authoritative package id per package group key so product rows
+        // in the same group cannot be mismatched by stale hidden inputs.
+        $groupPackageIdMap = array();
+        for ($g = 0; $g < $maxCount; $g++) {
+            $gPkgId = isset($pkgIdArr[$g]) ? (int) $pkgIdArr[$g] : 0;
+            if ($gPkgId <= 0) {
+                continue;
+            }
+            $gRowRole = isset($rowRoleArr[$g]) ? strtolower(trim((string) $rowRoleArr[$g])) : 'product';
+            if ($gRowRole !== 'package') {
+                continue;
+            }
+            $gGroupKey = isset($packageGroupKeyArr[$g]) ? trim((string) $packageGroupKeyArr[$g]) : '';
+            if ($gGroupKey === '') {
+                continue;
+            }
+            if (!isset($groupPackageIdMap[$gGroupKey])) {
+                $groupPackageIdMap[$gGroupKey] = $gPkgId;
+            }
+        }
+
         for ($i = 0; $i < $maxCount; $i++) {
             $prodId = isset($prodIdArr[$i]) ? (int) $prodIdArr[$i] : 0;
+            $itemId = isset($itemIdArr[$i]) ? (int) $itemIdArr[$i] : 0;
+            $rowRole = isset($rowRoleArr[$i]) ? strtolower(trim((string) $rowRoleArr[$i])) : 'product';
             $prodName = isset($prodNameArr[$i]) ? trim((string) $prodNameArr[$i]) : '';
             $pkgId = isset($pkgIdArr[$i]) ? (int) $pkgIdArr[$i] : 0;
             $pkgName = isset($pkgNameArr[$i]) ? trim((string) $pkgNameArr[$i]) : '';
@@ -276,6 +384,14 @@ if (post('actionBtn')) {
             $productQty = isset($productQtyArr[$i]) ? (int) $productQtyArr[$i] : 0;
             $packageGroupKey = isset($packageGroupKeyArr[$i]) ? trim((string) $packageGroupKeyArr[$i]) : '';
             $postedPackagePrice = isset($packagePriceArr[$i]) ? (float) $packagePriceArr[$i] : 0.00;
+
+            if ($rowRole === 'package' && $packageGroupKey !== '' && $pkgId > 0 && !isset($groupPackageIdMap[$packageGroupKey])) {
+                $groupPackageIdMap[$packageGroupKey] = $pkgId;
+            }
+
+            if ($packageGroupKey !== '' && isset($groupPackageIdMap[$packageGroupKey]) && (int) $groupPackageIdMap[$packageGroupKey] > 0) {
+                $pkgId = (int) $groupPackageIdMap[$packageGroupKey];
+            }
 
             if ($prodId <= 0 && $prodName !== '') {
                 $prodKey = strtolower(trim($prodName));
@@ -316,14 +432,24 @@ if (post('actionBtn')) {
             }
 
             $allowedProducts = isset($packageProductMap[$pkgId]) ? $packageProductMap[$pkgId] : array();
-            if (empty($allowedProducts) || !in_array($prodId, $allowedProducts, true)) {
-                $mismatchItems[] = $pkgName !== '' ? $pkgName : (isset($packageNameMap[$pkgId]) ? $packageNameMap[$pkgId] : '');
-                continue;
+            if ($rowRole !== 'package' && !empty($allowedProducts) && !in_array($prodId, $allowedProducts, true)) {
+                $legacyPairUnchanged = false;
+                if ($action === 'updRecord' && $itemId > 0 && isset($existingItemPairById[$itemId])) {
+                    $legacyPair = $existingItemPairById[$itemId];
+                    $legacyPairUnchanged = ((int) $legacyPair['product_id'] === $prodId && (int) $legacyPair['package_id'] === $pkgId);
+                }
+
+                if (!$legacyPairUnchanged) {
+                    $mismatchItems[] = $pkgName !== '' ? $pkgName : (isset($packageNameMap[$pkgId]) ? $packageNameMap[$pkgId] : '');
+                    continue;
+                }
             }
 
             $pkgPrice = isset($packageMap[$pkgId]) ? (float) $packageMap[$pkgId] : 0.00;
             $pkgBrandId = isset($packageBrandMap[$pkgId]) ? (int) $packageBrandMap[$pkgId] : 0;
-            $pkgCompanyId = ($pkgBrandId > 0 && isset($brandCompanyMap[$pkgBrandId])) ? (int) $brandCompanyMap[$pkgBrandId] : 0;
+            $productBrandId = ($prodId > 0 && isset($productBrandDirectMap[$prodId])) ? (int) $productBrandDirectMap[$prodId] : 0;
+            $effectiveBrandId = $productBrandId > 0 ? $productBrandId : $pkgBrandId;
+            $pkgCompanyId = ($effectiveBrandId > 0 && isset($brandCompanyMap[$effectiveBrandId])) ? (int) $brandCompanyMap[$effectiveBrandId] : 0;
             if ($pkgDesc === '' && isset($packageDescMap[$pkgId])) {
                 $pkgDesc = (string) $packageDescMap[$pkgId];
             }
@@ -337,16 +463,26 @@ if (post('actionBtn')) {
                 $countedPackageTotals[$packageGroupKey] = true;
             }
 
-            if ($pkgBrandId > 0) {
-                $resolvedBrandIds[$pkgBrandId] = true;
+            if ($effectiveBrandId > 0) {
+                if (!isset($resolvedBrandCounts[$effectiveBrandId])) {
+                    $resolvedBrandCounts[$effectiveBrandId] = 0;
+                    $resolvedBrandFirstOrder[$effectiveBrandId] = $i;
+                }
+                $resolvedBrandCounts[$effectiveBrandId]++;
             }
             if ($pkgCompanyId > 0) {
-                $resolvedCompanyIds[$pkgCompanyId] = true;
+                if (!isset($resolvedCompanyCounts[$pkgCompanyId])) {
+                    $resolvedCompanyCounts[$pkgCompanyId] = 0;
+                    $resolvedCompanyFirstOrder[$pkgCompanyId] = $i;
+                }
+                $resolvedCompanyCounts[$pkgCompanyId]++;
             }
 
             $items[] = array(
+                'item_id' => $itemId,
+                'row_role' => $rowRole,
                 'product_id' => $prodId,
-                'brand_id' => $pkgBrandId,
+                'brand_id' => $effectiveBrandId,
                 'company_id' => $pkgCompanyId,
                 'package_id' => $pkgId,
                 'package_group_key' => $packageGroupKey,
@@ -357,8 +493,92 @@ if (post('actionBtn')) {
             );
         }
 
-        $requestBrandId = count($resolvedBrandIds) === 1 ? (int) array_key_first($resolvedBrandIds) : 0;
-        $requestCompanyId = count($resolvedCompanyIds) === 1 ? (int) array_key_first($resolvedCompanyIds) : 0;
+        $pathBrandCounts = array();
+        $pathCompanyCounts = array();
+        $pathBrandFirstOrder = array();
+        $pathCompanyFirstOrder = array();
+        $packageByGroup = array();
+
+        foreach ($items as $idx => $it) {
+            $gk = isset($it['package_group_key']) ? trim((string) $it['package_group_key']) : '';
+            if ($gk === '') {
+                $gk = 'idx_' . $idx;
+            }
+            $itPkgId = isset($it['package_id']) ? (int) $it['package_id'] : 0;
+            if ($itPkgId > 0 && !isset($packageByGroup[$gk])) {
+                $packageByGroup[$gk] = $itPkgId;
+            }
+        }
+
+        $groupOrderCounter = 0;
+        foreach ($packageByGroup as $groupPkgId) {
+            $groupPkgId = (int) $groupPkgId;
+            if ($groupPkgId <= 0) {
+                continue;
+            }
+
+            $linkedProductIds = isset($packageProductMap[$groupPkgId]) && is_array($packageProductMap[$groupPkgId])
+                ? $packageProductMap[$groupPkgId]
+                : array();
+
+            if (!empty($linkedProductIds)) {
+                foreach ($linkedProductIds as $linkedProductIdRaw) {
+                    $linkedProductId = (int) $linkedProductIdRaw;
+                    $brandId = ($linkedProductId > 0 && isset($productBrandDirectMap[$linkedProductId])) ? (int) $productBrandDirectMap[$linkedProductId] : 0;
+                    if ($brandId <= 0 && isset($packageBrandMap[$groupPkgId])) {
+                        $brandId = (int) $packageBrandMap[$groupPkgId];
+                    }
+                    $companyId = ($brandId > 0 && isset($brandCompanyMap[$brandId])) ? (int) $brandCompanyMap[$brandId] : 0;
+
+                    if ($brandId > 0) {
+                        if (!isset($pathBrandCounts[$brandId])) {
+                            $pathBrandCounts[$brandId] = 0;
+                            $pathBrandFirstOrder[$brandId] = $groupOrderCounter;
+                        }
+                        $pathBrandCounts[$brandId]++;
+                    }
+                    if ($companyId > 0) {
+                        if (!isset($pathCompanyCounts[$companyId])) {
+                            $pathCompanyCounts[$companyId] = 0;
+                            $pathCompanyFirstOrder[$companyId] = $groupOrderCounter;
+                        }
+                        $pathCompanyCounts[$companyId]++;
+                    }
+
+                    $groupOrderCounter++;
+                }
+                continue;
+            }
+
+            $fallbackBrandId = isset($packageBrandMap[$groupPkgId]) ? (int) $packageBrandMap[$groupPkgId] : 0;
+            $fallbackCompanyId = ($fallbackBrandId > 0 && isset($brandCompanyMap[$fallbackBrandId])) ? (int) $brandCompanyMap[$fallbackBrandId] : 0;
+
+            if ($fallbackBrandId > 0) {
+                if (!isset($pathBrandCounts[$fallbackBrandId])) {
+                    $pathBrandCounts[$fallbackBrandId] = 0;
+                    $pathBrandFirstOrder[$fallbackBrandId] = $groupOrderCounter;
+                }
+                $pathBrandCounts[$fallbackBrandId]++;
+            }
+            if ($fallbackCompanyId > 0) {
+                if (!isset($pathCompanyCounts[$fallbackCompanyId])) {
+                    $pathCompanyCounts[$fallbackCompanyId] = 0;
+                    $pathCompanyFirstOrder[$fallbackCompanyId] = $groupOrderCounter;
+                }
+                $pathCompanyCounts[$fallbackCompanyId]++;
+            }
+            $groupOrderCounter++;
+        }
+
+        $requestBrandId = sorPickDominantIdByCounts($pathBrandCounts, $pathBrandFirstOrder);
+        if ($requestBrandId <= 0) {
+            $requestBrandId = sorPickDominantIdByCounts($resolvedBrandCounts, $resolvedBrandFirstOrder);
+        }
+
+        $requestCompanyId = sorPickDominantIdByCounts($pathCompanyCounts, $pathCompanyFirstOrder);
+        if ($requestCompanyId <= 0) {
+            $requestCompanyId = sorPickDominantIdByCounts($resolvedCompanyCounts, $resolvedCompanyFirstOrder);
+        }
 
         // --- FIX: Check for duplicate invoice numbers in the database ---
         $safeInvoiceNoCheck = mysqli_real_escape_string($finance_connect, $sor_invoice_no);
@@ -397,13 +617,13 @@ if (post('actionBtn')) {
         } else if (count($items) === 0) {
             $err = 'Please add at least one package item with quantity.';
         } else {
-            $existingAttachment = postSpaceFilter('existing_attachment');
+            $existingAttachment = sorNormalizeAttachmentRelativePath(postSpaceFilter('existing_attachment'));
             $sor_attachment = $existingAttachment;
 
             if (isset($_FILES['sor_attachment']) && $_FILES['sor_attachment']['error'] === UPLOAD_ERR_OK) {
-                $requestNoForPath = sorGenerateRequestNo($finance_connect);
-                $targetRelativeDir = 'attachment/' . date('Y') . '/' . date('m') . '/beyourdiary/' . $requestNoForPath . '/';
-                $targetFsDir = ROOT . img_server . $targetRelativeDir;
+                $sqlAccountFolder = sorResolveSqlAccountFolderFromCompany($requestCompanyId, $companySqlAccountFolderMap);
+                $targetRelativeDir = 'attachment/' . $sqlAccountFolder . '/' . substr((string) comYMD, 0, 4) . '/' . substr((string) comYMD, 4, 2) . '/' . basename(__FILE__, '.php') . '/';
+                $targetFsDir = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . ltrim($targetRelativeDir, '/\\');
 
                 if (!file_exists($targetFsDir)) {
                     mkdir($targetFsDir, 0777, true);
@@ -416,17 +636,29 @@ if (post('actionBtn')) {
                 if (!in_array($ext, $allowed, true)) {
                     $err = 'Attachment format not supported. Allowed: pdf, png, jpg, jpeg, zip.';
                 } else {
-                    $newName = 'sor_' . time() . '_' . mt_rand(1000, 9999) . '.' . $ext;
+                    $baseName = (string) pathinfo($original, PATHINFO_FILENAME);
+                    $safeBase = preg_replace('/[^a-zA-Z0-9_-]/', '_', $baseName);
+                    if ($safeBase === '') {
+                        $safeBase = 'sor_attachment';
+                    }
+                    $newName = $safeBase . '_' . date('Ymd_His') . '_' . mt_rand(1000, 9999) . '.' . $ext;
                     $targetFile = $targetFsDir . $newName;
                     if (!move_uploaded_file($_FILES['sor_attachment']['tmp_name'], $targetFile)) {
                         $err = 'Failed to upload attachment.';
                     } else {
-                        $sor_attachment = $targetRelativeDir . $newName;
+                        $sor_attachment = sorNormalizeAttachmentRelativePath($targetRelativeDir . $newName);
                     }
                 }
             }
 
             if (!isset($err)) {
+                $auditDataField = array();
+                $auditOldValArr = array();
+                $auditNewValArr = array();
+                $auditChgValArr = array();
+                $auditOldRow = is_array($row) ? $row : array();
+                $auditOldItemSnapshot = sorBuildAuditItemSnapshot($itemRows, $packageNameMap, $productNameMap);
+
                 $safeWarehouse = mysqli_real_escape_string($finance_connect, $sor_warehouse);
                 $safeInvoiceNo = mysqli_real_escape_string($finance_connect, $sor_invoice_no);
                 $safeInvoiceDate = mysqli_real_escape_string($finance_connect, $sor_invoice_date);
@@ -439,6 +671,22 @@ if (post('actionBtn')) {
                 $courierSqlValue = ($safeCourier === '' ? "NULL" : "'" . $safeCourier . "'");
 
                 if ($action === 'addRecord') {
+                    $auditDataField = array('warehouse_id', 'company_id', 'brand_id', 'invoice_no', 'invoice_date', 'request_date', 'courier_id', 'tracking_no', 'total_price', 'attachment', 'remark', 'item_snapshot');
+                    $auditNewValArr = array(
+                        normalizeAuditLogValue($sor_warehouse),
+                        normalizeAuditLogValue($requestCompanyId),
+                        normalizeAuditLogValue($requestBrandId),
+                        normalizeAuditLogValue($sor_invoice_no),
+                        normalizeAuditLogValue($sor_invoice_date),
+                        normalizeAuditLogValue($sor_request_date),
+                        normalizeAuditLogValue($sor_courier),
+                        normalizeAuditLogValue($sor_tracking_no),
+                        normalizeAuditLogValue($safeTotalPrice),
+                        normalizeAuditLogValue($sor_attachment),
+                        normalizeAuditLogValue($sor_remark),
+                        normalizeAuditLogValue(sorBuildAuditItemSnapshot($items, $packageNameMap, $productNameMap)),
+                    );
+
                     $query = "INSERT INTO " . STOCK_ORDER_REQ . "
                                                                 (warehouse_id, company_id, brand_id, invoice_no, invoice_date, request_date, courier_id, tracking_no, total_price, attachment, remark, create_by, create_date, create_time)
                               VALUES
@@ -462,10 +710,48 @@ if (post('actionBtn')) {
                                   update_date = CURDATE(),
                                   update_time = CURTIME()
                               WHERE id = '" . (int) $dataID . "'";
-                    $returnData = mysqli_query($finance_connect, $query);
+
+                    $auditPairs = array(
+                        'warehouse_id' => array(isset($auditOldRow['warehouse_id']) ? $auditOldRow['warehouse_id'] : '', $sor_warehouse),
+                        'company_id' => array(isset($auditOldRow['company_id']) ? $auditOldRow['company_id'] : '', $requestCompanyId),
+                        'brand_id' => array(isset($auditOldRow['brand_id']) ? $auditOldRow['brand_id'] : '', $requestBrandId),
+                        'invoice_no' => array(isset($auditOldRow['invoice_no']) ? $auditOldRow['invoice_no'] : '', $sor_invoice_no),
+                        'invoice_date' => array(isset($auditOldRow['invoice_date']) ? $auditOldRow['invoice_date'] : '', $sor_invoice_date),
+                        'request_date' => array(isset($auditOldRow['request_date']) ? $auditOldRow['request_date'] : '', $sor_request_date),
+                        'courier_id' => array(isset($auditOldRow['courier_id']) ? $auditOldRow['courier_id'] : '', $sor_courier),
+                        'tracking_no' => array(isset($auditOldRow['tracking_no']) ? $auditOldRow['tracking_no'] : '', $sor_tracking_no),
+                        'total_price' => array(isset($auditOldRow['total_price']) ? $auditOldRow['total_price'] : '', $safeTotalPrice),
+                        'attachment' => array(isset($auditOldRow['attachment']) ? $auditOldRow['attachment'] : '', $sor_attachment),
+                        'remark' => array(isset($auditOldRow['remark']) ? $auditOldRow['remark'] : '', $sor_remark),
+                        'item_snapshot' => array($auditOldItemSnapshot, sorBuildAuditItemSnapshot($items, $packageNameMap, $productNameMap)),
+                    );
+
+                    foreach ($auditPairs as $field => $pair) {
+                        $oldVal = normalizeAuditLogValue($pair[0]);
+                        $newVal = normalizeAuditLogValue($pair[1]);
+                        $oldCmpVal = sorCanonicalAuditValue($field, $pair[0]);
+                        $newCmpVal = sorCanonicalAuditValue($field, $pair[1]);
+                        if ($oldCmpVal !== $newCmpVal) {
+                            $auditDataField[] = $field;
+                            $auditOldValArr[] = $oldVal;
+                            $auditChgValArr[] = $newVal;
+                        }
+                    }
+
+                    if (!empty($auditDataField) && !empty($auditOldValArr) && !empty($auditChgValArr)) {
+                        $returnData = mysqli_query($finance_connect, $query);
+                    } else {
+                        // No change: keep user on edit page, show no-change modal, do not regenerate QR.
+                        $act = 'E';
+                        $pageAction = getPageAction($act);
+                        $pageActionTitle = $pageAction . ' ' . $pageTitle;
+                        $actionBtnValue = 'updRecord';
+                        $showQrPanel = false;
+                        $modalAct = 'NC';
+                    }
                 }
 
-                if ($returnData) {
+                if (isset($returnData) && $returnData) {
                     if ($action === 'addRecord') {
                         foreach ($items as $item) {
                             $safeProdId = isset($item['product_id']) ? (int) $item['product_id'] : 0;
@@ -485,20 +771,17 @@ if (post('actionBtn')) {
                         }
                     } else {
                         $existingItemIds = array();
-                        $existingRst = mysqli_query($finance_connect, "SELECT id FROM " . STOCK_ORDER_REQ_ITEM . " WHERE request_id='" . (int) $dataID . "' AND status='A' ORDER BY id ASC");
+                        $existingRst = mysqli_query($finance_connect, "SELECT id FROM " . STOCK_ORDER_REQ_ITEM . " WHERE request_id='" . (int) $dataID . "' AND status='A'");
                         if ($existingRst) {
                             while ($existingRow = mysqli_fetch_assoc($existingRst)) {
-                                $existingItemIds[] = (int) $existingRow['id'];
+                                $existingItemIds[(int)$existingRow['id']] = true;
                             }
                         }
 
-                        $itemCount = count($items);
-                        $existingCount = count($existingItemIds);
-                        $updateCount = min($itemCount, $existingCount);
+                        $postedItemIds = array();
 
-                        for ($i = 0; $i < $updateCount; $i++) {
-                            $item = $items[$i];
-                            $itemId = (int) $existingItemIds[$i];
+                        foreach ($items as $item) {
+                            $itemId = (int) $item['item_id'];
                             $safeProdId = isset($item['product_id']) ? (int) $item['product_id'] : 0;
                             $safeBrandId = isset($item['brand_id']) ? (int) $item['brand_id'] : 0;
                             $safeCompanyId = isset($item['company_id']) ? (int) $item['company_id'] : 0;
@@ -509,45 +792,40 @@ if (post('actionBtn')) {
                             $safePackageQty = isset($item['packageQty']) ? (int) $item['packageQty'] : 1;
                             $safeProductQty = isset($item['productQty']) ? (int) $item['productQty'] : $safePackageQty;
 
-                            $updateItemSql = "UPDATE " . STOCK_ORDER_REQ_ITEM . "
-                                              SET product_id='" . $safeProdId . "',
-                                                  brand_id='" . $safeBrandId . "',
-                                                  company_id='" . $safeCompanyId . "',
-                                                  package_id='" . $safePkgId . "',
-                                                  package_group_key='" . $safePkgGroupKey . "',
-                                                  package_desc='" . $safeDesc . "',
-                                                  package_price='" . number_format($safePkgPrice, 2, '.', '') . "',
-                                                  packageQty='" . $safePackageQty . "',
-                                                  productQty='" . $safeProductQty . "',
-                                                  status='A',
-                                                  update_by='" . USER_ID . "',
-                                                  update_date=CURDATE(),
-                                                  update_time=CURTIME()
-                                              WHERE id='" . $itemId . "' AND request_id='" . (int) $dataID . "'";
-                            mysqli_query($finance_connect, $updateItemSql);
+                            if ($itemId > 0 && isset($existingItemIds[$itemId])) {
+                                // UPDATE existing record by its specific ID
+                                $updateItemSql = "UPDATE " . STOCK_ORDER_REQ_ITEM . "
+                                                  SET product_id='" . $safeProdId . "',
+                                                      brand_id='" . $safeBrandId . "',
+                                                      company_id='" . $safeCompanyId . "',
+                                                      package_id='" . $safePkgId . "',
+                                                      package_group_key='" . $safePkgGroupKey . "',
+                                                      package_desc='" . $safeDesc . "',
+                                                      package_price='" . number_format($safePkgPrice, 2, '.', '') . "',
+                                                      packageQty='" . $safePackageQty . "',
+                                                      productQty='" . $safeProductQty . "',
+                                                      status='A',
+                                                      update_by='" . USER_ID . "',
+                                                      update_date=CURDATE(),
+                                                      update_time=CURTIME()
+                                                  WHERE id='" . $itemId . "' AND request_id='" . (int) $dataID . "'";
+                                mysqli_query($finance_connect, $updateItemSql);
+                                $postedItemIds[] = $itemId;
+                            } else {
+                                // INSERT new record
+                                $insertItemSql = "INSERT INTO " . STOCK_ORDER_REQ_ITEM . "
+                                                  (request_id, product_id, brand_id, company_id, package_id, package_group_key, package_desc, package_price, packageQty, productQty, create_by, create_date, create_time)
+                                                  VALUES
+                                                  ('" . (int) $dataID . "', '" . $safeProdId . "', '" . $safeBrandId . "', '" . $safeCompanyId . "', '$safePkgId', '$safePkgGroupKey', '$safeDesc', '" . number_format($safePkgPrice, 2, '.', '') . "', '$safePackageQty', '$safeProductQty', '" . USER_ID . "', CURDATE(), CURTIME())";
+                                mysqli_query($finance_connect, $insertItemSql);
+                            }
                         }
 
-                        for ($i = $updateCount; $i < $itemCount; $i++) {
-                            $item = $items[$i];
-                            $safeProdId = isset($item['product_id']) ? (int) $item['product_id'] : 0;
-                            $safeBrandId = isset($item['brand_id']) ? (int) $item['brand_id'] : 0;
-                            $safeCompanyId = isset($item['company_id']) ? (int) $item['company_id'] : 0;
-                            $safePkgId = mysqli_real_escape_string($finance_connect, $item['package_id']);
-                            $safePkgGroupKey = mysqli_real_escape_string($finance_connect, isset($item['package_group_key']) ? (string) $item['package_group_key'] : '');
-                            $safeDesc = mysqli_real_escape_string($finance_connect, $item['package_desc']);
-                            $safePkgPrice = isset($item['package_price']) ? (float) $item['package_price'] : 0.00;
-                            $safePackageQty = isset($item['packageQty']) ? (int) $item['packageQty'] : 1;
-                            $safeProductQty = isset($item['productQty']) ? (int) $item['productQty'] : $safePackageQty;
-                            $insertItemSql = "INSERT INTO " . STOCK_ORDER_REQ_ITEM . "
-                                              (request_id, product_id, brand_id, company_id, package_id, package_group_key, package_desc, package_price, packageQty, productQty, create_by, create_date, create_time)
-                                              VALUES
-                                              ('" . (int) $dataID . "', '" . $safeProdId . "', '" . $safeBrandId . "', '" . $safeCompanyId . "', '$safePkgId', '$safePkgGroupKey', '$safeDesc', '" . number_format($safePkgPrice, 2, '.', '') . "', '$safePackageQty', '$safeProductQty', '" . USER_ID . "', CURDATE(), CURTIME())";
-                            mysqli_query($finance_connect, $insertItemSql);
-                        }
-
-                        for ($i = $itemCount; $i < $existingCount; $i++) {
-                            $itemId = (int) $existingItemIds[$i];
-                            mysqli_query($finance_connect, "UPDATE " . STOCK_ORDER_REQ_ITEM . " SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $itemId . "' AND request_id='" . (int) $dataID . "'");
+                        // DELETE any records that existed in the DB but were NOT posted back from the UI
+                        foreach ($existingItemIds as $id => $val) {
+                            if (!in_array($id, $postedItemIds)) {
+                                mysqli_query($finance_connect, "UPDATE " . STOCK_ORDER_REQ_ITEM . " SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $id . "' AND request_id='" . (int) $dataID . "'");
+                            }
                         }
                     }
 
@@ -575,6 +853,38 @@ if (post('actionBtn')) {
                     $safeToken = mysqli_real_escape_string($finance_connect, $token);
                     $safeQr = mysqli_real_escape_string($finance_connect, $qrWebPath);
                     mysqli_query($finance_connect, "UPDATE " . STOCK_ORDER_REQ . " SET order_link_token='$safeToken', qr_image='$safeQr' WHERE id='" . (int) $dataID . "'");
+
+                    // After successful save, stay on current page in edit mode.
+                    $act = 'E';
+                    $pageAction = getPageAction($act);
+                    $pageActionTitle = $pageAction . ' ' . $pageTitle;
+                    $actionBtnValue = 'updRecord';
+                    $modalAct = ($action === 'addRecord') ? 'I' : 'E';
+
+                    $log = [
+                        'log_act' => $pageAction,
+                        'cdate' => $cdate,
+                        'ctime' => $ctime,
+                        'uid' => USER_ID,
+                        'cby' => USER_ID,
+                        'query_rec' => $query,
+                        'query_table' => $tblName,
+                        'page' => $pageTitle,
+                        'connect' => $connect,
+                    ];
+
+                    if ($pageAction === 'Add') {
+                        $log['newval'] = implodeWithComma($auditNewValArr);
+                        $log['act_msg'] = actMsgLog($dataID, $auditDataField, $auditNewValArr, array(), array(), $tblName, $pageAction, '');
+                        audit_log($log);
+                    } else if ($pageAction === 'Edit') {
+                        if (!empty($auditDataField) && !empty($auditOldValArr) && !empty($auditChgValArr)) {
+                            $log['oldval'] = implodeWithComma($auditOldValArr);
+                            $log['changes'] = implodeWithComma($auditChgValArr);
+                            $log['act_msg'] = actMsgLog($dataID, $auditDataField, array(), $auditOldValArr, $auditChgValArr, $tblName, $pageAction, '');
+                            audit_log($log);
+                        }
+                    }
 
                     // Reload persisted header and item rows so add/edit success view exactly matches DB state.
                     $reloadRst = getData('*', "id='" . (int) $dataID . "'", 'LIMIT 1', STOCK_ORDER_REQ, $finance_connect);
@@ -622,7 +932,9 @@ if (post('actionBtn')) {
 
                     $showQrPanel = true;
                 } else {
-                    $err = 'Failed to save stock order request.';
+                    if ($modalAct !== 'NC') {
+                        $err = 'Failed to save stock order request.';
+                    }
                 }
             }
         }
@@ -634,6 +946,180 @@ function sorEcho($value)
     return htmlspecialchars((string) $value, ENT_QUOTES, 'UTF-8');
 }
 
+function sorPickDominantIdByCounts($counts, $firstOrder)
+{
+    if (!is_array($counts) || empty($counts)) {
+        return 0;
+    }
+
+    $bestId = 0;
+    $bestCount = -1;
+    $bestOrder = PHP_INT_MAX;
+
+    foreach ($counts as $id => $count) {
+        $id = (int) $id;
+        $count = (int) $count;
+        if ($id <= 0 || $count <= 0) {
+            continue;
+        }
+
+        $order = isset($firstOrder[$id]) ? (int) $firstOrder[$id] : PHP_INT_MAX;
+        if ($count > $bestCount || ($count === $bestCount && $order < $bestOrder)) {
+            $bestId = $id;
+            $bestCount = $count;
+            $bestOrder = $order;
+        }
+    }
+
+    return $bestId > 0 ? $bestId : 0;
+}
+
+function sorResolveSqlAccountFolderFromCompany($companyId, $companySqlAccountFolderMap)
+{
+    $companyId = (int) $companyId;
+    if ($companyId > 0 && is_array($companySqlAccountFolderMap) && isset($companySqlAccountFolderMap[$companyId])) {
+        $folder = trim((string) $companySqlAccountFolderMap[$companyId]);
+        if ($folder !== '') {
+            return $folder;
+        }
+    }
+
+    return 'sqlaccount';
+}
+
+function sorNormalizeAttachmentRelativePath($path)
+{
+    $path = trim((string) $path);
+    if ($path === '') {
+        return '';
+    }
+
+    $path = str_replace('\\', '/', $path);
+    $path = preg_replace('#^https?://[^/]+/#i', '', $path);
+    $path = preg_replace('#^/?images_server/#i', '', $path);
+    $path = ltrim((string) $path, '/');
+
+    if (stripos($path, 'attachment/') !== 0) {
+        if (strpos($path, 'attachment/') !== false) {
+            $pos = strpos($path, 'attachment/');
+            $path = substr($path, $pos);
+        }
+    }
+
+    if (strpos($path, 'attachment/') === false) {
+        return '';
+    }
+
+    return $path;
+}
+
+function sorBuildAuditItemSnapshot($rows, $packageNameMap = array(), $productNameMap = array())
+{
+    if (!is_array($rows) || empty($rows)) {
+        return '';
+    }
+
+    $grouped = array();
+    foreach ($rows as $idx => $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+
+        $prodId = isset($item['product_id']) ? (int) $item['product_id'] : 0;
+        $pkgId = isset($item['package_id']) ? (int) $item['package_id'] : 0;
+        $pkgQty = isset($item['packageQty']) ? (int) $item['packageQty'] : 0;
+        $prodQty = isset($item['productQty']) ? (int) $item['productQty'] : 0;
+        $pkgPrice = isset($item['package_price']) ? number_format((float) $item['package_price'], 2, '.', '') : '0.00';
+        $pkgName = isset($packageNameMap[$pkgId]) ? trim((string) $packageNameMap[$pkgId]) : '';
+        $prodName = isset($productNameMap[$prodId]) ? trim((string) $productNameMap[$prodId]) : '';
+        $groupKey = isset($item['package_group_key']) ? trim((string) $item['package_group_key']) : '';
+
+        if ($groupKey === '') {
+            $groupKey = 'pkg_' . $pkgId . '_' . ($idx + 1);
+        }
+
+        if ($pkgName === '') {
+            $pkgName = $pkgId > 0 ? ('Package #' . $pkgId) : 'Package';
+        }
+        if ($prodName === '') {
+            $prodName = $prodId > 0 ? ('Product #' . $prodId) : 'Product';
+        }
+
+        if (!isset($grouped[$groupKey])) {
+            $grouped[$groupKey] = array(
+                'package_name' => $pkgName,
+                'package_qty' => $pkgQty,
+                'price' => $pkgPrice,
+                'products' => array(),
+            );
+        }
+
+        $grouped[$groupKey]['products'][] = array(
+            'product_name' => $prodName,
+            'product_qty' => $prodQty,
+        );
+    }
+
+    $snapshotRows = array();
+    foreach ($grouped as $group) {
+        $productParts = array();
+        if (!empty($group['products']) && is_array($group['products'])) {
+            foreach ($group['products'] as $pIdx => $p) {
+                $labelSuffix = $pIdx === 0 ? '' : (string) ($pIdx + 1);
+                $productParts[] = 'Product' . $labelSuffix . ' Name: ' . $p['product_name'] . '; Product' . $labelSuffix . ' Qty: ' . (int) $p['product_qty'];
+            }
+        }
+
+        $snapshotRows[] = 'Package Name: ' . $group['package_name']
+            . '; Package Qty: ' . (int) $group['package_qty']
+            . '; ' . implode(', ', $productParts)
+            . '; Price: ' . $group['price'];
+    }
+
+    sort($snapshotRows);
+    return implode('|', $snapshotRows);
+}
+
+function sorCanonicalAuditValue($field, $value)
+{
+    $field = trim((string) $field);
+    $normalized = normalizeAuditLogValue($value);
+
+    if ($field === 'warehouse_id' || $field === 'company_id' || $field === 'brand_id' || $field === 'courier_id') {
+        return (string) ((int) $normalized);
+    }
+
+    if ($field === 'total_price') {
+        return number_format((float) $normalized, 2, '.', '');
+    }
+
+    if ($field === 'invoice_no') {
+        return ltrim(trim((string) $normalized), "'");
+    }
+
+    if ($field === 'item_snapshot') {
+        $raw = trim((string) $normalized);
+        if ($raw === '' || $raw === 'Empty Value') {
+            return '';
+        }
+
+        $rows = explode('|', $raw);
+        $canonicalRows = array();
+        foreach ($rows as $row) {
+            $row = trim((string) $row);
+            if ($row === '') {
+                continue;
+            }
+            $canonicalRows[] = preg_replace('/\s+/', ' ', $row);
+        }
+
+        sort($canonicalRows);
+        return implode('|', $canonicalRows);
+    }
+
+    return trim((string) $normalized);
+}
+
 function sorQrSrc($path, $siteUrl)
 {
     $path = trim((string) $path);
@@ -642,6 +1128,21 @@ function sorQrSrc($path, $siteUrl)
         return $path;
     }
     return rtrim((string) $siteUrl, '/') . '/' . ltrim($path, '/');
+}
+
+function sorAttachmentUrl($relativePath, $siteUrl)
+{
+    $relativePath = sorNormalizeAttachmentRelativePath($relativePath);
+    if ($relativePath === '') {
+        return '';
+    }
+
+    $newAbsPath = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . ltrim($relativePath, '/\\');
+    if (is_file($newAbsPath)) {
+        return rtrim((string) $siteUrl, '/') . '/' . ltrim($relativePath, '/');
+    }
+
+    return rtrim((string) $siteUrl, '/') . '/' . ltrim((string) img_server, '/') . ltrim($relativePath, '/');
 }
 ?>
 <!DOCTYPE html>
@@ -760,7 +1261,7 @@ function sorQrSrc($path, $siteUrl)
                         
                         <div id="qr_success_panel" class="alert alert-success d-flex justify-content-between align-items-center mb-3">
                             <span>Stock Order saved. Redirecting to table in <strong><span id="countdownSec">15</span>s</strong>.</span>
-                            <button type="button" class="btn btn-sm btn-rounded btn-primary" id="goNowBtn">Go To Table Now</button>
+                            <button type="button" class="btn btn-sm btn-rounded btn-primary" id="goNowBtn">Back</button>
                         </div>
 
                         <div class="card mb-4">
@@ -777,7 +1278,7 @@ function sorQrSrc($path, $siteUrl)
                                             <button type="button" class="btn btn-sm btn-rounded btn-primary" id="copyOrderLinkBtn">Copy Link</button>
                                         </div>
                                         <a class="btn btn-sm btn-rounded btn-primary me-2" href="<?= sorEcho(sorQrSrc($qrWebPath, $SITEURL)) ?>" download>Download QR</a>
-                                        <a class="btn btn-sm btn-rounded btn-primary" href="<?= sorEcho($orderLink) ?>" target="_blank">Open Order Link</a>
+                                        <a class="btn btn-sm btn-rounded btn-primary" id="openOrderLinkBtn" href="<?= sorEcho($orderLink) ?>" target="_blank">Open Order Link</a>
                                     </div>
                                 </div>
                             </div>
@@ -928,7 +1429,10 @@ function sorQrSrc($path, $siteUrl)
                                                 </div>
                                             </div>
                                         </td>
-                                        <td></td>
+                                        <td>
+                                            <input type="hidden" class="sor-item-prod-name" name="sor_item_prod_name[]" value="">
+                                            <input type="hidden" class="sor-item-prod-id" name="sor_item_prod_id[]" value="">
+                                        </td>
                                         <td class="cell-desc">
                                             <div class="desc-main-field">
                                                 <input class="form-control sor-item-desc" type="text" name="sor_item_desc[]" value="<?= sorEcho($desc) ?>" readonly>
@@ -937,6 +1441,8 @@ function sorQrSrc($path, $siteUrl)
                                         <td>
                                             <div class="qty-main-field">
                                                 <input class="form-control sor-item-qty" type="number" min="1" name="sor_item_product_qty[]" value="<?= sorEcho($packageQty) ?>" <?= ($act == '') ? 'readonly' : '' ?>>
+                                                <input class="sor-item-id" type="hidden" name="sor_item_id[]" value="">
+                                                <input class="sor-item-row-role" type="hidden" name="sor_item_row_role[]" value="package">
                                                 <input class="sor-item-package-qty" type="hidden" name="sor_item_package_qty[]" value="<?= sorEcho($packageQty) ?>">
                                                 <input class="sor-item-base-qty" type="hidden" name="sor_item_base_qty[]" value="1">
                                                 <input class="sor-item-group-key" type="hidden" name="sor_item_group_key[]" value="<?= sorEcho($gk) ?>">
@@ -993,6 +1499,8 @@ function sorQrSrc($path, $siteUrl)
                                         <td>
                                             <div class="qty-main-field">
                                                 <input class="form-control sor-item-qty" type="number" min="1" name="sor_item_product_qty[]" value="<?= sorEcho($productQty) ?>" <?= ($act == '') ? 'readonly' : '' ?>>
+                                                <input class="sor-item-id" type="hidden" name="sor_item_id[]" value="<?= sorEcho(isset($item['id']) ? (int) $item['id'] : '') ?>">
+                                                <input class="sor-item-row-role" type="hidden" name="sor_item_row_role[]" value="product">
                                                 <input class="sor-item-package-qty" type="hidden" name="sor_item_package_qty[]" value="<?= sorEcho($packageQty) ?>">
                                                 <input class="sor-item-base-qty" type="hidden" name="sor_item_base_qty[]" value="<?= sorEcho($baseQty) ?>">
                                                 <input class="sor-item-group-key" type="hidden" name="sor_item_group_key[]" value="<?= sorEcho($gk) ?>">
@@ -1031,10 +1539,10 @@ function sorQrSrc($path, $siteUrl)
                         <div class="col-md-4 mb-3">
                             <label class="form-label form_lbl" for="sor_attachment">Attachment</label>
                             <input class="form-control" type="file" id="sor_attachment" name="sor_attachment" <?= ($act == '') ? 'disabled' : '' ?>>
-                            <input type="hidden" name="existing_attachment" value="<?= sorEcho(isset($row['attachment']) ? $row['attachment'] : '') ?>">
+                            <input type="hidden" name="existing_attachment" value="<?= sorEcho(sorNormalizeAttachmentRelativePath(isset($row['attachment']) ? $row['attachment'] : '')) ?>">
                             <?php if (isset($row['attachment']) && $row['attachment'] !== '') { ?>
                                 <div class="mt-2">
-                                    <a href="<?= $SITEURL . img_server . $row['attachment'] ?>" target="_blank">View Current Attachment</a>
+                                    <a href="<?= sorAttachmentUrl(sorNormalizeAttachmentRelativePath($row['attachment']), $SITEURL) ?>" target="_blank">View Current Attachment</a>
                                 </div>
                             <?php } ?>
                         </div>
@@ -1062,6 +1570,7 @@ function sorQrSrc($path, $siteUrl)
             action: <?= json_encode((string) (isset($act) ? $act : '')) ?>,
             redirectPage: <?= json_encode((string) $redirect_page) ?>,
             showQrPanel: <?= $showQrPanel ? 'true' : 'false' ?>,
+            modalAct: <?= json_encode((string) $modalAct) ?>,
             warehouses: <?= json_encode(array_values($warehouses)) ?>,
             couriers: <?= json_encode(array_values($couriers)) ?>,
             products: <?= json_encode(array_values($products)) ?>,

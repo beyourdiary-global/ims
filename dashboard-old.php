@@ -1,7 +1,9 @@
 <?php
+$currentPagePin = 0;
 $pageTitle = 'Dashboard';
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $currency = '';
 

@@ -1,8 +1,11 @@
 <?php
+$currentPagePin = 84;
 $pageTitle = "Website Customer Record (Deals)";
 
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once ROOT . '/include/user_record_log.php';
 
 $tblName = WEB_CUST_RCD;
 
@@ -35,6 +38,41 @@ if (!($dataID) && !($act)) {
     alert("Invalid action.");
     window.location.href = "' . $redirect_page . '"; // Redirect to previous page
     </script>';
+}
+
+if ($dataID && isset($_GET['open_order_id'])) {
+    $openOrderId = (int) $_GET['open_order_id'];
+    if ($openOrderId > 0) {
+        $customerRowId = (int) $dataID;
+        $customerCode = (isset($row['cust_id']) ? trim((string) $row['cust_id']) : '');
+        $orderWhere = "id='" . $openOrderId . "' AND status='A' AND (cust_id='" . $customerRowId . "'";
+        if ($customerCode !== '') {
+            $orderWhere .= " OR cust_id='" . mysqli_real_escape_string($finance_connect, $customerCode) . "'";
+        }
+        $orderWhere .= ")";
+
+        $orderRst = getData('id,order_id', $orderWhere, 'LIMIT 1', WEB_ORDER_REQ, $finance_connect);
+        if ($orderRst && $orderRst->num_rows > 0) {
+            $orderRow = $orderRst->fetch_assoc();
+            $orderNo = isset($orderRow['order_id']) ? $orderRow['order_id'] : ('#' . $openOrderId);
+            $log = [
+                'log_act' => 'View',
+                'cdate' => $cdate,
+                'ctime' => $ctime,
+                'uid' => USER_ID,
+                'cby' => USER_ID,
+                'query_rec' => "order_id=" . $openOrderId,
+                'query_table' => WEB_ORDER_REQ,
+                'act_msg' => USER_NAME . " opened Website order detail [<b>" . $orderNo . "</b>] from <b><i>" . $pageTitle . "</i></b>.",
+                'page' => $pageTitle,
+                'connect' => $connect,
+            ];
+            audit_log($log);
+
+            echo "<script>location.href='" . $SITEURL . "/finance/website_order_request.php?id=" . $openOrderId . "&act=E';</script>";
+            exit;
+        }
+    }
 }
 
 $series_list_result = getData('*', '', '', BRD_SERIES, $connect);
@@ -514,7 +552,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
     // Retrieve details of the logged-in user
     $user_rst = getData('name', "id = '$loggedInUserId'", '', USR_USER, $connect);
     if ($user_rst && $user_rst->num_rows > 0) {
-        $user_row = $user_rst->fetch_assoc();
+        $user_row = ($user_rst && $user_rst->num_rows > 0) ? $user_rst->fetch_assoc() : array();
         $defaultUser = $user_row['name'];
     }
     ?>
@@ -532,16 +570,15 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                     
                                     $pic_rst = getData('name', "id = '$echoVal'", '', USR_USER, $connect);
                                     if (!$pic_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                        echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                                        // Graceful fallback: keep form usable even when lookup query is unavailable.
                                     }
-                                    $pic_row = $pic_rst->fetch_assoc();
+                                    $pic_row = ($pic_rst && $pic_rst->num_rows > 0) ? $pic_rst->fetch_assoc() : array();
                            
                                 }
                                 ?>
 
                                 <input class="form-control" type="text" name="wcr_pic" id="wcr_pic" <?php if ($act == '')
-                                    echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $pic_row['name'] : '' ?>">
+                                    echo 'disabled' ?> value="<?php echo !empty($echoVal) ? ($pic_row['name'] ?? '') : '' ?>">
 
                                 <input type="hidden" name="wcr_pic_hidden" id="wcr_pic_hidden"
                                     value="<?php echo (isset($row['sales_pic'])) ? $row['sales_pic'] : ''; ?>">
@@ -566,13 +603,12 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
             if (isset($echoVal)) {
                 $country_rst = getData('nicename', "id = '$echoVal'", '', COUNTRIES, $connect);
                 if (!$country_rst) {
-                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                    // Graceful fallback: keep form usable even when lookup query is unavailable.
                 }
-                $country_row = $country_rst->fetch_assoc();
+                $country_row = ($country_rst && $country_rst->num_rows > 0) ? $country_rst->fetch_assoc() : array();
             }
             ?>
-            <input class="form-control" type="text" name="wcr_country" id="wcr_country" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $country_row['nicename'] : '' ?>">
+            <input class="form-control" type="text" name="wcr_country" id="wcr_country" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? ($country_row['nicename'] ?? '') : '' ?>">
             <input type="hidden" name="wcr_country_hidden" id="wcr_country_hidden" value="<?php echo (isset($row['country'])) ? $row['country'] : ''; ?>">
             <?php if (isset($country_err)) { ?>
                 <div id="err_msg">
@@ -594,13 +630,12 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
             if (isset($echoVal)) {
                 $brand_rst = getData('name', "id = '$echoVal'", '', BRAND, $connect);
                 if (!$brand_rst) {
-                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+                    // Graceful fallback: keep form usable even when lookup query is unavailable.
                 }
-                $brand_row = $brand_rst->fetch_assoc();
+                $brand_row = ($brand_rst && $brand_rst->num_rows > 0) ? $brand_rst->fetch_assoc() : array();
             }
             ?>
-            <input class="form-control" type="text" name="wcr_brand" id="wcr_brand" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $brand_row['name'] : '' ?>">
+            <input class="form-control" type="text" name="wcr_brand" id="wcr_brand" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? ($brand_row['name'] ?? '') : '' ?>">
             <input type="hidden" name="wcr_brand_hidden" id="wcr_brand_hidden" value="<?php echo (isset($row['brand'])) ? $row['brand'] : ''; ?>">
             <?php if (isset($brand_err)) { ?>
                 <div id="err_msg">
@@ -622,15 +657,14 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         if (isset($echoVal)) {
             $series_rst = getData('name', "id = '$echoVal'", '', BRD_SERIES, $connect);
         if (!$series_rst) {
-            echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-            echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+            // Graceful fallback: keep form usable even when lookup query is unavailable.
         }
-            $series_row = $series_rst->fetch_assoc();
+            $series_row = ($series_rst && $series_rst->num_rows > 0) ? $series_rst->fetch_assoc() : array();
         }
         ?>
 
         <input class="form-control" type="text" name="wcr_series" id="wcr_series" <?php if ($act == '')
-            echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $series_row['name'] : '' ?>">
+            echo 'disabled' ?> value="<?php echo !empty($echoVal) ? ($series_row['name'] ?? '') : '' ?>">
 
         <input type="hidden" name="wcr_series_hidden" id="wcr_series_hidden" value="<?php echo (isset($row['series'])) ? $row['series'] : ''; ?>">
             <?php if (isset($wcr_series_err)) { ?>
@@ -721,21 +755,147 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 echo $row['remark'] ?></textarea>
                             </div>
 
-                            <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
-                                <?php
-                            switch ($act) {
-                                case 'I':
-                                    echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="addRecord">Add Record</button>';
-                                    break;
-                                case 'E':
-                                    echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="updRecord">Edit Record</button>';
-                                    break;
-                            }
+                            <?php
+                            if ($dataID) {
+                                $orderRows = array();
+                                $sumFinalAmount = 0.00;
+                                $orderPackageCache = array();
+                                $orderPayMethodCache = array();
+                                $customerRowId = (int) $dataID;
+                                $customerCode = isset($row['cust_id']) ? trim((string) $row['cust_id']) : '';
+
+                                $orderWhere = "status='A' AND (cust_id='" . $customerRowId . "'";
+                                if ($customerCode !== '') {
+                                    $orderWhere .= " OR cust_id='" . mysqli_real_escape_string($finance_connect, $customerCode) . "'";
+                                }
+                                $orderWhere .= ")";
+
+                                $orderSql = "SELECT * FROM " . WEB_ORDER_REQ . " WHERE " . $orderWhere . " ORDER BY id DESC";
+                                $orderRst = mysqli_query($finance_connect, $orderSql);
+                                if ($orderRst && $orderRst->num_rows > 0) {
+                                    while ($orderRow = $orderRst->fetch_assoc()) {
+                                        $orderRows[] = $orderRow;
+                                        $sumFinalAmount += (float) (isset($orderRow['total']) ? $orderRow['total'] : 0);
+                                    }
+
+                                    foreach ($orderRows as $orderRow) {
+                                        $pkgCsv = isset($orderRow['pkg']) ? trim((string) $orderRow['pkg']) : '';
+                                        if (!isset($orderPackageCache[$pkgCsv])) {
+                                            $orderPackageCache[$pkgCsv] = commonResolvePackageNamesFromCsv($pkgCsv, $connect);
+                                        }
+
+                                        $payMethodId = isset($orderRow['pay_method']) ? trim((string) $orderRow['pay_method']) : '';
+                                        if (!isset($orderPayMethodCache[$payMethodId])) {
+                                            $orderPayMethodCache[$payMethodId] = commonResolvePaymentMethodName($payMethodId, $finance_connect);
+                                        }
+                                    }
+                                } else if (!$orderRst) {
+                                    error_log("Website order list query failed: " . mysqli_error($finance_connect) . " SQL: " . $orderSql);
+                                }
                             ?>
-                            <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn"
-                                id="actionBtn" value="back">Back</button>
-                        </div>
+                            <div class="form-group mt-3">
+                                <h5 class="mb-3">Order Records</h5>
+                                <div class="table-responsive">
+                                    <table class="table table-striped table-bordered mb-0" id="wcr_order_tbl">
+                                        <thead>
+                                            <tr>
+                                                <th width="60">S/N</th>
+                                                <th width="200">Action</th>
+                                                <th>Order ID</th>
+                                                <th>Date</th>
+                                                <th>Package</th>
+                                                <th>Buyer Payment Method</th>
+                                                <th>Charges &amp; Fees</th>
+                                                <th>Final Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php if (!empty($orderRows)) {
+                                                $orderSN = 1;
+                                                foreach ($orderRows as $orderRow) {
+                                                    $orderId = isset($orderRow['id']) ? (int) $orderRow['id'] : 0;
+                                                    $orderNo = isset($orderRow['order_id']) ? $orderRow['order_id'] : '';
+                                                    $orderDate = isset($orderRow['create_date']) ? $orderRow['create_date'] : '';
+                                                    $pkgCsv = isset($orderRow['pkg']) ? trim((string) $orderRow['pkg']) : '';
+                                                    $payMethodId = isset($orderRow['pay_method']) ? trim((string) $orderRow['pay_method']) : '';
+                                                    $orderPackage = isset($orderPackageCache[$pkgCsv]) ? $orderPackageCache[$pkgCsv] : '';
+                                                    $buyerPayMethod = isset($orderPayMethodCache[$payMethodId]) ? $orderPayMethodCache[$payMethodId] : '';
+                                                    $orderFees = isset($orderRow['shipping']) ? $orderRow['shipping'] : '0.00';
+                                                    $finalAmount = isset($orderRow['total']) ? $orderRow['total'] : '0.00';
+                                                    ?>
+                                                    <tr>
+                                                        <td><?= $orderSN++ ?></td>
+                                                        <td>
+                                                            <a class="btn btn-sm btn-rounded btn-primary"
+                                                               href="<?= $SITEURL . '/website_customer_record.php?id=' . (int) $dataID . '&act=' . $act_2 . '&open_order_id=' . $orderId ?>">
+                                                                Show Order Detail
+                                                            </a>
+                                                        </td>
+                                                        <td><?= htmlspecialchars((string) $orderNo, ENT_QUOTES, 'UTF-8') ?></td>
+                                                        <td><?= htmlspecialchars((string) $orderDate, ENT_QUOTES, 'UTF-8') ?></td>
+                                                        <td><?= htmlspecialchars((string) $orderPackage, ENT_QUOTES, 'UTF-8') ?></td>
+                                                        <td><?= htmlspecialchars((string) $buyerPayMethod, ENT_QUOTES, 'UTF-8') ?></td>
+                                                        <td><?= commonFormatAmountRm($orderFees) ?></td>
+                                                        <td><?= commonFormatAmountRm($finalAmount) ?></td>
+                                                    </tr>
+                                                <?php }
+                                            } else { ?>
+                                                <tr>
+                                                    <td colspan="8" class="text-center">No order records found.</td>
+                                                </tr>
+                                            <?php } ?>
+                                        </tbody>
+                                        <tfoot>
+                                            <tr>
+                                                <th colspan="7" class="text-end">Sub-Total (RM)</th>
+                                                <th><?= commonFormatAmountRm($sumFinalAmount) ?></th>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+                            </div>
+                            <?php } ?>
+
                 </form>
+
+                <?php
+                if ($dataID) {
+                    $customerLogReturnUrl = $SITEURL . '/website_customer_record.php?id=' . (int) $dataID;
+                    if ($act !== '') {
+                        $customerLogReturnUrl .= '&act=' . urlencode((string) $act);
+                    }
+
+                    $customerLogContext = urlResolveUserRecordLogContext($connect, $connect, array(
+                        'customer_id' => (int) $dataID,
+                        'customer_column' => 'website_cust_id',
+                        'customer_label' => isset($row['name']) ? $row['name'] : '',
+                        'return_url' => $customerLogReturnUrl,
+                        'ajax_url' => $SITEURL . '/user_record_log.php',
+                        'customer_only' => true,
+                    ));
+
+                    urlRenderUserRecordLogModule($connect, $connect, array(
+                        'table_name' => USER_RECORD_LOG,
+                        'context' => $customerLogContext,
+                        'section_heading' => 'User Record Log',
+                        'show_scope_note' => true,
+                    ));
+                }
+                ?>
+
+                <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
+                    <?php
+                    switch ($act) {
+                        case 'I':
+                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" form="FORForm" name="actionBtn" id="actionBtn" value="addRecord">Add Record</button>';
+                            break;
+                        case 'E':
+                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" form="FORForm" name="actionBtn" id="actionBtn" value="updRecord">Edit Record</button>';
+                            break;
+                    }
+                    ?>
+                    <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" form="FORForm" name="actionBtn" id="actionBtn" value="back">Back</button>
+                </div>
             </div>
         </div>
     </div>

@@ -1,8 +1,10 @@
 <?php
+$currentPagePin = 11;
 $pageTitle = "Currencies";
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = CURRENCIES;
 

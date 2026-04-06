@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 58;
 $pageTitle = "Shopee Account";
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = SHOPEE_ACC;
 

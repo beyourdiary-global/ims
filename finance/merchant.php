@@ -1,9 +1,11 @@
 <?php
+$currentPagePin = 36;
 $pageTitle = "Merchant";
 $isFinance = 1;
 
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
+$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = MERCHANT;
 
