@@ -102,7 +102,7 @@ $result = getData('*', '', '', $tblName, $connect);
                 <?php if (!$result) {
                     echo '<div class="text-center"><h4>No Result!</h4></div>';
                 } else { ?>
-                    <div class="table-scroll-wrap">
+                    <div class="table-scroll-wrap mobile-scroll-wrap">
                     <table class="table table-striped" id="table">
                         <thead>
                             <tr>

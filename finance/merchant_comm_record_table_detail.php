@@ -1,6 +1,7 @@
-<<?php
+<?php
 ob_start();
 $pageTitle = "Merchant Commission Record";
+$currentPagePin = 61;
 $isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
@@ -194,7 +195,6 @@ $result = getData('*', '', '', MRCHT_COMM, $finance_connect);
                         <h2><?php echo $pageTitle . " Detail"; ?></h2>
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-$currentPagePin = 61;
                                 <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                     Transaction </a>
                             <?php endif; ?>

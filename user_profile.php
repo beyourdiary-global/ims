@@ -242,14 +242,14 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                         <div class="col-12 col-lg-4">
                             <div class="form-group mb-3">
                                 <label class="form-label">Main Report Supervisor</label>
-                                <input class="form-control" type="text" value="<?= htmlspecialchars($mainSupName, ENT_QUOTES, 'UTF-8') ?>" readonly>
+                                <label class="form-control"><?= htmlspecialchars($mainSupName, ENT_QUOTES, 'UTF-8') ?></label>
                             </div>
                         </div>
 
                         <div class="col-12 col-lg-4">
                             <div class="form-group mb-3">
                                 <label class="form-label">Second Report Supervisor</label>
-                                <input class="form-control" type="text" value="<?= htmlspecialchars($secondSupName, ENT_QUOTES, 'UTF-8') ?>" readonly>
+                                <label class="form-control"><?= htmlspecialchars($secondSupName, ENT_QUOTES, 'UTF-8') ?></label>
                             </div>
                         </div>
 

@@ -53,6 +53,28 @@ table {
   min-width: 680px;
 }
 
+.mobile-scroll-wrap {
+  overflow-x: visible;
+  -webkit-overflow-scrolling: auto;
+  touch-action: auto;
+}
+
+.mobile-scroll-wrap table {
+  min-width: 0;
+}
+
+@media screen and (max-width: 768px) {
+  .mobile-scroll-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+  }
+
+  .mobile-scroll-wrap table {
+    min-width: 680px;
+  }
+}
+
 @media (width < 768px) {
   /* padding-left: 0 !important;
     padding-right: 0 !important;
