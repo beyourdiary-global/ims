@@ -1,6 +1,7 @@
 <?php
 include "include/common.php";
 include "include/connection.php";
+include_once "include/auto_login.php";
 
 if(isset($_SESSION['userid']))
 {
@@ -27,12 +28,14 @@ if(isset($_SESSION['userid']))
     ];
     
     audit_log($log);
-
-    setcookie(session_name(), '', 100);
-    session_unset();
-    session_destroy();
-
-    // redirect
-    echo '<script>location.href = "' . $SITEURL . '/index.php";</script>';
 }
+
+cmsClearAutoLoginCookie();
+
+setcookie(session_name(), '', time() - 3600, '/');
+session_unset();
+session_destroy();
+
+// redirect
+echo '<script>location.href = "' . $SITEURL . '/index.php";</script>';
 ?>

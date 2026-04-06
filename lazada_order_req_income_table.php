@@ -279,9 +279,11 @@ $(document).ready(() => {
                                 href="<?= $redirect_page . '?act=' . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                 Record </a>
                             <?php endif; ?>
+                            <?php if (isActionAllowed('Export', $pinAccess)): ?>
                             <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn"
                                 onclick="captureAndExport('<?php echo $tblName; ?>')"><i
                                     class="fa-solid fa-file-export"></i> Export</a>
+                            <?php endif; ?>
                         </div>
                         
                     </div>

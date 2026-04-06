@@ -201,7 +201,9 @@ $tblName = MRCHT_COMM;
                                 <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                     Transaction </a>
                             <?php endif; ?>
-                            <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>
+                            <?php if (isActionAllowed("Export", $pinAccess)) : ?>
+                                <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
