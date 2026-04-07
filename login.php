@@ -1,6 +1,7 @@
 <?php
 include "include/common.php";
 include "include/connection.php";
+include_once "include/auto_login.php";
 
 $email = post('email-addr');
 $password = md5(post('password'));
@@ -69,6 +70,9 @@ if ($email && $password) {
                     }
                     
                     $_SESSION['usr_pin_access'] = $usr_pin_access;
+
+                    cmsSetAutoLoginCookieForUserRow($loginrows);
+
                     $log = [
                          'log_act' => 'login',
                          'act_msg' => $loginrows['name'] . " has login to the system.",

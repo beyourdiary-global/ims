@@ -1,5 +1,5 @@
 <?php
-$currentPagePin = 0;
+$currentPagePin = 129;
 $pageTitle = "Shopee Verify Order";
 $isFinance = 1;
 
@@ -170,14 +170,16 @@ $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_con
                 <div class="row">
                     <div class="col-12 d-flex justify-content-between flex-wrap">
                         <h2><?php echo $pageTitle ?></h2>
-                        <?php if ($result) { ?>
-                            <div class="mt-auto mb-auto">
-                                <?php if (in_array(4, $accessActionKey)): ?>
+                        <div class="mt-auto mb-auto">
+                            <?php if (isActionAllowed("Add", $pinAccess) || isActionAllowed("Import", $pinAccess)): ?>
+                                <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Request </a>
+                                <?php endif; ?>
+                                <?php if (isActionAllowed("Import", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="importBtn" id="importBtn" href="<?= $SITEURL ?>/common_import.php?module=shopee_order_req"><i class="fa-solid fa-file-import"></i> Import </a>
                                 <?php endif; ?>
-                            </div>
-                        <?php } ?>
+                            <?php endif; ?>
+                        </div>
                     </div>
                 </div>
             </div>

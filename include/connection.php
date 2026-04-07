@@ -12,6 +12,7 @@ $login_url = $SITEURL."/index.php";
 
 $currentPage = $path[sizeof($path) - 1];
 $isForgotPasswordPage = ($currentPage === 'forgotPassword.php');
+$isLoginProcessPage = ($currentPage === 'login.php');
 $isTokenResetPage = (
     $currentPage === 'changePassword.php'
     && isset($_GET['token'])
@@ -22,9 +23,18 @@ $isTokenResetPage = (
     && trim((string) $_GET['email']) !== ''
 );
 
-if (!($isForgotPasswordPage || $isTokenResetPage))
-    if(!(isset($_SESSION['userid'])))
+if (!($isForgotPasswordPage || $isTokenResetPage || $isLoginProcessPage)) {
+    include_once ROOT . '/include/auto_login.php';
+
+    if (!isset($_SESSION['userid'])) {
+        cmsTryAutoLoginFromCookie($connect);
+    }
+
+    if (!isset($_SESSION['userid'])) {
         echo("<script>location.href = '$login_url';</script>");
+        exit;
+    }
+}
 
 /* 
 include ROOT.'/include/header.php';

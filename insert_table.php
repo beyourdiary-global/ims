@@ -956,6 +956,77 @@ function removePinBlockById($allPins, $targetPinId)
     return implode('+', $rebuilt);
 }
 
+function addPinAccessIds($pinList, $addIds = array(6))
+{
+    $values = array_filter(array_map('trim', explode(',', (string) $pinList)), 'strlen');
+    foreach ((array) $addIds as $addId) {
+        $addValue = (string) ((int) $addId);
+        if ($addValue !== '' && !in_array($addValue, $values, true)) {
+            $values[] = $addValue;
+        }
+    }
+
+    return implode(',', $values);
+}
+
+function addAccessToPinBlock($allPins, $targetPinId, $addIds = array(6))
+{
+    $targetPinId = (string) ((int) $targetPinId);
+    $entries = array_filter(array_map('trim', explode('+', (string) $allPins)), 'strlen');
+    $rebuilt = array();
+    $found = false;
+
+    foreach ($entries as $entry) {
+        $entry = trim($entry, '[]');
+        $parts = explode(':', $entry, 2);
+
+        if (count($parts) !== 2) {
+            continue;
+        }
+
+        $pinId = trim($parts[0]);
+        $accessList = trim($parts[1]);
+
+        if ($pinId === $targetPinId) {
+            $accessList = addPinAccessIds($accessList, $addIds);
+            $found = true;
+        }
+
+        $rebuilt[] = '[' . $pinId . ':' . $accessList . ']';
+    }
+
+    if (!$found) {
+        $rebuilt[] = '[' . $targetPinId . ':' . addPinAccessIds('', $addIds) . ']';
+    }
+
+    return implode('+', $rebuilt);
+}
+
+function pinBlockHasAccessId($allPins, $targetPinId, $accessId)
+{
+    $targetPinId = (string) ((int) $targetPinId);
+    $accessId = (string) ((int) $accessId);
+    $entries = array_filter(array_map('trim', explode('+', (string) $allPins)), 'strlen');
+
+    foreach ($entries as $entry) {
+        $entry = trim($entry, '[]');
+        $parts = explode(':', $entry, 2);
+        if (count($parts) !== 2) {
+            continue;
+        }
+
+        $pinId = trim($parts[0]);
+        if ($pinId !== $targetPinId) {
+            continue;
+        }
+
+        $accessValues = array_filter(array_map('trim', explode(',', trim($parts[1]))), 'strlen');
+        return in_array($accessId, $accessValues, true);
+    }
+
+    return false;
+}
+
 if ($conn->select_db($db_fin)) {
     if ($conn->query("DROP TABLE IF EXISTS `" . USER_RECORD_LOG . "`")) {
         echo "<p style='color:green;'>Verified dropped `" . USER_RECORD_LOG . "` from financial database.</p>";
@@ -1129,6 +1200,87 @@ if ($conn->select_db($db_cms)) {
     }
 } else {
     echo "<p style='color:red;'>Failed selecting CMS database for dashboard/user-group pin updates.</p>";
+}
+
+if ($conn->select_db($db_cms)) {
+    // Export action id is 6. Ensure these pin groups include 6 for Export button control.
+    $exportPinGroupIds = array(51, 59, 61, 65, 66, 69, 78, 87, 89, 92, 93, 123);
+    $pinIdSql = implode(',', $exportPinGroupIds);
+    $pinGroupRows = array();
+
+    $pinGroupResult = $conn->query("SELECT `id`, `pins` FROM `pin_group` WHERE `id` IN (" . $pinIdSql . ")");
+    if ($pinGroupResult) {
+        while ($pinGroupRow = $pinGroupResult->fetch_assoc()) {
+            $groupId = (int) $pinGroupRow['id'];
+            $pinGroupRows[$groupId] = isset($pinGroupRow['pins']) ? (string) $pinGroupRow['pins'] : '';
+
+            $updatedPins = addPinAccessIds($pinGroupRows[$groupId], array(6));
+            if ($updatedPins !== $pinGroupRows[$groupId]) {
+                $safePins = $conn->real_escape_string($updatedPins);
+                if ($conn->query("UPDATE `pin_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . $groupId)) {
+                    echo "<p style='color:green;'>Verified `pin_group` id " . $groupId . " updated with Export pin access 6.</p>";
+                    $pinGroupRows[$groupId] = $updatedPins;
+                } else {
+                    echo "<p style='color:red;'>Failed updating `pin_group` id " . $groupId . " with Export pin access 6: " . $conn->error . "</p>";
+                }
+            } else {
+                echo "<p style='color:green;'>Verified `pin_group` id " . $groupId . " already contains Export pin access 6.</p>";
+            }
+        }
+    } else {
+        echo "<p style='color:red;'>Failed reading `pin_group` for Export pin access update: " . $conn->error . "</p>";
+    }
+
+    foreach ($exportPinGroupIds as $groupIdCheck) {
+        if (!isset($pinGroupRows[(int) $groupIdCheck])) {
+            echo "<p style='color:orange;'>`pin_group` id " . (int) $groupIdCheck . " not found. Skipped Export pin access update.</p>";
+        }
+    }
+
+    // Update only Super Admin (1) and Admin (2), as requested.
+    $targetUserGroupIds = array(1, 2);
+    foreach ($targetUserGroupIds as $userGroupId) {
+        $userGroupResult = $conn->query("SELECT `pins` FROM `user_group` WHERE `id` = " . (int) $userGroupId . " LIMIT 1");
+        if (!$userGroupResult || $userGroupResult->num_rows === 0) {
+            echo "<p style='color:orange;'>`user_group` id " . (int) $userGroupId . " not found. Skipped Export pin access update.</p>";
+            continue;
+        }
+
+        $userGroupRow = $userGroupResult->fetch_assoc();
+        $currentPins = isset($userGroupRow['pins']) ? (string) $userGroupRow['pins'] : '';
+        $updatedPins = $currentPins;
+
+        foreach ($exportPinGroupIds as $exportPinGroupId) {
+            $updatedPins = addAccessToPinBlock($updatedPins, $exportPinGroupId, array(6));
+        }
+
+        if ($updatedPins !== $currentPins) {
+            $safePins = $conn->real_escape_string($updatedPins);
+            if ($conn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $userGroupId)) {
+                echo "<p style='color:green;'>Verified `user_group` id " . (int) $userGroupId . " updated with Export pin access 6 for target pin groups.</p>";
+            } else {
+                echo "<p style='color:red;'>Failed updating `user_group` id " . (int) $userGroupId . " for Export pin access 6: " . $conn->error . "</p>";
+                continue;
+            }
+        } else {
+            echo "<p style='color:green;'>Verified `user_group` id " . (int) $userGroupId . " already contains Export pin access 6 for target pin groups.</p>";
+        }
+
+        $missingExportBlocks = array();
+        foreach ($exportPinGroupIds as $exportPinGroupId) {
+            if (!pinBlockHasAccessId($updatedPins, $exportPinGroupId, 6)) {
+                $missingExportBlocks[] = (int) $exportPinGroupId;
+            }
+        }
+
+        if (empty($missingExportBlocks)) {
+            echo "<p style='color:green;'>Verified `user_group` id " . (int) $userGroupId . " has Export pin access 6 on all target pin groups.</p>";
+        } else {
+            echo "<p style='color:red;'>Verification failed for `user_group` id " . (int) $userGroupId . ". Missing Export pin access 6 on pin groups: " . implode(',', $missingExportBlocks) . "</p>";
+        }
+    }
+} else {
+    echo "<p style='color:red;'>Failed selecting CMS database for Export pin migration update.</p>";
 }
 
 $conn->close();

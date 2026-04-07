@@ -393,7 +393,7 @@ $menuList = array(
                     array('Shopee Order Report', 'mdi storefront-outline', $SITEURL . '/shopee/shopeeOrder_request_income.php', '123'),
                     array('Facebook Order Request', 'mdi storefront-outline', $SITEURL . '/finance/fb_order_req_income_table.php', '69'),
                     array('Website Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/finance/website_order_request_income_table.php', '92'),
-                    array('Lazada Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/lazadaOrder_request_income.php', '93'),
+                    array('Lazada Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/lazada_order_req_income_table.php', '93'),
                     array('Sales Person Report', 'mdi mdi-note-text-outline', $SITEURL . '/finance/sales_person_report_table.php', '100'),
                 ),
                 'pin' => array('123', '69', '92', '93', '100'),

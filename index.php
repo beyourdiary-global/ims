@@ -4,6 +4,17 @@ $pageTitle = "Login";
 include "./include/common.php";
 include "./include/common_variable.php";
 include "init.php";
+include_once "./include/auto_login.php";
+
+if (isset($_SESSION['userid']) && (int) $_SESSION['userid'] > 0) {
+    header('Location: dashboard.php');
+    exit;
+}
+
+if (cmsTryAutoLoginFromCookie($connect)) {
+    header('Location: dashboard.php');
+    exit;
+}
 
 $img_path = $SITEURL . '/' . img_server . 'themes/';
 
