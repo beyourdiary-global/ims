@@ -32,6 +32,7 @@ if (!($isForgotPasswordPage || $isTokenResetPage || $isLoginProcessPage)) {
 
     if (!isset($_SESSION['userid'])) {
         echo("<script>location.href = '$login_url';</script>");
+        exit;
     }
 }
 
