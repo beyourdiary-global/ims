@@ -322,11 +322,15 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                         <div id="tokenHelpBotTokenSection">
                             <h6>How to get Bot Token</h6>
                             <ol class="token-help-steps">
-                                <li>Open <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer">@BotFather</a>, then send <strong>/start</strong>.</li>
-                                <img class="token-help-media" src="<?= $SITEURL ?>/images_server/token_setting_guide/bot_token_step1.png" alt="BotFather start and command list">
+                                <li>
+                                    Open <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer">@BotFather</a>, then send <strong>/start</strong>.<br>
+                                    <img class="token-help-media mt-2" src="<?= $SITEURL ?>/images_server/token_setting_guide/bot_token_step1.png" alt="BotFather start and command list">
+                                </li>
                                 <li>Send <strong>/newbot</strong> and enter your bot display name when BotFather asks.</li>
-                                <li>Enter a username that ends with <strong>bot</strong> (for example: <code>testing_0406_bot</code>).</li>
-                                <img class="token-help-media mt-2" src="<?= $SITEURL ?>/images_server/token_setting_guide/bot_token_step2.png" alt="BotFather new bot token message">
+                                <li>
+                                    Enter a username that ends with <strong>bot</strong> (for example: <code>testing_0406_bot</code>).<br>
+                                    <img class="token-help-media mt-2" src="<?= $SITEURL ?>/images_server/token_setting_guide/bot_token_step2.png" alt="BotFather new bot token message">
+                                </li>
                                 <li>From the success message, copy the HTTP API token and paste it into the Bot Token field.</li>
                             </ol>
                         </div>
