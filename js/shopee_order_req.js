@@ -261,8 +261,11 @@ $(document).ready(function () {
     var productPrice = toPositiveNumber($("#product_price").val());
     var actualShipping = toPositiveNumber($("#act_shipping_fee").val());
     var fees = toPositiveNumber($("#fees").val());
+    var voucher = toPositiveNumber($("#voucher").val());
 
-    $("#final_amt").val((productPrice - actualShipping - fees).toFixed(2));
+    $("#final_amt").val(
+      (productPrice - actualShipping - fees - voucher).toFixed(2),
+    );
   }
 
   function trimSinglePackageRowsOnLoad() {
@@ -290,14 +293,17 @@ $(document).ready(function () {
     recalculateImportFees();
   });
 
-  $("#product_price, #act_shipping_fee").on(
+  $("#product_price, #voucher, #act_shipping_fee").on(
     "input",
     recalculateImportFinalAmount,
   );
-  $("#product_price, #act_shipping_fee").on("change blur", function () {
-    normalizePositiveField($(this));
-    recalculateImportFinalAmount();
-  });
+  $("#product_price, #voucher, #act_shipping_fee").on(
+    "change blur",
+    function () {
+      normalizePositiveField($(this));
+      recalculateImportFinalAmount();
+    },
+  );
 
   [
     "#product_price",
@@ -432,6 +438,11 @@ function getPkgBrand() {
   var brandContainer = $("#sor_brand_container");
   if (brandContainer.length === 0) {
     return;
+  }
+
+  // Remove excess brand rows if a package was deleted
+  while (brandContainer.find(".sor-brand-row").length > packageIds.length) {
+    brandContainer.find(".sor-brand-row").last().remove();
   }
 
   while (brandContainer.find(".sor-brand-row").length < packageIds.length) {

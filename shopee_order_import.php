@@ -1,8 +1,5 @@
 <?php
 $currentPagePin = 0;
-if (!defined('IMPORT_FORCE_MODULE')) {
-    define('IMPORT_FORCE_MODULE', 'shopee_order_req');
-}
 
 $parentPageTitle = "Shopee Order Request";
 $pageTitle = '';
@@ -101,6 +98,8 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
         $importErrors[] = 'Please choose a Shopee Order HTML or PDF file.';
     } else if ($_FILES['import_file']['error'] !== UPLOAD_ERR_OK) {
         $importErrors[] = 'File upload failed. Error Code: ' . $_FILES['import_file']['error'];
+    } else if ($_FILES['import_file']['size'] > 5 * 1024 * 1024) { // 5MB limit
+        $importErrors[] = 'The uploaded file exceeds the maximum allowed size of 5MB.';
     } else {
         $uploadedName = isset($_FILES['import_file']['name']) ? (string) $_FILES['import_file']['name'] : '';
         $extension = strtolower(pathinfo($uploadedName, PATHINFO_EXTENSION));
@@ -112,6 +111,10 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
 
             if ($rawContent === false || (string) $rawContent === '') {
                 $importErrors[] = 'The uploaded file could not be read.';
+            } else if ($extension === 'pdf' && strncmp($rawContent, '%PDF-', 5) !== 0) {
+                $importErrors[] = 'The uploaded file is not a valid PDF document.';
+            } else if (in_array($extension, ['html', 'htm'], true) && stripos($rawContent, '<html') === false && stripos($rawContent, '<!DOCTYPE') === false && stripos($rawContent, '<body') === false) {
+                $importErrors[] = 'The uploaded file is not a valid HTML document.';
             } else {
                 $html = '';
                 $cleanText = '';
@@ -451,7 +454,10 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
     $previewData['trans_fee'] = $previewData['trans_fee'] !== '' ? $previewData['trans_fee'] : '0.00';
     $previewData['ams_fee'] = $previewData['ams_fee'] !== '' ? $previewData['ams_fee'] : '0.00';
     $previewData['fees'] = number_format(((float) $previewData['service_fee'] + (float) $previewData['trans_fee'] + (float) $previewData['ams_fee']), 2, '.', '');
-    $previewData['final_amt'] = $previewData['final_amt'] !== '' ? $previewData['final_amt'] : '0.00';
+    
+    // Server-side recomputation to prevent tampering
+    $calculatedFinalAmt = (float) $previewData['product_price'] - (float) $previewData['voucher'] - (float) $previewData['act_shipping_fee'] - (float) $previewData['fees'];
+    $previewData['final_amt'] = number_format($calculatedFinalAmt, 2, '.', '');
 
     if (empty($importErrors) && $orderIdFieldError === '') {
         $orderId = mysqli_real_escape_string($finance_connect, $previewData['order_id']);
@@ -681,6 +687,10 @@ function sanitizeImportLikeTerm($value)
     // Convert to ASCII-safe LIKE term to avoid collation conflicts on legacy latin1 columns.
     $value = preg_replace('/[^\x20-\x7E]+/', ' ', $value);
     $value = trim(preg_replace('/\s+/', ' ', $value));
+    
+    // Escape LIKE metacharacters (% and _) to prevent wildcard injection
+    $value = addcslashes($value, '%_\\');
+    
     return $value;
 }
 
@@ -713,28 +723,6 @@ function resolveBrandIdsByPackageIds($packageIds, $connect)
     }
 
     return array_values(array_unique($brandIds));
-}
-
-function decodePdfStream($stream)
-{
-    $decoded = @gzuncompress($stream);
-    if ($decoded !== false) {
-        return $decoded;
-    }
-
-    $decoded = @gzinflate($stream);
-    if ($decoded !== false) {
-        return $decoded;
-    }
-
-    if (strlen((string) $stream) > 6) {
-        $decoded = @gzinflate(substr((string) $stream, 2));
-        if ($decoded !== false) {
-            return $decoded;
-        }
-    }
-
-    return false;
 }
 
 function cleanPdfTextOperand($text)
@@ -1415,7 +1403,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                         </div>
                                         <div class="col-12 col-md-3">
                                             <label class="form-label" for="final_amt">Final Amount</label>
-                                            <input class="form-control" type="number" step="0.01" id="final_amt" name="final_amt" value="<?= htmlspecialchars(isset($previewData['final_amt']) ? $previewData['final_amt'] : '0.00') ?>">
+                                            <input class="form-control" type="number" step="0.01" id="final_amt" name="final_amt" value="<?= htmlspecialchars(isset($previewData['final_amt']) ? $previewData['final_amt'] : '0.00') ?>" readonly>
                                         </div>
                                     </div>
 

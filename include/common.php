@@ -75,6 +75,42 @@ function xssFilter($url)
 	return $url;
 }
 
+if (!function_exists('decodePdfStream')) {
+    function decodePdfStream($stream)
+    {
+        $stream = (string) $stream;
+        $compressedLength = strlen($stream);
+        $maxCompressedSize = 5 * 1024 * 1024; // 5MB
+        $maxDecodedSize = 20 * 1024 * 1024;   // 20MB
+
+        if ($compressedLength === 0 || $compressedLength > $maxCompressedSize) {
+            return false;
+        }
+
+        $decoded = @gzuncompress($stream, $maxDecodedSize);
+        if ($decoded !== false && strlen($decoded) <= $maxDecodedSize) {
+            return $decoded;
+        }
+
+        $decoded = @gzinflate($stream, $maxDecodedSize);
+        if ($decoded !== false && strlen($decoded) <= $maxDecodedSize) {
+            return $decoded;
+        }
+
+        if ($compressedLength > 6) {
+            $trimmedStream = substr($stream, 2);
+            if (strlen($trimmedStream) <= $maxCompressedSize) {
+                $decoded = @gzinflate($trimmedStream, $maxDecodedSize);
+                if ($decoded !== false && strlen($decoded) <= $maxDecodedSize) {
+                    return $decoded;
+                }
+            }
+        }
+
+        return false;
+    }
+}
+
 if (!function_exists('commonFormatAmountRm')) {
     function commonFormatAmountRm($val)
     {
