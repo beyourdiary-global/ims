@@ -1,8 +1,5 @@
 <?php
 $currentPagePin = 0;
-if (!defined('IMPORT_FORCE_MODULE')) {
-    define('IMPORT_FORCE_MODULE', 'shopee_ads_topup');
-}
 
 $parentPagePinGroupId = 77;
 $parentPageTitle = "Shopee Ads Top Up Transaction";
@@ -317,28 +314,6 @@ function collectShopeeImportSourceFiles($fileInfo, &$errors, &$warnings)
     }
 
     return $sourceFiles;
-}
-
-function decodePdfStream($stream)
-{
-    $decoded = @gzuncompress($stream);
-    if ($decoded !== false) {
-        return $decoded;
-    }
-
-    $decoded = @gzinflate($stream);
-    if ($decoded !== false) {
-        return $decoded;
-    }
-
-    if (strlen((string) $stream) > 6) {
-        $decoded = @gzinflate(substr((string) $stream, 2));
-        if ($decoded !== false) {
-            return $decoded;
-        }
-    }
-
-    return false;
 }
 
 function cleanPdfTextOperand($text)

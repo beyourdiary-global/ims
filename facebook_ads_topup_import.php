@@ -402,28 +402,6 @@ function collectFacebookImportSourceFiles($fileInfo, &$errors, &$warnings)
     return $sourceFiles;
 }
 
-function decodePdfStream($stream)
-{
-    $decoded = @gzuncompress($stream);
-    if ($decoded !== false) {
-        return $decoded;
-    }
-
-    $decoded = @gzinflate($stream);
-    if ($decoded !== false) {
-        return $decoded;
-    }
-
-    if (strlen($stream) > 6) {
-        $decoded = @gzinflate(substr($stream, 2));
-        if ($decoded !== false) {
-            return $decoded;
-        }
-    }
-
-    return false;
-}
-
 function cleanPdfTextOperand($text)
 {
     $text = str_replace("\x00", "", $text);

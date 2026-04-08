@@ -233,6 +233,106 @@ $(document).ready(function () {
   ).change(calculateFinalAmount);
   $("#sor_serv, #sor_trans, #sor_ams").on("keyup", calculateFees);
   $("#sor_price, #sor_user_hidden, #sor_curr_hidden").change(calculateComm);
+
+  function toPositiveNumber(value) {
+    var parsed = parseFloat(value);
+    return isNaN(parsed) ? 0 : Math.abs(parsed);
+  }
+
+  function normalizePositiveField(field) {
+    if (!field || field.length === 0) {
+      return;
+    }
+
+    var normalized = toPositiveNumber(field.val());
+    field.val(normalized.toFixed(2));
+  }
+
+  function recalculateImportFees() {
+    var service = toPositiveNumber($("#service_fee").val());
+    var transaction = toPositiveNumber($("#trans_fee").val());
+    var commission = toPositiveNumber($("#ams_fee").val());
+
+    $("#fees").val((service + transaction + commission).toFixed(2));
+    recalculateImportFinalAmount();
+  }
+
+  function recalculateImportFinalAmount() {
+    var productPrice = toPositiveNumber($("#product_price").val());
+    var actualShipping = toPositiveNumber($("#act_shipping_fee").val());
+    var fees = toPositiveNumber($("#fees").val());
+    var voucher = toPositiveNumber($("#voucher").val());
+
+    $("#final_amt").val(
+      (productPrice - actualShipping - fees - voucher).toFixed(2),
+    );
+  }
+
+  function trimSinglePackageRowsOnLoad() {
+    var packageIds = getFilledValues(".sor-pkg-hidden");
+    if (packageIds.length !== 1) {
+      return;
+    }
+
+    var pkgRows = $("#sor_pkg_container .sor-pkg-row");
+    if (pkgRows.length > 1) {
+      pkgRows.slice(1).remove();
+    }
+
+    var brandRows = $("#sor_brand_container .sor-brand-row");
+    if (brandRows.length > 1) {
+      brandRows.slice(1).remove();
+    }
+  }
+
+  $("#fees").prop("readonly", true);
+  $("#final_amt").prop("readonly", true);
+  $("#service_fee, #trans_fee, #ams_fee").on("input", recalculateImportFees);
+  $("#service_fee, #trans_fee, #ams_fee").on("change blur", function () {
+    normalizePositiveField($(this));
+    recalculateImportFees();
+  });
+
+  $("#product_price, #voucher, #act_shipping_fee").on(
+    "input",
+    recalculateImportFinalAmount,
+  );
+  $("#product_price, #voucher, #act_shipping_fee").on(
+    "change blur",
+    function () {
+      normalizePositiveField($(this));
+      recalculateImportFinalAmount();
+    },
+  );
+
+  [
+    "#product_price",
+    "#voucher",
+    "#act_shipping_fee",
+    "#service_fee",
+    "#trans_fee",
+    "#ams_fee",
+    "#fees",
+    "#final_amt",
+  ].forEach(function (selector) {
+    var field = $(selector);
+    if (field.length === 0) {
+      return;
+    }
+
+    var currentValue = parseFloat(field.val());
+    if (!isNaN(currentValue)) {
+      field.val(Math.abs(currentValue).toFixed(2));
+    }
+  });
+
+  recalculateImportFees();
+  recalculateImportFinalAmount();
+  trimSinglePackageRowsOnLoad();
+
+  if ($(".sor-pkg-hidden").length > 0) {
+    getPkgBrand();
+  }
 });
 
 function getAccountCurrency() {
@@ -323,45 +423,90 @@ function autofill() {
 }
 
 function getPkgBrand() {
-  var firstPackageId = getFirstFilledValue(".sor-pkg-hidden");
-  if (!firstPackageId) {
+  var packageIds = [];
+  $(".sor-pkg-hidden").each(function () {
+    var pkgId = String($(this).val() || "").trim();
+    if (pkgId !== "" && pkgId !== "0") {
+      packageIds.push(pkgId);
+    }
+  });
+
+  if (packageIds.length === 0) {
     return;
   }
 
-  var paramPkg = {
-    search: firstPackageId,
-    searchCol: "id",
-    searchType: "*",
-    dbTable: "<?= PKG ?>",
-    isFin: 0,
-  };
+  var brandContainer = $("#sor_brand_container");
+  if (brandContainer.length === 0) {
+    return;
+  }
 
-  retrieveDBData(paramPkg, "<?= $SITEURL ?>", function (result) {
-    if (result && result.length > 0) {
-      var pkg_brand = result[0]["brand"];
-      console.log("brand", pkg_brand);
-      var firstBrandHidden = $(".sor-brand-hidden").first();
-      var firstBrandInput = $(".sor-brand-input").first();
-      if (firstBrandHidden.length > 0) {
-        firstBrandHidden.val(String(pkg_brand));
+  // Remove excess brand rows if a package was deleted
+  while (brandContainer.find(".sor-brand-row").length > packageIds.length) {
+    brandContainer.find(".sor-brand-row").last().remove();
+  }
+
+  while (brandContainer.find(".sor-brand-row").length < packageIds.length) {
+    var idx = brandContainer.find(".sor-brand-row").length;
+    var rowHtml =
+      '<div class="input-group mb-2 sor-brand-row autocomplete">' +
+      '<input class="form-control sor-brand-input" type="text" name="sor_brand[]" id="sor_brand_' +
+      idx +
+      '" data-hidden-target="sor_brand_hidden_' +
+      idx +
+      '">' +
+      '<input type="hidden" class="sor-brand-hidden" name="sor_brand_hidden[]" id="sor_brand_hidden_' +
+      idx +
+      '" value="">' +
+      '<button type="button" class="btn btn-outline-danger sor-remove-row-btn" data-row-type="brand" title="Remove Brand">' +
+      '<i class="fa-solid fa-xmark"></i>' +
+      "</button>" +
+      "</div>";
+    brandContainer.append(rowHtml);
+  }
+
+  packageIds.forEach(function (packageId, index) {
+    var paramPkg = {
+      search: packageId,
+      searchCol: "id",
+      searchType: "*",
+      dbTable: "<?= PKG ?>",
+      isFin: 0,
+    };
+
+    retrieveDBData(paramPkg, "<?= $SITEURL ?>", function (pkgResult) {
+      if (!pkgResult || pkgResult.length === 0) {
+        return;
       }
+
+      var pkgBrand = String(pkgResult[0]["brand"] || "")
+        .split(",")[0]
+        .trim();
+      if (pkgBrand === "") {
+        return;
+      }
+
+      var targetBrandHidden = $(".sor-brand-hidden").eq(index);
+      var targetBrandInput = $(".sor-brand-input").eq(index);
+      if (targetBrandHidden.length === 0 || targetBrandInput.length === 0) {
+        return;
+      }
+
+      targetBrandHidden.val(pkgBrand);
+
       var paramBrand = {
-        search: pkg_brand,
+        search: pkgBrand,
         searchCol: "id",
         searchType: "*",
         dbTable: "<?= BRAND ?>",
         isFin: 0,
       };
-      retrieveDBData(paramBrand, "<?= $SITEURL ?>", function (result) {
-        if (result && result.length > 0) {
-          if (firstBrandInput.length > 0) {
-            firstBrandInput.val(result[0]["name"]);
-          }
+
+      retrieveDBData(paramBrand, "<?= $SITEURL ?>", function (brandResult) {
+        if (brandResult && brandResult.length > 0) {
+          targetBrandInput.val(brandResult[0]["name"]);
         }
       });
-    } else {
-      console.error("Error retrieving Package data");
-    }
+    });
   });
 }
 
