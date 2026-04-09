@@ -185,6 +185,16 @@ define('URBAN_CUST_REG', 'urbanism_customer_register_info');
 define('OFFICIAL_PROCESS_ORDER', 'official_process_order');
 define('YEARLYGOAL', 'yearly_goals');
 define('USER_RECORD_LOG', 'user_record_log');
+define('TASK_COLUMN', 'task_board_status');
+define('TASK_WORK_TYPE', 'task_work_type');
+define('TASK_ITEM', 'task_board_item');
+define('TASK_LABEL', 'task_board_label');
+define('TASK_ITEM_LABEL', 'task_board_item_label');
+define('TASK_STATUS_LABEL', 'task_status_label');
+define('TASK_PROJECT_KEY', 'task_project_key');
+define('TASK_ITEM_ATTACHMENT', 'task_board_item_attachment');
+define('TASK_ITEM_URL', 'task_board_item_url');
+define('TASK_ITEM_RELATION', 'task_board_item_relation');
 
 
 

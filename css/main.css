@@ -409,6 +409,98 @@ input {
   position: fixed;
 }
 
+.task-global-sidebar {
+  position: fixed;
+  top: 92px;
+  left: 0;
+  bottom: 0;
+  width: 220px;
+  background-color: #34444c;
+  color: #aeb7c2;
+  transform: translateX(-100%);
+  transition: transform 0.25s ease;
+  z-index: 97;
+  overflow-y: auto;
+}
+
+.task-global-sidebar-inner {
+  padding: 12px 0;
+}
+
+.task-global-sidebar-title {
+  margin: 0;
+  padding: 0 16px 10px;
+  font-size: 14px;
+  color: #ffffff;
+}
+
+.task-global-sidebar-links {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.task-global-sidebar-links li a {
+  display: block;
+  color: #aeb7c2;
+  text-decoration: none;
+  padding: 10px 16px;
+  font-size: 14px;
+}
+
+.task-global-sidebar-links li a:hover {
+  background-color: #415761;
+  color: #ffffff;
+}
+
+body.task-global-sidebar-open .task-global-sidebar {
+  transform: translateX(0);
+}
+
+body.task-global-sidebar-open .menuBar > .container-fluid {
+  padding-left: 0;
+}
+
+body.task-global-sidebar-open .menuBar > .container-fluid > .nav.nav-tabs {
+  transform: translateX(220px);
+}
+
+body.task-global-sidebar-open
+  .menuBar
+  > .container-fluid
+  > .nav.nav-tabs
+  > li:first-child {
+  transform: translateX(-220px);
+}
+
+body.task-global-sidebar-open #dispTable {
+  padding-left: 220px;
+  transition: padding-left 0.25s ease;
+}
+
+@media (max-width: 991.98px) {
+  .task-global-sidebar {
+    display: none;
+  }
+
+  body.task-global-sidebar-open .menuBar > .container-fluid {
+    padding-left: 0;
+  }
+
+  body.task-global-sidebar-open .menuBar > .container-fluid > .nav.nav-tabs,
+  body.task-global-sidebar-open
+    .menuBar
+    > .container-fluid
+    > .nav.nav-tabs
+    > li:first-child {
+    transform: none;
+  }
+
+  body.task-global-sidebar-open #dispTable {
+    padding-left: 0;
+  }
+}
+
 /*---------------------------------------------------------
 # login Page / forgotPassword Page / changePassword Page              
 ---------------------------------------------------------*/

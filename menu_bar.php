@@ -216,6 +216,14 @@ $menuList = array(
         'pin' => array('0')             // action
     ),
     array(
+        'Task Management',
+        'mdi mdi-menu',
+        $SITEURL . '/task/board.php',
+        'n',
+        'expand' => array(),
+        'pin' => array('136')
+    ),
+    array(
         'Customer',
         'mdi mdi-account-outline',
         'javascript:void(0)',
@@ -482,10 +490,90 @@ $menuList = array(
 </head>
 
 <style>
+    :root {
+        --task-global-sidebar-top: 92px;
+    }
+
+    #taskGlobalSidebar {
+        top: var(--task-global-sidebar-top) !important;
+        border-top: 0 !important;
+    }
+
+    #taskGlobalSidebar .task-global-sidebar-inner {
+        padding-top: 0 !important;
+    }
+
+    #taskGlobalSidebar .task-global-sidebar-title {
+        margin: 0 !important;
+        padding: 12px 16px 10px !important;
+        line-height: 1.2;
+    }
+
+    #taskGlobalSidebar .task-global-sidebar-links li a.task-global-link-active {
+        background-color: #415761;
+        color: #ffffff !important;
+        font-weight: 700;
+    }
+
     @media (max-width: 768px) {
         #navbarMenuBar {
             display: none;
             color: #FFFFFF;
+        }
+    }
+
+    @media (max-width: 991.98px) and (min-width: 769px) {
+        #taskGlobalSidebar {
+            display: block !important;
+        }
+    }
+
+    body.task-global-sidebar-open .container-xxl,
+    body.task-global-sidebar-open .task-page-wrap,
+    body.task-global-sidebar-open #dispTable {
+        margin-left: 0;
+        width: 100% !important;
+        max-width: none !important;
+        padding-left: 232px !important;
+        padding-right: 12px !important;
+        box-sizing: border-box;
+        transition: padding-left 0.25s ease, width 0.25s ease;
+    }
+
+    body.task-global-sidebar-open .menuBar > .container-fluid {
+        padding-left: 0 !important;
+    }
+
+    body.task-global-sidebar-open .menuBar > .container-fluid > .nav.nav-tabs {
+        transform: translateX(232px);
+        transition: transform 0.25s ease;
+    }
+
+    body.task-global-sidebar-open .menuBar > .container-fluid > .nav.nav-tabs > li:first-child {
+        transform: translateX(-232px);
+    }
+
+    body.task-global-sidebar-open .task-page-wrap > .col-12.col-md-11 {
+        max-width: 100% !important;
+        flex: 0 0 100% !important;
+    }
+
+    @media (max-width: 768px) {
+        body.task-global-sidebar-open .container-xxl,
+        body.task-global-sidebar-open .task-page-wrap,
+        body.task-global-sidebar-open #dispTable {
+            width: 100% !important;
+            padding-left: 0 !important;
+            padding-right: 0 !important;
+        }
+
+        body.task-global-sidebar-open .menuBar > .container-fluid {
+            padding-left: 0 !important;
+        }
+
+        body.task-global-sidebar-open .menuBar > .container-fluid > .nav.nav-tabs,
+        body.task-global-sidebar-open .menuBar > .container-fluid > .nav.nav-tabs > li:first-child {
+            transform: none;
         }
     }
 </style>
@@ -508,11 +596,22 @@ $menuList = array(
             */
             foreach ($menuList as $innerList) {
                 if (!empty(array_intersect($innerList['pin'], GlobalPin))) {
+                    $isTaskTopMenu = $innerList[0] === 'Task Management';
                     $li = $innerList[3] == 'y' ? "class=\"nav-item dropdown\"" : "class=\"nav-item\"";
-                    $a = $innerList[3] == 'y' ? "class=\"nav-link dropdown-toggle\" data-bs-toggle=\"dropdown\" role=\"button\" aria-expanded=\"false\"" : "class=\"nav-link\"";
+                    $linkClass = $innerList[3] == 'y' ? 'nav-link dropdown-toggle' : 'nav-link';
+                    if ($isTaskTopMenu) {
+                        $linkClass .= ' task-top-menu-trigger';
+                    }
+                    $a = $innerList[3] == 'y'
+                        ? "class=\"" . $linkClass . "\" data-bs-toggle=\"dropdown\" role=\"button\" aria-expanded=\"false\""
+                        : "class=\"" . $linkClass . "\"";
 
                     echo "<li $li>";
-                    echo "<a $a href=\"$innerList[2]\"><i class=\"$innerList[1]\"></i><span> $innerList[0]</span></a>";
+                    echo "<a $a href=\"$innerList[2]\"><i class=\"$innerList[1]\"></i>";
+                    if (!$isTaskTopMenu) {
+                        echo "<span> $innerList[0]</span>";
+                    }
+                    echo "</a>";
                     echo "<ul class=\"dropdown-menu menuBar\">";
                     foreach ($innerList['expand'] as $url) {
                         if (isset($url['expand'])) {
@@ -560,14 +659,28 @@ $menuList = array(
                 <?php
                 foreach ($menuList as $innerList) {
                     if (!empty(array_intersect($innerList['pin'], GlobalPin))) {
-                        $li = $innerList[3] == 'y' ? "class=\"nav-item dropdown\"" : "class=\"nav-item\"";
-                        $a = $innerList[3] == 'y' ? "class=\"nav-link dropdown-toggle\" data-bs-toggle=\"collapse\" data-bs-target=\"#$innerList[0]-collapse\" aria-expanded=\"false\"" : "class=\"nav-link\" href=\"$innerList[2]\"";
+                        $isTaskManagementMenu = $innerList[0] === 'Task Management';
+                        $isDropdownMenu = $innerList[3] == 'y' || $isTaskManagementMenu;
+                        $collapseId = $isTaskManagementMenu ? 'Task-Management' : $innerList[0];
+                        $li = $isDropdownMenu ? "class=\"nav-item dropdown\"" : "class=\"nav-item\"";
+                        $a = $isDropdownMenu
+                            ? "class=\"nav-link dropdown-toggle\" data-bs-toggle=\"collapse\" data-bs-target=\"#$collapseId-collapse\" aria-expanded=\"false\""
+                            : "class=\"nav-link\" href=\"$innerList[2]\"";
+
+                        $expandMenus = $innerList['expand'];
+                        if ($isTaskManagementMenu) {
+                            $expandMenus = array(
+                                array('Summary', 'mdi mdi-view-dashboard-outline', $SITEURL . '/task/summary.php', '136'),
+                                array('Board', 'mdi mdi-view-column-outline', $SITEURL . '/task/board.php', '136'),
+                                array('Sheets', 'mdi mdi-table-large', $SITEURL . '/task/sheets.php', '136'),
+                            );
+                        }
 
                         echo "<li $li>";
                         echo "<a $a href=\"#\"><i class=\"$innerList[1]\"></i><span> $innerList[0]</span></a>";
-                        echo "<div class=\"collapse\" id=\"$innerList[0]-collapse\">";
+                        echo "<div class=\"collapse\" id=\"$collapseId-collapse\">";
                         echo "<ul class=\"list-unstyled collapse-menu\">";
-                        foreach ($innerList['expand'] as $url) {
+                        foreach ($expandMenus as $url) {
                             if (isset($url['expand'])) {
                                 if (!empty(array_intersect($url['pin'], GlobalPin))) {
                                     // FIX: Prefix with parent menu name to prevent duplicate IDs for menus like 'Setting'
@@ -594,7 +707,7 @@ $menuList = array(
                                 }
                             } else {
                                 if (in_array($url[3], GlobalPin)) {
-                                    $urlTitle = getMenuTitleByPinGroupId($connect, $url[0], $url[3]);
+                                    $urlTitle = $isTaskManagementMenu ? $url[0] : getMenuTitleByPinGroupId($connect, $url[0], $url[3]);
                                     echo "<li><a class=\"nav-link\" href=\"$url[2]\"><i class=\"$url[1]\"></i><span> $urlTitle<span></a></li>";
                                 }
                             }
@@ -620,10 +733,101 @@ $menuList = array(
 </aside>
 <!-- V.Navbar -->
 
+<?php
+$taskCurrentPath = isset($_SERVER['REQUEST_URI']) ? (string) parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) : '';
+$isTaskSummaryPage = strpos($taskCurrentPath, '/task/summary.php') !== false;
+$isTaskBoardPage = strpos($taskCurrentPath, '/task/board.php') !== false;
+$isTaskSheetsPage = strpos($taskCurrentPath, '/task/sheets.php') !== false;
+?>
+
+<aside id="taskGlobalSidebar" class="task-global-sidebar" aria-hidden="true">
+    <div class="task-global-sidebar-inner">
+        <h6 class="task-global-sidebar-title">Task Management</h6>
+        <ul class="task-global-sidebar-links">
+            <li><a class="<?= $isTaskSummaryPage ? 'task-global-link-active' : '' ?>" href="<?= $SITEURL ?>/task/summary.php">Summary</a></li>
+            <li><a class="<?= $isTaskBoardPage ? 'task-global-link-active' : '' ?>" href="<?= $SITEURL ?>/task/board.php">Board</a></li>
+            <li><a class="<?= $isTaskSheetsPage ? 'task-global-link-active' : '' ?>" href="<?= $SITEURL ?>/task/sheets.php">Sheets</a></li>
+        </ul>
+    </div>
+</aside>
+
 <script>
+    function isMobileViewport() {
+        return window.matchMedia('(max-width: 768px)').matches;
+    }
+
     var sidebar = $("#sidebar");
     var sidebar_toggleBtn = $("#sidebarCollapse"); // variable from menuHeader
     var opacityBackground = $('div#filter_screen');
+    var taskTopMenuTrigger = $('.task-top-menu-trigger');
+    var taskGlobalSidebar = $('#taskGlobalSidebar');
+    var taskSidebarStorageKey = 'task_global_sidebar_open';
+
+    if (taskGlobalSidebar.length) {
+        $('body').addClass('task-global-sidebar-enabled');
+    }
+
+    function syncTaskSidebarTopOffset() {
+        if (!taskGlobalSidebar.length) {
+            return;
+        }
+
+        var topNavHeight = $('.topNav').outerHeight() || 50;
+        var menuBarHeight = $('.menuBar').outerHeight() || 0;
+        var totalTop = topNavHeight + menuBarHeight;
+        document.documentElement.style.setProperty('--task-global-sidebar-top', totalTop + 'px');
+    }
+
+    function setTaskGlobalSidebar(open) {
+        if (!taskGlobalSidebar.length || isMobileViewport()) {
+            $('body').removeClass('task-global-sidebar-open');
+            taskGlobalSidebar.attr('aria-hidden', 'true');
+            return;
+        }
+
+        $('body').toggleClass('task-global-sidebar-open', open);
+        taskGlobalSidebar.attr('aria-hidden', open ? 'false' : 'true');
+
+        try {
+            window.localStorage.setItem(taskSidebarStorageKey, open ? '1' : '0');
+        } catch (e) {}
+    }
+
+    function expandTaskMenuInMobileSidebar() {
+        var taskCollapse = document.getElementById('Task-Management-collapse');
+        if (!taskCollapse || typeof bootstrap === 'undefined' || !bootstrap.Collapse) {
+            return;
+        }
+
+        try {
+            var instance = bootstrap.Collapse.getOrCreateInstance(taskCollapse, { toggle: false });
+            instance.show();
+        } catch (e) {}
+    }
+
+    syncTaskSidebarTopOffset();
+
+    try {
+        setTaskGlobalSidebar(window.localStorage.getItem(taskSidebarStorageKey) === '1');
+    } catch (e) {
+        setTaskGlobalSidebar(false);
+    }
+
+    taskTopMenuTrigger.on('click', function (e) {
+        if (isMobileViewport()) {
+            e.preventDefault();
+            if (!sidebar.hasClass('active')) {
+                sidebar.toggleClass('active', true);
+                sidebar.toggleClass('close', false);
+                opacityBackground.show();
+            }
+            expandTaskMenuInMobileSidebar();
+            return;
+        }
+
+        e.preventDefault();
+        setTaskGlobalSidebar(!$('body').hasClass('task-global-sidebar-open'));
+    });
 
         sidebar_toggleBtn.on("click", function () {
             if (sidebar.hasClass("active")) {
@@ -642,6 +846,20 @@ $menuList = array(
                     opacityBackground.show();
                 } else {
                     opacityBackground.hide();
+                }
+            }
+        });
+
+        $(window).on('resize', function () {
+            syncTaskSidebarTopOffset();
+            if (isMobileViewport()) {
+                $('body').removeClass('task-global-sidebar-open');
+                taskGlobalSidebar.attr('aria-hidden', 'true');
+            } else {
+                try {
+                    setTaskGlobalSidebar(window.localStorage.getItem(taskSidebarStorageKey) === '1');
+                } catch (e) {
+                    setTaskGlobalSidebar(false);
                 }
             }
         });
