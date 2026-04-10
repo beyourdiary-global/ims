@@ -37,6 +37,7 @@
   jQuery(function ($) {
     var cfg = window.taskBoardConfig || {};
     var ajaxUrl = cfg.ajaxUrl || "";
+    var csrfToken = String(cfg.csrfToken || "");
     var canAdd = !!cfg.canAdd;
     var canEdit = !!cfg.canEdit;
     var state = {
@@ -70,7 +71,6 @@
     var $sidebarToggle = $("#taskSidebarToggle");
     var $sidebarBackdrop = $("#taskSidebarBackdrop");
     var $taskTopMenuTrigger = $(".task-top-menu-trigger");
-    var $createStatusSlot = $("#taskCreateStatusSlot");
     var sidebarStorageKey = "task_module_sidebar_open";
 
     function isMobile() {
@@ -159,6 +159,11 @@
       selected: [],
     };
 
+    var statusLabelsPanelState = {
+      itemId: 0,
+      selected: [],
+    };
+
     var workTypeModalState = {
       mode: "add",
       workTypeId: 0,
@@ -172,6 +177,7 @@
       cardEl: null,
       initialTitle: "",
       initialDescription: "",
+      initialSaveSnapshot: "",
       attachments: [],
       attachmentSort: {
         field: "date",
@@ -202,6 +208,12 @@
         progress_percent: 0,
       },
       childWorkItemsCollapsed: false,
+    };
+
+    var statusModalState = {
+      mode: "create",
+      columnId: 0,
+      initialName: "",
     };
 
     function normalizeProjectKey(projectKey) {
@@ -325,6 +337,73 @@
       window.alert(message || "Operation completed.");
     }
 
+    function cleanupTaskDialogArtifacts() {
+      $("#modal-confirm").remove();
+
+      // Keep at most one backdrop for an existing modal (e.g. item detail modal).
+      var $backdrops = $(".modal-backdrop");
+      if ($backdrops.length > 1) {
+        $backdrops.slice(1).remove();
+      }
+
+      var hasVisibleModal = document.querySelector(".modal.show");
+      if (!hasVisibleModal) {
+        $(".modal-backdrop").remove();
+      }
+
+      $("body").removeClass("modal-open").css({
+        overflow: "",
+        paddingRight: "",
+      });
+
+      if (hasVisibleModal) {
+        $("body").addClass("modal-open").css("overflow", "hidden");
+      }
+    }
+
+    function showConfirmationDialog(act, pagename, msg) {
+      if (typeof window.confirmationDialog !== "function") {
+        if (act === "NC") {
+          notify("No changes were made.");
+          return;
+        }
+        notify(pagename || "Operation completed.");
+        return;
+      }
+
+      var dialogResult = window.confirmationDialog(
+        "",
+        Array.isArray(msg) ? msg : [],
+        pagename || "",
+        "",
+        "",
+        act,
+      );
+
+      // Run immediate cleanup passes so page is never left in a locked state.
+      window.setTimeout(cleanupTaskDialogArtifacts, 0);
+      window.setTimeout(cleanupTaskDialogArtifacts, 30);
+      window.setTimeout(cleanupTaskDialogArtifacts, 120);
+
+      // confirmationDialog sometimes leaves backdrop/body lock behind.
+      if (dialogResult && typeof dialogResult.finally === "function") {
+        dialogResult.finally(function () {
+          window.setTimeout(cleanupTaskDialogArtifacts, 30);
+          window.setTimeout(cleanupTaskDialogArtifacts, 120);
+        });
+      }
+
+      window.setTimeout(cleanupTaskDialogArtifacts, 5200);
+    }
+
+    function showTaskSuccess(message) {
+      return;
+    }
+
+    function showNoChangeMessage() {
+      return;
+    }
+
     function postAction(payload, onDone, onFail) {
       if (!ajaxUrl) {
         notify("Missing ajax endpoint.");
@@ -334,11 +413,22 @@
         return;
       }
 
+      var requestData = payload || {};
+      if (csrfToken) {
+        if (requestData instanceof FormData) {
+          if (!requestData.has("csrf_token")) {
+            requestData.append("csrf_token", csrfToken);
+          }
+        } else {
+          requestData = $.extend({}, requestData, { csrf_token: csrfToken });
+        }
+      }
+
       $.ajax({
         url: ajaxUrl,
         method: "POST",
         dataType: "json",
-        data: payload,
+        data: requestData,
         timeout: 30000,
       })
         .done(function (res) {
@@ -510,6 +600,52 @@
       $row.html(html);
     }
 
+    function getItemStatusLabelIdsFromCard($card) {
+      var csv = String($card.attr("data-task-status-label-ids") || "").trim();
+      if (!csv) {
+        return [];
+      }
+
+      return csv
+        .split(",")
+        .map(function (value) {
+          return Number(String(value).trim() || 0);
+        })
+        .filter(function (value) {
+          return value > 0;
+        });
+    }
+
+    function setCardTaskStatusLabels($card, statusLabelIds) {
+      var ids = normalizeStatusLabelIdList(statusLabelIds);
+      $card.attr("data-task-status-label-ids", ids.join(","));
+
+      var $toggle = $card.find(".task-item-status-label-submenu-toggle");
+      if ($toggle.length) {
+        $toggle.html(
+          (ids.length ? "Edit task status labels" : "Add task status labels") +
+            ' <i class="fa-solid fa-chevron-right task-submenu-chevron"></i>',
+        );
+      }
+    }
+
+    function statusLabelsBySearch(term) {
+      var query = String(term || "")
+        .trim()
+        .toLowerCase();
+      if (!query) {
+        return state.statusLabels.slice();
+      }
+
+      return state.statusLabels.filter(function (label) {
+        return (
+          String(label.name || "")
+            .toLowerCase()
+            .indexOf(query) !== -1
+        );
+      });
+    }
+
     function syncKnownLabels(newLabels) {
       var source = Array.isArray(newLabels) ? newLabels : [];
       if (!source.length) {
@@ -647,6 +783,108 @@
         .text(canCreate ? '"' + search + '"' : "");
     }
 
+    function renderInlineStatusLabelPanel($card, $submenu) {
+      var selected = getItemStatusLabelIdsFromCard($card);
+      var selectedNames = [];
+      for (var i = 0; i < state.statusLabels.length; i++) {
+        var statusLabel = state.statusLabels[i] || {};
+        var statusLabelId = Number(statusLabel.id || 0);
+        if (selected.indexOf(statusLabelId) !== -1) {
+          selectedNames.push(String(statusLabel.name || ""));
+        }
+      }
+
+      var chipsHtml = "";
+      for (var c = 0; c < selectedNames.length; c++) {
+        if (!selectedNames[c]) {
+          continue;
+        }
+        chipsHtml +=
+          '<span class="task-inline-label-chip">' +
+          escHtml(selectedNames[c]) +
+          "</span>";
+      }
+
+      var panelHtml =
+        '<div class="task-inline-label-panel task-inline-status-panel" data-item-id="' +
+        Number($card.data("itemId") || 0) +
+        '">' +
+        '<div class="task-inline-label-selected">' +
+        (chipsHtml ||
+          '<span class="task-inline-label-empty">No task status selected</span>') +
+        "</div>" +
+        '<input type="text" class="form-control form-control-sm task-inline-status-search" placeholder="Type task status name">' +
+        '<div class="task-inline-label-create-row d-none"><button type="button" class="btn btn-sm btn-outline-primary task-inline-status-create-btn">Create</button> <span class="task-inline-label-create-name"></span></div>' +
+        '<div class="task-inline-label-list task-inline-status-list"></div>' +
+        '<div class="text-end mt-2"><button type="button" class="btn btn-sm btn-primary task-inline-status-save">Save</button></div>' +
+        "</div>";
+
+      $submenu.find(".task-item-status-label-submenu-content").html(panelHtml);
+      statusLabelsPanelState.itemId = Number($card.data("itemId") || 0);
+      statusLabelsPanelState.selected = selected.slice();
+      refreshInlineStatusLabelList($submenu);
+    }
+
+    function refreshInlineStatusLabelList($submenu) {
+      var $panel = $submenu.find(".task-inline-status-panel");
+      if (!$panel.length) {
+        return;
+      }
+
+      var search = String(
+        $panel.find(".task-inline-status-search").val() || "",
+      ).trim();
+      var matches = statusLabelsBySearch(search);
+      var listHtml = "";
+
+      for (var i = 0; i < matches.length; i++) {
+        var label = matches[i] || {};
+        var labelId = Number(label.id || 0);
+        var labelName = String(label.name || "").trim();
+        if (!labelId || !labelName) {
+          continue;
+        }
+
+        var checked = statusLabelsPanelState.selected.indexOf(labelId) !== -1;
+        listHtml +=
+          '<label class="task-inline-label-option">' +
+          '<input class="form-check-input task-inline-status-checkbox" type="checkbox" value="' +
+          labelId +
+          '" ' +
+          (checked ? "checked" : "") +
+          ">" +
+          '<span class="task-inline-label-option-name">' +
+          escHtml(labelName) +
+          "</span>" +
+          '<button type="button" class="btn task-inline-label-delete-btn task-inline-status-delete-btn" data-status-label-id="' +
+          labelId +
+          '" title="Delete task status"><i class="fa-regular fa-trash-can"></i></button>' +
+          "</label>";
+      }
+
+      $panel
+        .find(".task-inline-status-list")
+        .html(
+          listHtml ||
+            '<div class="task-label-empty">No task status found.</div>',
+        );
+
+      var canCreate =
+        search.length > 0 &&
+        !state.statusLabels.some(function (label) {
+          return (
+            String(label.name || "").toLowerCase() === search.toLowerCase()
+          );
+        });
+
+      $panel
+        .find(".task-inline-label-create-row")
+        .toggleClass("d-none", !canCreate);
+      $panel
+        .find(".task-inline-label-create-name")
+        .text(canCreate ? '"' + search + '"' : "");
+    }
+
     function removeLabelFromState(labelId) {
       var targetId = Number(labelId || 0);
       if (!targetId) {
@@ -694,6 +932,23 @@
       });
     }
 
+    function removeTaskStatusLabelFromCards(statusLabelId) {
+      var targetId = Number(statusLabelId || 0);
+      if (!targetId) {
+        return;
+      }
+
+      $app.find(".task-item-card").each(function () {
+        var $card = $(this);
+        var ids = getItemStatusLabelIdsFromCard($card).filter(function (id) {
+          return Number(id || 0) !== targetId;
+        });
+        setCardTaskStatusLabels($card, ids);
+      });
+
+      removeStatusLabelFromSelection(targetId);
+    }
+
     function normalizeStatusLabels(list) {
       var source = Array.isArray(list) ? list : [];
       var byId = {};
@@ -724,8 +979,6 @@
         return allowedIds.indexOf(id) !== -1;
       });
       renderStatusLabelChips();
-
-      renderManageStatusList();
     }
 
     function normalizeParentOptions(list) {
@@ -1028,40 +1281,6 @@
       $("#taskItemWebLinkUrlInput").val("");
       $("#taskItemWebLinkTextInput").val("");
       renderWebLinksSection();
-    }
-
-    function renderManageStatusList() {
-      var query = String($("#taskManageStatusInput").val() || "")
-        .trim()
-        .toLowerCase();
-      var html = "";
-
-      for (var i = 0; i < state.statusLabels.length; i++) {
-        var item = state.statusLabels[i] || {};
-        var id = Number(item.id || 0);
-        var name = String(item.name || "").trim();
-        if (!id || !name) {
-          continue;
-        }
-        if (query && name.toLowerCase().indexOf(query) === -1) {
-          continue;
-        }
-
-        html +=
-          '<div class="task-manage-status-row">' +
-          '<span class="task-manage-status-name">' +
-          escHtml(name) +
-          "</span>" +
-          '<button type="button" class="btn task-manage-status-delete-btn" data-status-label-id="' +
-          id +
-          '" title="Delete status"><i class="fa-regular fa-trash-can"></i></button>' +
-          "</div>";
-      }
-
-      $("#taskManageStatusList").html(
-        html ||
-          '<div class="task-manage-status-empty">No task status found.</div>',
-      );
     }
 
     function priorityIconHtml(priority) {
@@ -1636,6 +1855,10 @@
         setCardLabels($card, detail.labels);
       }
 
+      if (Array.isArray(detail.task_status_label_ids)) {
+        setCardTaskStatusLabels($card, detail.task_status_label_ids);
+      }
+
       if (Object.prototype.hasOwnProperty.call(detail, "parent_item_id")) {
         updateCardParentSubmenuToggle(
           $card,
@@ -1757,6 +1980,10 @@
       renderModalLabelChips();
       renderModalLabelOptions();
       updateCardFromDetail(info);
+      itemDetailModalState.initialSaveSnapshot = buildModalSaveSnapshot(
+        title,
+        description,
+      );
     }
 
     function persistModalLabels(onDone) {
@@ -1803,6 +2030,53 @@
       );
     }
 
+    function normalizeNumericIdList(list) {
+      return (Array.isArray(list) ? list : [])
+        .map(function (id) {
+          return Number(id || 0);
+        })
+        .filter(function (id) {
+          return id > 0;
+        })
+        .sort(function (a, b) {
+          return a - b;
+        });
+    }
+
+    function buildModalSaveSnapshot(currentTitle, currentDescription) {
+      return JSON.stringify({
+        title: String(currentTitle || "").trim(),
+        description: String(currentDescription || "").trim(),
+        assignee_user_id: Number($("#taskItemDetailAssigneeSelect").val() || 0),
+        reporter_user_id: Number($("#taskItemDetailReporterSelect").val() || 0),
+        priority: String(itemDetailModalState.selectedPriority || "Medium"),
+        original_estimate_value: Number(
+          $("#taskItemDetailEstimateValueInput").val() || 0,
+        ),
+        original_estimate_unit: String(
+          $("#taskItemDetailEstimateUnitInput").val() || "minutes",
+        ),
+        task_status_label_ids: normalizeStatusLabelIdList(
+          itemDetailModalState.selectedStatusLabelIds,
+        ),
+        start_date: String($("#taskItemDetailStartDateInput").val() || ""),
+        due_date: String($("#taskItemDetailDueDateInput").val() || ""),
+        amendement_date: String($("#taskItemDetailAmendDateInput").val() || ""),
+        amendement_time_minutes: Number(
+          $("#taskItemDetailAmendTimeInput").val() || 0,
+        ),
+        second_amendement_date: String(
+          $("#taskItemDetailSecondAmendDateInput").val() || "",
+        ),
+        second_amendement_time_minutes: Number(
+          $("#taskItemDetailSecondAmendTimeInput").val() || 0,
+        ),
+        label_ids: normalizeNumericIdList(
+          itemDetailModalState.selectedLabelIds,
+        ),
+      });
+    }
+
     function saveItemDetailsFromModal(closeAfterSave) {
       if (!canEdit) {
         notify("You do not have permission to update work item.");
@@ -1820,6 +2094,15 @@
       ).trim();
       if (!title) {
         notify("Work item title is required.");
+        return;
+      }
+
+      var currentSnapshot = buildModalSaveSnapshot(title, description);
+      if (
+        itemDetailModalState.initialSaveSnapshot &&
+        currentSnapshot === itemDetailModalState.initialSaveSnapshot
+      ) {
+        showNoChangeMessage();
         return;
       }
 
@@ -1892,6 +2175,12 @@
             );
 
             persistModalLabels(function () {
+              itemDetailModalState.initialSaveSnapshot = buildModalSaveSnapshot(
+                title,
+                description,
+              );
+              showTaskSuccess("Work item details updated successfully.");
+
               if (closeAfterSave) {
                 var modal = getItemDetailModalInstance();
                 if (modal) {
@@ -1972,8 +2261,25 @@
         String(workTypeName || "")
           .trim()
           .toLowerCase() === "epic";
+      var statusLabelIds = Array.isArray(item.task_status_label_ids)
+        ? item.task_status_label_ids
+        : parseStatusLabelIdsFromRaw(item.task_status || "");
+      statusLabelIds = normalizeStatusLabelIdList(statusLabelIds);
+      var statusLabelActionText = statusLabelIds.length
+        ? "Edit task status labels"
+        : "Add task status labels";
+
+      var statusLabelMenuHtml = "";
       var parentMenuHtml = "";
       if (!isEpic) {
+        statusLabelMenuHtml =
+          '<li class="dropend task-item-submenu-wrap">' +
+          '<a class="dropdown-item task-item-submenu-toggle task-item-status-label-submenu-toggle" href="#" data-action="submenu_task_status_labels">' +
+          escHtml(statusLabelActionText) +
+          ' <i class="fa-solid fa-chevron-right task-submenu-chevron"></i></a>' +
+          '<ul class="dropdown-menu task-item-submenu-list task-item-status-label-submenu"><li class="task-item-status-label-submenu-content"></li></ul>' +
+          "</li>";
+
         parentMenuHtml =
           '<li class="dropend task-item-submenu-wrap">' +
           '<a class="dropdown-item task-item-submenu-toggle task-item-parent-submenu-toggle" href="#" data-action="submenu_parent" data-has-parent="' +
@@ -1982,8 +2288,7 @@
           (parentItemId > 0 ? "Change parent" : "Link parent") +
           ' <i class="fa-solid fa-chevron-right task-submenu-chevron"></i></a>' +
           '<ul class="dropdown-menu task-item-submenu-list task-item-parent-submenu"><li class="task-item-parent-submenu-content"></li></ul>' +
-          "</li>" +
-          '<li><hr class="dropdown-divider"></li>';
+          "</li>";
       }
 
       return (
@@ -2001,6 +2306,8 @@
         escHtml(workItemKey) +
         '" data-parent-item-id="' +
         parentItemId +
+        '" data-task-status-label-ids="' +
+        escHtml(statusLabelIds.join(",")) +
         '" draggable="true">' +
         '<div class="task-item-head">' +
         '<h6 class="task-item-title">' +
@@ -2017,14 +2324,15 @@
         '<a class="dropdown-item task-item-submenu-toggle" href="#" data-action="submenu_status">Change status <i class="fa-solid fa-chevron-right task-submenu-chevron"></i></a>' +
         '<ul class="dropdown-menu task-item-submenu-list task-item-status-options"></ul>' +
         "</li>" +
-        '<li><hr class="dropdown-divider"></li>' +
         '<li class="dropend task-item-submenu-wrap">' +
         '<a class="dropdown-item task-item-submenu-toggle task-item-label-submenu-toggle" href="#" data-action="submenu_labels">' +
         escHtml(labelActionText) +
         ' <i class="fa-solid fa-chevron-right task-submenu-chevron"></i></a>' +
         '<ul class="dropdown-menu task-item-submenu-list task-item-label-submenu"><li class="task-item-label-submenu-content"></li></ul>' +
         "</li>" +
+        statusLabelMenuHtml +
         parentMenuHtml +
+        '<li><hr class="dropdown-divider"></li>' +
         '<li><a class="dropdown-item task-item-action text-danger" href="#" data-action="delete">Delete</a></li>' +
         "</ul>" +
         "</div>" +
@@ -2342,6 +2650,64 @@
       return window.matchMedia("(max-width: 768px)").matches;
     }
 
+    function getCreateStatusModalElements() {
+      return {
+        modalEl: document.getElementById("taskCreateStatusMobileModal"),
+        $title: $("#taskCreateStatusMobileModal .modal-title"),
+        $input: $("#taskStatusNameMobile"),
+        $submit: $("#taskCreateStatusSubmitMobile"),
+      };
+    }
+
+    function getCreateStatusModalInstance() {
+      var elems = getCreateStatusModalElements();
+      if (
+        !elems.modalEl ||
+        typeof bootstrap === "undefined" ||
+        !bootstrap.Modal
+      ) {
+        return null;
+      }
+
+      return bootstrap.Modal.getOrCreateInstance(elems.modalEl);
+    }
+
+    function openStatusModal(config) {
+      var opts = config || {};
+      var mode = String(opts.mode || "create").toLowerCase();
+      var elems = getCreateStatusModalElements();
+      if (!elems.modalEl) {
+        return;
+      }
+
+      statusModalState.mode = mode === "rename" ? "rename" : "create";
+      statusModalState.columnId = Number(opts.columnId || 0);
+      statusModalState.initialName = String(opts.currentName || "").trim();
+
+      if (statusModalState.mode === "rename") {
+        elems.$title.text("Rename status");
+        elems.$submit.text("Save");
+        elems.$input.val(statusModalState.initialName);
+      } else {
+        elems.$title.text("Add status");
+        elems.$submit.text("Add");
+        elems.$input.val("");
+      }
+
+      elems.$submit.prop(
+        "disabled",
+        statusModalState.mode === "rename" ? !canEdit : !canAdd,
+      );
+
+      var modal = getCreateStatusModalInstance();
+      if (modal) {
+        modal.show();
+        setTimeout(function () {
+          elems.$input.trigger("focus").trigger("select");
+        }, 120);
+      }
+    }
+
     function resetCreateStatusInline() {
       $("#taskStatusName").val("");
       $("#taskCreateStatusInlineForm").addClass("d-none");
@@ -2367,9 +2733,38 @@
           $("#taskCreateStatusSlot").before($newColumn);
           updateColumnCount($newColumn);
           refreshEmptyBoardState();
+          showTaskSuccess("Status created successfully.");
 
           $("#taskStatusNameMobile").val("");
           resetCreateStatusInline();
+        },
+      );
+    }
+
+    function renameStatus(columnId, newName, $column) {
+      var id = Number(columnId || 0);
+      var nextName = String(newName || "").trim();
+      if (!id || !nextName) {
+        return;
+      }
+
+      postAction(
+        {
+          task_action: "rename_status",
+          column_id: id,
+          column_name: nextName,
+        },
+        function () {
+          var $targetColumn =
+            $column && $column.length
+              ? $column
+              : $app.find('.task-column[data-column-id="' + id + '"]');
+
+          if ($targetColumn.length) {
+            $targetColumn.find(".task-column-title").text(nextName);
+          }
+
+          showTaskSuccess("Status renamed successfully.");
         },
       );
     }
@@ -2389,22 +2784,7 @@
         return;
       }
 
-      if (isMobileCreateStatusView()) {
-        var modalEl = document.getElementById("taskCreateStatusMobileModal");
-        if (modalEl && typeof bootstrap !== "undefined" && bootstrap.Modal) {
-          var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-          modal.show();
-          setTimeout(function () {
-            $("#taskStatusNameMobile").trigger("focus");
-          }, 120);
-        }
-        return;
-      }
-
-      $("#taskOpenCreateStatusBtn").addClass("d-none");
-      $createStatusSlot.addClass("task-create-status-slot-expanded");
-      $("#taskCreateStatusInlineForm").removeClass("d-none");
-      $("#taskStatusName").trigger("focus");
+      openStatusModal({ mode: "create" });
     });
 
     $("#taskCreateStatusInlineForm").on("submit", function (e) {
@@ -2417,11 +2797,45 @@
     });
 
     $("#taskCreateStatusSubmitMobile").on("click", function () {
-      createStatus($("#taskStatusNameMobile").val());
-      var modalEl = document.getElementById("taskCreateStatusMobileModal");
-      if (modalEl && typeof bootstrap !== "undefined" && bootstrap.Modal) {
-        bootstrap.Modal.getOrCreateInstance(modalEl).hide();
+      var inputName = $("#taskStatusNameMobile").val();
+      if (statusModalState.mode === "rename") {
+        if (!canEdit) {
+          notify("You do not have permission to manage statuses.");
+          return;
+        }
+
+        var newName = String(inputName || "").trim();
+        if (!newName) {
+          notify("Status name is required.");
+          return;
+        }
+
+        if (newName === statusModalState.initialName) {
+          showNoChangeMessage();
+          return;
+        }
+
+        renameStatus(statusModalState.columnId, newName);
+      } else {
+        createStatus(inputName);
       }
+
+      var modal = getCreateStatusModalInstance();
+      if (modal) {
+        modal.hide();
+      }
+    });
+
+    $("#taskCreateStatusMobileModal").on("hidden.bs.modal", function () {
+      statusModalState.mode = "create";
+      statusModalState.columnId = 0;
+      statusModalState.initialName = "";
+
+      var elems = getCreateStatusModalElements();
+      elems.$title.text("Add status");
+      elems.$submit.text("Add");
+      elems.$submit.prop("disabled", !canAdd);
+      elems.$input.val("");
     });
 
     $app.on("click", ".task-column-collapse-btn", function () {
@@ -2475,21 +2889,11 @@
       }
 
       if (action === "rename") {
-        var newName = window.prompt("Rename status:", currentName);
-        if (!newName) {
-          return;
-        }
-
-        postAction(
-          {
-            task_action: "rename_status",
-            column_id: columnId,
-            column_name: newName,
-          },
-          function () {
-            $column.find(".task-column-title").text(String(newName).trim());
-          },
-        );
+        openStatusModal({
+          mode: "rename",
+          columnId: columnId,
+          currentName: currentName,
+        });
         return;
       }
 
@@ -2530,6 +2934,7 @@
           function () {
             $column.remove();
             refreshEmptyBoardState();
+            showTaskSuccess("Status deleted successfully.");
           },
         );
       }
@@ -2844,92 +3249,6 @@
       $("#taskProjectKeyInput").val("").trigger("focus");
     });
 
-    $(document).on("click", "#taskManageStatusBtn", function (e) {
-      e.preventDefault();
-      var $panel = $("#taskManageStatusPanel");
-      var show = $panel.hasClass("d-none");
-      $panel.toggleClass("d-none", !show);
-      if (show) {
-        renderManageStatusList();
-        setTimeout(function () {
-          $("#taskManageStatusInput").trigger("focus");
-        }, 50);
-      }
-    });
-
-    $(document).on("input", "#taskManageStatusInput", function () {
-      renderManageStatusList();
-    });
-
-    $(document).on("keydown", "#taskManageStatusInput", function (e) {
-      if (e.key === "Enter") {
-        e.preventDefault();
-        $("#taskManageStatusCreateBtn").trigger("click");
-      }
-    });
-
-    $(document).on("click", "#taskManageStatusCreateBtn", function () {
-      if (!canEdit) {
-        notify("You do not have permission to manage task status labels.");
-        return;
-      }
-
-      var labelName = String($("#taskManageStatusInput").val() || "").trim();
-      if (!labelName) {
-        notify("Task status name is required.");
-        return;
-      }
-
-      postAction(
-        {
-          task_action: "create_status_label",
-          status_label_name: labelName,
-        },
-        function (res) {
-          normalizeStatusLabels(
-            Array.isArray(res.statusLabels) ? res.statusLabels : [],
-          );
-          $("#taskManageStatusInput").val("");
-          renderManageStatusList();
-          renderStatusLabelOptions(
-            $("#taskItemDetailStatusSearchInput").val() || "",
-          );
-        },
-      );
-    });
-
-    $(document).on("click", ".task-manage-status-delete-btn", function () {
-      if (!canEdit) {
-        notify("You do not have permission to manage task status labels.");
-        return;
-      }
-
-      var statusLabelId = Number($(this).data("statusLabelId") || 0);
-      if (!statusLabelId) {
-        return;
-      }
-
-      if (!window.confirm("Delete this task status label?")) {
-        return;
-      }
-
-      postAction(
-        {
-          task_action: "delete_status_label",
-          status_label_id: statusLabelId,
-        },
-        function (res) {
-          normalizeStatusLabels(
-            Array.isArray(res.statusLabels) ? res.statusLabels : [],
-          );
-          removeStatusLabelFromSelection(statusLabelId);
-          renderStatusLabelOptions(
-            $("#taskItemDetailStatusSearchInput").val() || "",
-          );
-        },
-      );
-    });
-
     $app.on("click", ".task-create-item-btn", function () {
       if (!canAdd) {
         notify("You do not have permission to create work items.");
@@ -2972,6 +3291,7 @@
           updateColumnCount($column);
           applyBoardFilters();
           refreshCardItemKeys();
+          showTaskSuccess("Work item created successfully.");
 
           $composer.find(".task-title-input").val("");
           $composer.find(".task-due-date-input").val("");
@@ -3060,14 +3380,29 @@
             ' <i class="fa-solid fa-chevron-right task-submenu-chevron"></i>',
         );
 
+      var statusLabelIds = getItemStatusLabelIdsFromCard($card);
+      $menu
+        .find(".task-item-status-label-submenu-toggle")
+        .html(
+          (statusLabelIds.length
+            ? "Edit task status labels"
+            : "Add task status labels") +
+            ' <i class="fa-solid fa-chevron-right task-submenu-chevron"></i>',
+        );
+
+      var isEpicCard =
+        String($card.attr("data-work-type-name") || "")
+          .trim()
+          .toLowerCase() === "epic";
+      $menu
+        .find(".task-item-status-label-submenu-toggle")
+        .closest(".task-item-submenu-wrap")
+        .toggleClass("d-none", isEpicCard);
+
       var $parentWrap = $menu
         .find(".task-item-parent-submenu-toggle")
         .closest(".task-item-submenu-wrap");
       if ($parentWrap.length) {
-        var isEpicCard =
-          String($card.attr("data-work-type-name") || "")
-            .trim()
-            .toLowerCase() === "epic";
         $parentWrap.toggleClass("d-none", isEpicCard);
         if (!isEpicCard) {
           var $parentSubmenu = $parentWrap.find(".task-item-parent-submenu");
@@ -3126,16 +3461,31 @@
 
       if (action === "submenu_labels") {
         renderInlineLabelPanel($card, $submenu);
+      } else if (action === "submenu_task_status_labels") {
+        renderInlineStatusLabelPanel($card, $submenu);
       } else if (action === "submenu_parent") {
         renderParentSubmenu($card, $submenu);
       }
 
       $submenu.addClass("show");
       $submenuWrap.addClass("show");
+
+      var submenuEl = $submenu.get(0);
+      if (submenuEl) {
+        var rect = submenuEl.getBoundingClientRect();
+        var viewportWidth =
+          window.innerWidth || document.documentElement.clientWidth || 0;
+        if (rect.right > viewportWidth - 8) {
+          $submenuWrap.addClass("task-item-submenu-open-left");
+        } else {
+          $submenuWrap.removeClass("task-item-submenu-open-left");
+        }
+      }
     }
 
     function closeItemSubmenu($wrap) {
       $wrap.removeClass("show");
+      $wrap.removeClass("task-item-submenu-open-left");
       $wrap.children(".task-item-submenu-list").removeClass("show");
     }
 
@@ -3294,6 +3644,207 @@
       );
     });
 
+    $app.on("input", ".task-inline-status-search", function (e) {
+      e.stopPropagation();
+      var $submenu = $(this).closest(".task-item-status-label-submenu");
+      refreshInlineStatusLabelList($submenu);
+    });
+
+    $app.on("change", ".task-inline-status-checkbox", function (e) {
+      e.stopPropagation();
+      var statusLabelId = Number($(this).val() || 0);
+      if (!statusLabelId) {
+        return;
+      }
+
+      if ($(this).is(":checked")) {
+        if (statusLabelsPanelState.selected.indexOf(statusLabelId) === -1) {
+          statusLabelsPanelState.selected.push(statusLabelId);
+        }
+      } else {
+        statusLabelsPanelState.selected =
+          statusLabelsPanelState.selected.filter(function (id) {
+            return id !== statusLabelId;
+          });
+      }
+    });
+
+    $app.on("click", ".task-inline-status-create-btn", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (!canEdit) {
+        notify("You do not have permission to manage task status labels.");
+        return;
+      }
+
+      var $submenu = $(this).closest(".task-item-status-label-submenu");
+      var $panel = $submenu.find(".task-inline-status-panel");
+      var statusLabelName = String(
+        $panel.find(".task-inline-status-search").val() || "",
+      ).trim();
+      if (!statusLabelName) {
+        return;
+      }
+
+      postAction(
+        {
+          task_action: "create_status_label",
+          status_label_name: statusLabelName,
+        },
+        function (res) {
+          normalizeStatusLabels(
+            Array.isArray(res.statusLabels) ? res.statusLabels : [],
+          );
+
+          if (res.statusLabel && Number(res.statusLabel.id || 0) > 0) {
+            var createdId = Number(res.statusLabel.id || 0);
+            if (statusLabelsPanelState.selected.indexOf(createdId) === -1) {
+              statusLabelsPanelState.selected.push(createdId);
+            }
+          }
+
+          refreshInlineStatusLabelList($submenu);
+          renderStatusLabelOptions(
+            $("#taskItemDetailStatusSearchInput").val() || "",
+          );
+        },
+      );
+    });
+
+    $app.on("click", ".task-inline-status-delete-btn", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (!canEdit) {
+        notify("You do not have permission to manage task status labels.");
+        return;
+      }
+
+      var statusLabelId = Number($(this).data("statusLabelId") || 0);
+      if (!statusLabelId) {
+        return;
+      }
+
+      if (!window.confirm("Delete this task status label?")) {
+        return;
+      }
+
+      var $submenu = $(this).closest(".task-item-status-label-submenu");
+      postAction(
+        {
+          task_action: "delete_status_label",
+          status_label_id: statusLabelId,
+        },
+        function (res) {
+          normalizeStatusLabels(
+            Array.isArray(res.statusLabels) ? res.statusLabels : [],
+          );
+          removeTaskStatusLabelFromCards(statusLabelId);
+          statusLabelsPanelState.selected =
+            statusLabelsPanelState.selected.filter(function (id) {
+              return Number(id || 0) !== statusLabelId;
+            });
+          refreshInlineStatusLabelList($submenu);
+          renderStatusLabelOptions(
+            $("#taskItemDetailStatusSearchInput").val() || "",
+          );
+        },
+      );
+    });
+
+    $app.on("click", ".task-inline-status-save", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      if (!canEdit) {
+        notify("You do not have permission to manage task status labels.");
+        return;
+      }
+
+      var $submenu = $(this).closest(".task-item-status-label-submenu");
+      var $card = $(this).closest(".task-item-card");
+      var itemId = Number($card.data("itemId") || 0);
+      if (!itemId) {
+        return;
+      }
+
+      var selectedIds = normalizeStatusLabelIdList(
+        statusLabelsPanelState.selected,
+      );
+
+      postAction(
+        {
+          task_action: "get_item_detail",
+          item_id: itemId,
+        },
+        function (detailRes) {
+          var detail =
+            detailRes &&
+            detailRes.detail &&
+            typeof detailRes.detail === "object"
+              ? detailRes.detail
+              : {};
+
+          postAction(
+            {
+              task_action: "update_item_detail",
+              item_id: itemId,
+              assignee_user_id: Number(detail.assignee_user_id || 0),
+              reporter_user_id: Number(detail.reporter_user_id || 0),
+              priority: String(detail.priority || "Medium"),
+              original_estimate_value: Number(
+                detail.original_estimate_value || 0,
+              ),
+              original_estimate_unit: String(
+                detail.original_estimate_unit || "minutes",
+              ),
+              task_status_label_ids: selectedIds.join(","),
+              start_date: String(detail.start_date || ""),
+              due_date: String(detail.due_date || ""),
+              amendement_date: String(detail.amendement_date || ""),
+              amendement_time_minutes: Number(
+                detail.amendement_time_minutes || 0,
+              ),
+              second_amendement_date: String(
+                detail.second_amendement_date || "",
+              ),
+              second_amendement_time_minutes: Number(
+                detail.second_amendement_time_minutes || 0,
+              ),
+            },
+            function (updateRes) {
+              normalizeStatusLabels(
+                Array.isArray(updateRes.statusLabels)
+                  ? updateRes.statusLabels
+                  : [],
+              );
+              var resolvedIds = normalizeStatusLabelIdList(
+                updateRes &&
+                  updateRes.detail &&
+                  Array.isArray(updateRes.detail.task_status_label_ids)
+                  ? updateRes.detail.task_status_label_ids
+                  : selectedIds,
+              );
+              setCardTaskStatusLabels($card, resolvedIds);
+
+              $submenu.removeClass("show");
+              $submenu.closest(".task-item-submenu-wrap").removeClass("show");
+
+              if (Number(itemDetailModalState.itemId || 0) === itemId) {
+                itemDetailModalState.selectedStatusLabelIds =
+                  resolvedIds.slice();
+                renderStatusLabelChips();
+                renderStatusLabelOptions(
+                  $("#taskItemDetailStatusSearchInput").val() || "",
+                );
+              }
+            },
+          );
+        },
+      );
+    });
+
     $app.on("click", ".task-item-action", function (e) {
       e.preventDefault();
 
@@ -3395,6 +3946,7 @@
             $card.remove();
             updateColumnCount($column);
             applyBoardFilters();
+            showTaskSuccess("Work item deleted successfully.");
           },
         );
       }
@@ -3844,6 +4396,7 @@
       };
       itemDetailModalState.childWorkItemsCollapsed = false;
       itemDetailModalState.detailsCollapsed = false;
+      itemDetailModalState.initialSaveSnapshot = "";
       setAttachmentPanelCollapsed(false);
       renderItemAttachments([]);
       setSelectedStatusLabels([]);
@@ -4683,7 +5236,9 @@
       $app.find(".task-open-composer-btn").prop("disabled", true);
       $("#taskOpenCreateStatusBtn").prop("disabled", true);
       $("#taskCreateStatusSubmit").prop("disabled", true);
-      $("#taskCreateStatusSubmitMobile").prop("disabled", true);
+      if (!canEdit) {
+        $("#taskCreateStatusSubmitMobile").prop("disabled", true);
+      }
     }
 
     state.projectKey =

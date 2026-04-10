@@ -457,6 +457,10 @@ body.task-global-sidebar-open .task-global-sidebar {
   transform: translateX(0);
 }
 
+body.task-global-sidebar-open {
+  overflow-x: hidden;
+}
+
 body.task-global-sidebar-open .menuBar > .container-fluid {
   padding-left: 0;
 }

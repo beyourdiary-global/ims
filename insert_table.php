@@ -1375,16 +1375,18 @@ if ($conn->select_db($db_cms)) {
     }
 
     $taskPinGroupSql = "INSERT INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
-        (136, 'Board', '1,2,3,4', 'Task Board Management', '1', CURDATE(), CURTIME(), 'A')
+        (136, 'Board', '1,2,3,4', 'Task Board Management', '1', CURDATE(), CURTIME(), 'A'),
+        (137, 'Summary', '1', 'Task Summary Management', '1', CURDATE(), CURTIME(), 'A'),
+        (138, 'Sheets', '1,2,3,4', 'Task Sheets Management', '1', CURDATE(), CURTIME(), 'A')
         ON DUPLICATE KEY UPDATE
             `name` = VALUES(`name`),
             `pins` = VALUES(`pins`),
             `remark` = VALUES(`remark`),
             `status` = 'A'";
     if ($conn->query($taskPinGroupSql)) {
-        echo "<p style='color:green;'>Verified pin group 136 for Board.</p>";
+        echo "<p style='color:green;'>Verified pin groups 136 (Board), 137 (Summary) and 138 (Sheets).</p>";
     } else {
-        echo "<p style='color:red;'>Failed creating pin group 136: " . $conn->error . "</p>";
+        echo "<p style='color:red;'>Failed creating task pin groups 136/137/138: " . $conn->error . "</p>";
     }
 
     foreach (array(1, 2, 3) as $groupId) {
@@ -1397,16 +1399,18 @@ if ($conn->select_db($db_cms)) {
         $userGroupRow = $userGroupResult->fetch_assoc();
         $currentPins = isset($userGroupRow['pins']) ? (string) $userGroupRow['pins'] : '';
         $updatedPins = addAccessToPinBlock($currentPins, 136, array(1, 2, 3, 4));
+        $updatedPins = addAccessToPinBlock($updatedPins, 137, array(1));
+        $updatedPins = addAccessToPinBlock($updatedPins, 138, array(1, 2, 3, 4));
 
         if ($updatedPins !== $currentPins) {
             $safePins = $conn->real_escape_string($updatedPins);
             if ($conn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $groupId)) {
-                echo "<p style='color:green;'>Verified task pin access for `user_group` id " . (int) $groupId . ".</p>";
+                echo "<p style='color:green;'>Verified task pin access (136/137/138) for `user_group` id " . (int) $groupId . ".</p>";
             } else {
-                echo "<p style='color:red;'>Failed updating task pin access for `user_group` id " . (int) $groupId . ": " . $conn->error . "</p>";
+                echo "<p style='color:red;'>Failed updating task pin access (136/137/138) for `user_group` id " . (int) $groupId . ": " . $conn->error . "</p>";
             }
         } else {
-            echo "<p style='color:green;'>Verified task pin access already exists for `user_group` id " . (int) $groupId . ".</p>";
+            echo "<p style='color:green;'>Verified task pin access (136/137/138) already exists for `user_group` id " . (int) $groupId . ".</p>";
         }
     }
 } else {

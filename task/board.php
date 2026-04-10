@@ -15,6 +15,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to access task board.'));
     }
 
+    // Ensure session token exists
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+
+    // Validate CSRF token for all state-changing actions
+    $submittedToken = isset($_POST['csrf_token']) ? $_POST['csrf_token'] : '';
+    if (!hash_equals($_SESSION['csrf_token'], $submittedToken)) {
+        taskJsonResponse(array('ok' => 0, 'message' => 'Invalid session token. Please refresh the page and try again.'));
+    }
+
     $currentUserId = defined('USER_ID') ? USER_ID : '';
     taskEnsureDefaultWorkTypes($connect, $currentUserId, $cdate, $ctime);
 
@@ -59,7 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     }
 
     if ($taskAction === 'delete_status') {
-        if (!taskIsActionAllowed('edit', $pinAccess)) {
+        if (!taskIsActionAllowed('delete', $pinAccess)) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to delete status.'));
         }
 
@@ -379,10 +390,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to upload attachment.'));
         }
 
+        $file = isset($_FILES['attachment']) ? $_FILES['attachment'] : null;
+
+        if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'File upload failed or no file selected.'));
+        }
+
+        // 1. Enforce max file size (e.g., 100MB)
+        $maxSizeBytes = 100 * 1024 * 1024; 
+        if ($file['size'] > $maxSizeBytes) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'File exceeds the 100MB size limit.'));
+        }
+
+        // 2. Enforce extension allowlist
+        $allowedExts = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt', 'jpg', 'jpeg', 'png', 'gif', 'zip'];
+        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, $allowedExts, true)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'Invalid file extension. Allowed types: ' . implode(', ', $allowedExts) . '.'));
+        }
+
+        // 3. Enforce MIME type validation (to prevent extension spoofing)
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime = finfo_file($finfo, $file['tmp_name']);
+        finfo_close($finfo);
+
+        $allowedMimes = [
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/zip',
+            'text/csv',
+            'text/plain',
+            'image/jpeg',
+            'image/png',
+            'image/gif'
+        ];
+
+        if (!in_array($mime, $allowedMimes, true)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'Invalid file format detected by server.'));
+        }
+
         $result = taskUploadItemAttachment(
             $connect,
             isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
-            isset($_FILES['attachment']) ? $_FILES['attachment'] : array(),
+            $file,
             $currentUserId,
             $cdate,
             $ctime
@@ -510,7 +563,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     }
 
     if ($taskAction === 'delete_item') {
-        if (!taskIsActionAllowed('edit', $pinAccess)) {
+        if (!taskIsActionAllowed('delete', $pinAccess)) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to delete work item.'));
         }
 
@@ -560,8 +613,8 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
     <link rel="stylesheet" href="../css/main.css">
     <link rel="stylesheet" href="../css/task.css">
 </head>
-<body>
-<div class="container-fluid d-flex justify-content-center task-page-wrap">
+<body class="task-board-page">
+<div class="container-fluid d-flex justify-content-center mt-3 task-page-wrap">
     <div class="col-12 col-md-11">
         <div class="d-flex flex-column mb-2">
             <div class="row">
@@ -608,7 +661,8 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                             <?php endforeach; ?>
                         </ul>
                     </div>
-                    <div class="dropdown ms-auto task-board-settings-wrap">
+                    <div class="task-board-toolbar-actions ms-auto">
+                        <div class="dropdown task-board-settings-wrap">
                         <button id="taskBoardSettingsBtn" class="btn task-board-settings-btn" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" title="Board settings">
                             <i class="fa-solid fa-sliders"></i>
                         </button>
@@ -620,16 +674,6 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                                     <input id="taskProjectKeyInput" type="text" class="form-control form-control-sm" maxlength="20" placeholder="Example: BCS" value="<?= htmlspecialchars(isset($projectKeySetting['project_key']) ? (string) $projectKeySetting['project_key'] : '', ENT_QUOTES, 'UTF-8') ?>">
                                     <button id="taskProjectKeySaveBtn" class="btn btn-light task-project-key-action-btn" type="button" title="Save project key"><i class="fa-solid fa-check"></i></button>
                                     <button id="taskProjectKeyClearBtn" class="btn btn-light task-project-key-action-btn" type="button" title="Clear project key"><i class="fa-solid fa-xmark"></i></button>
-                                </div>
-                            </div>
-                            <div class="mb-3">
-                                <button id="taskManageStatusBtn" class="btn btn-outline-secondary btn-sm w-100 task-manage-status-btn" type="button">Manage Task Status</button>
-                                <div id="taskManageStatusPanel" class="task-manage-status-panel d-none mt-2">
-                                    <div class="input-group input-group-sm mb-2">
-                                        <input id="taskManageStatusInput" type="text" class="form-control" maxlength="120" placeholder="Type status label name">
-                                        <button id="taskManageStatusCreateBtn" class="btn btn-primary task-manage-status-create-btn" type="button" title="Add status label"><i class="fa-solid fa-plus"></i></button>
-                                    </div>
-                                    <div id="taskManageStatusList" class="task-manage-status-list"></div>
                                 </div>
                             </div>
                             <hr class="my-2">
@@ -664,6 +708,11 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                             </div>
                         </div>
                     </div>
+
+                        <button id="taskOpenCreateStatusBtn" class="btn task-create-status-icon-btn" type="button" <?= $canAdd ? '' : 'disabled' ?> title="Add status">
+                            <i class="fa-solid fa-plus"></i>
+                        </button>
+                    </div>
                 </div>
 
                 <div id="taskBoardApp" class="task-board-scroll">
@@ -675,18 +724,6 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                                 taskRenderBoardColumn($column, $columnItems, $workTypes, $assignees);
                             ?>
                         <?php endforeach; ?>
-
-                        <div id="taskCreateStatusSlot" class="task-create-status-slot">
-                            <button id="taskOpenCreateStatusBtn" class="btn task-create-status-icon-btn" type="button" <?= $canAdd ? '' : 'disabled' ?> title="Add status">
-                                <i class="fa-solid fa-plus"></i>
-                            </button>
-
-                            <form id="taskCreateStatusInlineForm" class="task-create-status-inline d-none">
-                                <input id="taskStatusName" class="form-control" type="text" maxlength="150" placeholder="Status name" <?= $canAdd ? '' : 'disabled' ?>>
-                                <button id="taskCreateStatusSubmit" class="btn btn-primary" type="submit" <?= $canAdd ? '' : 'disabled' ?>><i class="fa-solid fa-check"></i></button>
-                                <button id="taskCreateStatusCancel" class="btn btn-light" type="button"><i class="fa-solid fa-xmark"></i></button>
-                            </form>
-                        </div>
                     </div>
 
                     <div id="taskBoardEmpty" class="task-empty-board-note mt-3 <?= !empty($columns) ? 'd-none' : '' ?>">
@@ -1039,9 +1076,16 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
 </div>
 
 <script>
+<?php
+    // Ensure token exists for initial page load rendering
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+?>
 window.taskBoardConfig = {
     ajaxUrl: 'board.php',
     siteUrl: <?= json_encode(rtrim((string) $SITEURL, '/'), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    csrfToken: <?= json_encode($_SESSION['csrf_token'], JSON_UNESCAPED_UNICODE) ?>,
     canAdd: <?= $canAdd ? 'true' : 'false' ?>,
     canEdit: <?= $canEdit ? 'true' : 'false' ?>,
     projectKey: <?= json_encode($projectKeySetting, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,

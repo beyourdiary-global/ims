@@ -1755,8 +1755,10 @@ if (!function_exists('taskRenderCard')) {
         $dueDate = isset($taskItem['due_date']) ? trim((string) $taskItem['due_date']) : '';
         $labels = isset($taskItem['labels']) && is_array($taskItem['labels']) ? $taskItem['labels'] : array();
         $labelIds = array();
+        $statusLabelIds = array();
         $assigneeDisplay = $assigneeName === '' ? 'Unassigned' : $assigneeName;
         $assigneeInitial = $assigneeName === '' ? '' : taskInitials($assigneeName);
+        $isEpic = strtolower(trim($workTypeName)) === 'epic';
 
         foreach ($labels as $label) {
             $labelId = isset($label['id']) ? (int) $label['id'] : 0;
@@ -1766,8 +1768,20 @@ if (!function_exists('taskRenderCard')) {
         }
 
         $labelActionText = !empty($labelIds) ? 'Edit label' : 'Add labels';
+        if (isset($taskItem['task_status_label_ids']) && is_array($taskItem['task_status_label_ids'])) {
+            foreach ($taskItem['task_status_label_ids'] as $statusLabelId) {
+                $statusLabelId = (int) $statusLabelId;
+                if ($statusLabelId > 0) {
+                    $statusLabelIds[] = $statusLabelId;
+                }
+            }
+            $statusLabelIds = array_values(array_unique($statusLabelIds));
+        } else {
+            $statusLabelIds = taskParseCsvIdList(isset($taskItem['task_status']) ? $taskItem['task_status'] : '');
+        }
+        $statusLabelActionText = !empty($statusLabelIds) ? 'Edit task status labels' : 'Add task status labels';
 
-        echo '<article class="task-item-card" data-item-id="' . (int) $taskItem['id'] . '" data-label-ids="' . htmlspecialchars(implode(',', $labelIds), ENT_QUOTES, 'UTF-8') . '" data-assignee-user-id="' . $assigneeUserId . '" data-item-description="' . htmlspecialchars($description, ENT_QUOTES, 'UTF-8') . '" data-work-type-name="' . htmlspecialchars($workTypeName, ENT_QUOTES, 'UTF-8') . '" data-work-item-key="' . htmlspecialchars($workItemKey, ENT_QUOTES, 'UTF-8') . '" data-parent-item-id="' . $parentItemId . '" draggable="true">';
+        echo '<article class="task-item-card" data-item-id="' . (int) $taskItem['id'] . '" data-label-ids="' . htmlspecialchars(implode(',', $labelIds), ENT_QUOTES, 'UTF-8') . '" data-assignee-user-id="' . $assigneeUserId . '" data-item-description="' . htmlspecialchars($description, ENT_QUOTES, 'UTF-8') . '" data-work-type-name="' . htmlspecialchars($workTypeName, ENT_QUOTES, 'UTF-8') . '" data-work-item-key="' . htmlspecialchars($workItemKey, ENT_QUOTES, 'UTF-8') . '" data-parent-item-id="' . $parentItemId . '" data-task-status-label-ids="' . htmlspecialchars(implode(',', $statusLabelIds), ENT_QUOTES, 'UTF-8') . '" draggable="true">';
         echo '<div class="task-item-head">';
         echo '<h6 class="task-item-title">' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</h6>';
         echo '<div class="dropdown task-item-menu-dropdown">';
@@ -1781,8 +1795,8 @@ if (!function_exists('taskRenderCard')) {
         echo '  <a class="dropdown-item task-item-submenu-toggle" href="#" data-action="submenu_status">Change status <i class="fa-solid fa-chevron-right task-submenu-chevron"></i></a>';
         echo '  <ul class="dropdown-menu task-item-submenu-list task-item-status-options"></ul>';
         echo '</li>';
-        echo '<li><hr class="dropdown-divider"></li>';
-        if (strtolower(trim($workTypeName)) !== 'epic') {
+        if (!$isEpic) {
+            echo '<li><hr class="dropdown-divider"></li>';
             echo '<li class="dropend task-item-submenu-wrap">';
             echo '  <a class="dropdown-item task-item-submenu-toggle task-item-parent-submenu-toggle" href="#" data-action="submenu_parent" data-has-parent="' . ($parentItemId > 0 ? '1' : '0') . '">' . ($parentItemId > 0 ? 'Change parent' : 'Link parent') . ' <i class="fa-solid fa-chevron-right task-submenu-chevron"></i></a>';
             echo '  <ul class="dropdown-menu task-item-submenu-list task-item-parent-submenu">';
@@ -1790,13 +1804,21 @@ if (!function_exists('taskRenderCard')) {
             echo '  </ul>';
             echo '</li>';
         }
-        echo '<li><hr class="dropdown-divider"></li>';
         echo '<li class="dropend task-item-submenu-wrap">';
         echo '  <a class="dropdown-item task-item-submenu-toggle task-item-label-submenu-toggle" href="#" data-action="submenu_labels">' . htmlspecialchars($labelActionText, ENT_QUOTES, 'UTF-8') . ' <i class="fa-solid fa-chevron-right task-submenu-chevron"></i></a>';
         echo '  <ul class="dropdown-menu task-item-submenu-list task-item-label-submenu">';
         echo '      <li class="task-item-label-submenu-content"></li>';
         echo '  </ul>';
         echo '</li>';
+        if (!$isEpic) {
+            echo '<li class="dropend task-item-submenu-wrap">';
+            echo '  <a class="dropdown-item task-item-submenu-toggle task-item-status-label-submenu-toggle" href="#" data-action="submenu_task_status_labels">' . htmlspecialchars($statusLabelActionText, ENT_QUOTES, 'UTF-8') . ' <i class="fa-solid fa-chevron-right task-submenu-chevron"></i></a>';
+            echo '  <ul class="dropdown-menu task-item-submenu-list task-item-status-label-submenu">';
+            echo '      <li class="task-item-status-label-submenu-content"></li>';
+            echo '  </ul>';
+            echo '</li>';
+        }
+        echo '<li><hr class="dropdown-divider"></li>';
         echo '<li><a class="dropdown-item task-item-action text-danger" href="#" data-action="delete">Delete</a></li>';
         echo '</ul>';
         echo '</div>';

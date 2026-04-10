@@ -1,6 +1,9 @@
 <?php
-$currentPagePin = 136;
-$pageTitle = 'Task Management Sheets';
+$currentPagePin = 138;
+$taskPageTitleByPin = array(
+    138 => 'Task Management Sheets',
+);
+$pageTitle = isset($taskPageTitleByPin[$currentPagePin]) ? $taskPageTitleByPin[$currentPagePin] : 'Task Management';
 $isFinance = 1;
 
 include_once '../menuHeader.php';
@@ -20,7 +23,7 @@ if (!taskIsActionAllowed('view', $pinAccess)) {
     <link rel="stylesheet" href="../css/task.css">
 </head>
 <body>
-<div class="container-fluid d-flex justify-content-center task-page-wrap">
+<div class="container-fluid d-flex justify-content-center mt-3 task-page-wrap">
     <div class="col-12 col-md-11">
         <div class="d-flex flex-column mb-3">
             <div class="row">

@@ -2,6 +2,15 @@
   margin-top: 0.25rem;
 }
 
+body.task-board-page {
+  overflow-x: hidden !important;
+}
+
+body.task-board-page .page-load-cover,
+body.task-board-page .task-page-wrap {
+  overflow-x: hidden;
+}
+
 .task-module-layout {
   position: relative;
   display: flex;
@@ -9,7 +18,8 @@
   border: 1px solid #d8dee6;
   border-radius: 12px;
   background: #f8fafc;
-  overflow: visible;
+  overflow-x: hidden;
+  overflow-y: visible;
 }
 
 body.task-global-sidebar-enabled .task-module-sidebar,
@@ -84,14 +94,29 @@ body.task-local-sidebar-open
   min-width: 0;
   background: #f4f7fb;
   padding: 0.75rem;
-  overflow: visible;
+  overflow-x: visible;
+  overflow-y: visible;
+  overscroll-behavior-x: contain;
 }
 
 .task-board-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 12;
   display: flex;
   align-items: center;
   gap: 0.65rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  background: #f4f7fb;
+  border-bottom: 1px solid #dbe3ef;
+  padding-bottom: 0.65rem;
+  margin-bottom: 0.75rem !important;
+}
+
+.task-board-toolbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
 }
 
 .task-board-settings-wrap {
@@ -416,14 +441,16 @@ body.task-local-sidebar-open
 }
 
 .task-board-scroll {
+  width: 100%;
   overflow-x: auto;
   overflow-y: visible;
   padding-bottom: 8rem;
-  scrollbar-width: none;
+  scrollbar-width: auto;
 }
 
 .task-board-scroll::-webkit-scrollbar {
-  display: none;
+  display: block;
+  height: 10px;
 }
 
 .task-board-scroll::-webkit-scrollbar-track {
@@ -440,7 +467,9 @@ body.task-local-sidebar-open
   display: flex;
   align-items: flex-start;
   gap: 1rem;
+  width: max-content;
   min-width: max-content;
+  padding-right: 0.75rem;
 }
 
 .task-column {
@@ -669,6 +698,11 @@ body.task-local-sidebar-open
   scrollbar-width: none;
 }
 
+.task-item-submenu-wrap.task-item-submenu-open-left > .task-item-submenu-list {
+  left: auto;
+  right: 100%;
+}
+
 .task-item-submenu-list::-webkit-scrollbar {
   display: none;
 }
@@ -724,6 +758,17 @@ body.task-local-sidebar-open
   min-width: 280px;
   max-width: 320px;
   padding: 8px;
+}
+
+.task-item-status-label-submenu {
+  min-width: 280px;
+  max-width: 320px;
+  padding: 8px;
+}
+
+.task-item-status-label-submenu-content {
+  padding: 0;
+  list-style: none;
 }
 
 .task-item-label-submenu-content {
@@ -1109,6 +1154,7 @@ body.task-local-sidebar-open
 
 .task-create-status-inline .btn {
   min-width: 38px;
+  flex: 0 0 38px;
 }
 
 .task-empty-board-note {
