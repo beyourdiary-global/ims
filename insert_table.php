@@ -861,34 +861,34 @@ if (!$conn->select_db($db_fin)) {
 
 // echo "<h3>Stock Order Request financial schema setup complete.</h3>";
 
-function migrationTableExists($conn, $dbName, $tableName)
-{
-    $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
-    $sql = "SELECT 1 FROM information_schema.tables WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' LIMIT 1";
-    $rst = $conn->query($sql);
-    return ($rst && $rst->num_rows > 0);
-}
+// function migrationTableExists($conn, $dbName, $tableName)
+// {
+//     $safeDb = $conn->real_escape_string($dbName);
+//     $safeTable = $conn->real_escape_string($tableName);
+//     $sql = "SELECT 1 FROM information_schema.tables WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' LIMIT 1";
+//     $rst = $conn->query($sql);
+//     return ($rst && $rst->num_rows > 0);
+// }
 
-function migrationColumnExists($conn, $dbName, $tableName, $columnName)
-{
-    $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
-    $safeColumn = $conn->real_escape_string($columnName);
-    $sql = "SELECT 1 FROM information_schema.columns WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' AND column_name='" . $safeColumn . "' LIMIT 1";
-    $rst = $conn->query($sql);
-    return ($rst && $rst->num_rows > 0);
-}
+// function migrationColumnExists($conn, $dbName, $tableName, $columnName)
+// {
+//     $safeDb = $conn->real_escape_string($dbName);
+//     $safeTable = $conn->real_escape_string($tableName);
+//     $safeColumn = $conn->real_escape_string($columnName);
+//     $sql = "SELECT 1 FROM information_schema.columns WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' AND column_name='" . $safeColumn . "' LIMIT 1";
+//     $rst = $conn->query($sql);
+//     return ($rst && $rst->num_rows > 0);
+// }
 
-function migrationIndexExists($conn, $dbName, $tableName, $indexName)
-{
-    $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
-    $safeIndex = $conn->real_escape_string($indexName);
-    $sql = "SELECT 1 FROM information_schema.statistics WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' AND index_name='" . $safeIndex . "' LIMIT 1";
-    $rst = $conn->query($sql);
-    return ($rst && $rst->num_rows > 0);
-}
+// function migrationIndexExists($conn, $dbName, $tableName, $indexName)
+// {
+//     $safeDb = $conn->real_escape_string($dbName);
+//     $safeTable = $conn->real_escape_string($tableName);
+//     $safeIndex = $conn->real_escape_string($indexName);
+//     $sql = "SELECT 1 FROM information_schema.statistics WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' AND index_name='" . $safeIndex . "' LIMIT 1";
+//     $rst = $conn->query($sql);
+//     return ($rst && $rst->num_rows > 0);
+// }
 
 function removePinAccessIds($pinList, $removeIds = array(7, 8))
 {
@@ -1027,260 +1027,521 @@ function pinBlockHasAccessId($allPins, $targetPinId, $accessId)
     return false;
 }
 
-if ($conn->select_db($db_fin)) {
-    if ($conn->query("DROP TABLE IF EXISTS `" . USER_RECORD_LOG . "`")) {
-        echo "<p style='color:green;'>Verified dropped `" . USER_RECORD_LOG . "` from financial database.</p>";
-    } else {
-        echo "<p style='color:red;'>Failed dropping `" . USER_RECORD_LOG . "` from financial database: " . $conn->error . "</p>";
-    }
-} else {
-    echo "<p style='color:red;'>Failed selecting financial database for user record log cleanup.</p>";
-}
+// if ($conn->select_db($db_fin)) {
+//     if ($conn->query("DROP TABLE IF EXISTS `" . USER_RECORD_LOG . "`")) {
+//         echo "<p style='color:green;'>Verified dropped `" . USER_RECORD_LOG . "` from financial database.</p>";
+//     } else {
+//         echo "<p style='color:red;'>Failed dropping `" . USER_RECORD_LOG . "` from financial database: " . $conn->error . "</p>";
+//     }
+// } else {
+//     echo "<p style='color:red;'>Failed selecting financial database for user record log cleanup.</p>";
+// }
+
+// if ($conn->select_db($db_cms)) {
+//     $createUserRecordLogTableSql = "CREATE TABLE IF NOT EXISTS `" . USER_RECORD_LOG . "` (
+//         `id` INT AUTO_INCREMENT PRIMARY KEY,
+//         `cust_id` INT DEFAULT NULL,
+//         `shopee_cust_id` INT DEFAULT NULL,
+//         `facebook_cust_id` INT DEFAULT NULL,
+//         `website_cust_id` INT DEFAULT NULL,
+//         `lazada_cust_id` INT DEFAULT NULL,
+//         `urbanism_member_id` INT DEFAULT NULL,
+//         `content` TEXT NOT NULL,
+//         `attachment` VARCHAR(255) DEFAULT NULL,
+//         `created_by` VARCHAR(30) DEFAULT NULL,
+//         `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+//         `updated_by` VARCHAR(30) DEFAULT NULL,
+//         `updated_at` DATETIME DEFAULT NULL,
+//         `status` CHAR(1) NOT NULL DEFAULT 'A',
+//         KEY `idx_url_created_at` (`created_at`),
+//         KEY `idx_url_created_by` (`created_by`),
+//         KEY `idx_url_cust_id` (`cust_id`),
+//         KEY `idx_url_shopee_cust_id` (`shopee_cust_id`),
+//         KEY `idx_url_facebook_cust_id` (`facebook_cust_id`),
+//         KEY `idx_url_website_cust_id` (`website_cust_id`),
+//         KEY `idx_url_lazada_cust_id` (`lazada_cust_id`),
+//         KEY `idx_url_urbanism_member_id` (`urbanism_member_id`)
+//     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+//     if ($conn->query($createUserRecordLogTableSql)) {
+//         echo "<p style='color:blue;'>Table `" . USER_RECORD_LOG . "` is ready in CMS database.</p>";
+//     } else {
+//         echo "<p style='color:red;'>Error creating `" . USER_RECORD_LOG . "` in CMS database: " . $conn->error . "</p>";
+//     }
+
+//     $userRecordLogCustomerColumns = array(
+//         'cust_id' => 'id',
+//         'shopee_cust_id' => 'id',
+//         'facebook_cust_id' => 'shopee_cust_id',
+//         'website_cust_id' => 'facebook_cust_id',
+//         'lazada_cust_id' => 'website_cust_id',
+//         'urbanism_member_id' => 'lazada_cust_id',
+//     );
+//     foreach ($userRecordLogCustomerColumns as $customerColumn => $afterColumn) {
+//         if (!migrationColumnExists($conn, $db_cms, USER_RECORD_LOG, $customerColumn)) {
+//             if ($conn->query("ALTER TABLE `" . USER_RECORD_LOG . "` ADD COLUMN `" . $customerColumn . "` INT DEFAULT NULL AFTER `" . $afterColumn . "`")) {
+//                 echo "<p style='color:blue;'>Added column `" . $customerColumn . "` to `" . USER_RECORD_LOG . "` in CMS database.</p>";
+//             } else {
+//                 echo "<p style='color:red;'>Failed adding `" . $customerColumn . "` to `" . USER_RECORD_LOG . "` in CMS database: " . $conn->error . "</p>";
+//             }
+//         } else {
+//             echo "<p style='color:green;'>Verified column `" . $customerColumn . "` already exists in `" . USER_RECORD_LOG . "` in CMS database.</p>";
+//         }
+
+//         $customerIndex = 'idx_url_' . $customerColumn;
+//         if (!migrationIndexExists($conn, $db_cms, USER_RECORD_LOG, $customerIndex)) {
+//             if ($conn->query("ALTER TABLE `" . USER_RECORD_LOG . "` ADD INDEX `" . $customerIndex . "` (`" . $customerColumn . "`)")) {
+//                 echo "<p style='color:blue;'>Added index `" . $customerIndex . "` to `" . USER_RECORD_LOG . "` in CMS database.</p>";
+//             } else {
+//                 echo "<p style='color:red;'>Failed adding index `" . $customerIndex . "` to `" . USER_RECORD_LOG . "` in CMS database: " . $conn->error . "</p>";
+//             }
+//         } else {
+//             echo "<p style='color:green;'>Verified index `" . $customerIndex . "` already exists in `" . USER_RECORD_LOG . "` in CMS database.</p>";
+//         }
+//     }
+
+//     if (migrationColumnExists($conn, $db_cms, USER_RECORD_LOG, 'customer_id') && migrationColumnExists($conn, $db_cms, USER_RECORD_LOG, 'shopee_cust_id')) {
+//         if ($conn->query("UPDATE `" . USER_RECORD_LOG . "` SET `shopee_cust_id` = `customer_id` WHERE IFNULL(`shopee_cust_id`,0)=0 AND IFNULL(`customer_id`,0)>0")) {
+//             echo "<p style='color:green;'>Verified migrated legacy `customer_id` values into `shopee_cust_id` in `" . USER_RECORD_LOG . "`.</p>";
+//         } else {
+//             echo "<p style='color:red;'>Failed migrating legacy `customer_id` values into `shopee_cust_id` in `" . USER_RECORD_LOG . "`: " . $conn->error . "</p>";
+//         }
+//     }
+
+//     if (migrationColumnExists($conn, $db_cms, USER_RECORD_LOG, 'cust_id') && migrationColumnExists($conn, $db_cms, USER_RECORD_LOG, 'shopee_cust_id')) {
+//         if ($conn->query("UPDATE `" . USER_RECORD_LOG . "` SET `shopee_cust_id` = `cust_id` WHERE IFNULL(`shopee_cust_id`,0)=0 AND IFNULL(`cust_id`,0)>0")) {
+//             echo "<p style='color:green;'>Verified migrated legacy `cust_id` values into `shopee_cust_id` in `" . USER_RECORD_LOG . "`.</p>";
+//         } else {
+//             echo "<p style='color:red;'>Failed migrating legacy `cust_id` values into `shopee_cust_id` in `" . USER_RECORD_LOG . "`: " . $conn->error . "</p>";
+//         }
+//     }
+
+// } else {
+//     echo "<p style='color:red;'>Failed selecting CMS database for user record log migration.</p>";
+// }
 
 if ($conn->select_db($db_cms)) {
-    $createUserRecordLogTableSql = "CREATE TABLE IF NOT EXISTS `" . USER_RECORD_LOG . "` (
+    $createTaskStatusSql = "CREATE TABLE IF NOT EXISTS `" . TASK_COLUMN . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
-        `cust_id` INT DEFAULT NULL,
-        `shopee_cust_id` INT DEFAULT NULL,
-        `facebook_cust_id` INT DEFAULT NULL,
-        `website_cust_id` INT DEFAULT NULL,
-        `lazada_cust_id` INT DEFAULT NULL,
-        `urbanism_member_id` INT DEFAULT NULL,
-        `content` TEXT NOT NULL,
-        `attachment` VARCHAR(255) DEFAULT NULL,
-        `created_by` VARCHAR(30) DEFAULT NULL,
-        `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
-        `updated_by` VARCHAR(30) DEFAULT NULL,
-        `updated_at` DATETIME DEFAULT NULL,
+        `name` VARCHAR(150) NOT NULL,
+        `sort_order` INT NOT NULL DEFAULT 0,
+        `remark` VARCHAR(255) DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
         `status` CHAR(1) NOT NULL DEFAULT 'A',
-        KEY `idx_url_created_at` (`created_at`),
-        KEY `idx_url_created_by` (`created_by`),
-        KEY `idx_url_cust_id` (`cust_id`),
-        KEY `idx_url_shopee_cust_id` (`shopee_cust_id`),
-        KEY `idx_url_facebook_cust_id` (`facebook_cust_id`),
-        KEY `idx_url_website_cust_id` (`website_cust_id`),
-        KEY `idx_url_lazada_cust_id` (`lazada_cust_id`),
-        KEY `idx_url_urbanism_member_id` (`urbanism_member_id`)
+        KEY `idx_task_status_sort` (`sort_order`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
-    if ($conn->query($createUserRecordLogTableSql)) {
-        echo "<p style='color:blue;'>Table `" . USER_RECORD_LOG . "` is ready in CMS database.</p>";
+    if ($conn->query($createTaskStatusSql)) {
+        echo "<p style='color:green;'>Verified table `" . TASK_COLUMN . "` for task statuses.</p>";
     } else {
-        echo "<p style='color:red;'>Error creating `" . USER_RECORD_LOG . "` in CMS database: " . $conn->error . "</p>";
+        echo "<p style='color:red;'>Failed creating `" . TASK_COLUMN . "`: " . $conn->error . "</p>";
     }
 
-    $userRecordLogCustomerColumns = array(
-        'cust_id' => 'id',
-        'shopee_cust_id' => 'id',
-        'facebook_cust_id' => 'shopee_cust_id',
-        'website_cust_id' => 'facebook_cust_id',
-        'lazada_cust_id' => 'website_cust_id',
-        'urbanism_member_id' => 'lazada_cust_id',
-    );
-    foreach ($userRecordLogCustomerColumns as $customerColumn => $afterColumn) {
-        if (!migrationColumnExists($conn, $db_cms, USER_RECORD_LOG, $customerColumn)) {
-            if ($conn->query("ALTER TABLE `" . USER_RECORD_LOG . "` ADD COLUMN `" . $customerColumn . "` INT DEFAULT NULL AFTER `" . $afterColumn . "`")) {
-                echo "<p style='color:blue;'>Added column `" . $customerColumn . "` to `" . USER_RECORD_LOG . "` in CMS database.</p>";
-            } else {
-                echo "<p style='color:red;'>Failed adding `" . $customerColumn . "` to `" . USER_RECORD_LOG . "` in CMS database: " . $conn->error . "</p>";
-            }
-        } else {
-            echo "<p style='color:green;'>Verified column `" . $customerColumn . "` already exists in `" . USER_RECORD_LOG . "` in CMS database.</p>";
-        }
+    $createTaskWorkTypeSql = "CREATE TABLE IF NOT EXISTS `" . TASK_WORK_TYPE . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `name` VARCHAR(80) NOT NULL,
+        `svg_icon` VARCHAR(255) DEFAULT NULL,
+        `remark` VARCHAR(255) DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        UNIQUE KEY `uniq_task_work_type_name` (`name`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
-        $customerIndex = 'idx_url_' . $customerColumn;
-        if (!migrationIndexExists($conn, $db_cms, USER_RECORD_LOG, $customerIndex)) {
-            if ($conn->query("ALTER TABLE `" . USER_RECORD_LOG . "` ADD INDEX `" . $customerIndex . "` (`" . $customerColumn . "`)")) {
-                echo "<p style='color:blue;'>Added index `" . $customerIndex . "` to `" . USER_RECORD_LOG . "` in CMS database.</p>";
-            } else {
-                echo "<p style='color:red;'>Failed adding index `" . $customerIndex . "` to `" . USER_RECORD_LOG . "` in CMS database: " . $conn->error . "</p>";
-            }
-        } else {
-            echo "<p style='color:green;'>Verified index `" . $customerIndex . "` already exists in `" . USER_RECORD_LOG . "` in CMS database.</p>";
-        }
-    }
-
-    if (migrationColumnExists($conn, $db_cms, USER_RECORD_LOG, 'customer_id') && migrationColumnExists($conn, $db_cms, USER_RECORD_LOG, 'shopee_cust_id')) {
-        if ($conn->query("UPDATE `" . USER_RECORD_LOG . "` SET `shopee_cust_id` = `customer_id` WHERE IFNULL(`shopee_cust_id`,0)=0 AND IFNULL(`customer_id`,0)>0")) {
-            echo "<p style='color:green;'>Verified migrated legacy `customer_id` values into `shopee_cust_id` in `" . USER_RECORD_LOG . "`.</p>";
-        } else {
-            echo "<p style='color:red;'>Failed migrating legacy `customer_id` values into `shopee_cust_id` in `" . USER_RECORD_LOG . "`: " . $conn->error . "</p>";
-        }
-    }
-
-    if (migrationColumnExists($conn, $db_cms, USER_RECORD_LOG, 'cust_id') && migrationColumnExists($conn, $db_cms, USER_RECORD_LOG, 'shopee_cust_id')) {
-        if ($conn->query("UPDATE `" . USER_RECORD_LOG . "` SET `shopee_cust_id` = `cust_id` WHERE IFNULL(`shopee_cust_id`,0)=0 AND IFNULL(`cust_id`,0)>0")) {
-            echo "<p style='color:green;'>Verified migrated legacy `cust_id` values into `shopee_cust_id` in `" . USER_RECORD_LOG . "`.</p>";
-        } else {
-            echo "<p style='color:red;'>Failed migrating legacy `cust_id` values into `shopee_cust_id` in `" . USER_RECORD_LOG . "`: " . $conn->error . "</p>";
-        }
-    }
-
-} else {
-    echo "<p style='color:red;'>Failed selecting CMS database for user record log migration.</p>";
-}
-
-if ($conn->select_db($db_cms)) {
-    $userGroup136Result = $conn->query("SELECT `id`, `pins` FROM `user_group`");
-    if ($userGroup136Result) {
-        $removed136Count = 0;
-        while ($userGroup136Row = $userGroup136Result->fetch_assoc()) {
-            $currentPins = isset($userGroup136Row['pins']) ? (string) $userGroup136Row['pins'] : '';
-            $updatedPins = removePinBlockById($currentPins, 136);
-            if ($updatedPins !== $currentPins) {
-                $safePins = $conn->real_escape_string($updatedPins);
-                $groupId = (int) $userGroup136Row['id'];
-                if ($conn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . $groupId)) {
-                    $removed136Count++;
-                } else {
-                    echo "<p style='color:red;'>Failed removing pin block [136:*] from `user_group` id " . $groupId . ": " . $conn->error . "</p>";
-                }
-            }
-        }
-        echo "<p style='color:green;'>Verified obsolete pin block [136:*] removed from user groups where applicable. Updated rows: " . $removed136Count . ".</p>";
+    if ($conn->query($createTaskWorkTypeSql)) {
+        echo "<p style='color:green;'>Verified table `" . TASK_WORK_TYPE . "` for task work types.</p>";
     } else {
-        echo "<p style='color:red;'>Failed reading `user_group` for pin 136 cleanup: " . $conn->error . "</p>";
+        echo "<p style='color:red;'>Failed creating `" . TASK_WORK_TYPE . "`: " . $conn->error . "</p>";
     }
 
-    $pinGroup136Result = $conn->query("SELECT `id` FROM `pin_group` WHERE `id` = 136 LIMIT 1");
-    if ($pinGroup136Result && $pinGroup136Result->num_rows > 0) {
-        if ($conn->query("DELETE FROM `pin_group` WHERE `id` = 136")) {
-            echo "<p style='color:green;'>Verified obsolete `pin_group` id 136 (User Record Log) removed.</p>";
-        } else {
-            echo "<p style='color:red;'>Failed removing `pin_group` id 136: " . $conn->error . "</p>";
-        }
+    $createTaskProjectKeySql = "CREATE TABLE IF NOT EXISTS `" . TASK_PROJECT_KEY . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `project_key` VARCHAR(20) DEFAULT NULL,
+        `remark` VARCHAR(255) DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_task_project_key` (`project_key`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createTaskProjectKeySql)) {
+        echo "<p style='color:green;'>Verified table `" . TASK_PROJECT_KEY . "` for project key settings.</p>";
     } else {
-        echo "<p style='color:green;'>Verified obsolete `pin_group` id 136 (User Record Log) is already removed.</p>";
+        echo "<p style='color:red;'>Failed creating `" . TASK_PROJECT_KEY . "`: " . $conn->error . "</p>";
     }
-} else {
-    echo "<p style='color:red;'>Failed selecting CMS database for pin 136 cleanup.</p>";
-}
 
-if ($conn->select_db($db_cms)) {
-    // Update Dashboard pin group (id=7): remove login/logout actions (7,8).
-    $dashboardPinResult = $conn->query("SELECT `pins` FROM `pin_group` WHERE `id` = 7 LIMIT 1");
-    if ($dashboardPinResult && $dashboardPinResult->num_rows > 0) {
-        $dashboardPinRow = $dashboardPinResult->fetch_assoc();
-        $updatedDashboardPins = removePinAccessIds($dashboardPinRow['pins'], array(7, 8));
-        $safeDashboardPins = $conn->real_escape_string($updatedDashboardPins);
+    $createTaskItemSql = "CREATE TABLE IF NOT EXISTS `" . TASK_ITEM . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `column_id` INT NOT NULL,
+        `title` VARCHAR(255) NOT NULL,
+        `description` TEXT DEFAULT NULL,
+        `project_key_id` INT DEFAULT NULL,
+        `work_type_id` INT DEFAULT NULL,
+        `assignee_user_id` INT DEFAULT NULL,
+        `reporter_user_id` INT DEFAULT NULL,
+        `priority` VARCHAR(20) NOT NULL DEFAULT 'Medium',
+        `original_estimate` VARCHAR(80) DEFAULT NULL,
+        `task_status` VARCHAR(80) DEFAULT NULL,
+        `parent_item_id` INT DEFAULT NULL,
+        `time_tracking` VARCHAR(120) DEFAULT NULL,
+        `due_date` DATE DEFAULT NULL,
+        `start_date` DATE DEFAULT NULL,
+        `amendement_date` DATE DEFAULT NULL,
+        `amendement_time` TIME DEFAULT NULL,
+        `second_amendement_date` DATE DEFAULT NULL,
+        `second_amendement_time` TIME DEFAULT NULL,
+        `sort_order` INT NOT NULL DEFAULT 0,
+        `remark` TEXT DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_task_item_column` (`column_id`),
+        KEY `idx_task_item_sort` (`sort_order`),
+        KEY `idx_task_item_assignee` (`assignee_user_id`),
+        KEY `idx_task_item_project_key` (`project_key_id`),
+        KEY `idx_task_item_reporter` (`reporter_user_id`),
+        KEY `idx_task_item_parent` (`parent_item_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
-        if ($conn->query("UPDATE `pin_group` SET `pins` = '{$safeDashboardPins}' WHERE `id` = 7")) {
-            echo "<p style='color:green;'>Verified `pin_group` id 7 (Dashboard) removed pin access 7 and 8.</p>";
-        } else {
-            echo "<p style='color:red;'>Failed updating `pin_group` id 7: " . $conn->error . "</p>";
-        }
+    if ($conn->query($createTaskItemSql)) {
+        echo "<p style='color:green;'>Verified table `" . TASK_ITEM . "` for board tasks.</p>";
     } else {
-        echo "<p style='color:orange;'>`pin_group` id 7 not found. Skipped dashboard pin update.</p>";
+        echo "<p style='color:red;'>Failed creating `" . TASK_ITEM . "`: " . $conn->error . "</p>";
     }
 
-    // Update all user groups: for pin block [7:...], remove access 7 and 8.
-    $userGroupResult = $conn->query("SELECT `id`, `pins` FROM `user_group`");
-    if ($userGroupResult) {
-        $updatedCount = 0;
+    $createTaskLabelSql = "CREATE TABLE IF NOT EXISTS `" . TASK_LABEL . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `name` VARCHAR(120) NOT NULL,
+        `sort_order` INT NOT NULL DEFAULT 0,
+        `remark` VARCHAR(255) DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        UNIQUE KEY `uniq_task_label_name` (`name`),
+        KEY `idx_task_label_sort` (`sort_order`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
-        while ($userGroupRow = $userGroupResult->fetch_assoc()) {
-            $currentPins = isset($userGroupRow['pins']) ? (string) $userGroupRow['pins'] : '';
-            $updatedPins = removeAccessFromPinBlock($currentPins, 7, array(7, 8));
-
-            if ($updatedPins !== $currentPins) {
-                $safePins = $conn->real_escape_string($updatedPins);
-                $groupId = (int) $userGroupRow['id'];
-
-                if ($conn->query("UPDATE `user_group` SET `pins` = '{$safePins}' WHERE `id` = {$groupId}")) {
-                    $updatedCount++;
-                } else {
-                    echo "<p style='color:red;'>Failed updating `user_group` id {$groupId}: " . $conn->error . "</p>";
-                }
-            }
-        }
-
-        echo "<p style='color:green;'>Verified user groups updated for pin block [7:*], removed access 7 and 8. Updated rows: {$updatedCount}.</p>";
+    if ($conn->query($createTaskLabelSql)) {
+        echo "<p style='color:green;'>Verified table `" . TASK_LABEL . "` for task labels.</p>";
     } else {
-        echo "<p style='color:red;'>Failed reading `user_group` table: " . $conn->error . "</p>";
+        echo "<p style='color:red;'>Failed creating `" . TASK_LABEL . "`: " . $conn->error . "</p>";
     }
-} else {
-    echo "<p style='color:red;'>Failed selecting CMS database for dashboard/user-group pin updates.</p>";
-}
 
-if ($conn->select_db($db_cms)) {
-    // Export action id is 6. Ensure these pin groups include 6 for Export button control.
-    $exportPinGroupIds = array(51, 59, 61, 65, 66, 69, 78, 87, 89, 92, 93, 123);
-    $pinIdSql = implode(',', $exportPinGroupIds);
-    $pinGroupRows = array();
+    $createTaskStatusLabelSql = "CREATE TABLE IF NOT EXISTS `" . TASK_STATUS_LABEL . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `name` VARCHAR(120) NOT NULL,
+        `sort_order` INT NOT NULL DEFAULT 0,
+        `remark` VARCHAR(255) DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        UNIQUE KEY `uniq_task_status_label_name` (`name`),
+        KEY `idx_task_status_label_sort` (`sort_order`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
-    $pinGroupResult = $conn->query("SELECT `id`, `pins` FROM `pin_group` WHERE `id` IN (" . $pinIdSql . ")");
-    if ($pinGroupResult) {
-        while ($pinGroupRow = $pinGroupResult->fetch_assoc()) {
-            $groupId = (int) $pinGroupRow['id'];
-            $pinGroupRows[$groupId] = isset($pinGroupRow['pins']) ? (string) $pinGroupRow['pins'] : '';
-
-            $updatedPins = addPinAccessIds($pinGroupRows[$groupId], array(6));
-            if ($updatedPins !== $pinGroupRows[$groupId]) {
-                $safePins = $conn->real_escape_string($updatedPins);
-                if ($conn->query("UPDATE `pin_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . $groupId)) {
-                    echo "<p style='color:green;'>Verified `pin_group` id " . $groupId . " updated with Export pin access 6.</p>";
-                    $pinGroupRows[$groupId] = $updatedPins;
-                } else {
-                    echo "<p style='color:red;'>Failed updating `pin_group` id " . $groupId . " with Export pin access 6: " . $conn->error . "</p>";
-                }
-            } else {
-                echo "<p style='color:green;'>Verified `pin_group` id " . $groupId . " already contains Export pin access 6.</p>";
-            }
-        }
+    if ($conn->query($createTaskStatusLabelSql)) {
+        echo "<p style='color:green;'>Verified table `" . TASK_STATUS_LABEL . "` for task status labels.</p>";
     } else {
-        echo "<p style='color:red;'>Failed reading `pin_group` for Export pin access update: " . $conn->error . "</p>";
+        echo "<p style='color:red;'>Failed creating `" . TASK_STATUS_LABEL . "`: " . $conn->error . "</p>";
     }
 
-    foreach ($exportPinGroupIds as $groupIdCheck) {
-        if (!isset($pinGroupRows[(int) $groupIdCheck])) {
-            echo "<p style='color:orange;'>`pin_group` id " . (int) $groupIdCheck . " not found. Skipped Export pin access update.</p>";
-        }
+    $createTaskItemLabelSql = "CREATE TABLE IF NOT EXISTS `" . TASK_ITEM_LABEL . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `item_id` INT NOT NULL,
+        `label_id` INT NOT NULL,
+        `remark` VARCHAR(255) DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        UNIQUE KEY `uniq_task_item_label` (`item_id`,`label_id`),
+        KEY `idx_task_item_label_item` (`item_id`),
+        KEY `idx_task_item_label_label` (`label_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createTaskItemLabelSql)) {
+        echo "<p style='color:green;'>Verified table `" . TASK_ITEM_LABEL . "` for task item labels.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . TASK_ITEM_LABEL . "`: " . $conn->error . "</p>";
     }
 
-    // Update only Super Admin (1) and Admin (2), as requested.
-    $targetUserGroupIds = array(1, 2);
-    foreach ($targetUserGroupIds as $userGroupId) {
-        $userGroupResult = $conn->query("SELECT `pins` FROM `user_group` WHERE `id` = " . (int) $userGroupId . " LIMIT 1");
+    $createTaskItemAttachmentSql = "CREATE TABLE IF NOT EXISTS `" . TASK_ITEM_ATTACHMENT . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `item_id` INT NOT NULL,
+        `file_name` VARCHAR(255) NOT NULL,
+        `file_path` VARCHAR(500) NOT NULL,
+        `file_size` BIGINT DEFAULT NULL,
+        `mime_type` VARCHAR(120) DEFAULT NULL,
+        `remark` VARCHAR(255) DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_task_item_attachment_item` (`item_id`),
+        KEY `idx_task_item_attachment_status` (`status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createTaskItemAttachmentSql)) {
+        echo "<p style='color:green;'>Verified table `" . TASK_ITEM_ATTACHMENT . "` for task item attachments.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . TASK_ITEM_ATTACHMENT . "`: " . $conn->error . "</p>";
+    }
+
+    $createTaskItemUrlSql = "CREATE TABLE IF NOT EXISTS `" . TASK_ITEM_URL . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `item_id` INT NOT NULL,
+        `url` VARCHAR(500) NOT NULL,
+        `link_text` VARCHAR(255) DEFAULT NULL,
+        `title` VARCHAR(255) DEFAULT NULL,
+        `remark` VARCHAR(255) DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_task_item_url_item` (`item_id`),
+        KEY `idx_task_item_url_status` (`status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createTaskItemUrlSql)) {
+        echo "<p style='color:green;'>Verified table `" . TASK_ITEM_URL . "` for task item web links.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . TASK_ITEM_URL . "`: " . $conn->error . "</p>";
+    }
+
+    $createTaskItemRelationSql = "CREATE TABLE IF NOT EXISTS `" . TASK_ITEM_RELATION . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `parent_board_item_id` INT NOT NULL,
+        `child_board_item_id` INT NOT NULL,
+        `remark` VARCHAR(255) DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        UNIQUE KEY `uniq_task_item_relation_child` (`child_board_item_id`),
+        KEY `idx_task_item_relation_parent` (`parent_board_item_id`),
+        KEY `idx_task_item_relation_status` (`status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createTaskItemRelationSql)) {
+        echo "<p style='color:green;'>Verified table `" . TASK_ITEM_RELATION . "` for task item parent-child relations.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . TASK_ITEM_RELATION . "`: " . $conn->error . "</p>";
+    }
+
+    $seedWorkTypeSql = "INSERT IGNORE INTO `" . TASK_WORK_TYPE . "` (`name`, `svg_icon`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+        ('Task', 'svg_icon/10318.svg', 'Default Task Work Type', '1', CURDATE(), CURTIME(), 'A'),
+        ('Epic', 'svg_icon/10307.svg', 'Default Epic Work Type', '1', CURDATE(), CURTIME(), 'A')";
+    if ($conn->query($seedWorkTypeSql)) {
+        echo "<p style='color:green;'>Verified default task work types (Task, Epic).</p>";
+    } else {
+        echo "<p style='color:red;'>Failed seeding default task work types: " . $conn->error . "</p>";
+    }
+
+    $taskPinGroupSql = "INSERT INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+        (136, 'Board', '1,2,3,4', 'Task Board Management', '1', CURDATE(), CURTIME(), 'A'),
+        (137, 'Summary', '1', 'Task Summary Management', '1', CURDATE(), CURTIME(), 'A'),
+        (138, 'Sheets', '1,2,3,4', 'Task Sheets Management', '1', CURDATE(), CURTIME(), 'A')
+        ON DUPLICATE KEY UPDATE
+            `name` = VALUES(`name`),
+            `pins` = VALUES(`pins`),
+            `remark` = VALUES(`remark`),
+            `status` = 'A'";
+    if ($conn->query($taskPinGroupSql)) {
+        echo "<p style='color:green;'>Verified pin groups 136 (Board), 137 (Summary) and 138 (Sheets).</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating task pin groups 136/137/138: " . $conn->error . "</p>";
+    }
+
+    foreach (array(1, 2, 3) as $groupId) {
+        $userGroupResult = $conn->query("SELECT `pins` FROM `user_group` WHERE `id` = " . (int) $groupId . " LIMIT 1");
         if (!$userGroupResult || $userGroupResult->num_rows === 0) {
-            echo "<p style='color:orange;'>`user_group` id " . (int) $userGroupId . " not found. Skipped Export pin access update.</p>";
+            echo "<p style='color:orange;'>`user_group` id " . (int) $groupId . " not found. Skipped task pin assignment.</p>";
             continue;
         }
 
         $userGroupRow = $userGroupResult->fetch_assoc();
         $currentPins = isset($userGroupRow['pins']) ? (string) $userGroupRow['pins'] : '';
-        $updatedPins = $currentPins;
-
-        foreach ($exportPinGroupIds as $exportPinGroupId) {
-            $updatedPins = addAccessToPinBlock($updatedPins, $exportPinGroupId, array(6));
-        }
+        $updatedPins = addAccessToPinBlock($currentPins, 136, array(1, 2, 3, 4));
+        $updatedPins = addAccessToPinBlock($updatedPins, 137, array(1));
+        $updatedPins = addAccessToPinBlock($updatedPins, 138, array(1, 2, 3, 4));
 
         if ($updatedPins !== $currentPins) {
             $safePins = $conn->real_escape_string($updatedPins);
-            if ($conn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $userGroupId)) {
-                echo "<p style='color:green;'>Verified `user_group` id " . (int) $userGroupId . " updated with Export pin access 6 for target pin groups.</p>";
+            if ($conn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $groupId)) {
+                echo "<p style='color:green;'>Verified task pin access (136/137/138) for `user_group` id " . (int) $groupId . ".</p>";
             } else {
-                echo "<p style='color:red;'>Failed updating `user_group` id " . (int) $userGroupId . " for Export pin access 6: " . $conn->error . "</p>";
-                continue;
+                echo "<p style='color:red;'>Failed updating task pin access (136/137/138) for `user_group` id " . (int) $groupId . ": " . $conn->error . "</p>";
             }
         } else {
-            echo "<p style='color:green;'>Verified `user_group` id " . (int) $userGroupId . " already contains Export pin access 6 for target pin groups.</p>";
-        }
-
-        $missingExportBlocks = array();
-        foreach ($exportPinGroupIds as $exportPinGroupId) {
-            if (!pinBlockHasAccessId($updatedPins, $exportPinGroupId, 6)) {
-                $missingExportBlocks[] = (int) $exportPinGroupId;
-            }
-        }
-
-        if (empty($missingExportBlocks)) {
-            echo "<p style='color:green;'>Verified `user_group` id " . (int) $userGroupId . " has Export pin access 6 on all target pin groups.</p>";
-        } else {
-            echo "<p style='color:red;'>Verification failed for `user_group` id " . (int) $userGroupId . ". Missing Export pin access 6 on pin groups: " . implode(',', $missingExportBlocks) . "</p>";
+            echo "<p style='color:green;'>Verified task pin access (136/137/138) already exists for `user_group` id " . (int) $groupId . ".</p>";
         }
     }
 } else {
-    echo "<p style='color:red;'>Failed selecting CMS database for Export pin migration update.</p>";
+    echo "<p style='color:red;'>Failed selecting CMS database for task management migration.</p>";
 }
+
+// if ($conn->select_db($db_cms)) {
+//     // Update Dashboard pin group (id=7): remove login/logout actions (7,8).
+//     $dashboardPinResult = $conn->query("SELECT `pins` FROM `pin_group` WHERE `id` = 7 LIMIT 1");
+//     if ($dashboardPinResult && $dashboardPinResult->num_rows > 0) {
+//         $dashboardPinRow = $dashboardPinResult->fetch_assoc();
+//         $updatedDashboardPins = removePinAccessIds($dashboardPinRow['pins'], array(7, 8));
+//         $safeDashboardPins = $conn->real_escape_string($updatedDashboardPins);
+
+//         if ($conn->query("UPDATE `pin_group` SET `pins` = '{$safeDashboardPins}' WHERE `id` = 7")) {
+//             echo "<p style='color:green;'>Verified `pin_group` id 7 (Dashboard) removed pin access 7 and 8.</p>";
+//         } else {
+//             echo "<p style='color:red;'>Failed updating `pin_group` id 7: " . $conn->error . "</p>";
+//         }
+//     } else {
+//         echo "<p style='color:orange;'>`pin_group` id 7 not found. Skipped dashboard pin update.</p>";
+//     }
+
+//     // Update all user groups: for pin block [7:...], remove access 7 and 8.
+//     $userGroupResult = $conn->query("SELECT `id`, `pins` FROM `user_group`");
+//     if ($userGroupResult) {
+//         $updatedCount = 0;
+
+//         while ($userGroupRow = $userGroupResult->fetch_assoc()) {
+//             $currentPins = isset($userGroupRow['pins']) ? (string) $userGroupRow['pins'] : '';
+//             $updatedPins = removeAccessFromPinBlock($currentPins, 7, array(7, 8));
+
+//             if ($updatedPins !== $currentPins) {
+//                 $safePins = $conn->real_escape_string($updatedPins);
+//                 $groupId = (int) $userGroupRow['id'];
+
+//                 if ($conn->query("UPDATE `user_group` SET `pins` = '{$safePins}' WHERE `id` = {$groupId}")) {
+//                     $updatedCount++;
+//                 } else {
+//                     echo "<p style='color:red;'>Failed updating `user_group` id {$groupId}: " . $conn->error . "</p>";
+//                 }
+//             }
+//         }
+
+//         echo "<p style='color:green;'>Verified user groups updated for pin block [7:*], removed access 7 and 8. Updated rows: {$updatedCount}.</p>";
+//     } else {
+//         echo "<p style='color:red;'>Failed reading `user_group` table: " . $conn->error . "</p>";
+//     }
+// } else {
+//     echo "<p style='color:red;'>Failed selecting CMS database for dashboard/user-group pin updates.</p>";
+// }
+
+// if ($conn->select_db($db_cms)) {
+//     // Export action id is 6. Ensure these pin groups include 6 for Export button control.
+//     $exportPinGroupIds = array(51, 59, 61, 65, 66, 69, 78, 87, 89, 92, 93, 123);
+//     $pinIdSql = implode(',', $exportPinGroupIds);
+//     $pinGroupRows = array();
+
+//     $pinGroupResult = $conn->query("SELECT `id`, `pins` FROM `pin_group` WHERE `id` IN (" . $pinIdSql . ")");
+//     if ($pinGroupResult) {
+//         while ($pinGroupRow = $pinGroupResult->fetch_assoc()) {
+//             $groupId = (int) $pinGroupRow['id'];
+//             $pinGroupRows[$groupId] = isset($pinGroupRow['pins']) ? (string) $pinGroupRow['pins'] : '';
+
+//             $updatedPins = addPinAccessIds($pinGroupRows[$groupId], array(6));
+//             if ($updatedPins !== $pinGroupRows[$groupId]) {
+//                 $safePins = $conn->real_escape_string($updatedPins);
+//                 if ($conn->query("UPDATE `pin_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . $groupId)) {
+//                     echo "<p style='color:green;'>Verified `pin_group` id " . $groupId . " updated with Export pin access 6.</p>";
+//                     $pinGroupRows[$groupId] = $updatedPins;
+//                 } else {
+//                     echo "<p style='color:red;'>Failed updating `pin_group` id " . $groupId . " with Export pin access 6: " . $conn->error . "</p>";
+//                 }
+//             } else {
+//                 echo "<p style='color:green;'>Verified `pin_group` id " . $groupId . " already contains Export pin access 6.</p>";
+//             }
+//         }
+//     } else {
+//         echo "<p style='color:red;'>Failed reading `pin_group` for Export pin access update: " . $conn->error . "</p>";
+//     }
+
+//     foreach ($exportPinGroupIds as $groupIdCheck) {
+//         if (!isset($pinGroupRows[(int) $groupIdCheck])) {
+//             echo "<p style='color:orange;'>`pin_group` id " . (int) $groupIdCheck . " not found. Skipped Export pin access update.</p>";
+//         }
+//     }
+
+//     // Update only Super Admin (1) and Admin (2), as requested.
+//     $targetUserGroupIds = array(1, 2);
+//     foreach ($targetUserGroupIds as $userGroupId) {
+//         $userGroupResult = $conn->query("SELECT `pins` FROM `user_group` WHERE `id` = " . (int) $userGroupId . " LIMIT 1");
+//         if (!$userGroupResult || $userGroupResult->num_rows === 0) {
+//             echo "<p style='color:orange;'>`user_group` id " . (int) $userGroupId . " not found. Skipped Export pin access update.</p>";
+//             continue;
+//         }
+
+//         $userGroupRow = $userGroupResult->fetch_assoc();
+//         $currentPins = isset($userGroupRow['pins']) ? (string) $userGroupRow['pins'] : '';
+//         $updatedPins = $currentPins;
+
+//         foreach ($exportPinGroupIds as $exportPinGroupId) {
+//             $updatedPins = addAccessToPinBlock($updatedPins, $exportPinGroupId, array(6));
+//         }
+
+//         if ($updatedPins !== $currentPins) {
+//             $safePins = $conn->real_escape_string($updatedPins);
+//             if ($conn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $userGroupId)) {
+//                 echo "<p style='color:green;'>Verified `user_group` id " . (int) $userGroupId . " updated with Export pin access 6 for target pin groups.</p>";
+//             } else {
+//                 echo "<p style='color:red;'>Failed updating `user_group` id " . (int) $userGroupId . " for Export pin access 6: " . $conn->error . "</p>";
+//                 continue;
+//             }
+//         } else {
+//             echo "<p style='color:green;'>Verified `user_group` id " . (int) $userGroupId . " already contains Export pin access 6 for target pin groups.</p>";
+//         }
+
+//         $missingExportBlocks = array();
+//         foreach ($exportPinGroupIds as $exportPinGroupId) {
+//             if (!pinBlockHasAccessId($updatedPins, $exportPinGroupId, 6)) {
+//                 $missingExportBlocks[] = (int) $exportPinGroupId;
+//             }
+//         }
+
+//         if (empty($missingExportBlocks)) {
+//             echo "<p style='color:green;'>Verified `user_group` id " . (int) $userGroupId . " has Export pin access 6 on all target pin groups.</p>";
+//         } else {
+//             echo "<p style='color:red;'>Verification failed for `user_group` id " . (int) $userGroupId . ". Missing Export pin access 6 on pin groups: " . implode(',', $missingExportBlocks) . "</p>";
+//         }
+//     }
+// } else {
+//     echo "<p style='color:red;'>Failed selecting CMS database for Export pin migration update.</p>";
+// }
 
 $conn->close();
