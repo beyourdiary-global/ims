@@ -1,0 +1,3009 @@
+(function () {
+  "use strict";
+
+  if (typeof jQuery === "undefined") {
+    return;
+  }
+
+  function escHtml(text) {
+    return String(text || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function initials(name) {
+    var value = String(name || "").trim();
+    if (!value) {
+      return "U";
+    }
+
+    var parts = value.split(/\s+/);
+    var out = "";
+    for (var i = 0; i < parts.length; i++) {
+      if (parts[i]) {
+        out += parts[i].charAt(0).toUpperCase();
+      }
+      if (out.length >= 2) {
+        break;
+      }
+    }
+
+    return out || "U";
+  }
+
+  jQuery(function ($) {
+    var cfg = window.taskBoardConfig || {};
+    var ajaxUrl = cfg.ajaxUrl || "";
+    var csrfToken = String(cfg.csrfToken || "");
+    var canAdd = !!cfg.canAdd;
+    var canEdit = !!cfg.canEdit;
+    var state = {
+      siteUrl: String(cfg.siteUrl || "").replace(/\/+$/, ""),
+      projectKey:
+        cfg.projectKey && typeof cfg.projectKey === "object"
+          ? cfg.projectKey
+          : { id: 0, project_key: "" },
+      workTypes: Array.isArray(cfg.workTypes) ? cfg.workTypes.slice() : [],
+      workTypeIcons: Array.isArray(cfg.workTypeIcons)
+        ? cfg.workTypeIcons.slice()
+        : [],
+      assignees: Array.isArray(cfg.assignees) ? cfg.assignees.slice() : [],
+      labels: Array.isArray(cfg.labels) ? cfg.labels.slice() : [],
+      statusLabels: Array.isArray(cfg.statusLabels)
+        ? cfg.statusLabels.slice()
+        : [],
+    };
+
+    var dragState = {
+      $item: null,
+      $sourceList: null,
+      $sourceNext: null,
+    };
+
+    var $layout = $("#taskModuleLayout");
+    var $sidebarToggle = $("#taskSidebarToggle");
+    var $sidebarBackdrop = $("#taskSidebarBackdrop");
+    var $taskTopMenuTrigger = $(".task-top-menu-trigger");
+    var sidebarStorageKey = "task_module_sidebar_open";
+
+    function isMobile() {
+      return window.matchMedia("(max-width: 991.98px)").matches;
+    }
+
+    function setSidebar(open) {
+      if (!$layout.length) {
+        return;
+      }
+
+      $layout.toggleClass("task-sidebar-open", open);
+      $layout.toggleClass("task-sidebar-closed", !open);
+
+      if (open && isMobile()) {
+        $sidebarBackdrop.show();
+      } else {
+        $sidebarBackdrop.hide();
+      }
+
+      var canShiftTopMenu =
+        !isMobile() && !$("body").hasClass("task-global-sidebar-enabled");
+      $("body").toggleClass(
+        "task-local-sidebar-open",
+        !!open && canShiftTopMenu,
+      );
+
+      try {
+        window.localStorage.setItem(sidebarStorageKey, open ? "1" : "0");
+      } catch (e) {}
+    }
+
+    if ($layout.length) {
+      var hasGlobalTaskSidebar = $("#taskGlobalSidebar").length > 0;
+      var shouldOpen = true;
+      if (hasGlobalTaskSidebar) {
+        shouldOpen = false;
+      }
+      try {
+        shouldOpen = window.localStorage.getItem(sidebarStorageKey) !== "0";
+      } catch (e) {}
+
+      if (hasGlobalTaskSidebar) {
+        shouldOpen = false;
+      }
+
+      setSidebar(shouldOpen);
+
+      if ($taskTopMenuTrigger.length && !hasGlobalTaskSidebar) {
+        $taskTopMenuTrigger.on("click", function (e) {
+          if (!isMobile()) {
+            e.preventDefault();
+            setSidebar(!$layout.hasClass("task-sidebar-open"));
+          }
+        });
+      }
+
+      if ($sidebarToggle.length) {
+        $sidebarToggle.on("click", function () {
+          setSidebar(!$layout.hasClass("task-sidebar-open"));
+        });
+      }
+
+      $sidebarBackdrop.on("click", function () {
+        setSidebar(false);
+      });
+
+      $(window).on("resize", function () {
+        if (!isMobile()) {
+          $sidebarBackdrop.hide();
+        } else if ($layout.hasClass("task-sidebar-open")) {
+          $sidebarBackdrop.show();
+        }
+
+        setSidebar($layout.hasClass("task-sidebar-open"));
+      });
+    }
+
+    var $app = $("#taskBoardApp");
+    if (!$app.length) {
+      return;
+    }
+
+    var labelsPanelState = {
+      itemId: 0,
+      selected: [],
+    };
+
+    var statusLabelsPanelState = {
+      itemId: 0,
+      selected: [],
+    };
+
+    var workTypeModalState = {
+      mode: "add",
+      workTypeId: 0,
+      iconPath: "",
+      initialIconPath: "",
+      composerEl: null,
+    };
+
+    var itemDetailModalState = {
+      itemId: 0,
+      cardEl: null,
+      initialTitle: "",
+      initialDescription: "",
+      initialSaveSnapshot: "",
+      attachments: [],
+      attachmentSort: {
+        field: "date",
+        direction: "desc",
+      },
+      attachmentsCollapsed: false,
+      attachmentView: "list",
+      showAttachmentPanelWhenEmpty: false,
+      pendingAttachmentPicker: false,
+      selectedPriority: "Medium",
+      selectedStatusLabelIds: [],
+      selectedLabelIds: [],
+      parentItemId: 0,
+      parentOptions: [],
+      webLinks: [],
+      webLinkEditorOpen: false,
+      detailsCollapsed: false,
+      workTypeName: "Task",
+      workTypeIcon: "",
+      workItemKey: "",
+      parentWorkItemKey: "",
+      parentWorkTypeName: "Task",
+      parentWorkTypeIcon: "",
+      childWorkItems: {
+        items: [],
+        total: 0,
+        done: 0,
+        progress_percent: 0,
+      },
+      childWorkItemsCollapsed: false,
+      history: [],
+      activityTab: "all",
+    };
+
+    var statusModalState = {
+      mode: "create",
+      columnId: 0,
+      initialName: "",
+    };
+
+    var worklogTimerState = {
+      itemId: 0,
+      elapsedSeconds: 0,
+      running: false,
+      startedAtMs: 0,
+      collapsed: false,
+    };
+
+    var worklogTickerId = null;
+    var worklogStoragePrefix = "task_board_worklog_timer_v1_";
+
+    var currentUserId = Number(cfg.currentUserId || 0);
+    var boardProjectId = Number(
+      cfg.projectKey && cfg.projectKey.id ? cfg.projectKey.id : 0,
+    );
+    var boardFilterCookiePrefix = "task_board_filters_v2_user_";
+    var boardFilterCookieName =
+      boardFilterCookiePrefix +
+      String(currentUserId > 0 ? currentUserId : 0) +
+      "_project_" +
+      String(boardProjectId > 0 ? boardProjectId : 0);
+    var boardViewFieldCookiePrefix = "task_board_view_fields_v1_user_";
+    var boardViewFieldCookieName =
+      boardViewFieldCookiePrefix +
+      String(currentUserId > 0 ? currentUserId : 0) +
+      "_project_" +
+      String(boardProjectId > 0 ? boardProjectId : 0);
+    var boardGroupCookiePrefix = "task_board_group_v1_user_";
+    var boardGroupCookieName =
+      boardGroupCookiePrefix +
+      String(currentUserId > 0 ? currentUserId : 0) +
+      "_project_" +
+      String(boardProjectId > 0 ? boardProjectId : 0);
+    var boardGroupBy = "status";
+    var boardStatusColumns = [];
+
+    var boardViewFieldDefaults = {
+      work_item_key: true,
+      work_type: true,
+      labels: true,
+      assignee: true,
+      priority: true,
+      reporter: true,
+      due_date: true,
+      created: true,
+      updated: true,
+      amendement_date: true,
+      amendement_time: true,
+      second_amendement_date: true,
+      second_amendement_time: true,
+      start_date: true,
+      original_estimate: true,
+      parent: true,
+    };
+
+    var boardViewFieldState = $.extend({}, boardViewFieldDefaults);
+
+    var boardFilterState = {
+      activePart: "none",
+      partA: {
+        assignedToMe: false,
+        dueThisWeek: false,
+      },
+      partB: {
+        dateStart: "",
+        dateDue: "",
+        assigneeIds: [],
+        createdFrom: "",
+        createdTo: "",
+        labelIds: [],
+        parentIds: [],
+        priorityValues: [],
+        reporterIds: [],
+        statusIds: [],
+        updatedFrom: "",
+        updatedTo: "",
+        workTypeIds: [],
+      },
+      search: {
+        label: "",
+        parent: "",
+      },
+    };
+
+    var taskPriorityValues = ["Highest", "High", "Medium", "Low", "Lowest"];
+    var boardSearchQuery = "";
+
+    function normalizeProjectKey(projectKey) {
+      return String(projectKey || "")
+        .trim()
+        .toUpperCase()
+        .replace(/\s+/g, "")
+        .replace(/[^A-Z0-9\-]/g, "")
+        .slice(0, 20);
+    }
+
+    function buildWorkItemKey(itemId) {
+      var key = normalizeProjectKey(
+        state.projectKey && state.projectKey.project_key
+          ? state.projectKey.project_key
+          : "",
+      );
+      var id = Number(itemId || 0);
+      if (!key || id <= 0) {
+        return "";
+      }
+      return key + "-" + id;
+    }
+
+    function defaultWorkTypeIconByName(name) {
+      var key = String(name || "")
+        .trim()
+        .toLowerCase();
+      if (key === "epic") {
+        return "svg_icon/10307.svg";
+      }
+      return "svg_icon/10318.svg";
+    }
+
+    function normalizeWorkTypeIcon(iconPath, name) {
+      var icons = Array.isArray(state.workTypeIcons) ? state.workTypeIcons : [];
+      var fallback = defaultWorkTypeIconByName(name);
+      var value = String(iconPath || "")
+        .trim()
+        .replace(/\\/g, "/");
+
+      if (value && value.indexOf("svg_icon/") !== 0) {
+        value = "svg_icon/" + value.split("/").pop();
+      }
+
+      if (value && icons.indexOf(value) !== -1) {
+        return value;
+      }
+
+      if (icons.indexOf(fallback) !== -1) {
+        return fallback;
+      }
+
+      if (icons.length) {
+        return String(icons[0]);
+      }
+
+      return fallback;
+    }
+
+    function normalizeWorkTypeEntry(raw) {
+      var item = raw || {};
+      var name = String(item.name || "Task").trim() || "Task";
+      return {
+        id: Number(item.id || 0),
+        name: name,
+        remark: String(item.remark || "").trim(),
+        svg_icon: normalizeWorkTypeIcon(item.svg_icon, name),
+      };
+    }
+
+    function normalizeAllWorkTypes() {
+      state.workTypes = (
+        Array.isArray(state.workTypes) ? state.workTypes : []
+      ).map(function (item) {
+        return normalizeWorkTypeEntry(item);
+      });
+    }
+
+    function workTypeIconHtml(iconPath, name, className) {
+      return (
+        '<img class="' +
+        escHtml(className || "") +
+        '" src="' +
+        escHtml(normalizeWorkTypeIcon(iconPath, name)) +
+        '" alt="">'
+      );
+    }
+
+    function findWorkTypeById(workTypeId) {
+      var id = Number(workTypeId || 0);
+      for (var i = 0; i < state.workTypes.length; i++) {
+        var type = normalizeWorkTypeEntry(state.workTypes[i]);
+        if (Number(type.id || 0) === id) {
+          return type;
+        }
+      }
+      return null;
+    }
+
+    function setComposerWorkType($toggle, workType) {
+      var type = normalizeWorkTypeEntry(workType || {});
+      $toggle
+        .attr("data-work-type-id", Number(type.id || 0))
+        .attr("data-work-type-name", type.name)
+        .attr("data-work-type-remark", type.remark)
+        .attr("data-work-type-icon", type.svg_icon)
+        .attr("title", type.name)
+        .html(
+          workTypeIconHtml(
+            type.svg_icon,
+            type.name,
+            "task-work-type-toggle-icon",
+          ),
+        );
+    }
+
+    normalizeAllWorkTypes();
+
+    function notify(message) {
+      window.alert(message || "Operation completed.");
+    }
+
+    function cleanupTaskDialogArtifacts() {
+      $("#modal-confirm").remove();
+
+      // Keep at most one backdrop for an existing modal (e.g. item detail modal).
+      var $backdrops = $(".modal-backdrop");
+      if ($backdrops.length > 1) {
+        $backdrops.slice(1).remove();
+      }
+
+      var hasVisibleModal = document.querySelector(".modal.show");
+      if (!hasVisibleModal) {
+        $(".modal-backdrop").remove();
+      }
+
+      $("body").removeClass("modal-open").css({
+        overflow: "",
+        paddingRight: "",
+      });
+
+      if (hasVisibleModal) {
+        $("body").addClass("modal-open").css("overflow", "hidden");
+      }
+    }
+
+    function showConfirmationDialog(act, pagename, msg) {
+      if (typeof window.confirmationDialog !== "function") {
+        if (act === "NC") {
+          notify("No changes were made.");
+          return;
+        }
+        notify(pagename || "Operation completed.");
+        return;
+      }
+
+      var dialogResult = window.confirmationDialog(
+        "",
+        Array.isArray(msg) ? msg : [],
+        pagename || "",
+        "",
+        "",
+        act,
+      );
+
+      // Run immediate cleanup passes so page is never left in a locked state.
+      window.setTimeout(cleanupTaskDialogArtifacts, 0);
+      window.setTimeout(cleanupTaskDialogArtifacts, 30);
+      window.setTimeout(cleanupTaskDialogArtifacts, 120);
+
+      // confirmationDialog sometimes leaves backdrop/body lock behind.
+      if (dialogResult && typeof dialogResult.finally === "function") {
+        dialogResult.finally(function () {
+          window.setTimeout(cleanupTaskDialogArtifacts, 30);
+          window.setTimeout(cleanupTaskDialogArtifacts, 120);
+        });
+      }
+
+      window.setTimeout(cleanupTaskDialogArtifacts, 5200);
+    }
+
+    function showTaskSuccess(message) {
+      return;
+    }
+
+    function showNoChangeMessage() {
+      showBoardToast("No changes", normalizeToastMessage("No changes were made."));
+    }
+
+    function normalizeToastMessage(message) {
+      var text = String(message || "").trim();
+      return text || "Operation completed.";
+    }
+
+    function parseDateTimeToMs(dateValue, timeValue) {
+      var dateText = String(dateValue || "").trim();
+      if (!dateText) {
+        return 0;
+      }
+
+      var fullText = dateText + (timeValue ? " " + String(timeValue) : "");
+      var parsed = Date.parse(fullText.replace(/-/g, "/"));
+      return Number.isNaN(parsed) ? 0 : parsed;
+    }
+
+    function formatRelativeTime(dateValue, timeValue) {
+      var createdAtMs = parseDateTimeToMs(dateValue, timeValue);
+      if (!createdAtMs) {
+        return "";
+      }
+
+      var diffSec = Math.max(1, Math.floor((Date.now() - createdAtMs) / 1000));
+      if (diffSec < 60) {
+        return diffSec + " seconds ago";
+      }
+
+      var diffMin = Math.floor(diffSec / 60);
+      if (diffMin < 60) {
+        return diffMin + (diffMin === 1 ? " minute ago" : " minutes ago");
+      }
+
+      var diffHour = Math.floor(diffMin / 60);
+      if (diffHour < 24) {
+        return diffHour + (diffHour === 1 ? " hour ago" : " hours ago");
+      }
+
+      var diffDay = Math.floor(diffHour / 24);
+      return diffDay + (diffDay === 1 ? " day ago" : " days ago");
+    }
+
+    function parseDurationTextToSeconds(text) {
+      var source = String(text || "").trim();
+      if (!source) {
+        return 0;
+      }
+
+      if (source.toLowerCase() === "no time logged") {
+        return 0;
+      }
+
+      var total = 0;
+      var regex =
+        /(\d+)\s*(days?|d|hours?|hrs?|h|minutes?|mins?|m|seconds?|secs?|s)/gi;
+      var matched = false;
+      var token;
+      while ((token = regex.exec(source)) !== null) {
+        matched = true;
+        var value = Number(token[1] || 0);
+        var unit = String(token[2] || "")
+          .trim()
+          .toLowerCase();
+        if (!value) {
+          continue;
+        }
+
+        if (unit === "d" || unit.indexOf("day") === 0) {
+          total += value * 86400;
+        } else if (
+          unit === "h" ||
+          unit.indexOf("hour") === 0 ||
+          unit.indexOf("hr") === 0
+        ) {
+          total += value * 3600;
+        } else if (unit === "m" || unit.indexOf("min") === 0) {
+          total += value * 60;
+        } else if (unit === "s" || unit.indexOf("sec") === 0) {
+          total += value;
+        }
+      }
+
+      return matched ? total : 0;
+    }
+
+    function formatDurationBrief(totalSeconds) {
+      var remain = Math.max(0, Math.floor(Number(totalSeconds || 0)));
+      var days = Math.floor(remain / 86400);
+      remain -= days * 86400;
+      var hours = Math.floor(remain / 3600);
+      remain -= hours * 3600;
+      var minutes = Math.floor(remain / 60);
+      remain -= minutes * 60;
+      var seconds = remain;
+
+      var parts = [];
+      if (days > 0) {
+        parts.push(days + "d");
+      }
+      if (hours > 0) {
+        parts.push(hours + "h");
+      }
+      if (minutes > 0) {
+        parts.push(minutes + "m");
+      }
+      if (!parts.length || (parts.length < 2 && seconds > 0)) {
+        parts.push(seconds + "s");
+      }
+
+      return parts.slice(0, 2).join(" ");
+    }
+
+    function estimateUnitToSeconds(value, unit) {
+      var amount = Math.max(0, Number(value || 0));
+      if (!amount) {
+        return 0;
+      }
+
+      var normalizedUnit = String(unit || "minutes")
+        .trim()
+        .toLowerCase();
+      if (normalizedUnit === "weeks") {
+        return amount * 604800;
+      }
+      if (normalizedUnit === "days") {
+        return amount * 86400;
+      }
+      if (normalizedUnit === "hours") {
+        return amount * 3600;
+      }
+      return amount * 60;
+    }
+
+    function renderDetailTimeTracking(
+      timeTrackingText,
+      estimateValue,
+      estimateUnit,
+    ) {
+      var $target = $("#taskItemDetailTimeTrackingValue");
+      if (!$target.length) {
+        return;
+      }
+
+      var trackingText =
+        String(timeTrackingText || "").trim() || "No time logged";
+      var estimateSeconds = estimateUnitToSeconds(estimateValue, estimateUnit);
+
+      if (estimateSeconds <= 0) {
+        $target
+          .removeClass("task-item-detail-time-tracking")
+          .html(
+            '<span class="task-item-detail-time-tracking-plain">' +
+              escHtml(trackingText) +
+              "</span>",
+          );
+        return;
+      }
+
+      var loggedSeconds = parseDurationTextToSeconds(trackingText);
+      var remainingSeconds = Math.max(0, estimateSeconds - loggedSeconds);
+      var isOvertime = loggedSeconds > estimateSeconds;
+      var overtimeSeconds = isOvertime ? loggedSeconds - estimateSeconds : 0;
+
+      var loggedText =
+        loggedSeconds > 0
+          ? formatDurationBrief(loggedSeconds) + " logged"
+          : "No time logged";
+      var balanceText = isOvertime
+        ? formatDurationBrief(overtimeSeconds) + " over original estimate"
+        : formatDurationBrief(remainingSeconds) + " remaining";
+      var progressPercent = Math.min(
+        100,
+        Math.max(0, Math.round((loggedSeconds / estimateSeconds) * 100)),
+      );
+
+      var html =
+        '<div class="task-item-detail-time-tracking-block">' +
+        '<div class="task-item-detail-time-tracking-bar"' +
+        (isOvertime
+          ? ' title="' +
+            escHtml(
+              formatDurationBrief(overtimeSeconds) + " over original estimate",
+            ) +
+            '"'
+          : "") +
+        ">" +
+        '<span class="task-item-detail-time-tracking-fill task-item-detail-time-tracking-fill-logged" style="width:' +
+        progressPercent +
+        '%"></span>' +
+        (isOvertime
+          ? '<span class="task-item-detail-time-tracking-fill task-item-detail-time-tracking-fill-overtime" style="width:100%"></span>'
+          : "") +
+        "</div>" +
+        '<div class="task-item-detail-time-tracking-meta">' +
+        '<span class="task-item-detail-time-tracking-logged">' +
+        escHtml(loggedText) +
+        "</span>" +
+        '<span class="task-item-detail-time-tracking-balance' +
+        (isOvertime ? " is-overtime" : "") +
+        '"' +
+        (isOvertime
+          ? ' title="' +
+            escHtml(
+              formatDurationBrief(overtimeSeconds) + " over original estimate",
+            ) +
+            '"'
+          : "") +
+        ">" +
+        escHtml(balanceText) +
+        "</span>" +
+        "</div>" +
+        "</div>";
+
+      $target.addClass("task-item-detail-time-tracking").html(html);
+    }
+
+    function renderActivityFeed($target, historyRows) {
+      if (!$target || !$target.length) {
+        return;
+      }
+
+      var rows = Array.isArray(historyRows) ? historyRows : [];
+      if (!rows.length) {
+        $target.html(
+          '<div class="task-item-activity-empty">No activity yet.</div>',
+        );
+        return;
+      }
+
+      var html = "";
+      for (var i = 0; i < rows.length; i++) {
+        var row = rows[i] || {};
+        var actor = String(row.actor_name || "User").trim() || "User";
+        var remark = String(row.remark || "updated the Work item").trim();
+        var ago = formatRelativeTime(row.create_date, row.create_time);
+        var fromValue = String(row.from_value || "").trim();
+        var toValue = String(row.to_value || "").trim();
+
+        html +=
+          '<div class="task-item-activity-entry">' +
+          '<div class="task-item-activity-avatar">' +
+          escHtml(initials(actor)) +
+          "</div>" +
+          '<div class="task-item-activity-content">' +
+          '<div class="task-item-activity-text"><span class="task-item-activity-actor">' +
+          escHtml(actor) +
+          "</span> " +
+          escHtml(remark) +
+          "</div>" +
+          (ago
+            ? '<div class="task-item-activity-ago">' + escHtml(ago) + "</div>"
+            : "");
+
+        if (fromValue || toValue) {
+          html +=
+            '<div class="task-item-activity-diff">' +
+            '<span class="task-item-activity-badge">' +
+            escHtml(fromValue || "None") +
+            "</span>" +
+            '<span class="task-item-activity-arrow"><i class="fa-solid fa-arrow-right"></i></span>' +
+            '<span class="task-item-activity-badge">' +
+            escHtml(toValue || "None") +
+            "</span>" +
+            "</div>";
+        }
+
+        html += "</div></div>";
+      }
+
+      $target.html(html);
+    }
+
+    function renderItemHistoryPanels() {
+      renderActivityFeed(
+        $("#taskItemActivityAllList"),
+        itemDetailModalState.history,
+      );
+      renderActivityFeed(
+        $("#taskItemActivityHistoryList"),
+        itemDetailModalState.history,
+      );
+    }
+
+    function setItemActivityTab(tabName) {
+      var tab = String(tabName || "all").toLowerCase();
+      if (["all", "comment", "history"].indexOf(tab) === -1) {
+        tab = "all";
+      }
+
+      itemDetailModalState.activityTab = tab;
+      $(".task-item-activity-tab").removeClass("active");
+      $('.task-item-activity-tab[data-tab-target="' + tab + '"]').addClass(
+        "active",
+      );
+
+      $("#taskItemActivityPanelAll").toggleClass("d-none", tab !== "all");
+      $("#taskItemActivityPanelComment").toggleClass(
+        "d-none",
+        tab !== "comment",
+      );
+      $("#taskItemActivityPanelHistory").toggleClass(
+        "d-none",
+        tab !== "history",
+      );
+    }
+
+    function loadItemHistory(itemId) {
+      var id = Number(itemId || 0);
+      if (!id) {
+        itemDetailModalState.history = [];
+        renderItemHistoryPanels();
+        return;
+      }
+
+      postAction(
+        {
+          task_action: "get_item_history",
+          item_id: id,
+        },
+        function (res) {
+          itemDetailModalState.history = Array.isArray(res.history)
+            ? res.history.slice()
+            : [];
+          renderItemHistoryPanels();
+        },
+      );
+    }
+
+    function showBoardToast(title, message) {
+      var $host = $("#taskBoardToastHost");
+      if (!$host.length) {
+        return;
+      }
+
+      var toastId =
+        "taskToast_" + Date.now() + "_" + Math.floor(Math.random() * 9999);
+      var html =
+        '<div class="task-board-toast" id="' +
+        toastId +
+        '">' +
+        '<span class="task-board-toast-icon"><i class="fa-solid fa-check"></i></span>' +
+        '<div class="task-board-toast-body">' +
+        '<div class="task-board-toast-title">' +
+        escHtml(title || "Success") +
+        "</div>" +
+        '<div class="task-board-toast-text">' +
+        escHtml(message || "") +
+        "</div>" +
+        "</div>" +
+        '<button type="button" class="task-board-toast-close" data-toast-id="' +
+        toastId +
+        '"><i class="fa-solid fa-xmark"></i></button>' +
+        "</div>";
+
+      $host.append(html);
+      window.setTimeout(function () {
+        $("#" + toastId).fadeOut(160, function () {
+          $(this).remove();
+        });
+      }, 4200);
+    }
+
+    function getWorklogStorageKey(itemId) {
+      return worklogStoragePrefix + String(Number(itemId || 0));
+    }
+
+    function readWorklogTimerState(itemId) {
+      var id = Number(itemId || 0);
+      if (!id) {
+        return {
+          itemId: 0,
+          elapsedSeconds: 0,
+          running: false,
+          startedAtMs: 0,
+          collapsed: false,
+        };
+      }
+
+      var fallback = {
+        itemId: id,
+        elapsedSeconds: 0,
+        running: false,
+        startedAtMs: 0,
+        collapsed: false,
+      };
+
+      try {
+        var raw = window.localStorage.getItem(getWorklogStorageKey(id));
+        if (!raw) {
+          return fallback;
+        }
+
+        var parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object") {
+          return fallback;
+        }
+
+        fallback.elapsedSeconds = Math.max(
+          0,
+          Number(parsed.elapsedSeconds || 0),
+        );
+        fallback.running = !!parsed.running;
+        fallback.startedAtMs = fallback.running
+          ? Math.max(0, Number(parsed.startedAtMs || 0))
+          : 0;
+        if (fallback.running && !fallback.startedAtMs) {
+          fallback.running = false;
+        }
+        fallback.collapsed = !!parsed.collapsed;
+      } catch (e) {
+        return fallback;
+      }
+
+      return fallback;
+    }
+
+    function writeWorklogTimerState(stateData) {
+      var data = stateData || worklogTimerState;
+      var id = Number(data.itemId || 0);
+      if (!id) {
+        return;
+      }
+
+      try {
+        window.localStorage.setItem(
+          getWorklogStorageKey(id),
+          JSON.stringify({
+            itemId: id,
+            elapsedSeconds: Math.max(
+              0,
+              Math.floor(Number(data.elapsedSeconds || 0)),
+            ),
+            running: !!data.running,
+            startedAtMs: !!data.running
+              ? Math.max(0, Math.floor(Number(data.startedAtMs || 0)))
+              : 0,
+            collapsed: !!data.collapsed,
+          }),
+        );
+      } catch (e) {}
+    }
+
+    function currentWorklogSeconds() {
+      var base = Math.max(
+        0,
+        Math.floor(Number(worklogTimerState.elapsedSeconds || 0)),
+      );
+      if (!worklogTimerState.running) {
+        return base;
+      }
+
+      var startedAt = Math.max(
+        0,
+        Math.floor(Number(worklogTimerState.startedAtMs || 0)),
+      );
+      if (!startedAt) {
+        return base;
+      }
+
+      return Math.max(0, base + Math.floor((Date.now() - startedAt) / 1000));
+    }
+
+    function formatWorklogSegment(value) {
+      var num = Math.max(0, Number(value || 0));
+      return num < 10 ? "0" + num : String(num);
+    }
+
+    function renderWorklogDisplay(seconds) {
+      var total = Math.max(0, Math.floor(Number(seconds || 0)));
+      var days = Math.floor(total / 86400);
+      var hours = Math.floor((total % 86400) / 3600);
+      var minutes = Math.floor((total % 3600) / 60);
+      var remainSeconds = total % 60;
+
+      $("#taskItemWorklogDays").text(formatWorklogSegment(days));
+      $("#taskItemWorklogHours").text(formatWorklogSegment(hours));
+      $("#taskItemWorklogMinutes").text(formatWorklogSegment(minutes));
+      $("#taskItemWorklogSeconds").text(formatWorklogSegment(remainSeconds));
+    }
+
+    function renderWorklogActionButtons() {
+      var elapsed = currentWorklogSeconds();
+      var isRunning = !!worklogTimerState.running;
+      var hasElapsed = elapsed > 0;
+
+      $("#taskItemWorklogStartBtn").toggleClass(
+        "d-none",
+        hasElapsed || isRunning,
+      );
+      $("#taskItemWorklogStopBtn").toggleClass("d-none", !isRunning);
+      $("#taskItemWorklogContinueBtn").toggleClass(
+        "d-none",
+        isRunning || !hasElapsed,
+      );
+      $("#taskItemWorklogSaveBtn").toggleClass("d-none", !hasElapsed);
+      $("#taskItemWorklogResetBtn").toggleClass(
+        "d-none",
+        !hasElapsed && !isRunning,
+      );
+    }
+
+    function applyWorklogCollapsedUi() {
+      $("#taskItemWorklogTimerSection").toggleClass(
+        "task-item-worklog-collapsed",
+        !!worklogTimerState.collapsed,
+      );
+      $("#taskItemWorklogToggleBtn")
+        .attr(
+          "title",
+          worklogTimerState.collapsed
+            ? "Expand worklog timer"
+            : "Collapse worklog timer",
+        )
+        .attr("aria-expanded", worklogTimerState.collapsed ? "false" : "true")
+        .find("i")
+        .toggleClass("fa-chevron-down", !worklogTimerState.collapsed)
+        .toggleClass("fa-chevron-right", !!worklogTimerState.collapsed);
+    }
+
+    function applyWorklogTimerUi() {
+      renderWorklogDisplay(currentWorklogSeconds());
+      renderWorklogActionButtons();
+      applyWorklogCollapsedUi();
+    }
+
+    function startWorklogTicker() {
+      if (worklogTickerId !== null) {
+        return;
+      }
+
+      worklogTickerId = window.setInterval(function () {
+        applyWorklogTimerUi();
+      }, 1000);
+    }
+
+    function stopWorklogTicker() {
+      if (worklogTickerId === null) {
+        return;
+      }
+
+      window.clearInterval(worklogTickerId);
+      worklogTickerId = null;
+    }
+
+    function openWorklogTimerForItem(itemId) {
+      worklogTimerState = readWorklogTimerState(itemId);
+      applyWorklogTimerUi();
+      startWorklogTicker();
+    }
+
+    function persistWorklogTimerState() {
+      writeWorklogTimerState(worklogTimerState);
+    }
+
+    function startOrContinueWorklogTimer() {
+      if (!Number(worklogTimerState.itemId || 0)) {
+        return;
+      }
+
+      if (worklogTimerState.running) {
+        return;
+      }
+
+      worklogTimerState.running = true;
+      worklogTimerState.startedAtMs = Date.now();
+      persistWorklogTimerState();
+      applyWorklogTimerUi();
+      startWorklogTicker();
+    }
+
+    function stopWorklogTimer() {
+      if (
+        !Number(worklogTimerState.itemId || 0) ||
+        !worklogTimerState.running
+      ) {
+        return;
+      }
+
+      worklogTimerState.elapsedSeconds = currentWorklogSeconds();
+      worklogTimerState.running = false;
+      worklogTimerState.startedAtMs = 0;
+      persistWorklogTimerState();
+      applyWorklogTimerUi();
+    }
+
+    function resetWorklogTimer() {
+      if (!Number(worklogTimerState.itemId || 0)) {
+        return;
+      }
+
+      worklogTimerState.elapsedSeconds = 0;
+      worklogTimerState.running = false;
+      worklogTimerState.startedAtMs = 0;
+      persistWorklogTimerState();
+      applyWorklogTimerUi();
+    }
+
+    function saveWorklogForCurrentItem() {
+      var itemId = Number(worklogTimerState.itemId || 0);
+      if (!itemId) {
+        return;
+      }
+
+      var totalSeconds = currentWorklogSeconds();
+      if (totalSeconds <= 0) {
+        notify("No time to save yet.");
+        return;
+      }
+
+      postAction(
+        {
+          task_action: "save_item_worklog",
+          item_id: itemId,
+          duration_seconds: totalSeconds,
+        },
+        function (res) {
+          var timeTrackingText = String(
+            (res && res.time_tracking) || "",
+          ).trim();
+          renderDetailTimeTracking(
+            timeTrackingText,
+            Number($("#taskItemDetailEstimateValueInput").val() || 0),
+            String($("#taskItemDetailEstimateUnitInput").val() || "minutes"),
+          );
+
+          worklogTimerState.elapsedSeconds = 0;
+          worklogTimerState.running = false;
+          worklogTimerState.startedAtMs = 0;
+          persistWorklogTimerState();
+          applyWorklogTimerUi();
+
+          if (itemDetailModalState.itemId === itemId) {
+            loadItemHistory(itemId);
+          }
+
+          showBoardToast(
+            "Work log saved",
+            "Time tracking was updated successfully.",
+          );
+        },
+      );
+    }
+
+    function normalizeIdList(list) {
+      return (Array.isArray(list) ? list : [])
+        .map(function (value) {
+          return Number(value || 0);
+        })
+        .filter(function (value) {
+          return value > 0;
+        })
+        .filter(function (value, index, source) {
+          return source.indexOf(value) === index;
+        })
+        .sort(function (a, b) {
+          return a - b;
+        });
+    }
+
+    function normalizePriorityList(list) {
+      var allowed = taskPriorityValues.slice();
+      return (Array.isArray(list) ? list : [])
+        .map(function (value) {
+          return String(value || "").trim();
+        })
+        .filter(function (value) {
+          return allowed.indexOf(value) !== -1;
+        })
+        .filter(function (value, index, source) {
+          return source.indexOf(value) === index;
+        });
+    }
+
+    function resetBoardFilterPartA() {
+      boardFilterState.partA.assignedToMe = false;
+      boardFilterState.partA.dueThisWeek = false;
+    }
+
+    function resetBoardFilterPartB() {
+      boardFilterState.partB.dateStart = "";
+      boardFilterState.partB.dateDue = "";
+      boardFilterState.partB.assigneeIds = [];
+      boardFilterState.partB.createdFrom = "";
+      boardFilterState.partB.createdTo = "";
+      boardFilterState.partB.labelIds = [];
+      boardFilterState.partB.parentIds = [];
+      boardFilterState.partB.priorityValues = [];
+      boardFilterState.partB.reporterIds = [];
+      boardFilterState.partB.statusIds = [];
+      boardFilterState.partB.updatedFrom = "";
+      boardFilterState.partB.updatedTo = "";
+      boardFilterState.partB.workTypeIds = [];
+      boardFilterState.search.label = "";
+      boardFilterState.search.parent = "";
+    }
+
+    function hasPartASelection() {
+      return !!(
+        boardFilterState.partA.assignedToMe ||
+        boardFilterState.partA.dueThisWeek
+      );
+    }
+
+    function hasPartBSelection() {
+      return !!(
+        boardFilterState.partB.dateStart ||
+        boardFilterState.partB.dateDue ||
+        boardFilterState.partB.assigneeIds.length ||
+        boardFilterState.partB.createdFrom ||
+        boardFilterState.partB.createdTo ||
+        boardFilterState.partB.labelIds.length ||
+        boardFilterState.partB.parentIds.length ||
+        boardFilterState.partB.priorityValues.length ||
+        boardFilterState.partB.reporterIds.length ||
+        boardFilterState.partB.statusIds.length ||
+        boardFilterState.partB.updatedFrom ||
+        boardFilterState.partB.updatedTo ||
+        boardFilterState.partB.workTypeIds.length
+      );
+    }
+
+    function syncBoardFilterActivePart() {
+      if (hasPartASelection()) {
+        boardFilterState.activePart = "A";
+        resetBoardFilterPartB();
+        return;
+      }
+
+      if (hasPartBSelection()) {
+        boardFilterState.activePart = "B";
+        resetBoardFilterPartA();
+        return;
+      }
+
+      boardFilterState.activePart = "none";
+    }
+
+    function boardFilterCookieValue() {
+      return {
+        activePart: boardFilterState.activePart,
+        partA: {
+          assignedToMe: !!boardFilterState.partA.assignedToMe,
+          dueThisWeek: !!boardFilterState.partA.dueThisWeek,
+        },
+        partB: {
+          dateStart: String(boardFilterState.partB.dateStart || ""),
+          dateDue: String(boardFilterState.partB.dateDue || ""),
+          assigneeIds: normalizeIdList(boardFilterState.partB.assigneeIds),
+          createdFrom: String(boardFilterState.partB.createdFrom || ""),
+          createdTo: String(boardFilterState.partB.createdTo || ""),
+          labelIds: normalizeIdList(boardFilterState.partB.labelIds),
+          parentIds: normalizeIdList(boardFilterState.partB.parentIds),
+          priorityValues: normalizePriorityList(
+            boardFilterState.partB.priorityValues,
+          ),
+          reporterIds: normalizeIdList(boardFilterState.partB.reporterIds),
+          statusIds: normalizeIdList(boardFilterState.partB.statusIds),
+          updatedFrom: String(boardFilterState.partB.updatedFrom || ""),
+          updatedTo: String(boardFilterState.partB.updatedTo || ""),
+          workTypeIds: normalizeIdList(boardFilterState.partB.workTypeIds),
+        },
+      };
+    }
+
+    function setCookieValue(name, value, days) {
+      var expireDate = new Date();
+      expireDate.setTime(expireDate.getTime() + Number(days || 30) * 86400000);
+      document.cookie =
+        name +
+        "=" +
+        encodeURIComponent(value) +
+        "; expires=" +
+        expireDate.toUTCString() +
+        "; path=/";
+    }
+
+    function getCookieValue(name) {
+      var source = String(document.cookie || "").split(";");
+      for (var i = 0; i < source.length; i++) {
+        var part = String(source[i] || "").trim();
+        if (!part || part.indexOf(name + "=") !== 0) {
+          continue;
+        }
+
+        return decodeURIComponent(part.substring(name.length + 1));
+      }
+
+      return "";
+    }
+
+    function saveBoardFiltersToCookie() {
+      try {
+        setCookieValue(
+          boardFilterCookieName,
+          JSON.stringify(boardFilterCookieValue()),
+          30,
+        );
+      } catch (e) {}
+    }
+
+    function loadBoardFiltersFromCookie() {
+      try {
+        var raw = getCookieValue(boardFilterCookieName);
+        if (!raw) {
+          return;
+        }
+
+        var parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object") {
+          return;
+        }
+
+        var partA =
+          parsed.partA && typeof parsed.partA === "object" ? parsed.partA : {};
+        var partB =
+          parsed.partB && typeof parsed.partB === "object" ? parsed.partB : {};
+
+        boardFilterState.activePart =
+          parsed.activePart === "A" || parsed.activePart === "B"
+            ? parsed.activePart
+            : "none";
+
+        boardFilterState.partA.assignedToMe = !!partA.assignedToMe;
+        boardFilterState.partA.dueThisWeek = !!partA.dueThisWeek;
+
+        boardFilterState.partB.dateStart = String(partB.dateStart || "");
+        boardFilterState.partB.dateDue = String(partB.dateDue || "");
+        boardFilterState.partB.assigneeIds = normalizeIdList(partB.assigneeIds);
+        boardFilterState.partB.createdFrom = String(partB.createdFrom || "");
+        boardFilterState.partB.createdTo = String(partB.createdTo || "");
+        boardFilterState.partB.labelIds = normalizeIdList(partB.labelIds);
+        boardFilterState.partB.parentIds = normalizeIdList(partB.parentIds);
+        boardFilterState.partB.priorityValues = normalizePriorityList(
+          partB.priorityValues,
+        );
+        boardFilterState.partB.reporterIds = normalizeIdList(partB.reporterIds);
+        boardFilterState.partB.statusIds = normalizeIdList(partB.statusIds);
+        boardFilterState.partB.updatedFrom = String(partB.updatedFrom || "");
+        boardFilterState.partB.updatedTo = String(partB.updatedTo || "");
+        boardFilterState.partB.workTypeIds = normalizeIdList(partB.workTypeIds);
+      } catch (e) {}
+
+      syncBoardFilterActivePart();
+    }
+
+    function normalizeBoardViewFieldState(raw) {
+      var normalized = $.extend({}, boardViewFieldDefaults);
+      if (!raw || typeof raw !== "object") {
+        return normalized;
+      }
+
+      for (var key in boardViewFieldDefaults) {
+        if (
+          !Object.prototype.hasOwnProperty.call(boardViewFieldDefaults, key)
+        ) {
+          continue;
+        }
+
+        if (Object.prototype.hasOwnProperty.call(raw, key)) {
+          normalized[key] = !!raw[key];
+        }
+      }
+
+      return normalized;
+    }
+
+    function saveBoardViewFieldsToCookie() {
+      try {
+        setCookieValue(
+          boardViewFieldCookieName,
+          JSON.stringify(normalizeBoardViewFieldState(boardViewFieldState)),
+          30,
+        );
+      } catch (e) {}
+    }
+
+    function loadBoardViewFieldsFromCookie() {
+      try {
+        var raw = getCookieValue(boardViewFieldCookieName);
+        if (!raw) {
+          boardViewFieldState = normalizeBoardViewFieldState({});
+          return;
+        }
+
+        var parsed = JSON.parse(raw);
+        boardViewFieldState = normalizeBoardViewFieldState(parsed);
+      } catch (e) {
+        boardViewFieldState = normalizeBoardViewFieldState({});
+      }
+    }
+
+    function normalizeBoardGroupBy(value) {
+      var mode = String(value || "status")
+        .trim()
+        .toLowerCase();
+      if (mode === "assignee" || mode === "priority") {
+        return mode;
+      }
+      return "status";
+    }
+
+    function boardGroupLabel(mode) {
+      var normalized = normalizeBoardGroupBy(mode);
+      if (normalized === "assignee") {
+        return "Assignee";
+      }
+      if (normalized === "priority") {
+        return "Priority";
+      }
+      return "Status";
+    }
+
+    function getBoardGroupBy() {
+      return normalizeBoardGroupBy(boardGroupBy);
+    }
+
+    function setBoardGroupBy(value, persist) {
+      boardGroupBy = normalizeBoardGroupBy(value);
+      if (persist !== false) {
+        saveBoardGroupToCookie();
+      }
+    }
+
+    function isBoardGroupedByStatus() {
+      return getBoardGroupBy() === "status";
+    }
+
+    function saveBoardGroupToCookie() {
+      try {
+        setCookieValue(
+          boardGroupCookieName,
+          JSON.stringify({ groupBy: getBoardGroupBy() }),
+          30,
+        );
+      } catch (e) {}
+    }
+
+    function loadBoardGroupFromCookie() {
+      try {
+        var raw = getCookieValue(boardGroupCookieName);
+        if (!raw) {
+          boardGroupBy = "status";
+          return;
+        }
+
+        var parsed = JSON.parse(raw);
+        if (!parsed || typeof parsed !== "object") {
+          boardGroupBy = "status";
+          return;
+        }
+
+        boardGroupBy = normalizeBoardGroupBy(parsed.groupBy);
+      } catch (e) {
+        boardGroupBy = "status";
+      }
+    }
+
+    function normalizeStatusColumnMeta(raw) {
+      var item = raw && typeof raw === "object" ? raw : {};
+      return {
+        id: Number(item.id || 0),
+        name: String(item.name || "").trim() || "Untitled",
+      };
+    }
+
+    function setBoardStatusColumns(columns) {
+      var source = Array.isArray(columns) ? columns : [];
+      var next = [];
+      var seen = {};
+
+      for (var i = 0; i < source.length; i++) {
+        var normalized = normalizeStatusColumnMeta(source[i]);
+        if (normalized.id <= 0 || seen[normalized.id]) {
+          continue;
+        }
+        seen[normalized.id] = true;
+        next.push(normalized);
+      }
+
+      boardStatusColumns = next;
+    }
+
+    function getBoardStatusColumns() {
+      return boardStatusColumns.slice();
+    }
+
+    function getBoardStatusColumnName(columnId) {
+      var id = Number(columnId || 0);
+      if (id <= 0) {
+        return "";
+      }
+
+      for (var i = 0; i < boardStatusColumns.length; i++) {
+        var col = boardStatusColumns[i] || {};
+        if (Number(col.id || 0) === id) {
+          return String(col.name || "").trim();
+        }
+      }
+
+      return "";
+    }
+
+    function captureBoardStatusColumnsFromDom() {
+      var cols = [];
+      $app.find(".task-column").each(function () {
+        var $column = $(this);
+        var columnId = Number($column.attr("data-column-id") || 0);
+        if (columnId <= 0) {
+          return;
+        }
+
+        var title = String(
+          $column.find(".task-column-title").first().text() || "",
+        ).trim();
+
+        cols.push({
+          id: columnId,
+          name: title || "Untitled",
+        });
+      });
+
+      setBoardStatusColumns(cols);
+    }
+
+    function upsertBoardStatusColumn(columnId, columnName) {
+      var id = Number(columnId || 0);
+      if (id <= 0) {
+        return;
+      }
+
+      var name = String(columnName || "").trim() || "Untitled";
+      var found = false;
+
+      for (var i = 0; i < boardStatusColumns.length; i++) {
+        var col = boardStatusColumns[i] || {};
+        if (Number(col.id || 0) !== id) {
+          continue;
+        }
+        boardStatusColumns[i] = { id: id, name: name };
+        found = true;
+        break;
+      }
+
+      if (!found) {
+        boardStatusColumns.push({ id: id, name: name });
+      }
+    }
+
+    function removeBoardStatusColumnById(columnId) {
+      var id = Number(columnId || 0);
+      if (id <= 0) {
+        return;
+      }
+
+      boardStatusColumns = boardStatusColumns.filter(function (col) {
+        return Number((col && col.id) || 0) !== id;
+      });
+    }
+
+    function moveBoardStatusColumn(columnId, direction) {
+      var id = Number(columnId || 0);
+      var dir = String(direction || "").trim().toLowerCase();
+      if (id <= 0 || (dir !== "left" && dir !== "right")) {
+        return;
+      }
+
+      var index = -1;
+      for (var i = 0; i < boardStatusColumns.length; i++) {
+        if (Number((boardStatusColumns[i] && boardStatusColumns[i].id) || 0) === id) {
+          index = i;
+          break;
+        }
+      }
+
+      if (index === -1) {
+        return;
+      }
+
+      if (dir === "left" && index > 0) {
+        var prev = boardStatusColumns[index - 1];
+        boardStatusColumns[index - 1] = boardStatusColumns[index];
+        boardStatusColumns[index] = prev;
+      } else if (dir === "right" && index < boardStatusColumns.length - 1) {
+        var next = boardStatusColumns[index + 1];
+        boardStatusColumns[index + 1] = boardStatusColumns[index];
+        boardStatusColumns[index] = next;
+      }
+    }
+
+    function setCardStatusColumn($card, columnId, columnName) {
+      if (!$card || !$card.length) {
+        return;
+      }
+
+      var id = Number(columnId || 0);
+      var name = String(columnName || "").trim();
+
+      if (id > 0) {
+        $card.attr("data-status-column-id", id);
+      }
+
+      if (name) {
+        $card.attr("data-status-column-name", name);
+      }
+    }
+
+    function syncCardStatusMeta($card, force) {
+      if (!$card || !$card.length) {
+        return;
+      }
+
+      var existingId = Number($card.attr("data-status-column-id") || 0);
+      var shouldSync = !!force || existingId <= 0;
+      if (!shouldSync) {
+        return;
+      }
+
+      var $column = $card.closest(".task-column");
+      var columnId = Number($column.attr("data-column-id") || 0);
+      if (columnId <= 0) {
+        return;
+      }
+
+      var columnName = String(
+        $column.find(".task-column-title").first().text() || "",
+      ).trim();
+      setCardStatusColumn($card, columnId, columnName);
+    }
+
+    function getCardStatusColumnId($card) {
+      if (!$card || !$card.length) {
+        return 0;
+      }
+
+      var fromAttr = Number($card.attr("data-status-column-id") || 0);
+      if (fromAttr > 0) {
+        return fromAttr;
+      }
+
+      var fromColumn = Number(
+        $card.closest(".task-column").attr("data-column-id") || 0,
+      );
+      if (fromColumn > 0) {
+        return fromColumn;
+      }
+
+      return 0;
+    }
+
+    function isBoardViewFieldEnabled(fieldKey) {
+      var key = String(fieldKey || "").trim();
+      if (!key) {
+        return false;
+      }
+
+      return !!boardViewFieldState[key];
+    }
+
+    function syncBoardViewSettingsCheckboxes() {
+      $(".task-board-view-field-checkbox").each(function () {
+        var key = String($(this).attr("data-field-key") || "").trim();
+        if (!key) {
+          return;
+        }
+
+        $(this).prop("checked", isBoardViewFieldEnabled(key));
+      });
+    }
+
+    function parseCardDate(value) {
+      var text = String(value || "").trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+        return 0;
+      }
+
+      var parts = text.split("-");
+      var year = Number(parts[0] || 0);
+      var month = Number(parts[1] || 0);
+      var day = Number(parts[2] || 0);
+      if (!year || !month || !day) {
+        return 0;
+      }
+
+      return new Date(year, month - 1, day).getTime();
+    }
+
+    function withinDateRange(valueDate, fromDate, toDate) {
+      var valueMs = parseCardDate(valueDate);
+      if (!valueMs) {
+        return false;
+      }
+
+      var fromMs = parseCardDate(fromDate);
+      var toMs = parseCardDate(toDate);
+      if (fromMs && valueMs < fromMs) {
+        return false;
+      }
+      if (toMs && valueMs > toMs) {
+        return false;
+      }
+
+      return true;
+    }
+
+    function isDateInCurrentWeek(valueDate) {
+      var valueMs = parseCardDate(valueDate);
+      if (!valueMs) {
+        return false;
+      }
+
+      var now = new Date();
+      var dayIndex = (now.getDay() + 6) % 7;
+      var weekStart = new Date(
+        now.getFullYear(),
+        now.getMonth(),
+        now.getDate() - dayIndex,
+      );
+      weekStart.setHours(0, 0, 0, 0);
+
+      var weekEnd = new Date(weekStart.getTime());
+      weekEnd.setDate(weekEnd.getDate() + 6);
+      weekEnd.setHours(23, 59, 59, 999);
+
+      return valueMs >= weekStart.getTime() && valueMs <= weekEnd.getTime();
+    }
+
+    function splitIdCsv(value) {
+      return String(value || "")
+        .split(",")
+        .map(function (part) {
+          return Number(String(part || "").trim() || 0);
+        })
+        .filter(function (id) {
+          return id > 0;
+        });
+    }
+
+    function collectParentOptionsFromCards() {
+      var cardsById = {};
+      var parentIds = {};
+      var options = [];
+
+      $app.find(".task-item-card").each(function () {
+        var $card = $(this);
+        var itemId = Number($card.data("itemId") || 0);
+        if (!itemId) {
+          return;
+        }
+
+        cardsById[itemId] = {
+          id: itemId,
+          key:
+            String($card.attr("data-work-item-key") || "").trim() ||
+            buildWorkItemKey(itemId),
+          title: String($card.find(".task-item-title").text() || "").trim(),
+          isEpic:
+            String($card.attr("data-work-type-name") || "")
+              .trim()
+              .toLowerCase() === "epic",
+        };
+
+        var parentItemId = Number($card.attr("data-parent-item-id") || 0);
+        if (parentItemId > 0) {
+          parentIds[parentItemId] = true;
+        }
+      });
+
+      Object.keys(parentIds).forEach(function (idText) {
+        var id = Number(idText || 0);
+        var parent = cardsById[id];
+        if (!id || !parent || !parent.isEpic) {
+          return;
+        }
+
+        options.push(parent);
+      });
+
+      options.sort(function (a, b) {
+        if (a.id === b.id) {
+          return 0;
+        }
+        return a.id < b.id ? -1 : 1;
+      });
+
+      return options;
+    }
+
+    function collectBoardStatusOptions() {
+      var fromState = getBoardStatusColumns();
+      if (fromState.length) {
+        return fromState;
+      }
+
+      captureBoardStatusColumnsFromDom();
+      return getBoardStatusColumns();
+    }
+
+    function filterSectionCountForPartB() {
+      var count = 0;
+      if (boardFilterState.partB.dateStart || boardFilterState.partB.dateDue) {
+        count++;
+      }
+      if (boardFilterState.partB.assigneeIds.length) {
+        count++;
+      }
+      if (
+        boardFilterState.partB.createdFrom ||
+        boardFilterState.partB.createdTo
+      ) {
+        count++;
+      }
+      if (boardFilterState.partB.labelIds.length) {
+        count++;
+      }
+      if (boardFilterState.partB.parentIds.length) {
+        count++;
+      }
+      if (boardFilterState.partB.priorityValues.length) {
+        count++;
+      }
+      if (boardFilterState.partB.reporterIds.length) {
+        count++;
+      }
+      if (boardFilterState.partB.statusIds.length) {
+        count++;
+      }
+      if (
+        boardFilterState.partB.updatedFrom ||
+        boardFilterState.partB.updatedTo
+      ) {
+        count++;
+      }
+      if (boardFilterState.partB.workTypeIds.length) {
+        count++;
+      }
+      return count;
+    }
+
+    function activeBoardFilterCount() {
+      if (boardFilterState.activePart === "A") {
+        return (
+          (boardFilterState.partA.assignedToMe ? 1 : 0) +
+          (boardFilterState.partA.dueThisWeek ? 1 : 0)
+        );
+      }
+
+      if (boardFilterState.activePart === "B") {
+        return filterSectionCountForPartB();
+      }
+
+      return 0;
+    }
+
+    function boardFilterPriorityIconClass(priority) {
+      var value = String(priority || "").trim();
+      if (value === "Highest") {
+        return "fa-solid fa-angles-up task-priority-highest";
+      }
+      if (value === "High") {
+        return "fa-solid fa-angle-up task-priority-high";
+      }
+      if (value === "Medium") {
+        return "task-priority-medium";
+      }
+      if (value === "Low") {
+        return "fa-solid fa-angle-down task-priority-low";
+      }
+      return "fa-solid fa-angles-down task-priority-lowest";
+    }
+
+    function boardFilterMenuHtml() {
+      return (
+        '<div class="task-board-filter-panel">' +
+        '<div class="task-board-filter-head"><span class="task-board-filter-head-title">FILTERS</span><button id="taskBoardFilterClearBtn" type="button" class="btn task-board-filter-clear-btn d-none">Clear</button></div>' +
+        '<div class="task-board-filter-fixed">' +
+        '<button id="taskBoardFilterPartAAssigned" type="button" class="btn task-board-filter-quick-btn"><i class="fa-regular fa-user"></i><span>Assigned to me</span><i class="fa-solid fa-check task-board-filter-quick-check"></i></button>' +
+        '<button id="taskBoardFilterPartADueWeek" type="button" class="btn task-board-filter-quick-btn"><i class="fa-regular fa-calendar"></i><span>Due this week</span><i class="fa-solid fa-check task-board-filter-quick-check"></i></button>' +
+        "</div>" +
+        '<div class="task-board-filter-scroll">' +
+        '<div class="task-board-filter-block"><label class="task-board-filter-label">Date range</label><div class="task-board-filter-date-grid"><div class="task-board-filter-date-col"><span>Start date</span><div class="task-board-filter-date-wrap"><input id="taskBoardFilterDateStart" type="date" class="form-control form-control-sm"><button type="button" class="btn task-board-filter-date-clear d-none" data-target-input="#taskBoardFilterDateStart"><i class="fa-solid fa-xmark"></i></button></div></div><div class="task-board-filter-date-arrow"><i class="fa-solid fa-arrow-right"></i></div><div class="task-board-filter-date-col"><span>Due date</span><div class="task-board-filter-date-wrap"><input id="taskBoardFilterDateDue" type="date" class="form-control form-control-sm"><button type="button" class="btn task-board-filter-date-clear d-none" data-target-input="#taskBoardFilterDateDue"><i class="fa-solid fa-xmark"></i></button></div></div></div></div>' +
+        '<div class="task-board-filter-block"><label class="task-board-filter-label">Assignee</label><div id="taskBoardFilterAssigneeList" class="task-board-filter-avatar-grid"></div></div>' +
+        '<div class="task-board-filter-block"><label class="task-board-filter-label">Created</label><div class="task-board-filter-date-grid task-board-filter-created-grid"><div class="task-board-filter-date-col"><span>From</span><div class="task-board-filter-date-wrap"><input id="taskBoardFilterCreatedFrom" type="date" class="form-control form-control-sm"><button type="button" class="btn task-board-filter-date-clear d-none" data-target-input="#taskBoardFilterCreatedFrom"><i class="fa-solid fa-xmark"></i></button></div></div><div class="task-board-filter-date-arrow"><i class="fa-solid fa-arrow-right"></i></div><div class="task-board-filter-date-col"><span>To</span><div class="task-board-filter-date-wrap"><input id="taskBoardFilterCreatedTo" type="date" class="form-control form-control-sm"><button type="button" class="btn task-board-filter-date-clear d-none" data-target-input="#taskBoardFilterCreatedTo"><i class="fa-solid fa-xmark"></i></button></div></div></div></div>' +
+        '<div class="task-board-filter-block task-board-filter-block-labels"><label class="task-board-filter-label">Labels</label><div id="taskBoardFilterLabelChips" class="task-board-filter-chip-list task-board-filter-chip-list-label"></div><button id="taskBoardFilterLabelSearchToggle" type="button" class="btn task-board-filter-search-toggle task-board-filter-overflow-toggle d-none">...</button><div id="taskBoardFilterLabelSearchPanel" class="task-board-filter-search-panel d-none"><div class="task-board-filter-search-input-wrap"><i class="fa-solid fa-magnifying-glass"></i><input id="taskBoardFilterLabelSearchInput" type="text" class="form-control form-control-sm" placeholder="Search labels"></div><div id="taskBoardFilterLabelSearchList" class="task-board-filter-search-list"></div></div></div>' +
+        '<div class="task-board-filter-block task-board-filter-block-parent"><label class="task-board-filter-label">Parent</label><div id="taskBoardFilterParentChips" class="task-board-filter-chip-list task-board-filter-chip-list-parent"></div><button id="taskBoardFilterParentSearchToggle" type="button" class="btn task-board-filter-search-toggle task-board-filter-overflow-toggle d-none">...</button><div id="taskBoardFilterParentSearchPanel" class="task-board-filter-search-panel d-none"><div class="task-board-filter-search-input-wrap"><i class="fa-solid fa-magnifying-glass"></i><input id="taskBoardFilterParentSearchInput" type="text" class="form-control form-control-sm" placeholder="Search parent"></div><div id="taskBoardFilterParentSearchList" class="task-board-filter-search-list"></div></div></div>' +
+        '<div class="task-board-filter-block"><label class="task-board-filter-label">Priority</label><div id="taskBoardFilterPriorityList" class="task-board-filter-priority-row"></div></div>' +
+        '<div class="task-board-filter-block"><label class="task-board-filter-label">Reporter</label><div id="taskBoardFilterReporterList" class="task-board-filter-avatar-grid"></div></div>' +
+        '<div class="task-board-filter-block"><label class="task-board-filter-label">Status</label><div id="taskBoardFilterStatusList" class="task-board-filter-status-list"></div></div>' +
+        '<div class="task-board-filter-block"><label class="task-board-filter-label">Updated</label><div class="task-board-filter-date-grid task-board-filter-updated-grid"><div class="task-board-filter-date-col"><span>From</span><div class="task-board-filter-date-wrap"><input id="taskBoardFilterUpdatedFrom" type="date" class="form-control form-control-sm"><button type="button" class="btn task-board-filter-date-clear d-none" data-target-input="#taskBoardFilterUpdatedFrom"><i class="fa-solid fa-xmark"></i></button></div></div><div class="task-board-filter-date-arrow"><i class="fa-solid fa-arrow-right"></i></div><div class="task-board-filter-date-col"><span>To</span><div class="task-board-filter-date-wrap"><input id="taskBoardFilterUpdatedTo" type="date" class="form-control form-control-sm"><button type="button" class="btn task-board-filter-date-clear d-none" data-target-input="#taskBoardFilterUpdatedTo"><i class="fa-solid fa-xmark"></i></button></div></div></div></div>' +
+        '<div class="task-board-filter-block"><label class="task-board-filter-label">Work type</label><div id="taskBoardFilterWorkTypeList" class="task-board-filter-chip-list"></div></div>' +
+        "</div></div>"
+      );
+    }
+
+    function ensureBoardFilterMenu() {
+      var $menu = $("#taskBoardFilterMenu");
+      if (!$menu.length || $menu.children().length) {
+        return;
+      }
+
+      $menu.html(boardFilterMenuHtml());
+    }
+
+    function assigneeById(userId) {
+      var id = Number(userId || 0);
+      for (var i = 0; i < state.assignees.length; i++) {
+        var item = state.assignees[i] || {};
+        if (Number(item.id || 0) === id) {
+          return item;
+        }
+      }
+      return null;
+    }
+
+    function renderBoardFilterAssigneeSummary() {
+      var $wrap = $("#taskBoardFilterSelectedAssignees");
+      if (!$wrap.length) {
+        return;
+      }
+
+      var html = "";
+      if (
+        boardFilterState.activePart === "A" &&
+        boardFilterState.partA.assignedToMe &&
+        currentUserId > 0
+      ) {
+        var me = assigneeById(currentUserId);
+        var meName = me && me.name ? String(me.name) : "Me";
+        html +=
+          '<span class="task-board-filter-avatar-pill" title="Assigned to me">' +
+          escHtml(initials(meName)) +
+          "</span>";
+      }
+
+      if (
+        boardFilterState.activePart === "B" &&
+        boardFilterState.partB.assigneeIds.length
+      ) {
+        for (var i = 0; i < boardFilterState.partB.assigneeIds.length; i++) {
+          var user = assigneeById(boardFilterState.partB.assigneeIds[i]);
+          var name = user && user.name ? String(user.name) : "U";
+          html +=
+            '<span class="task-board-filter-avatar-pill" title="' +
+            escHtml(name) +
+            '">' +
+            escHtml(initials(name)) +
+            "</span>";
+        }
+      }
+
+      $wrap.html(html).toggleClass("d-none", !html);
+    }
+
+    function renderBoardFilterAvatarGrid(
+      containerSelector,
+      selectedIds,
+      dataRole,
+    ) {
+      var $container = $(containerSelector);
+      if (!$container.length) {
+        return;
+      }
+
+      var selected = normalizeIdList(selectedIds);
+      var html =
+        '<button type="button" class="btn task-board-filter-avatar-option ' +
+        (selected.indexOf(0) !== -1 ? "active" : "") +
+        '" data-role="' +
+        escHtml(dataRole) +
+        '" data-user-id="0" title="Unassigned"><i class="fa-regular fa-user"></i></button>';
+
+      for (var i = 0; i < state.assignees.length; i++) {
+        var item = state.assignees[i] || {};
+        var userId = Number(item.id || 0);
+        var userName = String(item.name || "").trim();
+        if (!userId || !userName) {
+          continue;
+        }
+
+        html +=
+          '<button type="button" class="btn task-board-filter-avatar-option ' +
+          (selected.indexOf(userId) !== -1 ? "active" : "") +
+          '" data-role="' +
+          escHtml(dataRole) +
+          '" data-user-id="' +
+          userId +
+          '" title="' +
+          escHtml(userName) +
+          '">' +
+          escHtml(initials(userName)) +
+          "</button>";
+      }
+
+      $container.html(html);
+    }
+
+    function renderBoardFilterPriorityOptions() {
+      var $container = $("#taskBoardFilterPriorityList");
+      if (!$container.length) {
+        return;
+      }
+
+      var selected = normalizePriorityList(
+        boardFilterState.partB.priorityValues,
+      );
+      var html = "";
+      for (var i = 0; i < taskPriorityValues.length; i++) {
+        var value = taskPriorityValues[i];
+        html +=
+          '<button type="button" class="btn task-board-filter-priority-btn ' +
+          (selected.indexOf(value) !== -1 ? "active" : "") +
+          '" data-priority-value="' +
+          escHtml(value) +
+          '" title="' +
+          escHtml(value) +
+          '">' +
+          priorityIconGlyphHtml(value) +
+          "</button>";
+      }
+
+      $container.html(html);
+    }
+
+    function renderBoardFilterStatusOptions() {
+      var $container = $("#taskBoardFilterStatusList");
+      if (!$container.length) {
+        return;
+      }
+
+      var selected = normalizeIdList(boardFilterState.partB.statusIds);
+      var statusOptions = collectBoardStatusOptions();
+      var html = "";
+      for (var i = 0; i < statusOptions.length; i++) {
+        var item = statusOptions[i] || {};
+        var statusId = Number(item.id || 0);
+        var statusName = String(item.name || "").trim();
+        if (!statusId || !statusName) {
+          continue;
+        }
+
+        html +=
+          '<label class="task-board-filter-status-option ' +
+          (selected.indexOf(statusId) !== -1 ? "active" : "") +
+          '"><input class="task-board-filter-status-checkbox" type="checkbox" value="' +
+          statusId +
+          '"' +
+          (selected.indexOf(statusId) !== -1 ? " checked" : "") +
+          "><span>" +
+          escHtml(statusName) +
+          "</span></label>";
+      }
+
+      $container.html(
+        html || '<div class="task-board-filter-empty">No status</div>',
+      );
+    }
+
+    function renderBoardFilterWorkTypeOptions() {
+      var $container = $("#taskBoardFilterWorkTypeList");
+      if (!$container.length) {
+        return;
+      }
+
+      var selected = normalizeIdList(boardFilterState.partB.workTypeIds);
+      var html = "";
+      for (var i = 0; i < state.workTypes.length; i++) {
+        var item = normalizeWorkTypeEntry(state.workTypes[i]);
+        var workTypeId = Number(item.id || 0);
+        if (!workTypeId) {
+          continue;
+        }
+
+        html +=
+          '<button type="button" class="btn task-board-filter-chip ' +
+          (selected.indexOf(workTypeId) !== -1 ? "active" : "") +
+          '" data-work-type-id="' +
+          workTypeId +
+          '">' +
+          workTypeIconHtml(
+            item.svg_icon,
+            item.name,
+            "task-board-filter-work-type-icon",
+          ) +
+          '<span class="task-board-filter-work-type-name">' +
+          escHtml(item.name || "Task") +
+          "</span>" +
+          "</button>";
+      }
+
+      $container.html(html);
+    }
+
+    function renderBoardFilterLabelChips() {
+      var $container = $("#taskBoardFilterLabelChips");
+      if (!$container.length) {
+        return;
+      }
+
+      var selected = normalizeIdList(boardFilterState.partB.labelIds);
+      var maxVisible = 6;
+      var visibleSelected = selected.slice(0, maxVisible);
+      var html = "";
+      for (var i = 0; i < visibleSelected.length; i++) {
+        var selectedId = visibleSelected[i];
+        var label = null;
+        for (var j = 0; j < state.labels.length; j++) {
+          var candidate = state.labels[j] || {};
+          if (Number(candidate.id || 0) === selectedId) {
+            label = candidate;
+            break;
+          }
+        }
+        if (!label) {
+          continue;
+        }
+
+        html +=
+          '<button type="button" class="btn task-board-filter-chip active" data-remove-label-id="' +
+          selectedId +
+          '">' +
+          escHtml(String(label.name || "")) +
+          "</button>";
+      }
+
+      if (!html) {
+        html =
+          '<span class="task-board-filter-chip-placeholder">No labels selected</span>';
+      }
+
+      $container.html(html);
+      $("#taskBoardFilterLabelSearchToggle").toggleClass(
+        "d-none",
+        selected.length <= maxVisible,
+      );
+    }
+
+    function renderBoardFilterParentChips() {
+      var $container = $("#taskBoardFilterParentChips");
+      if (!$container.length) {
+        return;
+      }
+
+      var selected = normalizeIdList(boardFilterState.partB.parentIds);
+      var options = collectParentOptionsFromCards();
+      var maxVisible = 4;
+      var visibleSelected = selected.slice(0, maxVisible);
+      var html = "";
+      for (var i = 0; i < visibleSelected.length; i++) {
+        var id = visibleSelected[i];
+        var found = null;
+        for (var j = 0; j < options.length; j++) {
+          if (options[j].id === id) {
+            found = options[j];
+            break;
+          }
+        }
+
+        var text = found ? found.key : buildWorkItemKey(id);
+        html +=
+          '<button type="button" class="btn task-board-filter-chip active" data-remove-parent-id="' +
+          id +
+          '">' +
+          escHtml(text || "Item #" + id) +
+          "</button>";
+      }
+
+      if (!html) {
+        html =
+          '<span class="task-board-filter-chip-placeholder">No parent selected</span>';
+      }
+
+      $container.html(html);
+      $("#taskBoardFilterParentSearchToggle").toggleClass(
+        "d-none",
+        selected.length <= maxVisible,
+      );
+    }
+
+    function renderBoardFilterLabelSearchList() {
+      var $list = $("#taskBoardFilterLabelSearchList");
+      if (!$list.length) {
+        return;
+      }
+
+      var keyword = String(boardFilterState.search.label || "")
+        .trim()
+        .toLowerCase();
+      var selected = normalizeIdList(boardFilterState.partB.labelIds);
+      var html = "";
+
+      for (var i = 0; i < state.labels.length; i++) {
+        var label = state.labels[i] || {};
+        var labelId = Number(label.id || 0);
+        var labelName = String(label.name || "").trim();
+        if (!labelId || !labelName) {
+          continue;
+        }
+
+        if (keyword && labelName.toLowerCase().indexOf(keyword) === -1) {
+          continue;
+        }
+
+        html +=
+          '<label class="task-board-filter-search-option"><input type="checkbox" class="task-board-filter-label-checkbox" value="' +
+          labelId +
+          '"' +
+          (selected.indexOf(labelId) !== -1 ? " checked" : "") +
+          "><span>" +
+          escHtml(labelName) +
+          "</span></label>";
+      }
+
+      $list.html(
+        html || '<div class="task-board-filter-empty">No labels found.</div>',
+      );
+    }
+
+    function renderBoardFilterParentSearchList() {
+      var $list = $("#taskBoardFilterParentSearchList");
+      if (!$list.length) {
+        return;
+      }
+
+      var keyword = String(boardFilterState.search.parent || "")
+        .trim()
+        .toLowerCase();
+      var selected = normalizeIdList(boardFilterState.partB.parentIds);
+      var options = collectParentOptionsFromCards();
+      var html = "";
+
+      for (var i = 0; i < options.length; i++) {
+        var item = options[i] || {};
+        var text = String(item.key || "").trim();
+        var title = String(item.title || "").trim();
+        var searchText = (text + " " + title).toLowerCase();
+        if (keyword && searchText.indexOf(keyword) === -1) {
+          continue;
+        }
+
+        html +=
+          '<label class="task-board-filter-search-option"><input type="checkbox" class="task-board-filter-parent-checkbox" value="' +
+          Number(item.id || 0) +
+          '"' +
+          (selected.indexOf(Number(item.id || 0)) !== -1 ? " checked" : "") +
+          "><span>" +
+          escHtml(text || "Item #" + item.id) +
+          "</span></label>";
+      }
+
+      $list.html(
+        html ||
+          '<div class="task-board-filter-empty">No parent items found.</div>',
+      );
+    }
+
+    function updateBoardFilterDateInputs() {
+      $("#taskBoardFilterDateStart").val(
+        boardFilterState.partB.dateStart || "",
+      );
+      $("#taskBoardFilterDateDue").val(boardFilterState.partB.dateDue || "");
+      $("#taskBoardFilterCreatedFrom").val(
+        boardFilterState.partB.createdFrom || "",
+      );
+      $("#taskBoardFilterCreatedTo").val(
+        boardFilterState.partB.createdTo || "",
+      );
+      $("#taskBoardFilterUpdatedFrom").val(
+        boardFilterState.partB.updatedFrom || "",
+      );
+      $("#taskBoardFilterUpdatedTo").val(
+        boardFilterState.partB.updatedTo || "",
+      );
+
+      $(".task-board-filter-date-clear").each(function () {
+        var target = String($(this).data("targetInput") || "");
+        if (!target) {
+          return;
+        }
+
+        var hasValue = String($(target).val() || "").trim() !== "";
+        $(this).toggleClass("d-none", !hasValue);
+      });
+    }
+
+    function updateBoardFilterButtons() {
+      var count = activeBoardFilterCount();
+      var $countBadge = $("#taskBoardFilterCountBadge");
+      $countBadge.text(String(count)).toggleClass("d-none", count <= 0);
+
+      $("#taskBoardFilterPartAAssigned").toggleClass(
+        "active",
+        !!boardFilterState.partA.assignedToMe,
+      );
+      $("#taskBoardFilterPartADueWeek").toggleClass(
+        "active",
+        !!boardFilterState.partA.dueThisWeek,
+      );
+
+      $("#taskBoardFilterClearBtn").toggleClass("d-none", count <= 0);
+      $("#taskBoardFilterBtn").toggleClass("active", count > 0);
+    }
+
+    function renderBoardFilterUi() {
+      ensureBoardFilterMenu();
+      updateBoardFilterDateInputs();
+      renderBoardFilterAvatarGrid(
+        "#taskBoardFilterAssigneeList",
+        boardFilterState.partB.assigneeIds,
+        "assignee",
+      );
+      renderBoardFilterAvatarGrid(
+        "#taskBoardFilterReporterList",
+        boardFilterState.partB.reporterIds,
+        "reporter",
+      );
+      renderBoardFilterPriorityOptions();
+      renderBoardFilterStatusOptions();
+      renderBoardFilterWorkTypeOptions();
+      renderBoardFilterLabelChips();
+      renderBoardFilterParentChips();
+      $("#taskBoardFilterLabelSearchInput").val(
+        boardFilterState.search.label || "",
+      );
+      $("#taskBoardFilterParentSearchInput").val(
+        boardFilterState.search.parent || "",
+      );
+      renderBoardFilterLabelSearchList();
+      renderBoardFilterParentSearchList();
+      updateBoardFilterButtons();
+      renderBoardFilterAssigneeSummary();
+    }
+
+    function setBoardFilterPartA(key, enabled) {
+      if (key !== "assignedToMe" && key !== "dueThisWeek") {
+        return;
+      }
+
+      if (enabled) {
+        resetBoardFilterPartB();
+        boardFilterState.activePart = "A";
+      }
+
+      boardFilterState.partA[key] = !!enabled;
+      syncBoardFilterActivePart();
+    }
+
+    function enableBoardFilterPartB() {
+      resetBoardFilterPartA();
+      boardFilterState.activePart = "B";
+    }
+
+    function commitBoardFilters() {
+      syncBoardFilterActivePart();
+      saveBoardFiltersToCookie();
+      renderBoardFilterUi();
+      applyBoardFilters();
+    }
+
+    function cardMatchesPartBFilter($card) {
+      var partB = boardFilterState.partB;
+
+      var assigneeId = Number($card.attr("data-assignee-user-id") || 0);
+      if (
+        partB.assigneeIds.length &&
+        partB.assigneeIds.indexOf(assigneeId) === -1
+      ) {
+        return false;
+      }
+
+      var startDate = String($card.attr("data-start-date") || "").trim();
+      var dueDate = String($card.attr("data-due-date") || "").trim();
+      if (partB.dateStart && startDate !== partB.dateStart) {
+        return false;
+      }
+      if (partB.dateDue && dueDate !== partB.dateDue) {
+        return false;
+      }
+
+      var createdDate = String($card.attr("data-create-date") || "").trim();
+      if (
+        (partB.createdFrom || partB.createdTo) &&
+        !withinDateRange(createdDate, partB.createdFrom, partB.createdTo)
+      ) {
+        return false;
+      }
+
+      var updatedDate = String($card.attr("data-update-date") || "").trim();
+      if (
+        (partB.updatedFrom || partB.updatedTo) &&
+        !withinDateRange(updatedDate, partB.updatedFrom, partB.updatedTo)
+      ) {
+        return false;
+      }
+
+      if (partB.labelIds.length) {
+        var labelIds = splitIdCsv($card.attr("data-label-ids"));
+        var hasLabel = partB.labelIds.some(function (id) {
+          return labelIds.indexOf(id) !== -1;
+        });
+        if (!hasLabel) {
+          return false;
+        }
+      }
+
+      if (partB.parentIds.length) {
+        var parentId = Number($card.attr("data-parent-item-id") || 0);
+        if (partB.parentIds.indexOf(parentId) === -1) {
+          return false;
+        }
+      }
+
+      if (partB.priorityValues.length) {
+        var priority = String($card.attr("data-priority") || "Medium").trim();
+        if (partB.priorityValues.indexOf(priority) === -1) {
+          return false;
+        }
+      }
+
+      if (partB.reporterIds.length) {
+        var reporterId = Number($card.attr("data-reporter-user-id") || 0);
+        if (partB.reporterIds.indexOf(reporterId) === -1) {
+          return false;
+        }
+      }
+
+      if (partB.statusIds.length) {
+        var statusColumnId = getCardStatusColumnId($card);
+        if (partB.statusIds.indexOf(statusColumnId) === -1) {
+          return false;
+        }
+      }
+
+      if (partB.workTypeIds.length) {
+        var workTypeId = Number($card.attr("data-work-type-id") || 0);
+        if (partB.workTypeIds.indexOf(workTypeId) === -1) {
+          return false;
+        }
+      }
+
+      return true;
+    }
+
+    function postAction(payload, onDone, onFail) {
+      if (!ajaxUrl) {
+        notify("Missing ajax endpoint.");
+        if (typeof onFail === "function") {
+          onFail();
+        }
+        return;
+      }
+
+      var requestData = payload || {};
+      if (csrfToken) {
+        if (requestData instanceof FormData) {
+          if (!requestData.has("csrf_token")) {
+            requestData.append("csrf_token", csrfToken);
+          }
+        } else {
+          requestData = $.extend({}, requestData, { csrf_token: csrfToken });
+        }
+      }
+
+      $.ajax({
+        url: ajaxUrl,
+        method: "POST",
+        dataType: "json",
+        data: requestData,
+        timeout: 30000,
+      })
+        .done(function (res) {
+          if (!res || !res.ok) {
+            notify(res && res.message ? res.message : "Request failed.");
+            if (typeof onFail === "function") {
+              onFail(res);
+            }
+            return;
+          }
+
+          if (typeof onDone === "function") {
+            onDone(res);
+          }
+        })
+        .fail(function (xhr) {
+          var recovered = recoverJsonResponse(xhr);
+          if (recovered) {
+            if (!recovered.ok) {
+              notify(
+                recovered.message ? recovered.message : "Request failed.",
+              );
+              if (typeof onFail === "function") {
+                onFail(recovered);
+              }
+              return;
+            }
+
+            if (typeof onDone === "function") {
+              onDone(recovered);
+            }
+            return;
+          }
+
+          var msg = "Request failed.";
+          if (xhr && xhr.status) {
+            msg += " (" + xhr.status + ")";
+          }
+          notify(msg);
+          if (typeof onFail === "function") {
+            onFail();
+          }
+        });
+    }
+
+    function recoverJsonResponse(xhr) {
+      var responseText =
+        xhr && typeof xhr.responseText === "string" ? xhr.responseText : "";
+      if (!responseText || !(xhr && Number(xhr.status || 0) === 200)) {
+        return null;
+      }
+
+      var start = responseText.indexOf("{");
+      var end = responseText.lastIndexOf("}");
+      if (start === -1 || end === -1 || end < start) {
+        return null;
+      }
+
+      try {
+        return JSON.parse(responseText.slice(start, end + 1));
+      } catch (err) {
+        return null;
+      }
+    }
+
+    function workTypeMenuHtml() {
+      var html = "";
+      for (var i = 0; i < state.workTypes.length; i++) {
+        var workType = normalizeWorkTypeEntry(state.workTypes[i]);
+        html +=
+          '<li><a class="dropdown-item task-work-type-option" href="#" data-work-type-id="' +
+          Number(workType.id || 0) +
+          '" data-work-type-name="' +
+          escHtml(workType.name) +
+          '" data-work-type-remark="' +
+          escHtml(workType.remark) +
+          '" data-work-type-icon="' +
+          escHtml(workType.svg_icon) +
+          '">' +
+          workTypeIconHtml(
+            workType.svg_icon,
+            workType.name,
+            "task-work-type-option-icon",
+          ) +
+          " " +
+          escHtml(workType.name || "Task") +
+          "</a></li>";
+      }
+
+      html += '<li><hr class="dropdown-divider"></li>';
+      html +=
+        '<li><a class="dropdown-item task-work-type-action" href="#" data-action="add">Add work type</a></li>';
+      html +=
+        '<li><a class="dropdown-item task-work-type-action" href="#" data-action="edit">Edit work type</a></li>';
+
+      return html;
+    }
+
+    function assigneeMenuHtml() {
+      var html =
+        '<li class="task-assignee-search-wrap px-2 pb-2"><input type="text" class="form-control form-control-sm task-assignee-search-input" placeholder="Search assignee"></li>' +
+        '<li><a class="dropdown-item task-assignee-option" href="#" data-user-id="0" data-user-name="Unassigned"><span class="task-assignee-option-avatar"><i class="fa-regular fa-user"></i></span><span class="task-assignee-option-text">Unassigned</span></a></li>' +
+        '<li><hr class="dropdown-divider"></li>';
+
+      for (var i = 0; i < state.assignees.length; i++) {
+        var item = state.assignees[i] || {};
+        var assigneeName = String(item.name || "").trim();
+        var line =
+          '<span class="task-assignee-option-avatar">' +
+          escHtml(initials(assigneeName)) +
+          '</span><span class="task-assignee-option-text">' +
+          escHtml(assigneeName);
+        if (item.email) {
+          line +=
+            '<br><small class="text-muted">' + escHtml(item.email) + "</small>";
+        }
+        line += "</span>";
+        html +=
+          '<li><a class="dropdown-item task-assignee-option" href="#" data-user-id="' +
+          Number(item.id || 0) +
+          '" data-user-name="' +
+          escHtml(assigneeName) +
+          '">' +
+          line +
+          "</a></li>";
+      }
+
+      return html;
+    }
+
+    function assigneeButtonInner(userId, userName) {
+      var id = Number(userId || 0);
+      var name = String(userName || "").trim();
+      if (id > 0 && name) {
+        return escHtml(initials(name));
+      }
+      return '<i class="fa-regular fa-user"></i>';
+    }
+
+    function labelsBySearch(term) {
+      var query = String(term || "")
+        .trim()
+        .toLowerCase();
+      if (!query) {
+        return state.labels.slice();
+      }
+
+      return state.labels.filter(function (label) {
+        return (
+          String(label.name || "")
+            .toLowerCase()
+            .indexOf(query) !== -1
+        );
+      });
+    }
+
+    function getItemLabelsFromCard($card) {
+      var csv = String($card.attr("data-label-ids") || "").trim();
+      if (!csv) {
+        return [];
+      }
+
+      return csv
+        .split(",")
+        .map(function (value) {
+          return Number(String(value).trim() || 0);
+        })
+        .filter(function (value) {
+          return value > 0;
+        });
+    }
+
+    function setCardLabels($card, labels) {
+      var safeLabels = Array.isArray(labels) ? labels : [];
+      var ids = [];
+      var html = "";
+
+      for (var i = 0; i < safeLabels.length; i++) {
+        var label = safeLabels[i] || {};
+        var id = Number(label.id || 0);
+        var name = String(label.name || "").trim();
+        if (!id || !name) {
+          continue;
+        }
+        ids.push(id);
+        html += '<span class="task-label-pill">' + escHtml(name) + "</span>";
+      }
+
+      $card.attr("data-label-ids", ids.join(","));
+      $card
+        .find(".task-item-label-submenu-toggle")
+        .html(
+          (ids.length ? "Edit label" : "Add labels") +
+            ' <i class="fa-solid fa-chevron-right task-submenu-chevron"></i>',
+        );
+      var $row = $card.find(".task-item-label-row");
+      if (!ids.length) {
+        $row.remove();
+        applyBoardViewSettingsToCard($card);
+        return;
+      }
+
+      if (!$row.length) {
+        $row = $('<div class="task-item-label-row"></div>');
+        $card.find(".task-item-meta").before($row);
+      }
+
+      $row.html(html);
+      applyBoardViewSettingsToCard($card);
+    }
+
+    function getItemStatusLabelIdsFromCard($card) {
+      var csv = String($card.attr("data-task-status-label-ids") || "").trim();
+      if (!csv) {
+        return [];
+      }
+
+      return csv
+        .split(",")
+        .map(function (value) {
+          return Number(String(value).trim() || 0);
+        })
+        .filter(function (value) {
+          return value > 0;
+        });
+    }
+
+    function setCardTaskStatusLabels($card, statusLabelIds) {
+      var ids = normalizeStatusLabelIdList(statusLabelIds);
+      $card.attr("data-task-status-label-ids", ids.join(","));
+
+      var $toggle = $card.find(".task-item-status-label-submenu-toggle");
+      if ($toggle.length) {
+        $toggle.html(
+          (ids.length ? "Edit task status labels" : "Add task status labels") +
+            ' <i class="fa-solid fa-chevron-right task-submenu-chevron"></i>',
+        );
+      }
+
+      applyBoardViewSettingsToCard($card);
+    }
+
+    function formatCardDateLabel(value) {
+      var text = String(value || "").trim();
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+        return "";
+      }
+
+      var parts = text.split("-");
+      var year = Number(parts[0] || 0);
+      var month = Number(parts[1] || 0);
+      var day = Number(parts[2] || 0);
+      if (!year || !month || !day) {
+        return "";
+      }
+
+      var date = new Date(year, month - 1, day);
+      if (Number.isNaN(date.getTime())) {
+        return "";
+      }
+
+      var monthNames = [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec",
+      ];
+
+      return (
+        monthNames[date.getMonth()] +
+        " " +
+        date.getDate() +
+        ", " +
+        date.getFullYear()
+      );
+    }
+
+    function formatRelativeFromCardDate(value) {
+      var ms = parseCardDate(value);
+      if (!ms) {
+        return "";
+      }
+
+      var diffMs = Math.max(0, Date.now() - ms);
+      var dayMs = 86400000;
+      if (diffMs < dayMs) {
+        return "Today";
+      }
+
+      var days = Math.floor(diffMs / dayMs);
+      if (days < 30) {
+        return days === 1 ? "1 day ago" : days + " days ago";
+      }
+
+      var months = Math.floor(days / 30);
+      if (months < 12) {
+        return months === 1 ? "1 month ago" : months + " months ago";
+      }
+
+      var years = Math.floor(days / 365);
+      return years === 1 ? "1 year ago" : years + " years ago";
+    }
+
+    function formatMinutesCompact(value) {
+      var minutes = Number(value || 0);
+      if (!minutes || minutes <= 0) {
+        return "";
+      }
+
+      var hours = Math.floor(minutes / 60);
+      var remain = minutes % 60;
+      if (hours > 0 && remain > 0) {
+        return hours + "h " + remain + "m";
+      }
+
+      if (hours > 0) {
+        return hours + "h";
+      }
+
+      return minutes + "m";
+    }
+
+    function formatEstimateCompact(value, unit) {
+      var amount = Number(value || 0);
+      if (!amount || amount <= 0) {
+        return "";
+      }
+
+      var normalizedUnit = String(unit || "minutes")
+        .trim()
+        .toLowerCase();
+      if (normalizedUnit === "minutes") {
+        return formatMinutesCompact(amount);
+      }
+
+      if (normalizedUnit === "hours") {
+        return amount + "h";
+      }
+
+      if (normalizedUnit === "days") {
+        return amount + "d";
+      }
+
+      if (normalizedUnit === "weeks") {
+        return amount + "w";
+      }
+
+      return String(amount);
+    }
+
+    function priorityIconGlyphHtml(priority) {
+      var iconClass = boardFilterPriorityIconClass(priority);
+      if (iconClass === "task-priority-medium") {
+        return '<span class="task-priority-medium-icon" aria-hidden="true"></span>';
+      }
+      return '<i class="' + escHtml(iconClass) + '"></i>';
+    }
+
+    function resolveParentDisplayForCard($card) {
+      var parentId = Number($card.attr("data-parent-item-id") || 0);
+      if (!parentId) {
+        return "";
+      }
+
+      var stored = String($card.attr("data-parent-display") || "").trim();
+      if (stored && stored.toLowerCase() !== "none") {
+        return stored;
+      }
+
+      var $parentCard = $app.find(
+        '.task-item-card[data-item-id="' + parentId + '"]',
+      );
+      if (!$parentCard.length) {
+        return buildWorkItemKey(parentId) || "";
+      }
+
+      var key = String($parentCard.attr("data-work-item-key") || "").trim();
+      var title = String(
+        $parentCard.find(".task-item-title").first().text() || "",
+      ).trim();
+      var display = String((key ? key + " " : "") + title).trim();
+      if (display) {
+        $card.attr("data-parent-display", display);
+      }
+      return display;
+    }
+
+    function buildCardFieldRowsHtml($card) {
+      var html = "";
+
+      function appendFieldRow(fieldKey, label, valueHtml, isHtml) {
+        if (!isBoardViewFieldEnabled(fieldKey)) {
+          return;
+        }
+
+        var valueText = String(valueHtml || "").trim();
+        if (!valueText) {
+          return;
+        }
+
+        html +=
+          '<div class="task-item-field-row" data-view-field="' +
+          escHtml(fieldKey) +
+          '">' +
+          '<span class="task-item-field-label">' +
+          escHtml(label) +
+          "</span>" +
+          '<span class="task-item-field-value">' +
+          (isHtml ? valueText : escHtml(valueText)) +
+          "</span>" +
+          "</div>";
+      }
+
+      appendFieldRow(
+        "created",
+        "Created",
+        formatRelativeFromCardDate($card.attr("data-create-date")) ||
+          formatCardDateLabel($card.attr("data-create-date")),
+        false,
+      );
+      appendFieldRow(
+        "start_date",
+        "Start date",
+        formatCardDateLabel($card.attr("data-start-date")),
+        false,
+      );
+      var itemId = Number($card.data("itemId") || 0);
+      var currentParentId = Number($card.attr("data-parent-item-id") || 0);
+      var parentDisplay = resolveParentDisplayForCard($card);
+      var parentOptions = getBoardEpicParentOptions(itemId);
+      var parentOptionsHtml =
+        '<option value="0"' +
+        (currentParentId <= 0 ? " selected" : "") +
+        '">None</option>';
+      var hasCurrentParentOption = currentParentId <= 0;
+
+      for (var p = 0; p < parentOptions.length; p++) {
+        var parentOption = parentOptions[p] || {};
+        var parentOptionId = Number(parentOption.id || 0);
+        if (!parentOptionId) {
+          continue;
+        }
+
+        if (parentOptionId === currentParentId) {
+          hasCurrentParentOption = true;
+        }
+
+        parentOptionsHtml +=
+          '<option value="' +
+          parentOptionId +
+          '"' +
+          (parentOptionId === currentParentId ? " selected" : "") +
+          '">' +
+          escHtml(String(parentOption.display || parentOption.title || "")) +
+          "</option>";
+      }
+
+      if (currentParentId > 0 && !hasCurrentParentOption && parentDisplay) {
+        parentOptionsHtml +=
+          '<option value="' +
+          currentParentId +
+          '" selected>' +
+          escHtml(parentDisplay) +
+          "</option>";
+      }
+
+      appendFieldRow(
+        "parent",
+        "Parent",
+        '<select class="form-select form-select-sm task-item-parent-select" data-item-id="' +
+          itemId +
+          '"' +
+          (canEdit ? "" : " disabled") +
+          ">" +
+          parentOptionsHtml +
+          "</select>",
+        true,
+      );
+
+      var reporterName = String($card.attr("data-reporter-name") || "").trim();
+      appendFieldRow(
+        "reporter",
+        "Reporter",
+        reporterName
+          ? '<span class="task-item-field-reporter"><span class="task-item-field-avatar">' +
+              escHtml(initials(reporterName)) +
+              "</span><span>" +
+              escHtml(reporterName) +
+              "</span></span>"
+          : "",
+        true,
+      );
+
+      appendFieldRow(
+        "original_estimate",
+        "Original estimate",
+        formatEstimateCompact(
+          Number($card.attr("data-original-estimate-value") || 0),
+          $card.attr("data-original-estimate-unit"),
+        )
+          ? '<span class="task-item-field-badge">' +
+              escHtml(
+                formatEstimateCompact(
+                  Number($card.attr("data-original-estimate-value") || 0),
+                  $card.attr("data-original-estimate-unit"),
+                ),
+              ) +
+              "</span>"
+          : "",
+        true,
+      );
+      appendFieldRow(
+        "amendement_date",
+        "Amendement date",
+        formatCardDateLabel($card.attr("data-amendement-date")),
+        false,
+      );
+      appendFieldRow(
+        "amendement_time",
+        "Amendement time",
+        formatMinutesCompact($card.attr("data-amendement-time-minutes")),
+        false,
+      );
+      appendFieldRow(
+        "second_amendement_date",
+        "Second amen-date",
+        formatCardDateLabel($card.attr("data-second-amendement-date")),
+        false,
+      );
+      appendFieldRow(
+        "second_amendement_time",
+        "Second amen-time",
+        formatMinutesCompact($card.attr("data-second-amendement-time-minutes")),
+        false,
+      );
+      appendFieldRow(
+        "updated",
+        "Updated",
+        formatRelativeFromCardDate($card.attr("data-update-date")) ||
+          formatCardDateLabel($card.attr("data-update-date")),
+        false,
+      );
+
+      return html;
+    }

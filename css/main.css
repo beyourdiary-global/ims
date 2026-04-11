@@ -287,6 +287,27 @@ input {
   }
 }
 
+.menuBar > .container-fluid {
+  display: flex;
+  align-items: flex-start;
+}
+
+.menuBar > .container-fluid > .nav.nav-tabs {
+  width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  row-gap: 0;
+}
+
+.menuBar > .container-fluid > .nav.nav-tabs > .nav-item {
+  flex: 0 0 auto;
+}
+
+.menuBar > .container-fluid > .nav.nav-tabs .nav-link {
+  white-space: nowrap;
+}
+
 .dropdown-menu li {
   position: relative;
 }
