@@ -598,74 +598,180 @@ function updateCardParentSubmenuToggle($card, parentItemId, parentDisplay) {
 function renderParentSubmenu($card, $submenu) {
   var itemId = Number($card.data("itemId") || 0);
   var currentParentId = Number($card.attr("data-parent-item-id") || 0);
+
+  var html =
+    '<div class="task-item-parent-submenu-panel" data-item-id="' +
+    itemId +
+    '" data-current-parent-id="' +
+    currentParentId +
+    '">' +
+    '<div class="task-item-parent-search-wrap"><i class="fa-solid fa-magnifying-glass"></i><input type="text" class="form-control form-control-sm task-item-parent-search-input" placeholder="Search parent name"></div>' +
+    '<div class="task-item-parent-option-list"></div>' +
+    "</div>";
+
+  $submenu.find(".task-item-parent-submenu-content").html(html);
+  refreshParentSubmenuList($submenu);
+}
+
+function refreshParentSubmenuList($submenu) {
+  var $panel = $submenu.find(".task-item-parent-submenu-panel").first();
+  if (!$panel.length) {
+    return;
+  }
+
+  var itemId = Number($panel.attr("data-item-id") || 0);
+  var currentParentId = Number($panel.attr("data-current-parent-id") || 0);
+  var search = String($panel.find(".task-item-parent-search-input").val() || "")
+    .trim()
+    .toLowerCase();
   var options = getBoardEpicParentOptions(itemId);
+  var html = "";
+  var visibleCount = 0;
+  var parentVisibleCount = 0;
+  var hasSelectedOption = currentParentId <= 0;
 
-  var html = '<div class="task-item-parent-submenu-panel">';
-  html +=
-    '<button type="button" class="btn task-item-parent-option' +
-    (currentParentId === 0 ? " active" : "") +
-    '" data-parent-item-id="0">None</button>';
-
-  if (!options.length) {
+  if (!search || "none".indexOf(search) !== -1) {
+    visibleCount++;
     html +=
-      '<div class="task-item-parent-empty">No Epic items available.</div>';
-  } else {
-    for (var i = 0; i < options.length; i++) {
-      var option = options[i] || {};
-      var parentId = Number(option.id || 0);
-      if (!parentId) {
-        continue;
-      }
+      '<button type="button" class="btn task-item-parent-option' +
+      (currentParentId === 0 ? " active" : "") +
+      '" data-parent-item-id="0">None</button>';
+  }
 
-      var label = String(option.display || option.title || "").trim();
+  for (var i = 0; i < options.length; i++) {
+    var option = options[i] || {};
+    var parentId = Number(option.id || 0);
+    var label = String(option.display || option.title || "").trim();
+    if (!parentId || !label) {
+      continue;
+    }
+
+    if (parentId === currentParentId) {
+      hasSelectedOption = true;
+    }
+
+    if (search && label.toLowerCase().indexOf(search) === -1) {
+      continue;
+    }
+
+    visibleCount++;
+    parentVisibleCount++;
+    html +=
+      '<button type="button" class="btn task-item-parent-option' +
+      (currentParentId === parentId ? " active" : "") +
+      '" data-parent-item-id="' +
+      parentId +
+      '">' +
+      escHtml(label) +
+      "</button>";
+  }
+
+  if (currentParentId > 0 && !hasSelectedOption) {
+    var fallbackDisplay = String(
+      $(".task-item-card[data-item-id='" + itemId + "']").attr(
+        "data-parent-display",
+      ) || "",
+    ).trim();
+    if (!fallbackDisplay) {
+      fallbackDisplay = "Parent #" + String(currentParentId);
+    }
+
+    if (!search || fallbackDisplay.toLowerCase().indexOf(search) !== -1) {
+      visibleCount++;
+      parentVisibleCount++;
       html +=
-        '<button type="button" class="btn task-item-parent-option' +
-        (currentParentId === parentId ? " active" : "") +
-        '" data-parent-item-id="' +
-        parentId +
+        '<button type="button" class="btn task-item-parent-option active" data-parent-item-id="' +
+        currentParentId +
         '">' +
-        escHtml(label) +
+        escHtml(fallbackDisplay) +
         "</button>";
     }
   }
 
-  html += "</div>";
-  $submenu.find(".task-item-parent-submenu-content").html(html);
-}
-
-function renderDetailParentSelect(selectedParentId, parentOptions) {
-  var selectedId = Number(selectedParentId || 0);
-  var options = normalizeParentOptions(parentOptions);
-  itemDetailModalState.parentOptions = options.slice();
-
-  var html = '<option value="0">None</option>';
-  for (var i = 0; i < options.length; i++) {
-    var item = options[i] || {};
-    html +=
-      '<option value="' +
-      Number(item.id || 0) +
-      '">' +
-      escHtml(item.display || item.title || "") +
-      "</option>";
+  if (!visibleCount) {
+    html =
+      '<div class="task-item-parent-empty">No matching parent found.</div>';
   }
 
-  $("#taskItemDetailParentSelect").html(html).val(String(selectedId));
+  $panel
+    .find(".task-item-parent-option-list")
+    .toggleClass("is-scrollable", parentVisibleCount > 5)
+    .html(html);
+}
 
-  if (Number($("#taskItemDetailParentSelect").val() || 0) !== selectedId) {
-    $("#taskItemDetailParentSelect").val("0");
+function renderDetailParentOptions(filterText) {
+  var query = String(filterText || "")
+    .trim()
+    .toLowerCase();
+  var selectedId = Number(itemDetailModalState.parentItemId || 0);
+  var options = normalizeParentOptions(itemDetailModalState.parentOptions);
+  var html =
+    '<button type="button" class="btn task-item-detail-parent-option' +
+    (selectedId === 0 ? " active" : "") +
+    '" data-parent-item-id="0"><span class="task-item-detail-parent-option-name">None</span></button>';
+  var visibleCount = 1;
+  if (!options.length) {
+    html += '<div class="task-label-empty">No Epic items available.</div>';
+  }
+
+  for (var i = 0; i < options.length; i++) {
+    var option = options[i] || {};
+    var parentId = Number(option.id || 0);
+    var label = String(option.display || option.title || "").trim();
+    if (!parentId || !label) {
+      continue;
+    }
+
+    if (query && label.toLowerCase().indexOf(query) === -1) {
+      continue;
+    }
+
+    visibleCount++;
+    html +=
+      '<button type="button" class="btn task-item-detail-parent-option' +
+      (selectedId === parentId ? " active" : "") +
+      '" data-parent-item-id="' +
+      parentId +
+      '"><span class="task-item-detail-parent-option-name">' +
+      escHtml(label) +
+      "</span></button>";
+  }
+
+  $("#taskItemDetailParentOptionList")
+    .toggleClass("is-scrollable", visibleCount > 5)
+    .html(
+      html || '<div class="task-label-empty">No matching parent found.</div>',
+    );
+}
+
+function renderDetailParentDropdown(selectedParentId, parentOptions) {
+  var selectedId = Number(selectedParentId || 0);
+  var options = normalizeParentOptions(parentOptions);
+  var selectedDisplay = "None";
+  var hasSelectedOption = selectedId === 0;
+
+  itemDetailModalState.parentOptions = options.slice();
+
+  for (var i = 0; i < options.length; i++) {
+    var opt = options[i] || {};
+    if (Number(opt.id || 0) !== selectedId) {
+      continue;
+    }
+
+    selectedDisplay = String(opt.display || opt.title || "").trim() || "None";
+    hasSelectedOption = true;
+    break;
+  }
+
+  if (!hasSelectedOption) {
     selectedId = 0;
   }
 
-  var selectedDisplay = "";
-  for (var i = 0; i < options.length; i++) {
-    var opt = options[i] || {};
-    if (Number(opt.id || 0) === selectedId) {
-      selectedDisplay = String(opt.display || opt.title || "").trim();
-      break;
-    }
-  }
-
   itemDetailModalState.parentItemId = selectedId;
+  $("#taskItemDetailParentSelectedText").text(selectedDisplay);
+  $("#taskItemDetailParentSearchInput").val("");
+  renderDetailParentOptions("");
+
   var $card = $(itemDetailModalState.cardEl || null);
   if ($card.length) {
     updateCardParentSubmenuToggle($card, selectedId, selectedDisplay);
@@ -1528,6 +1634,8 @@ function applyItemDetailToModal(detail, statusLabels, parentOptions, webLinks) {
   $("#taskItemDetailDescriptionInput").val(description);
   itemDetailModalState.initialTitle = title;
   itemDetailModalState.initialDescription = description;
+  itemDetailModalState.titleEditing = false;
+  $(".task-item-detail-title-row").removeClass("is-editing");
 
   $("#taskItemDetailEstimateValueInput").val(
     Number(info.original_estimate_value || 0),
@@ -1547,12 +1655,12 @@ function applyItemDetailToModal(detail, statusLabels, parentOptions, webLinks) {
   var effectiveParentOptions = Array.isArray(parentOptions)
     ? parentOptions
     : getBoardEpicParentOptions(itemDetailModalState.itemId);
-  renderDetailParentSelect(
+  renderDetailParentDropdown(
     Number(info.parent_item_id || 0),
     effectiveParentOptions,
   );
   renderDetailTimeTracking(
-    String(info.time_tracking || "").trim() || "No time logged",
+    info,
     Number(info.original_estimate_value || 0),
     String(info.original_estimate_unit || "minutes"),
   );
@@ -1620,72 +1728,86 @@ function applyItemDetailToModal(detail, statusLabels, parentOptions, webLinks) {
   renderModalLabelChips();
   renderModalLabelOptions();
   updateCardFromDetail(info);
-  itemDetailModalState.initialSaveSnapshot = buildModalSaveSnapshot(
-    title,
-    description,
+  itemDetailModalState.lastSavedCoreSnapshot = buildModalCoreSnapshot({
+    title: title,
+    description: description,
+  });
+  itemDetailModalState.lastSavedDetailSnapshot = buildModalDetailSnapshot({
+    assignee_user_id: Number(info.assignee_user_id || 0),
+    reporter_user_id: Number(info.reporter_user_id || 0),
+    priority: String(info.priority || "Medium"),
+    original_estimate_value: Number(info.original_estimate_value || 0),
+    original_estimate_unit: String(info.original_estimate_unit || "minutes"),
+    task_status_label_ids: statusIds,
+    start_date: String(info.start_date || ""),
+    due_date: String(info.due_date || ""),
+    amendement_date: String(info.amendement_date || ""),
+    amendement_time_minutes: Number(info.amendement_time_minutes || 0),
+    second_amendement_date: String(info.second_amendement_date || ""),
+    second_amendement_time_minutes: Number(
+      info.second_amendement_time_minutes || 0,
+    ),
+  });
+  itemDetailModalState.lastSavedLabelsSnapshot = buildModalLabelsSnapshot(
+    itemDetailModalState.selectedLabelIds,
   );
+  setItemDetailAutosaveStatus("", "");
 }
 
-function persistModalLabels(onDone) {
-  var itemId = Number(itemDetailModalState.itemId || 0);
-  if (!itemId) {
-    if (typeof onDone === "function") {
-      onDone();
-    }
+function setItemDetailAutosaveStatus(stateName, message) {
+  var $status = $("#taskItemDetailAutosaveStatus");
+  if (!$status.length) {
     return;
   }
 
-  postAction(
-    {
-      task_action: "set_item_labels",
-      item_id: itemId,
-      label_ids: itemDetailModalState.selectedLabelIds.join(","),
-    },
-    function (res) {
-      syncKnownLabels(res.allLabels || []);
-      var detail = {
-        labels: Array.isArray(res.labels) ? res.labels : [],
-        assignee_user_id: Number($("#taskItemDetailAssigneeSelect").val() || 0),
-        assignee_name: String(
-          $("#taskItemDetailAssigneeSelect option:selected").text() || "",
-        ),
-        due_date: String($("#taskItemDetailDueDateInput").val() || ""),
-      };
-      updateCardFromDetail(detail);
-      itemDetailModalState.selectedLabelIds = detail.labels
-        .map(function (item) {
-          return Number(item.id || 0);
-        })
-        .filter(function (id) {
-          return id > 0;
-        });
-      renderModalLabelChips();
-      renderModalLabelOptions();
-      loadItemHistory(itemId);
-      if (typeof onDone === "function") {
-        onDone();
-      }
-    },
-  );
+  if (stateName !== "error") {
+    $status
+      .addClass("d-none")
+      .removeClass("is-saving is-saved is-error")
+      .text("");
+    return;
+  }
+
+  var text = String(message || "").trim();
+  $status.removeClass("is-saving is-saved is-error");
+
+  if (!text) {
+    $status.addClass("d-none").text("");
+    return;
+  }
+
+  $status.removeClass("d-none");
+  if (stateName === "saving") {
+    $status.addClass("is-saving");
+  } else if (stateName === "saved") {
+    $status.addClass("is-saved");
+  } else if (stateName === "error") {
+    $status.addClass("is-error");
+  }
+
+  $status.text(text);
 }
 
-function normalizeNumericIdList(list) {
-  return (Array.isArray(list) ? list : [])
-    .map(function (id) {
-      return Number(id || 0);
-    })
-    .filter(function (id) {
-      return id > 0;
-    })
-    .sort(function (a, b) {
-      return a - b;
-    });
+function getModalCoreValues() {
+  return {
+    title: String($("#taskItemDetailTitleInput").val() || "").trim(),
+    description: String(
+      $("#taskItemDetailDescriptionInput").val() || "",
+    ).trim(),
+  };
 }
 
-function buildModalSaveSnapshot(currentTitle, currentDescription) {
+function buildModalCoreSnapshot(source) {
+  var values =
+    source && typeof source === "object" ? source : getModalCoreValues();
   return JSON.stringify({
-    title: String(currentTitle || "").trim(),
-    description: String(currentDescription || "").trim(),
+    title: String(values.title || "").trim(),
+    description: String(values.description || "").trim(),
+  });
+}
+
+function getModalDetailValues() {
+  return {
     assignee_user_id: Number($("#taskItemDetailAssigneeSelect").val() || 0),
     reporter_user_id: Number($("#taskItemDetailReporterSelect").val() || 0),
     priority: String(itemDetailModalState.selectedPriority || "Medium"),
@@ -1710,11 +1832,141 @@ function buildModalSaveSnapshot(currentTitle, currentDescription) {
     second_amendement_time_minutes: Number(
       $("#taskItemDetailSecondAmendTimeInput").val() || 0,
     ),
-    label_ids: normalizeNumericIdList(itemDetailModalState.selectedLabelIds),
+  };
+}
+
+function buildModalDetailSnapshot(source) {
+  var values =
+    source && typeof source === "object" ? source : getModalDetailValues();
+  return JSON.stringify({
+    assignee_user_id: Number(values.assignee_user_id || 0),
+    reporter_user_id: Number(values.reporter_user_id || 0),
+    priority: String(values.priority || "Medium"),
+    original_estimate_value: Number(values.original_estimate_value || 0),
+    original_estimate_unit: String(values.original_estimate_unit || "minutes"),
+    task_status_label_ids: normalizeStatusLabelIdList(
+      values.task_status_label_ids,
+    ),
+    start_date: String(values.start_date || ""),
+    due_date: String(values.due_date || ""),
+    amendement_date: String(values.amendement_date || ""),
+    amendement_time_minutes: Number(values.amendement_time_minutes || 0),
+    second_amendement_date: String(values.second_amendement_date || ""),
+    second_amendement_time_minutes: Number(
+      values.second_amendement_time_minutes || 0,
+    ),
   });
 }
 
-function saveItemDetailsFromModal(closeAfterSave) {
+function buildModalLabelsSnapshot(labelIds) {
+  return JSON.stringify(normalizeNumericIdList(labelIds));
+}
+
+function persistModalLabels(onDone, options) {
+  var settings = options && typeof options === "object" ? options : {};
+  var itemId = Number(itemDetailModalState.itemId || 0);
+  if (!itemId) {
+    if (typeof onDone === "function") {
+      onDone();
+    }
+    return;
+  }
+
+  var selectedLabelIds = normalizeNumericIdList(
+    itemDetailModalState.selectedLabelIds,
+  );
+  var currentSnapshot = buildModalLabelsSnapshot(selectedLabelIds);
+  if (currentSnapshot === itemDetailModalState.lastSavedLabelsSnapshot) {
+    if (typeof onDone === "function") {
+      onDone();
+    }
+    return;
+  }
+
+  if (itemDetailModalState.labelsSaveInFlight) {
+    itemDetailModalState.queuedLabelsSave = true;
+    return;
+  }
+
+  itemDetailModalState.labelsSaveInFlight = true;
+  setItemDetailAutosaveStatus("saving", "Saving changes...");
+
+  postAction(
+    {
+      task_action: "set_item_labels",
+      item_id: itemId,
+      label_ids: selectedLabelIds.join(","),
+    },
+    function (res) {
+      syncKnownLabels(res.allLabels || []);
+      var hasPendingLocalChange =
+        buildModalLabelsSnapshot(itemDetailModalState.selectedLabelIds) !==
+        currentSnapshot;
+      var detail = {
+        labels: Array.isArray(res.labels) ? res.labels : [],
+        assignee_user_id: Number($("#taskItemDetailAssigneeSelect").val() || 0),
+        assignee_name: String(
+          $("#taskItemDetailAssigneeSelect option:selected").text() || "",
+        ),
+        due_date: String($("#taskItemDetailDueDateInput").val() || ""),
+      };
+      updateCardFromDetail(detail);
+      var savedLabelIds = detail.labels
+        .map(function (item) {
+          return Number(item.id || 0);
+        })
+        .filter(function (id) {
+          return id > 0;
+        });
+      if (!hasPendingLocalChange) {
+        itemDetailModalState.selectedLabelIds = savedLabelIds.slice();
+      }
+      itemDetailModalState.lastSavedLabelsSnapshot =
+        buildModalLabelsSnapshot(savedLabelIds);
+      renderModalLabelChips();
+      renderModalLabelOptions();
+      loadItemHistory(itemId);
+      itemDetailModalState.labelsSaveInFlight = false;
+      if (typeof onDone === "function") {
+        onDone();
+      }
+
+      if (
+        itemDetailModalState.queuedLabelsSave ||
+        buildModalLabelsSnapshot(itemDetailModalState.selectedLabelIds) !==
+          itemDetailModalState.lastSavedLabelsSnapshot
+      ) {
+        itemDetailModalState.queuedLabelsSave = false;
+        persistModalLabels(null, settings);
+        return;
+      }
+
+      if (!settings.silentSuccess) {
+        setItemDetailAutosaveStatus("saved", "All changes saved");
+      }
+    },
+    function () {
+      itemDetailModalState.labelsSaveInFlight = false;
+      setItemDetailAutosaveStatus("error", "Failed to save changes");
+    },
+  );
+}
+
+function normalizeNumericIdList(list) {
+  return (Array.isArray(list) ? list : [])
+    .map(function (id) {
+      return Number(id || 0);
+    })
+    .filter(function (id) {
+      return id > 0;
+    })
+    .sort(function (a, b) {
+      return a - b;
+    });
+}
+
+function saveItemDetailsFromModal(closeAfterSave, options) {
+  var settings = options && typeof options === "object" ? options : {};
   if (!canEdit) {
     notify("You do not have permission to update work item.");
     return;
@@ -1725,97 +1977,109 @@ function saveItemDetailsFromModal(closeAfterSave) {
     return;
   }
 
-  var title = String($("#taskItemDetailTitleInput").val() || "").trim();
-  var description = String(
-    $("#taskItemDetailDescriptionInput").val() || "",
-  ).trim();
-  if (!title) {
-    notify("Work item title is required.");
+  var detailValues = getModalDetailValues();
+  var currentSnapshot = buildModalDetailSnapshot(detailValues);
+  if (currentSnapshot === itemDetailModalState.lastSavedDetailSnapshot) {
+    if (!settings.suppressNoChangeMessage) {
+      showNoChangeMessage();
+    }
     return;
   }
 
-  var currentSnapshot = buildModalSaveSnapshot(title, description);
-  if (
-    itemDetailModalState.initialSaveSnapshot &&
-    currentSnapshot === itemDetailModalState.initialSaveSnapshot
-  ) {
-    showNoChangeMessage();
+  if (itemDetailModalState.detailSaveInFlight) {
+    itemDetailModalState.queuedDetailSave = true;
     return;
   }
+
+  itemDetailModalState.detailSaveInFlight = true;
+  setItemDetailAutosaveStatus("saving", "Saving changes...");
+
+  var payload = {
+    task_action: "update_item_detail",
+    item_id: itemId,
+    assignee_user_id: detailValues.assignee_user_id,
+    reporter_user_id: detailValues.reporter_user_id,
+    priority: detailValues.priority,
+    original_estimate_value: detailValues.original_estimate_value,
+    original_estimate_unit: detailValues.original_estimate_unit,
+    task_status_label_ids: detailValues.task_status_label_ids.join(","),
+    start_date: detailValues.start_date,
+    due_date: detailValues.due_date,
+    amendement_date: detailValues.amendement_date,
+    amendement_time_minutes: detailValues.amendement_time_minutes,
+    second_amendement_date: detailValues.second_amendement_date,
+    second_amendement_time_minutes: detailValues.second_amendement_time_minutes,
+  };
 
   postAction(
-    {
-      task_action: "update_item_core",
-      item_id: itemId,
-      title: title,
-      description: description,
+    payload,
+    function (res) {
+      var detail =
+        res && res.detail && typeof res.detail === "object" ? res.detail : {};
+
+      itemDetailModalState.lastSavedDetailSnapshot =
+        buildModalDetailSnapshot(detailValues);
+      itemDetailModalState.detailSaveInFlight = false;
+
+      if (Array.isArray(res.statusLabels)) {
+        normalizeStatusLabels(res.statusLabels);
+        renderStatusLabelOptions(
+          $("#taskItemDetailStatusSearchInput").val() || "",
+        );
+      }
+
+      if (Array.isArray(res.parentOptions)) {
+        itemDetailModalState.parentOptions = normalizeParentOptions(
+          res.parentOptions,
+        );
+        renderDetailParentOptions(
+          $("#taskItemDetailParentSearchInput").val() || "",
+        );
+      }
+
+      if (detail && typeof detail === "object") {
+        updateCardFromDetail(detail);
+        itemDetailModalState.childWorkItems = normalizeChildWorkItems(
+          detail.child_work_items,
+        );
+        renderChildWorkItemsSection();
+        renderDetailTimeTracking(
+          detail,
+          Number($("#taskItemDetailEstimateValueInput").val() || 0),
+          String($("#taskItemDetailEstimateUnitInput").val() || "minutes"),
+        );
+      }
+
+      loadItemHistory(itemId);
+
+      if (
+        itemDetailModalState.queuedDetailSave ||
+        buildModalDetailSnapshot() !==
+          itemDetailModalState.lastSavedDetailSnapshot
+      ) {
+        itemDetailModalState.queuedDetailSave = false;
+        saveItemDetailsFromModal(false, {
+          autosave: true,
+          suppressNoChangeMessage: true,
+          silentSuccess: true,
+        });
+        return;
+      }
+
+      if (!settings.silentSuccess) {
+        setItemDetailAutosaveStatus("saved", "All changes saved");
+      }
+
+      if (closeAfterSave) {
+        var modal = getItemDetailModalInstance();
+        if (modal) {
+          modal.hide();
+        }
+      }
     },
     function () {
-      var payload = {
-        task_action: "update_item_detail",
-        item_id: itemId,
-        assignee_user_id: Number($("#taskItemDetailAssigneeSelect").val() || 0),
-        reporter_user_id: Number($("#taskItemDetailReporterSelect").val() || 0),
-        priority: itemDetailModalState.selectedPriority || "Medium",
-        original_estimate_value: Number(
-          $("#taskItemDetailEstimateValueInput").val() || 0,
-        ),
-        original_estimate_unit: String(
-          $("#taskItemDetailEstimateUnitInput").val() || "minutes",
-        ),
-        task_status_label_ids: normalizeStatusLabelIdList(
-          itemDetailModalState.selectedStatusLabelIds,
-        ).join(","),
-        start_date: String($("#taskItemDetailStartDateInput").val() || ""),
-        due_date: String($("#taskItemDetailDueDateInput").val() || ""),
-        amendement_date: String($("#taskItemDetailAmendDateInput").val() || ""),
-        amendement_time_minutes: Number(
-          $("#taskItemDetailAmendTimeInput").val() || 0,
-        ),
-        second_amendement_date: String(
-          $("#taskItemDetailSecondAmendDateInput").val() || "",
-        ),
-        second_amendement_time_minutes: Number(
-          $("#taskItemDetailSecondAmendTimeInput").val() || 0,
-        ),
-      };
-
-      postAction(payload, function (res) {
-        var detail =
-          res && res.detail && typeof res.detail === "object" ? res.detail : {};
-        detail.title = title;
-        detail.description = description;
-
-        var $card = $(itemDetailModalState.cardEl || null);
-        if ($card.length) {
-          $card.find(".task-item-title").text(title);
-          $card.attr("data-item-description", description);
-        }
-
-        itemDetailModalState.initialTitle = title;
-        itemDetailModalState.initialDescription = description;
-        applyItemDetailToModal(
-          detail,
-          res && res.statusLabels ? res.statusLabels : null,
-          res && Array.isArray(res.parentOptions) ? res.parentOptions : null,
-          res && Array.isArray(res.webLinks) ? res.webLinks : null,
-        );
-
-        persistModalLabels(function () {
-          itemDetailModalState.initialSaveSnapshot = buildModalSaveSnapshot(
-            title,
-            description,
-          );
-          showTaskSuccess("Work item details updated successfully.");
-
-          if (closeAfterSave) {
-            var modal = getItemDetailModalInstance();
-            if (modal) {
-              modal.hide();
-            }
-          }
-        });
-      });
+      itemDetailModalState.detailSaveInFlight = false;
+      setItemDetailAutosaveStatus("error", "Failed to save changes");
     },
   );
 }
@@ -2147,6 +2411,16 @@ function buildBoardGroupedColumnHtml(groupTitle, groupType, groupKey) {
   );
 }
 
+function buildCreateStatusSlotHtml() {
+  return (
+    '<section id="taskCreateStatusSlot" class="task-create-status-slot task-create-status-slot-board">' +
+    '<button id="taskOpenCreateStatusBtn" class="btn task-create-status-icon-btn" type="button" ' +
+    (canAdd ? "" : "disabled") +
+    ' title="Add status"><i class="fa-solid fa-plus"></i></button>' +
+    "</section>"
+  );
+}
+
 function syncBoardGroupControlUi() {
   var mode = getBoardGroupBy();
   var label = boardGroupLabel(mode);
@@ -2377,6 +2651,8 @@ function renderBoardGroupingLayout() {
     }
   }
 
+  $grid.append($(buildCreateStatusSlotHtml()));
+
   syncBoardGroupControlUi();
   if (typeof bindTaskItemMenuRepositionListeners === "function") {
     bindTaskItemMenuRepositionListeners();
@@ -2559,15 +2835,6 @@ function updateColumnInnerScroll($column) {
   );
 
   if ($visibleCards.length <= 2) {
-    var contentHeight = Number($list.get(0).scrollHeight || 0);
-    if (contentHeight > fallbackMaxHeight) {
-      $list.css({
-        maxHeight: String(fallbackMaxHeight) + "px",
-        overflowY: "auto",
-      });
-      return;
-    }
-
     $list.css({
       maxHeight: "none",
       overflowY: "visible",
@@ -2770,7 +3037,7 @@ function resetCreateStatusInline() {
   $("#taskStatusName").val("");
   $("#taskCreateStatusInlineForm").addClass("d-none");
   $("#taskOpenCreateStatusBtn").removeClass("d-none");
-  $createStatusSlot.removeClass("task-create-status-slot-expanded");
+  $("#taskCreateStatusSlot").removeClass("task-create-status-slot-expanded");
 }
 
 function createStatus(columnName) {
@@ -2844,7 +3111,7 @@ function enableCreateButton($composer) {
     .prop("disabled", title.length === 0 || !canAdd);
 }
 
-$("#taskOpenCreateStatusBtn").on("click", function () {
+$(document).on("click", "#taskOpenCreateStatusBtn", function () {
   if (!canAdd) {
     notify("You do not have permission to create status.");
     return;

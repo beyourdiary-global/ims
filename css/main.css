@@ -487,7 +487,9 @@ body.task-global-sidebar-open .menuBar > .container-fluid {
 }
 
 body.task-global-sidebar-open .menuBar > .container-fluid > .nav.nav-tabs {
-  transform: translateX(220px);
+  transform: none;
+  padding-left: 220px;
+  transition: padding-left 0.25s ease;
 }
 
 body.task-global-sidebar-open
@@ -495,7 +497,7 @@ body.task-global-sidebar-open
   > .container-fluid
   > .nav.nav-tabs
   > li:first-child {
-  transform: translateX(-220px);
+  transform: none;
 }
 
 body.task-global-sidebar-open #dispTable {
@@ -503,12 +505,16 @@ body.task-global-sidebar-open #dispTable {
   transition: padding-left 0.25s ease;
 }
 
-@media (max-width: 991.98px) {
+@media (max-width: 768px) {
   .task-global-sidebar {
     display: none;
   }
 
   body.task-global-sidebar-open .menuBar > .container-fluid {
+    padding-left: 0;
+  }
+
+  body.task-global-sidebar-open .menuBar > .container-fluid > .nav.nav-tabs {
     padding-left: 0;
   }
 

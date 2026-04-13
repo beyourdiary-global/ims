@@ -126,6 +126,41 @@ if (!function_exists('taskFormatWorklogDuration')) {
     }
 }
 
+if (!function_exists('taskParseWorklogDurationSeconds')) {
+    function taskParseWorklogDurationSeconds($value)
+    {
+        $text = strtolower(trim((string) $value));
+        if ($text === '' || $text === 'no time logged') {
+            return 0;
+        }
+
+        if (!preg_match_all('/(\d+)\s*([dhms])/', $text, $matches, PREG_SET_ORDER)) {
+            return 0;
+        }
+
+        $totalSeconds = 0;
+        foreach ($matches as $match) {
+            $amount = isset($match[1]) ? (int) $match[1] : 0;
+            $unit = isset($match[2]) ? (string) $match[2] : '';
+            if ($amount <= 0 || $unit === '') {
+                continue;
+            }
+
+            if ($unit === 'd') {
+                $totalSeconds += $amount * 86400;
+            } elseif ($unit === 'h') {
+                $totalSeconds += $amount * 3600;
+            } elseif ($unit === 'm') {
+                $totalSeconds += $amount * 60;
+            } elseif ($unit === 's') {
+                $totalSeconds += $amount;
+            }
+        }
+
+        return $totalSeconds;
+    }
+}
+
 if (!function_exists('taskLogItemHistory')) {
     function taskLogItemHistory($connect, $itemId, $eventType, $fieldName, $fromValue, $toValue, $remark, $currentUserId, $cdate, $ctime)
     {
@@ -772,6 +807,8 @@ if (!function_exists('taskGetEpicChildWorkItemsSummary')) {
             'total' => 0,
             'done' => 0,
             'progress_percent' => 0,
+            'time_tracking' => 'No time logged',
+            'time_tracking_seconds' => 0,
         );
         if ($epicItemId <= 0) {
             return $summary;
@@ -779,10 +816,19 @@ if (!function_exists('taskGetEpicChildWorkItemsSummary')) {
 
         $projectKeySetting = taskGetProjectKeySetting($connect);
         $defaultProjectKey = isset($projectKeySetting['project_key']) ? (string) $projectKeySetting['project_key'] : '';
+        $lastColumnSortOrder = 0;
+
+        $lastColumnRst = mysqli_query($connect, "SELECT MAX(sort_order) AS max_sort_order FROM " . TASK_COLUMN . " WHERE status='A'");
+        if ($lastColumnRst && $lastColumnRst->num_rows > 0) {
+            $lastColumnRow = $lastColumnRst->fetch_assoc();
+            $lastColumnSortOrder = isset($lastColumnRow['max_sort_order']) ? (int) $lastColumnRow['max_sort_order'] : 0;
+        }
 
         $sql = "SELECT c.id, c.title, c.priority, c.assignee_user_id,
                        c.sort_order,
+                       c.time_tracking,
                        col.name AS column_name,
+                       col.sort_order AS column_sort_order,
                        pk.project_key AS item_project_key,
                        COALESCE(NULLIF(TRIM(u.name), ''), u.username, '') AS assignee_name
                 FROM " . TASK_ITEM . " c
@@ -816,10 +862,16 @@ if (!function_exists('taskGetEpicChildWorkItemsSummary')) {
             }
 
             $statusName = isset($row['column_name']) ? trim((string) $row['column_name']) : '';
-            $isDone = taskIsDoneColumnName($statusName);
+            $columnSortOrder = isset($row['column_sort_order']) ? (int) $row['column_sort_order'] : 0;
+            $isDone = taskIsDoneColumnName($statusName)
+                || ($lastColumnSortOrder > 0 && $columnSortOrder >= $lastColumnSortOrder);
             if ($isDone) {
                 $summary['done']++;
             }
+
+            $timeTracking = isset($row['time_tracking']) ? trim((string) $row['time_tracking']) : '';
+            $timeTrackingSeconds = taskParseWorklogDurationSeconds($timeTracking);
+            $summary['time_tracking_seconds'] += $timeTrackingSeconds;
 
             $summary['items'][] = array(
                 'id' => $itemId,
@@ -830,12 +882,16 @@ if (!function_exists('taskGetEpicChildWorkItemsSummary')) {
                 'assignee_name' => isset($row['assignee_name']) ? (string) $row['assignee_name'] : '',
                 'status_name' => $statusName,
                 'is_done' => $isDone ? 1 : 0,
+                'time_tracking' => $timeTracking !== '' ? $timeTracking : 'No time logged',
             );
         }
 
         $summary['total'] = count($summary['items']);
         if ($summary['total'] > 0) {
             $summary['progress_percent'] = (int) round(($summary['done'] * 100) / $summary['total']);
+        }
+        if ((int) $summary['time_tracking_seconds'] > 0) {
+            $summary['time_tracking'] = taskFormatWorklogDuration((int) $summary['time_tracking_seconds']);
         }
 
         return $summary;
@@ -1099,6 +1155,20 @@ if (!function_exists('taskCreateItemUrl')) {
             }
         }
 
+        $linkDisplay = $linkText !== '' ? $linkText . ' (' . $url . ')' : $url;
+        taskLogItemHistory(
+            $connect,
+            $itemId,
+            'add_web_link',
+            'Web Link',
+            '',
+            $linkDisplay,
+            'added web link',
+            $currentUserId,
+            $cdate,
+            $ctime
+        );
+
         return array('ok' => 1, 'message' => 'Web link added successfully.');
     }
 }
@@ -1111,7 +1181,7 @@ if (!function_exists('taskDeleteItemUrl')) {
             return array('ok' => 0, 'message' => 'Invalid web link delete request.');
         }
 
-        $rst = mysqli_query($connect, "SELECT id,item_id FROM " . TASK_ITEM_URL . " WHERE id='" . $urlId . "' AND status='A' LIMIT 1");
+        $rst = mysqli_query($connect, "SELECT id,item_id,url,link_text,title FROM " . TASK_ITEM_URL . " WHERE id='" . $urlId . "' AND status='A' LIMIT 1");
         if ($rst === false) {
             return array('ok' => 0, 'message' => 'Failed deleting web link. Please run insert_table.php first.');
         }
@@ -1122,6 +1192,11 @@ if (!function_exists('taskDeleteItemUrl')) {
 
         $row = $rst->fetch_assoc();
         $itemId = isset($row['item_id']) ? (int) $row['item_id'] : 0;
+        $url = isset($row['url']) ? trim((string) $row['url']) : '';
+        $linkText = isset($row['link_text']) ? trim((string) $row['link_text']) : '';
+        if ($linkText === '') {
+            $linkText = isset($row['title']) ? trim((string) $row['title']) : '';
+        }
         $safeUser = taskEsc($connect, $currentUserId);
         $safeDate = taskEsc($connect, $cdate);
         $safeTime = taskEsc($connect, $ctime);
@@ -1139,6 +1214,20 @@ if (!function_exists('taskDeleteItemUrl')) {
         if (!$ok) {
             return array('ok' => 0, 'message' => 'Failed deleting web link.');
         }
+
+        $linkDisplay = $linkText !== '' ? $linkText . ($url !== '' ? ' (' . $url . ')' : '') : $url;
+        taskLogItemHistory(
+            $connect,
+            $itemId,
+            'delete_web_link',
+            'Web Link',
+            $linkDisplay,
+            '',
+            'removed web link',
+            $currentUserId,
+            $cdate,
+            $ctime
+        );
 
         return array('ok' => 1, 'message' => 'Web link removed successfully.', 'item_id' => $itemId);
     }
@@ -1481,6 +1570,33 @@ if (!function_exists('taskSetItemParentRelation')) {
 }
 
 if (!function_exists('taskGetItemDetail')) {
+    if (!function_exists('taskBuildItemTimeTrackingDetail')) {
+        function taskBuildItemTimeTrackingDetail($ownTimeTracking, $childWorkItems)
+        {
+            $ownTimeTracking = trim((string) $ownTimeTracking);
+            $ownSeconds = taskParseWorklogDurationSeconds($ownTimeTracking);
+            $childSeconds = is_array($childWorkItems) && isset($childWorkItems['time_tracking_seconds'])
+                ? (int) $childWorkItems['time_tracking_seconds']
+                : 0;
+            $canIncludeChild = is_array($childWorkItems) && isset($childWorkItems['total']) && (int) $childWorkItems['total'] > 0;
+            $combinedSeconds = $ownSeconds + $childSeconds;
+
+            return array(
+                'time_tracking' => $canIncludeChild
+                    ? ($combinedSeconds > 0 ? taskFormatWorklogDuration($combinedSeconds) : 'No time logged')
+                    : ($ownSeconds > 0 ? taskFormatWorklogDuration($ownSeconds) : 'No time logged'),
+                'own_time_tracking' => $ownSeconds > 0 ? taskFormatWorklogDuration($ownSeconds) : 'No time logged',
+                'own_time_tracking_seconds' => $ownSeconds,
+                'child_time_tracking' => $childSeconds > 0 ? taskFormatWorklogDuration($childSeconds) : 'No time logged',
+                'child_time_tracking_seconds' => $childSeconds,
+                'combined_time_tracking' => $combinedSeconds > 0 ? taskFormatWorklogDuration($combinedSeconds) : 'No time logged',
+                'combined_time_tracking_seconds' => $combinedSeconds,
+                'can_include_child_time_tracking' => $canIncludeChild ? 1 : 0,
+                'include_child_time_tracking' => $canIncludeChild ? 1 : 0,
+            );
+        }
+    }
+
     function taskGetItemDetail($connect, $itemId)
     {
         $itemId = (int) $itemId;
@@ -1552,6 +1668,11 @@ if (!function_exists('taskGetItemDetail')) {
             'progress_percent' => 0,
         );
 
+        $timeTrackingDetail = taskBuildItemTimeTrackingDetail(
+            isset($row['time_tracking']) ? $row['time_tracking'] : '',
+            $childWorkItems
+        );
+
         $detail = array(
             'id' => $itemId,
             'title' => isset($row['title']) ? (string) $row['title'] : '',
@@ -1574,7 +1695,15 @@ if (!function_exists('taskGetItemDetail')) {
             'parent_work_item_key' => isset($parentInfo['parent_work_item_key']) ? (string) $parentInfo['parent_work_item_key'] : '',
             'parent_work_type_name' => isset($parentInfo['parent_work_type_name']) ? (string) $parentInfo['parent_work_type_name'] : 'Task',
             'parent_work_type_svg_icon' => isset($parentInfo['parent_work_type_svg_icon']) ? (string) $parentInfo['parent_work_type_svg_icon'] : '',
-            'time_tracking' => isset($row['time_tracking']) && trim((string) $row['time_tracking']) !== '' ? (string) $row['time_tracking'] : 'No time logged',
+            'time_tracking' => isset($timeTrackingDetail['time_tracking']) ? (string) $timeTrackingDetail['time_tracking'] : 'No time logged',
+            'own_time_tracking' => isset($timeTrackingDetail['own_time_tracking']) ? (string) $timeTrackingDetail['own_time_tracking'] : 'No time logged',
+            'own_time_tracking_seconds' => isset($timeTrackingDetail['own_time_tracking_seconds']) ? (int) $timeTrackingDetail['own_time_tracking_seconds'] : 0,
+            'child_time_tracking' => isset($timeTrackingDetail['child_time_tracking']) ? (string) $timeTrackingDetail['child_time_tracking'] : 'No time logged',
+            'child_time_tracking_seconds' => isset($timeTrackingDetail['child_time_tracking_seconds']) ? (int) $timeTrackingDetail['child_time_tracking_seconds'] : 0,
+            'combined_time_tracking' => isset($timeTrackingDetail['combined_time_tracking']) ? (string) $timeTrackingDetail['combined_time_tracking'] : 'No time logged',
+            'combined_time_tracking_seconds' => isset($timeTrackingDetail['combined_time_tracking_seconds']) ? (int) $timeTrackingDetail['combined_time_tracking_seconds'] : 0,
+            'can_include_child_time_tracking' => isset($timeTrackingDetail['can_include_child_time_tracking']) ? (int) $timeTrackingDetail['can_include_child_time_tracking'] : 0,
+            'include_child_time_tracking' => isset($timeTrackingDetail['include_child_time_tracking']) ? (int) $timeTrackingDetail['include_child_time_tracking'] : 0,
             'due_date' => isset($row['due_date']) && $row['due_date'] !== null ? (string) $row['due_date'] : '',
             'start_date' => isset($row['start_date']) && $row['start_date'] !== null ? (string) $row['start_date'] : '',
             'create_date' => isset($row['create_date']) && $row['create_date'] !== null ? (string) $row['create_date'] : '',
@@ -1882,7 +2011,10 @@ if (!function_exists('taskSaveItemWorklog')) {
         $oldValue = isset($itemRow['time_tracking']) && $itemRow['time_tracking'] !== null
             ? trim((string) $itemRow['time_tracking'])
             : '';
-        $newValue = taskFormatWorklogDuration($seconds);
+        $oldSeconds = taskParseWorklogDurationSeconds($oldValue);
+        $newTotalSeconds = max(0, $oldSeconds + $seconds);
+        $newValue = $newTotalSeconds > 0 ? taskFormatWorklogDuration($newTotalSeconds) : 'No time logged';
+        $addedValue = taskFormatWorklogDuration($seconds);
 
         $safeNewValue = taskEsc($connect, $newValue);
         $safeUser = taskEsc($connect, $currentUserId);
@@ -1910,16 +2042,22 @@ if (!function_exists('taskSaveItemWorklog')) {
             'Time Tracking',
             $oldValue,
             $newValue,
-            'logged ' . $newValue,
+            'logged ' . $addedValue,
             $currentUserId,
             $cdate,
             $ctime
         );
 
+        $detailResult = taskGetItemDetail($connect, $itemId);
+        $detail = !empty($detailResult['ok']) && isset($detailResult['detail']) && is_array($detailResult['detail'])
+            ? $detailResult['detail']
+            : array();
+
         return array(
             'ok' => 1,
             'message' => 'Work log added.',
-            'time_tracking' => $newValue,
+            'time_tracking' => isset($detail['time_tracking']) ? (string) $detail['time_tracking'] : $newValue,
+            'detail' => $detail,
             'history' => taskGetItemHistory($connect, $itemId, 150),
         );
     }
@@ -3468,6 +3606,19 @@ if (!function_exists('taskUploadItemAttachment')) {
             return array('ok' => 0, 'message' => 'Failed saving attachment record. Please run insert_table.php first.');
         }
 
+        taskLogItemHistory(
+            $connect,
+            $itemId,
+            'add_attachment',
+            'Attachment',
+            '',
+            $finalFileName,
+            'added attachment',
+            $currentUserId,
+            $cdate,
+            $ctime
+        );
+
         return array(
             'ok' => 1,
             'message' => 'Attachment uploaded successfully.',
@@ -3490,7 +3641,7 @@ if (!function_exists('taskDeleteItemAttachment')) {
             return array('ok' => 0, 'message' => 'Invalid attachment delete request.');
         }
 
-        $sql = "SELECT id,item_id,file_path FROM " . TASK_ITEM_ATTACHMENT . " WHERE id='" . $attachmentId . "' AND status='A' LIMIT 1";
+        $sql = "SELECT id,item_id,file_path,file_name FROM " . TASK_ITEM_ATTACHMENT . " WHERE id='" . $attachmentId . "' AND status='A' LIMIT 1";
         $rst = mysqli_query($connect, $sql);
         if ($rst === false) {
             return array('ok' => 0, 'message' => 'Failed deleting attachment. Please run insert_table.php first.');
@@ -3503,6 +3654,7 @@ if (!function_exists('taskDeleteItemAttachment')) {
         $row = $rst->fetch_assoc();
         $itemId = isset($row['item_id']) ? (int) $row['item_id'] : 0;
         $filePath = isset($row['file_path']) ? (string) $row['file_path'] : '';
+        $fileName = isset($row['file_name']) ? (string) $row['file_name'] : '';
         $safeUser = taskEsc($connect, $currentUserId);
         $safeDate = taskEsc($connect, $cdate);
         $safeTime = taskEsc($connect, $ctime);
@@ -3520,6 +3672,19 @@ if (!function_exists('taskDeleteItemAttachment')) {
         if (!$ok) {
             return array('ok' => 0, 'message' => 'Failed deleting attachment.');
         }
+
+        taskLogItemHistory(
+            $connect,
+            $itemId,
+            'delete_attachment',
+            'Attachment',
+            $fileName,
+            '',
+            'removed attachment',
+            $currentUserId,
+            $cdate,
+            $ctime
+        );
 
         $normalizedPath = str_replace('\\', '/', trim((string) $filePath));
         if ($normalizedPath !== '') {
@@ -3545,7 +3710,7 @@ if (!function_exists('taskDeleteAllItemAttachments')) {
             return array('ok' => 0, 'message' => 'Invalid attachment delete request.');
         }
 
-        $sql = "SELECT id,file_path FROM " . TASK_ITEM_ATTACHMENT . " WHERE item_id='" . $itemId . "' AND status='A'";
+        $sql = "SELECT id,file_path,file_name FROM " . TASK_ITEM_ATTACHMENT . " WHERE item_id='" . $itemId . "' AND status='A'";
         $rst = mysqli_query($connect, $sql);
         if ($rst === false) {
             return array('ok' => 0, 'message' => 'Failed deleting attachments. Please run insert_table.php first.');
@@ -3571,6 +3736,21 @@ if (!function_exists('taskDeleteAllItemAttachments')) {
 
         while ($row = $rst->fetch_assoc()) {
             $filePath = isset($row['file_path']) ? (string) $row['file_path'] : '';
+            $fileName = isset($row['file_name']) ? (string) $row['file_name'] : '';
+            if ($fileName !== '') {
+                taskLogItemHistory(
+                    $connect,
+                    $itemId,
+                    'delete_attachment',
+                    'Attachment',
+                    $fileName,
+                    '',
+                    'removed attachment',
+                    $currentUserId,
+                    $cdate,
+                    $ctime
+                );
+            }
             $normalizedPath = str_replace('\\', '/', trim((string) $filePath));
             if ($normalizedPath === '') {
                 continue;
@@ -3763,12 +3943,12 @@ if (!function_exists('taskDeleteStatusLabel')) {
 if (!function_exists('taskGetItemLabels')) {
     function taskGetItemLabels($connect, $itemId)
     {
+        $rows = array();
         $itemId = (int) $itemId;
         if ($itemId <= 0) {
-            return array();
+            return $rows;
         }
 
-        $rows = array();
         $sql = "SELECT l.id, l.name
                 FROM " . TASK_ITEM_LABEL . " il
                 INNER JOIN " . TASK_LABEL . " l ON l.id = il.label_id AND l.status='A'

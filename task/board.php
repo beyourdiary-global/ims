@@ -52,6 +52,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     taskEnsureDefaultWorkTypes($connect, $currentUserId, $cdate, $ctime);
 
     $taskAction = isset($_POST['task_action']) ? trim((string) $_POST['task_action']) : '';
+    $safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
+    $safePageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
 
     if ($taskAction === 'create_column' || $taskAction === 'create_status') {
         if (!taskIsActionAllowed('add', $pinAccess)) {
@@ -61,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         $result = taskCreateColumn($connect, isset($_POST['column_name']) ? $_POST['column_name'] : '', $currentUserId, $cdate, $ctime);
         if (!empty($result['ok'])) {
             $statusName = isset($result['column']['name']) ? htmlspecialchars((string) $result['column']['name'], ENT_QUOTES, 'UTF-8') : '';
-            $viewActMsg = USER_NAME . " added new status <b>" . $statusName . "</b> on <b>" . htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') . "</b>.";
+            $viewActMsg = $safeUserName . " added new status <b>" . $statusName . "</b> on <b>" . $safePageTitle . "</b>.";
             taskBoardAuditLog($connect, $pageTitle, 'Add', $viewActMsg, $cdate, $ctime);
         }
         taskJsonResponse($result);
@@ -82,7 +84,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         );
         if (!empty($result['ok'])) {
             $statusName = isset($result['column_name']) ? htmlspecialchars((string) $result['column_name'], ENT_QUOTES, 'UTF-8') : htmlspecialchars((string) ($_POST['column_name'] ?? ''), ENT_QUOTES, 'UTF-8');
-            $viewActMsg = USER_NAME . " edited status <b>" . $statusName . "</b> on <b>" . htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') . "</b>.";
+            $viewActMsg = $safeUserName . " edited status <b>" . $statusName . "</b> on <b>" . $safePageTitle . "</b>.";
             taskBoardAuditLog($connect, $pageTitle, 'Edit', $viewActMsg, $cdate, $ctime);
         }
         taskJsonResponse($result);
@@ -115,7 +117,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         );
         if (!empty($result['ok'])) {
             $statusName = isset($result['column_name']) ? htmlspecialchars((string) $result['column_name'], ENT_QUOTES, 'UTF-8') : '';
-            $viewActMsg = USER_NAME . " deleted status <b>" . $statusName . "</b> on <b>" . htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') . "</b>.";
+            $viewActMsg = $safeUserName . " deleted status <b>" . $statusName . "</b> on <b>" . $safePageTitle . "</b>.";
             taskBoardAuditLog($connect, $pageTitle, 'Delete', $viewActMsg, $cdate, $ctime);
         }
         taskJsonResponse($result);
@@ -680,7 +682,9 @@ if (!taskIsActionAllowed('view', $pinAccess)) {
     exit;
 }
 
-$viewActMsg = USER_NAME . " viewed the page <b>" . htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') . "</b>.";
+$safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
+$safePageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
+$viewActMsg = $safeUserName . ' viewed the page ' . $safePageTitle . '.';
 taskBoardAuditLog($connect, $pageTitle, 'View', $viewActMsg, $cdate, $ctime);
 
 $currentUserId = defined('USER_ID') ? USER_ID : '';
@@ -762,12 +766,14 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                         </div>
 
                         <div class="dropdown task-board-settings-wrap">
-                        <button id="taskBoardSettingsBtn" class="btn task-board-settings-btn" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" title="Board settings">
+                        <button id="taskBoardSettingsBtn" class="btn task-board-settings-btn" type="button" data-bs-auto-close="outside" aria-expanded="false" title="Board settings">
                             <i class="fa-solid fa-sliders"></i>
                         </button>
                         <div id="taskBoardSettingsPanel" class="dropdown-menu dropdown-menu-end task-board-settings-panel p-3">
-                            <h6 class="mb-3">View settings</h6>
-                            <div class="mb-3">
+                            <div class="task-board-settings-header">
+                                <h6 class="mb-0">View settings</h6>
+                            </div>
+                            <div class="task-board-settings-section mb-3">
                                 <label class="form-label mb-1" for="taskProjectKeyInput">Project Key fields</label>
                                 <div class="task-project-key-row">
                                     <input id="taskProjectKeyInput" type="text" class="form-control form-control-sm" maxlength="20" placeholder="Example: BCS" value="<?= htmlspecialchars(isset($projectKeySetting['project_key']) ? (string) $projectKeySetting['project_key'] : '', ENT_QUOTES, 'UTF-8') ?>">
@@ -775,8 +781,8 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                                     <button id="taskProjectKeyClearBtn" class="btn btn-light task-project-key-action-btn" type="button" title="Clear project key"><i class="fa-solid fa-xmark"></i></button>
                                 </div>
                             </div>
-                            <hr class="my-2">
-                            <h6 class="mb-2">Fields</h6>
+                            <div class="task-board-settings-divider"></div>
+                            <h6 class="task-board-settings-section-title mb-2">Fields</h6>
                             <div class="task-board-settings-fields">
                                 <?php
                                     $settingsFields = array(
@@ -811,9 +817,6 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                         </div>
                     </div>
 
-                        <button id="taskOpenCreateStatusBtn" class="btn task-create-status-icon-btn" type="button" <?= $canAdd ? '' : 'disabled' ?> title="Add status">
-                            <i class="fa-solid fa-plus"></i>
-                        </button>
                     </div>
                 </div>
 
@@ -933,8 +936,12 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                         <div class="mb-3">
                             <div class="task-item-detail-title-row">
                                 <input id="taskItemDetailTitleInput" class="form-control task-item-detail-title-input" type="text" maxlength="255" placeholder="Work item name">
-                                <button id="taskItemDetailTitleSaveBtn" class="btn btn-light task-item-detail-title-btn" type="button" title="Save title"><i class="fa-solid fa-check"></i></button>
-                                <button id="taskItemDetailTitleResetBtn" class="btn btn-light task-item-detail-title-btn" type="button" title="Reset title"><i class="fa-solid fa-xmark"></i></button>
+                                <button id="taskItemDetailTitleSaveBtn" class="btn task-item-detail-title-btn task-item-detail-title-btn-save" type="button" title="Save title" aria-label="Save title">
+                                    <i class="fa-solid fa-check"></i>
+                                </button>
+                                <button id="taskItemDetailTitleResetBtn" class="btn task-item-detail-title-btn task-item-detail-title-btn-cancel" type="button" title="Cancel title edit" aria-label="Cancel title edit">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
                             </div>
                             <div class="dropdown task-item-detail-add-wrap mt-2">
                                 <button id="taskItemDetailAddBtn" class="btn btn-outline-primary task-item-detail-add-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Add">
@@ -946,6 +953,7 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                                 </ul>
                                 <input id="taskItemAttachmentInput" type="file" class="d-none" multiple>
                             </div>
+                            <div id="taskItemDetailAutosaveStatus" class="task-item-detail-autosave-status d-none" aria-live="polite"></div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label" for="taskItemDetailDescriptionInput">Description</label>
@@ -1080,8 +1088,19 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                             </div>
 
                             <div class="task-item-detail-field-row" data-detail-field="parent">
-                                <label class="task-item-detail-field-label" for="taskItemDetailParentSelect">Parent</label>
-                                <select id="taskItemDetailParentSelect" class="form-select form-select-sm"></select>
+                                <label class="task-item-detail-field-label" for="taskItemDetailParentSearchInput">Parent</label>
+                                <div class="task-item-detail-parent-wrap">
+                                    <div class="dropdown task-item-detail-parent-dropdown">
+                                        <button id="taskItemDetailParentDropdownBtn" class="btn task-item-detail-parent-dropdown-btn" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                                            <span id="taskItemDetailParentSelectedText" class="task-item-detail-parent-selected-text">None</span>
+                                            <i class="fa-solid fa-chevron-down task-item-detail-dropdown-icon" aria-hidden="true"></i>
+                                        </button>
+                                        <div id="taskItemDetailParentMenu" class="dropdown-menu task-item-detail-parent-menu p-2">
+                                            <input id="taskItemDetailParentSearchInput" class="form-control form-control-sm mb-2" type="text" maxlength="120" autocomplete="off" placeholder="Search parent">
+                                            <div id="taskItemDetailParentOptionList" class="task-item-detail-parent-option-list"></div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="task-item-detail-field-row" data-detail-field="assignee">
@@ -1218,10 +1237,6 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                     </div>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" id="taskItemDetailSaveBtn" class="btn btn-primary">Save</button>
-            </div>
         </div>
     </div>
 </div>
@@ -1250,16 +1265,8 @@ window.taskBoardConfig = {
     statusLabels: <?= json_encode($statusLabels, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>
 };
 </script>
-<script>
-<?php
-    readfile(__DIR__ . '/../js/task_board_core.js');
-    echo "\n";
-    readfile(__DIR__ . '/../js/task_board_ui.js');
-    echo "\n";
-    readfile(__DIR__ . '/../js/task_board.js');
-?>
-    });
-})();
-</script>
+<script src="../js/task_board_core.js"></script>
+<script src="../js/task_board_ui.js"></script>
+<script src="../js/task_board.js"></script>
 </body>
 </html>
