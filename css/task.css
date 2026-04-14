@@ -2570,13 +2570,6 @@ body.task-local-sidebar-open
   border-radius: 6px;
 }
 
-.task-item-detail-add-btn:hover,
-.task-item-detail-add-btn:focus {
-  background: #eaf3ff;
-  border-color: #9bbde6;
-  color: #1555ab;
-}
-
 .task-item-detail-add-menu {
   min-width: 220px;
 }

@@ -175,11 +175,12 @@ if (!function_exists('taskLogItemHistory')) {
         }
 
         $safeItemId = (int) $itemId;
-        $safeEventType = taskEsc($connect, substr($eventType, 0, 80));
-        $safeFieldName = taskEsc($connect, substr(trim((string) $fieldName), 0, 120));
-        $safeFromValue = taskEsc($connect, substr(taskNormalizeHistoryValue($fromValue), 0, 65535));
-        $safeToValue = taskEsc($connect, substr(taskNormalizeHistoryValue($toValue), 0, 65535));
-        $safeRemark = taskEsc($connect, substr(trim((string) $remark), 0, 65535));
+        // Use mb_strcut to safely truncate bytes without corrupting UTF-8 characters
+        $safeEventType = taskEsc($connect, mb_strcut($eventType, 0, 80, 'UTF-8'));
+        $safeFieldName = taskEsc($connect, mb_strcut(trim((string) $fieldName), 0, 120, 'UTF-8'));
+        $safeFromValue = taskEsc($connect, mb_strcut(taskNormalizeHistoryValue($fromValue), 0, 65535, 'UTF-8'));
+        $safeToValue = taskEsc($connect, mb_strcut(taskNormalizeHistoryValue($toValue), 0, 65535, 'UTF-8'));
+        $safeRemark = taskEsc($connect, mb_strcut(trim((string) $remark), 0, 65535, 'UTF-8'));
         $safeUser = taskEsc($connect, $currentUserId);
         $safeDate = taskEsc($connect, $cdate);
         $safeTime = taskEsc($connect, $ctime);
@@ -2002,8 +2003,13 @@ if (!function_exists('taskSaveItemWorklog')) {
             return array('ok' => 0, 'message' => 'Worklog time must be greater than 0.');
         }
 
-        $itemRst = mysqli_query($connect, "SELECT id,time_tracking FROM " . TASK_ITEM . " WHERE id='" . $itemId . "' AND status='A' LIMIT 1");
+        // Start transaction for atomic read-modify-write
+        mysqli_begin_transaction($connect);
+
+        // Add FOR UPDATE to apply a pessimistic row lock
+        $itemRst = mysqli_query($connect, "SELECT id,time_tracking FROM " . TASK_ITEM . " WHERE id='" . $itemId . "' AND status='A' LIMIT 1 FOR UPDATE");
         if (!$itemRst || $itemRst->num_rows === 0) {
+            mysqli_rollback($connect);
             return array('ok' => 0, 'message' => 'Work item not found.');
         }
 
@@ -2032,8 +2038,12 @@ if (!function_exists('taskSaveItemWorklog')) {
         );
 
         if (!$okUpdate) {
+            mysqli_rollback($connect);
             return array('ok' => 0, 'message' => 'Failed to save worklog.');
         }
+
+        // Commit transaction to release the lock
+        mysqli_commit($connect);
 
         taskLogItemHistory(
             $connect,
