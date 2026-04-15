@@ -496,97 +496,10 @@ $menuList = array(
 
 
 <head>
-    <link rel="stylesheet" href="<?php $SITEURL . '/css/main.css' ?>">
+    <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
+    <link rel="stylesheet" href="<?= $SITEURL ?>/css/sidebar_menu.css">
 </head>
 
-<style>
-    :root {
-        --task-global-sidebar-top: 92px;
-        --task-global-sidebar-width: 220px;
-    }
-
-    #taskGlobalSidebar {
-        top: var(--task-global-sidebar-top) !important;
-        border-top: 0 !important;
-    }
-
-    #taskGlobalSidebar .task-global-sidebar-inner {
-        padding-top: 0 !important;
-    }
-
-    #taskGlobalSidebar .task-global-sidebar-title {
-        margin: 0 !important;
-        padding: 12px 16px 10px !important;
-        line-height: 1.2;
-    }
-
-    #taskGlobalSidebar .task-global-sidebar-links li a.task-global-link-active {
-        background-color: #415761;
-        color: #ffffff !important;
-        font-weight: 700;
-    }
-
-    @media (max-width: 768px) {
-        #navbarMenuBar {
-            display: none;
-            color: #FFFFFF;
-        }
-    }
-
-    @media (max-width: 991.98px) and (min-width: 769px) {
-        #taskGlobalSidebar {
-            display: block !important;
-        }
-    }
-
-    body.task-global-sidebar-open .container-xxl,
-    body.task-global-sidebar-open .task-page-wrap,
-    body.task-global-sidebar-open #dispTable {
-        margin-left: 0;
-        width: 100% !important;
-        max-width: none !important;
-        padding-left: var(--task-global-sidebar-width) !important;
-        padding-right: 12px !important;
-        box-sizing: border-box;
-        transition: padding-left 0.25s ease, width 0.25s ease;
-    }
-
-    body.task-global-sidebar-open .menuBar > .container-fluid {
-        padding-left: 0 !important;
-    }
-
-    body.task-global-sidebar-open .menuBar > .container-fluid > .nav.nav-tabs {
-        transform: translateX(var(--task-global-sidebar-width));
-        transition: transform 0.25s ease;
-    }
-
-    body.task-global-sidebar-open .menuBar > .container-fluid > .nav.nav-tabs > li:first-child {
-        transform: translateX(calc(-1 * var(--task-global-sidebar-width)));
-    }
-
-    @media (max-width: 768px) {
-        body.task-global-sidebar-open .container-xxl,
-        body.task-global-sidebar-open .task-page-wrap,
-        body.task-global-sidebar-open #dispTable {
-            width: 100% !important;
-            padding-left: 0 !important;
-            padding-right: 0 !important;
-        }
-
-        body.task-global-sidebar-open .menuBar > .container-fluid {
-            padding-left: 0 !important;
-        }
-
-        body.task-global-sidebar-open .menuBar > .container-fluid > .nav.nav-tabs,
-        body.task-global-sidebar-open .menuBar > .container-fluid > .nav.nav-tabs > li:first-child {
-            transform: none;
-        }
-    }
-</style>
-
-<script>
-
-</script>
 
 <!-- H.Navbar -->
 <nav class="menuBar">

@@ -4,6 +4,28 @@ $pageTitle = 'Board';
 $taskParentTitle = 'Task Management';
 $isFinance = 1;
 
+if (!function_exists('taskBoardAuditLog')) {
+    function taskBoardAuditLog($connect, $pageTitle, $pageAction, $viewActMsg, $cdate, $ctime)
+    {
+        if (!function_exists('audit_log') || !defined('USER_ID')) {
+            return;
+        }
+
+        $log = [
+            'log_act' => $pageAction,
+            'cdate'   => $cdate,
+            'ctime'   => $ctime,
+            'uid'     => USER_ID,
+            'cby'     => USER_ID,
+            'act_msg' => $viewActMsg,
+            'page'    => $pageTitle,
+            'connect' => $connect,
+        ];
+
+        audit_log($log);
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     include_once '../include/connection.php';
     include_once ROOT . '/include/common.php';
@@ -30,6 +52,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     taskEnsureDefaultWorkTypes($connect, $currentUserId, $cdate, $ctime);
 
     $taskAction = isset($_POST['task_action']) ? trim((string) $_POST['task_action']) : '';
+    $safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
+    $safePageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
 
     if ($taskAction === 'create_column' || $taskAction === 'create_status') {
         if (!taskIsActionAllowed('add', $pinAccess)) {
@@ -37,6 +61,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         }
 
         $result = taskCreateColumn($connect, isset($_POST['column_name']) ? $_POST['column_name'] : '', $currentUserId, $cdate, $ctime);
+        if (!empty($result['ok'])) {
+            $statusName = isset($result['column']['name']) ? htmlspecialchars((string) $result['column']['name'], ENT_QUOTES, 'UTF-8') : '';
+            $viewActMsg = $safeUserName . " added new status <b>" . $statusName . "</b> on <b>" . $safePageTitle . "</b>.";
+            taskBoardAuditLog($connect, $pageTitle, 'Add', $viewActMsg, $cdate, $ctime);
+        }
         taskJsonResponse($result);
     }
 
@@ -53,6 +82,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             $cdate,
             $ctime
         );
+        if (!empty($result['ok'])) {
+            $statusName = isset($result['column_name']) ? htmlspecialchars((string) $result['column_name'], ENT_QUOTES, 'UTF-8') : htmlspecialchars((string) ($_POST['column_name'] ?? ''), ENT_QUOTES, 'UTF-8');
+            $viewActMsg = $safeUserName . " edited status <b>" . $statusName . "</b> on <b>" . $safePageTitle . "</b>.";
+            taskBoardAuditLog($connect, $pageTitle, 'Edit', $viewActMsg, $cdate, $ctime);
+        }
         taskJsonResponse($result);
     }
 
@@ -81,6 +115,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             $cdate,
             $ctime
         );
+        if (!empty($result['ok'])) {
+            $statusName = isset($result['column_name']) ? htmlspecialchars((string) $result['column_name'], ENT_QUOTES, 'UTF-8') : '';
+            $viewActMsg = $safeUserName . " deleted status <b>" . $statusName . "</b> on <b>" . $safePageTitle . "</b>.";
+            taskBoardAuditLog($connect, $pageTitle, 'Delete', $viewActMsg, $cdate, $ctime);
+        }
         taskJsonResponse($result);
     }
 
@@ -208,6 +247,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         taskJsonResponse($result);
     }
 
+    if ($taskAction === 'set_item_work_type') {
+        if (!taskIsActionAllowed('edit', $pinAccess)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to change work type.'));
+        }
+
+        $result = taskSetItemWorkType(
+            $connect,
+            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
+            isset($_POST['work_type_id']) ? (int) $_POST['work_type_id'] : 0,
+            $currentUserId,
+            $cdate,
+            $ctime
+        );
+        taskJsonResponse($result);
+    }
+
     if ($taskAction === 'save_project_key') {
         if (!taskIsActionAllowed('edit', $pinAccess)) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to change project key.'));
@@ -248,6 +303,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         taskJsonResponse($result);
     }
 
+    if ($taskAction === 'get_item_history') {
+        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        taskJsonResponse(array(
+            'ok' => 1,
+            'history' => taskGetItemHistory($connect, $itemId, 150),
+        ));
+    }
+
     if ($taskAction === 'update_item_detail') {
         if (!taskIsActionAllowed('edit', $pinAccess)) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to update work item details.'));
@@ -276,21 +339,47 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         taskJsonResponse($result);
     }
 
-    if ($taskAction === 'set_item_parent') {
+    if ($taskAction === 'save_item_worklog') {
         if (!taskIsActionAllowed('edit', $pinAccess)) {
-            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to link parent.'));
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to save worklog.'));
         }
 
-        $result = taskSetItemParentRelation(
+        $result = taskSaveItemWorklog(
             $connect,
             isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
-            isset($_POST['parent_item_id']) ? (int) $_POST['parent_item_id'] : 0,
+            isset($_POST['duration_seconds']) ? (int) $_POST['duration_seconds'] : 0,
             $currentUserId,
             $cdate,
             $ctime
         );
 
         taskJsonResponse($result);
+    }
+
+    if ($taskAction === 'set_item_parent') {
+        if (!taskIsActionAllowed('edit', $pinAccess)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to link parent.'));
+        }
+
+        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $parentItemId = isset($_POST['parent_item_id']) ? (int) $_POST['parent_item_id'] : 0;
+
+        try {
+            $result = taskSetItemParentRelation(
+                $connect,
+                $itemId,
+                $parentItemId,
+                $currentUserId,
+                $cdate,
+                $ctime
+            );
+            taskJsonResponse($result);
+        } catch (Throwable $e) {
+            taskJsonResponse(array(
+                'ok' => 0,
+                'message' => 'Failed updating parent relation.',
+            ));
+        }
     }
 
     if ($taskAction === 'create_item_web_link') {
@@ -583,6 +672,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
 include_once '../common_task.php';
+include_once './board_item_history.php';
 
 $pageTitle = 'Board';
 
@@ -591,6 +681,11 @@ if (!taskIsActionAllowed('view', $pinAccess)) {
     echo "<script>alert('You do not have permission to view task board.'); location.replace('../dashboard.php');</script>";
     exit;
 }
+
+$safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
+$safePageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
+$viewActMsg = $safeUserName . ' viewed the page ' . $safePageTitle . '.';
+taskBoardAuditLog($connect, $pageTitle, 'View', $viewActMsg, $cdate, $ctime);
 
 $currentUserId = defined('USER_ID') ? USER_ID : '';
 taskEnsureDefaultWorkTypes($connect, $currentUserId, $cdate, $ctime);
@@ -641,34 +736,44 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                         <i class="fa-solid fa-magnifying-glass"></i>
                         <input id="taskBoardSearchInput" class="form-control" type="text" maxlength="150" placeholder="Search board">
                     </div>
-                    <div class="dropdown">
-                        <button id="taskBoardAssigneeFilterBtn" class="btn task-board-filter-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">
-                            Filter: All
+                    <div id="taskBoardFilterSelectedAssignees" class="task-board-filter-selected-assignees d-none"></div>
+                    <div id="taskBoardFilterDropdown" class="dropdown task-board-filter-wrap">
+                        <button id="taskBoardFilterBtn" class="btn task-board-filter-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                            <span class="task-board-filter-btn-label">Filter</span>
+                            <span id="taskBoardFilterCountBadge" class="task-board-filter-count-badge d-none">0</span>
                         </button>
-                        <ul id="taskBoardAssigneeFilterMenu" class="dropdown-menu task-board-filter-menu">
-                            <li><a class="dropdown-item task-board-assignee-filter-option active" href="#" data-assignee-filter="all" data-assignee-name="All">All</a></li>
-                            <li><hr class="dropdown-divider"></li>
-                            <?php foreach ($assignees as $assignee): ?>
-                                <?php
-                                    $assigneeId = (int) $assignee['id'];
-                                    $assigneeName = isset($assignee['name']) ? (string) $assignee['name'] : '';
-                                ?>
-                                <li>
-                                    <a class="dropdown-item task-board-assignee-filter-option" href="#" data-assignee-filter="<?= $assigneeId ?>" data-assignee-name="<?= htmlspecialchars($assigneeName, ENT_QUOTES, 'UTF-8') ?>">
-                                        <?= htmlspecialchars($assigneeName, ENT_QUOTES, 'UTF-8') ?>
-                                    </a>
-                                </li>
-                            <?php endforeach; ?>
-                        </ul>
+                        <div id="taskBoardFilterMenu" class="dropdown-menu task-board-filter-menu p-0"></div>
                     </div>
                     <div class="task-board-toolbar-actions ms-auto">
+                        <div id="taskBoardGroupDropdown" class="dropdown task-board-group-wrap">
+                            <button id="taskBoardGroupBtn" class="btn task-board-group-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                                <span id="taskBoardGroupLabel">Group: Status</span>
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end task-board-group-menu p-2">
+                                <button type="button" class="dropdown-item task-board-group-option" data-group-by="assignee">
+                                    <span>Assignee</span>
+                                    <i class="fa-solid fa-check task-board-group-check d-none"></i>
+                                </button>
+                                <button type="button" class="dropdown-item task-board-group-option" data-group-by="priority">
+                                    <span>Priority</span>
+                                    <i class="fa-solid fa-check task-board-group-check d-none"></i>
+                                </button>
+                                <button type="button" class="dropdown-item task-board-group-option" data-group-by="status">
+                                    <span>Status</span>
+                                    <i class="fa-solid fa-check task-board-group-check d-none"></i>
+                                </button>
+                            </div>
+                        </div>
+
                         <div class="dropdown task-board-settings-wrap">
-                        <button id="taskBoardSettingsBtn" class="btn task-board-settings-btn" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" title="Board settings">
+                        <button id="taskBoardSettingsBtn" class="btn task-board-settings-btn" type="button" data-bs-auto-close="outside" aria-expanded="false" title="Board settings">
                             <i class="fa-solid fa-sliders"></i>
                         </button>
                         <div id="taskBoardSettingsPanel" class="dropdown-menu dropdown-menu-end task-board-settings-panel p-3">
-                            <h6 class="mb-3">View settings</h6>
-                            <div class="mb-3">
+                            <div class="task-board-settings-header">
+                                <h6 class="mb-0">View settings</h6>
+                            </div>
+                            <div class="task-board-settings-section mb-3">
                                 <label class="form-label mb-1" for="taskProjectKeyInput">Project Key fields</label>
                                 <div class="task-project-key-row">
                                     <input id="taskProjectKeyInput" type="text" class="form-control form-control-sm" maxlength="20" placeholder="Example: BCS" value="<?= htmlspecialchars(isset($projectKeySetting['project_key']) ? (string) $projectKeySetting['project_key'] : '', ENT_QUOTES, 'UTF-8') ?>">
@@ -676,31 +781,34 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                                     <button id="taskProjectKeyClearBtn" class="btn btn-light task-project-key-action-btn" type="button" title="Clear project key"><i class="fa-solid fa-xmark"></i></button>
                                 </div>
                             </div>
-                            <hr class="my-2">
-                            <h6 class="mb-2">Fields</h6>
+                            <div class="task-board-settings-divider"></div>
+                            <h6 class="task-board-settings-section-title mb-2">Fields</h6>
                             <div class="task-board-settings-fields">
                                 <?php
                                     $settingsFields = array(
-                                        'Work item key',
-                                        'Work type',
-                                        'Assignee',
-                                        'Priority',
-                                        'Reporter',
-                                        'Due date',
-                                        'Amendement date',
-                                        'Amendement time',
-                                        'Second amen-date',
-                                        'Second amen-time',
-                                        'Start date',
-                                        'Original estimate',
-                                        'Parent',
+                                        'work_item_key' => 'Work item key',
+                                        'work_type' => 'Work type',
+                                        'labels' => 'Labels',
+                                        'assignee' => 'Assignee',
+                                        'priority' => 'Priority',
+                                        'reporter' => 'Reporter',
+                                        'due_date' => 'Due date',
+                                        'created' => 'Created',
+                                        'updated' => 'Updated',
+                                        'amendement_date' => 'Amendement date',
+                                        'amendement_time' => 'Amendement time',
+                                        'second_amendement_date' => 'Second amen-date',
+                                        'second_amendement_time' => 'Second amen-time',
+                                        'start_date' => 'Start date',
+                                        'original_estimate' => 'Original estimate',
+                                        'parent' => 'Parent',
                                     );
                                 ?>
-                                <?php foreach ($settingsFields as $fieldLabel): ?>
+                                <?php foreach ($settingsFields as $fieldKey => $fieldLabel): ?>
                                     <div class="task-board-settings-field-row">
                                         <span><?= htmlspecialchars($fieldLabel, ENT_QUOTES, 'UTF-8') ?></span>
                                         <label class="task-field-toggle mb-0" title="Toggle <?= htmlspecialchars($fieldLabel, ENT_QUOTES, 'UTF-8') ?>">
-                                            <input type="checkbox" checked>
+                                            <input class="task-board-view-field-checkbox" type="checkbox" data-field-key="<?= htmlspecialchars($fieldKey, ENT_QUOTES, 'UTF-8') ?>" checked>
                                             <span class="task-field-toggle-slider"></span>
                                         </label>
                                     </div>
@@ -709,9 +817,6 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                         </div>
                     </div>
 
-                        <button id="taskOpenCreateStatusBtn" class="btn task-create-status-icon-btn" type="button" <?= $canAdd ? '' : 'disabled' ?> title="Add status">
-                            <i class="fa-solid fa-plus"></i>
-                        </button>
                     </div>
                 </div>
 
@@ -728,6 +833,13 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
 
                     <div id="taskBoardEmpty" class="task-empty-board-note mt-3 <?= !empty($columns) ? 'd-none' : '' ?>">
                         Board is empty. Click the + button to create your first status.
+                    </div>
+
+                    <div id="taskBoardNoResult" class="task-board-no-result d-none">
+                        <div class="task-board-no-result-icon"><i class="fa-solid fa-magnifying-glass"></i></div>
+                        <h4>No search results</h4>
+                        <p>Try a different word, phrase or filter.</p>
+                        <button id="taskBoardNoResultClearBtn" type="button" class="btn task-board-no-result-clear-btn">Clear</button>
                     </div>
                 </div>
             </div>
@@ -791,23 +903,45 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
     </div>
 </div>
 
+<div class="modal fade" id="taskItemActionModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable task-item-action-modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 id="taskItemActionModalTitle" class="modal-title">Task options</h5>
+                    <div id="taskItemActionModalMeta" class="task-item-action-modal-meta d-none"></div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body task-item-action-modal-body">
+                <div id="taskItemActionModalSections" class="task-item-action-modal-sections"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="taskItemDetailModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable task-item-detail-modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 id="taskItemDetailModalTitle" class="modal-title">Work item</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <div class="task-item-detail-header-actions">
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
             </div>
             <div class="modal-body">
                 <div class="row g-3">
-                    <div class="col-12 col-lg-8">
+                    <div class="col-12 col-lg-8 task-item-detail-main-col">
                         <div id="taskItemDetailKeyTrail" class="task-item-detail-key-trail d-none"></div>
                         <div class="mb-3">
-                            <label class="form-label" for="taskItemDetailTitleInput">Title</label>
                             <div class="task-item-detail-title-row">
-                                <input id="taskItemDetailTitleInput" class="form-control" type="text" maxlength="255" placeholder="Work item name">
-                                <button id="taskItemDetailTitleSaveBtn" class="btn btn-light task-item-detail-title-btn" type="button" title="Save title"><i class="fa-solid fa-check"></i></button>
-                                <button id="taskItemDetailTitleResetBtn" class="btn btn-light task-item-detail-title-btn" type="button" title="Reset title"><i class="fa-solid fa-xmark"></i></button>
+                                <input id="taskItemDetailTitleInput" class="form-control task-item-detail-title-input" type="text" maxlength="255" placeholder="Work item name">
+                                <button id="taskItemDetailTitleSaveBtn" class="btn task-item-detail-title-btn task-item-detail-title-btn-save" type="button" title="Save title" aria-label="Save title">
+                                    <i class="fa-solid fa-check"></i>
+                                </button>
+                                <button id="taskItemDetailTitleResetBtn" class="btn task-item-detail-title-btn task-item-detail-title-btn-cancel" type="button" title="Cancel title edit" aria-label="Cancel title edit">
+                                    <i class="fa-solid fa-xmark"></i>
+                                </button>
                             </div>
                             <div class="dropdown task-item-detail-add-wrap mt-2">
                                 <button id="taskItemDetailAddBtn" class="btn btn-outline-primary task-item-detail-add-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Add">
@@ -819,6 +953,7 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                                 </ul>
                                 <input id="taskItemAttachmentInput" type="file" class="d-none" multiple>
                             </div>
+                            <div id="taskItemDetailAutosaveStatus" class="task-item-detail-autosave-status d-none" aria-live="polite"></div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label" for="taskItemDetailDescriptionInput">Description</label>
@@ -911,19 +1046,9 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                             <div id="taskItemWebLinkList" class="task-item-web-link-list"></div>
                         </div>
 
-                        <div class="task-item-activity-section">
-                            <h5 class="mb-2">Activity</h5>
-                            <ul class="nav nav-tabs task-item-activity-tabs" role="tablist">
-                                <li class="nav-item" role="presentation"><button class="nav-link active" type="button">All</button></li>
-                                <li class="nav-item" role="presentation"><button class="nav-link" type="button">Comment</button></li>
-                                <li class="nav-item" role="presentation"><button class="nav-link" type="button">History</button></li>
-                            </ul>
-                            <div class="task-item-activity-compose mt-3">
-                                <textarea class="form-control" rows="3" placeholder="Add a comment..."></textarea>
-                            </div>
-                        </div>
+                        <?php taskRenderBoardItemHistorySection(); ?>
                     </div>
-                    <div class="col-12 col-lg-4">
+                    <div class="col-12 col-lg-4 task-item-detail-side-col">
                         <div id="taskItemDetailSideCard" class="task-item-detail-side-card">
                             <div class="task-item-detail-side-head mb-3">
                                 <button id="taskItemDetailSideCollapseBtn" type="button" class="btn task-item-detail-side-collapse-btn" aria-expanded="true" title="Collapse details">
@@ -963,8 +1088,19 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                             </div>
 
                             <div class="task-item-detail-field-row" data-detail-field="parent">
-                                <label class="task-item-detail-field-label" for="taskItemDetailParentSelect">Parent</label>
-                                <select id="taskItemDetailParentSelect" class="form-select form-select-sm"></select>
+                                <label class="task-item-detail-field-label" for="taskItemDetailParentSearchInput">Parent</label>
+                                <div class="task-item-detail-parent-wrap">
+                                    <div class="dropdown task-item-detail-parent-dropdown">
+                                        <button id="taskItemDetailParentDropdownBtn" class="btn task-item-detail-parent-dropdown-btn" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                                            <span id="taskItemDetailParentSelectedText" class="task-item-detail-parent-selected-text">None</span>
+                                            <i class="fa-solid fa-chevron-down task-item-detail-dropdown-icon" aria-hidden="true"></i>
+                                        </button>
+                                        <div id="taskItemDetailParentMenu" class="dropdown-menu task-item-detail-parent-menu p-2">
+                                            <input id="taskItemDetailParentSearchInput" class="form-control form-control-sm mb-2" type="text" maxlength="120" autocomplete="off" placeholder="Search parent">
+                                            <div id="taskItemDetailParentOptionList" class="task-item-detail-parent-option-list"></div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
 
                             <div class="task-item-detail-field-row" data-detail-field="assignee">
@@ -1063,17 +1199,49 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                                 </select>
                             </div>
                             </div>
+
+                            <div id="taskItemWorklogTimerSection" class="task-item-worklog-section mt-3">
+                                <div class="task-item-worklog-header">
+                                    <button id="taskItemWorklogToggleBtn" type="button" class="btn task-item-worklog-toggle-btn" aria-expanded="true" title="Collapse worklog timer">
+                                        <i class="fa-solid fa-chevron-down"></i>
+                                    </button>
+                                    <span class="task-item-worklog-title">Simple Worklog Timer</span>
+                                </div>
+                                <div id="taskItemWorklogBody" class="task-item-worklog-body">
+                                    <div class="task-item-worklog-display" id="taskItemWorklogDisplay">
+                                        <div class="task-item-worklog-number" id="taskItemWorklogDays">00</div>
+                                        <div class="task-item-worklog-sep">:</div>
+                                        <div class="task-item-worklog-number" id="taskItemWorklogHours">00</div>
+                                        <div class="task-item-worklog-sep">:</div>
+                                        <div class="task-item-worklog-number" id="taskItemWorklogMinutes">00</div>
+                                        <div class="task-item-worklog-sep">:</div>
+                                        <div class="task-item-worklog-number" id="taskItemWorklogSeconds">00</div>
+                                        <div class="task-item-worklog-label">DAYS</div>
+                                        <div></div>
+                                        <div class="task-item-worklog-label">HOURS</div>
+                                        <div></div>
+                                        <div class="task-item-worklog-label">MINUTES</div>
+                                        <div></div>
+                                        <div class="task-item-worklog-label">SECONDS</div>
+                                    </div>
+                                    <div id="taskItemWorklogActions" class="task-item-worklog-actions mt-3">
+                                        <button type="button" id="taskItemWorklogStartBtn" class="btn task-worklog-btn task-worklog-btn-start">Start <i class="fa-solid fa-play"></i></button>
+                                        <button type="button" id="taskItemWorklogSaveBtn" class="btn task-worklog-btn task-worklog-btn-save d-none">Save in Work log</button>
+                                        <button type="button" id="taskItemWorklogStopBtn" class="btn task-worklog-btn task-worklog-btn-stop d-none">Stop <i class="fa-solid fa-stop"></i></button>
+                                        <button type="button" id="taskItemWorklogContinueBtn" class="btn task-worklog-btn task-worklog-btn-continue d-none">Continue</button>
+                                        <button type="button" id="taskItemWorklogResetBtn" class="btn task-worklog-btn task-worklog-btn-reset d-none">Reset time</button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
-                <button type="button" id="taskItemDetailSaveBtn" class="btn btn-primary">Save</button>
-            </div>
         </div>
     </div>
 </div>
+
+<div id="taskBoardToastHost" class="task-board-toast-host" aria-live="polite" aria-atomic="true"></div>
 
 <script>
 <?php
@@ -1086,6 +1254,7 @@ window.taskBoardConfig = {
     ajaxUrl: 'board.php',
     siteUrl: <?= json_encode(rtrim((string) $SITEURL, '/'), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     csrfToken: <?= json_encode($_SESSION['csrf_token'], JSON_UNESCAPED_UNICODE) ?>,
+    currentUserId: <?= json_encode($currentUserId, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     canAdd: <?= $canAdd ? 'true' : 'false' ?>,
     canEdit: <?= $canEdit ? 'true' : 'false' ?>,
     projectKey: <?= json_encode($projectKeySetting, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
@@ -1096,6 +1265,8 @@ window.taskBoardConfig = {
     statusLabels: <?= json_encode($statusLabels, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>
 };
 </script>
+<script src="../js/task_board_core.js"></script>
+<script src="../js/task_board_ui.js"></script>
 <script src="../js/task_board.js"></script>
 </body>
 </html>

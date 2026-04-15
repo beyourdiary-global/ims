@@ -195,6 +195,7 @@ define('TASK_PROJECT_KEY', 'task_project_key');
 define('TASK_ITEM_ATTACHMENT', 'task_board_item_attachment');
 define('TASK_ITEM_URL', 'task_board_item_url');
 define('TASK_ITEM_RELATION', 'task_board_item_relation');
+define('TASK_ITEM_HISTORY', 'task_board_item_history');
 
 
 

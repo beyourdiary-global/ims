@@ -1365,6 +1365,32 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Failed creating `" . TASK_ITEM_RELATION . "`: " . $conn->error . "</p>";
     }
 
+    $createTaskItemHistorySql = "CREATE TABLE IF NOT EXISTS `" . TASK_ITEM_HISTORY . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `item_id` INT NOT NULL,
+        `event_type` VARCHAR(80) NOT NULL,
+        `field_name` VARCHAR(120) DEFAULT NULL,
+        `from_value` TEXT DEFAULT NULL,
+        `to_value` TEXT DEFAULT NULL,
+        `remark` TEXT DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_task_item_history_item` (`item_id`),
+        KEY `idx_task_item_history_type` (`event_type`),
+        KEY `idx_task_item_history_created` (`create_date`,`create_time`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createTaskItemHistorySql)) {
+        echo "<p style='color:green;'>Verified table `" . TASK_ITEM_HISTORY . "` for task item history.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . TASK_ITEM_HISTORY . "`: " . $conn->error . "</p>";
+    }
+
     $seedWorkTypeSql = "INSERT IGNORE INTO `" . TASK_WORK_TYPE . "` (`name`, `svg_icon`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
         ('Task', 'svg_icon/10318.svg', 'Default Task Work Type', '1', CURDATE(), CURTIME(), 'A'),
         ('Epic', 'svg_icon/10307.svg', 'Default Epic Work Type', '1', CURDATE(), CURTIME(), 'A')";
