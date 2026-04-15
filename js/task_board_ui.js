@@ -32,6 +32,15 @@ function applyBoardViewSettingsToCard($card) {
   }
 
   var dueDateText = formatCardDateLabel($card.attr("data-due-date"));
+  var dueDateValue = String($card.attr("data-due-date") || "").trim();
+  var dueDateMs = parseCardDate(dueDateValue);
+  var today = new Date();
+  var todayMs = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate(),
+  ).getTime();
+  var isOverdue = !!dueDateMs && dueDateMs < todayMs;
   var $meta = $card.find(".task-item-meta").first();
   if (!$meta.length) {
     $meta = $('<div class="task-item-meta"></div>');
@@ -43,7 +52,14 @@ function applyBoardViewSettingsToCard($card) {
     if (!$due.length) {
       $due = $('<small class="task-item-due-date"></small>');
     }
-    $due.html('<i class="fa-regular fa-clock"></i> ' + escHtml(dueDateText));
+    $due
+      .toggleClass("task-item-due-date-overdue", isOverdue)
+      .html(
+        '<i class="fa-solid ' +
+          (isOverdue ? "fa-triangle-exclamation" : "fa-clock") +
+          '"></i> ' +
+          escHtml(dueDateText),
+      );
     $meta.before($due);
   } else {
     $due.remove();
@@ -633,7 +649,7 @@ function refreshParentSubmenuList($submenu) {
   if (!search || "none".indexOf(search) !== -1) {
     visibleCount++;
     html +=
-      '<button type="button" class="btn task-item-parent-option' +
+      '<button type="button" class="dropdown-item task-item-parent-option' +
       (currentParentId === 0 ? " active" : "") +
       '" data-parent-item-id="0">None</button>';
   }
@@ -657,7 +673,7 @@ function refreshParentSubmenuList($submenu) {
     visibleCount++;
     parentVisibleCount++;
     html +=
-      '<button type="button" class="btn task-item-parent-option' +
+      '<button type="button" class="dropdown-item task-item-parent-option' +
       (currentParentId === parentId ? " active" : "") +
       '" data-parent-item-id="' +
       parentId +
@@ -680,7 +696,7 @@ function refreshParentSubmenuList($submenu) {
       visibleCount++;
       parentVisibleCount++;
       html +=
-        '<button type="button" class="btn task-item-parent-option active" data-parent-item-id="' +
+        '<button type="button" class="dropdown-item task-item-parent-option active" data-parent-item-id="' +
         currentParentId +
         '">' +
         escHtml(fallbackDisplay) +
@@ -705,8 +721,18 @@ function renderDetailParentOptions(filterText) {
     .toLowerCase();
   var selectedId = Number(itemDetailModalState.parentItemId || 0);
   var options = normalizeParentOptions(itemDetailModalState.parentOptions);
+  var normalizeParentDisplayLabel = function (value) {
+    var label = String(value || "").trim();
+    if (!label) {
+      return "None";
+    }
+    if (label.toLowerCase() === "none") {
+      return "None";
+    }
+    return label;
+  };
   var html =
-    '<button type="button" class="btn task-item-detail-parent-option' +
+    '<button type="button" class="dropdown-item task-item-detail-parent-option' +
     (selectedId === 0 ? " active" : "") +
     '" data-parent-item-id="0"><span class="task-item-detail-parent-option-name">None</span></button>';
   var visibleCount = 1;
@@ -717,7 +743,7 @@ function renderDetailParentOptions(filterText) {
   for (var i = 0; i < options.length; i++) {
     var option = options[i] || {};
     var parentId = Number(option.id || 0);
-    var label = String(option.display || option.title || "").trim();
+    var label = normalizeParentDisplayLabel(option.display || option.title);
     if (!parentId || !label) {
       continue;
     }
@@ -728,7 +754,7 @@ function renderDetailParentOptions(filterText) {
 
     visibleCount++;
     html +=
-      '<button type="button" class="btn task-item-detail-parent-option' +
+      '<button type="button" class="dropdown-item task-item-detail-parent-option' +
       (selectedId === parentId ? " active" : "") +
       '" data-parent-item-id="' +
       parentId +
@@ -747,6 +773,16 @@ function renderDetailParentOptions(filterText) {
 function renderDetailParentDropdown(selectedParentId, parentOptions) {
   var selectedId = Number(selectedParentId || 0);
   var options = normalizeParentOptions(parentOptions);
+  var normalizeParentDisplayLabel = function (value) {
+    var label = String(value || "").trim();
+    if (!label) {
+      return "None";
+    }
+    if (label.toLowerCase() === "none") {
+      return "None";
+    }
+    return label;
+  };
   var selectedDisplay = "None";
   var hasSelectedOption = selectedId === 0;
 
@@ -758,7 +794,7 @@ function renderDetailParentDropdown(selectedParentId, parentOptions) {
       continue;
     }
 
-    selectedDisplay = String(opt.display || opt.title || "").trim() || "None";
+    selectedDisplay = normalizeParentDisplayLabel(opt.display || opt.title);
     hasSelectedOption = true;
     break;
   }
@@ -1120,6 +1156,52 @@ function setSelectedStatusLabels(ids) {
   }
 }
 
+function setDetailBoardStatus(columnId) {
+  var id = Number(columnId || 0);
+  var name = getBoardStatusColumnName(id);
+  if (!name && id > 0) {
+    var $card = $(itemDetailModalState.cardEl || null);
+    if ($card.length) {
+      name = String($card.attr("data-status-column-name") || "").trim();
+    }
+  }
+
+  if (!name) {
+    name = "Select status";
+  }
+
+  itemDetailModalState.detailStatusColumnId = id > 0 ? id : 0;
+  $("#taskItemDetailBoardStatusBtn").text(name);
+}
+
+function renderDetailBoardStatusOptions() {
+  var columns = getBoardStatusColumns();
+  var currentId = Number(itemDetailModalState.detailStatusColumnId || 0);
+  var html = "";
+
+  for (var i = 0; i < columns.length; i++) {
+    var col = columns[i] || {};
+    var colId = Number(col.id || 0);
+    var colName = String(col.name || "").trim();
+    if (!colId || !colName) {
+      continue;
+    }
+
+    html +=
+      '<button type="button" class="dropdown-item task-item-detail-board-status-option' +
+      (colId === currentId ? " active" : "") +
+      '" data-target-column-id="' +
+      colId +
+      '">' +
+      escHtml(colName) +
+      "</button>";
+  }
+
+  $("#taskItemDetailBoardStatusOptionList").html(
+    html || '<div class="task-label-empty">No status available.</div>',
+  );
+}
+
 function removeStatusLabelFromSelection(statusLabelId) {
   var targetId = Number(statusLabelId || 0);
   if (!targetId) {
@@ -1266,7 +1348,8 @@ function applyDetailFieldVisibility() {
     },
   );
 
-  $("#taskItemChildWorkItemsSection").toggleClass("d-none", !isEpic);
+  // For epics, hide the child items section (only show its own work item id)
+  $("#taskItemChildWorkItemsSection").toggleClass("d-none", isEpic);
   if (!isEpic) {
     setChildWorkItemsCollapsed(false);
   }
@@ -1637,6 +1720,19 @@ function applyItemDetailToModal(detail, statusLabels, parentOptions, webLinks) {
   itemDetailModalState.titleEditing = false;
   $(".task-item-detail-title-row").removeClass("is-editing");
 
+  if (typeof window.setDescriptionEditorContent === "function") {
+    window.setDescriptionEditorContent(description);
+  }
+  if (typeof window.renderItemDetailDescriptionPreview === "function") {
+    window.renderItemDetailDescriptionPreview(description);
+  }
+  if (typeof window.setItemDetailDescriptionEditMode === "function") {
+    window.setItemDetailDescriptionEditMode(false, {
+      keepDraftNotice: true,
+      skipEditorSync: true,
+    });
+  }
+
   $("#taskItemDetailEstimateValueInput").val(
     Number(info.original_estimate_value || 0),
   );
@@ -1663,6 +1759,13 @@ function applyItemDetailToModal(detail, statusLabels, parentOptions, webLinks) {
     info,
     Number(info.original_estimate_value || 0),
     String(info.original_estimate_unit || "minutes"),
+  );
+  setDetailBoardStatus(
+    Number(
+      info.column_id ||
+        getCardStatusColumnId($(itemDetailModalState.cardEl || null)) ||
+        0,
+    ),
   );
 
   itemDetailModalState.webLinks = Array.isArray(webLinks)
@@ -1789,20 +1892,35 @@ function setItemDetailAutosaveStatus(stateName, message) {
 }
 
 function getModalCoreValues() {
+  var descriptionValue = String(
+    $("#taskItemDetailDescriptionInput").val() || "",
+  );
+  if (typeof window.getDescriptionEditorContent === "function") {
+    descriptionValue = String(window.getDescriptionEditorContent() || "");
+  }
+
+  if (!descriptionHasRenderableContent(descriptionValue)) {
+    descriptionValue = "";
+  }
+
   return {
     title: String($("#taskItemDetailTitleInput").val() || "").trim(),
-    description: String(
-      $("#taskItemDetailDescriptionInput").val() || "",
-    ).trim(),
+    description: descriptionValue,
   };
 }
 
 function buildModalCoreSnapshot(source) {
   var values =
     source && typeof source === "object" ? source : getModalCoreValues();
+
+  var descriptionValue = String(values.description || "");
+  if (!descriptionHasRenderableContent(descriptionValue)) {
+    descriptionValue = "";
+  }
+
   return JSON.stringify({
     title: String(values.title || "").trim(),
-    description: String(values.description || "").trim(),
+    description: descriptionValue,
   });
 }
 
@@ -2137,6 +2255,16 @@ function buildTaskCardHtml(item) {
   var updateDate = String(item.update_date || "").trim();
   var startDate = String(item.start_date || "").trim();
   var dueDate = item.due_date || "";
+  var dueDateValue = String(dueDate || "").trim();
+  var dueDateText = formatCardDateLabel(dueDateValue);
+  var dueDateMs = parseCardDate(dueDateValue);
+  var now = new Date();
+  var todayMs = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  ).getTime();
+  var isOverdue = !!dueDateMs && dueDateMs < todayMs;
   var estimateValue = Number(item.original_estimate_value || 0);
   var estimateUnit = String(item.original_estimate_unit || "minutes").trim();
   var amendementDate = String(item.amendement_date || "").trim();
@@ -2312,9 +2440,13 @@ function buildTaskCardHtml(item) {
     "</div>" +
     "</div>" +
     "</div>" +
-    (dueDate
-      ? '<small class="task-item-due-date">Due: ' +
-        escHtml(dueDate) +
+    (dueDateText
+      ? '<small class="task-item-due-date' +
+        (isOverdue ? " task-item-due-date-overdue" : "") +
+        '"><i class="fa-solid ' +
+        (isOverdue ? "fa-triangle-exclamation" : "fa-clock") +
+        '"></i> ' +
+        escHtml(dueDateText) +
         "</small>"
       : "") +
     "</article>"
