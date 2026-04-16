@@ -205,9 +205,9 @@ if (in_array('130', GlobalPin)) {
     $userShopeeLink = $SITEURL . '/shopee/shopee_processing_order.php';
 }
 
-$hasTaskSummaryAccess = in_array('137', GlobalPin);
-$hasTaskBoardAccess = in_array('136', GlobalPin);
-$hasTaskSheetsAccess = in_array('138', GlobalPin);
+$hasTaskSummaryAccess = is_array(GlobalPin) && in_array('137', GlobalPin);
+$hasTaskBoardAccess = is_array(GlobalPin) && in_array('136', GlobalPin);
+$hasTaskSheetsAccess = is_array(GlobalPin) && in_array('138', GlobalPin);
 $hasTaskManagementAccess = $hasTaskSummaryAccess || $hasTaskBoardAccess || $hasTaskSheetsAccess;
 $taskManagementLandingUrl = $hasTaskSummaryAccess
     ? $SITEURL . '/task/summary.php'

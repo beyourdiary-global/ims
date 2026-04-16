@@ -338,11 +338,15 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                         <div id="tokenHelpChatIdSection" class="mt-3">
                             <h6>How to get Chat ID</h6>
                             <ol class="token-help-steps">
-                                <li>Open your created bot chat and send <strong>/start</strong> once.</li>
-                                <img class="token-help-media" src="<?= $SITEURL ?>/images_server/token_setting_guide/chat_id_step1.png" alt="Telegram bot chat with start command">
+                                <li>
+                                    Open your created bot chat and send <strong>/start</strong> once.<br>
+                                    <img class="token-help-media mt-2" src="<?= $SITEURL ?>/images_server/token_setting_guide/chat_id_step1.png" alt="Telegram bot chat with start command">
+                                </li>
                                 <li>Open this URL in browser (replace with your bot token):<br><code>https://api.telegram.org/bot&lt;YOUR_BOT_TOKEN&gt;/getUpdates</code></li>
-                                <li>In the JSON response, find <code>message</code> -&gt; <code>chat</code> -&gt; <code>id</code>.</li>
-                                <img class="token-help-media mt-2" src="<?= $SITEURL ?>/images_server/token_setting_guide/chat_id_step2.png" alt="Telegram getUpdates response with chat id">
+                                <li>
+                                    In the JSON response, find <code>message</code> -&gt; <code>chat</code> -&gt; <code>id</code>.<br>
+                                    <img class="token-help-media mt-2" src="<?= $SITEURL ?>/images_server/token_setting_guide/chat_id_step2.png" alt="Telegram getUpdates response with chat id">
+                                </li>
                                 <li>Copy that numeric value (example: <code>1064420282</code>) and paste it into Chat ID.</li>
                             </ol>
                             <p class="mb-0">Reference: <a href="https://core.telegram.org/bots/api#getupdates" target="_blank" rel="noopener noreferrer">Telegram Bot API - getUpdates</a></p>
