@@ -252,8 +252,24 @@ $(document).ready(function () {
     var service = toPositiveNumber($("#service_fee").val());
     var transaction = toPositiveNumber($("#trans_fee").val());
     var commission = toPositiveNumber($("#ams_fee").val());
+    var saverProgramFee = toPositiveNumber($("#saver_program_fee").val());
 
-    $("#fees").val((service + transaction + commission).toFixed(2));
+    $("#fees").val(
+      (service + transaction + commission + saverProgramFee).toFixed(2),
+    );
+
+    var saverHint = $("#saver_program_fee_hint");
+    if (saverHint.length > 0) {
+      if (saverProgramFee > 0) {
+        saverHint.text(
+          "Includes Saver Programme Fee: " + saverProgramFee.toFixed(2),
+        );
+        saverHint.removeClass("d-none");
+      } else {
+        saverHint.addClass("d-none");
+      }
+    }
+
     recalculateImportFinalAmount();
   }
 
