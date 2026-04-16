@@ -280,7 +280,7 @@ $(document).ready(function () {
     var voucher = toPositiveNumber($("#voucher").val());
 
     $("#final_amt").val(
-      (productPrice - actualShipping - fees - voucher).toFixed(2),
+      (productPrice - actualShipping - fees - voucher).toFixed(2)
     );
   }
 

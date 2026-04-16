@@ -711,16 +711,25 @@ function resolvePackageIdsFromDetectedData($sku, $productNameCandidates, $connec
             continue;
         }
 
-        $safeProductLike = sanitizeImportLikeTerm($productName);
-        if ($safeProductLike === '') {
+        // 1. Create an ASCII-safe normalized term for the EXACT equality check
+        $safeProductExact = normalizeImportText($productName);
+        $safeProductExact = preg_replace('/[^\x20-\x7E]+/', ' ', $safeProductExact);
+        $safeProductExact = trim(preg_replace('/\s+/', ' ', $safeProductExact));
+
+        if ($safeProductExact === '') {
             continue;
         }
 
+        // 2. Add slashes to the exact term ONLY for the LIKE check
+        $safeProductLike = addcslashes($safeProductExact, '%_\\');
+
+        $escapedProductExact = mysqli_real_escape_string($connect, $safeProductExact);
         $escapedProductLike = mysqli_real_escape_string($connect, $safeProductLike);
 
         $found = false;
         try {
-            $pkgResult = getData('id', "name = '$escapedProductLike' OR item_code = '$escapedProductLike'", 'LIMIT 1', PKG, $connect);
+            // Use the unescaped exact term for equality matching
+            $pkgResult = getData('id', "name = '$escapedProductExact' OR item_code = '$escapedProductExact'", 'LIMIT 1', PKG, $connect);
         } catch (Throwable $throwable) {
             $pkgResult = false;
         }
@@ -822,7 +831,7 @@ function pdfHexToUtf8($hex)
     }
 
     if ((strlen($hex) % 2) === 1) {
-        $hex = '0' . $hex;
+        $hex .= '0';
     }
 
     $bin = @hex2bin($hex);
@@ -866,15 +875,10 @@ function pdfIncrementHex($hex, $step)
     return strtoupper(str_pad(dechex($next), $width, '0', STR_PAD_LEFT));
 }
 
-function buildPdfUnicodeMapFromContent($content, &$debugMeta = null)
+function buildPdfUnicodeMapFromContent($content)
 {
-    if (!is_array($debugMeta)) {
-        $debugMeta = array();
-    }
-
     $map = array();
     $codeLengths = array();
-    $decodedCmapStreams = 0;
 
     preg_match_all('/stream\s*\r?\n(.*?)\r?\n?endstream/s', (string) $content, $streamMatches);
     $streams = isset($streamMatches[1]) && is_array($streamMatches[1]) ? $streamMatches[1] : array();
@@ -888,8 +892,6 @@ function buildPdfUnicodeMapFromContent($content, &$debugMeta = null)
         if (stripos($decoded, 'beginbfchar') === false && stripos($decoded, 'beginbfrange') === false) {
             continue;
         }
-
-        $decodedCmapStreams++;
 
         if (preg_match_all('/beginbfchar(.*?)endbfchar/si', $decoded, $bfCharBlocks)) {
             foreach ($bfCharBlocks[1] as $block) {
@@ -990,11 +992,6 @@ function buildPdfUnicodeMapFromContent($content, &$debugMeta = null)
     $lengths = array_map('intval', array_keys($codeLengths));
     rsort($lengths, SORT_NUMERIC);
 
-    $debugMeta['stream_count'] = count($streams);
-    $debugMeta['decoded_cmap_streams'] = $decodedCmapStreams;
-    $debugMeta['map_size'] = count($map);
-    $debugMeta['code_lengths'] = $lengths;
-
     return array(
         'map' => $map,
         'code_lengths' => $lengths,
@@ -1084,14 +1081,14 @@ function decodePdfLiteralStringToken($token)
     );
 
     $inner = str_replace(array(
-        '\\\\n',
-        '\\\\r',
-        '\\\\t',
-        '\\\\b',
-        '\\\\f',
-        '\\\\(',
-        '\\\\)',
-        '\\\\\\\\',
+        '\\n',
+        '\\r',
+        '\\t',
+        '\\b',
+        '\\f',
+        '\\(',
+        '\\)',
+        '\\\\',
     ), array(
         "\n",
         "\r",
@@ -1169,21 +1166,19 @@ function extractPdfTextTokensFromDecodedStream($decoded)
     return $lines;
 }
 
-function extractTextFromPdfViaCommand($filePath, &$debugMeta = null)
+function extractTextFromPdfViaCommand($filePath)
 {
-    if (!is_array($debugMeta)) {
-        $debugMeta = array();
+    // 1. Config Gate: Allow disabling via environment/config constant
+    if (defined('DISABLE_PDFTOTEXT_EXEC') && DISABLE_PDFTOTEXT_EXEC) {
+        return '';
     }
 
     $filePath = trim((string) $filePath);
-    $debugMeta['input_path_exists'] = is_file($filePath);
     if ($filePath === '' || !is_file($filePath)) {
-        $debugMeta['reason'] = 'missing-file';
         return '';
     }
 
     if (!function_exists('shell_exec')) {
-        $debugMeta['reason'] = 'shell-exec-not-available';
         return '';
     }
 
@@ -1191,62 +1186,47 @@ function extractTextFromPdfViaCommand($filePath, &$debugMeta = null)
     if ($disabled !== '') {
         $disabledFunctions = array_map('trim', explode(',', strtolower($disabled)));
         if (in_array('shell_exec', $disabledFunctions, true)) {
-            $debugMeta['reason'] = 'shell-exec-disabled';
             return '';
         }
     }
 
     $escapedFile = escapeshellarg($filePath);
-    $commands = [
-        'pdftotext -enc UTF-8 -layout ' . $escapedFile . ' - 2>/dev/null',
-        'pdftotext -enc UTF-8 ' . $escapedFile . ' - 2>/dev/null',
-    ];
+    
+    // 2. Resource Limit: Prevent hangs by wrapping the command with a 15-second timeout (Unix/Linux environments)
+    $timeoutPrefix = '';
+    if (strtoupper(substr(PHP_OS, 0, 3)) !== 'WIN') {
+        $timeoutPrefix = 'timeout 15 ';
+    }
 
-    $debugMeta['commands'] = [];
+    $commands = [
+        $timeoutPrefix . 'pdftotext -enc UTF-8 -layout ' . $escapedFile . ' - 2>/dev/null',
+        $timeoutPrefix . 'pdftotext -enc UTF-8 ' . $escapedFile . ' - 2>/dev/null',
+    ];
 
     foreach ($commands as $command) {
         $output = @shell_exec($command);
         $output = is_string($output) ? trim($output) : '';
-        $debugMeta['commands'][] = [
-            'command' => $command,
-            'output_len' => strlen($output),
-        ];
         if ($output !== '') {
-            $debugMeta['selected'] = $command;
             return $output;
         }
     }
 
-    $debugMeta['reason'] = 'pdftotext-empty-output';
-
     return '';
 }
 
-function extractTextFromPdfContent($content, &$debugMeta = null)
+function extractTextFromPdfContent($content)
 {
-    if (!is_array($debugMeta)) {
-        $debugMeta = array();
-    }
-
     if ((string) $content === '') {
-        $debugMeta['reason'] = 'empty-content';
         return '';
     }
 
     preg_match_all('/stream\s*\r?\n(.*?)\r?\n?endstream/s', (string) $content, $streamMatches);
     $lines = array();
-    $debugMeta['stream_count'] = isset($streamMatches[1]) && is_array($streamMatches[1]) ? count($streamMatches[1]) : 0;
-    $debugMeta['decoded_streams'] = 0;
-    $debugMeta['raw_fallback_streams'] = 0;
-    $debugMeta['line_count'] = 0;
 
     foreach ($streamMatches[1] as $stream) {
         $decoded = decodePdfStream($stream);
         if ($decoded === false) {
             $decoded = (string) $stream;
-            $debugMeta['raw_fallback_streams']++;
-        } else {
-            $debugMeta['decoded_streams']++;
         }
 
         $extractedLines = extractPdfTextTokensFromDecodedStream($decoded);
@@ -1254,9 +1234,6 @@ function extractTextFromPdfContent($content, &$debugMeta = null)
             $lines = array_merge($lines, $extractedLines);
         }
     }
-
-    $debugMeta['line_count'] = count($lines);
-    $debugMeta['sample_lines'] = array_slice($lines, 0, 20);
 
     return implode("\n", $lines);
 }
