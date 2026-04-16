@@ -223,6 +223,9 @@ if (!function_exists('taskGetItemHistory')) {
 
         while ($row = $rst->fetch_assoc()) {
             $eventType = isset($row['event_type']) ? trim((string) $row['event_type']) : '';
+            if ($eventType === 'comment') {
+                continue;
+            }
             $fieldName = isset($row['field_name']) ? trim((string) $row['field_name']) : '';
             $remark = isset($row['remark']) ? trim((string) $row['remark']) : '';
             $toValue = isset($row['to_value']) ? trim((string) $row['to_value']) : '';
@@ -258,6 +261,540 @@ if (!function_exists('taskGetItemHistory')) {
         }
 
         return $rows;
+    }
+}
+
+if (!function_exists('taskSanitizeCommentHtml')) {
+    function taskSanitizeCommentHtml($html)
+    {
+        $value = trim((string) $html);
+        if ($value === '') {
+            return '';
+        }
+
+        $value = str_replace("\0", '', $value);
+        $allowedTags = '<p><br><strong><b><em><i><u><s><strike><sub><sup><ul><ol><li><a><h1><h2><h3><h4><h5><h6><blockquote><span><img>';
+        $value = strip_tags($value, $allowedTags);
+
+        $value = preg_replace('/\son[a-z]+\s*=\s*"[^"]*"/i', '', $value);
+        $value = preg_replace("/\son[a-z]+\s*=\s*'[^']*'/i", '', $value);
+        $value = preg_replace('/\sstyle\s*=\s*"[^"]*"/i', '', $value);
+        $value = preg_replace("/\sstyle\s*=\s*'[^']*'/i", '', $value);
+        $value = preg_replace('/href\s*=\s*"\s*javascript:[^"]*"/i', 'href="#"', $value);
+        $value = preg_replace("/href\s*=\s*'\s*javascript:[^']*'/i", "href='#'", $value);
+        $value = preg_replace('/src\s*=\s*"\s*javascript:[^"]*"/i', 'src=""', $value);
+        $value = preg_replace("/src\s*=\s*'\s*javascript:[^']*'/i", "src=''", $value);
+
+        return trim((string) $value);
+    }
+}
+
+if (!function_exists('taskBuildCommentPlainText')) {
+    function taskBuildCommentPlainText($html)
+    {
+        $text = trim((string) html_entity_decode(strip_tags((string) $html), ENT_QUOTES, 'UTF-8'));
+        $text = preg_replace('/\s+/', ' ', $text);
+        return trim((string) $text);
+    }
+}
+
+if (!function_exists('taskGetItemCommentRepliesMap')) {
+    function taskGetItemCommentRepliesMap($connect, $itemId, $commentIds)
+    {
+        $itemId = (int) $itemId;
+        $map = array();
+        $commentIds = array_values(array_unique(array_map('intval', (array) $commentIds)));
+        $commentIds = array_filter($commentIds, function ($id) {
+            return $id > 0;
+        });
+
+        if ($itemId <= 0 || empty($commentIds) || !defined('TASK_ITEM_COMMENT_REPLY')) {
+            return $map;
+        }
+
+        $idSql = implode(',', $commentIds);
+        $limit = max(100, min(5000, count($commentIds) * 80));
+        $sql = "SELECT r.id,r.item_id,r.comment_id,r.reply_html,r.reply_text,r.create_by,r.create_date,r.create_time,r.update_date,r.update_time,
+                       COALESCE(NULLIF(TRIM(u.name), ''), NULLIF(TRIM(u.username), ''), r.create_by, 'User') AS actor_name
+                FROM " . TASK_ITEM_COMMENT_REPLY . " r
+                LEFT JOIN " . USR_USER . " u ON u.id = r.create_by
+                WHERE r.item_id='" . $itemId . "' AND r.status='A' AND r.comment_id IN (" . $idSql . ")
+                ORDER BY r.id ASC
+                LIMIT " . (int) $limit;
+
+        $rst = mysqli_query($connect, $sql);
+        if (!$rst) {
+            return $map;
+        }
+
+        while ($row = $rst->fetch_assoc()) {
+            $commentId = isset($row['comment_id']) ? (int) $row['comment_id'] : 0;
+            if ($commentId <= 0) {
+                continue;
+            }
+
+            $createDate = isset($row['create_date']) ? (string) $row['create_date'] : '';
+            $createTime = isset($row['create_time']) ? (string) $row['create_time'] : '';
+            $updateDate = isset($row['update_date']) ? (string) $row['update_date'] : '';
+            $updateTime = isset($row['update_time']) ? (string) $row['update_time'] : '';
+            $hasUpdateDate = ($updateDate !== '' && $updateDate !== '0000-00-00');
+            $hasUpdateTime = ($updateTime !== '' && $updateTime !== '00:00:00');
+            $isEdited = ($hasUpdateDate || $hasUpdateTime) && ($updateDate !== $createDate || $updateTime !== $createTime);
+
+            if (!isset($map[$commentId])) {
+                $map[$commentId] = array();
+            }
+
+            $map[$commentId][] = array(
+                'id' => isset($row['id']) ? (int) $row['id'] : 0,
+                'item_id' => isset($row['item_id']) ? (int) $row['item_id'] : 0,
+                'comment_id' => $commentId,
+                'reply_html' => isset($row['reply_html']) ? (string) $row['reply_html'] : '',
+                'reply_text' => isset($row['reply_text']) ? (string) $row['reply_text'] : '',
+                'actor_name' => isset($row['actor_name']) ? (string) $row['actor_name'] : 'User',
+                'create_by' => isset($row['create_by']) ? (string) $row['create_by'] : '',
+                'create_date' => $createDate,
+                'create_time' => $createTime,
+                'is_edited' => $isEdited ? 1 : 0,
+            );
+        }
+
+        return $map;
+    }
+}
+
+if (!function_exists('taskGetItemComments')) {
+    function taskGetItemComments($connect, $itemId, $limit = 200)
+    {
+        $itemId = (int) $itemId;
+        $limit = (int) $limit;
+        if ($itemId <= 0 || !defined('TASK_ITEM_COMMENT')) {
+            return array();
+        }
+
+        if ($limit <= 0) {
+            $limit = 200;
+        }
+
+        $rows = array();
+        $commentIds = array();
+        $sql = "SELECT c.id,c.item_id,c.comment_html,c.comment_text,c.create_by,c.create_date,c.create_time,c.update_date,c.update_time,c.status AS row_status,
+                       COALESCE(NULLIF(TRIM(u.name), ''), NULLIF(TRIM(u.username), ''), c.create_by, 'User') AS actor_name
+                FROM " . TASK_ITEM_COMMENT . " c
+                LEFT JOIN " . USR_USER . " u ON u.id = c.create_by
+            WHERE c.item_id='" . $itemId . "' AND c.status IN ('A','D')
+                ORDER BY c.id DESC
+                LIMIT " . $limit;
+
+        $rst = mysqli_query($connect, $sql);
+        if (!$rst) {
+            return $rows;
+        }
+
+        while ($row = $rst->fetch_assoc()) {
+            $commentId = isset($row['id']) ? (int) $row['id'] : 0;
+            $createDate = isset($row['create_date']) ? (string) $row['create_date'] : '';
+            $createTime = isset($row['create_time']) ? (string) $row['create_time'] : '';
+            $updateDate = isset($row['update_date']) ? (string) $row['update_date'] : '';
+            $updateTime = isset($row['update_time']) ? (string) $row['update_time'] : '';
+            $hasUpdateDate = ($updateDate !== '' && $updateDate !== '0000-00-00');
+            $hasUpdateTime = ($updateTime !== '' && $updateTime !== '00:00:00');
+            $isEdited = ($hasUpdateDate || $hasUpdateTime) && ($updateDate !== $createDate || $updateTime !== $createTime);
+
+            if ($commentId > 0) {
+                $commentIds[] = $commentId;
+            }
+
+            $rows[] = array(
+                'id' => $commentId,
+                'item_id' => isset($row['item_id']) ? (int) $row['item_id'] : 0,
+                'comment_html' => isset($row['comment_html']) ? (string) $row['comment_html'] : '',
+                'comment_text' => isset($row['comment_text']) ? (string) $row['comment_text'] : '',
+                'is_deleted' => (isset($row['row_status']) && (string) $row['row_status'] === 'D') ? 1 : 0,
+                'actor_name' => isset($row['actor_name']) ? (string) $row['actor_name'] : 'User',
+                'create_by' => isset($row['create_by']) ? (string) $row['create_by'] : '',
+                'create_date' => $createDate,
+                'create_time' => $createTime,
+                'is_edited' => $isEdited ? 1 : 0,
+                'replies' => array(),
+            );
+        }
+
+        if (!empty($rows) && !empty($commentIds)) {
+            $replyMap = taskGetItemCommentRepliesMap($connect, $itemId, $commentIds);
+            foreach ($rows as $idx => $commentRow) {
+                $cid = isset($commentRow['id']) ? (int) $commentRow['id'] : 0;
+                $rows[$idx]['replies'] = isset($replyMap[$cid]) ? $replyMap[$cid] : array();
+            }
+        }
+
+        $visibleRows = array();
+        foreach ($rows as $commentRow) {
+            $isDeleted = isset($commentRow['is_deleted']) && (int) $commentRow['is_deleted'] === 1;
+            $replyCount = isset($commentRow['replies']) && is_array($commentRow['replies']) ? count($commentRow['replies']) : 0;
+            if ($isDeleted && $replyCount === 0) {
+                continue;
+            }
+
+            if ($isDeleted) {
+                $commentRow['comment_html'] = '';
+                $commentRow['comment_text'] = '';
+            }
+
+            $visibleRows[] = $commentRow;
+        }
+
+        return $visibleRows;
+    }
+}
+
+if (!function_exists('taskCreateItemComment')) {
+    function taskCreateItemComment($connect, $itemId, $commentHtml, $currentUserId, $cdate, $ctime)
+    {
+        $itemId = (int) $itemId;
+        if ($itemId <= 0) {
+            return array('ok' => 0, 'message' => 'Invalid comment request.');
+        }
+
+        if (!defined('TASK_ITEM_COMMENT')) {
+            return array('ok' => 0, 'message' => 'Comment table is not configured. Please run insert_table.php.');
+        }
+
+        $itemRst = mysqli_query(
+            $connect,
+            "SELECT id FROM " . TASK_ITEM . " WHERE id='" . $itemId . "' AND status='A' LIMIT 1"
+        );
+        if (!$itemRst || $itemRst->num_rows === 0) {
+            return array('ok' => 0, 'message' => 'Work item not found.');
+        }
+
+        $safeHtml = taskSanitizeCommentHtml($commentHtml);
+        $plainText = taskBuildCommentPlainText($safeHtml);
+        $hasImage = (bool) preg_match('/<img\b/i', $safeHtml);
+        if ($safeHtml === '' || ($plainText === '' && !$hasImage)) {
+            return array('ok' => 0, 'message' => 'Comment cannot be empty.');
+        }
+
+        $safeItemId = (int) $itemId;
+        $safeCommentHtml = taskEsc($connect, mb_strcut($safeHtml, 0, 65535, 'UTF-8'));
+        $safeCommentText = taskEsc($connect, mb_strcut($plainText, 0, 65535, 'UTF-8'));
+        $safeUser = taskEsc($connect, $currentUserId);
+        $safeDate = taskEsc($connect, $cdate);
+        $safeTime = taskEsc($connect, $ctime);
+
+        $okInsert = mysqli_query(
+            $connect,
+            "INSERT INTO " . TASK_ITEM_COMMENT . "
+             (item_id,comment_html,comment_text,create_by,create_date,create_time,status)
+             VALUES
+             ('" . $safeItemId . "','" . $safeCommentHtml . "','" . $safeCommentText . "','" . $safeUser . "','" . $safeDate . "','" . $safeTime . "','A')"
+        );
+
+        if (!$okInsert) {
+            return array('ok' => 0, 'message' => 'Failed to save comment.');
+        }
+
+        return array(
+            'ok' => 1,
+            'message' => 'Comment saved successfully.',
+            'comments' => taskGetItemComments($connect, $itemId, 200),
+        );
+    }
+}
+
+if (!function_exists('taskCreateItemCommentReply')) {
+    function taskCreateItemCommentReply($connect, $itemId, $commentId, $replyHtml, $currentUserId, $cdate, $ctime)
+    {
+        $itemId = (int) $itemId;
+        $commentId = (int) $commentId;
+        if ($itemId <= 0 || $commentId <= 0) {
+            return array('ok' => 0, 'message' => 'Invalid reply request.');
+        }
+
+        if (!defined('TASK_ITEM_COMMENT_REPLY')) {
+            return array('ok' => 0, 'message' => 'Reply table is not configured. Please run insert_table.php.');
+        }
+
+        $commentRst = mysqli_query(
+            $connect,
+            "SELECT id FROM " . TASK_ITEM_COMMENT . "
+             WHERE id='" . $commentId . "' AND item_id='" . $itemId . "' AND status='A' LIMIT 1"
+        );
+        if (!$commentRst || $commentRst->num_rows === 0) {
+            return array('ok' => 0, 'message' => 'Parent comment not found.');
+        }
+
+        $safeHtml = taskSanitizeCommentHtml($replyHtml);
+        $plainText = taskBuildCommentPlainText($safeHtml);
+        $hasImage = (bool) preg_match('/<img\b/i', $safeHtml);
+        if ($safeHtml === '' || ($plainText === '' && !$hasImage)) {
+            return array('ok' => 0, 'message' => 'Reply cannot be empty.');
+        }
+
+        $safeHtmlSql = taskEsc($connect, mb_strcut($safeHtml, 0, 65535, 'UTF-8'));
+        $safeTextSql = taskEsc($connect, mb_strcut($plainText, 0, 65535, 'UTF-8'));
+        $safeUser = taskEsc($connect, $currentUserId);
+        $safeDate = taskEsc($connect, $cdate);
+        $safeTime = taskEsc($connect, $ctime);
+
+        $okInsert = mysqli_query(
+            $connect,
+            "INSERT INTO " . TASK_ITEM_COMMENT_REPLY . "
+             (item_id,comment_id,reply_html,reply_text,create_by,create_date,create_time,status)
+             VALUES
+             ('" . $itemId . "','" . $commentId . "','" . $safeHtmlSql . "','" . $safeTextSql . "','" . $safeUser . "','" . $safeDate . "','" . $safeTime . "','A')"
+        );
+
+        if (!$okInsert) {
+            return array('ok' => 0, 'message' => 'Failed to save reply.');
+        }
+
+        return array(
+            'ok' => 1,
+            'message' => 'Reply saved successfully.',
+            'comments' => taskGetItemComments($connect, $itemId, 200),
+        );
+    }
+}
+
+if (!function_exists('taskDeleteItemComment')) {
+    function taskDeleteItemComment($connect, $itemId, $commentId, $currentUserId, $cdate, $ctime)
+    {
+        $itemId = (int) $itemId;
+        $commentId = (int) $commentId;
+        if ($itemId <= 0 || $commentId <= 0) {
+            return array('ok' => 0, 'message' => 'Invalid comment delete request.');
+        }
+
+        if (!defined('TASK_ITEM_COMMENT')) {
+            return array('ok' => 0, 'message' => 'Comment table is not configured. Please run insert_table.php.');
+        }
+
+        $commentSql = "SELECT id,item_id,comment_text FROM " . TASK_ITEM_COMMENT . "
+                       WHERE id='" . $commentId . "' AND item_id='" . $itemId . "' AND status='A' LIMIT 1";
+        $commentRst = mysqli_query($connect, $commentSql);
+        if (!$commentRst || $commentRst->num_rows === 0) {
+            return array('ok' => 0, 'message' => 'Comment not found or already deleted.');
+        }
+
+        $commentRow = $commentRst->fetch_assoc();
+        $oldCommentText = isset($commentRow['comment_text']) ? (string) $commentRow['comment_text'] : '';
+
+        $safeCommentId = (int) $commentId;
+        $safeUser = taskEsc($connect, $currentUserId);
+        $safeDate = taskEsc($connect, $cdate);
+        $safeTime = taskEsc($connect, $ctime);
+
+        $okDelete = mysqli_query(
+            $connect,
+            "UPDATE " . TASK_ITEM_COMMENT . "
+             SET status='D', update_by='" . $safeUser . "', update_date='" . $safeDate . "', update_time='" . $safeTime . "'
+             WHERE id='" . $safeCommentId . "' AND item_id='" . $itemId . "' AND status='A'"
+        );
+
+        if (!$okDelete) {
+            return array('ok' => 0, 'message' => 'Failed to delete comment.');
+        }
+
+        taskLogItemHistory(
+            $connect,
+            $itemId,
+            'delete_comment',
+            'Comment',
+            mb_strcut(taskBuildCommentPlainText($oldCommentText), 0, 255, 'UTF-8'),
+            '',
+            'deleted a comment',
+            $currentUserId,
+            $cdate,
+            $ctime
+        );
+
+        return array(
+            'ok' => 1,
+            'message' => 'Comment deleted successfully.',
+            'comments' => taskGetItemComments($connect, $itemId, 200),
+        );
+    }
+}
+
+if (!function_exists('taskUpdateItemComment')) {
+    function taskUpdateItemComment($connect, $itemId, $commentId, $commentHtml, $currentUserId, $cdate, $ctime)
+    {
+        $itemId = (int) $itemId;
+        $commentId = (int) $commentId;
+        if ($itemId <= 0 || $commentId <= 0) {
+            return array('ok' => 0, 'message' => 'Invalid comment edit request.');
+        }
+
+        if (!defined('TASK_ITEM_COMMENT')) {
+            return array('ok' => 0, 'message' => 'Comment table is not configured. Please run insert_table.php.');
+        }
+
+        $commentSql = "SELECT id,item_id,comment_html,comment_text FROM " . TASK_ITEM_COMMENT . "
+                       WHERE id='" . $commentId . "' AND item_id='" . $itemId . "' AND status='A' LIMIT 1";
+        $commentRst = mysqli_query($connect, $commentSql);
+        if (!$commentRst || $commentRst->num_rows === 0) {
+            return array('ok' => 0, 'message' => 'Comment not found.');
+        }
+
+        $commentRow = $commentRst->fetch_assoc();
+        $safeHtml = taskSanitizeCommentHtml($commentHtml);
+        $plainText = taskBuildCommentPlainText($safeHtml);
+        $hasImage = (bool) preg_match('/<img\b/i', $safeHtml);
+        if ($safeHtml === '' || ($plainText === '' && !$hasImage)) {
+            return array('ok' => 0, 'message' => 'Comment cannot be empty.');
+        }
+
+        $safeCommentHtml = taskEsc($connect, mb_strcut($safeHtml, 0, 65535, 'UTF-8'));
+        $safeCommentText = taskEsc($connect, mb_strcut($plainText, 0, 65535, 'UTF-8'));
+        $safeUser = taskEsc($connect, $currentUserId);
+        $safeDate = taskEsc($connect, $cdate);
+        $safeTime = taskEsc($connect, $ctime);
+
+        $okUpdate = mysqli_query(
+            $connect,
+            "UPDATE " . TASK_ITEM_COMMENT . "
+             SET comment_html='" . $safeCommentHtml . "', comment_text='" . $safeCommentText . "',
+                 update_by='" . $safeUser . "', update_date='" . $safeDate . "', update_time='" . $safeTime . "'
+             WHERE id='" . $commentId . "' AND item_id='" . $itemId . "' AND status='A'"
+        );
+
+        if (!$okUpdate) {
+            return array('ok' => 0, 'message' => 'Failed to update comment.');
+        }
+
+        return array(
+            'ok' => 1,
+            'message' => 'Comment updated successfully.',
+            'comments' => taskGetItemComments($connect, $itemId, 200),
+        );
+    }
+}
+
+if (!function_exists('taskUpdateItemCommentReply')) {
+    function taskUpdateItemCommentReply($connect, $itemId, $replyId, $replyHtml, $currentUserId, $cdate, $ctime)
+    {
+        $itemId = (int) $itemId;
+        $replyId = (int) $replyId;
+        if ($itemId <= 0 || $replyId <= 0) {
+            return array('ok' => 0, 'message' => 'Invalid reply edit request.');
+        }
+
+        if (!defined('TASK_ITEM_COMMENT_REPLY')) {
+            return array('ok' => 0, 'message' => 'Reply table is not configured. Please run insert_table.php.');
+        }
+
+        $replySql = "SELECT id,item_id,reply_html,reply_text FROM " . TASK_ITEM_COMMENT_REPLY . "
+                     WHERE id='" . $replyId . "' AND item_id='" . $itemId . "' AND status='A' LIMIT 1";
+        $replyRst = mysqli_query($connect, $replySql);
+        if (!$replyRst || $replyRst->num_rows === 0) {
+            return array('ok' => 0, 'message' => 'Reply not found.');
+        }
+
+        $replyRow = $replyRst->fetch_assoc();
+        $safeHtml = taskSanitizeCommentHtml($replyHtml);
+        $plainText = taskBuildCommentPlainText($safeHtml);
+        $hasImage = (bool) preg_match('/<img\b/i', $safeHtml);
+        if ($safeHtml === '' || ($plainText === '' && !$hasImage)) {
+            return array('ok' => 0, 'message' => 'Reply cannot be empty.');
+        }
+
+        $safeReplyHtml = taskEsc($connect, mb_strcut($safeHtml, 0, 65535, 'UTF-8'));
+        $safeReplyText = taskEsc($connect, mb_strcut($plainText, 0, 65535, 'UTF-8'));
+        $safeUser = taskEsc($connect, $currentUserId);
+        $safeDate = taskEsc($connect, $cdate);
+        $safeTime = taskEsc($connect, $ctime);
+
+        $okUpdate = mysqli_query(
+            $connect,
+            "UPDATE " . TASK_ITEM_COMMENT_REPLY . "
+             SET reply_html='" . $safeReplyHtml . "', reply_text='" . $safeReplyText . "',
+                 update_by='" . $safeUser . "', update_date='" . $safeDate . "', update_time='" . $safeTime . "'
+             WHERE id='" . $replyId . "' AND item_id='" . $itemId . "' AND status='A'"
+        );
+
+        if (!$okUpdate) {
+            return array('ok' => 0, 'message' => 'Failed to update reply.');
+        }
+
+        $oldReplyText = isset($replyRow['reply_text']) ? (string) $replyRow['reply_text'] : '';
+        taskLogItemHistory(
+            $connect,
+            $itemId,
+            'update_reply',
+            'Reply',
+            mb_strcut(taskBuildCommentPlainText($oldReplyText), 0, 255, 'UTF-8'),
+            mb_strcut(taskBuildCommentPlainText($plainText), 0, 255, 'UTF-8'),
+            'edited a reply',
+            $currentUserId,
+            $cdate,
+            $ctime
+        );
+
+        return array(
+            'ok' => 1,
+            'message' => 'Reply updated successfully.',
+            'comments' => taskGetItemComments($connect, $itemId, 200),
+        );
+    }
+}
+
+if (!function_exists('taskDeleteItemCommentReply')) {
+    function taskDeleteItemCommentReply($connect, $itemId, $replyId, $currentUserId, $cdate, $ctime)
+    {
+        $itemId = (int) $itemId;
+        $replyId = (int) $replyId;
+        if ($itemId <= 0 || $replyId <= 0) {
+            return array('ok' => 0, 'message' => 'Invalid reply delete request.');
+        }
+
+        if (!defined('TASK_ITEM_COMMENT_REPLY')) {
+            return array('ok' => 0, 'message' => 'Reply table is not configured. Please run insert_table.php.');
+        }
+
+        $replySql = "SELECT id,item_id,reply_text FROM " . TASK_ITEM_COMMENT_REPLY . "
+                     WHERE id='" . $replyId . "' AND item_id='" . $itemId . "' AND status='A' LIMIT 1";
+        $replyRst = mysqli_query($connect, $replySql);
+        if (!$replyRst || $replyRst->num_rows === 0) {
+            return array('ok' => 0, 'message' => 'Reply not found or already deleted.');
+        }
+
+        $replyRow = $replyRst->fetch_assoc();
+        $oldReplyText = isset($replyRow['reply_text']) ? (string) $replyRow['reply_text'] : '';
+
+        $safeUser = taskEsc($connect, $currentUserId);
+        $safeDate = taskEsc($connect, $cdate);
+        $safeTime = taskEsc($connect, $ctime);
+
+        $okDelete = mysqli_query(
+            $connect,
+            "UPDATE " . TASK_ITEM_COMMENT_REPLY . "
+             SET status='D', update_by='" . $safeUser . "', update_date='" . $safeDate . "', update_time='" . $safeTime . "'
+             WHERE id='" . $replyId . "' AND item_id='" . $itemId . "' AND status='A'"
+        );
+
+        if (!$okDelete) {
+            return array('ok' => 0, 'message' => 'Failed to delete reply.');
+        }
+
+        taskLogItemHistory(
+            $connect,
+            $itemId,
+            'delete_reply',
+            'Reply',
+            mb_strcut(taskBuildCommentPlainText($oldReplyText), 0, 255, 'UTF-8'),
+            '',
+            'deleted a reply',
+            $currentUserId,
+            $cdate,
+            $ctime
+        );
+
+        return array(
+            'ok' => 1,
+            'message' => 'Reply deleted successfully.',
+            'comments' => taskGetItemComments($connect, $itemId, 200),
+        );
     }
 }
 
@@ -1605,7 +2142,7 @@ if (!function_exists('taskGetItemDetail')) {
             return array('ok' => 0, 'message' => 'Invalid work item request.');
         }
 
-        $sql = "SELECT i.id, i.title, i.description, i.assignee_user_id, i.reporter_user_id,
+        $sql = "SELECT i.id, i.column_id, i.title, i.description, i.assignee_user_id, i.reporter_user_id,
                        i.priority, i.original_estimate, i.task_status, i.parent_item_id, i.time_tracking,
                        i.due_date, i.start_date, i.amendement_date, i.amendement_time, i.second_amendement_date, i.second_amendement_time,
                        i.create_date, i.update_date,
@@ -1623,7 +2160,7 @@ if (!function_exists('taskGetItemDetail')) {
 
         $rst = mysqli_query($connect, $sql);
         if ($rst === false) {
-                 $sql = "SELECT i.id, i.title, '' AS description, i.assignee_user_id, 0 AS reporter_user_id,
+                 $sql = "SELECT i.id, i.column_id, i.title, '' AS description, i.assignee_user_id, 0 AS reporter_user_id,
                            'Medium' AS priority, '' AS original_estimate, '' AS task_status, 0 AS parent_item_id, '' AS time_tracking,
                            i.due_date, i.due_date AS start_date, NULL AS amendement_date, NULL AS amendement_time, NULL AS second_amendement_date, NULL AS second_amendement_time,
                            '' AS create_date, '' AS update_date,
@@ -1676,6 +2213,7 @@ if (!function_exists('taskGetItemDetail')) {
 
         $detail = array(
             'id' => $itemId,
+            'column_id' => isset($row['column_id']) ? (int) $row['column_id'] : 0,
             'title' => isset($row['title']) ? (string) $row['title'] : '',
             'description' => isset($row['description']) && $row['description'] !== null ? (string) $row['description'] : '',
             'assignee_user_id' => isset($row['assignee_user_id']) ? (int) $row['assignee_user_id'] : 0,
@@ -3332,6 +3870,7 @@ if (!function_exists('taskSetItemWorkType')) {
         $itemRow = $itemRst->fetch_assoc();
         $previousWorkTypeId = isset($itemRow['work_type_id']) ? (int) $itemRow['work_type_id'] : 0;
         $previousWorkTypeName = isset($itemRow['work_type_name']) ? (string) $itemRow['work_type_name'] : 'Task';
+        $previousParentInfo = taskGetParentRelationInfo($connect, $itemId);
 
         $workTypeSql = "SELECT id,name,remark,svg_icon
                         FROM " . TASK_WORK_TYPE . "
@@ -3353,14 +3892,19 @@ if (!function_exists('taskSetItemWorkType')) {
             $workTypeName = 'Task';
         }
 
+        $isTargetEpic = strtolower($workTypeName) === 'epic';
+
         $safeUser = taskEsc($connect, $currentUserId);
         $safeDate = taskEsc($connect, $cdate);
         $safeTime = taskEsc($connect, $ctime);
+
+        mysqli_begin_transaction($connect);
 
         $okUpdate = mysqli_query(
             $connect,
             "UPDATE " . TASK_ITEM . " SET
                 work_type_id='" . $workTypeId . "',
+                parent_item_id='" . ($isTargetEpic ? 0 : (int) (isset($previousParentInfo['parent_item_id']) ? $previousParentInfo['parent_item_id'] : 0)) . "',
                 update_by='" . $safeUser . "',
                 update_date='" . $safeDate . "',
                 update_time='" . $safeTime . "'
@@ -3368,8 +3912,40 @@ if (!function_exists('taskSetItemWorkType')) {
         );
 
         if (!$okUpdate) {
+            mysqli_rollback($connect);
             return array('ok' => 0, 'message' => 'Failed to update work type.');
         }
+
+        if ($isTargetEpic) {
+            $okUnlink = mysqli_query(
+                $connect,
+                "UPDATE " . TASK_ITEM . " SET
+                    parent_item_id='0',
+                    update_by='" . $safeUser . "',
+                    update_date='" . $safeDate . "',
+                    update_time='" . $safeTime . "'
+                 WHERE id='" . $itemId . "' AND status='A'"
+            );
+
+            if (!$okUnlink) {
+                mysqli_rollback($connect);
+                return array('ok' => 0, 'message' => 'Failed to clear Epic parent relation.');
+            }
+
+            if (defined('TASK_ITEM_RELATION')) {
+                $okDeleteRelation = mysqli_query(
+                    $connect,
+                    "DELETE FROM " . TASK_ITEM_RELATION . "
+                     WHERE child_board_item_id='" . $itemId . "'"
+                );
+                if ($okDeleteRelation === false) {
+                    mysqli_rollback($connect);
+                    return array('ok' => 0, 'message' => 'Failed deleting parent relation from db.');
+                }
+            }
+        }
+
+        mysqli_commit($connect);
 
         if ($previousWorkTypeId !== $workTypeId) {
             taskLogItemHistory(
@@ -3386,6 +3962,26 @@ if (!function_exists('taskSetItemWorkType')) {
             );
         }
 
+        if ($isTargetEpic) {
+            $oldParentDisplay = isset($previousParentInfo['parent_display']) ? trim((string) $previousParentInfo['parent_display']) : 'None';
+            if ($oldParentDisplay !== '' && strtolower($oldParentDisplay) !== 'none') {
+                taskLogItemHistory(
+                    $connect,
+                    $itemId,
+                    'update_field',
+                    'Parent',
+                    $oldParentDisplay,
+                    'None',
+                    'cleared Parent after changing Work type to Epic',
+                    $currentUserId,
+                    $cdate,
+                    $ctime
+                );
+            }
+        }
+
+        $latestParentInfo = taskGetParentRelationInfo($connect, $itemId);
+
         return array(
             'ok' => 1,
             'message' => 'Work type updated successfully.',
@@ -3395,6 +3991,9 @@ if (!function_exists('taskSetItemWorkType')) {
                 'remark' => isset($workTypeRow['remark']) ? (string) $workTypeRow['remark'] : '',
                 'svg_icon' => taskNormalizeWorkTypeSvgIcon(isset($workTypeRow['svg_icon']) ? $workTypeRow['svg_icon'] : '', $workTypeName),
             ),
+            'parent_item_id' => isset($latestParentInfo['parent_item_id']) ? (int) $latestParentInfo['parent_item_id'] : 0,
+            'parent_display' => isset($latestParentInfo['parent_display']) ? (string) $latestParentInfo['parent_display'] : 'None',
+            'parent_relation_removed' => $isTargetEpic ? 1 : 0,
         );
     }
 }
@@ -3638,6 +4237,156 @@ if (!function_exists('taskUploadItemAttachment')) {
                 'file_path' => $relativePath,
                 'file_size' => $fileSize,
                 'mime_type' => $mimeType,
+            ),
+        );
+    }
+}
+
+if (!function_exists('taskUploadItemCommentAttachment')) {
+    function taskUploadItemCommentAttachment($connect, $itemId, $fileInfo, $currentUserId, $cdate, $ctime)
+    {
+        $itemId = (int) $itemId;
+        if ($itemId <= 0) {
+            return array('ok' => 0, 'message' => 'Invalid comment attachment request.');
+        }
+
+        if (!is_array($fileInfo) || !isset($fileInfo['tmp_name']) || !isset($fileInfo['error'])) {
+            return array('ok' => 0, 'message' => 'No comment attachment uploaded.');
+        }
+
+        if ((int) $fileInfo['error'] !== UPLOAD_ERR_OK) {
+            return array('ok' => 0, 'message' => 'Comment attachment upload failed.');
+        }
+
+        if (empty($fileInfo['tmp_name']) || !is_uploaded_file($fileInfo['tmp_name'])) {
+            return array('ok' => 0, 'message' => 'Invalid uploaded comment attachment.');
+        }
+
+        $itemSql = "SELECT id FROM " . TASK_ITEM . " WHERE id='" . $itemId . "' AND status='A' LIMIT 1";
+        $itemRst = mysqli_query($connect, $itemSql);
+        if (!$itemRst || $itemRst->num_rows === 0) {
+            return array('ok' => 0, 'message' => 'Work item not found.');
+        }
+
+        $safeFileName = taskSanitizeUploadFileName(isset($fileInfo['name']) ? $fileInfo['name'] : '');
+        $namePart = pathinfo($safeFileName, PATHINFO_FILENAME);
+        $extPart = pathinfo($safeFileName, PATHINFO_EXTENSION);
+        $dateTimeFolder = preg_replace('/[^0-9]/', '', (string) $cdate . (string) $ctime);
+        if ($dateTimeFolder === '') {
+            $dateTimeFolder = date('YmdHis');
+        }
+
+        $relativeDir = 'attachment/board/comment/' . $itemId . '/' . $dateTimeFolder;
+        $absoluteDir = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativeDir);
+
+        if (!is_dir($absoluteDir)) {
+            if (!mkdir($absoluteDir, 0777, true) && !is_dir($absoluteDir)) {
+                return array('ok' => 0, 'message' => 'Failed to prepare comment attachment folder.');
+            }
+        }
+
+        $finalFileName = $safeFileName;
+        $counter = 1;
+        while (file_exists($absoluteDir . DIRECTORY_SEPARATOR . $finalFileName)) {
+            $suffix = '_' . $counter;
+            $finalFileName = $namePart . $suffix . ($extPart !== '' ? '.' . $extPart : '');
+            $counter++;
+            if ($counter > 5000) {
+                return array('ok' => 0, 'message' => 'Too many files with similar name.');
+            }
+        }
+
+        $absolutePath = $absoluteDir . DIRECTORY_SEPARATOR . $finalFileName;
+        if (!move_uploaded_file($fileInfo['tmp_name'], $absolutePath)) {
+            return array('ok' => 0, 'message' => 'Failed to store uploaded comment attachment.');
+        }
+
+        $relativePath = $relativeDir . '/' . $finalFileName;
+        $siteUrl = defined('SITEURL') ? rtrim((string) SITEURL, '/') : '';
+        $fileUrl = $siteUrl !== '' ? ($siteUrl . '/' . ltrim($relativePath, '/')) : $relativePath;
+
+        return array(
+            'ok' => 1,
+            'message' => 'Comment attachment uploaded successfully.',
+            'attachment' => array(
+                'file_name' => $finalFileName,
+                'file_path' => $relativePath,
+                'file_url' => $fileUrl,
+                'file_size' => isset($fileInfo['size']) ? (int) $fileInfo['size'] : 0,
+                'mime_type' => isset($fileInfo['type']) ? (string) $fileInfo['type'] : '',
+            ),
+        );
+    }
+}
+
+if (!function_exists('taskUploadItemDescriptionAttachment')) {
+    function taskUploadItemDescriptionAttachment($connect, $itemId, $fileInfo, $currentUserId, $cdate, $ctime)
+    {
+        $itemId = (int) $itemId;
+        if ($itemId <= 0) {
+            return array('ok' => 0, 'message' => 'Invalid description attachment request.');
+        }
+
+        if (!is_array($fileInfo) || !isset($fileInfo['tmp_name']) || !isset($fileInfo['error'])) {
+            return array('ok' => 0, 'message' => 'No description attachment uploaded.');
+        }
+
+        if ((int) $fileInfo['error'] !== UPLOAD_ERR_OK) {
+            return array('ok' => 0, 'message' => 'Description attachment upload failed.');
+        }
+
+        if (empty($fileInfo['tmp_name']) || !is_uploaded_file($fileInfo['tmp_name'])) {
+            return array('ok' => 0, 'message' => 'Invalid uploaded description attachment.');
+        }
+
+        $itemSql = "SELECT id FROM " . TASK_ITEM . " WHERE id='" . $itemId . "' AND status='A' LIMIT 1";
+        $itemRst = mysqli_query($connect, $itemSql);
+        if (!$itemRst || $itemRst->num_rows === 0) {
+            return array('ok' => 0, 'message' => 'Work item not found.');
+        }
+
+        $safeFileName = taskSanitizeUploadFileName(isset($fileInfo['name']) ? $fileInfo['name'] : '');
+        $namePart = pathinfo($safeFileName, PATHINFO_FILENAME);
+        $extPart = pathinfo($safeFileName, PATHINFO_EXTENSION);
+
+        $relativeDir = 'attachment/board/description/' . $itemId;
+        $absoluteDir = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativeDir);
+
+        if (!is_dir($absoluteDir)) {
+            if (!mkdir($absoluteDir, 0777, true) && !is_dir($absoluteDir)) {
+                return array('ok' => 0, 'message' => 'Failed to prepare description attachment folder.');
+            }
+        }
+
+        $finalFileName = $safeFileName;
+        $counter = 1;
+        while (file_exists($absoluteDir . DIRECTORY_SEPARATOR . $finalFileName)) {
+            $suffix = '_' . $counter;
+            $finalFileName = $namePart . $suffix . ($extPart !== '' ? '.' . $extPart : '');
+            $counter++;
+            if ($counter > 5000) {
+                return array('ok' => 0, 'message' => 'Too many files with similar name.');
+            }
+        }
+
+        $absolutePath = $absoluteDir . DIRECTORY_SEPARATOR . $finalFileName;
+        if (!move_uploaded_file($fileInfo['tmp_name'], $absolutePath)) {
+            return array('ok' => 0, 'message' => 'Failed to store uploaded description attachment.');
+        }
+
+        $relativePath = $relativeDir . '/' . $finalFileName;
+        $siteUrl = defined('SITEURL') ? rtrim((string) SITEURL, '/') : '';
+        $fileUrl = $siteUrl !== '' ? ($siteUrl . '/' . ltrim($relativePath, '/')) : $relativePath;
+
+        return array(
+            'ok' => 1,
+            'message' => 'Description attachment uploaded successfully.',
+            'attachment' => array(
+                'file_name' => $finalFileName,
+                'file_path' => $relativePath,
+                'file_url' => $fileUrl,
+                'file_size' => isset($fileInfo['size']) ? (int) $fileInfo['size'] : 0,
+                'mime_type' => isset($fileInfo['type']) ? (string) $fileInfo['type'] : '',
             ),
         );
     }

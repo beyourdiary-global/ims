@@ -500,10 +500,27 @@ function updateItemWorkType(itemId, workTypeId, fallbackType, onDone) {
       var $card = findCardByItemId(resolvedItemId);
       applyWorkTypeToCardUi($card, updatedType);
 
+      if (Number((res && res.parent_relation_removed) || 0) > 0) {
+        updateCardParentSubmenuToggle($card, 0, "");
+      }
+
       if (Number(itemDetailModalState.itemId || 0) === resolvedItemId) {
         itemDetailModalState.workTypeName = updatedType.name;
         itemDetailModalState.workTypeIcon = updatedType.svg_icon;
+        if (Number((res && res.parent_relation_removed) || 0) > 0) {
+          itemDetailModalState.parentItemId = 0;
+          itemDetailModalState.parentWorkItemKey = "";
+          itemDetailModalState.parentWorkTypeName = "Task";
+          itemDetailModalState.parentWorkTypeIcon = "";
+          renderDetailParentDropdown(
+            0,
+            Array.isArray(itemDetailModalState.parentOptions)
+              ? itemDetailModalState.parentOptions
+              : [],
+          );
+        }
         renderDetailKeyTrail();
+        applyDetailFieldVisibility();
       }
 
       if (typeof onDone === "function") {
@@ -1585,34 +1602,12 @@ $(document).on("click", ".task-item-action", function (e) {
         target_column_id: targetColumnId,
       },
       function () {
-        setCardStatusColumn(
+        applyStatusChangeToBoard(
           $card,
+          $column,
           targetColumnId,
-          getBoardStatusColumnName(targetColumnId),
+          closeActionModal,
         );
-
-        if (!isBoardGroupedByStatus()) {
-          if (closeActionModal) {
-            closeTaskItemActionModal();
-          }
-          renderBoardGroupingLayout();
-          return;
-        }
-
-        var $targetColumn = $app.find(
-          '.task-column[data-column-id="' + targetColumnId + '"]',
-        );
-        if (!$targetColumn.length) {
-          return;
-        }
-
-        $targetColumn.find(".task-item-list").append($card);
-        updateColumnCount($column);
-        updateColumnCount($targetColumn);
-        applyBoardFilters();
-        if (closeActionModal) {
-          closeTaskItemActionModal();
-        }
       },
     );
     return;
@@ -1640,6 +1635,52 @@ $(document).on("click", ".task-item-action", function (e) {
     );
   }
 });
+
+function applyStatusChangeToBoard(
+  $card,
+  $sourceColumn,
+  targetColumnId,
+  closeActionModal,
+) {
+  var $source =
+    $sourceColumn && $sourceColumn.length
+      ? $sourceColumn
+      : $card.closest(".task-column");
+  var targetId = Number(targetColumnId || 0);
+  if (!$card || !$card.length || targetId <= 0) {
+    return;
+  }
+
+  setCardStatusColumn($card, targetId, getBoardStatusColumnName(targetId));
+
+  if (!isBoardGroupedByStatus()) {
+    if (closeActionModal) {
+      closeTaskItemActionModal();
+    }
+    renderBoardGroupingLayout();
+    return;
+  }
+
+  var $targetColumn = $app.find(
+    '.task-column[data-column-id="' + targetId + '"]',
+  );
+  if (!$targetColumn.length) {
+    if (closeActionModal) {
+      closeTaskItemActionModal();
+    }
+    return;
+  }
+
+  $targetColumn.find(".task-item-list").append($card);
+  if ($source.length) {
+    updateColumnCount($source);
+  }
+  updateColumnCount($targetColumn);
+  applyBoardFilters();
+  if (closeActionModal) {
+    closeTaskItemActionModal();
+  }
+}
 
 function setCardParentRelation($card, parentItemId, onDone) {
   if (!canEdit) {
@@ -1849,6 +1890,25 @@ function setAttachmentPanelCollapsed(collapsed) {
   );
 }
 
+function setDescriptionPanelCollapsed(collapsed) {
+  var isCollapsed = !!collapsed;
+  itemDetailModalState.descriptionCollapsed = isCollapsed;
+  var $section = $("#taskItemDetailDescriptionSection");
+  $section.toggleClass("task-item-detail-description-collapsed", isCollapsed);
+  var $btn = $("#taskItemDetailDescriptionCollapseBtn");
+  $btn.attr("aria-expanded", isCollapsed ? "false" : "true");
+  $btn
+    .find("i")
+    .attr(
+      "class",
+      "fa-solid " + (isCollapsed ? "fa-chevron-right" : "fa-chevron-down"),
+    );
+  $btn.attr(
+    "title",
+    isCollapsed ? "Expand description" : "Collapse description",
+  );
+}
+
 function renderItemAttachments(attachments) {
   var list = Array.isArray(attachments) ? attachments : [];
   itemDetailModalState.attachments = list.slice();
@@ -2015,6 +2075,136 @@ function loadItemAttachments(itemId) {
   );
 }
 
+function readDescriptionFromInputField() {
+  return String($("#taskItemDetailDescriptionInput").val() || "").trim();
+}
+
+function writeDescriptionToInputField(html) {
+  var value = String(html || "");
+  $("#taskItemDetailDescriptionInput").val(value);
+}
+
+function descriptionHasRenderableContent(html) {
+  var $tmp = $("<div>").html(String(html || ""));
+  var text = String($tmp.text() || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (text) {
+    return true;
+  }
+
+  return $tmp.find("img,video,audio,iframe,object,embed,table,a").length > 0;
+}
+
+function renderItemDetailDescriptionPreview(sourceHtml) {
+  var html =
+    typeof sourceHtml === "string"
+      ? sourceHtml
+      : readDescriptionFromInputField();
+
+  function normalizeDescriptionChecklistHtml(inputHtml) {
+    var value = String(inputHtml || "");
+    if (!value) {
+      return value;
+    }
+
+    var wrapper = document.createElement("div");
+    wrapper.innerHTML = value;
+
+    var lists = wrapper.querySelectorAll("ul");
+    for (var i = 0; i < lists.length; i += 1) {
+      var list = lists[i];
+      if (
+        list.querySelector(
+          'input.task-editor-checkbox,input[type="checkbox"][data-task-editor="1"]',
+        )
+      ) {
+        list.classList.add("task-editor-checklist");
+      }
+    }
+
+    return wrapper.innerHTML;
+  }
+
+  html = normalizeDescriptionChecklistHtml(html);
+
+  var $view = $("#taskItemDetailDescriptionView");
+  var $text = $("#taskItemDetailDescriptionViewText");
+  var $content = $("#taskItemDetailDescriptionViewContent");
+  if (!$view.length || !$text.length || !$content.length) {
+    return;
+  }
+
+  if (descriptionHasRenderableContent(html)) {
+    $view.removeClass("is-empty");
+    $text.addClass("d-none");
+    $content.html(String(html || "")).removeClass("d-none");
+  } else {
+    $view.addClass("is-empty");
+    $content.addClass("d-none").empty();
+    $text.removeClass("d-none");
+    $text.text("Add a description...");
+  }
+
+  if (
+    window.taskBoardDescriptionDraft &&
+    typeof window.taskBoardDescriptionDraft.updateNotice === "function"
+  ) {
+    window.taskBoardDescriptionDraft.updateNotice();
+  }
+}
+
+function setItemDetailDescriptionEditMode(isEditing, options) {
+  var settings = options && typeof options === "object" ? options : {};
+  var editing = !!isEditing && !!canEdit;
+  itemDetailModalState.descriptionEditing = editing;
+
+  $("#taskItemDetailDescriptionViewWrap").toggleClass("d-none", editing);
+  $("#taskItemDetailDescriptionEditWrap").toggleClass("d-none", !editing);
+
+  if (editing) {
+    if (!settings.skipEditorSync) {
+      var html =
+        typeof settings.descriptionHtml === "string"
+          ? settings.descriptionHtml
+          : readDescriptionFromInputField();
+      writeDescriptionToInputField(html);
+      if (typeof window.setDescriptionEditorContent === "function") {
+        window.setDescriptionEditorContent(html);
+      }
+    }
+
+    if (typeof window.ensureDescriptionEditorReady === "function") {
+      window.ensureDescriptionEditorReady().then(function () {
+        if (settings.focus === false) {
+          return;
+        }
+        if (window.tinymce && typeof window.tinymce.get === "function") {
+          var editor = window.tinymce.get("taskItemDetailDescriptionInput");
+          if (editor) {
+            editor.focus();
+            return;
+          }
+        }
+        $("#taskItemDetailDescriptionInput").trigger("focus");
+      });
+    } else if (settings.focus !== false) {
+      $("#taskItemDetailDescriptionInput").trigger("focus");
+    }
+
+    return;
+  }
+
+  if (!settings.skipPreviewUpdate) {
+    renderItemDetailDescriptionPreview();
+  }
+}
+
+window.renderItemDetailDescriptionPreview = renderItemDetailDescriptionPreview;
+window.setItemDetailDescriptionEditMode = setItemDetailDescriptionEditMode;
+
 function saveItemCoreFromModal(closeAfterSave) {
   var settings =
     arguments.length > 1 && arguments[1] && typeof arguments[1] === "object"
@@ -2044,8 +2234,16 @@ function saveItemCoreFromModal(closeAfterSave) {
 
   var currentSnapshot = buildModalCoreSnapshot(coreValues);
   if (currentSnapshot === itemDetailModalState.lastSavedCoreSnapshot) {
+    if (settings.exitDescriptionEditModeOnNoChange) {
+      setItemDetailDescriptionEditMode(false, {
+        skipPreviewUpdate: false,
+      });
+    }
+
     if (!settings.suppressNoChangeMessage) {
       showNoChangeMessage();
+    } else if (!settings.autosave) {
+      setItemDetailAutosaveStatus("saved", "No changes to save");
     }
     return;
   }
@@ -2076,6 +2274,10 @@ function saveItemCoreFromModal(closeAfterSave) {
       itemDetailModalState.lastSavedCoreSnapshot = currentSnapshot;
       itemDetailModalState.initialTitle = title;
       itemDetailModalState.initialDescription = description;
+      if (typeof window.setDescriptionEditorContent === "function") {
+        window.setDescriptionEditorContent(description);
+      }
+      renderItemDetailDescriptionPreview(description);
       itemDetailModalState.coreSaveInFlight = false;
       loadItemHistory(itemId);
 
@@ -2099,6 +2301,20 @@ function saveItemCoreFromModal(closeAfterSave) {
       if (settings.exitTitleEditModeOnSuccess) {
         itemDetailModalState.titleEditing = false;
         $(".task-item-detail-title-row").removeClass("is-editing");
+      }
+
+      if (settings.exitDescriptionEditModeOnSuccess) {
+        setItemDetailDescriptionEditMode(false, {
+          skipPreviewUpdate: true,
+        });
+      }
+
+      if (
+        settings.clearDescriptionDraftOnSuccess &&
+        window.taskBoardDescriptionDraft &&
+        typeof window.taskBoardDescriptionDraft.clear === "function"
+      ) {
+        window.taskBoardDescriptionDraft.clear();
       }
 
       if (closeAfterSave) {
@@ -2194,6 +2410,8 @@ function openItemDetailModal($card) {
   itemDetailModalState.cardEl = $card.get(0) || null;
   itemDetailModalState.initialTitle = title;
   itemDetailModalState.initialDescription = description;
+  itemDetailModalState.descriptionEditing = false;
+  itemDetailModalState.descriptionCollapsed = false;
   itemDetailModalState.workTypeName = String(
     $card.attr("data-work-type-name") || "Task",
   );
@@ -2218,6 +2436,11 @@ function openItemDetailModal($card) {
   $("#taskItemDetailTitleInput").val(title);
   $("#taskItemDetailDescriptionInput").val(description);
   setItemDetailTitleEditMode(false);
+  setDescriptionPanelCollapsed(false);
+  renderItemDetailDescriptionPreview(description);
+  setItemDetailDescriptionEditMode(false, {
+    skipPreviewUpdate: true,
+  });
   itemDetailModalState.attachmentSort = {
     field: "date",
     direction: "desc",
@@ -2226,8 +2449,13 @@ function openItemDetailModal($card) {
   itemDetailModalState.showAttachmentPanelWhenEmpty = false;
   itemDetailModalState.pendingAttachmentPicker = false;
   itemDetailModalState.selectedPriority = "Medium";
+  itemDetailModalState.detailStatusColumnId = Number(
+    getCardStatusColumnId($card) || 0,
+  );
   itemDetailModalState.selectedStatusLabelIds = [];
   itemDetailModalState.selectedLabelIds = [];
+  itemDetailModalState.comments = [];
+  itemDetailModalState.commentsLoading = false;
   itemDetailModalState.childWorkItems = {
     items: [],
     total: 0,
@@ -2237,6 +2465,7 @@ function openItemDetailModal($card) {
   itemDetailModalState.childWorkItemsCollapsed = false;
   itemDetailModalState.history = [];
   itemDetailModalState.activityTab = "all";
+  itemDetailModalState.activitySortDirection = "desc";
   itemDetailModalState.detailsCollapsed = false;
   itemDetailModalState.initialSaveSnapshot = "";
   itemDetailModalState.lastSavedCoreSnapshot = "";
@@ -2250,6 +2479,7 @@ function openItemDetailModal($card) {
   itemDetailModalState.queuedLabelsSave = false;
   clearItemDetailAutosaveTimer("coreAutosaveTimer");
   clearItemDetailAutosaveTimer("detailAutosaveTimer");
+  setDescriptionPanelCollapsed(false);
   setAttachmentPanelCollapsed(false);
   renderItemAttachments([]);
   renderItemHistoryPanels();
@@ -2292,8 +2522,54 @@ function openItemDetailModal($card) {
   loadItemAttachments(itemId);
   loadItemDetail(itemId);
   loadItemHistory(itemId);
+  if (typeof loadItemComments === "function") {
+    loadItemComments(itemId);
+  }
   modal.show();
 }
+
+function parseTaskCommentPermalinkHash() {
+  var hash = String(window.location.hash || "").trim();
+  var matched = hash.match(/^#task-item-(\d+)-comment-(\d+)$/i);
+  if (!matched) {
+    return null;
+  }
+
+  return {
+    itemId: Number(matched[1] || 0),
+    commentId: Number(matched[2] || 0),
+  };
+}
+
+function openCommentFromPermalinkHash(attempt) {
+  var target = parseTaskCommentPermalinkHash();
+  if (!target || Number(target.itemId || 0) <= 0) {
+    return;
+  }
+
+  var $card = findCardByItemId(target.itemId);
+  if ($card.length) {
+    openItemDetailModal($card);
+    return;
+  }
+
+  var tries = Number(attempt || 0);
+  if (tries >= 10) {
+    return;
+  }
+
+  window.setTimeout(function () {
+    openCommentFromPermalinkHash(tries + 1);
+  }, 220);
+}
+
+window.setTimeout(function () {
+  openCommentFromPermalinkHash(0);
+}, 150);
+
+$(window).on("hashchange", function () {
+  openCommentFromPermalinkHash(0);
+});
 
 $app.on("click", ".task-item-card", function (e) {
   if (
@@ -2323,12 +2599,76 @@ $(document).on("click", ".task-item-title, .task-item-key", function (e) {
   openItemDetailModal($card);
 });
 
-$(document).on("blur", "#taskItemDetailDescriptionInput", function () {
-  saveItemCoreFromModal(false, {
-    autosave: true,
-    suppressNoChangeMessage: true,
-    silentSuccess: true,
+$(document).on("click", "#taskItemDetailDescriptionView", function (e) {
+  if ($(e.target).closest("a").length) {
+    return;
+  }
+  setItemDetailDescriptionEditMode(true, {
+    focus: true,
   });
+});
+
+$(document).on("keydown", "#taskItemDetailDescriptionView", function (e) {
+  if ($(e.target).closest("a").length) {
+    return;
+  }
+  var key = String(e.key || "").toLowerCase();
+  if (key === "enter" || key === " ") {
+    e.preventDefault();
+    setItemDetailDescriptionEditMode(true, {
+      focus: true,
+    });
+  }
+});
+
+$(document).on(
+  "click",
+  "#taskItemDetailDescriptionDraftRestoreBtn",
+  function () {
+    if (
+      window.taskBoardDescriptionDraft &&
+      typeof window.taskBoardDescriptionDraft.restore === "function"
+    ) {
+      window.taskBoardDescriptionDraft.restore();
+      return;
+    }
+
+    setItemDetailDescriptionEditMode(true, {
+      focus: true,
+    });
+  },
+);
+
+$(document).on("click", "#taskItemDetailDescriptionSaveBtn", function () {
+  saveItemCoreFromModal(false, {
+    suppressNoChangeMessage: false,
+    exitDescriptionEditModeOnSuccess: true,
+    exitDescriptionEditModeOnNoChange: true,
+    clearDescriptionDraftOnSuccess: true,
+  });
+});
+
+$(document).on("click", "#taskItemDetailDescriptionCancelBtn", function () {
+  var originalDescription = String(
+    itemDetailModalState.initialDescription || "",
+  );
+  writeDescriptionToInputField(originalDescription);
+  if (typeof window.setDescriptionEditorContent === "function") {
+    window.setDescriptionEditorContent(originalDescription);
+  }
+  if (
+    window.taskBoardDescriptionDraft &&
+    typeof window.taskBoardDescriptionDraft.clear === "function"
+  ) {
+    window.taskBoardDescriptionDraft.clear();
+  }
+  setItemDetailDescriptionEditMode(false, {
+    skipPreviewUpdate: false,
+  });
+});
+
+$(document).on("click", "#taskItemDetailDescriptionCollapseBtn", function () {
+  setDescriptionPanelCollapsed(!itemDetailModalState.descriptionCollapsed);
 });
 
 $(document).on("focus click", "#taskItemDetailTitleInput", function () {
@@ -2414,6 +2754,57 @@ $(document).on("click", ".task-item-detail-priority-option", function (e) {
 
 $(document).on(
   "show.bs.dropdown",
+  ".task-item-detail-board-status-dropdown",
+  function () {
+    renderDetailBoardStatusOptions();
+  },
+);
+
+$(document).on("click", ".task-item-detail-board-status-option", function (e) {
+  e.preventDefault();
+
+  if (!canEdit) {
+    notify("You do not have permission to change status.");
+    return;
+  }
+
+  var itemId = Number(itemDetailModalState.itemId || 0);
+  var targetColumnId = Number($(this).data("targetColumnId") || 0);
+  if (!itemId || !targetColumnId) {
+    return;
+  }
+
+  var currentColumnId = Number(itemDetailModalState.detailStatusColumnId || 0);
+  if (currentColumnId === targetColumnId) {
+    return;
+  }
+
+  postAction(
+    {
+      task_action: "change_item_status",
+      item_id: itemId,
+      target_column_id: targetColumnId,
+    },
+    function () {
+      var $card = $(itemDetailModalState.cardEl || null);
+      if (!$card.length) {
+        $card = findCardByItemId(itemId);
+      }
+
+      applyStatusChangeToBoard(
+        $card,
+        $card.closest(".task-column"),
+        targetColumnId,
+        false,
+      );
+      setDetailBoardStatus(targetColumnId);
+      loadItemHistory(itemId);
+    },
+  );
+});
+
+$(document).on(
+  "show.bs.dropdown",
   ".task-item-detail-status-dropdown",
   function () {
     $("#taskItemDetailStatusSearchInput").val("");
@@ -2492,6 +2883,17 @@ $(document).on("click", "#taskItemDetailSideCollapseBtn", function () {
 $(document).on("click", ".task-item-activity-tab", function (e) {
   e.preventDefault();
   setItemActivityTab($(this).data("tabTarget") || "all");
+});
+
+$(document).on("click", ".task-item-activity-sort-btn", function (e) {
+  e.preventDefault();
+  var currentDirection =
+    String(itemDetailModalState.activitySortDirection || "desc") === "asc"
+      ? "asc"
+      : "desc";
+  itemDetailModalState.activitySortDirection =
+    currentDirection === "asc" ? "desc" : "asc";
+  renderItemHistoryPanels();
 });
 
 $(document).on("click", "#taskItemWorklogToggleBtn", function () {
@@ -3073,6 +3475,7 @@ $(document).on("hidden.bs.modal", "#taskItemDetailModal", function () {
   itemDetailModalState.initialTitle = "";
   itemDetailModalState.initialDescription = "";
   itemDetailModalState.titleEditing = false;
+  itemDetailModalState.descriptionEditing = false;
   itemDetailModalState.lastSavedCoreSnapshot = "";
   itemDetailModalState.lastSavedDetailSnapshot = "";
   itemDetailModalState.lastSavedLabelsSnapshot = "";
@@ -3082,6 +3485,7 @@ $(document).on("hidden.bs.modal", "#taskItemDetailModal", function () {
     direction: "desc",
   };
   itemDetailModalState.attachmentsCollapsed = false;
+  itemDetailModalState.descriptionCollapsed = false;
   itemDetailModalState.attachmentView = "list";
   itemDetailModalState.showAttachmentPanelWhenEmpty = false;
   itemDetailModalState.pendingAttachmentPicker = false;
@@ -3094,8 +3498,11 @@ $(document).on("hidden.bs.modal", "#taskItemDetailModal", function () {
   itemDetailModalState.queuedDetailSave = false;
   itemDetailModalState.queuedLabelsSave = false;
   itemDetailModalState.selectedPriority = "Medium";
+  itemDetailModalState.detailStatusColumnId = 0;
   itemDetailModalState.selectedStatusLabelIds = [];
   itemDetailModalState.selectedLabelIds = [];
+  itemDetailModalState.comments = [];
+  itemDetailModalState.commentsLoading = false;
   itemDetailModalState.parentItemId = 0;
   itemDetailModalState.parentOptions = [];
   itemDetailModalState.detailsCollapsed = false;
@@ -3122,7 +3529,14 @@ $(document).on("hidden.bs.modal", "#taskItemDetailModal", function () {
   itemDetailModalState.childWorkItemsCollapsed = false;
   itemDetailModalState.history = [];
   itemDetailModalState.activityTab = "all";
+  itemDetailModalState.activitySortDirection = "desc";
   $(".task-item-detail-title-row").removeClass("is-editing");
+  $("#taskItemDetailDescriptionInput").val("");
+  setDescriptionPanelCollapsed(false);
+  renderItemDetailDescriptionPreview("");
+  setItemDetailDescriptionEditMode(false, {
+    skipPreviewUpdate: true,
+  });
   setItemDetailAutosaveStatus("", "");
   $("#taskItemDetailKeyTrail").addClass("d-none").empty();
   $("#taskItemDetailModalTitle").text("Work item");
@@ -3135,6 +3549,10 @@ $(document).on("hidden.bs.modal", "#taskItemDetailModal", function () {
     startedAtMs: 0,
     collapsed: false,
   };
+
+  if (typeof resetTaskCommentEditor === "function") {
+    resetTaskCommentEditor();
+  }
   applyWorklogTimerUi();
   renderItemHistoryPanels();
   setItemActivityTab("all");

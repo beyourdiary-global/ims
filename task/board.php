@@ -311,6 +311,237 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         ));
     }
 
+    if ($taskAction === 'get_item_comments') {
+        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        taskJsonResponse(array(
+            'ok' => 1,
+            'comments' => taskGetItemComments($connect, $itemId, 200),
+        ));
+    }
+
+    if ($taskAction === 'create_item_comment') {
+        if (!taskIsActionAllowed('edit', $pinAccess)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to add comments.'));
+        }
+
+        $result = taskCreateItemComment(
+            $connect,
+            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
+            isset($_POST['comment_html']) ? $_POST['comment_html'] : '',
+            $currentUserId,
+            $cdate,
+            $ctime
+        );
+        taskJsonResponse($result);
+    }
+
+    if ($taskAction === 'create_item_comment_reply') {
+        if (!taskIsActionAllowed('edit', $pinAccess)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to add replies.'));
+        }
+
+        $result = taskCreateItemCommentReply(
+            $connect,
+            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
+            isset($_POST['comment_id']) ? (int) $_POST['comment_id'] : 0,
+            isset($_POST['reply_html']) ? $_POST['reply_html'] : '',
+            $currentUserId,
+            $cdate,
+            $ctime
+        );
+        taskJsonResponse($result);
+    }
+
+    if ($taskAction === 'update_item_comment') {
+        if (!taskIsActionAllowed('edit', $pinAccess)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to edit comments.'));
+        }
+
+        $result = taskUpdateItemComment(
+            $connect,
+            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
+            isset($_POST['comment_id']) ? (int) $_POST['comment_id'] : 0,
+            isset($_POST['comment_html']) ? $_POST['comment_html'] : '',
+            $currentUserId,
+            $cdate,
+            $ctime
+        );
+        taskJsonResponse($result);
+    }
+
+    if ($taskAction === 'update_item_comment_reply') {
+        if (!taskIsActionAllowed('edit', $pinAccess)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to edit replies.'));
+        }
+
+        $result = taskUpdateItemCommentReply(
+            $connect,
+            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
+            isset($_POST['reply_id']) ? (int) $_POST['reply_id'] : 0,
+            isset($_POST['reply_html']) ? $_POST['reply_html'] : '',
+            $currentUserId,
+            $cdate,
+            $ctime
+        );
+        taskJsonResponse($result);
+    }
+
+    if ($taskAction === 'delete_item_comment') {
+        if (!taskIsActionAllowed('edit', $pinAccess)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to delete comments.'));
+        }
+
+        $result = taskDeleteItemComment(
+            $connect,
+            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
+            isset($_POST['comment_id']) ? (int) $_POST['comment_id'] : 0,
+            $currentUserId,
+            $cdate,
+            $ctime
+        );
+        taskJsonResponse($result);
+    }
+
+    if ($taskAction === 'delete_item_comment_reply') {
+        if (!taskIsActionAllowed('edit', $pinAccess)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to delete replies.'));
+        }
+
+        $result = taskDeleteItemCommentReply(
+            $connect,
+            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
+            isset($_POST['reply_id']) ? (int) $_POST['reply_id'] : 0,
+            $currentUserId,
+            $cdate,
+            $ctime
+        );
+        taskJsonResponse($result);
+    }
+
+    if ($taskAction === 'upload_item_comment_attachment') {
+        if (!taskIsActionAllowed('edit', $pinAccess)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to upload comment attachment.'));
+        }
+
+        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $file = isset($_FILES['attachment']) ? $_FILES['attachment'] : null;
+
+        if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'File upload failed or no file selected.'));
+        }
+
+        $maxSizeBytes = 50 * 1024 * 1024;
+        if ((int) $file['size'] > $maxSizeBytes) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'File exceeds the 50MB size limit.'));
+        }
+
+        $allowedExts = array('jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt', 'zip');
+        $ext = strtolower(pathinfo((string) $file['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, $allowedExts, true)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'Invalid file extension. Allowed types: ' . implode(', ', $allowedExts) . '.'));
+        }
+
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime = $finfo ? finfo_file($finfo, $file['tmp_name']) : '';
+        if ($finfo) {
+            finfo_close($finfo);
+        }
+
+        $allowedMimes = array(
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'image/webp',
+            'image/bmp',
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'text/csv',
+            'text/plain',
+            'application/zip',
+            'application/x-zip-compressed'
+        );
+
+        if (!in_array((string) $mime, $allowedMimes, true)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'Invalid file format detected by server.'));
+        }
+
+        $result = taskUploadItemCommentAttachment(
+            $connect,
+            $itemId,
+            $file,
+            $currentUserId,
+            $cdate,
+            $ctime
+        );
+
+        taskJsonResponse($result);
+    }
+
+    if ($taskAction === 'upload_item_description_attachment') {
+        if (!taskIsActionAllowed('edit', $pinAccess)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to upload description attachment.'));
+        }
+
+        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $file = isset($_FILES['attachment']) ? $_FILES['attachment'] : null;
+
+        if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'File upload failed or no file selected.'));
+        }
+
+        $maxSizeBytes = 50 * 1024 * 1024;
+        if ((int) $file['size'] > $maxSizeBytes) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'File exceeds the 50MB size limit.'));
+        }
+
+        $allowedExts = array('jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt', 'zip');
+        $ext = strtolower(pathinfo((string) $file['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, $allowedExts, true)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'Invalid file extension. Allowed types: ' . implode(', ', $allowedExts) . '.'));
+        }
+
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime = $finfo ? finfo_file($finfo, $file['tmp_name']) : '';
+        if ($finfo) {
+            finfo_close($finfo);
+        }
+
+        $allowedMimes = array(
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'image/webp',
+            'image/bmp',
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'text/csv',
+            'text/plain',
+            'application/zip',
+            'application/x-zip-compressed'
+        );
+
+        if (!in_array((string) $mime, $allowedMimes, true)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'Invalid file format detected by server.'));
+        }
+
+        $result = taskUploadItemDescriptionAttachment(
+            $connect,
+            $itemId,
+            $file,
+            $currentUserId,
+            $cdate,
+            $ctime
+        );
+
+        taskJsonResponse($result);
+    }
+
     if ($taskAction === 'update_item_detail') {
         if (!taskIsActionAllowed('edit', $pinAccess)) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to update work item details.'));
@@ -956,8 +1187,32 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                             <div id="taskItemDetailAutosaveStatus" class="task-item-detail-autosave-status d-none" aria-live="polite"></div>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label" for="taskItemDetailDescriptionInput">Description</label>
-                            <textarea id="taskItemDetailDescriptionInput" class="form-control" rows="6" placeholder="Description"></textarea>
+                                <div class="task-item-detail-description-section" id="taskItemDetailDescriptionSection">
+                                    <div class="task-item-detail-description-header">
+                                        <button id="taskItemDetailDescriptionCollapseBtn" type="button" class="btn task-item-detail-description-collapse-btn" aria-expanded="true" title="Collapse description">
+                                            <i class="fa-solid fa-chevron-down"></i>
+                                        </button>
+                                        <label class="form-label mb-0" for="taskItemDetailDescriptionInput">Description</label>
+                                    </div>
+                                    <div id="taskItemDetailDescriptionBody" class="task-item-detail-description-body">
+                                        <div id="taskItemDetailDescriptionViewWrap" class="task-item-detail-description-view-wrap">
+                                            <div id="taskItemDetailDescriptionView" class="task-item-detail-description-view is-empty" role="button" tabindex="0" aria-label="Add or edit description">
+                                                <span id="taskItemDetailDescriptionViewText" class="task-item-detail-description-view-text">Add a description...</span>
+                                                <div id="taskItemDetailDescriptionViewContent" class="task-item-detail-description-rendered d-none"></div>
+                                            </div>
+                                            <div id="taskItemDetailDescriptionDraftNotice" class="task-item-draft-reminder d-none">
+                                                <button id="taskItemDetailDescriptionDraftRestoreBtn" type="button" class="btn task-item-draft-reminder-btn">You have unsaved description</button>
+                                            </div>
+                                        </div>
+                                        <div id="taskItemDetailDescriptionEditWrap" class="task-item-detail-description-edit-wrap d-none">
+                                            <textarea id="taskItemDetailDescriptionInput" class="form-control" rows="6" placeholder="Description"></textarea>
+                                            <div class="task-item-detail-description-actions">
+                                                <button id="taskItemDetailDescriptionSaveBtn" type="button" class="btn btn-primary">Save</button>
+                                                <button id="taskItemDetailDescriptionCancelBtn" type="button" class="btn btn-light">Cancel</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                         </div>
 
                         <div id="taskItemChildWorkItemsSection" class="mb-3 task-item-child-section d-none">
@@ -1050,6 +1305,15 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                     </div>
                     <div class="col-12 col-lg-4 task-item-detail-side-col">
                         <div id="taskItemDetailSideCard" class="task-item-detail-side-card">
+                            <div class="task-item-detail-board-status-wrap mb-3">
+                                <div class="dropdown task-item-detail-board-status-dropdown">
+                                    <button id="taskItemDetailBoardStatusBtn" class="btn task-item-detail-board-status-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Select status</button>
+                                    <div id="taskItemDetailBoardStatusMenu" class="dropdown-menu task-item-detail-board-status-menu p-2">
+                                        <div id="taskItemDetailBoardStatusOptionList" class="task-item-detail-board-status-option-list"></div>
+                                    </div>
+                                </div>
+                            </div>
+
                             <div class="task-item-detail-side-head mb-3">
                                 <button id="taskItemDetailSideCollapseBtn" type="button" class="btn task-item-detail-side-collapse-btn" aria-expanded="true" title="Collapse details">
                                     <i class="fa-solid fa-chevron-down"></i>
@@ -1268,5 +1532,7 @@ window.taskBoardConfig = {
 <script src="../js/task_board_core.js"></script>
 <script src="../js/task_board_ui.js"></script>
 <script src="../js/task_board.js"></script>
+<script src="<?= $SITEURL ?>/header/tinymce/tinymce.min.js"></script>
+<script src="../js/text_editor.js"></script>
 </body>
 </html>

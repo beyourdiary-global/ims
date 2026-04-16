@@ -1391,6 +1391,54 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Failed creating `" . TASK_ITEM_HISTORY . "`: " . $conn->error . "</p>";
     }
 
+    $createTaskItemCommentSql = "CREATE TABLE IF NOT EXISTS `" . TASK_ITEM_COMMENT . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `item_id` INT NOT NULL,
+        `comment_html` MEDIUMTEXT DEFAULT NULL,
+        `comment_text` TEXT DEFAULT NULL,
+        `remark` VARCHAR(255) DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_task_item_comment_item` (`item_id`),
+        KEY `idx_task_item_comment_created` (`create_date`,`create_time`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createTaskItemCommentSql)) {
+        echo "<p style='color:green;'>Verified table `" . TASK_ITEM_COMMENT . "` for task item comments.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . TASK_ITEM_COMMENT . "`: " . $conn->error . "</p>";
+    }
+
+    $createTaskItemCommentReplySql = "CREATE TABLE IF NOT EXISTS `" . TASK_ITEM_COMMENT_REPLY . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `item_id` INT NOT NULL,
+        `comment_id` INT NOT NULL,
+        `reply_html` MEDIUMTEXT DEFAULT NULL,
+        `reply_text` TEXT DEFAULT NULL,
+        `remark` VARCHAR(255) DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_task_item_comment_reply_item` (`item_id`),
+        KEY `idx_task_item_comment_reply_comment` (`comment_id`),
+        KEY `idx_task_item_comment_reply_created` (`create_date`,`create_time`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createTaskItemCommentReplySql)) {
+        echo "<p style='color:green;'>Verified table `" . TASK_ITEM_COMMENT_REPLY . "` for task item comment replies.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . TASK_ITEM_COMMENT_REPLY . "`: " . $conn->error . "</p>";
+    }
+
     $seedWorkTypeSql = "INSERT IGNORE INTO `" . TASK_WORK_TYPE . "` (`name`, `svg_icon`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
         ('Task', 'svg_icon/10318.svg', 'Default Task Work Type', '1', CURDATE(), CURTIME(), 'A'),
         ('Epic', 'svg_icon/10307.svg', 'Default Epic Work Type', '1', CURDATE(), CURTIME(), 'A')";

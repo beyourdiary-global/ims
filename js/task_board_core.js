@@ -15,6 +15,47 @@ function escHtml(text) {
     .replace(/'/g, "&#039;");
 }
 
+function activityValueHasRichContent(fieldName, value) {
+  if (
+    String(fieldName || "")
+      .trim()
+      .toLowerCase() !== "description"
+  ) {
+    return false;
+  }
+
+  var $tmp = $("<div>").html(String(value || ""));
+  var text = String($tmp.text() || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  if (text) {
+    return true;
+  }
+
+  return $tmp.find("img,video,audio,iframe,object,embed,table,a").length > 0;
+}
+
+function buildActivityValueHtml(fieldName, value) {
+  var normalizedValue = String(value || "").trim();
+  if (!normalizedValue) {
+    return '<span class="task-item-activity-badge">None</span>';
+  }
+
+  if (activityValueHasRichContent(fieldName, normalizedValue)) {
+    return (
+      '<div class="task-item-activity-rich-value">' + normalizedValue + "</div>"
+    );
+  }
+
+  return (
+    '<span class="task-item-activity-badge">' +
+    escHtml(normalizedValue) +
+    "</span>"
+  );
+}
+
 function initials(name) {
   var value = String(name || "").trim();
   if (!value) {
@@ -169,6 +210,7 @@ var itemDetailModalState = {
   initialTitle: "",
   initialDescription: "",
   titleEditing: false,
+  descriptionEditing: false,
   initialSaveSnapshot: "",
   lastSavedCoreSnapshot: "",
   lastSavedDetailSnapshot: "",
@@ -191,8 +233,11 @@ var itemDetailModalState = {
   queuedDetailSave: false,
   queuedLabelsSave: false,
   selectedPriority: "Medium",
+  detailStatusColumnId: 0,
   selectedStatusLabelIds: [],
   selectedLabelIds: [],
+  comments: [],
+  commentsLoading: false,
   parentItemId: 0,
   parentOptions: [],
   webLinks: [],
@@ -221,6 +266,7 @@ var itemDetailModalState = {
   childWorkItemsCollapsed: false,
   history: [],
   activityTab: "all",
+  activitySortDirection: "desc",
 };
 
 var statusModalState = {
@@ -824,7 +870,7 @@ function renderActivityFeed($target, historyRows) {
     return;
   }
 
-  var rows = Array.isArray(historyRows) ? historyRows : [];
+  var rows = sortedActivityRows(Array.isArray(historyRows) ? historyRows : []);
   if (!rows.length) {
     $target.html(
       '<div class="task-item-activity-empty">No activity yet.</div>',
@@ -838,6 +884,7 @@ function renderActivityFeed($target, historyRows) {
     var actor = String(row.actor_name || "User").trim() || "User";
     var remark = String(row.remark || "updated the Work item").trim();
     var ago = formatRelativeTime(row.create_date, row.create_time);
+    var fieldName = String(row.field_name || "").trim();
     var fromValue = String(row.from_value || "").trim();
     var toValue = String(row.to_value || "").trim();
 
@@ -852,20 +899,477 @@ function renderActivityFeed($target, historyRows) {
       "</span> " +
       escHtml(remark) +
       "</div>" +
+      '<div class="task-item-activity-meta">' +
       (ago
         ? '<div class="task-item-activity-ago">' + escHtml(ago) + "</div>"
-        : "");
+        : "") +
+      activityTypeBadgeHtml("history") +
+      "</div>";
 
     if (fromValue || toValue) {
       html +=
         '<div class="task-item-activity-diff">' +
-        '<span class="task-item-activity-badge">' +
-        escHtml(fromValue || "None") +
-        "</span>" +
+        buildActivityValueHtml(fieldName, fromValue) +
         '<span class="task-item-activity-arrow"><i class="fa-solid fa-arrow-right"></i></span>' +
-        '<span class="task-item-activity-badge">' +
-        escHtml(toValue || "None") +
-        "</span>" +
+        buildActivityValueHtml(fieldName, toValue) +
+        "</div>";
+    }
+
+    html += "</div></div>";
+  }
+
+  $target.html(html);
+}
+
+function buildCommentRepliesHtml(commentRow) {
+  var commentId = Number((commentRow || {}).id || 0);
+  var canReplyAction = !!canEdit;
+  var replies = Array.isArray(commentRow && commentRow.replies)
+    ? commentRow.replies
+    : [];
+  if (!replies.length) {
+    return "";
+  }
+
+  var html = '<div class="task-item-comment-replies">';
+  for (var i = 0; i < replies.length; i++) {
+    var reply = replies[i] || {};
+    var replyId = Number(reply.id || 0);
+    var actor = String(reply.actor_name || "User").trim() || "User";
+    var ago = formatRelativeTime(reply.create_date, reply.create_time);
+    var isEdited = Number(reply.is_edited || 0) === 1;
+    var replyHtml = String(reply.reply_html || "").trim();
+
+    html +=
+      '<div id="taskItemReplyEntry_' +
+      commentId +
+      "_" +
+      replyId +
+      '" class="task-item-comment-reply-entry" data-comment-id="' +
+      commentId +
+      '" data-reply-id="' +
+      replyId +
+      '">' +
+      '<div class="task-item-activity-avatar">' +
+      escHtml(initials(actor)) +
+      "</div>" +
+      '<div class="task-item-activity-content">' +
+      '<div class="task-item-activity-text"><span class="task-item-activity-actor">' +
+      escHtml(actor) +
+      "</span> replied</div>" +
+      '<div class="task-item-activity-meta">' +
+      (ago
+        ? '<div class="task-item-activity-ago">' +
+          escHtml(ago) +
+          (isEdited
+            ? ' <span class="task-item-comment-edited">(edited)</span>'
+            : "") +
+          "</div>"
+        : "") +
+      '<span class="task-item-activity-type-badge task-item-activity-type-comment">REPLY</span>' +
+      "</div>" +
+      '<div class="task-item-activity-comment-body">' +
+      (replyHtml || '<p class="mb-0">(empty reply)</p>') +
+      "</div>" +
+      (canReplyAction && replyId > 0
+        ? '<div class="task-item-comment-actions-row task-item-reply-actions-row">' +
+          '<button type="button" class="btn task-item-comment-action-btn task-item-reply-edit-btn" data-reply-id="' +
+          replyId +
+          '" title="Edit" aria-label="Edit reply"><i class="fa-solid fa-pen-to-square"></i></button>' +
+          '<div class="task-item-comment-more-wrap">' +
+          '<button type="button" class="btn task-item-comment-action-btn task-item-reply-more-btn" data-reply-id="' +
+          replyId +
+          '" title="More" aria-label="More reply actions"><i class="fa-solid fa-ellipsis"></i></button>' +
+          '<div class="task-item-comment-more-menu task-item-reply-more-menu d-none">' +
+          '<button type="button" class="dropdown-item task-item-reply-copy-link-btn" data-reply-id="' +
+          replyId +
+          '">Copy link</button>' +
+          '<button type="button" class="dropdown-item task-item-reply-delete-btn text-danger" data-reply-id="' +
+          replyId +
+          '">Delete</button>' +
+          "</div>" +
+          "</div>" +
+          "</div>" +
+          '<div class="task-item-comment-reply-edit-slot" data-reply-id="' +
+          replyId +
+          '"></div>'
+        : "") +
+      "</div>" +
+      "</div>";
+  }
+
+  html += "</div>";
+  return html;
+}
+
+function buildCommentEntryHtml(row, entryPrefix) {
+  var commentId = Number(row.id || 0);
+  var actor = String(row.actor_name || "User").trim() || "User";
+  var ago = formatRelativeTime(row.create_date, row.create_time);
+  var isEdited = Number(row.is_edited || 0) === 1;
+  var isDeleted = Number(row.is_deleted || 0) === 1;
+  var commentHtml = String(row.comment_html || "").trim();
+  var canCommentAction = !!canEdit && commentId > 0 && !isDeleted;
+  var entryIdPrefix = String(entryPrefix || "comment").trim() || "comment";
+
+  if (isDeleted) {
+    commentHtml =
+      '<p class="mb-0 text-muted"><em>This comment was deleted.</em></p>';
+  }
+
+  return (
+    '<div id="taskItemCommentEntry_' +
+    entryIdPrefix +
+    "_" +
+    commentId +
+    '" class="task-item-activity-entry task-item-activity-entry-comment task-item-comment-entry" data-comment-id="' +
+    commentId +
+    '" data-actor-name="' +
+    escHtml(actor) +
+    '">' +
+    '<div class="task-item-activity-avatar">' +
+    escHtml(initials(actor)) +
+    "</div>" +
+    '<div class="task-item-activity-content">' +
+    '<div class="task-item-activity-text"><span class="task-item-activity-actor">' +
+    escHtml(actor) +
+    "</span> " +
+    (isDeleted ? "deleted a comment" : "added a comment") +
+    "</div>" +
+    '<div class="task-item-activity-meta">' +
+    (ago
+      ? '<div class="task-item-activity-ago">' +
+        escHtml(ago) +
+        (isEdited
+          ? ' <span class="task-item-comment-edited">(edited)</span>'
+          : "") +
+        "</div>"
+      : "") +
+    activityTypeBadgeHtml("comment") +
+    "</div>" +
+    '<div class="task-item-activity-comment-body">' +
+    (commentHtml || '<p class="mb-0">(empty comment)</p>') +
+    "</div>" +
+    buildCommentRepliesHtml(row) +
+    (canCommentAction
+      ? '<div class="task-item-comment-actions-row">' +
+        '<button type="button" class="btn task-item-comment-action-btn task-item-comment-reply-btn" data-comment-id="' +
+        commentId +
+        '" title="Reply" aria-label="Reply"><i class="fa-solid fa-reply"></i></button>' +
+        '<button type="button" class="btn task-item-comment-action-btn task-item-comment-edit-btn" data-comment-id="' +
+        commentId +
+        '" title="Edit" aria-label="Edit comment"><i class="fa-solid fa-pen-to-square"></i></button>' +
+        '<div class="task-item-comment-more-wrap">' +
+        '<button type="button" class="btn task-item-comment-action-btn task-item-comment-more-btn" data-comment-id="' +
+        commentId +
+        '" title="More" aria-label="More actions"><i class="fa-solid fa-ellipsis"></i></button>' +
+        '<div class="task-item-comment-more-menu d-none">' +
+        '<button type="button" class="dropdown-item task-item-comment-copy-link-btn" data-comment-id="' +
+        commentId +
+        '">Copy link</button>' +
+        '<button type="button" class="dropdown-item task-item-comment-delete-btn text-danger" data-comment-id="' +
+        commentId +
+        '">Delete</button>' +
+        "</div>" +
+        "</div>" +
+        "</div>" +
+        '<div class="task-item-draft-reminder task-item-reply-draft-notice d-none" data-comment-id="' +
+        commentId +
+        '">' +
+        '<button type="button" class="btn task-item-draft-reminder-btn task-item-reply-draft-restore-btn" data-comment-id="' +
+        commentId +
+        '">You have unsaved reply</button>' +
+        "</div>"
+      : "") +
+    '<div class="task-item-comment-edit-slot" data-comment-id="' +
+    commentId +
+    '"></div>' +
+    '<div class="task-item-comment-reply-slot" data-comment-id="' +
+    commentId +
+    '"></div>' +
+    "</div></div>"
+  );
+}
+
+function renderCommentFeed($target, commentRows) {
+  if (!$target || !$target.length) {
+    return;
+  }
+
+  var rows = sortedActivityRows(Array.isArray(commentRows) ? commentRows : []);
+  if (!rows.length) {
+    $target.html(
+      '<div class="task-item-activity-empty">No comments yet.</div>',
+    );
+    return;
+  }
+
+  var html = "";
+  for (var i = 0; i < rows.length; i++) {
+    html += buildCommentEntryHtml(rows[i] || {}, "comment");
+  }
+
+  $target.html(html);
+  focusCommentFromHash();
+}
+
+function activityTypeBadgeHtml(type) {
+  var value = String(type || "history").toLowerCase();
+  if (value === "comment") {
+    return '<span class="task-item-activity-type-badge task-item-activity-type-comment">COMMENT</span>';
+  }
+  return '<span class="task-item-activity-type-badge task-item-activity-type-history">HISTORY</span>';
+}
+
+function getActivitySortDirection() {
+  return String(itemDetailModalState.activitySortDirection || "desc") === "asc"
+    ? "asc"
+    : "desc";
+}
+
+function sortedActivityRows(rows) {
+  var sorted = Array.isArray(rows) ? rows.slice() : [];
+  sorted.sort(function (a, b) {
+    var tsA = toActivitySortTimestamp(
+      a && a.create_date ? a.create_date : "",
+      a && a.create_time ? a.create_time : "",
+    );
+    var tsB = toActivitySortTimestamp(
+      b && b.create_date ? b.create_date : "",
+      b && b.create_time ? b.create_time : "",
+    );
+
+    if (tsA !== tsB) {
+      return tsB - tsA;
+    }
+
+    var idA = Number(a && a.id ? a.id : 0);
+    var idB = Number(b && b.id ? b.id : 0);
+    return idB - idA;
+  });
+
+  if (getActivitySortDirection() === "asc") {
+    sorted.reverse();
+  }
+
+  return sorted;
+}
+
+function parseActivityPermalinkHash() {
+  var hash = String(window.location.hash || "").trim();
+  var commentMatch = hash.match(/^#task-item-(\d+)-comment-(\d+)$/i);
+  if (commentMatch) {
+    return {
+      type: "comment",
+      itemId: Number(commentMatch[1] || 0),
+      commentId: Number(commentMatch[2] || 0),
+      replyId: 0,
+    };
+  }
+
+  var replyMatch = hash.match(/^#task-item-(\d+)-reply-(\d+)$/i);
+  if (replyMatch) {
+    return {
+      type: "reply",
+      itemId: Number(replyMatch[1] || 0),
+      commentId: 0,
+      replyId: Number(replyMatch[2] || 0),
+    };
+  }
+
+  return null;
+}
+
+function focusCommentFromHash() {
+  var target = parseActivityPermalinkHash();
+  if (!target) {
+    return;
+  }
+
+  var activeItemId = Number(itemDetailModalState.itemId || 0);
+  if (activeItemId <= 0 || activeItemId !== target.itemId) {
+    return;
+  }
+
+  var $entry = $();
+  if (target.type === "reply") {
+    $entry = $(
+      '#taskItemActivityCommentList .task-item-comment-reply-entry[data-reply-id="' +
+        target.replyId +
+        '"]',
+    ).first();
+  } else {
+    $entry = $(
+      '#taskItemActivityCommentList .task-item-comment-entry[data-comment-id="' +
+        target.commentId +
+        '"]',
+    ).first();
+  }
+  if (!$entry.length) {
+    return;
+  }
+
+  setItemActivityTab("comment");
+
+  var $list = $("#taskItemActivityCommentList");
+  if ($list.length) {
+    var top = $entry.position().top + $list.scrollTop() - 10;
+    $list.stop(true).animate({ scrollTop: Math.max(0, top) }, 180);
+  }
+
+  $(".task-item-comment-entry").removeClass("task-item-comment-entry-focus");
+  $(".task-item-comment-reply-entry").removeClass(
+    "task-item-comment-reply-entry-focus",
+  );
+  $entry.addClass(
+    target.type === "reply"
+      ? "task-item-comment-reply-entry-focus"
+      : "task-item-comment-entry-focus",
+  );
+  window.setTimeout(function () {
+    $entry
+      .removeClass("task-item-comment-entry-focus")
+      .removeClass("task-item-comment-reply-entry-focus");
+  }, 1800);
+}
+
+function updateActivitySortButtons() {
+  var isAsc = getActivitySortDirection() === "asc";
+  $(".task-item-activity-sort-btn").each(function () {
+    var $btn = $(this);
+    $btn.attr("title", isAsc ? "Sort newest first" : "Reverse sort direction");
+    $btn.attr(
+      "aria-label",
+      isAsc ? "Sort newest first" : "Reverse sort direction",
+    );
+    var $icon = $btn.find("i");
+    $icon.toggleClass("fa-arrow-down-short-wide", !isAsc);
+    $icon.toggleClass("fa-arrow-up-short-wide", isAsc);
+  });
+}
+
+function toActivitySortTimestamp(createDate, createTime) {
+  var dateText = String(createDate || "").trim();
+  var timeText = String(createTime || "").trim();
+  var isoText = "";
+
+  if (dateText && timeText) {
+    isoText = dateText + "T" + timeText;
+  } else if (dateText) {
+    isoText = dateText;
+  } else if (timeText) {
+    isoText = "1970-01-01T" + timeText;
+  }
+
+  if (!isoText) {
+    return 0;
+  }
+
+  var ms = Date.parse(isoText);
+  return Number.isFinite(ms) ? ms : 0;
+}
+
+function renderAllActivityFeed($target, historyRows, commentRows) {
+  if (!$target || !$target.length) {
+    return;
+  }
+
+  var allRows = [];
+  var history = Array.isArray(historyRows) ? historyRows : [];
+  var comments = Array.isArray(commentRows) ? commentRows : [];
+  var i;
+
+  for (i = 0; i < history.length; i++) {
+    var historyRow = history[i] || {};
+    allRows.push({
+      type: "history",
+      create_date: historyRow.create_date,
+      create_time: historyRow.create_time,
+      sort_ts: toActivitySortTimestamp(
+        historyRow.create_date,
+        historyRow.create_time,
+      ),
+      payload: historyRow,
+    });
+  }
+
+  for (i = 0; i < comments.length; i++) {
+    var commentRow = comments[i] || {};
+    allRows.push({
+      type: "comment",
+      create_date: commentRow.create_date,
+      create_time: commentRow.create_time,
+      sort_ts: toActivitySortTimestamp(
+        commentRow.create_date,
+        commentRow.create_time,
+      ),
+      payload: commentRow,
+    });
+  }
+
+  if (!allRows.length) {
+    $target.html(
+      '<div class="task-item-activity-empty">No activity yet.</div>',
+    );
+    return;
+  }
+
+  allRows.sort(function (a, b) {
+    var tsDiff = Number(b.sort_ts || 0) - Number(a.sort_ts || 0);
+    if (tsDiff !== 0) {
+      return tsDiff;
+    }
+
+    var idA = Number(a && a.payload ? a.payload.id || 0 : 0);
+    var idB = Number(b && b.payload ? b.payload.id || 0 : 0);
+    return idB - idA;
+  });
+
+  if (getActivitySortDirection() === "asc") {
+    allRows.reverse();
+  }
+
+  var html = "";
+  for (i = 0; i < allRows.length; i++) {
+    var row = allRows[i] || {};
+    var payload = row.payload || {};
+    var actor = String(payload.actor_name || "User").trim() || "User";
+    var ago = formatRelativeTime(payload.create_date, payload.create_time);
+
+    if (row.type === "comment") {
+      html += buildCommentEntryHtml(payload, "all");
+      continue;
+    }
+
+    var remark = String(payload.remark || "updated the Work item").trim();
+    var fieldName = String(payload.field_name || "").trim();
+    var fromValue = String(payload.from_value || "").trim();
+    var toValue = String(payload.to_value || "").trim();
+
+    html +=
+      '<div class="task-item-activity-entry">' +
+      '<div class="task-item-activity-avatar">' +
+      escHtml(initials(actor)) +
+      "</div>" +
+      '<div class="task-item-activity-content">' +
+      '<div class="task-item-activity-text"><span class="task-item-activity-actor">' +
+      escHtml(actor) +
+      "</span> " +
+      escHtml(remark) +
+      "</div>" +
+      '<div class="task-item-activity-meta">' +
+      (ago
+        ? '<div class="task-item-activity-ago">' + escHtml(ago) + "</div>"
+        : "") +
+      activityTypeBadgeHtml("history") +
+      "</div>";
+
+    if (fromValue || toValue) {
+      html +=
+        '<div class="task-item-activity-diff">' +
+        buildActivityValueHtml(fieldName, fromValue) +
+        '<span class="task-item-activity-arrow"><i class="fa-solid fa-arrow-right"></i></span>' +
+        buildActivityValueHtml(fieldName, toValue) +
         "</div>";
     }
 
@@ -876,14 +1380,21 @@ function renderActivityFeed($target, historyRows) {
 }
 
 function renderItemHistoryPanels() {
-  renderActivityFeed(
+  renderAllActivityFeed(
     $("#taskItemActivityAllList"),
     itemDetailModalState.history,
+    itemDetailModalState.comments,
+  );
+  renderCommentFeed(
+    $("#taskItemActivityCommentList"),
+    itemDetailModalState.comments,
   );
   renderActivityFeed(
     $("#taskItemActivityHistoryList"),
     itemDetailModalState.history,
   );
+  updateActivitySortButtons();
+  $(document).trigger("task:historyPanelsRendered");
 }
 
 function setItemActivityTab(tabName) {
@@ -898,9 +1409,17 @@ function setItemActivityTab(tabName) {
     "active",
   );
 
-  $("#taskItemActivityPanelAll").toggleClass("d-none", tab !== "all");
-  $("#taskItemActivityPanelComment").toggleClass("d-none", tab !== "comment");
-  $("#taskItemActivityPanelHistory").toggleClass("d-none", tab !== "history");
+  $("#taskItemActivityPanelAll")
+    .toggleClass("d-none", tab !== "all")
+    .prop("hidden", tab !== "all");
+  $("#taskItemActivityPanelComment")
+    .toggleClass("d-none", tab !== "comment")
+    .prop("hidden", tab !== "comment");
+  $("#taskItemActivityPanelHistory")
+    .toggleClass("d-none", tab !== "history")
+    .prop("hidden", tab !== "history");
+
+  updateActivitySortButtons();
 }
 
 function loadItemHistory(itemId) {
