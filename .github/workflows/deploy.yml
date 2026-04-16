@@ -35,7 +35,7 @@ jobs:
           else
             echo "FTP_USERNAME=${{ secrets.FTP_USERNAME_UAT }}" >> $GITHUB_ENV
             echo "FTP_PASSWORD=${{ secrets.FTP_PASSWORD_UAT }}" >> $GITHUB_ENV
-            echo "SERVER_DIR=/" >> $GITHUB_ENV
+            echo "SERVER_DIR=/public_html/uatcms/" >> $GITHUB_ENV
           fi
 
       # 🧪 DRY RUN (preview only)
