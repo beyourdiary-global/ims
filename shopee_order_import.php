@@ -1,8 +1,5 @@
 <?php
 $currentPagePin = 0;
-if (!defined('IMPORT_FORCE_MODULE')) {
-    define('IMPORT_FORCE_MODULE', 'shopee_order_req');
-}
 
 $parentPageTitle = "Shopee Order Request";
 $pageTitle = '';
@@ -84,7 +81,7 @@ if ($action !== '' && !isActionAllowed('Import', $pinAccess)) {
 $importErrors = [];
 $importWarnings = [];
 $previewData = [];
-
+$orderIdFieldError = '';
 
 $shopeeAccounts = getImportOptionList(SHOPEE_ACC, 'name', $finance_connect);
 $currencyUnits = getImportOptionList(CUR_UNIT, 'unit', $connect);
@@ -93,57 +90,115 @@ $shopeePayMethods = getImportOptionList(PAY_MTHD_SHOPEE, 'name', $finance_connec
 $brandOptions = getImportOptionList(BRAND, 'name', $connect);
 $pkgOptions = getImportOptionList(PKG, 'name', $connect);
 $shopeeBuyers = getImportOptionList(SHOPEE_CUST_INFO, 'buyer_username', $finance_connect);
-if ($action === 'parseShopeeOrderReq') { // NEW: Shopee Order HTML Parsing
+$GLOBALS['sor_pdf_unicode_map'] = [];
+
+if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
     $module = 'shopee_order_req';
 
     if (!isset($_FILES['import_file'])) {
-        $importErrors[] = 'Please choose a Shopee Order HTML file.';
+        $importErrors[] = 'Please choose a Shopee Order HTML or PDF file.';
     } else if ($_FILES['import_file']['error'] !== UPLOAD_ERR_OK) {
         $importErrors[] = 'File upload failed. Error Code: ' . $_FILES['import_file']['error'];
+    } else if ($_FILES['import_file']['size'] > 5 * 1024 * 1024) {
+        $importErrors[] = 'The uploaded file exceeds the maximum allowed size of 5MB.';
     } else {
-        $html = file_get_contents($_FILES['import_file']['tmp_name']);
+        $uploadedName = isset($_FILES['import_file']['name']) ? (string) $_FILES['import_file']['name'] : '';
+        $extension = strtolower(pathinfo($uploadedName, PATHINFO_EXTENSION));
 
-        if ($html === false || trim($html) === '') {
-            $importErrors[] = 'The uploaded file could not be read.';
+        if (!in_array($extension, ['html', 'htm', 'pdf'], true)) {
+            $importErrors[] = 'Only HTML or text-based PDF files are supported.';
         } else {
-            $cleanText = normalizeImportText(strip_tags(str_replace(['<', '>'], [' <', '> '], $html)));
+            $rawContent = @file_get_contents($_FILES['import_file']['tmp_name']);
 
-            // Use DOM parsing for better extraction
-            libxml_use_internal_errors(true);
-            $dom = new DOMDocument();
-            $dom->loadHTML($html, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING);
-            libxml_clear_errors();
-            $xpath = new DOMXPath($dom);
-
-            $order_id = preg_match('/(?:Order ID|Order SN|Order No)[^A-Z0-9]*([A-Z0-9]{12,24})/i', $cleanText, $m) ? strtoupper(trim($m[1])) : '';
-            if ($order_id === '') {
-                $order_id = preg_match('/sale\/order\/([A-Z0-9]{12,24})/i', $html, $m) ? strtoupper(trim($m[1])) : '';
-            }
-
-            $sku = preg_match('/(?:SKU|Item Code)[^A-Za-z0-9]*([A-Za-z0-9\-_]+)/i', $cleanText, $m) ? trim($m[1]) : '';
-
-            // Extract product name from HTML for better package matching
-            $productName = '';
-            // Try to get product name from product title elements common in Shopee order pages
-            $productNameNode = getNodeText($xpath, "//*[contains(@class,'product-name') or contains(@class,'item-name') or contains(@class,'product-title')]");
-            if ($productNameNode === '') {
-                // Fallback: try to extract from text near SKU
-                if (preg_match('/Product\(s\)[^:]*:?\s*(.+?)(?:SKU|Item Code|Variation)/is', $cleanText, $pnm)) {
-                    $productName = normalizeImportText($pnm[1]);
-                }
+            if ($rawContent === false || (string) $rawContent === '') {
+                $importErrors[] = 'The uploaded file could not be read.';
+            } else if ($extension === 'pdf' && strncmp($rawContent, '%PDF-', 5) !== 0) {
+                $importErrors[] = 'The uploaded file is not a valid PDF document.';
+            } else if (in_array($extension, ['html', 'htm'], true) && stripos($rawContent, '<html') === false && stripos($rawContent, '<!DOCTYPE') === false && stripos($rawContent, '<body') === false) {
+                $importErrors[] = 'The uploaded file is not a valid HTML document.';
             } else {
-                $productName = $productNameNode;
+                $html = '';
+                $cleanText = '';
+                $rawPdfText = '';
+                $decodedPdfText = '';
+                $decodedPdfTextDigitsPreserved = '';
+                $xpath = null;
+                $sourceTypeLabel = 'HTML';
+
+                if ($extension === 'pdf') {
+                    $sourceTypeLabel = 'PDF';
+                    $pdfUnicodeMapBundle = buildPdfUnicodeMapFromContent($rawContent);
+                    $GLOBALS['sor_pdf_unicode_map'] = $pdfUnicodeMapBundle;
+
+                    $rawPdfText = (string) extractTextFromPdfContent($rawContent);
+
+                    $commandPdfText = extractTextFromPdfViaCommand((string) $_FILES['import_file']['tmp_name']);
+
+                    if ($commandPdfText !== '') {
+                        $rawPdfText = trim($rawPdfText . "\n" . $commandPdfText);
+                    }
+
+                    $decodedPdfText = decodeLikelyShopeePdfText($rawPdfText);
+                    $decodedPdfTextDigitsPreserved = decodeShopeePdfShiftedGlyphText($rawPdfText, false);
+                    if ($decodedPdfText !== '') {
+                        $rawPdfText = trim($rawPdfText . "\n" . $decodedPdfText);
+                    }
+                    if ($decodedPdfTextDigitsPreserved !== '') {
+                        $rawPdfText = trim($rawPdfText . "\n" . $decodedPdfTextDigitsPreserved);
+                    }
+
+                    $cleanText = normalizeImportText($rawPdfText);
+                    if ($cleanText === '') {
+                        $importErrors[] = 'Unable to extract text from the uploaded PDF file.';
+                    }
+                } else {
+                    $html = (string) $rawContent;
+                    $cleanText = normalizeImportText(strip_tags(str_replace(['<', '>'], [' <', '> '], $html)));
+
+                    libxml_use_internal_errors(true);
+                    $dom = new DOMDocument();
+                    $loaded = $dom->loadHTML($html, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING);
+                    libxml_clear_errors();
+
+                    if (!$loaded) {
+                        $importErrors[] = 'The uploaded file is not a valid HTML document.';
+                    } else {
+                        $xpath = new DOMXPath($dom);
+                    }
+                }
+            }
+        }
+
+        if (!empty($importErrors)) {
+            // Parsing pre-check failed. Errors already populated.
+        } else {
+            $pdfSourceText = $extension === 'pdf' ? (isset($rawPdfText) ? (string) $rawPdfText : '') : '';
+            $order_id = extractShopeeOrderId($cleanText, $html, $pdfSourceText, $extension === 'pdf' ? (string) $rawContent : '');
+
+            $skuSourceText = $pdfSourceText !== '' ? $pdfSourceText : $cleanText;
+            $sku = extractShopeeSkuFromText($skuSourceText);
+            if ($sku === '') {
+                $sku = extractShopeeSkuFromText($cleanText);
+            }
+            if ($sku === '' && $extension === 'pdf') {
+                $sku = extractShopeeSkuFromPdfBinary((string) $rawContent);
             }
 
-            $paymentInfoPairs = collectShopeeOrderAmountPairsFromDom($xpath, "//*[@data-testid='odp-order-payment']//*[contains(@class,'income-item')]");
-            $buyerPaymentPairs = collectShopeeOrderAmountPairsFromDom($xpath, "//*[@data-testid='odp-buyer-payment']//*[contains(@class,'income-item')]");
+            // Extract one or more product names for package matching.
+            $productNameCandidates = extractShopeeProductNameCandidates($xpath, $cleanText);
 
-            // Fallback to full-page scan if section-specific selectors are not available.
-            if (empty($paymentInfoPairs)) {
-                $paymentInfoPairs = collectShopeeOrderAmountPairsFromDom($xpath);
-            }
-            if (empty($buyerPaymentPairs)) {
-                $buyerPaymentPairs = $paymentInfoPairs;
+            $paymentInfoPairs = [];
+            $buyerPaymentPairs = [];
+            if ($xpath instanceof DOMXPath) {
+                $paymentInfoPairs = collectShopeeOrderAmountPairsFromDom($xpath, "//*[@data-testid='odp-order-payment']//*[contains(@class,'income-item')]");
+                $buyerPaymentPairs = collectShopeeOrderAmountPairsFromDom($xpath, "//*[@data-testid='odp-buyer-payment']//*[contains(@class,'income-item')]");
+
+                if (empty($paymentInfoPairs)) {
+                    $paymentInfoPairs = collectShopeeOrderAmountPairsFromDom($xpath);
+                }
+                if (empty($buyerPaymentPairs)) {
+                    $buyerPaymentPairs = $paymentInfoPairs;
+                }
             }
 
             $product_price = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Product Price', 'Deal Price', 'Merchandise Subtotal']);
@@ -167,32 +222,35 @@ if ($action === 'parseShopeeOrderReq') { // NEW: Shopee Order HTML Parsing
                 $actShippingFee = parseShopeeOrderAmountByLabels($cleanText, ['Shipping Subtotal', 'Estimated Shipping Subtotal', 'Estimated Shipping Fee Charged by Logistic Provider', 'Shipping Fee Paid by Buyer']);
             }
 
-            // CMS mapping requirement:
-            // service_fee <- Commission Fee (Incl.SST)
-            $serviceFee = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Commission Fee', 'Service Fee']);
+            // Required mapping:
+            // service_fee <- Service Fee
+            $serviceFee = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Service Fee']);
             if ($serviceFee === '') {
-                $serviceFee = parseShopeeOrderAmountByLabels($cleanText, ['Commission Fee', 'Service Fee']);
+                $serviceFee = parseShopeeOrderAmountByLabels($cleanText, ['Service Fee']);
             }
 
-            // CMS mapping requirement:
-            // trans_fee <- Service Fee
-            $transactionFee = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Service Fee', 'Transaction Fee']);
+            // Required mapping:
+            // trans_fee <- Transaction Fee
+            $transactionFee = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Transaction Fee']);
             if ($transactionFee === '') {
-                $transactionFee = parseShopeeOrderAmountByLabels($cleanText, ['Service Fee', 'Transaction Fee']);
+                $transactionFee = parseShopeeOrderAmountByLabels($cleanText, ['Transaction Fee']);
             }
 
-            // CMS mapping requirement:
-            // ams_fee <- Fees & Charges
-            $amsFee = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Fees & Charges', 'Commission Fee', 'Saver Programme Fee']);
+            // Required mapping:
+            // ams_fee <- Commission Fee
+            $amsFee = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Commission Fee']);
             if ($amsFee === '') {
-                $amsFee = parseShopeeOrderAmountByLabels($cleanText, ['Fees & Charges', 'Commission Fee', 'Saver Programme Fee']);
+                $amsFee = parseShopeeOrderAmountByLabels($cleanText, ['Commission Fee']);
             }
 
-            // CMS mapping requirement:
-            // fees <- Seller Paid Shipping Fee SST
-            $fees = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Seller Paid Shipping Fee SST', 'Fees & Charges']);
+            // Special fee is only available in PDF imports.
+            $saverProgramFee = '0.00';
+
+            // Required mapping:
+            // fees <- Fees & Charges
+            $fees = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Fees & Charges']);
             if ($fees === '') {
-                $fees = parseShopeeOrderAmountByLabels($cleanText, ['Seller Paid Shipping Fee SST', 'Fees & Charges']);
+                $fees = parseShopeeOrderAmountByLabels($cleanText, ['Fees & Charges']);
             }
 
             $finalAmt = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Estimated Order Income', 'Order Income', 'Final Amount']);
@@ -200,113 +258,138 @@ if ($action === 'parseShopeeOrderReq') { // NEW: Shopee Order HTML Parsing
                 $finalAmt = parseShopeeOrderAmountByLabels($cleanText, ['Order Income', 'Estimated Order Income', 'Final Amount']);
             }
 
+            if ($extension === 'pdf') {
+                $pdfMoneySource = $pdfSourceText !== '' ? $pdfSourceText : $cleanText;
+                $pdfMoney = extractShopeePdfMonetaryValues($pdfMoneySource);
+
+                if (is_array($pdfMoney)) {
+                    if (array_key_exists('product_price', $pdfMoney)) {
+                        $product_price = (string) $pdfMoney['product_price'];
+                    }
+                    if (array_key_exists('voucher', $pdfMoney)) {
+                        $voucher = (string) $pdfMoney['voucher'];
+                    }
+                    if (array_key_exists('act_shipping_fee', $pdfMoney)) {
+                        $actShippingFee = (string) $pdfMoney['act_shipping_fee'];
+                    }
+                    if (array_key_exists('service_fee', $pdfMoney)) {
+                        $serviceFee = (string) $pdfMoney['service_fee'];
+                    }
+                    if (array_key_exists('trans_fee', $pdfMoney)) {
+                        $transactionFee = (string) $pdfMoney['trans_fee'];
+                    }
+                    if (array_key_exists('ams_fee', $pdfMoney)) {
+                        $amsFee = (string) $pdfMoney['ams_fee'];
+                    }
+                    if (array_key_exists('saver_program_fee', $pdfMoney)) {
+                        $saverProgramFee = (string) $pdfMoney['saver_program_fee'];
+                    }
+                }
+            }
+
             $detectedCurrency = detectShopeeOrderCurrency($cleanText);
             $currencyFallbacks = $detectedCurrency === 'RM' ? ['MYR'] : [];
             $currencyId = resolveImportOptionId($detectedCurrency, $currencyUnits, $currencyFallbacks);
 
-            $buyerUsername = extractShopeeBuyerUsername($html, $cleanText);
+            $buyerSourceText = $extension === 'pdf' ? ($pdfSourceText !== '' ? $pdfSourceText : $cleanText) : $cleanText;
+            $buyerUsername = extractShopeeBuyerUsername($html, $buyerSourceText);
             $buyerId = resolveImportOptionId($buyerUsername, $shopeeBuyers);
 
-            // Extract buyer payment method from HTML
+            // Extract buyer payment method.
             $detectedPayMethod = '';
-            $payMethodNode = extractValueFromTableLabel($xpath, ['Payment Method']);
-            if ($payMethodNode === '') {
-                // Fallback: regex from clean text
+            if ($xpath instanceof DOMXPath) {
+                $payMethodNode = extractValueFromTableLabel($xpath, ['Payment Method']);
+                if ($payMethodNode !== '') {
+                    $detectedPayMethod = $payMethodNode;
+                }
+            }
+            if ($detectedPayMethod === '' && $extension === 'pdf') {
+                $detectedPayMethod = extractPdfFieldByLabels($pdfSourceText !== '' ? $pdfSourceText : $cleanText, ['Payment Method', 'Payment Type']);
+            }
+            if ($detectedPayMethod === '') {
                 if (preg_match('/Payment\s*Method\s*[:\s]*([A-Za-z0-9\s\-\.\/]+?)(?:\s*(?:Shipping|Voucher|Fees|Order|Merchandise|$))/i', $cleanText, $pm)) {
                     $detectedPayMethod = normalizeImportText($pm[1]);
                 }
-            } else {
-                $detectedPayMethod = $payMethodNode;
             }
             $payMethodId = '';
             if ($detectedPayMethod !== '') {
                 $payMethodId = resolveImportOptionId($detectedPayMethod, $shopeePayMethods);
             }
 
-            // Extract shop name / Shopee account from HTML
+            // Extract shop name / Shopee account.
             $detectedShopName = '';
-            $shopHeaderNode = getNodeText($xpath, "//div[contains(@class,'order-detail-info')]//div[contains(@class,'header')]");
-            if ($shopHeaderNode !== '') {
-                $detectedShopName = extractValueAfterColon($shopHeaderNode);
+            if ($xpath instanceof DOMXPath) {
+                $shopHeaderNode = getNodeText($xpath, "//div[contains(@class,'order-detail-info')]//div[contains(@class,'header')]");
+                if ($shopHeaderNode !== '') {
+                    $detectedShopName = extractValueAfterColon($shopHeaderNode);
+                }
+            }
+            if ($detectedShopName === '' && $extension === 'pdf') {
+                $detectedShopName = extractPdfFieldByLabels($pdfSourceText !== '' ? $pdfSourceText : $cleanText, ['Shop Name', 'Shopee Account']);
+                if (!isLikelyShopeeAccountName($detectedShopName)) {
+                    $detectedShopName = extractShopeePdfAccountName($pdfSourceText !== '' ? $pdfSourceText : $cleanText);
+                }
+                if (!isLikelyShopeeAccountName($detectedShopName)) {
+                    $detectedShopName = extractShopeePdfAccountNameFromBinary((string) $rawContent);
+                }
             }
             if ($detectedShopName === '') {
-                // Fallback: try to find shop name in text
-                if (preg_match('/Shop\s*(?:Name)?\s*[:\s]+([^\n,]+)/i', $cleanText, $sn)) {
+                if (preg_match('/Shop\s*Name\s*[:\s]+([^\n,]+)/i', $cleanText, $sn)) {
                     $detectedShopName = normalizeImportText($sn[1]);
                 }
+            }
+            if (!isLikelyShopeeAccountName($detectedShopName)) {
+                $detectedShopName = '';
             }
             $shopeeAccId = '';
             if ($detectedShopName !== '') {
                 $shopeeAccId = resolveImportOptionId($detectedShopName, $shopeeAccounts);
             }
 
-            // Detect order status from HTML (completed orders should show as Completed)
-            $detectedOrderStatus = 'P'; // Default: Pending To Pack
-            $detectedOrderStatusLabel = 'Pending To Pack';
-            // Check for Completed timeline
-            $completedNode = getNodeText($xpath, "//div[contains(@class,'timeline-item')][.//div[contains(@class,'title') and normalize-space()='Completed']]");
-            if ($completedNode !== '') {
-                $detectedOrderStatus = 'C';
-                $detectedOrderStatusLabel = 'Completed';
-            } else {
-                // Fallback: check text for status indicators
-                if (preg_match('/\bOrder\s+Status\s*[:\s]*(Completed|Shipped|Delivered|To\s*Ship|To\s*Receive|Processing)/i', $cleanText, $osm)) {
-                    $statusText = strtolower(trim($osm[1]));
-                    if ($statusText === 'completed' || $statusText === 'delivered') {
-                        $detectedOrderStatus = 'C';
-                        $detectedOrderStatusLabel = 'Completed';
-                    } else if ($statusText === 'shipped' || $statusText === 'to receive') {
-                        $detectedOrderStatus = 'SP';
-                        $detectedOrderStatusLabel = 'SHIP PROCESSING (Warehouse)';
-                    }
-                }
-                // Also check for "Order Income" label which indicates a completed order
-                if ($detectedOrderStatus === 'P' && preg_match('/\bOrder\s+Income\b/i', $cleanText)) {
-                    $detectedOrderStatus = 'C';
-                    $detectedOrderStatusLabel = 'Completed';
-                }
+            // Detect order status with strict mapping:
+            // To Ship -> P, To Receive -> SP, Completed -> OC.
+            $statusInfo = $xpath instanceof DOMXPath
+                ? detectShopeeOrderStatusFromHtml($xpath, $cleanText)
+                : detectShopeeOrderStatusFromText($cleanText, true);
+
+            $detectedOrderStatus = $statusInfo['code'];
+            $detectedOrderStatusLabel = $statusInfo['label'];
+
+            if ($extension === 'pdf' && isset($pdfMoney) && !empty($pdfMoney['delivered_hint'])) {
+                $detectedOrderStatus = 'OC';
+                $detectedOrderStatusLabel = 'Order Received (admin checking)';
             }
 
             if ($order_id === '') {
-                $importErrors[] = 'Order ID could not be detected. Please ensure you uploaded the correct Shopee Order Details HTML file.';
+                $importErrors[] = 'Order ID could not be detected. Please ensure you uploaded the correct Shopee Order Details HTML/PDF file.';
+            } else if (isShopeeOrderIdDuplicated($order_id, $finance_connect)) {
+                $orderIdFieldError = 'Duplicate Order ID found in Shopee Order Request records.';
             }
 
-            $pkg_id = '';
-            $missing_sku = false;
-            
-            // Safely Validate the SKU from the CMS Package DB
-            if (!empty($sku)) {
-                // Escape SKU to prevent SQL injection when building the condition string
-                $safeSku = mysqli_real_escape_string($connect, $sku);
-                // Search by item_code OR name
-                $pkgResult = getData('*', "item_code='$safeSku' OR name='$safeSku'", '', PKG, $connect); 
-                if ($pkgResult && $pkgResult->num_rows > 0) {
-                    $pkg_row = $pkgResult->fetch_assoc();
-                    $pkg_id = $pkg_row['id'];
-                } else {
-                    // Try partial/fuzzy match: item_code LIKE or name LIKE
-                    $pkgResult = getData('*', "item_code LIKE '%$safeSku%' OR name LIKE '%$safeSku%'", 'LIMIT 1', PKG, $connect);
-                    if ($pkgResult && $pkgResult->num_rows > 0) {
-                        $pkg_row = $pkgResult->fetch_assoc();
-                        $pkg_id = $pkg_row['id'];
-                    } else {
-                        $missing_sku = true;
-                    }
-                }
-            } else {
-                $missing_sku = true;
-            }
+            $pkgIds = resolvePackageIdsFromDetectedData($sku, $productNameCandidates, $connect);
+            $pkg_id = implode(',', $pkgIds);
+            $missing_sku = empty($pkgIds);
+            $brandIds = resolveBrandIdsByPackageIds($pkgIds, $connect);
 
-            // If still missing, try matching using product name
-            if ($missing_sku && !empty($productName)) {
-                $safeProductName = mysqli_real_escape_string($connect, $productName);
-                $pkgResult = getData('*', "name LIKE '%$safeProductName%'", 'LIMIT 1', PKG, $connect);
-                if ($pkgResult && $pkgResult->num_rows > 0) {
-                    $pkg_row = $pkgResult->fetch_assoc();
-                    $pkg_id = $pkg_row['id'];
-                    $missing_sku = false;
-                }
-            }
+            $product_price = normalizeImportAmount($product_price);
+            $voucher = normalizeImportAmount($voucher);
+            $actShippingFee = normalizeImportAmount($actShippingFee);
+            $serviceFee = normalizeImportAmount($serviceFee);
+            $transactionFee = normalizeImportAmount($transactionFee);
+            $amsFee = normalizeImportAmount($amsFee);
+            $saverProgramFee = normalizeImportAmount($saverProgramFee);
+            $fees = normalizeImportAmount($fees);
+            $finalAmt = normalizeImportAmount($finalAmt);
+
+            $product_price = $product_price !== '' ? $product_price : '0.00';
+            $voucher = $voucher !== '' ? $voucher : '0.00';
+            $actShippingFee = $actShippingFee !== '' ? $actShippingFee : '0.00';
+            $serviceFee = $serviceFee !== '' ? $serviceFee : '0.00';
+            $transactionFee = $transactionFee !== '' ? $transactionFee : '0.00';
+            $amsFee = $amsFee !== '' ? $amsFee : '0.00';
+            $saverProgramFee = $saverProgramFee !== '' ? $saverProgramFee : '0.00';
+            $fees = number_format(((float) $serviceFee + (float) $transactionFee + (float) $amsFee + (float) $saverProgramFee), 2, '.', '');
+            $finalAmt = number_format(((float) $product_price - (float) $voucher - (float) $actShippingFee - (float) $fees), 2, '.', '');
 
             $previewData = [
                 'order_id' => $order_id,
@@ -320,7 +403,7 @@ if ($action === 'parseShopeeOrderReq') { // NEW: Shopee Order HTML Parsing
                 'source_shopee_acc' => $detectedShopName,
                 'currency' => $currencyId,
                 'source_currency' => $detectedCurrency,
-                'brand' => '',
+                'brand' => implode(',', $brandIds),
                 'buyer' => $buyerId,
                 'source_buyer_username' => $buyerUsername,
                 'buyer_pay_meth' => $payMethodId,
@@ -331,9 +414,10 @@ if ($action === 'parseShopeeOrderReq') { // NEW: Shopee Order HTML Parsing
                 'service_fee' => $serviceFee,
                 'trans_fee' => $transactionFee,
                 'ams_fee' => $amsFee,
+                'saver_program_fee' => $saverProgramFee,
                 'fees' => $fees,
                 'final_amt' => $finalAmt,
-                'remark' => $order_id !== '' ? ('Imported from Shopee Order HTML (' . $order_id . ')') : 'Imported from Shopee Order HTML',
+                'remark' => $order_id !== '' ? ('Imported from Shopee Order ' . $sourceTypeLabel . ' (' . $order_id . ')') : ('Imported from Shopee Order ' . $sourceTypeLabel),
             ];
 
             if ($currencyId === '') {
@@ -411,6 +495,7 @@ if ($action === 'parseShopeeOrderReq') { // NEW: Shopee Order HTML Parsing
         'service_fee' => postSpaceFilter('service_fee'),
         'trans_fee' => postSpaceFilter('trans_fee'),
         'ams_fee' => postSpaceFilter('ams_fee'),
+        'saver_program_fee' => postSpaceFilter('saver_program_fee'),
         'fees' => postSpaceFilter('fees'),
         'final_amt' => postSpaceFilter('final_amt'),
         'remark' => postSpaceFilter('remark'),
@@ -422,15 +507,33 @@ if ($action === 'parseShopeeOrderReq') { // NEW: Shopee Order HTML Parsing
     if ($previewData['brand'] === '') $importErrors[] = 'Brand is required.';
     if ($previewData['pic'] === '') $importErrors[] = 'Person In Charge is required.';
 
+    if ($previewData['order_id'] !== '' && isShopeeOrderIdDuplicated($previewData['order_id'], $finance_connect)) {
+        $orderIdFieldError = 'Duplicate Order ID found in Shopee Order Request records.';
+    }
+
+    $amountFields = ['product_price', 'voucher', 'act_shipping_fee', 'service_fee', 'trans_fee', 'ams_fee', 'saver_program_fee', 'fees', 'final_amt'];
+    foreach ($amountFields as $amountField) {
+        if (isset($previewData[$amountField]) && $previewData[$amountField] !== '') {
+            $normalizedAmount = normalizeImportAmount($previewData[$amountField]);
+            if ($normalizedAmount !== '') {
+                $previewData[$amountField] = $normalizedAmount;
+            }
+        }
+    }
+
     $previewData['voucher'] = $previewData['voucher'] !== '' ? $previewData['voucher'] : '0.00';
     $previewData['act_shipping_fee'] = $previewData['act_shipping_fee'] !== '' ? $previewData['act_shipping_fee'] : '0.00';
     $previewData['service_fee'] = $previewData['service_fee'] !== '' ? $previewData['service_fee'] : '0.00';
     $previewData['trans_fee'] = $previewData['trans_fee'] !== '' ? $previewData['trans_fee'] : '0.00';
     $previewData['ams_fee'] = $previewData['ams_fee'] !== '' ? $previewData['ams_fee'] : '0.00';
-    $previewData['fees'] = $previewData['fees'] !== '' ? $previewData['fees'] : '0.00';
-    $previewData['final_amt'] = $previewData['final_amt'] !== '' ? $previewData['final_amt'] : '0.00';
+    $previewData['saver_program_fee'] = $previewData['saver_program_fee'] !== '' ? $previewData['saver_program_fee'] : '0.00';
+    $previewData['fees'] = number_format(((float) $previewData['service_fee'] + (float) $previewData['trans_fee'] + (float) $previewData['ams_fee'] + (float) $previewData['saver_program_fee']), 2, '.', '');
+    
+    // Server-side recomputation to prevent tampering
+    $calculatedFinalAmt = (float) $previewData['product_price'] - (float) $previewData['voucher'] - (float) $previewData['act_shipping_fee'] - (float) $previewData['fees'];
+    $previewData['final_amt'] = number_format($calculatedFinalAmt, 2, '.', '');
 
-    if (empty($importErrors)) {
+    if (empty($importErrors) && $orderIdFieldError === '') {
         $orderId = mysqli_real_escape_string($finance_connect, $previewData['order_id']);
         $pkgId = mysqli_real_escape_string($connect, $previewData['package_id']);
         $price = mysqli_real_escape_string($finance_connect, $previewData['product_price']);
@@ -525,6 +628,1257 @@ function extractValueAfterColon($text)
     return isset($parts[1]) ? normalizeImportText($parts[1]) : normalizeImportText($text);
 }
 
+function extractShopeeProductNameCandidates($xpath, $cleanText)
+{
+    $candidates = array();
+
+    if ($xpath instanceof DOMXPath) {
+        $nodes = $xpath->query("//*[contains(@class,'product-name') or contains(@class,'item-name') or contains(@class,'product-title')]");
+        if ($nodes) {
+            foreach ($nodes as $node) {
+                $name = normalizeImportText($node->textContent);
+                if ($name !== '') {
+                    $candidates[] = $name;
+                }
+            }
+        }
+    }
+
+    if (preg_match_all('/(?:Product\(s\)|Product Name|Item)\s*[:\-]?\s*(.+?)(?:SKU|Item Code|Variation|Qty|Quantity|Payment|Order|$)/is', (string) $cleanText, $matches)) {
+        foreach ($matches[1] as $match) {
+            $name = normalizeImportText($match);
+            if ($name !== '') {
+                $candidates[] = $name;
+            }
+        }
+    }
+
+    $normalized = array();
+    foreach ($candidates as $candidate) {
+        $lookup = normalizeImportLookup($candidate);
+        if ($lookup === '' || isset($normalized[$lookup])) {
+            continue;
+        }
+        $normalized[$lookup] = $candidate;
+    }
+
+    return array_values($normalized);
+}
+
+function resolvePackageIdsFromDetectedData($sku, $productNameCandidates, $connect)
+{
+    $resolvedIds = array();
+
+    $pushId = function ($id) use (&$resolvedIds) {
+        $id = (int) $id;
+        if ($id > 0) {
+            $resolvedIds[] = $id;
+        }
+    };
+
+    $sku = trim((string) $sku);
+    if ($sku !== '') {
+        $safeSku = mysqli_real_escape_string($connect, $sku);
+        $pkgResult = getData('id', "item_code='$safeSku' OR name='$safeSku'", 'LIMIT 1', PKG, $connect);
+        if ($pkgResult && $pkgResult->num_rows > 0) {
+            $pkgRow = $pkgResult->fetch_assoc();
+            $pushId($pkgRow['id']);
+        } else {
+            $safeSkuLike = sanitizeImportLikeTerm($sku);
+            if ($safeSkuLike !== '') {
+                $escapedSkuLike = mysqli_real_escape_string($connect, $safeSkuLike);
+                try {
+                    $pkgResult = getData('id', "item_code LIKE '%$escapedSkuLike%' OR name LIKE '%$escapedSkuLike%'", 'LIMIT 1', PKG, $connect);
+                } catch (Throwable $throwable) {
+                    $pkgResult = false;
+                }
+
+                if ($pkgResult && $pkgResult->num_rows > 0) {
+                    $pkgRow = $pkgResult->fetch_assoc();
+                    $pushId($pkgRow['id']);
+                }
+            }
+        }
+    }
+
+    if (!is_array($productNameCandidates)) {
+        $productNameCandidates = array();
+    }
+
+    foreach ($productNameCandidates as $productName) {
+        $productName = trim((string) $productName);
+        if ($productName === '') {
+            continue;
+        }
+
+        // 1. Create an ASCII-safe normalized term for the EXACT equality check
+        $safeProductExact = normalizeImportText($productName);
+        $safeProductExact = preg_replace('/[^\x20-\x7E]+/', ' ', $safeProductExact);
+        $safeProductExact = trim(preg_replace('/\s+/', ' ', $safeProductExact));
+
+        if ($safeProductExact === '') {
+            continue;
+        }
+
+        // 2. Add slashes to the exact term ONLY for the LIKE check
+        $safeProductLike = addcslashes($safeProductExact, '%_\\');
+
+        $escapedProductExact = mysqli_real_escape_string($connect, $safeProductExact);
+        $escapedProductLike = mysqli_real_escape_string($connect, $safeProductLike);
+
+        $found = false;
+        try {
+            // Use the unescaped exact term for equality matching
+            $pkgResult = getData('id', "name = '$escapedProductExact' OR item_code = '$escapedProductExact'", 'LIMIT 1', PKG, $connect);
+        } catch (Throwable $throwable) {
+            $pkgResult = false;
+        }
+
+        if ($pkgResult && $pkgResult->num_rows > 0) {
+            $pkgRow = $pkgResult->fetch_assoc();
+            $pushId($pkgRow['id']);
+            $found = true;
+        }
+
+        if ($found) {
+            continue;
+        }
+
+        try {
+            $pkgResult = getData('id', "name LIKE '%$escapedProductLike%'", 'LIMIT 1', PKG, $connect);
+        } catch (Throwable $throwable) {
+            $pkgResult = false;
+        }
+
+        if ($pkgResult && $pkgResult->num_rows > 0) {
+            $pkgRow = $pkgResult->fetch_assoc();
+            $pushId($pkgRow['id']);
+        }
+    }
+
+    $resolvedIds = array_values(array_unique(array_map('intval', $resolvedIds)));
+    return $resolvedIds;
+}
+
+function sanitizeImportLikeTerm($value)
+{
+    $value = normalizeImportText((string) $value);
+    if ($value === '') {
+        return '';
+    }
+
+    // Convert to ASCII-safe LIKE term to avoid collation conflicts on legacy latin1 columns.
+    $value = preg_replace('/[^\x20-\x7E]+/', ' ', $value);
+    $value = trim(preg_replace('/\s+/', ' ', $value));
+    
+    // Escape LIKE metacharacters (% and _) to prevent wildcard injection
+    $value = addcslashes($value, '%_\\');
+    
+    return $value;
+}
+
+function resolveBrandIdsByPackageIds($packageIds, $connect)
+{
+    $brandIds = array();
+    if (!is_array($packageIds)) {
+        $packageIds = array();
+    }
+
+    foreach ($packageIds as $packageId) {
+        $packageId = (int) $packageId;
+        if ($packageId <= 0) {
+            continue;
+        }
+
+        $pkgResult = getData('brand', "id='$packageId'", 'LIMIT 1', PKG, $connect);
+        if (!$pkgResult || $pkgResult->num_rows === 0) {
+            continue;
+        }
+
+        $pkgRow = $pkgResult->fetch_assoc();
+        $rawBrands = isset($pkgRow['brand']) ? (string) $pkgRow['brand'] : '';
+        foreach (explode(',', $rawBrands) as $brandId) {
+            $brandId = (int) trim((string) $brandId);
+            if ($brandId > 0) {
+                $brandIds[] = $brandId;
+            }
+        }
+    }
+
+    return array_values(array_unique($brandIds));
+}
+
+function cleanPdfTextOperand($text)
+{
+    $text = str_replace("\x00", '', (string) $text);
+    $text = strtr($text, array(
+        '\\n' => ' ',
+        '\\r' => ' ',
+        '\\t' => ' ',
+        '\\(' => '(',
+        '\\)' => ')',
+        '\\\\' => '\\',
+    ));
+
+    return normalizeImportText(preg_replace('/[^[:print:] ]/', ' ', $text));
+}
+
+function pdfHexToUtf8($hex)
+{
+    $hex = preg_replace('/[^0-9A-Fa-f]/', '', (string) $hex);
+    if ($hex === '') {
+        return '';
+    }
+
+    if ((strlen($hex) % 2) === 1) {
+        $hex .= '0';
+    }
+
+    $bin = @hex2bin($hex);
+    if ($bin === false) {
+        return '';
+    }
+
+    if (strlen($hex) <= 2) {
+        return cleanPdfTextOperand($bin);
+    }
+
+    if ((strlen($hex) % 4) === 0 && function_exists('mb_convert_encoding')) {
+        $text = @mb_convert_encoding($bin, 'UTF-8', 'UTF-16BE');
+        if (is_string($text) && $text !== '') {
+            return $text;
+        }
+    }
+
+    return cleanPdfTextOperand($bin);
+}
+
+function pdfIncrementHex($hex, $step)
+{
+    $hex = strtoupper(preg_replace('/[^0-9A-F]/', '', (string) $hex));
+    $step = (int) $step;
+    if ($hex === '' || $step < 0) {
+        return '';
+    }
+
+    $width = strlen($hex);
+    if ($width > 8) {
+        return '';
+    }
+
+    $value = hexdec($hex);
+    $next = $value + $step;
+    if ($next < 0) {
+        return '';
+    }
+
+    return strtoupper(str_pad(dechex($next), $width, '0', STR_PAD_LEFT));
+}
+
+function buildPdfUnicodeMapFromContent($content)
+{
+    $map = array();
+    $codeLengths = array();
+
+    preg_match_all('/stream\s*\r?\n(.*?)\r?\n?endstream/s', (string) $content, $streamMatches);
+    $streams = isset($streamMatches[1]) && is_array($streamMatches[1]) ? $streamMatches[1] : array();
+
+    foreach ($streams as $stream) {
+        $decoded = decodePdfStream($stream);
+        if ($decoded === false || $decoded === '') {
+            continue;
+        }
+
+        if (stripos($decoded, 'beginbfchar') === false && stripos($decoded, 'beginbfrange') === false) {
+            continue;
+        }
+
+        if (preg_match_all('/beginbfchar(.*?)endbfchar/si', $decoded, $bfCharBlocks)) {
+            foreach ($bfCharBlocks[1] as $block) {
+                if (preg_match_all('/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/', $block, $pairs, PREG_SET_ORDER)) {
+                    foreach ($pairs as $pair) {
+                        $src = strtoupper($pair[1]);
+                        $dst = pdfHexToUtf8($pair[2]);
+                        if ($src === '' || $dst === '') {
+                            continue;
+                        }
+                        $map[$src] = $dst;
+                        $codeLengths[strlen($src)] = true;
+                    }
+                }
+            }
+        }
+
+        if (preg_match_all('/beginbfrange(.*?)endbfrange/si', $decoded, $bfRangeBlocks)) {
+            foreach ($bfRangeBlocks[1] as $block) {
+                if (preg_match_all('/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/', $block, $rangeMatches, PREG_SET_ORDER)) {
+                    foreach ($rangeMatches as $rangeMatch) {
+                        $start = strtoupper($rangeMatch[1]);
+                        $end = strtoupper($rangeMatch[2]);
+                        $destStart = strtoupper($rangeMatch[3]);
+
+                        if ($start === '' || $end === '' || $destStart === '' || strlen($start) !== strlen($end)) {
+                            continue;
+                        }
+
+                        $startVal = hexdec($start);
+                        $endVal = hexdec($end);
+                        if ($endVal < $startVal) {
+                            continue;
+                        }
+
+                        $total = $endVal - $startVal;
+                        if ($total > 1024) {
+                            continue;
+                        }
+
+                        for ($offset = 0; $offset <= $total; $offset++) {
+                            $src = pdfIncrementHex($start, $offset);
+                            $dstHex = pdfIncrementHex($destStart, $offset);
+                            $dst = pdfHexToUtf8($dstHex);
+
+                            if ($src === '' || $dst === '') {
+                                continue;
+                            }
+
+                            $map[$src] = $dst;
+                            $codeLengths[strlen($src)] = true;
+                        }
+                    }
+                }
+
+                if (preg_match_all('/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*\[(.*?)\]/s', $block, $arrayRangeMatches, PREG_SET_ORDER)) {
+                    foreach ($arrayRangeMatches as $rangeMatch) {
+                        $start = strtoupper($rangeMatch[1]);
+                        $end = strtoupper($rangeMatch[2]);
+                        $arrayBlock = $rangeMatch[3];
+
+                        if ($start === '' || $end === '' || strlen($start) !== strlen($end)) {
+                            continue;
+                        }
+
+                        $startVal = hexdec($start);
+                        $endVal = hexdec($end);
+                        if ($endVal < $startVal) {
+                            continue;
+                        }
+
+                        $destList = array();
+                        if (preg_match_all('/<([0-9A-Fa-f]+)>/', $arrayBlock, $destMatches)) {
+                            $destList = $destMatches[1];
+                        }
+
+                        $total = min(($endVal - $startVal), count($destList) - 1);
+                        if ($total > 1024) {
+                            $total = 1024;
+                        }
+
+                        for ($offset = 0; $offset <= $total; $offset++) {
+                            $src = pdfIncrementHex($start, $offset);
+                            $dst = pdfHexToUtf8($destList[$offset]);
+                            if ($src === '' || $dst === '') {
+                                continue;
+                            }
+
+                            $map[$src] = $dst;
+                            $codeLengths[strlen($src)] = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    $lengths = array_map('intval', array_keys($codeLengths));
+    rsort($lengths, SORT_NUMERIC);
+
+    return array(
+        'map' => $map,
+        'code_lengths' => $lengths,
+    );
+}
+
+function decodePdfHexTokenWithUnicodeMap($hex)
+{
+    $hex = strtoupper(preg_replace('/[^0-9A-F]/', '', (string) $hex));
+    if ($hex === '') {
+        return '';
+    }
+
+    $bundle = isset($GLOBALS['sor_pdf_unicode_map']) && is_array($GLOBALS['sor_pdf_unicode_map'])
+        ? $GLOBALS['sor_pdf_unicode_map']
+        : array();
+    $map = isset($bundle['map']) && is_array($bundle['map']) ? $bundle['map'] : array();
+    $lengths = isset($bundle['code_lengths']) && is_array($bundle['code_lengths']) ? $bundle['code_lengths'] : array();
+
+    if (empty($map) || empty($lengths)) {
+        return '';
+    }
+
+    foreach ($lengths as $codeLen) {
+        $codeLen = (int) $codeLen;
+        if ($codeLen <= 0 || (strlen($hex) % $codeLen) !== 0) {
+            continue;
+        }
+
+        $parts = str_split($hex, $codeLen);
+        $hits = 0;
+        $out = '';
+
+        foreach ($parts as $part) {
+            if (isset($map[$part])) {
+                $out .= $map[$part];
+                $hits++;
+            }
+        }
+
+        if ($hits > 0 && $hits >= (int) ceil(count($parts) * 0.6)) {
+            return cleanPdfTextOperand($out);
+        }
+    }
+
+    return '';
+}
+
+function decodePdfLiteralStringToken($token)
+{
+    $token = (string) $token;
+    if ($token === '') {
+        return '';
+    }
+
+    if ($token[0] === '<' && substr($token, -1) === '>') {
+        $hex = preg_replace('/[^0-9A-Fa-f]/', '', substr($token, 1, -1));
+        if ($hex !== '') {
+            $decodedWithMap = decodePdfHexTokenWithUnicodeMap($hex);
+            if ($decodedWithMap !== '') {
+                return $decodedWithMap;
+            }
+
+            if ((strlen($hex) % 2) === 1) {
+                $hex .= '0';
+            }
+            $decodedHex = @hex2bin($hex);
+            if ($decodedHex !== false) {
+                return cleanPdfTextOperand($decodedHex);
+            }
+        }
+        return '';
+    }
+
+    if ($token[0] === '(' && substr($token, -1) === ')') {
+        $inner = substr($token, 1, -1);
+    } else {
+        $inner = $token;
+    }
+
+    $inner = preg_replace_callback(
+        '/\\\\([0-7]{1,3})/',
+        function ($m) {
+            return chr(octdec($m[1]));
+        },
+        $inner,
+    );
+
+    $inner = str_replace(array(
+        '\\n',
+        '\\r',
+        '\\t',
+        '\\b',
+        '\\f',
+        '\\(',
+        '\\)',
+        '\\\\',
+    ), array(
+        "\n",
+        "\r",
+        "\t",
+        "\b",
+        "\f",
+        "(",
+        ")",
+        "\\",
+    ), $inner);
+
+    $inner = preg_replace('/\\\\\r\n|\\\\\n|\\\\\r/', '', $inner);
+
+    return cleanPdfTextOperand($inner);
+}
+
+function extractPdfTextTokensFromDecodedStream($decoded)
+{
+    $decoded = (string) $decoded;
+    if ($decoded === '') {
+        return array();
+    }
+
+    $lines = array();
+
+    $singleTokenPattern = '/(\((?:\\\\.|[^\\\\\)])*\)|<[0-9A-Fa-f\s]+>)\s*Tj/s';
+    if (preg_match_all($singleTokenPattern, $decoded, $matches)) {
+        foreach ($matches[1] as $token) {
+            $cleanLine = decodePdfLiteralStringToken($token);
+            if ($cleanLine !== '') {
+                $lines[] = $cleanLine;
+            }
+        }
+    }
+
+    $apostrophePattern = '/(\((?:\\\\.|[^\\\\\)])*\)|<[0-9A-Fa-f\s]+>)\s*\'/s';
+    if (preg_match_all($apostrophePattern, $decoded, $matches)) {
+        foreach ($matches[1] as $token) {
+            $cleanLine = decodePdfLiteralStringToken($token);
+            if ($cleanLine !== '') {
+                $lines[] = $cleanLine;
+            }
+        }
+    }
+
+    $quotePattern = '/[-+0-9.\s]+[-+0-9.\s]+(\((?:\\\\.|[^\\\\\)])*\)|<[0-9A-Fa-f\s]+>)\s*"/s';
+    if (preg_match_all($quotePattern, $decoded, $matches)) {
+        foreach ($matches[1] as $token) {
+            $cleanLine = decodePdfLiteralStringToken($token);
+            if ($cleanLine !== '') {
+                $lines[] = $cleanLine;
+            }
+        }
+    }
+
+    if (preg_match_all('/\[(.*?)\]\s*TJ/s', $decoded, $arrayMatches)) {
+        foreach ($arrayMatches[1] as $chunk) {
+            if (preg_match_all('/(\((?:\\\\.|[^\\\\\)])*\)|<[0-9A-Fa-f\s]+>)/s', $chunk, $innerMatches)) {
+                $pieces = array();
+                foreach ($innerMatches[1] as $token) {
+                    $part = decodePdfLiteralStringToken($token);
+                    if ($part !== '') {
+                        $pieces[] = $part;
+                    }
+                }
+
+                $cleanLine = cleanPdfTextOperand(implode('', $pieces));
+                if ($cleanLine !== '') {
+                    $lines[] = $cleanLine;
+                }
+            }
+        }
+    }
+
+    return $lines;
+}
+
+function extractTextFromPdfViaCommand($filePath)
+{
+    // 1. Config Gate: Allow disabling via environment/config constant
+    if (defined('DISABLE_PDFTOTEXT_EXEC') && DISABLE_PDFTOTEXT_EXEC) {
+        return '';
+    }
+
+    $filePath = trim((string) $filePath);
+    if ($filePath === '' || !is_file($filePath)) {
+        return '';
+    }
+
+    if (!function_exists('shell_exec')) {
+        return '';
+    }
+
+    $disabled = (string) ini_get('disable_functions');
+    if ($disabled !== '') {
+        $disabledFunctions = array_map('trim', explode(',', strtolower($disabled)));
+        if (in_array('shell_exec', $disabledFunctions, true)) {
+            return '';
+        }
+    }
+
+    $escapedFile = escapeshellarg($filePath);
+    
+    // 2. Resource Limit: Prevent hangs by wrapping the command with a 15-second timeout (Unix/Linux environments)
+    $timeoutPrefix = '';
+    if (strtoupper(substr(PHP_OS, 0, 3)) !== 'WIN') {
+        $timeoutPrefix = 'timeout 15 ';
+    }
+
+    $commands = [
+        $timeoutPrefix . 'pdftotext -enc UTF-8 -layout ' . $escapedFile . ' - 2>/dev/null',
+        $timeoutPrefix . 'pdftotext -enc UTF-8 ' . $escapedFile . ' - 2>/dev/null',
+    ];
+
+    foreach ($commands as $command) {
+        $output = @shell_exec($command);
+        $output = is_string($output) ? trim($output) : '';
+        if ($output !== '') {
+            return $output;
+        }
+    }
+
+    return '';
+}
+
+function extractTextFromPdfContent($content)
+{
+    if ((string) $content === '') {
+        return '';
+    }
+
+    preg_match_all('/stream\s*\r?\n(.*?)\r?\n?endstream/s', (string) $content, $streamMatches);
+    $lines = array();
+
+    foreach ($streamMatches[1] as $stream) {
+        $decoded = decodePdfStream($stream);
+        if ($decoded === false) {
+            $decoded = (string) $stream;
+        }
+
+        $extractedLines = extractPdfTextTokensFromDecodedStream($decoded);
+        if (!empty($extractedLines)) {
+            $lines = array_merge($lines, $extractedLines);
+        }
+    }
+
+    return implode("\n", $lines);
+}
+
+function getPdfTextLines($text)
+{
+    $lines = preg_split('/\r\n|\r|\n/', (string) $text);
+    $normalizedLines = array();
+
+    foreach ($lines as $line) {
+        $line = normalizeImportText($line);
+        if ($line !== '') {
+            $normalizedLines[] = $line;
+        }
+    }
+
+    return $normalizedLines;
+}
+
+function extractPdfFieldByLabels($text, $labels)
+{
+    $lines = getPdfTextLines($text);
+
+    foreach ($lines as $index => $line) {
+        $lineLookup = normalizeImportLookup($line);
+        if ($lineLookup === '') {
+            continue;
+        }
+
+        foreach ($labels as $label) {
+            $labelLookup = normalizeImportLookup($label);
+            if ($labelLookup === '' || strpos($lineLookup, $labelLookup) === false) {
+                continue;
+            }
+
+            if (preg_match('/' . preg_quote($label, '/') . '\s*:?\s*(.+)/i', $line, $matches)) {
+                $value = normalizeImportText($matches[1]);
+                if ($value !== '' && normalizeImportLookup($value) !== $labelLookup) {
+                    return $value;
+                }
+            }
+
+            if (isset($lines[$index + 1])) {
+                return normalizeImportText($lines[$index + 1]);
+            }
+        }
+    }
+
+    return '';
+}
+
+function normalizeShopeeSkuCandidate($value)
+{
+    $value = strtoupper(trim((string) $value));
+    if ($value === '') {
+        return '';
+    }
+
+    // Repair common encoded glyph substitutions seen in Shopee PDF text extraction.
+    $value = strtr($value, array(
+        '&' => 'B',
+        '%' => 'A',
+        '-' => 'I',
+        '=' => 'Y',
+        ':' => 'V',
+        ';' => 'W',
+        ',' => 'X',
+    ));
+
+    $value = preg_replace('/\b(?:VIEW|TRANSACTION|HISTORY|UNIT|PRICE|MERCHANDISE|SUBTOTAL|PAYMENT|INFO|INFORMATION)\b.*$/i', '', $value);
+    $value = preg_replace('/[^A-Z0-9]+/', '', $value);
+
+    if ($value === null || strlen($value) < 4 || strlen($value) > 32) {
+        return '';
+    }
+
+    $invalidTokens = array(
+        'TOTAL',
+        'SUBTOTAL',
+        'MERCHANDISE',
+        'SHIPPING',
+        'VOUCHER',
+        'COMMISSION',
+        'SERVICE',
+        'TRANSACTION',
+        'PAYMENT',
+        'ORDERINCOME',
+    );
+
+    foreach ($invalidTokens as $token) {
+        if (strpos($value, $token) !== false) {
+            return '';
+        }
+    }
+
+    if (!preg_match('/[A-Z]{3,}/', $value)) {
+        return '';
+    }
+
+    if (!preg_match('/\d{2,}/', $value)) {
+        return '';
+    }
+
+    return $value;
+}
+
+function scoreShopeeSkuCandidate($candidate)
+{
+    $candidate = strtoupper(trim((string) $candidate));
+    if ($candidate === '') {
+        return -999;
+    }
+
+    $score = 0;
+    $len = strlen($candidate);
+
+    if (preg_match('/[A-Z]/', $candidate)) {
+        $score += 4;
+    }
+    if (preg_match('/\d/', $candidate)) {
+        $score += 4;
+    }
+    if (preg_match('/\d{2,}$/', $candidate)) {
+        $score += 3;
+    }
+    if ($len >= 8 && $len <= 16) {
+        $score += 2;
+    }
+
+    $blacklist = array(
+        'TOTAL',
+        'SUBTOTAL',
+        'PRODUCT',
+        'PRICE',
+        'SHIPPING',
+        'VOUCHER',
+        'MERCHANDISE',
+        'TRANSACTION',
+        'COMMISSION',
+        'SERVICE',
+    );
+
+    foreach ($blacklist as $token) {
+        if (strpos($candidate, $token) !== false) {
+            $score -= 20;
+        }
+    }
+
+    if (preg_match('/^(RM|MYR|USD|SGD)/', $candidate)) {
+        $score -= 6;
+    }
+
+    return $score;
+}
+
+function extractShopeeSkuFromPdfBinary($rawContent)
+{
+    $rawContent = (string) $rawContent;
+    if ($rawContent === '') {
+        return '';
+    }
+
+    if (preg_match_all('/(?:SKU|ITEM\s*CODE)\s*[:=]?\s*([A-Za-z0-9\-_]{4,40})/i', $rawContent, $matches)) {
+        $bestSku = '';
+        $bestScore = -999;
+
+        foreach ($matches[1] as $rawCandidate) {
+            $candidate = normalizeShopeeSkuCandidate($rawCandidate);
+            if ($candidate === '') {
+                continue;
+            }
+
+            $score = scoreShopeeSkuCandidate($candidate);
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $bestSku = $candidate;
+            }
+        }
+
+        if ($bestScore >= 5) {
+            return $bestSku;
+        }
+    }
+
+    return '';
+}
+
+function extractShopeeSkuFromText($text)
+{
+    $text = (string) $text;
+    if ($text === '') {
+        return '';
+    }
+
+    $lines = getPdfTextLines($text);
+    $bestSku = '';
+    $bestScore = -999;
+
+    $patterns = array(
+        '/(?:SKU|S\/?K\/?U|ITEM\s*CODE)\s*[:\-]?\s*([A-Za-z0-9&%:=;,\-\/\\_\s]{4,60})/i',
+        '/\b([A-Za-z0-9&%:=;,\-\/\\_]{6,40})\b\s*(?:SKU|ITEM\s*CODE)/i',
+    );
+
+    foreach ($lines as $index => $line) {
+        $candidateLineTexts = array($line);
+        if (isset($lines[$index + 1])) {
+            $candidateLineTexts[] = $line . ' ' . $lines[$index + 1];
+        }
+
+        foreach ($candidateLineTexts as $lineText) {
+            foreach ($patterns as $pattern) {
+                if (preg_match_all($pattern, $lineText, $matches)) {
+                    foreach ($matches[1] as $rawCandidate) {
+                        $rawCandidate = preg_replace('/\b(?:VIEW|TRANSACTION|HISTORY|UNIT|PRICE|MERCHANDISE|SUBTOTAL|PAYMENT|INFO|INFORMATION|DELIVERY|ADDRESS|LOGISTIC)\b.*$/i', '', (string) $rawCandidate);
+                        $rawCandidate = preg_replace('/\s+[0-9]{1,4}(?:\.[0-9]{2})?.*$/', '', (string) $rawCandidate);
+                        $candidate = normalizeShopeeSkuCandidate($rawCandidate);
+                        if ($candidate === '') {
+                            continue;
+                        }
+
+                        $score = scoreShopeeSkuCandidate($candidate);
+                        if ($score > $bestScore) {
+                            $bestScore = $score;
+                            $bestSku = $candidate;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if ($bestScore >= 5) {
+        return $bestSku;
+    }
+
+    return '';
+}
+
+function normalizeShopeeOrderIdCandidate($value)
+{
+    $value = strtoupper(trim((string) $value));
+    if ($value === '') {
+        return '';
+    }
+
+    $value = preg_replace('/[^A-Z0-9]+/', '', $value);
+    if ($value === null) {
+        return '';
+    }
+
+    $length = strlen($value);
+    if ($length < 10 || $length > 30) {
+        return '';
+    }
+
+    if (!preg_match('/\d/', $value)) {
+        return '';
+    }
+
+    return $value;
+}
+
+function extractShopeeOrderIdFromText($text)
+{
+    $text = (string) $text;
+    if ($text === '') {
+        return '';
+    }
+
+    if (preg_match_all('/(?:Order\s*(?:ID|SN|No|Number)\s*[:#\-]?\s*)([^\r\n]{6,80})/i', $text, $labelMatches)) {
+        foreach ($labelMatches[1] as $rawCandidate) {
+            if (preg_match_all('/[A-Za-z0-9][A-Za-z0-9\-_]{8,40}/', (string) $rawCandidate, $tokenMatches)) {
+                foreach ($tokenMatches[0] as $token) {
+                    $candidate = normalizeShopeeOrderIdCandidate($token);
+                    if ($candidate !== '') {
+                        return $candidate;
+                    }
+                }
+            }
+
+            $candidate = normalizeShopeeOrderIdCandidate($rawCandidate);
+            if ($candidate !== '') {
+                return $candidate;
+            }
+        }
+    }
+
+    if (preg_match_all('/(?:Order\s*(?:ID|SN|No|Number))[\s:;#\-]*((?:[A-Za-z0-9][\s\-\/_]?){10,40})/i', $text, $spacedMatches)) {
+        foreach ($spacedMatches[1] as $rawCandidate) {
+            $candidate = normalizeShopeeOrderIdCandidate($rawCandidate);
+            if ($candidate !== '') {
+                return $candidate;
+            }
+        }
+    }
+
+    if (preg_match_all('/\b([A-Za-z0-9][A-Za-z0-9\-\/_]{9,35})\b/', $text, $genericMatches)) {
+        foreach ($genericMatches[1] as $rawCandidate) {
+            $candidate = normalizeShopeeOrderIdCandidate($rawCandidate);
+            if ($candidate !== '') {
+                return $candidate;
+            }
+        }
+    }
+
+    return '';
+}
+
+function extractShopeeOrderIdFromPdfBinary($rawContent)
+{
+    $rawContent = (string) $rawContent;
+    if ($rawContent === '') {
+        return '';
+    }
+
+    $directPatterns = [
+        '/sale\/order\/([A-Za-z0-9\-_]{8,40})/i',
+        '/order[_\-]?(?:id|sn|no|number)[^A-Za-z0-9]{0,20}([A-Za-z0-9\-_]{8,40})/i',
+        '/(?:orderid|ordersn)=([A-Za-z0-9\-_]{8,40})/i',
+    ];
+
+    foreach ($directPatterns as $pattern) {
+        if (preg_match($pattern, $rawContent, $m)) {
+            $candidate = normalizeShopeeOrderIdCandidate($m[1]);
+            if ($candidate !== '') {
+                return $candidate;
+            }
+        }
+    }
+
+    if (preg_match_all('/\/URI\s*\(([^\)]{1,600})\)/i', $rawContent, $uriMatches)) {
+        foreach ($uriMatches[1] as $uri) {
+            $uri = html_entity_decode((string) $uri, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+
+            if (preg_match('/sale\/order\/([A-Za-z0-9\-_]{8,40})/i', $uri, $m)) {
+                $candidate = normalizeShopeeOrderIdCandidate($m[1]);
+                if ($candidate !== '') {
+                    return $candidate;
+                }
+            }
+
+            if (preg_match('/(?:orderid|ordersn)=([A-Za-z0-9\-_]{8,40})/i', $uri, $m)) {
+                $candidate = normalizeShopeeOrderIdCandidate($m[1]);
+                if ($candidate !== '') {
+                    return $candidate;
+                }
+            }
+        }
+    }
+
+    return '';
+}
+
+function extractShopeeOrderIdFromHtml($html)
+{
+    $html = (string) $html;
+    if ($html === '') {
+        return '';
+    }
+
+    $patterns = [
+        '/data-testid\s*=\s*["\']odp-label-order-id["\'][\s\S]{0,2000}?class\s*=\s*["\'][^"\']*body[^"\']*["\']\s*>\s*([A-Za-z0-9\-_\s]{8,60})\s*</i',
+        '/Order\s*ID\s*<[^>]*>[\s\S]{0,600}?class\s*=\s*["\'][^"\']*body[^"\']*["\']\s*>\s*([A-Za-z0-9\-_\s]{8,60})\s*</i',
+    ];
+
+    foreach ($patterns as $pattern) {
+        if (!preg_match($pattern, $html, $m)) {
+            continue;
+        }
+
+        $candidate = normalizeShopeeOrderIdCandidate((string) $m[1]);
+        if ($candidate !== '') {
+            return $candidate;
+        }
+    }
+
+    return '';
+}
+
+function extractShopeeOrderId($cleanText, $html, $pdfSourceText = '', $rawPdfContent = '')
+{
+    $orderId = '';
+
+    if ((string) $pdfSourceText !== '') {
+        $orderId = extractPdfFieldByLabels($pdfSourceText, ['Order ID', 'Order SN', 'Order No', 'Order Number']);
+        $orderId = normalizeShopeeOrderIdCandidate($orderId);
+
+        if ($orderId === '') {
+            $orderId = extractShopeeOrderIdFromText($pdfSourceText);
+        }
+    }
+
+    if ($orderId === '' && (string) $html !== '') {
+        $orderId = extractShopeeOrderIdFromHtml((string) $html);
+    }
+
+    if ($orderId === '') {
+        $orderId = extractShopeeOrderIdFromText((string) $cleanText);
+    }
+
+    if ($orderId === '' && (string) $html !== '') {
+        if (preg_match('/sale\/order\/([A-Za-z0-9\-_]{8,40})/i', (string) $html, $m)) {
+            $orderId = normalizeShopeeOrderIdCandidate($m[1]);
+        }
+    }
+
+    if ($orderId === '' && (string) $rawPdfContent !== '') {
+        $orderId = extractShopeeOrderIdFromPdfBinary($rawPdfContent);
+    }
+
+    return $orderId;
+}
+
+function scoreShopeePdfTextReadability($text)
+{
+    $text = strtolower((string) $text);
+    if ($text === '') {
+        return 0;
+    }
+
+    $keywords = array(
+        'shopee',
+        'order',
+        'order id',
+        'order sn',
+        'payment',
+        'shipping',
+        'subtotal',
+        'voucher',
+        'buyer',
+        'seller',
+        'income',
+    );
+
+    $score = 0;
+    foreach ($keywords as $keyword) {
+        if (strpos($text, $keyword) !== false) {
+            $score++;
+        }
+    }
+
+    return $score;
+}
+
+function decodeShopeePdfShiftedGlyphText($text, $mapDigits = true)
+{
+    $text = (string) $text;
+    if ($text === '') {
+        return '';
+    }
+
+    $decoded = '';
+    $length = strlen($text);
+
+    for ($i = 0; $i < $length; $i++) {
+        $char = $text[$i];
+        $ord = ord($char);
+
+        if ($ord >= 69 && $ord <= 90) {
+            $decoded .= chr($ord - 4);
+            continue;
+        }
+
+        if ($mapDigits && $char >= '0' && $char <= '9') {
+            $decoded .= chr(ord('L') + (int) $char);
+            continue;
+        }
+
+        if ($char === '[') {
+            $decoded .= 'W';
+            continue;
+        }
+
+        if ($char === '\\') {
+            $decoded .= 'X';
+            continue;
+        }
+
+        if ($char === ']') {
+            $decoded .= 'Y';
+            continue;
+        }
+
+        if ($char === '^') {
+            $decoded .= 'Z';
+            continue;
+        }
+
+        $decoded .= $char;
+    }
+
+    return $decoded;
+}
+
+function decodeLikelyShopeePdfText($text)
+{
+    $text = (string) $text;
+    if ($text === '') {
+        return '';
+    }
+
+    $decoded = decodeShopeePdfShiftedGlyphText($text, true);
+    if ($decoded === '') {
+        return '';
+    }
+
+    $sourceScore = scoreShopeePdfTextReadability($text);
+    $decodedScore = scoreShopeePdfTextReadability($decoded);
+
+    if ($decodedScore >= max(2, $sourceScore + 2)) {
+        return $decoded;
+    }
+
+    return '';
+}
+
+function getShopeeOrderStatusInfoByKeyword($keyword)
+{
+    $normalizedKeyword = normalizeImportLookup($keyword);
+
+    $statusSPKeywords = array(
+        'toreceive',
+        'shipped',
+        'shipprocessing',
+        'shipprocessingwarehouse',
+        'intransit',
+        'outfordelivery',
+        'parcelpickedup',
+    );
+    if (in_array($normalizedKeyword, $statusSPKeywords, true)) {
+        return [
+            'code' => 'SP',
+            'label' => 'SHIP PROCESSING (Warehouse)',
+        ];
+    }
+
+    $statusOCKeywords = array(
+        'completed',
+        'delivered',
+        'orderreceived',
+        'received',
+    );
+    if (in_array($normalizedKeyword, $statusOCKeywords, true)) {
+        return [
+            'code' => 'OC',
+            'label' => 'Order Received (admin checking)',
+        ];
+    }
+
+    return [
+        'code' => 'P',
+        'label' => 'Pending To Pack',
+    ];
+}
+
+function detectShopeeOrderStatusFromText($text, $allowLooseMatch = false)
+{
+    $normalizedText = normalizeImportText($text);
+    if ($normalizedText === '') {
+        return getShopeeOrderStatusInfoByKeyword('to ship');
+    }
+
+    $compact = strtolower(preg_replace('/[^a-z]+/i', '', $normalizedText));
+    if ($compact !== '') {
+        $ocCompactPhrases = array(
+            'parcelhasbeendelivered',
+            'deliveredtobuyer',
+            'orderreceived',
+            'completed',
+            'successfullydelivered',
+        );
+        foreach ($ocCompactPhrases as $phrase) {
+            if (strpos($compact, $phrase) !== false) {
+                return getShopeeOrderStatusInfoByKeyword('completed');
+            }
+        }
+
+        $spCompactPhrases = array(
+            'toreceive',
+            'shipprocessingwarehouse',
+            'shipprocessing',
+            'intransit',
+            'outfordelivery',
+            'shipped',
+            'parcelpickedup',
+        );
+        foreach ($spCompactPhrases as $phrase) {
+            if (strpos($compact, $phrase) !== false) {
+                return getShopeeOrderStatusInfoByKeyword('to receive');
+            }
+        }
+
+        $pCompactPhrases = array(
+            'toship',
+            'pendingtopack',
+            'pendingtoship',
+            'neworder',
+            'waitingtoship',
+            'waitingforcouriertoconfirmshipment',
+        );
+        foreach ($pCompactPhrases as $phrase) {
+            if (strpos($compact, $phrase) !== false) {
+                return getShopeeOrderStatusInfoByKeyword('to ship');
+            }
+        }
+    }
+
+    if (preg_match('/\bOrder\s*Status\b[^A-Za-z]*(To\s*Ship|To\s*Receive|Ship\s*Processing(?:\s*\(\s*Warehouse\s*\))?|Pending\s*To\s*Pack|Completed|Delivered|Order\s*Received)\b/i', $normalizedText, $matches)) {
+        return getShopeeOrderStatusInfoByKeyword($matches[1]);
+    }
+
+    if ($allowLooseMatch && preg_match('/\b(To\s*Ship|To\s*Receive|Ship\s*Processing(?:\s*\(\s*Warehouse\s*\))?|Pending\s*To\s*Pack|Completed|Delivered|Order\s*Received)\b/i', $normalizedText, $matches)) {
+        return getShopeeOrderStatusInfoByKeyword($matches[1]);
+    }
+
+    return getShopeeOrderStatusInfoByKeyword('to ship');
+}
+
+function detectShopeeOrderStatusFromHtml($xpath, $cleanText)
+{
+    $statusNodeQueries = [
+        "//*[contains(@class,'order-status') and (contains(@class,'active') or contains(@class,'current'))]",
+        "//*[contains(@class,'status') and (contains(@class,'active') or contains(@class,'current'))]",
+        "//*[contains(@class,'timeline-item') and contains(@class,'active')]//*[contains(@class,'title')]",
+        "//*[contains(@class,'timeline-item') and contains(@class,'current')]//*[contains(@class,'title')]",
+        "//*[contains(@class,'order-detail-status') or contains(@class,'order_status')]",
+    ];
+
+    foreach ($statusNodeQueries as $query) {
+        $nodes = $xpath->query($query);
+        if (!$nodes || $nodes->length === 0) {
+            continue;
+        }
+
+        foreach ($nodes as $node) {
+            $statusText = normalizeImportText($node->textContent);
+            if ($statusText !== '' && preg_match('/\b(To\s*Ship|To\s*Receive|Completed|Delivered|Order\s*Received)\b/i', $statusText)) {
+                return detectShopeeOrderStatusFromText($statusText, true);
+            }
+        }
+    }
+
+    return detectShopeeOrderStatusFromText($cleanText, false);
+}
+
 function normalizeImportAmount($rawAmount)
 {
     $value = trim((string) $rawAmount);
@@ -534,23 +1888,558 @@ function normalizeImportAmount($rawAmount)
 
     $value = str_replace([',', ' '], '', $value);
     $value = str_replace(['RM', 'MYR', 'USD', 'SGD'], '', strtoupper($value));
-    $isNegative = strpos($value, '-') === 0;
     $numeric = preg_replace('/[^0-9.]+/', '', $value);
 
     if ($numeric === '' || !is_numeric($numeric)) {
         return '';
     }
 
-    $amount = (float) $numeric;
-    if ($isNegative) {
-        $amount *= -1;
-    }
-    // Remove abs() so negative values are preserved
+    $amount = abs((float) $numeric);
     return number_format($amount, 2, '.', '');
+}
+
+function isShopeeOrderIdDuplicated($orderId, $financeConnect)
+{
+    $orderId = trim((string) $orderId);
+    if ($orderId === '') {
+        return false;
+    }
+
+    if (function_exists('isDuplicateRecord')) {
+        return isDuplicateRecord('orderID', $orderId, SHOPEE_SG_ORDER_REQ, $financeConnect, '');
+    }
+
+    $safeOrderId = mysqli_real_escape_string($financeConnect, $orderId);
+    $result = mysqli_query($financeConnect, "SELECT id FROM " . SHOPEE_SG_ORDER_REQ . " WHERE orderID = '$safeOrderId' LIMIT 1");
+    return $result && mysqli_num_rows($result) > 0;
+}
+
+function buildLooseAmountLabelPattern($label)
+{
+    $normalized = strtoupper(preg_replace('/[^A-Z0-9]+/', '', (string) $label));
+    if ($normalized === '') {
+        return '';
+    }
+
+    $chars = str_split($normalized);
+    $parts = array();
+    foreach ($chars as $char) {
+        $parts[] = preg_quote($char, '/');
+    }
+
+    return implode('[^A-Z0-9]{0,4}', $parts);
+}
+
+function buildShopeePdfCompactText($text)
+{
+    $text = strtoupper((string) $text);
+    if ($text === '') {
+        return '';
+    }
+
+    // Keep only alnum plus amount markers for deterministic label->amount matching.
+    return preg_replace('/[^A-Z0-9\.\-]+/', '', $text);
+}
+
+function extractImportAmountsFromText($text)
+{
+    $text = (string) $text;
+    if ($text === '') {
+        return array();
+    }
+
+    $results = array();
+    if (preg_match_all('/-?\s*(?:RM|MYR|SGD|USD)?\s*[0-9][0-9,]*\.[0-9]{2}/i', $text, $matches)) {
+        foreach ($matches[0] as $raw) {
+            $amount = normalizeImportAmount($raw);
+            if ($amount !== '') {
+                $results[] = $amount;
+            }
+        }
+    }
+
+    return $results;
+}
+
+function normalizeShopeePdfMoneyText($text)
+{
+    $normalized = strtoupper(normalizeImportText((string) $text));
+    if ($normalized !== '') {
+        return $normalized;
+    }
+
+    return strtoupper((string) $text);
+}
+
+function buildShopeePdfStrictLabelPattern($label)
+{
+    $label = strtoupper((string) $label);
+    $parts = preg_split('/[^A-Z0-9]+/', $label, -1, PREG_SPLIT_NO_EMPTY);
+    if (empty($parts)) {
+        return '';
+    }
+
+    $wordPatterns = array();
+    foreach ($parts as $part) {
+        $chars = str_split($part);
+        $charPattern = array();
+        foreach ($chars as $ch) {
+            $charPattern[] = preg_quote($ch, '/');
+        }
+        $wordPatterns[] = implode('\s*', $charPattern);
+    }
+
+    return implode('\s+', $wordPatterns);
+}
+
+function extractImportAmountTokensWithSign($text)
+{
+    $text = (string) $text;
+    if ($text === '') {
+        return array();
+    }
+
+    $tokens = array();
+    if (preg_match_all('/-?\s*(?:RM|MYR|SGD|USD)?\s*[0-9][0-9,]*\.[0-9]{2}/i', $text, $matches)) {
+        foreach ($matches[0] as $raw) {
+            $rawStr = trim((string) $raw);
+            $amount = normalizeImportAmount($rawStr);
+            if ($amount === '') {
+                continue;
+            }
+
+            $tokens[] = array(
+                'amount' => $amount,
+                'negative' => preg_match('/^\s*\-/', $rawStr) === 1,
+                'raw' => $rawStr,
+            );
+        }
+    }
+
+    return $tokens;
+}
+
+function chooseImportAmountToken($tokens, $preferNegative = null)
+{
+    if (empty($tokens)) {
+        return '';
+    }
+
+    $wantNegative = $preferNegative === true;
+    $wantPositive = $preferNegative === false;
+
+    foreach ($tokens as $token) {
+        $value = isset($token['amount']) ? (string) $token['amount'] : '';
+        $isNegative = !empty($token['negative']);
+        if ($value === '' || (float) $value <= 0) {
+            continue;
+        }
+
+        if ($wantNegative && $isNegative) {
+            return $value;
+        }
+        if ($wantPositive && !$isNegative) {
+            return $value;
+        }
+    }
+
+    foreach ($tokens as $token) {
+        $value = isset($token['amount']) ? (string) $token['amount'] : '';
+        if ($value !== '' && (float) $value > 0) {
+            return $value;
+        }
+    }
+
+    return isset($tokens[0]['amount']) ? (string) $tokens[0]['amount'] : '';
+}
+
+function getShopeePdfMoneyBoundaryLabels()
+{
+    return array(
+        'Product Price',
+        'Merchandise Subtotal',
+        'Deal Price',
+        'Shopee Voucher',
+        'Shop Voucher',
+        'Seller Voucher',
+        'Coins Redeemed',
+        'Shopee Coins',
+        'Vouchers & Rebates',
+        'Shipping Fee Charged by Logistic Provider',
+        'Estimated Shipping Fee Charged by Logistic Provider',
+        'Shipping Fee Paid by Buyer',
+        'Shipping Subtotal',
+        'Estimated Shipping Subtotal',
+        'Service Fee',
+        'Transaction Fee',
+        'Commission Fee',
+        'Fees & Charges',
+        'Order Income',
+        'Estimated Order Income',
+        'Final Amount',
+    );
+}
+
+function extractShopeePdfAmountByAnchoredLabels($text, $labels, $boundaryLabels = array(), $maxLen = 220)
+{
+    $source = normalizeShopeePdfMoneyText($text);
+    if ($source === '' || empty($labels)) {
+        return '';
+    }
+
+    $maxLen = (int) $maxLen;
+    if ($maxLen < 80) {
+        $maxLen = 80;
+    }
+    if ($maxLen > 600) {
+        $maxLen = 600;
+    }
+
+    $boundaryPatterns = array();
+    foreach ((array) $boundaryLabels as $boundaryLabel) {
+        $boundaryPattern = buildShopeePdfStrictLabelPattern($boundaryLabel);
+        if ($boundaryPattern !== '') {
+            $boundaryPatterns[] = $boundaryPattern;
+        }
+    }
+
+    foreach ((array) $labels as $label) {
+        $labelPattern = buildShopeePdfStrictLabelPattern($label);
+        if ($labelPattern === '') {
+            continue;
+        }
+
+        if (!preg_match_all('/' . $labelPattern . '/i', $source, $labelMatches, PREG_OFFSET_CAPTURE)) {
+            continue;
+        }
+
+        foreach ($labelMatches[0] as $labelMatch) {
+            $start = (int) $labelMatch[1];
+            if ($start < 0) {
+                continue;
+            }
+
+            $segment = substr($source, $start, $maxLen);
+            if ($segment === '') {
+                continue;
+            }
+
+            $cutLen = strlen($segment);
+            foreach ($boundaryPatterns as $boundaryPattern) {
+                if (preg_match('/' . $boundaryPattern . '/i', $segment, $boundaryMatch, PREG_OFFSET_CAPTURE)) {
+                    $boundaryOffset = (int) $boundaryMatch[0][1];
+                    if ($boundaryOffset > 0 && $boundaryOffset < $cutLen) {
+                        $cutLen = $boundaryOffset;
+                    }
+                }
+            }
+
+            $segment = substr($segment, 0, $cutLen);
+            $amounts = extractImportAmountsFromText($segment);
+            if (!empty($amounts)) {
+                return $amounts[0];
+            }
+        }
+    }
+
+    return '';
+}
+
+function extractShopeePdfAmountByStrictLabels($text, $labels, $boundaryLabels = array(), $maxLen = 220, $preferNegative = null)
+{
+    $source = normalizeShopeePdfMoneyText($text);
+    if ($source === '' || empty($labels)) {
+        return '';
+    }
+
+    $maxLen = (int) $maxLen;
+    if ($maxLen < 80) {
+        $maxLen = 80;
+    }
+    if ($maxLen > 600) {
+        $maxLen = 600;
+    }
+
+    $boundaryPatterns = array();
+    foreach ((array) $boundaryLabels as $boundaryLabel) {
+        $pattern = buildShopeePdfStrictLabelPattern($boundaryLabel);
+        if ($pattern !== '') {
+            $boundaryPatterns[] = $pattern;
+        }
+    }
+
+    foreach ((array) $labels as $label) {
+        $labelPattern = buildShopeePdfStrictLabelPattern($label);
+        if ($labelPattern === '') {
+            continue;
+        }
+
+        if (!preg_match_all('/' . $labelPattern . '/i', $source, $labelMatches, PREG_OFFSET_CAPTURE)) {
+            continue;
+        }
+
+        foreach ($labelMatches[0] as $labelMatch) {
+            $labelStart = (int) $labelMatch[1];
+            $labelLen = strlen((string) $labelMatch[0]);
+            if ($labelStart < 0) {
+                continue;
+            }
+
+            $segment = substr($source, $labelStart + $labelLen, $maxLen);
+            if ($segment === '') {
+                continue;
+            }
+
+            $cutLen = strlen($segment);
+            foreach ($boundaryPatterns as $boundaryPattern) {
+                if (preg_match('/' . $boundaryPattern . '/i', $segment, $boundaryMatch, PREG_OFFSET_CAPTURE)) {
+                    $boundaryOffset = (int) $boundaryMatch[0][1];
+                    if ($boundaryOffset > 0 && $boundaryOffset < $cutLen) {
+                        $cutLen = $boundaryOffset;
+                    }
+                }
+            }
+
+            $segment = substr($segment, 0, $cutLen);
+            $tokens = extractImportAmountTokensWithSign($segment);
+            $amount = chooseImportAmountToken($tokens, $preferNegative);
+            if ($amount !== '') {
+                return $amount;
+            }
+        }
+    }
+
+    return '';
+}
+
+function extractShopeePdfAmountByLineLabels($text, $labels, $lineWindow = 1)
+{
+    $lines = getPdfTextLines($text);
+    if (empty($lines) || empty($labels)) {
+        return '';
+    }
+
+    $lineWindow = (int) $lineWindow;
+    if ($lineWindow < 0) {
+        $lineWindow = 0;
+    }
+    if ($lineWindow > 3) {
+        $lineWindow = 3;
+    }
+
+    $labelPatterns = array();
+    foreach ((array) $labels as $label) {
+        $pattern = buildLooseAmountLabelPattern($label);
+        if ($pattern !== '') {
+            $labelPatterns[] = $pattern;
+        }
+    }
+
+    if (empty($labelPatterns)) {
+        return '';
+    }
+
+    $lineCount = count($lines);
+    for ($i = 0; $i < $lineCount; $i++) {
+        $lineUpper = strtoupper($lines[$i]);
+        $matched = false;
+
+        foreach ($labelPatterns as $pattern) {
+            if (preg_match('/' . $pattern . '/i', $lineUpper)) {
+                $matched = true;
+                break;
+            }
+        }
+
+        if (!$matched) {
+            continue;
+        }
+
+        $maxJ = min($lineCount - 1, $i + $lineWindow);
+        for ($j = $i; $j <= $maxJ; $j++) {
+            $amounts = extractImportAmountsFromText($lines[$j]);
+            if (!empty($amounts)) {
+                return $amounts[0];
+            }
+        }
+    }
+
+    return '';
+}
+
+function extractShopeePdfAmountFromCompact($compactText, $labels)
+{
+    $compactText = strtoupper((string) $compactText);
+    if ($compactText === '') {
+        return '';
+    }
+
+    foreach ((array) $labels as $label) {
+        $labelKey = strtoupper(preg_replace('/[^A-Z0-9]+/', '', (string) $label));
+        if ($labelKey === '') {
+            continue;
+        }
+
+        $pattern = '/' . $labelKey . '[A-Z]{0,40}?((?:RM|MYR|SGD|USD)?-?[0-9]{1,6}\.[0-9]{2})/';
+        if (preg_match_all($pattern, $compactText, $matches) && !empty($matches[1])) {
+            foreach ($matches[1] as $rawAmount) {
+                $amount = normalizeImportAmount($rawAmount);
+                if ($amount !== '') {
+                    return $amount;
+                }
+            }
+        }
+    }
+
+    return '';
+}
+
+function textContainsLoosePhrase($text, $phrase)
+{
+    $pattern = buildLooseAmountLabelPattern($phrase);
+    if ($pattern === '') {
+        return false;
+    }
+
+    return preg_match('/' . $pattern . '/i', strtoupper((string) $text)) === 1;
+}
+
+function extractShopeePdfAmountByLooseLabels($text, $labels)
+{
+    $source = strtoupper((string) $text);
+    if ($source === '') {
+        return '';
+    }
+
+    foreach ((array) $labels as $label) {
+        $labelPattern = buildLooseAmountLabelPattern($label);
+        if ($labelPattern === '') {
+            continue;
+        }
+
+        $pattern = '/' . $labelPattern . '.{0,220}?(-?\s*(?:RM|MYR|SGD|USD)?\s*[0-9][0-9,]*\.[0-9]{2})/i';
+        if (preg_match($pattern, $source, $matches)) {
+            $amount = normalizeImportAmount($matches[1]);
+            if ($amount !== '') {
+                return $amount;
+            }
+        }
+    }
+
+    return '';
+}
+
+function extractShopeePdfVoucherAmount($text)
+{
+    $boundaries = getShopeePdfMoneyBoundaryLabels();
+
+    $vouchersAndRebates = extractShopeePdfAmountByStrictLabels($text, ['Vouchers & Rebates'], $boundaries, 260, true);
+    if ($vouchersAndRebates === '') {
+        $vouchersAndRebates = extractShopeePdfAmountByLooseLabels($text, ['Vouchers & Rebates']);
+    }
+
+    $voucherPart = extractShopeePdfAmountByStrictLabels($text, ['Shopee Voucher', 'Shop Voucher', 'Seller Voucher'], $boundaries, 220, true);
+    if ($voucherPart === '') {
+        $voucherPart = extractShopeePdfAmountByLooseLabels($text, ['Shopee Voucher', 'Shop Voucher', 'Seller Voucher']);
+    }
+
+    $coinsPart = extractShopeePdfAmountByStrictLabels($text, ['Coins Redeemed', 'Shopee Coins'], $boundaries, 220, true);
+    if ($coinsPart === '') {
+        $coinsPart = extractShopeePdfAmountByLooseLabels($text, ['Coins Redeemed', 'Shopee Coins']);
+    }
+
+    if ($voucherPart !== '' && $coinsPart !== '') {
+        return number_format(((float) $voucherPart + (float) $coinsPart), 2, '.', '');
+    }
+
+    if ($vouchersAndRebates !== '') {
+        return $vouchersAndRebates;
+    }
+
+    if ($voucherPart !== '') {
+        return $voucherPart;
+    }
+
+    if ($coinsPart !== '') {
+        return $coinsPart;
+    }
+
+    return '';
+}
+
+function extractShopeePdfMonetaryValues($text)
+{
+    $text = (string) $text;
+    $boundaries = getShopeePdfMoneyBoundaryLabels();
+
+    $productPrice = extractShopeePdfAmountByStrictLabels($text, ['Product Price', 'Merchandise Subtotal', 'Deal Price'], $boundaries, 260, false);
+    if ($productPrice === '') {
+        $productPrice = extractShopeePdfAmountByLooseLabels($text, ['Product Price', 'Merchandise Subtotal', 'Deal Price']);
+    }
+    if ($productPrice === '') {
+        $compact = buildShopeePdfCompactText($text);
+        $productPrice = extractShopeePdfAmountFromCompact($compact, ['Product Price', 'Merchandise Subtotal', 'Deal Price']);
+    }
+
+    $voucher = extractShopeePdfVoucherAmount($text);
+
+    $shippingFee = extractShopeePdfAmountByStrictLabels($text, [
+        'Shipping Fee Charged by Logistic Provider',
+        'Estimated Shipping Fee Charged by Logistic Provider',
+    ], $boundaries, 280, true);
+    if ($shippingFee === '') {
+        $shippingFee = extractShopeePdfAmountByLooseLabels($text, [
+            'Shipping Fee Charged by Logistic Provider',
+            'Estimated Shipping Fee Charged by Logistic Provider',
+        ]);
+    }
+    if ($shippingFee === '') {
+        $shippingFee = extractShopeePdfAmountByStrictLabels($text, [
+            'Shipping Fee Paid by Buyer',
+            'Shipping Subtotal',
+            'Estimated Shipping Subtotal',
+        ], $boundaries, 260, true);
+    }
+
+    $serviceFee = extractShopeePdfAmountByStrictLabels($text, ['Service Fee'], $boundaries, 220, true);
+    if ($serviceFee === '') {
+        $serviceFee = extractShopeePdfAmountByLooseLabels($text, ['Service Fee']);
+    }
+
+    $transactionFee = extractShopeePdfAmountByStrictLabels($text, ['Transaction Fee'], $boundaries, 220, true);
+    if ($transactionFee === '') {
+        $transactionFee = extractShopeePdfAmountByLooseLabels($text, ['Transaction Fee']);
+    }
+
+    $commissionFee = extractShopeePdfAmountByStrictLabels($text, ['Commission Fee'], $boundaries, 220, true);
+    if ($commissionFee === '') {
+        $commissionFee = extractShopeePdfAmountByLooseLabels($text, ['Commission Fee']);
+    }
+
+    $saverProgramFee = extractShopeePdfAmountByStrictLabels($text, ['Saver Programme Fee', 'Saver Program Fee'], $boundaries, 220, true);
+    if ($saverProgramFee === '') {
+        $saverProgramFee = extractShopeePdfAmountByLooseLabels($text, ['Saver Programme Fee', 'Saver Program Fee']);
+    }
+
+    return array(
+        'product_price' => $productPrice,
+        'voucher' => $voucher,
+        'act_shipping_fee' => $shippingFee,
+        'service_fee' => $serviceFee,
+        'trans_fee' => $transactionFee,
+        'ams_fee' => $commissionFee,
+        'saver_program_fee' => $saverProgramFee,
+        'delivered_hint' => (
+            textContainsLoosePhrase($text, 'parcel has been delivered to buyer') ||
+            textContainsLoosePhrase($text, 'order received')
+        ),
+    );
 }
 
 function parseShopeeOrderAmountByLabels($text, $labels)
 {
+    $text = (string) $text;
+
     foreach ($labels as $label) {
         $currencyPattern = '/' . preg_quote($label, '/') . '.{0,220}?(-?\s*(?:RM|MYR|SGD|USD)\s*[0-9][0-9,]*\.?[0-9]*)(?!\s*%)/i';
         if (preg_match($currencyPattern, $text, $matches)) {
@@ -560,16 +2449,35 @@ function parseShopeeOrderAmountByLabels($text, $labels)
             }
         }
 
-        $numericPattern = '/' . preg_quote($label, '/') . '.{0,220}?(-?\s*[0-9][0-9,]*\.?[0-9]*)(?!\s*%)/i';
+        $numericPattern = '/' . preg_quote($label, '/') . '.{0,220}?(-?\s*[0-9][0-9,]*\.[0-9]{2})(?!\s*%)/i';
         if (preg_match($numericPattern, $text, $matches)) {
             $amount = normalizeImportAmount($matches[1]);
             if ($amount !== '') {
                 return $amount;
             }
         }
+
+        $looseLabelPattern = buildLooseAmountLabelPattern($label);
+        if ($looseLabelPattern !== '') {
+            $looseCurrencyPattern = '/' . $looseLabelPattern . '.{0,320}?(-?\s*(?:RM|MYR|SGD|USD)\s*[0-9][0-9,]*\.?[0-9]*)(?!\s*%)/i';
+            if (preg_match($looseCurrencyPattern, strtoupper($text), $matches)) {
+                $amount = normalizeImportAmount($matches[1]);
+                if ($amount !== '') {
+                    return $amount;
+                }
+            }
+
+            $looseNumericPattern = '/' . $looseLabelPattern . '.{0,320}?(-?\s*[0-9][0-9,]*\.[0-9]{2})(?!\s*%)/i';
+            if (preg_match($looseNumericPattern, strtoupper($text), $matches)) {
+                $amount = normalizeImportAmount($matches[1]);
+                if ($amount !== '') {
+                    return $amount;
+                }
+            }
+        }
     }
 
-    return '0.00';
+    return '';
 }
 
 function parseShopeeOrderAmountToken($text)
@@ -649,7 +2557,18 @@ function parseShopeeOrderAmountFromPairs($pairs, $labels)
                 continue;
             }
 
-            if ($normalizedLabel === $normalizedTarget || strpos($normalizedLabel, $normalizedTarget) === 0) {
+            if ($normalizedLabel === $normalizedTarget) {
+                return isset($pair['amount']) ? $pair['amount'] : '';
+            }
+        }
+
+        foreach ($pairs as $pair) {
+            $normalizedLabel = normalizeImportLookup(isset($pair['label']) ? $pair['label'] : '');
+            if ($normalizedLabel === '') {
+                continue;
+            }
+
+            if (strpos($normalizedLabel, $normalizedTarget) !== false || strpos($normalizedTarget, $normalizedLabel) !== false) {
                 return isset($pair['amount']) ? $pair['amount'] : '';
             }
         }
@@ -678,12 +2597,116 @@ function detectShopeeOrderCurrency($text)
 
 function extractShopeeBuyerUsername($html, $text)
 {
+    $html = (string) $html;
+    $text = (string) $text;
+
     if (preg_match('/class="username\s+text-overflow"[^>]*>([^<]+)/i', $html, $matches)) {
         return normalizeImportText($matches[1]);
     }
 
     if (preg_match('/\bBuyer\s*Username\b[^A-Za-z0-9]*([A-Za-z0-9._\-]+)/i', $text, $matches)) {
         return normalizeImportText($matches[1]);
+    }
+
+    $normalized = normalizeImportText($text);
+    if ($normalized !== '') {
+        if (preg_match('/\b([A-Za-z0-9._\-]{4,40})\b\s+F\s*O\s*L\s*L\s*O\s*W\s+C\s*H\s*A\s*T\s+N\s*O\s*W\b/i', $normalized, $matches)) {
+            return normalizeImportText($matches[1]);
+        }
+        if (preg_match('/\b([A-Za-z0-9._\-]{4,40})\b\s+E\s*X\s*P\s*A\s*N\s*D\b/i', $normalized, $matches)) {
+            return normalizeImportText($matches[1]);
+        }
+    }
+
+    return '';
+}
+
+function extractShopeePdfAccountName($text)
+{
+    $text = normalizeImportText((string) $text);
+    if ($text === '') {
+        return '';
+    }
+
+    $lines = getPdfTextLines($text);
+    foreach ($lines as $line) {
+        if (preg_match_all('/\b([a-z0-9][a-z0-9._\-]{2,40})\b/', $line, $matches)) {
+            foreach ($matches[1] as $candidate) {
+                $candidate = trim((string) $candidate);
+                if ($candidate === '') {
+                    continue;
+                }
+                if (strpos($candidate, '.') === false) {
+                    continue;
+                }
+                if (strpos($candidate, '@') !== false) {
+                    continue;
+                }
+                if (preg_match('/^\d+$/', $candidate)) {
+                    continue;
+                }
+                if (preg_match('/^(https?|seller|shopee|global|main)$/i', $candidate)) {
+                    continue;
+                }
+                if (stripos($candidate, 'beyourdiary') !== false) {
+                    continue;
+                }
+
+                return normalizeImportText($candidate);
+            }
+        }
+    }
+
+    return '';
+}
+
+function isLikelyShopeeAccountName($value)
+{
+    $value = trim((string) $value);
+    if ($value === '') {
+        return false;
+    }
+
+    if (strlen($value) < 5 || strlen($value) > 50) {
+        return false;
+    }
+
+    if (!preg_match('/[a-z]/i', $value)) {
+        return false;
+    }
+
+    if (preg_match('/^(ee|ok|yes|no)$/i', $value)) {
+        return false;
+    }
+
+    if (stripos($value, 'assistant module') !== false) {
+        return false;
+    }
+
+    return true;
+}
+
+function extractShopeePdfAccountNameFromBinary($rawContent)
+{
+    $rawContent = (string) $rawContent;
+    if ($rawContent === '') {
+        return '';
+    }
+
+    if (preg_match_all('/\b([a-z0-9][a-z0-9._\-]{2,40}\.[a-z0-9][a-z0-9._\-]{1,20})\b/', $rawContent, $matches)) {
+        foreach ($matches[1] as $candidate) {
+            $candidate = trim((string) $candidate);
+            if ($candidate === '') {
+                continue;
+            }
+            if (stripos($candidate, 'beyourdiary') !== false) {
+                continue;
+            }
+            if (preg_match('/^(https?|seller|shopee)$/i', $candidate)) {
+                continue;
+            }
+            return normalizeImportText($candidate);
+        }
     }
 
     return '';
@@ -781,12 +2804,12 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
 
                     <div class="card mb-4 shadow-sm">
                         <div class="card-body">
-                            <h5 class="card-title mb-3">Step 1: Upload Shopee Order HTML</h5>
+                            <h5 class="card-title mb-3">Step 1: Upload Shopee Order HTML/PDF</h5>
                             <form method="post" enctype="multipart/form-data">
                                 <div class="row g-3 align-items-end">
                                     <div class="col-12 col-md-8">
-                                        <label class="form-label" for="import_file">Shopee Order Details HTML File</label>
-                                        <input class="form-control" type="file" name="import_file" id="import_file" accept=".html,.htm" required>
+                                        <label class="form-label" for="import_file">Shopee Order Details HTML/PDF File</label>
+                                        <input class="form-control" type="file" name="import_file" id="import_file" accept=".html,.htm,.pdf" required>
                                     </div>
                                     <div class="col-12 col-md-4">
                                         <button class="btn btn-lg btn-rounded btn-primary w-100 px-4" type="submit" name="actionBtn" value="parseShopeeOrderReq">
@@ -807,6 +2830,9 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                         <div class="col-12 col-md-4">
                                             <label class="form-label" for="order_id">Order ID<span class="requireRed">*</span></label>
                                             <input class="form-control" type="text" id="order_id" name="order_id" value="<?= htmlspecialchars($previewData['order_id']) ?>" required>
+                                            <?php if ($orderIdFieldError !== '') { ?>
+                                                <small class="text-danger fw-bold"><i class="fa-solid fa-circle-exclamation"></i> <?= htmlspecialchars($orderIdFieldError) ?></small>
+                                            <?php } ?>
                                         </div>
                                         <div class="col-12 col-md-4">
                                             <label class="form-label">Detected SKU / Item Code</label>
@@ -833,6 +2859,9 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                             }
                                             if (empty($pkgRows)) {
                                                 $pkgRows[] = array('id' => '', 'name' => '');
+                                            }
+                                            if (count($selectedPkgIds) <= 1 && count($pkgRows) > 1) {
+                                                $pkgRows = array($pkgRows[0]);
                                             }
                                             ?>
                                             <div id="sor_pkg_container">
@@ -904,6 +2933,9 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                             }
                                             if (empty($brandRows)) {
                                                 $brandRows[] = array('id' => '', 'name' => '');
+                                            }
+                                            if (count($pkgRows) <= 1 && count($brandRows) > 1) {
+                                                $brandRows = array($brandRows[0]);
                                             }
                                             ?>
                                             <div id="sor_brand_container">
@@ -999,11 +3031,15 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                         </div>
                                         <div class="col-12 col-md-3">
                                             <label class="form-label" for="fees">Fees & Charges</label>
-                                            <input class="form-control" type="number" step="0.01" id="fees" name="fees" value="<?= htmlspecialchars(isset($previewData['fees']) ? $previewData['fees'] : '0.00') ?>">
+                                            <input class="form-control" type="number" step="0.01" id="fees" name="fees" value="<?= htmlspecialchars(isset($previewData['fees']) ? $previewData['fees'] : '0.00') ?>" readonly>
+                                            <input type="hidden" id="saver_program_fee" name="saver_program_fee" value="<?= htmlspecialchars(isset($previewData['saver_program_fee']) ? $previewData['saver_program_fee'] : '0.00') ?>">
+                                            <small id="saver_program_fee_hint" class="text-muted <?= ((float) (isset($previewData['saver_program_fee']) ? $previewData['saver_program_fee'] : 0)) > 0 ? '' : 'd-none' ?>">
+                                                Includes Saver Programme Fee: <?= htmlspecialchars(isset($previewData['saver_program_fee']) ? $previewData['saver_program_fee'] : '0.00') ?>
+                                            </small>
                                         </div>
                                         <div class="col-12 col-md-3">
                                             <label class="form-label" for="final_amt">Final Amount</label>
-                                            <input class="form-control" type="number" step="0.01" id="final_amt" name="final_amt" value="<?= htmlspecialchars(isset($previewData['final_amt']) ? $previewData['final_amt'] : '0.00') ?>">
+                                            <input class="form-control" type="number" step="0.01" id="final_amt" name="final_amt" value="<?= htmlspecialchars(isset($previewData['final_amt']) ? $previewData['final_amt'] : '0.00') ?>" readonly>
                                         </div>
                                     </div>
 

@@ -501,7 +501,9 @@ foreach ($listRows as $row) {
                     <div class="col-12 d-flex justify-content-between flex-wrap">
                         <h2><?= siEsc($pageTitle) ?></h2>
                         <div class="mt-auto mb-auto d-flex flex-wrap gap-2">
-                            <a class="btn btn-sm btn-rounded btn-primary" id="addBtn" href="<?= $formPage ?>?act=I">Add Stock In</a>
+                            <?php if (isActionAllowed("Add", $pinAccess)): ?>
+                                <a class="btn btn-sm btn-rounded btn-primary" id="addBtn" href="<?= $formPage ?>?act=I">Add Stock In</a>
+                            <?php endif; ?>
                             <?php if (isActionAllowed("Import", $pinAccess)): ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" id="addBtn" href="<?= $importPage ?>">Import</a>
                             <?php endif; ?>

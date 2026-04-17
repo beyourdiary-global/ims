@@ -1,5 +1,5 @@
 <?php
-$currentPagePin = 0;
+$currentPagePin = 129;
 $pageTitle = "Shopee Verify Order";
 $isFinance = 1;
 
@@ -32,21 +32,25 @@ $_SESSION['act'] = '';
 $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 
-// Build numeric action keys from login session pin access.
+// Build numeric action keys from the latest user-group pins in database.
 $accessActionKey = array();
 $shopeePinGroups = array(128, 129, 130);
+$userPinGroupData = getUserPinGroup($connect);
 foreach ($shopeePinGroups as $pinGroupId) {
-    if (isset($_SESSION['usr_pin_access'][$pinGroupId]) && is_array($_SESSION['usr_pin_access'][$pinGroupId])) {
-        $accessActionKey = array_merge($accessActionKey, $_SESSION['usr_pin_access'][$pinGroupId]);
+    $latestActions = getValuesByPinAssocIndex($userPinGroupData, (int) $pinGroupId);
+    if (!empty($latestActions)) {
+        $accessActionKey = array_merge($accessActionKey, $latestActions);
     }
 }
 $accessActionKey = array_values(array_unique(array_map('intval', $accessActionKey)));
+$canVerifyAction = in_array(14, $accessActionKey, true);
+$canViewProfit = in_array(15, $accessActionKey, true);
 
 $num = $default_currency_id = 1; 
 
 if (isset($_GET['verify_id'])) {
     // SECURITY FIX: Explicitly check if the user has the Verify action permission (14)
-    if (!in_array(14, $accessActionKey)) {
+    if (!$canVerifyAction) {
         echo "<script>alert('Security Error: You do not have permission to verify orders.'); location.replace('shopee_verify.php');</script>";
         exit;
     }
@@ -170,14 +174,16 @@ $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_con
                 <div class="row">
                     <div class="col-12 d-flex justify-content-between flex-wrap">
                         <h2><?php echo $pageTitle ?></h2>
-                        <?php if ($result) { ?>
-                            <div class="mt-auto mb-auto">
-                                <?php if (in_array(4, $accessActionKey)): ?>
+                        <div class="mt-auto mb-auto">
+                            <?php if (isActionAllowed("Add", $pinAccess) || isActionAllowed("Import", $pinAccess)): ?>
+                                <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Request </a>
-                                    <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="importBtn" id="importBtn" href="<?= $SITEURL ?>/common_import.php?module=shopee_order_req"><i class="fa-solid fa-file-import"></i> Import </a>
                                 <?php endif; ?>
-                            </div>
-                        <?php } ?>
+                                <?php if (isActionAllowed("Import", $pinAccess)): ?>
+                                    <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="importBtn" id="importBtn" href="<?= $SITEURL ?>/shopee_order_import.php"><i class="fa-solid fa-file-import"></i> Import </a>
+                                <?php endif; ?>
+                            <?php endif; ?>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -379,7 +385,7 @@ $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_con
                             <th scope="col">Fees & Charges</th>
                             <th scope="col">Final Amount</th>
                             <th scope="col">Remark</th>
-                           <?php  if(in_array(15, $accessActionKey)){ 
+                           <?php  if($canViewProfit){ 
                             echo "<th scope=\"col\">Agent Profit</th><th scope=\"col\">Company Profit</th>";
                            } ?>
                         </tr>
@@ -492,7 +498,7 @@ $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_con
                                 <?php renderViewEditButtonByPin("1", $redirect_page, $row, $accessActionKey); ?>
                                 <?php renderViewEditButtonByPin("2", $redirect_page, $row, $accessActionKey, $act_2); ?>
                                 <?php renderDeleteButtonByPin($accessActionKey, $row['id'], $row['orderID'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?> 
-                                <?php if($row['order_status'] == 'OC' && in_array(14, $accessActionKey)){ ?>
+                                <?php if($row['order_status'] == 'OC' && $canVerifyAction){ ?>
                                  <a href="?verify_id=<?= $row['id'] ?>" class="btn btn-sm btn-success btn-verified" onclick="return confirm('Mark this order as verified?')">Verified</a>
                                 <?php } ?>
                                 </td>
@@ -517,7 +523,7 @@ $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_con
                                 <td scope="row"><?= $row['final_amt'] ?? '' ?></td>
                                 <td scope="row"><?= $row['remark'] ?? '' ?></td>
                                <?php  
-                                if (in_array(15, $accessActionKey)) { 
+                                if ($canViewProfit) { 
                                     $clear_profit = ($final_amt - (float)($pkg['cost'] ?? 0));
                                     echo "<td scope=\"row\">" . ($agentCostProfit = ($clear_profit *0.4)). "</td>";
                                      $total_final_agentCostProfit += $agentCostProfit;
@@ -553,7 +559,7 @@ $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_con
                             <th scope="col">Fees & Charges<br><?php echo "(RM)".$total_fees;?></th>
                             <th scope="col">Final Amount<br><?php echo "(RM)".$total_final_amt; ?></th>
                             <th scope="col">Remark</th>
-                           <?php  if(in_array(15, $accessActionKey)){ 
+                           <?php  if($canViewProfit){ 
                             echo "<th scope=\"col\">Agent Profit (".$total_final_agentCostProfit.")</th>";
                             echo "<th scope=\"col\">Company Profit (".$total_final_companyCostProfit.")</th>";
                            } ?>

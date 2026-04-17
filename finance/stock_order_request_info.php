@@ -73,9 +73,86 @@ function sorInfoBuildItemsSummary($items, $packageNameMap, $productNameMap)
     }
 
     return array(
+        'package_items' => $packageSummary,
+        'product_items' => $productSummary,
         'package' => implode(', ', $packageSummary),
         'product' => implode(', ', $productSummary),
     );
+}
+
+function sorInfoResolveWarehouseName($connect, $requestRow)
+{
+    $warehouseId = isset($requestRow['warehouse_id']) ? (int) $requestRow['warehouse_id'] : 0;
+    if ($warehouseId <= 0) {
+        return 'Unknown';
+    }
+
+    $rst = mysqli_query($connect, "SELECT name FROM " . WHSE . " WHERE id='" . $warehouseId . "' LIMIT 1");
+    if ($rst && mysqli_num_rows($rst) > 0) {
+        $row = mysqli_fetch_assoc($rst);
+        $name = isset($row['name']) ? trim((string) $row['name']) : '';
+        if ($name !== '') {
+            return $name;
+        }
+    }
+
+    return 'Unknown';
+}
+
+function sorInfoBuildTelegramMessage($requestRow, $summary, $orderLink, $warehouseName)
+{
+    $invoiceNoRaw = isset($requestRow['invoice_no']) ? (string) $requestRow['invoice_no'] : '';
+    $invoiceDateRaw = isset($requestRow['invoice_date']) ? (string) $requestRow['invoice_date'] : '';
+
+    $invoiceNo = trim($invoiceNoRaw) !== '' ? trim($invoiceNoRaw) : ('SOR-' . (int) (isset($requestRow['id']) ? $requestRow['id'] : 0));
+    $invoiceDate = trim($invoiceDateRaw) !== '' ? trim($invoiceDateRaw) : '-';
+
+    $safeWarehouseName = htmlspecialchars((string) $warehouseName, ENT_QUOTES, 'UTF-8');
+    $safeInvoiceNo = htmlspecialchars((string) $invoiceNo, ENT_QUOTES, 'UTF-8');
+    $safeInvoiceDate = htmlspecialchars((string) $invoiceDate, ENT_QUOTES, 'UTF-8');
+
+    $packageItems = isset($summary['package_items']) && is_array($summary['package_items']) ? $summary['package_items'] : array();
+    $productItems = isset($summary['product_items']) && is_array($summary['product_items']) ? $summary['product_items'] : array();
+
+    $safePackage = '-';
+    if (!empty($packageItems)) {
+        $safePackages = array();
+        foreach ($packageItems as $pkg) {
+            $safePackages[] = htmlspecialchars((string) $pkg, ENT_QUOTES, 'UTF-8');
+        }
+        $safePackage = implode(', ', $safePackages);
+    }
+
+    $safeProductLines = array('-');
+    if (!empty($productItems)) {
+        $safeProductLines = array();
+        $appendComma = count($productItems) > 1;
+        foreach ($productItems as $productItem) {
+            $rawLine = trim((string) $productItem);
+            if (preg_match('/^(.*?)(\s*x\d+(?:\.\d+)?)$/i', $rawLine, $m)) {
+                $line = htmlspecialchars((string) $m[1], ENT_QUOTES, 'UTF-8')
+                    . '<b>' . htmlspecialchars((string) $m[2], ENT_QUOTES, 'UTF-8') . '</b>';
+            } else {
+                $line = htmlspecialchars($rawLine, ENT_QUOTES, 'UTF-8');
+            }
+            if ($appendComma) {
+                $line .= ',';
+            }
+            $safeProductLines[] = $line;
+        }
+    }
+
+    $safeOrderLink = htmlspecialchars((string) $orderLink, ENT_QUOTES, 'UTF-8');
+
+    $message = "Warehouse [" . $safeWarehouseName . "]\n"
+        . "Invoice ID: <b>" . $safeInvoiceNo . "</b>\n"
+        . "Invoice Date: <b>" . $safeInvoiceDate . "</b>\n"
+        . "Package: " . $safePackage . "\n\n"
+        . "Product:\n"
+        . implode("\n", $safeProductLines) . "\n\n"
+        . "Link: <a href=\"" . $safeOrderLink . "\">" . $safeOrderLink . "</a>";
+
+    return $message;
 }
 
 function sorInfoTelegramRequest($url, $payload, &$curlErr, &$httpCode = 0)
@@ -288,6 +365,7 @@ if (!empty($packageIds)) {
 $summary = sorInfoBuildItemsSummary($itemRows, $packageNameMap, $productNameMap);
 $orderLink = $SITEURL . '/warehouse_stock_in_scan.php?t=' . urlencode((string) (isset($requestRow['order_link_token']) ? $requestRow['order_link_token'] : ''));
 $qrImageUrl = sorInfoQrSrc(isset($requestRow['qr_image']) ? $requestRow['qr_image'] : '', $SITEURL);
+$warehouseName = sorInfoResolveWarehouseName($connect, $requestRow);
 $telegramMsg = '';
 $telegramErr = '';
 
@@ -313,11 +391,7 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
         if ($botToken === '') {
             $telegramErr = 'Token Setting is incomplete. Bot Token is required.';
         } else {
-            $invoiceNo = isset($requestRow['invoice_no']) ? (string) $requestRow['invoice_no'] : ('SOR-' . $requestId);
-            $caption = "Invoice ID: " . $invoiceNo . "\n"
-                . "Package: " . ($summary['package'] !== '' ? $summary['package'] : '-') . "\n"
-                . "Product: " . ($summary['product'] !== '' ? $summary['product'] : '-') . "\n"
-                . "Link: " . $orderLink;
+            $telegramText = sorInfoBuildTelegramMessage($requestRow, $summary, $orderLink, $warehouseName);
 
             $apiBase = 'https://api.telegram.org/bot' . $botToken;
             $sendPhotoUrl = $apiBase . '/sendPhoto';
@@ -339,7 +413,8 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
             } else {
                 $payload = array(
                     'chat_id' => $chatId,
-                    'caption' => $caption,
+                    'caption' => $telegramText,
+                    'parse_mode' => 'HTML',
                     'photo' => $qrImageUrl,
                 );
 
@@ -356,7 +431,8 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
                 if (!$ok) {
                     $msgPayload = array(
                         'chat_id' => $chatId,
-                        'text' => $caption,
+                        'text' => $telegramText,
+                        'parse_mode' => 'HTML',
                         'disable_web_page_preview' => true,
                     );
                     $curlErr2 = '';

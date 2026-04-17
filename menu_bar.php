@@ -205,6 +205,16 @@ if (in_array('130', GlobalPin)) {
     $userShopeeLink = $SITEURL . '/shopee/shopee_processing_order.php';
 }
 
+$hasTaskSummaryAccess = is_array(GlobalPin) && in_array('137', GlobalPin);
+$hasTaskBoardAccess = is_array(GlobalPin) && in_array('136', GlobalPin);
+$hasTaskSheetsAccess = is_array(GlobalPin) && in_array('138', GlobalPin);
+$hasTaskManagementAccess = $hasTaskSummaryAccess || $hasTaskBoardAccess || $hasTaskSheetsAccess;
+$taskManagementLandingUrl = $hasTaskSummaryAccess
+    ? $SITEURL . '/task/summary.php'
+    : ($hasTaskBoardAccess
+        ? $SITEURL . '/task/board.php'
+        : ($hasTaskSheetsAccess ? $SITEURL . '/task/sheets.php' : 'javascript:void(0)'));
+
 $menuList = array(
     // dashboard
     array(
@@ -214,6 +224,14 @@ $menuList = array(
         'n',                            // check whether is a dropdown
         'expand' => array(),            // dropdown list item
         'pin' => array('0')             // action
+    ),
+    array(
+        'Task Management',
+        'mdi mdi-menu',
+        $taskManagementLandingUrl,
+        'n',
+        'expand' => array(),
+        'pin' => array('136', '137', '138')
     ),
     array(
         'Customer',
@@ -393,7 +411,7 @@ $menuList = array(
                     array('Shopee Order Report', 'mdi storefront-outline', $SITEURL . '/shopee/shopeeOrder_request_income.php', '123'),
                     array('Facebook Order Request', 'mdi storefront-outline', $SITEURL . '/finance/fb_order_req_income_table.php', '69'),
                     array('Website Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/finance/website_order_request_income_table.php', '92'),
-                    array('Lazada Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/lazadaOrder_request_income.php', '93'),
+                    array('Lazada Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/lazada_order_req_income_table.php', '93'),
                     array('Sales Person Report', 'mdi mdi-note-text-outline', $SITEURL . '/finance/sales_person_report_table.php', '100'),
                 ),
                 'pin' => array('123', '69', '92', '93', '100'),
@@ -478,21 +496,10 @@ $menuList = array(
 
 
 <head>
-    <link rel="stylesheet" href="<?php $SITEURL . '/css/main.css' ?>">
+    <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
+    <link rel="stylesheet" href="<?= $SITEURL ?>/css/sidebar_menu.css">
 </head>
 
-<style>
-    @media (max-width: 768px) {
-        #navbarMenuBar {
-            display: none;
-            color: #FFFFFF;
-        }
-    }
-</style>
-
-<script>
-
-</script>
 
 <!-- H.Navbar -->
 <nav class="menuBar">
@@ -508,11 +515,25 @@ $menuList = array(
             */
             foreach ($menuList as $innerList) {
                 if (!empty(array_intersect($innerList['pin'], GlobalPin))) {
+                    $isTaskTopMenu = $innerList[0] === 'Task Management';
                     $li = $innerList[3] == 'y' ? "class=\"nav-item dropdown\"" : "class=\"nav-item\"";
-                    $a = $innerList[3] == 'y' ? "class=\"nav-link dropdown-toggle\" data-bs-toggle=\"dropdown\" role=\"button\" aria-expanded=\"false\"" : "class=\"nav-link\"";
+                    $linkClass = $innerList[3] == 'y' ? 'nav-link dropdown-toggle' : 'nav-link';
+                    if ($isTaskTopMenu) {
+                        $linkClass .= ' task-top-menu-trigger';
+                    }
+                    $taskAriaLabel = $isTaskTopMenu ? ' aria-label="Task Management" title="Task Management"' : '';
+                    $a = $innerList[3] == 'y'
+                        ? "class=\"" . $linkClass . "\" data-bs-toggle=\"dropdown\" role=\"button\" aria-expanded=\"false\"" . $taskAriaLabel
+                        : "class=\"" . $linkClass . "\"" . $taskAriaLabel;
 
                     echo "<li $li>";
-                    echo "<a $a href=\"$innerList[2]\"><i class=\"$innerList[1]\"></i><span> $innerList[0]</span></a>";
+                    echo "<a $a href=\"$innerList[2]\"><i class=\"$innerList[1]\"></i>";
+                    if (!$isTaskTopMenu) {
+                        echo "<span> $innerList[0]</span>";
+                    } else {
+                        echo "<span class=\"visually-hidden\">$innerList[0]</span>";
+                    }
+                    echo "</a>";
                     echo "<ul class=\"dropdown-menu menuBar\">";
                     foreach ($innerList['expand'] as $url) {
                         if (isset($url['expand'])) {
@@ -560,14 +581,28 @@ $menuList = array(
                 <?php
                 foreach ($menuList as $innerList) {
                     if (!empty(array_intersect($innerList['pin'], GlobalPin))) {
-                        $li = $innerList[3] == 'y' ? "class=\"nav-item dropdown\"" : "class=\"nav-item\"";
-                        $a = $innerList[3] == 'y' ? "class=\"nav-link dropdown-toggle\" data-bs-toggle=\"collapse\" data-bs-target=\"#$innerList[0]-collapse\" aria-expanded=\"false\"" : "class=\"nav-link\" href=\"$innerList[2]\"";
+                        $isTaskManagementMenu = $innerList[0] === 'Task Management';
+                        $isDropdownMenu = $innerList[3] == 'y' || $isTaskManagementMenu;
+                        $collapseId = $isTaskManagementMenu ? 'Task-Management' : $innerList[0];
+                        $li = $isDropdownMenu ? "class=\"nav-item dropdown\"" : "class=\"nav-item\"";
+                        $a = $isDropdownMenu
+                            ? "class=\"nav-link dropdown-toggle\" data-bs-toggle=\"collapse\" data-bs-target=\"#$collapseId-collapse\" aria-expanded=\"false\""
+                            : "class=\"nav-link\" href=\"$innerList[2]\"";
+
+                        $expandMenus = $innerList['expand'];
+                        if ($isTaskManagementMenu) {
+                            $expandMenus = array(
+                                array('Summary', 'mdi mdi-view-dashboard-outline', $SITEURL . '/task/summary.php', '137'),
+                                array('Board', 'mdi mdi-view-column-outline', $SITEURL . '/task/board.php', '136'),
+                                array('Sheets', 'mdi mdi-table-large', $SITEURL . '/task/sheets.php', '138'),
+                            );
+                        }
 
                         echo "<li $li>";
                         echo "<a $a href=\"#\"><i class=\"$innerList[1]\"></i><span> $innerList[0]</span></a>";
-                        echo "<div class=\"collapse\" id=\"$innerList[0]-collapse\">";
+                        echo "<div class=\"collapse\" id=\"$collapseId-collapse\">";
                         echo "<ul class=\"list-unstyled collapse-menu\">";
-                        foreach ($innerList['expand'] as $url) {
+                        foreach ($expandMenus as $url) {
                             if (isset($url['expand'])) {
                                 if (!empty(array_intersect($url['pin'], GlobalPin))) {
                                     // FIX: Prefix with parent menu name to prevent duplicate IDs for menus like 'Setting'
@@ -594,7 +629,7 @@ $menuList = array(
                                 }
                             } else {
                                 if (in_array($url[3], GlobalPin)) {
-                                    $urlTitle = getMenuTitleByPinGroupId($connect, $url[0], $url[3]);
+                                    $urlTitle = $isTaskManagementMenu ? $url[0] : getMenuTitleByPinGroupId($connect, $url[0], $url[3]);
                                     echo "<li><a class=\"nav-link\" href=\"$url[2]\"><i class=\"$url[1]\"></i><span> $urlTitle<span></a></li>";
                                 }
                             }
@@ -620,10 +655,114 @@ $menuList = array(
 </aside>
 <!-- V.Navbar -->
 
+<?php if ($hasTaskManagementAccess): ?>
+<?php
+$taskCurrentPath = isset($_SERVER['REQUEST_URI']) ? (string) parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) : '';
+$isTaskSummaryPage = strpos($taskCurrentPath, '/task/summary.php') !== false;
+$isTaskBoardPage = strpos($taskCurrentPath, '/task/board.php') !== false;
+$isTaskSheetsPage = strpos($taskCurrentPath, '/task/sheets.php') !== false;
+?>
+
+<aside id="taskGlobalSidebar" class="task-global-sidebar" aria-hidden="true">
+    <div class="task-global-sidebar-inner">
+        <h6 class="task-global-sidebar-title">Task Management</h6>
+        <ul class="task-global-sidebar-links">
+            <?php if ($hasTaskSummaryAccess): ?>
+            <li><a class="<?= $isTaskSummaryPage ? 'task-global-link-active' : '' ?>" href="<?= $SITEURL ?>/task/summary.php">Summary</a></li>
+            <?php endif; ?>
+            <?php if ($hasTaskBoardAccess): ?>
+            <li><a class="<?= $isTaskBoardPage ? 'task-global-link-active' : '' ?>" href="<?= $SITEURL ?>/task/board.php">Board</a></li>
+            <?php endif; ?>
+            <?php if ($hasTaskSheetsAccess): ?>
+            <li><a class="<?= $isTaskSheetsPage ? 'task-global-link-active' : '' ?>" href="<?= $SITEURL ?>/task/sheets.php">Sheets</a></li>
+            <?php endif; ?>
+        </ul>
+    </div>
+</aside>
+<?php endif; ?>
+
 <script>
+    function isMobileViewport() {
+        return window.matchMedia('(max-width: 768px)').matches;
+    }
+
     var sidebar = $("#sidebar");
     var sidebar_toggleBtn = $("#sidebarCollapse"); // variable from menuHeader
     var opacityBackground = $('div#filter_screen');
+    var taskTopMenuTrigger = $('.task-top-menu-trigger');
+    var taskGlobalSidebar = $('#taskGlobalSidebar');
+    var taskSidebarStorageKey = 'task_global_sidebar_open';
+    var hasTaskManagementAccess = <?php echo $hasTaskManagementAccess ? 'true' : 'false'; ?>;
+
+    if (hasTaskManagementAccess && taskGlobalSidebar.length) {
+        $('body').addClass('task-global-sidebar-enabled');
+    }
+
+    function syncTaskSidebarTopOffset() {
+        if (!taskGlobalSidebar.length) {
+            return;
+        }
+
+        var topNavHeight = $('.topNav').outerHeight() || 50;
+        var menuBarHeight = $('.menuBar').outerHeight() || 0;
+        var totalTop = topNavHeight + menuBarHeight;
+        document.documentElement.style.setProperty('--task-global-sidebar-top', totalTop + 'px');
+    }
+
+    function setTaskGlobalSidebar(open) {
+        if (!hasTaskManagementAccess || !taskGlobalSidebar.length || isMobileViewport()) {
+            $('body').removeClass('task-global-sidebar-open');
+            taskGlobalSidebar.attr('aria-hidden', 'true');
+            return;
+        }
+
+        $('body').toggleClass('task-global-sidebar-open', open);
+        taskGlobalSidebar.attr('aria-hidden', open ? 'false' : 'true');
+
+        try {
+            window.localStorage.setItem(taskSidebarStorageKey, open ? '1' : '0');
+        } catch (e) {}
+    }
+
+    function expandTaskMenuInMobileSidebar() {
+        var taskCollapse = document.getElementById('Task-Management-collapse');
+        if (!taskCollapse || typeof bootstrap === 'undefined' || !bootstrap.Collapse) {
+            return;
+        }
+
+        try {
+            var instance = bootstrap.Collapse.getOrCreateInstance(taskCollapse, { toggle: false });
+            instance.show();
+        } catch (e) {}
+    }
+
+    syncTaskSidebarTopOffset();
+
+    if (hasTaskManagementAccess) {
+        try {
+            setTaskGlobalSidebar(window.localStorage.getItem(taskSidebarStorageKey) === '1');
+        } catch (e) {
+            setTaskGlobalSidebar(false);
+        }
+    }
+
+    if (hasTaskManagementAccess) {
+        taskTopMenuTrigger.on('click', function (e) {
+            if (isMobileViewport()) {
+                e.preventDefault();
+                if (!sidebar.hasClass('active')) {
+                    sidebar.toggleClass('active', true);
+                    sidebar.toggleClass('close', false);
+                    opacityBackground.show();
+                }
+                expandTaskMenuInMobileSidebar();
+                return;
+            }
+
+            e.preventDefault();
+            setTaskGlobalSidebar(!$('body').hasClass('task-global-sidebar-open'));
+        });
+    }
 
         sidebar_toggleBtn.on("click", function () {
             if (sidebar.hasClass("active")) {
@@ -642,6 +781,25 @@ $menuList = array(
                     opacityBackground.show();
                 } else {
                     opacityBackground.hide();
+                }
+            }
+        });
+
+        $(window).on('resize', function () {
+            syncTaskSidebarTopOffset();
+            if (!hasTaskManagementAccess) {
+                $('body').removeClass('task-global-sidebar-open task-global-sidebar-enabled');
+                return;
+            }
+
+            if (isMobileViewport()) {
+                $('body').removeClass('task-global-sidebar-open');
+                taskGlobalSidebar.attr('aria-hidden', 'true');
+            } else {
+                try {
+                    setTaskGlobalSidebar(window.localStorage.getItem(taskSidebarStorageKey) === '1');
+                } catch (e) {
+                    setTaskGlobalSidebar(false);
                 }
             }
         });

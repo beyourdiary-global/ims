@@ -216,6 +216,40 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 
 <head>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
+    <style>
+        .token-help-trigger {
+            border: 0;
+            background: transparent;
+            padding: 0;
+            margin-left: 8px;
+            color: #2f67d8;
+            line-height: 1;
+        }
+
+        .token-help-trigger:hover,
+        .token-help-trigger:focus {
+            color: #1f4eac;
+        }
+
+        .token-help-media {
+            width: 100%;
+            max-width: 520px;
+            border: 1px solid #d7dce3;
+            border-radius: 8px;
+            padding: 6px;
+            background: #fff;
+            margin: 8px 0 12px;
+        }
+
+        .token-help-steps {
+            margin-bottom: 0;
+            padding-left: 20px;
+        }
+
+        .token-help-steps li {
+            margin-bottom: 8px;
+        }
+    </style>
 </head>
 
 <body>
@@ -241,12 +275,22 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                     </div>
 
                     <div class="form-group mb-3">
-                        <label class="form-label" for="botToken">Bot Token*</label>
+                        <label class="form-label d-flex align-items-center" for="botToken">
+                            Bot Token*
+                            <button type="button" class="token-help-trigger" data-help-target="botToken" title="How to get Bot Token" aria-label="How to get Bot Token">
+                                <i class="fa-solid fa-circle-info"></i>
+                            </button>
+                        </label>
                         <input class="form-control" type="text" name="botToken" id="botToken" value="<?= isset($row['bot_token']) ? htmlspecialchars((string) $row['bot_token'], ENT_QUOTES, 'UTF-8') : '' ?>" <?= ($act == '') ? 'readonly' : '' ?> required autocomplete="off">
                     </div>
 
                     <div class="form-group mb-3">
-                        <label class="form-label" for="chatId">Chat ID</label>
+                        <label class="form-label d-flex align-items-center" for="chatId">
+                            Chat ID
+                            <button type="button" class="token-help-trigger" data-help-target="chatId" title="How to get Chat ID" aria-label="How to get Chat ID">
+                                <i class="fa-solid fa-circle-info"></i>
+                            </button>
+                        </label>
                         <input class="form-control" type="text" name="chatId" id="chatId" value="<?= isset($row['chat_id']) ? htmlspecialchars((string) $row['chat_id'], ENT_QUOTES, 'UTF-8') : '' ?>" <?= ($act == '') ? 'readonly' : '' ?> autocomplete="off" placeholder="e.g. -1001234567890">
                     </div>
 
@@ -266,6 +310,54 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                 </form>
             </div>
         </div>
+
+        <div class="modal fade" id="tokenHelpModal" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="tokenHelpModalTitle">Telegram Setup Guide</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div id="tokenHelpBotTokenSection">
+                            <h6>How to get Bot Token</h6>
+                            <ol class="token-help-steps">
+                                <li>
+                                    Open <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer">@BotFather</a>, then send <strong>/start</strong>.<br>
+                                    <img class="token-help-media mt-2" src="<?= $SITEURL ?>/images_server/token_setting_guide/bot_token_step1.png" alt="BotFather start and command list">
+                                </li>
+                                <li>Send <strong>/newbot</strong> and enter your bot display name when BotFather asks.</li>
+                                <li>
+                                    Enter a username that ends with <strong>bot</strong> (for example: <code>testing_0406_bot</code>).<br>
+                                    <img class="token-help-media mt-2" src="<?= $SITEURL ?>/images_server/token_setting_guide/bot_token_step2.png" alt="BotFather new bot token message">
+                                </li>
+                                <li>From the success message, copy the HTTP API token and paste it into the Bot Token field.</li>
+                            </ol>
+                        </div>
+
+                        <div id="tokenHelpChatIdSection" class="mt-3">
+                            <h6>How to get Chat ID</h6>
+                            <ol class="token-help-steps">
+                                <li>
+                                    Open your created bot chat and send <strong>/start</strong> once.<br>
+                                    <img class="token-help-media mt-2" src="<?= $SITEURL ?>/images_server/token_setting_guide/chat_id_step1.png" alt="Telegram bot chat with start command">
+                                </li>
+                                <li>Open this URL in browser (replace with your bot token):<br><code>https://api.telegram.org/bot&lt;YOUR_BOT_TOKEN&gt;/getUpdates</code></li>
+                                <li>
+                                    In the JSON response, find <code>message</code> -&gt; <code>chat</code> -&gt; <code>id</code>.<br>
+                                    <img class="token-help-media mt-2" src="<?= $SITEURL ?>/images_server/token_setting_guide/chat_id_step2.png" alt="Telegram getUpdates response with chat id">
+                                </li>
+                                <li>Copy that numeric value (example: <code>1064420282</code>) and paste it into Chat ID.</li>
+                            </ol>
+                            <p class="mb-0">Reference: <a href="https://core.telegram.org/bots/api#getupdates" target="_blank" rel="noopener noreferrer">Telegram Bot API - getUpdates</a></p>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-primary" data-bs-dismiss="modal">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -276,6 +368,48 @@ if (isset($_SESSION['tempValConfirmBox'])) {
         centerAlignment("formContainer");
         setButtonColor();
         preloader(300, action);
+
+        (function () {
+            var triggers = document.querySelectorAll('.token-help-trigger');
+            var modalEl = document.getElementById('tokenHelpModal');
+            if (!triggers.length || !modalEl || typeof bootstrap === 'undefined' || !bootstrap.Modal) {
+                return;
+            }
+
+            var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+            var titleEl = document.getElementById('tokenHelpModalTitle');
+            var botSection = document.getElementById('tokenHelpBotTokenSection');
+            var chatSection = document.getElementById('tokenHelpChatIdSection');
+
+            function showSection(target) {
+                if (!botSection || !chatSection || !titleEl) {
+                    modal.show();
+                    return;
+                }
+
+                if (target === 'botToken') {
+                    titleEl.textContent = 'How to Get Bot Token';
+                    botSection.style.display = '';
+                    chatSection.style.display = 'none';
+                } else if (target === 'chatId') {
+                    titleEl.textContent = 'How to Get Chat ID';
+                    botSection.style.display = 'none';
+                    chatSection.style.display = '';
+                } else {
+                    titleEl.textContent = 'Telegram Setup Guide';
+                    botSection.style.display = '';
+                    chatSection.style.display = '';
+                }
+
+                modal.show();
+            }
+
+            triggers.forEach(function (btn) {
+                btn.addEventListener('click', function () {
+                    showSection(btn.getAttribute('data-help-target') || '');
+                });
+            });
+        })();
     </script>
 </body>
 
