@@ -427,8 +427,10 @@ $menuList = array(
         'expand' => array(
             array('Merchant', 'mdi storefront-outline', $SITEURL . '/finance/merchant_table.php', '36'),
             array('Agent', 'mdi mdi-information-outline', $SITEURL . '/finance/agent_table.php', '62'),
+            array('Goal Target', 'mdi mdi-bullseye-arrow', $SITEURL . '/goalTarget_table.php', '121'),
+
         ),
-        'pin' => array('36', '62')
+        'pin' => array('36', '62', '121')
     ),
     array(
         'Setting',
