@@ -29,10 +29,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         exit;
     }
 
-    $currentUserId = (int) (defined('USER_ID') && USER_ID !== '' ? USER_ID : (isset($_SESSION['userid']) ? $_SESSION['userid'] : 0));
+    $currentUserId = (int) USER_ID;
     $taskAction    = trim((string) $_POST['task_action']);
-    $resolvedUserName = defined('USER_NAME') && USER_NAME !== '' ? USER_NAME : (isset($_SESSION['user_name']) ? $_SESSION['user_name'] : '');
-    $safeUserName  = htmlspecialchars((string) $resolvedUserName, ENT_QUOTES, 'UTF-8');
+    $safeUserName  = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
 
     if ($taskAction === 'sheets_get_data') {
         $items = taskGetAllItemsFlat($connect);
@@ -175,13 +174,13 @@ if (!taskIsActionAllowed('view', $pinAccess)) {
     exit;
 }
 
-$currentUserId = defined('USER_ID') ? USER_ID : '';
+$currentUserId = USER_ID;
 taskEnsureDefaultWorkTypes($connect, $currentUserId, $cdate, $ctime);
 
-$safeUserName = htmlspecialchars((string)(defined('USER_NAME') ? USER_NAME : ''), ENT_QUOTES, 'UTF-8');
+$safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
 $safePageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
 $viewActMsg = $safeUserName . ' viewed the page ' . $safePageTitle . '.';
-if (function_exists('audit_log') && defined('USER_ID')) {
+if (function_exists('audit_log')) {
     $log = [
         'log_act' => 'View',
         'cdate'   => $cdate,

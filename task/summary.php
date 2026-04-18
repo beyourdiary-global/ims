@@ -9,7 +9,7 @@ $isFinance = 1;
 if (!function_exists('taskBoardAuditLog')) {
     function taskBoardAuditLog($connect, $pageTitle, $pageAction, $viewActMsg, $cdate, $ctime)
     {
-        if (!function_exists('audit_log') || !defined('USER_ID')) {
+        if (!function_exists('audit_log')) {
             return;
         }
 
@@ -121,8 +121,8 @@ $projectKeySetting = taskGetProjectKeySetting($connect);
 $workTypeIcons = taskGetSvgIconOptions();
 $canEdit = taskIsActionAllowed('edit', $pinAccess);
 $canAdd = taskIsActionAllowed('add', $pinAccess);
-$currentUserId = defined('USER_ID') && USER_ID !== '' ? USER_ID : (isset($_SESSION['userid']) ? $_SESSION['userid'] : 0);
-$currentUserName = defined('USER_NAME') && USER_NAME !== '' ? USER_NAME : (isset($_SESSION['user_name']) ? $_SESSION['user_name'] : 'Current User');
+$currentUserId = USER_ID;
+$currentUserName = USER_NAME;
 
 // Initial data load
 $stats = taskGetSummaryStats($connect, array());

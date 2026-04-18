@@ -7,7 +7,7 @@ $isFinance = 1;
 if (!function_exists('taskBoardAuditLog')) {
     function taskBoardAuditLog($connect, $pageTitle, $pageAction, $viewActMsg, $cdate, $ctime)
     {
-        if (!function_exists('audit_log') || !defined('USER_ID')) {
+        if (!function_exists('audit_log')) {
             return;
         }
 
@@ -48,7 +48,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         taskJsonResponse(array('ok' => 0, 'message' => 'Invalid session token. Please refresh the page and try again.'));
     }
 
-    $currentUserId = defined('USER_ID') ? USER_ID : '';
+    $currentUserId = USER_ID;
     taskEnsureDefaultWorkTypes($connect, $currentUserId, $cdate, $ctime);
 
     $taskAction = isset($_POST['task_action']) ? trim((string) $_POST['task_action']) : '';
@@ -918,7 +918,7 @@ $safePageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
 $viewActMsg = $safeUserName . ' viewed the page ' . $safePageTitle . '.';
 taskBoardAuditLog($connect, $pageTitle, 'View', $viewActMsg, $cdate, $ctime);
 
-$currentUserId = defined('USER_ID') ? USER_ID : '';
+$currentUserId = USER_ID;
 taskEnsureDefaultWorkTypes($connect, $currentUserId, $cdate, $ctime);
 
 $canAdd = taskIsActionAllowed('add', $pinAccess);
