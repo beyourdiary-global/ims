@@ -43,19 +43,21 @@
   body.task-global-sidebar-open .container-xxl,
   body.task-global-sidebar-open .task-page-wrap,
   body.task-global-sidebar-open .page-load-cover,
-  body.task-global-sidebar-open #dispTable {
-    padding-left: var(--task-global-sidebar-width) !important;
+  body.task-global-sidebar-open #dispTable,
+  body.task-global-sidebar-open #formContainer {
+    padding-left: calc(var(--task-global-sidebar-width) + 16px) !important;
   }
 }
 
 body.task-global-sidebar-open .container-xxl,
 body.task-global-sidebar-open .task-page-wrap,
 body.task-global-sidebar-open .page-load-cover,
-body.task-global-sidebar-open #dispTable {
+body.task-global-sidebar-open #dispTable,
+body.task-global-sidebar-open #formContainer {
   margin-left: 0;
   width: 100% !important;
   max-width: none !important;
-  padding-left: var(--task-global-sidebar-width) !important;
+  padding-left: calc(var(--task-global-sidebar-width) + 16px) !important;
   padding-right: 12px !important;
   box-sizing: border-box;
   transition:
@@ -63,7 +65,14 @@ body.task-global-sidebar-open #dispTable {
     width 0.25s ease;
 }
 
-body.task-global-sidebar-open .page-load-cover #dispTable {
+body.task-global-sidebar-open #shopeeOrderReqBreadcrumbWrap {
+  margin-left: 0 !important;
+  padding-left: calc(var(--task-global-sidebar-width) + 16px) !important;
+  transition: padding-left 0.25s ease;
+}
+
+body.task-global-sidebar-open .page-load-cover #dispTable,
+body.task-global-sidebar-open .page-load-cover #formContainer {
   padding-left: 0 !important;
   padding-right: 0 !important;
 }
@@ -94,10 +103,16 @@ body.task-global-sidebar-open
   body.task-global-sidebar-open .container-xxl,
   body.task-global-sidebar-open .task-page-wrap,
   body.task-global-sidebar-open .page-load-cover,
-  body.task-global-sidebar-open #dispTable {
+  body.task-global-sidebar-open #dispTable,
+  body.task-global-sidebar-open #formContainer {
     width: 100% !important;
     padding-left: 0 !important;
     padding-right: 0 !important;
+  }
+
+  body.task-global-sidebar-open #shopeeOrderReqBreadcrumbWrap {
+    margin-left: 0 !important;
+    padding-left: 0 !important;
   }
 
   body.task-global-sidebar-open .page-load-cover #dispTable {
