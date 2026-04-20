@@ -36,7 +36,7 @@ if (!function_exists('taskRenderBoardItemHistorySection')) {
                     </button>
                 </div>
                 <div id="taskItemCommentDraftNotice" class="task-item-draft-reminder d-none">
-                    <button id="taskItemCommentDraftRestoreBtn" type="button" class="btn task-item-draft-reminder-btn">You have unsaved comment</button>
+                    <button id="taskItemCommentDraftRestoreBtn" type="button" class="btn task-item-draft-reminder-btn">You have an unsaved comment</button>
                 </div>
                 <div id="taskItemCommentComposeLauncherWrap" class="task-item-comment-compose-launcher-wrap">
                     <button id="taskItemCommentComposeLauncher" type="button" class="btn task-item-comment-compose-launcher" aria-label="Add comment">Add a comment...</button>
