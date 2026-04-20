@@ -198,7 +198,6 @@ define('TASK_ITEM_RELATION', 'task_board_item_relation');
 define('TASK_ITEM_HISTORY', 'task_board_item_history');
 define('TASK_ITEM_COMMENT', 'task_board_item_comment');
 define('TASK_ITEM_COMMENT_REPLY', 'task_board_comment_reply');
-define('TASK_SHEETS', 'task_sheets_column');
 
 
 

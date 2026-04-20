@@ -2650,7 +2650,7 @@ $(document).on("click", "#taskItemDetailDescriptionSaveBtn", function () {
 
 $(document).on("click", "#taskItemDetailDescriptionCancelBtn", function () {
   var originalDescription = String(
-    itemDetailModalState.initialDescription || ""
+    itemDetailModalState.initialDescription || "",
   );
   writeDescriptionToInputField(originalDescription);
   if (typeof window.setDescriptionEditorContent === "function") {
