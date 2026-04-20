@@ -3525,12 +3525,14 @@ function buildCardFieldRowsHtml($card) {
       "</option>";
   }
 
-  if (currentParentId > 0 && !hasCurrentParentOption && parentDisplay) {
+  if (currentParentId > 0 && !hasCurrentParentOption) {
+    var fallbackParentDisplay =
+      parentDisplay || buildWorkItemKey(currentParentId);
     parentOptionsHtml +=
       '<option value="' +
       currentParentId +
       '" selected>' +
-      escHtml(parentDisplay) +
+      escHtml(String(fallbackParentDisplay || "").trim()) +
       "</option>";
   }
 

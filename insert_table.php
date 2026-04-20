@@ -1404,8 +1404,7 @@ if ($conn->select_db($db_cms)) {
         `update_date` DATE DEFAULT NULL,
         `update_time` TIME DEFAULT NULL,
         `status` CHAR(1) NOT NULL DEFAULT 'A',
-        KEY `idx_task_item_comment_item` (`item_id`),
-        KEY `idx_task_item_comment_created` (`create_date`,`create_time`)
+        KEY `idx_task_item_comment_main` (`item_id`, `status`, `create_date`, `create_time`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
     if ($conn->query($createTaskItemCommentSql)) {
@@ -1428,15 +1427,61 @@ if ($conn->select_db($db_cms)) {
         `update_date` DATE DEFAULT NULL,
         `update_time` TIME DEFAULT NULL,
         `status` CHAR(1) NOT NULL DEFAULT 'A',
-        KEY `idx_task_item_comment_reply_item` (`item_id`),
-        KEY `idx_task_item_comment_reply_comment` (`comment_id`),
-        KEY `idx_task_item_comment_reply_created` (`create_date`,`create_time`)
+        KEY `idx_task_item_comment_reply_main` (`comment_id`, `status`, `create_date`, `create_time`),
+        KEY `idx_task_item_comment_reply_item` (`item_id`, `status`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
     if ($conn->query($createTaskItemCommentReplySql)) {
         echo "<p style='color:green;'>Verified table `" . TASK_ITEM_COMMENT_REPLY . "` for task item comment replies.</p>";
     } else {
         echo "<p style='color:red;'>Failed creating `" . TASK_ITEM_COMMENT_REPLY . "`: " . $conn->error . "</p>";
+    }
+
+    // MIGRATION: Update indexes for existing Task Item Comment tables
+
+    // 1. Migration for TASK_ITEM_COMMENT
+    $checkCommentIdx = $conn->query("SHOW INDEX FROM `" . TASK_ITEM_COMMENT . "` WHERE Key_name = 'idx_task_item_comment_main'");
+    if ($checkCommentIdx && $checkCommentIdx->num_rows === 0) {
+        // Drop old legacy indexes (using @ to suppress errors in case they don't exist)
+        @$conn->query("ALTER TABLE `" . TASK_ITEM_COMMENT . "` DROP INDEX `idx_task_item_comment_item`");
+        @$conn->query("ALTER TABLE `" . TASK_ITEM_COMMENT . "` DROP INDEX `idx_task_item_comment_created`");
+        
+        // Add new optimized composite index
+        $conn->query("ALTER TABLE `" . TASK_ITEM_COMMENT . "` ADD INDEX `idx_task_item_comment_main` (`item_id`, `status`, `create_date`, `create_time`)");
+    }
+
+    // 2. Migration for TASK_ITEM_COMMENT_REPLY
+    $checkReplyIdx = $conn->query("SHOW INDEX FROM `" . TASK_ITEM_COMMENT_REPLY . "` WHERE Key_name = 'idx_task_item_comment_reply_main'");
+    if ($checkReplyIdx && $checkReplyIdx->num_rows === 0) {
+        // Drop old legacy indexes
+        @$conn->query("ALTER TABLE `" . TASK_ITEM_COMMENT_REPLY . "` DROP INDEX `idx_task_item_comment_reply_item`");
+        @$conn->query("ALTER TABLE `" . TASK_ITEM_COMMENT_REPLY . "` DROP INDEX `idx_task_item_comment_reply_comment`");
+        @$conn->query("ALTER TABLE `" . TASK_ITEM_COMMENT_REPLY . "` DROP INDEX `idx_task_item_comment_reply_created`");
+        
+        // Add new optimized composite indexes
+        $conn->query("ALTER TABLE `" . TASK_ITEM_COMMENT_REPLY . "` ADD INDEX `idx_task_item_comment_reply_main` (`comment_id`, `status`, `create_date`, `create_time`)");
+        $conn->query("ALTER TABLE `" . TASK_ITEM_COMMENT_REPLY . "` ADD INDEX `idx_task_item_comment_reply_item` (`item_id`, `status`)");
+    }
+
+    $createTaskSheetsSql = "CREATE TABLE IF NOT EXISTS `" . TASK_SHEETS . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `user_id` INT NOT NULL,
+        `column_key` VARCHAR(120) NOT NULL,
+        `sort_order` INT NOT NULL DEFAULT 0,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_task_sheets_user` (`user_id`, `status`, `sort_order`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createTaskSheetsSql)) {
+        echo "<p style='color:green;'>Verified table `" . TASK_SHEETS . "` for sheets column config.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . TASK_SHEETS . "`: " . $conn->error . "</p>";
     }
 
     $seedWorkTypeSql = "INSERT IGNORE INTO `" . TASK_WORK_TYPE . "` (`name`, `svg_icon`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
