@@ -31,8 +31,6 @@
   var replyDraftTimerByCommentId = {};
   var descriptionDraftTimer = 0;
   var draftItemContextId = 0;
-  var descriptionDraftClearedByUser = false; // set when user explicitly saves or cancels
-  var capturedInitialDescription = ""; // captured at modal open, before task_board.js clears it
   var simpleLinkDialogState = {
     editor: null,
     defaultText: "",
@@ -1042,24 +1040,8 @@
   }
 
   function flushDescriptionDraftNow() {
-    // If the user explicitly saved or cancelled, never re-save the draft on close
-    if (descriptionDraftClearedByUser) {
-      clearDraftCookie(getDescriptionDraftKey());
-      clearDraftNoticeFlag(getDescriptionDraftNoticeKey());
-      return false;
-    }
-
     var html = getDescriptionEditorHtml();
     if (hasCommentContent(html)) {
-      // Don't save draft if content matches the original description captured at modal open
-      if (
-        normalizeHtmlForComparison(html) ===
-        normalizeHtmlForComparison(capturedInitialDescription)
-      ) {
-        clearDraftCookie(getDescriptionDraftKey());
-        clearDraftNoticeFlag(getDescriptionDraftNoticeKey());
-        return false;
-      }
       setDraftCookie(getDescriptionDraftKey(), html);
       return true;
     }
@@ -1067,13 +1049,6 @@
     clearDraftCookie(getDescriptionDraftKey());
     clearDraftNoticeFlag(getDescriptionDraftNoticeKey());
     return false;
-  }
-
-  function normalizeHtmlForComparison(html) {
-    if (!html) return "";
-    var tmp = document.createElement("div");
-    tmp.innerHTML = String(html);
-    return (tmp.innerHTML || "").replace(/\s+/g, " ").trim();
   }
 
   function scheduleCommentDraftSave() {
@@ -1202,18 +1177,8 @@
       descriptionDraftTimer = 0;
       var html = getDescriptionEditorHtml();
       if (hasCommentContent(html)) {
-        // Don't save draft if content matches the original description (captured at modal open)
-        var initial = capturedInitialDescription;
-        if (
-          normalizeHtmlForComparison(html) ===
-          normalizeHtmlForComparison(initial)
-        ) {
-          clearDraftCookie(getDescriptionDraftKey());
-          clearDraftNoticeFlag(getDescriptionDraftNoticeKey());
-        } else {
-          setDraftCookie(getDescriptionDraftKey(), html);
-          clearDraftNoticeFlag(getDescriptionDraftNoticeKey());
-        }
+        setDraftCookie(getDescriptionDraftKey(), html);
+        clearDraftNoticeFlag(getDescriptionDraftNoticeKey());
       } else {
         clearDraftCookie(getDescriptionDraftKey());
         clearDraftNoticeFlag(getDescriptionDraftNoticeKey());
@@ -1223,7 +1188,6 @@
   }
 
   function clearDescriptionDraft() {
-    descriptionDraftClearedByUser = true;
     clearDraftCookie(getDescriptionDraftKey());
     clearDraftNoticeFlag(getDescriptionDraftNoticeKey());
     updateDescriptionDraftNotice();
@@ -2802,10 +2766,6 @@
 
   $(document).on("shown.bs.modal", "#taskItemDetailModal", function () {
     draftItemContextId = Number(itemDetailModalState.itemId || 0);
-    descriptionDraftClearedByUser = false; // reset on each new modal open
-    capturedInitialDescription = String(
-      itemDetailModalState.initialDescription || ""
-    );
     ensureCommentEditorReady().then(function () {
       setCommentComposerVisible(false, true, false);
       updateCommentActionButtons();
