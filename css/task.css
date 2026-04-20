@@ -4302,6 +4302,7 @@ body.task-local-sidebar-open
   display: flex;
   flex-wrap: wrap;
   gap: 0.3rem;
+  text-transform: none !important;
 }
 
 .task-item-detail-label-chip {
@@ -4341,6 +4342,7 @@ body.task-local-sidebar-open
   align-items: center;
   justify-content: space-between;
   color: #2f425c;
+  text-transform: none !important;
 }
 
 .task-item-detail-status-dropdown-btn:hover,

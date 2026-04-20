@@ -176,6 +176,35 @@ function applyBoardViewSettingsToCard($card) {
 
   if (rowsHtml) {
     $fieldList.html(rowsHtml).removeClass("d-none");
+
+    // Ensure parent dropdown reflects the card's current parent relation.
+    var currentParentId = Number($card.attr("data-parent-item-id") || 0);
+    var $parentSelect = $fieldList.find(".task-item-parent-select").first();
+    if ($parentSelect.length) {
+      $parentSelect.val(String(currentParentId));
+
+      // If current parent option is missing, inject a selected fallback option.
+      if (String($parentSelect.val() || "") !== String(currentParentId)) {
+        var parentDisplay = String(
+          $card.attr("data-parent-display") || "",
+        ).trim();
+        if (currentParentId > 0) {
+          if (!parentDisplay) {
+            parentDisplay = buildWorkItemKey(currentParentId);
+          }
+          if (parentDisplay) {
+            $parentSelect.append(
+              $("<option></option>")
+                .val(String(currentParentId))
+                .text(parentDisplay),
+            );
+            $parentSelect.val(String(currentParentId));
+          }
+        } else {
+          $parentSelect.val("0");
+        }
+      }
+    }
   } else {
     $fieldList.addClass("d-none").empty();
   }
@@ -1318,6 +1347,8 @@ function applyDetailFieldVisibility() {
     .trim()
     .toLowerCase();
   var isEpic = workType === "epic";
+  var childInfo = normalizeChildWorkItems(itemDetailModalState.childWorkItems);
+  var hasChildItems = Number(childInfo.total || 0) > 0;
   var epicFields = {
     time_tracking: true,
     assignee: true,
@@ -1348,9 +1379,11 @@ function applyDetailFieldVisibility() {
     },
   );
 
-  // For epics, hide the child items section (only show its own work item id)
-  $("#taskItemChildWorkItemsSection").toggleClass("d-none", isEpic);
-  if (!isEpic) {
+  // Show child section only for items that actually have children.
+  // This includes Epic parent items with child records.
+  var showChildSection = hasChildItems;
+  $("#taskItemChildWorkItemsSection").toggleClass("d-none", !showChildSection);
+  if (showChildSection) {
     setChildWorkItemsCollapsed(false);
   }
 }
@@ -2161,6 +2194,7 @@ function saveItemDetailsFromModal(closeAfterSave, options) {
           detail.child_work_items,
         );
         renderChildWorkItemsSection();
+        applyDetailFieldVisibility();
         renderDetailTimeTracking(
           detail,
           Number($("#taskItemDetailEstimateValueInput").val() || 0),
