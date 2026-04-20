@@ -208,13 +208,13 @@ if (!function_exists('taskGetItemHistory')) {
         }
 
         $rows = array();
-        $sql = "SELECT h.id,h.event_type,h.field_name,h.from_value,h.to_value,h.remark,h.create_by,h.create_date,h.create_time,
-                       COALESCE(NULLIF(TRIM(u.name), ''), NULLIF(TRIM(u.username), ''), h.create_by, 'User') AS actor_name
-                FROM " . TASK_ITEM_HISTORY . " h
-                LEFT JOIN " . USR_USER . " u ON u.id = h.create_by
-                WHERE h.item_id='" . $itemId . "' AND h.status='A'
-                ORDER BY h.id DESC
-                LIMIT " . $limit;
+        $historyRows = array();
+        $actorIds = array();
+        $sql = "SELECT id,event_type,field_name,from_value,to_value,remark,create_by,create_date,create_time
+            FROM " . TASK_ITEM_HISTORY . "
+            WHERE item_id='" . $itemId . "' AND status='A'
+            ORDER BY id DESC
+            LIMIT " . $limit;
 
         $rst = mysqli_query($connect, $sql);
         if (!$rst) {
@@ -222,6 +222,13 @@ if (!function_exists('taskGetItemHistory')) {
         }
 
         while ($row = $rst->fetch_assoc()) {
+            $historyRows[] = $row;
+            $actorIds[] = isset($row['create_by']) ? (int) $row['create_by'] : 0;
+        }
+
+        $actorMap = taskFetchUserDisplayMap($connect, $actorIds, false);
+
+        foreach ($historyRows as $row) {
             $eventType = isset($row['event_type']) ? trim((string) $row['event_type']) : '';
             if ($eventType === 'comment') {
                 continue;
@@ -246,6 +253,9 @@ if (!function_exists('taskGetItemHistory')) {
                 }
             }
 
+            $createById = isset($row['create_by']) ? (int) $row['create_by'] : 0;
+            $actorName = isset($actorMap[$createById]) ? (string) $actorMap[$createById] : 'User';
+
             $rows[] = array(
                 'id' => isset($row['id']) ? (int) $row['id'] : 0,
                 'event_type' => $eventType,
@@ -253,7 +263,7 @@ if (!function_exists('taskGetItemHistory')) {
                 'from_value' => isset($row['from_value']) ? (string) $row['from_value'] : '',
                 'to_value' => isset($row['to_value']) ? (string) $row['to_value'] : '',
                 'remark' => $remark,
-                'actor_name' => isset($row['actor_name']) ? (string) $row['actor_name'] : 'User',
+                'actor_name' => $actorName,
                 'create_by' => isset($row['create_by']) ? (string) $row['create_by'] : '',
                 'create_date' => isset($row['create_date']) ? (string) $row['create_date'] : '',
                 'create_time' => isset($row['create_time']) ? (string) $row['create_time'] : '',
@@ -314,20 +324,27 @@ if (!function_exists('taskGetItemCommentRepliesMap')) {
 
         $idSql = implode(',', $commentIds);
         $limit = max(100, min(5000, count($commentIds) * 80));
-        $sql = "SELECT r.id,r.item_id,r.comment_id,r.reply_html,r.reply_text,r.create_by,r.create_date,r.create_time,r.update_date,r.update_time,
-                       COALESCE(NULLIF(TRIM(u.name), ''), NULLIF(TRIM(u.username), ''), r.create_by, 'User') AS actor_name
-                FROM " . TASK_ITEM_COMMENT_REPLY . " r
-                LEFT JOIN " . USR_USER . " u ON u.id = r.create_by
-                WHERE r.item_id='" . $itemId . "' AND r.status='A' AND r.comment_id IN (" . $idSql . ")
-                ORDER BY r.id ASC
-                LIMIT " . (int) $limit;
+        $sql = "SELECT id,item_id,comment_id,reply_html,reply_text,create_by,create_date,create_time,update_date,update_time
+            FROM " . TASK_ITEM_COMMENT_REPLY . "
+            WHERE item_id='" . $itemId . "' AND status='A' AND comment_id IN (" . $idSql . ")
+            ORDER BY id ASC
+            LIMIT " . (int) $limit;
 
         $rst = mysqli_query($connect, $sql);
         if (!$rst) {
             return $map;
         }
 
+        $replyRows = array();
+        $actorIds = array();
         while ($row = $rst->fetch_assoc()) {
+            $replyRows[] = $row;
+            $actorIds[] = isset($row['create_by']) ? (int) $row['create_by'] : 0;
+        }
+
+        $actorMap = taskFetchUserDisplayMap($connect, $actorIds, false);
+
+        foreach ($replyRows as $row) {
             $commentId = isset($row['comment_id']) ? (int) $row['comment_id'] : 0;
             if ($commentId <= 0) {
                 continue;
@@ -341,6 +358,8 @@ if (!function_exists('taskGetItemCommentRepliesMap')) {
             $hasUpdateTime = ($updateTime !== '' && $updateTime !== '00:00:00');
             $isEdited = ($hasUpdateDate || $hasUpdateTime) && ($updateDate !== $createDate || $updateTime !== $createTime);
 
+            $createById = isset($row['create_by']) ? (int) $row['create_by'] : 0;
+
             if (!isset($map[$commentId])) {
                 $map[$commentId] = array();
             }
@@ -351,7 +370,7 @@ if (!function_exists('taskGetItemCommentRepliesMap')) {
                 'comment_id' => $commentId,
                 'reply_html' => isset($row['reply_html']) ? (string) $row['reply_html'] : '',
                 'reply_text' => isset($row['reply_text']) ? (string) $row['reply_text'] : '',
-                'actor_name' => isset($row['actor_name']) ? (string) $row['actor_name'] : 'User',
+                'actor_name' => isset($actorMap[$createById]) ? (string) $actorMap[$createById] : 'User',
                 'create_by' => isset($row['create_by']) ? (string) $row['create_by'] : '',
                 'create_date' => $createDate,
                 'create_time' => $createTime,
@@ -377,14 +396,14 @@ if (!function_exists('taskGetItemComments')) {
         }
 
         $rows = array();
+        $commentRows = array();
         $commentIds = array();
-        $sql = "SELECT c.id,c.item_id,c.comment_html,c.comment_text,c.create_by,c.create_date,c.create_time,c.update_date,c.update_time,c.status AS row_status,
-                       COALESCE(NULLIF(TRIM(u.name), ''), NULLIF(TRIM(u.username), ''), c.create_by, 'User') AS actor_name
-                FROM " . TASK_ITEM_COMMENT . " c
-                LEFT JOIN " . USR_USER . " u ON u.id = c.create_by
-            WHERE c.item_id='" . $itemId . "' AND c.status IN ('A','D')
-                ORDER BY c.id DESC
-                LIMIT " . $limit;
+        $actorIds = array();
+        $sql = "SELECT id,item_id,comment_html,comment_text,create_by,create_date,create_time,update_date,update_time,status AS row_status
+            FROM " . TASK_ITEM_COMMENT . "
+            WHERE item_id='" . $itemId . "' AND status IN ('A','D')
+            ORDER BY id DESC
+            LIMIT " . $limit;
 
         $rst = mysqli_query($connect, $sql);
         if (!$rst) {
@@ -392,6 +411,13 @@ if (!function_exists('taskGetItemComments')) {
         }
 
         while ($row = $rst->fetch_assoc()) {
+            $commentRows[] = $row;
+            $actorIds[] = isset($row['create_by']) ? (int) $row['create_by'] : 0;
+        }
+
+        $actorMap = taskFetchUserDisplayMap($connect, $actorIds, false);
+
+        foreach ($commentRows as $row) {
             $commentId = isset($row['id']) ? (int) $row['id'] : 0;
             $createDate = isset($row['create_date']) ? (string) $row['create_date'] : '';
             $createTime = isset($row['create_time']) ? (string) $row['create_time'] : '';
@@ -400,6 +426,7 @@ if (!function_exists('taskGetItemComments')) {
             $hasUpdateDate = ($updateDate !== '' && $updateDate !== '0000-00-00');
             $hasUpdateTime = ($updateTime !== '' && $updateTime !== '00:00:00');
             $isEdited = ($hasUpdateDate || $hasUpdateTime) && ($updateDate !== $createDate || $updateTime !== $createTime);
+            $createById = isset($row['create_by']) ? (int) $row['create_by'] : 0;
 
             if ($commentId > 0) {
                 $commentIds[] = $commentId;
@@ -411,7 +438,7 @@ if (!function_exists('taskGetItemComments')) {
                 'comment_html' => isset($row['comment_html']) ? (string) $row['comment_html'] : '',
                 'comment_text' => isset($row['comment_text']) ? (string) $row['comment_text'] : '',
                 'is_deleted' => (isset($row['row_status']) && (string) $row['row_status'] === 'D') ? 1 : 0,
-                'actor_name' => isset($row['actor_name']) ? (string) $row['actor_name'] : 'User',
+                'actor_name' => isset($actorMap[$createById]) ? (string) $actorMap[$createById] : 'User',
                 'create_by' => isset($row['create_by']) ? (string) $row['create_by'] : '',
                 'create_date' => $createDate,
                 'create_time' => $createTime,
@@ -1253,6 +1280,156 @@ if (!function_exists('taskGetStatusLabels')) {
     }
 }
 
+if (!function_exists('taskUniquePositiveIntIds')) {
+    function taskUniquePositiveIntIds($values)
+    {
+        $ids = array_values(array_unique(array_map('intval', (array) $values)));
+        return array_values(array_filter($ids, function ($id) {
+            return $id > 0;
+        }));
+    }
+}
+
+if (!function_exists('taskFetchUserDisplayMap')) {
+    function taskFetchUserDisplayMap($connect, $userIds, $onlyActive = false)
+    {
+        $map = array();
+        $ids = taskUniquePositiveIntIds($userIds);
+        if (empty($ids)) {
+            return $map;
+        }
+
+        $sql = "SELECT id,name,username FROM " . USR_USER . " WHERE id IN (" . implode(',', $ids) . ")";
+        if ($onlyActive) {
+            $sql .= " AND status='A'";
+        }
+
+        $rst = mysqli_query($connect, $sql);
+        if (!$rst) {
+            return $map;
+        }
+
+        while ($row = $rst->fetch_assoc()) {
+            $id = isset($row['id']) ? (int) $row['id'] : 0;
+            if ($id <= 0) {
+                continue;
+            }
+
+            $name = isset($row['name']) ? trim((string) $row['name']) : '';
+            $username = isset($row['username']) ? trim((string) $row['username']) : '';
+            $map[$id] = $name !== '' ? $name : ($username !== '' ? $username : 'User');
+        }
+
+        return $map;
+    }
+}
+
+if (!function_exists('taskFetchWorkTypeInfoMap')) {
+    function taskFetchWorkTypeInfoMap($connect, $workTypeIds, $onlyActive = true)
+    {
+        $map = array();
+        $ids = taskUniquePositiveIntIds($workTypeIds);
+        if (empty($ids)) {
+            return $map;
+        }
+
+        $sql = "SELECT id,name,svg_icon FROM " . TASK_WORK_TYPE . " WHERE id IN (" . implode(',', $ids) . ")";
+        if ($onlyActive) {
+            $sql .= " AND status='A'";
+        }
+
+        $rst = mysqli_query($connect, $sql);
+        if (!$rst) {
+            return $map;
+        }
+
+        while ($row = $rst->fetch_assoc()) {
+            $id = isset($row['id']) ? (int) $row['id'] : 0;
+            if ($id <= 0) {
+                continue;
+            }
+
+            $name = isset($row['name']) ? trim((string) $row['name']) : 'Task';
+            if ($name === '') {
+                $name = 'Task';
+            }
+
+            $map[$id] = array(
+                'name' => $name,
+                'svg_icon' => taskNormalizeWorkTypeSvgIcon(isset($row['svg_icon']) ? $row['svg_icon'] : '', $name),
+            );
+        }
+
+        return $map;
+    }
+}
+
+if (!function_exists('taskFetchProjectKeyMap')) {
+    function taskFetchProjectKeyMap($connect, $projectKeyIds, $onlyActive = true)
+    {
+        $map = array();
+        $ids = taskUniquePositiveIntIds($projectKeyIds);
+        if (empty($ids)) {
+            return $map;
+        }
+
+        $sql = "SELECT id,project_key FROM " . TASK_PROJECT_KEY . " WHERE id IN (" . implode(',', $ids) . ")";
+        if ($onlyActive) {
+            $sql .= " AND status='A'";
+        }
+
+        $rst = mysqli_query($connect, $sql);
+        if (!$rst) {
+            return $map;
+        }
+
+        while ($row = $rst->fetch_assoc()) {
+            $id = isset($row['id']) ? (int) $row['id'] : 0;
+            if ($id <= 0) {
+                continue;
+            }
+            $map[$id] = isset($row['project_key']) ? taskNormalizeProjectKey($row['project_key']) : '';
+        }
+
+        return $map;
+    }
+}
+
+if (!function_exists('taskFetchColumnInfoMap')) {
+    function taskFetchColumnInfoMap($connect, $columnIds, $onlyActive = true)
+    {
+        $map = array();
+        $ids = taskUniquePositiveIntIds($columnIds);
+        if (empty($ids)) {
+            return $map;
+        }
+
+        $sql = "SELECT id,name,sort_order FROM " . TASK_COLUMN . " WHERE id IN (" . implode(',', $ids) . ")";
+        if ($onlyActive) {
+            $sql .= " AND status='A'";
+        }
+
+        $rst = mysqli_query($connect, $sql);
+        if (!$rst) {
+            return $map;
+        }
+
+        while ($row = $rst->fetch_assoc()) {
+            $id = isset($row['id']) ? (int) $row['id'] : 0;
+            if ($id <= 0) {
+                continue;
+            }
+
+            $map[$id] = array(
+                'name' => isset($row['name']) ? (string) $row['name'] : '',
+                'sort_order' => isset($row['sort_order']) ? (int) $row['sort_order'] : 0,
+            );
+        }
+
+        return $map;
+    }
+}
+
 if (!function_exists('taskParseCsvIdList')) {
     function taskParseCsvIdList($rawValue)
     {
@@ -1362,45 +1539,54 @@ if (!function_exists('taskGetEpicChildWorkItemsSummary')) {
             $lastColumnSortOrder = isset($lastColumnRow['max_sort_order']) ? (int) $lastColumnRow['max_sort_order'] : 0;
         }
 
-        $sql = "SELECT c.id, c.title, c.priority, c.assignee_user_id,
-                       c.sort_order,
-                       c.time_tracking,
-                       col.name AS column_name,
-                       col.sort_order AS column_sort_order,
-                       pk.project_key AS item_project_key,
-                       COALESCE(NULLIF(TRIM(u.name), ''), u.username, '') AS assignee_name
-                FROM " . TASK_ITEM . " c
-                LEFT JOIN " . TASK_COLUMN . " col ON col.id = c.column_id AND col.status='A'
-                LEFT JOIN " . TASK_PROJECT_KEY . " pk ON pk.id = c.project_key_id AND pk.status='A'
-                LEFT JOIN " . USR_USER . " u ON u.id = c.assignee_user_id AND u.status='A'
-                WHERE c.status='A' AND (
-                    c.parent_item_id='" . $epicItemId . "'
-                    OR c.id IN (
+        $sql = "SELECT id,title,priority,assignee_user_id,sort_order,time_tracking,column_id,project_key_id
+                FROM " . TASK_ITEM . "
+                WHERE status='A' AND (
+                    parent_item_id='" . $epicItemId . "'
+                    OR id IN (
                         SELECT r.child_board_item_id
                         FROM " . TASK_ITEM_RELATION . " r
                         WHERE r.parent_board_item_id='" . $epicItemId . "' AND r.status='A'
                     )
                 )
-                ORDER BY c.sort_order ASC, c.id ASC";
+                ORDER BY sort_order ASC, id ASC";
 
         $rst = mysqli_query($connect, $sql);
         if (!$rst) {
             return $summary;
         }
 
+        $itemRows = array();
+        $columnIds = array();
+        $projectKeyIds = array();
+        $assigneeIds = array();
         while ($row = $rst->fetch_assoc()) {
+            $itemRows[] = $row;
+            $columnIds[] = isset($row['column_id']) ? (int) $row['column_id'] : 0;
+            $projectKeyIds[] = isset($row['project_key_id']) ? (int) $row['project_key_id'] : 0;
+            $assigneeIds[] = isset($row['assignee_user_id']) ? (int) $row['assignee_user_id'] : 0;
+        }
+
+        $columnMap = taskFetchColumnInfoMap($connect, $columnIds, true);
+        $projectKeyMap = taskFetchProjectKeyMap($connect, $projectKeyIds, true);
+        $assigneeMap = taskFetchUserDisplayMap($connect, $assigneeIds, true);
+
+        foreach ($itemRows as $row) {
             $itemId = isset($row['id']) ? (int) $row['id'] : 0;
             if ($itemId <= 0) {
                 continue;
             }
 
-            $projectKey = isset($row['item_project_key']) ? taskNormalizeProjectKey($row['item_project_key']) : '';
+            $projectKeyId = isset($row['project_key_id']) ? (int) $row['project_key_id'] : 0;
+            $projectKey = isset($projectKeyMap[$projectKeyId]) ? (string) $projectKeyMap[$projectKeyId] : '';
             if ($projectKey === '') {
                 $projectKey = taskNormalizeProjectKey($defaultProjectKey);
             }
 
-            $statusName = isset($row['column_name']) ? trim((string) $row['column_name']) : '';
-            $columnSortOrder = isset($row['column_sort_order']) ? (int) $row['column_sort_order'] : 0;
+            $columnId = isset($row['column_id']) ? (int) $row['column_id'] : 0;
+            $columnInfo = isset($columnMap[$columnId]) ? $columnMap[$columnId] : array('name' => '', 'sort_order' => 0);
+            $statusName = isset($columnInfo['name']) ? trim((string) $columnInfo['name']) : '';
+            $columnSortOrder = isset($columnInfo['sort_order']) ? (int) $columnInfo['sort_order'] : 0;
             $isDone = taskIsDoneColumnName($statusName)
                 || ($lastColumnSortOrder > 0 && $columnSortOrder >= $lastColumnSortOrder);
             if ($isDone) {
@@ -1411,13 +1597,15 @@ if (!function_exists('taskGetEpicChildWorkItemsSummary')) {
             $timeTrackingSeconds = taskParseWorklogDurationSeconds($timeTracking);
             $summary['time_tracking_seconds'] += $timeTrackingSeconds;
 
+            $assigneeUserId = isset($row['assignee_user_id']) ? (int) $row['assignee_user_id'] : 0;
+
             $summary['items'][] = array(
                 'id' => $itemId,
                 'work_item_key' => taskBuildWorkItemKey($projectKey, $itemId),
                 'title' => isset($row['title']) ? (string) $row['title'] : '',
                 'priority' => taskNormalizePriority(isset($row['priority']) ? $row['priority'] : 'Medium'),
-                'assignee_user_id' => isset($row['assignee_user_id']) ? (int) $row['assignee_user_id'] : 0,
-                'assignee_name' => isset($row['assignee_name']) ? (string) $row['assignee_name'] : '',
+                'assignee_user_id' => $assigneeUserId,
+                'assignee_name' => isset($assigneeMap[$assigneeUserId]) ? (string) $assigneeMap[$assigneeUserId] : '',
                 'status_name' => $statusName,
                 'is_done' => $isDone ? 1 : 0,
                 'time_tracking' => $timeTracking !== '' ? $timeTracking : 'No time logged',
@@ -1779,32 +1967,76 @@ if (!function_exists('taskGetEpicParentOptions')) {
         $projectKeySetting = taskGetProjectKeySetting($connect);
         $defaultProjectKey = isset($projectKeySetting['project_key']) ? (string) $projectKeySetting['project_key'] : '';
 
-        $sql = "SELECT i.id, i.title, i.project_key_id, pk.project_key AS item_project_key
-                FROM " . TASK_ITEM . " i
-                INNER JOIN " . TASK_WORK_TYPE . " wt ON wt.id = i.work_type_id AND wt.status='A'
-                LEFT JOIN " . TASK_PROJECT_KEY . " pk ON pk.id = i.project_key_id AND pk.status='A'
-                WHERE i.status='A' AND LOWER(wt.name)='epic'";
-        if ($excludeChildItemId > 0) {
-            $sql .= " AND i.id <> '" . $excludeChildItemId . "'";
+        $allWorkTypes = array();
+        $epicTypeIds = array();
+        $workTypeRst = mysqli_query($connect, "SELECT id,name,svg_icon FROM " . TASK_WORK_TYPE . " WHERE status='A'");
+        if ($workTypeRst) {
+            while ($wt = $workTypeRst->fetch_assoc()) {
+                $wtId = isset($wt['id']) ? (int) $wt['id'] : 0;
+                if ($wtId <= 0) {
+                    continue;
+                }
+                $wtName = isset($wt['name']) ? trim((string) $wt['name']) : 'Task';
+                if ($wtName === '') {
+                    $wtName = 'Task';
+                }
+                $allWorkTypes[$wtId] = array(
+                    'name' => $wtName,
+                    'svg_icon' => taskNormalizeWorkTypeSvgIcon(isset($wt['svg_icon']) ? $wt['svg_icon'] : '', $wtName),
+                );
+                if (strtolower($wtName) === 'epic') {
+                    $epicTypeIds[] = $wtId;
+                }
+            }
         }
-        $sql .= " ORDER BY i.id DESC";
+
+        $epicTypeIds = taskUniquePositiveIntIds($epicTypeIds);
+        if (empty($epicTypeIds)) {
+            return $options;
+        }
+
+        $sql = "SELECT id,title,project_key_id,work_type_id
+                FROM " . TASK_ITEM . "
+                WHERE status='A' AND work_type_id IN (" . implode(',', $epicTypeIds) . ")";
+        if ($excludeChildItemId > 0) {
+            $sql .= " AND id <> '" . $excludeChildItemId . "'";
+        }
+        $sql .= " ORDER BY id DESC";
 
         $rst = mysqli_query($connect, $sql);
         if (!$rst) {
             return $options;
         }
 
+        $rows = array();
+        $projectKeyIds = array();
         while ($row = $rst->fetch_assoc()) {
+            $rows[] = $row;
+            $projectKeyIds[] = isset($row['project_key_id']) ? (int) $row['project_key_id'] : 0;
+        }
+
+        $projectKeyMap = taskFetchProjectKeyMap($connect, $projectKeyIds, true);
+
+        foreach ($rows as $row) {
             $itemId = isset($row['id']) ? (int) $row['id'] : 0;
-            $itemKey = isset($row['item_project_key']) ? taskNormalizeProjectKey($row['item_project_key']) : '';
+            $projectKeyId = isset($row['project_key_id']) ? (int) $row['project_key_id'] : 0;
+            $itemKey = isset($projectKeyMap[$projectKeyId]) ? (string) $projectKeyMap[$projectKeyId] : '';
             if ($itemKey === '') {
                 $itemKey = taskNormalizeProjectKey($defaultProjectKey);
             }
+
+            $workTypeId = isset($row['work_type_id']) ? (int) $row['work_type_id'] : 0;
+            $workTypeInfo = isset($allWorkTypes[$workTypeId]) ? $allWorkTypes[$workTypeId] : array(
+                'name' => 'Epic',
+                'svg_icon' => taskDefaultWorkTypeSvgIcon('Epic'),
+            );
 
             $options[] = array(
                 'id' => $itemId,
                 'title' => isset($row['title']) ? (string) $row['title'] : '',
                 'work_item_key' => taskBuildWorkItemKey($itemKey, $itemId),
+                'work_type_name' => isset($workTypeInfo['name']) ? (string) $workTypeInfo['name'] : 'Epic',
+                'work_type_svg_icon' => isset($workTypeInfo['svg_icon']) ? (string) $workTypeInfo['svg_icon'] : taskDefaultWorkTypeSvgIcon('Epic'),
             );
         }
 
@@ -1831,74 +2063,72 @@ if (!function_exists('taskGetParentRelationInfo')) {
         $projectKeySetting = taskGetProjectKeySetting($connect);
         $defaultProjectKey = isset($projectKeySetting['project_key']) ? (string) $projectKeySetting['project_key'] : '';
 
-        $sql = "SELECT r.parent_board_item_id,
-                       p.title AS parent_title,
-                  pk.project_key AS parent_project_key,
-                  COALESCE(NULLIF(TRIM(wt.name), ''), 'Task') AS parent_work_type_name,
-                  wt.svg_icon AS parent_work_type_svg_icon
-                FROM " . TASK_ITEM_RELATION . " r
-                INNER JOIN " . TASK_ITEM . " p ON p.id = r.parent_board_item_id AND p.status='A'
-                LEFT JOIN " . TASK_PROJECT_KEY . " pk ON pk.id = p.project_key_id AND pk.status='A'
-              LEFT JOIN " . TASK_WORK_TYPE . " wt ON wt.id = p.work_type_id AND wt.status='A'
-                WHERE r.child_board_item_id='" . $childItemId . "' AND r.status='A'
-                LIMIT 1";
-        $rst = mysqli_query($connect, $sql);
+        $buildParentInfo = function ($parentItemId) use ($connect, $defaultProjectKey, &$info) {
+            $parentItemId = (int) $parentItemId;
+            if ($parentItemId <= 0) {
+                return false;
+            }
+
+            $parentRst = mysqli_query(
+                $connect,
+                "SELECT id,title,project_key_id,work_type_id FROM " . TASK_ITEM . " WHERE id='" . $parentItemId . "' AND status='A' LIMIT 1"
+            );
+            if (!$parentRst || $parentRst->num_rows === 0) {
+                return false;
+            }
+
+            $parentRow = $parentRst->fetch_assoc();
+            $projectKeyId = isset($parentRow['project_key_id']) ? (int) $parentRow['project_key_id'] : 0;
+            $workTypeId = isset($parentRow['work_type_id']) ? (int) $parentRow['work_type_id'] : 0;
+            $projectKeyMap = taskFetchProjectKeyMap($connect, array($projectKeyId), true);
+            $workTypeMap = taskFetchWorkTypeInfoMap($connect, array($workTypeId), true);
+
+            $parentProjectKey = isset($projectKeyMap[$projectKeyId]) ? (string) $projectKeyMap[$projectKeyId] : '';
+            if ($parentProjectKey === '') {
+                $parentProjectKey = taskNormalizeProjectKey($defaultProjectKey);
+            }
+
+            $workTypeInfo = isset($workTypeMap[$workTypeId]) ? $workTypeMap[$workTypeId] : array(
+                'name' => 'Task',
+                'svg_icon' => taskDefaultWorkTypeSvgIcon('Task'),
+            );
+
+            $parentKey = taskBuildWorkItemKey($parentProjectKey, $parentItemId);
+            $parentTitle = isset($parentRow['title']) ? trim((string) $parentRow['title']) : '';
+            $parentTypeName = isset($workTypeInfo['name']) ? (string) $workTypeInfo['name'] : 'Task';
+
+            $info['parent_item_id'] = $parentItemId;
+            $info['parent_work_item_key'] = $parentKey;
+            $info['parent_work_type_name'] = $parentTypeName;
+            $info['parent_work_type_svg_icon'] = isset($workTypeInfo['svg_icon']) ? (string) $workTypeInfo['svg_icon'] : taskDefaultWorkTypeSvgIcon($parentTypeName);
+            $info['parent_display'] = trim(($parentKey !== '' ? $parentKey . ' ' : '') . $parentTitle);
+            if ($info['parent_display'] === '') {
+                $info['parent_display'] = 'None';
+            }
+
+            return true;
+        };
+
+        $rst = mysqli_query(
+            $connect,
+            "SELECT parent_board_item_id FROM " . TASK_ITEM_RELATION . " WHERE child_board_item_id='" . $childItemId . "' AND status='A' LIMIT 1"
+        );
         if ($rst && $rst->num_rows > 0) {
             $row = $rst->fetch_assoc();
             $parentItemId = isset($row['parent_board_item_id']) ? (int) $row['parent_board_item_id'] : 0;
-            if ($parentItemId > 0) {
-                $parentProjectKey = isset($row['parent_project_key']) ? taskNormalizeProjectKey($row['parent_project_key']) : '';
-                if ($parentProjectKey === '') {
-                    $parentProjectKey = taskNormalizeProjectKey($defaultProjectKey);
-                }
-
-                $parentKey = taskBuildWorkItemKey($parentProjectKey, $parentItemId);
-                $parentTitle = isset($row['parent_title']) ? trim((string) $row['parent_title']) : '';
-                $parentTypeName = isset($row['parent_work_type_name']) ? (string) $row['parent_work_type_name'] : 'Task';
-                $info['parent_item_id'] = $parentItemId;
-                $info['parent_work_item_key'] = $parentKey;
-                $info['parent_work_type_name'] = $parentTypeName;
-                $info['parent_work_type_svg_icon'] = taskNormalizeWorkTypeSvgIcon(isset($row['parent_work_type_svg_icon']) ? $row['parent_work_type_svg_icon'] : '', $parentTypeName);
-                $info['parent_display'] = trim(($parentKey !== '' ? $parentKey . ' ' : '') . $parentTitle);
-                if ($info['parent_display'] === '') {
-                    $info['parent_display'] = 'None';
-                }
+            if ($buildParentInfo($parentItemId)) {
                 return $info;
             }
         }
 
-        $fallbackSql = "SELECT i.parent_item_id,
-                               p.title AS parent_title,
-                       pk.project_key AS parent_project_key,
-                       COALESCE(NULLIF(TRIM(wt.name), ''), 'Task') AS parent_work_type_name,
-                       wt.svg_icon AS parent_work_type_svg_icon
-                        FROM " . TASK_ITEM . " i
-                        LEFT JOIN " . TASK_ITEM . " p ON p.id = i.parent_item_id AND p.status='A'
-                        LEFT JOIN " . TASK_PROJECT_KEY . " pk ON pk.id = p.project_key_id AND pk.status='A'
-                   LEFT JOIN " . TASK_WORK_TYPE . " wt ON wt.id = p.work_type_id AND wt.status='A'
-                        WHERE i.id='" . $childItemId . "' AND i.status='A' LIMIT 1";
-        $fallbackRst = mysqli_query($connect, $fallbackSql);
+        $fallbackRst = mysqli_query(
+            $connect,
+            "SELECT parent_item_id FROM " . TASK_ITEM . " WHERE id='" . $childItemId . "' AND status='A' LIMIT 1"
+        );
         if ($fallbackRst && $fallbackRst->num_rows > 0) {
             $row = $fallbackRst->fetch_assoc();
             $parentItemId = isset($row['parent_item_id']) ? (int) $row['parent_item_id'] : 0;
-            if ($parentItemId > 0) {
-                $parentProjectKey = isset($row['parent_project_key']) ? taskNormalizeProjectKey($row['parent_project_key']) : '';
-                if ($parentProjectKey === '') {
-                    $parentProjectKey = taskNormalizeProjectKey($defaultProjectKey);
-                }
-
-                $parentKey = taskBuildWorkItemKey($parentProjectKey, $parentItemId);
-                $parentTitle = isset($row['parent_title']) ? trim((string) $row['parent_title']) : '';
-                $parentTypeName = isset($row['parent_work_type_name']) ? (string) $row['parent_work_type_name'] : 'Task';
-                $info['parent_item_id'] = $parentItemId;
-                $info['parent_work_item_key'] = $parentKey;
-                $info['parent_work_type_name'] = $parentTypeName;
-                $info['parent_work_type_svg_icon'] = taskNormalizeWorkTypeSvgIcon(isset($row['parent_work_type_svg_icon']) ? $row['parent_work_type_svg_icon'] : '', $parentTypeName);
-                $info['parent_display'] = trim(($parentKey !== '' ? $parentKey . ' ' : '') . $parentTitle);
-                if ($info['parent_display'] === '') {
-                    $info['parent_display'] = 'None';
-                }
-            }
+            $buildParentInfo($parentItemId);
         }
 
         return $info;
@@ -1922,19 +2152,33 @@ if (!function_exists('taskGetParentMapByChildIds')) {
         $sql = "SELECT child_board_item_id, parent_board_item_id
                 FROM " . TASK_ITEM_RELATION . "
                 WHERE status='A' AND child_board_item_id IN (" . $idSql . ")";
+        $foundChildIds = array();
         $rst = mysqli_query($connect, $sql);
         if ($rst) {
             while ($row = $rst->fetch_assoc()) {
                 $childId = isset($row['child_board_item_id']) ? (int) $row['child_board_item_id'] : 0;
                 $parentId = isset($row['parent_board_item_id']) ? (int) $row['parent_board_item_id'] : 0;
-                if ($childId > 0) {
+                if ($childId > 0 && $parentId > 0) {
                     $map[$childId] = $parentId;
+                    $foundChildIds[$childId] = 1;
                 }
             }
+        }
+
+        $missingChildIds = array();
+        foreach ($childIds as $childId) {
+            $childId = (int) $childId;
+            if ($childId > 0 && !isset($foundChildIds[$childId])) {
+                $missingChildIds[] = $childId;
+            }
+        }
+
+        if (empty($missingChildIds)) {
             return $map;
         }
 
-        $fallbackSql = "SELECT id,parent_item_id FROM " . TASK_ITEM . " WHERE status='A' AND id IN (" . $idSql . ")";
+        $missingIdSql = implode(',', $missingChildIds);
+        $fallbackSql = "SELECT id,parent_item_id FROM " . TASK_ITEM . " WHERE status='A' AND id IN (" . $missingIdSql . ")";
         $fallbackRst = mysqli_query($connect, $fallbackSql);
         if ($fallbackRst) {
             while ($row = $fallbackRst->fetch_assoc()) {
@@ -1959,17 +2203,16 @@ if (!function_exists('taskSetItemParentRelation')) {
             return array('ok' => 0, 'message' => 'Invalid parent link request.');
         }
 
-        $childSql = "SELECT i.id, wt.name AS work_type_name
-                     FROM " . TASK_ITEM . " i
-                     LEFT JOIN " . TASK_WORK_TYPE . " wt ON wt.id = i.work_type_id AND wt.status='A'
-                     WHERE i.id='" . $childItemId . "' AND i.status='A' LIMIT 1";
+        $childSql = "SELECT id,work_type_id FROM " . TASK_ITEM . " WHERE id='" . $childItemId . "' AND status='A' LIMIT 1";
         $childRst = mysqli_query($connect, $childSql);
         if (!$childRst || $childRst->num_rows === 0) {
             return array('ok' => 0, 'message' => 'Work item not found.');
         }
 
         $childRow = $childRst->fetch_assoc();
-        $childType = isset($childRow['work_type_name']) ? strtolower(trim((string) $childRow['work_type_name'])) : '';
+        $childWorkTypeId = isset($childRow['work_type_id']) ? (int) $childRow['work_type_id'] : 0;
+        $childWorkTypeMap = taskFetchWorkTypeInfoMap($connect, array($childWorkTypeId), true);
+        $childType = isset($childWorkTypeMap[$childWorkTypeId]['name']) ? strtolower(trim((string) $childWorkTypeMap[$childWorkTypeId]['name'])) : '';
         if ($childType === 'epic') {
             return array('ok' => 0, 'message' => 'Epic work item cannot be linked as child.');
         }
@@ -1981,17 +2224,16 @@ if (!function_exists('taskSetItemParentRelation')) {
                 return array('ok' => 0, 'message' => 'A work item cannot link itself as parent.');
             }
 
-            $parentSql = "SELECT i.id, wt.name AS work_type_name
-                          FROM " . TASK_ITEM . " i
-                          LEFT JOIN " . TASK_WORK_TYPE . " wt ON wt.id = i.work_type_id AND wt.status='A'
-                          WHERE i.id='" . $parentItemId . "' AND i.status='A' LIMIT 1";
+            $parentSql = "SELECT id,work_type_id FROM " . TASK_ITEM . " WHERE id='" . $parentItemId . "' AND status='A' LIMIT 1";
             $parentRst = mysqli_query($connect, $parentSql);
             if (!$parentRst || $parentRst->num_rows === 0) {
                 return array('ok' => 0, 'message' => 'Selected parent work item not found.');
             }
 
             $parentRow = $parentRst->fetch_assoc();
-            $parentType = isset($parentRow['work_type_name']) ? strtolower(trim((string) $parentRow['work_type_name'])) : '';
+            $parentWorkTypeId = isset($parentRow['work_type_id']) ? (int) $parentRow['work_type_id'] : 0;
+            $parentWorkTypeMap = taskFetchWorkTypeInfoMap($connect, array($parentWorkTypeId), true);
+            $parentType = isset($parentWorkTypeMap[$parentWorkTypeId]['name']) ? strtolower(trim((string) $parentWorkTypeMap[$parentWorkTypeId]['name'])) : '';
             if ($parentType !== 'epic') {
                 return array('ok' => 0, 'message' => 'Parent must be an Epic work item.');
             }
@@ -2142,36 +2384,21 @@ if (!function_exists('taskGetItemDetail')) {
             return array('ok' => 0, 'message' => 'Invalid work item request.');
         }
 
-        $sql = "SELECT i.id, i.column_id, i.title, i.description, i.assignee_user_id, i.reporter_user_id,
-                       i.priority, i.original_estimate, i.task_status, i.parent_item_id, i.time_tracking,
-                       i.due_date, i.start_date, i.amendement_date, i.amendement_time, i.second_amendement_date, i.second_amendement_time,
-                       i.create_date, i.update_date,
-                       COALESCE(NULLIF(TRIM(wt.name), ''), 'Task') AS work_type_name,
-                       wt.svg_icon AS work_type_svg_icon,
-                       pk.project_key AS item_project_key,
-                       COALESCE(NULLIF(TRIM(ua.name), ''), ua.username, '') AS assignee_name,
-                       COALESCE(NULLIF(TRIM(ur.name), ''), ur.username, '') AS reporter_name
-                FROM " . TASK_ITEM . " i
-                LEFT JOIN " . TASK_WORK_TYPE . " wt ON wt.id = i.work_type_id AND wt.status='A'
-                LEFT JOIN " . TASK_PROJECT_KEY . " pk ON pk.id = i.project_key_id AND pk.status='A'
-                LEFT JOIN " . USR_USER . " ua ON ua.id = i.assignee_user_id AND ua.status='A'
-                LEFT JOIN " . USR_USER . " ur ON ur.id = i.reporter_user_id AND ur.status='A'
-                WHERE i.id='" . $itemId . "' AND i.status='A' LIMIT 1";
+        $sql = "SELECT id,column_id,title,description,work_type_id,project_key_id,assignee_user_id,reporter_user_id,
+                   priority,original_estimate,task_status,parent_item_id,time_tracking,
+                   due_date,start_date,amendement_date,amendement_time,second_amendement_date,second_amendement_time,
+                   create_date,update_date
+            FROM " . TASK_ITEM . "
+            WHERE id='" . $itemId . "' AND status='A' LIMIT 1";
 
         $rst = mysqli_query($connect, $sql);
         if ($rst === false) {
-                 $sql = "SELECT i.id, i.column_id, i.title, '' AS description, i.assignee_user_id, 0 AS reporter_user_id,
-                           'Medium' AS priority, '' AS original_estimate, '' AS task_status, 0 AS parent_item_id, '' AS time_tracking,
-                           i.due_date, i.due_date AS start_date, NULL AS amendement_date, NULL AS amendement_time, NULL AS second_amendement_date, NULL AS second_amendement_time,
-                           '' AS create_date, '' AS update_date,
-                          'Task' AS work_type_name,
-                          '' AS work_type_svg_icon,
-                          '' AS item_project_key,
-                           COALESCE(NULLIF(TRIM(ua.name), ''), ua.username, '') AS assignee_name,
-                           '' AS reporter_name
-                    FROM " . TASK_ITEM . " i
-                    LEFT JOIN " . USR_USER . " ua ON ua.id = i.assignee_user_id AND ua.status='A'
-                    WHERE i.id='" . $itemId . "' AND i.status='A' LIMIT 1";
+                   $sql = "SELECT id,column_id,title,'' AS description,work_type_id,0 AS project_key_id,assignee_user_id,0 AS reporter_user_id,
+                          'Medium' AS priority,'' AS original_estimate,'' AS task_status,0 AS parent_item_id,'' AS time_tracking,
+                          due_date,due_date AS start_date,NULL AS amendement_date,NULL AS amendement_time,NULL AS second_amendement_date,NULL AS second_amendement_time,
+                          '' AS create_date,'' AS update_date
+                      FROM " . TASK_ITEM . "
+                      WHERE id='" . $itemId . "' AND status='A' LIMIT 1";
             $rst = mysqli_query($connect, $sql);
         }
 
@@ -2180,6 +2407,14 @@ if (!function_exists('taskGetItemDetail')) {
         }
 
         $row = $rst->fetch_assoc();
+        $workTypeId = isset($row['work_type_id']) ? (int) $row['work_type_id'] : 0;
+        $projectKeyId = isset($row['project_key_id']) ? (int) $row['project_key_id'] : 0;
+        $assigneeUserId = isset($row['assignee_user_id']) ? (int) $row['assignee_user_id'] : 0;
+        $reporterUserId = isset($row['reporter_user_id']) ? (int) $row['reporter_user_id'] : 0;
+        $workTypeMap = taskFetchWorkTypeInfoMap($connect, array($workTypeId), true);
+        $projectKeyMap = taskFetchProjectKeyMap($connect, array($projectKeyId), true);
+        $userMap = taskFetchUserDisplayMap($connect, array($assigneeUserId, $reporterUserId), true);
+
         $estimate = taskParseOriginalEstimate(isset($row['original_estimate']) ? $row['original_estimate'] : '');
         $labelsMap = taskGetItemLabelsByItemIds($connect, array($itemId));
         $labels = isset($labelsMap[$itemId]) ? $labelsMap[$itemId] : array();
@@ -2189,11 +2424,11 @@ if (!function_exists('taskGetItemDetail')) {
             $connect,
             isset($row['task_status']) && $row['task_status'] !== null ? (string) $row['task_status'] : ''
         );
-        $workTypeName = isset($row['work_type_name']) ? (string) $row['work_type_name'] : 'Task';
-        $workTypeIcon = taskNormalizeWorkTypeSvgIcon(isset($row['work_type_svg_icon']) ? $row['work_type_svg_icon'] : '', $workTypeName);
+        $workTypeName = isset($workTypeMap[$workTypeId]['name']) ? (string) $workTypeMap[$workTypeId]['name'] : 'Task';
+        $workTypeIcon = isset($workTypeMap[$workTypeId]['svg_icon']) ? (string) $workTypeMap[$workTypeId]['svg_icon'] : taskDefaultWorkTypeSvgIcon($workTypeName);
         $projectKeySetting = taskGetProjectKeySetting($connect);
         $defaultProjectKey = isset($projectKeySetting['project_key']) ? (string) $projectKeySetting['project_key'] : '';
-        $itemProjectKey = isset($row['item_project_key']) ? taskNormalizeProjectKey($row['item_project_key']) : '';
+        $itemProjectKey = isset($projectKeyMap[$projectKeyId]) ? (string) $projectKeyMap[$projectKeyId] : '';
         if ($itemProjectKey === '') {
             $itemProjectKey = taskNormalizeProjectKey($defaultProjectKey);
         }
@@ -2216,10 +2451,10 @@ if (!function_exists('taskGetItemDetail')) {
             'column_id' => isset($row['column_id']) ? (int) $row['column_id'] : 0,
             'title' => isset($row['title']) ? (string) $row['title'] : '',
             'description' => isset($row['description']) && $row['description'] !== null ? (string) $row['description'] : '',
-            'assignee_user_id' => isset($row['assignee_user_id']) ? (int) $row['assignee_user_id'] : 0,
-            'assignee_name' => isset($row['assignee_name']) ? (string) $row['assignee_name'] : '',
-            'reporter_user_id' => isset($row['reporter_user_id']) ? (int) $row['reporter_user_id'] : 0,
-            'reporter_name' => isset($row['reporter_name']) ? (string) $row['reporter_name'] : '',
+            'assignee_user_id' => $assigneeUserId,
+            'assignee_name' => isset($userMap[$assigneeUserId]) ? (string) $userMap[$assigneeUserId] : '',
+            'reporter_user_id' => $reporterUserId,
+            'reporter_name' => isset($userMap[$reporterUserId]) ? (string) $userMap[$reporterUserId] : '',
             'work_type_name' => $workTypeName,
             'work_type_svg_icon' => $workTypeIcon,
             'work_item_key' => $workItemKey,
@@ -2482,46 +2717,71 @@ if (!function_exists('taskGetItemLabelsByItemIds')) {
     function taskGetItemLabelsByItemIds($connect, $itemIds)
     {
         $map = array();
-        $itemIds = array_values(array_unique(array_map('intval', (array) $itemIds)));
-        $itemIds = array_filter($itemIds, function ($id) {
-            return $id > 0;
-        });
+        $itemIds = taskUniquePositiveIntIds($itemIds);
 
         if (empty($itemIds)) {
             return $map;
         }
 
         $idSql = implode(',', $itemIds);
-        $sql = "SELECT il.item_id, l.id AS label_id, l.name AS label_name
-                FROM " . TASK_ITEM_LABEL . " il
-                INNER JOIN " . TASK_LABEL . " l ON l.id = il.label_id AND l.status='A'
-                WHERE il.status='A' AND il.item_id IN (" . $idSql . ")
-                ORDER BY l.name ASC";
+        $sql = "SELECT item_id,label_id
+                FROM " . TASK_ITEM_LABEL . "
+                WHERE status='A' AND item_id IN (" . $idSql . ")";
         $rst = mysqli_query($connect, $sql);
-        if ($rst === false) {
-            $sql = "SELECT i.id, i.column_id, i.title, '' AS description, i.work_type_id, i.assignee_user_id, i.due_date, i.sort_order, 0 AS project_key_id,
-                    wt.name AS work_type_name, '' AS work_type_svg_icon,
-                '' AS item_project_key,
-                COALESCE(NULLIF(TRIM(u.name), ''), u.username, '') AS assignee_name
-                FROM " . TASK_ITEM . " i
-                LEFT JOIN " . TASK_WORK_TYPE . " wt ON wt.id = i.work_type_id AND wt.status='A'
-                LEFT JOIN " . USR_USER . " u ON u.id = i.assignee_user_id AND u.status='A'
-                WHERE i.status='A'
-                ORDER BY i.column_id ASC, i.sort_order ASC, i.id ASC";
-            $rst = mysqli_query($connect, $sql);
+        if (!$rst) {
+            return $map;
         }
-        if ($rst) {
-            while ($row = $rst->fetch_assoc()) {
-                $itemId = (int) $row['item_id'];
-                if (!isset($map[$itemId])) {
-                    $map[$itemId] = array();
-                }
 
-                $map[$itemId][] = array(
-                    'id' => (int) $row['label_id'],
-                    'name' => (string) $row['label_name'],
-                );
+        $pairs = array();
+        $labelIds = array();
+        while ($row = $rst->fetch_assoc()) {
+            $itemId = isset($row['item_id']) ? (int) $row['item_id'] : 0;
+            $labelId = isset($row['label_id']) ? (int) $row['label_id'] : 0;
+            if ($itemId <= 0 || $labelId <= 0) {
+                continue;
             }
+            $pairs[] = array('item_id' => $itemId, 'label_id' => $labelId);
+            $labelIds[] = $labelId;
+        }
+
+        $labelIds = taskUniquePositiveIntIds($labelIds);
+        if (empty($labelIds)) {
+            return $map;
+        }
+
+        $labelMap = array();
+        $labelSql = "SELECT id,name FROM " . TASK_LABEL . " WHERE status='A' AND id IN (" . implode(',', $labelIds) . ")";
+        $labelRst = mysqli_query($connect, $labelSql);
+        if ($labelRst) {
+            while ($row = $labelRst->fetch_assoc()) {
+                $labelId = isset($row['id']) ? (int) $row['id'] : 0;
+                if ($labelId <= 0) {
+                    continue;
+                }
+                $labelMap[$labelId] = isset($row['name']) ? (string) $row['name'] : '';
+            }
+        }
+
+        foreach ($pairs as $pair) {
+            $itemId = $pair['item_id'];
+            $labelId = $pair['label_id'];
+            if (!isset($labelMap[$labelId])) {
+                continue;
+            }
+            if (!isset($map[$itemId])) {
+                $map[$itemId] = array();
+            }
+            $map[$itemId][] = array(
+                'id' => $labelId,
+                'name' => (string) $labelMap[$labelId],
+            );
+        }
+
+        foreach ($map as $itemId => $labels) {
+            usort($labels, function ($a, $b) {
+                return strcmp((string) $a['name'], (string) $b['name']);
+            });
+            $map[$itemId] = $labels;
         }
 
         return $map;
@@ -2641,41 +2901,58 @@ if (!function_exists('taskGetItemsGroupedByColumn')) {
         $defaultProjectKeyId = isset($projectKeySetting['id']) ? (int) $projectKeySetting['id'] : 0;
         $defaultProjectKey = isset($projectKeySetting['project_key']) ? (string) $projectKeySetting['project_key'] : '';
 
-    $sql = "SELECT i.id, i.column_id, i.title, i.description, i.work_type_id, i.assignee_user_id, i.reporter_user_id,
-                i.priority, i.start_date, i.due_date, i.task_status, i.create_date, i.update_date,
-                i.original_estimate, i.amendement_date, i.amendement_time, i.second_amendement_date, i.second_amendement_time,
-                i.sort_order, i.project_key_id,
-                wt.name AS work_type_name, wt.svg_icon AS work_type_svg_icon,
-                pk.project_key AS item_project_key,
-                COALESCE(NULLIF(TRIM(u.name), ''), u.username, '') AS assignee_name,
-                COALESCE(NULLIF(TRIM(ur.name), ''), ur.username, '') AS reporter_name
-                FROM " . TASK_ITEM . " i
-                LEFT JOIN " . TASK_WORK_TYPE . " wt ON wt.id = i.work_type_id AND wt.status='A'
-                LEFT JOIN " . TASK_PROJECT_KEY . " pk ON pk.id = i.project_key_id AND pk.status='A'
-                LEFT JOIN " . USR_USER . " u ON u.id = i.assignee_user_id AND u.status='A'
-                LEFT JOIN " . USR_USER . " ur ON ur.id = i.reporter_user_id AND ur.status='A'
-                WHERE i.status='A'
-                ORDER BY i.column_id ASC, i.sort_order ASC, i.id ASC";
+    $sql = "SELECT id,column_id,title,description,work_type_id,assignee_user_id,reporter_user_id,
+                priority,start_date,due_date,task_status,create_date,update_date,
+                original_estimate,amendement_date,amendement_time,second_amendement_date,second_amendement_time,
+                sort_order,project_key_id
+                FROM " . TASK_ITEM . "
+                WHERE status='A'
+                ORDER BY column_id ASC, sort_order ASC, id ASC";
 
         $rst = mysqli_query($connect, $sql);
         if ($rst) {
+            $rows = array();
+            $workTypeIds = array();
+            $projectKeyIds = array();
+            $assigneeIds = array();
+            $reporterIds = array();
+
             while ($row = $rst->fetch_assoc()) {
+                $rows[] = $row;
+                $workTypeIds[] = isset($row['work_type_id']) ? (int) $row['work_type_id'] : 0;
+                $projectKeyIds[] = isset($row['project_key_id']) ? (int) $row['project_key_id'] : 0;
+                $assigneeIds[] = isset($row['assignee_user_id']) ? (int) $row['assignee_user_id'] : 0;
+                $reporterIds[] = isset($row['reporter_user_id']) ? (int) $row['reporter_user_id'] : 0;
+            }
+
+            $workTypeMap = taskFetchWorkTypeInfoMap($connect, $workTypeIds, true);
+            $projectKeyMap = taskFetchProjectKeyMap($connect, $projectKeyIds, true);
+            $userMap = taskFetchUserDisplayMap($connect, array_merge($assigneeIds, $reporterIds), true);
+
+            foreach ($rows as $row) {
                 $columnId = (int) $row['column_id'];
                 if (!isset($grouped[$columnId])) {
                     $grouped[$columnId] = array();
                 }
 
-                $resolvedProjectKey = isset($row['item_project_key']) && $row['item_project_key'] !== null ? taskNormalizeProjectKey($row['item_project_key']) : '';
+                $resolvedProjectKeyId = isset($row['project_key_id']) ? (int) $row['project_key_id'] : 0;
+                $resolvedProjectKey = isset($projectKeyMap[$resolvedProjectKeyId]) ? (string) $projectKeyMap[$resolvedProjectKeyId] : '';
                 if ($resolvedProjectKey === '') {
                     $resolvedProjectKey = taskNormalizeProjectKey($defaultProjectKey);
                 }
 
-                $resolvedProjectKeyId = isset($row['project_key_id']) ? (int) $row['project_key_id'] : 0;
                 if ($resolvedProjectKeyId <= 0) {
                     $resolvedProjectKeyId = $defaultProjectKeyId;
                 }
 
                 $estimate = taskParseOriginalEstimate(isset($row['original_estimate']) ? $row['original_estimate'] : '');
+                $workTypeId = isset($row['work_type_id']) ? (int) $row['work_type_id'] : 0;
+                $assigneeUserId = isset($row['assignee_user_id']) ? (int) $row['assignee_user_id'] : 0;
+                $reporterUserId = isset($row['reporter_user_id']) ? (int) $row['reporter_user_id'] : 0;
+                $workTypeInfo = isset($workTypeMap[$workTypeId]) ? $workTypeMap[$workTypeId] : array(
+                    'name' => 'Task',
+                    'svg_icon' => taskDefaultWorkTypeSvgIcon('Task'),
+                );
 
                 $grouped[$columnId][] = array(
                     'id' => (int) $row['id'],
@@ -2686,17 +2963,17 @@ if (!function_exists('taskGetItemsGroupedByColumn')) {
                     'project_key_id' => $resolvedProjectKeyId,
                     'project_key' => $resolvedProjectKey,
                     'work_item_key' => taskBuildWorkItemKey($resolvedProjectKey, (int) $row['id']),
-                    'work_type_id' => isset($row['work_type_id']) ? (int) $row['work_type_id'] : 0,
-                    'work_type_name' => isset($row['work_type_name']) && $row['work_type_name'] !== null ? (string) $row['work_type_name'] : 'Task',
-                    'work_type_svg_icon' => taskNormalizeWorkTypeSvgIcon(isset($row['work_type_svg_icon']) ? $row['work_type_svg_icon'] : '', isset($row['work_type_name']) ? (string) $row['work_type_name'] : 'Task'),
-                    'assignee_user_id' => isset($row['assignee_user_id']) ? (int) $row['assignee_user_id'] : 0,
-                    'reporter_user_id' => isset($row['reporter_user_id']) ? (int) $row['reporter_user_id'] : 0,
-                    'reporter_name' => isset($row['reporter_name']) ? (string) $row['reporter_name'] : '',
+                    'work_type_id' => $workTypeId,
+                    'work_type_name' => isset($workTypeInfo['name']) ? (string) $workTypeInfo['name'] : 'Task',
+                    'work_type_svg_icon' => isset($workTypeInfo['svg_icon']) ? (string) $workTypeInfo['svg_icon'] : taskDefaultWorkTypeSvgIcon('Task'),
+                    'assignee_user_id' => $assigneeUserId,
+                    'reporter_user_id' => $reporterUserId,
+                    'reporter_name' => isset($userMap[$reporterUserId]) ? (string) $userMap[$reporterUserId] : '',
                     'priority' => taskNormalizePriority(isset($row['priority']) ? $row['priority'] : 'Medium'),
                     'original_estimate_value' => isset($estimate['value']) ? (int) $estimate['value'] : 0,
                     'original_estimate_unit' => isset($estimate['unit']) ? (string) $estimate['unit'] : 'minutes',
                     'start_date' => isset($row['start_date']) && $row['start_date'] !== null ? (string) $row['start_date'] : '',
-                    'assignee_name' => isset($row['assignee_name']) ? (string) $row['assignee_name'] : '',
+                    'assignee_name' => isset($userMap[$assigneeUserId]) ? (string) $userMap[$assigneeUserId] : '',
                     'due_date' => isset($row['due_date']) && $row['due_date'] !== null ? (string) $row['due_date'] : '',
                     'task_status' => isset($row['task_status']) && $row['task_status'] !== null ? (string) $row['task_status'] : '',
                     'task_status_label_ids' => taskParseCsvIdList(isset($row['task_status']) ? $row['task_status'] : ''),
@@ -3333,33 +3610,19 @@ if (!function_exists('taskCreateItem')) {
         }
 
         $insertedId = (int) mysqli_insert_id($connect);
-        $itemSql = "SELECT i.id, i.column_id, i.title, i.description, i.project_key_id, i.work_type_id, i.assignee_user_id, i.reporter_user_id,
-                    i.priority, i.start_date, i.due_date, i.task_status, i.create_date, i.update_date,
-                    i.original_estimate, i.amendement_date, i.amendement_time, i.second_amendement_date, i.second_amendement_time,
-                    wt.name AS work_type_name, wt.svg_icon AS work_type_svg_icon,
-                    pk.project_key AS item_project_key,
-                    COALESCE(NULLIF(TRIM(u.name), ''), u.username, '') AS assignee_name,
-                    COALESCE(NULLIF(TRIM(ur.name), ''), ur.username, '') AS reporter_name
-                    FROM " . TASK_ITEM . " i
-                    LEFT JOIN " . TASK_WORK_TYPE . " wt ON wt.id = i.work_type_id AND wt.status='A'
-                    LEFT JOIN " . TASK_PROJECT_KEY . " pk ON pk.id = i.project_key_id AND pk.status='A'
-                    LEFT JOIN " . USR_USER . " u ON u.id = i.assignee_user_id AND u.status='A'
-                    LEFT JOIN " . USR_USER . " ur ON ur.id = i.reporter_user_id AND ur.status='A'
-                    WHERE i.id='" . $insertedId . "' LIMIT 1";
+        $itemSql = "SELECT id,column_id,title,description,project_key_id,work_type_id,assignee_user_id,reporter_user_id,
+                priority,start_date,due_date,task_status,create_date,update_date,
+                original_estimate,amendement_date,amendement_time,second_amendement_date,second_amendement_time
+                FROM " . TASK_ITEM . "
+                WHERE id='" . $insertedId . "' LIMIT 1";
 
         $itemRst = mysqli_query($connect, $itemSql);
         if ($itemRst === false) {
-            $itemSql = "SELECT i.id, i.column_id, i.title, '' AS description, 0 AS project_key_id, i.work_type_id, i.assignee_user_id, 0 AS reporter_user_id,
-                        'Medium' AS priority, i.due_date AS start_date, i.due_date, '' AS task_status, '' AS create_date, '' AS update_date,
-                        '' AS original_estimate, NULL AS amendement_date, NULL AS amendement_time, NULL AS second_amendement_date, NULL AS second_amendement_time,
-                        wt.name AS work_type_name, '' AS work_type_svg_icon,
-                        '' AS item_project_key,
-                        COALESCE(NULLIF(TRIM(u.name), ''), u.username, '') AS assignee_name,
-                        '' AS reporter_name
-                        FROM " . TASK_ITEM . " i
-                        LEFT JOIN " . TASK_WORK_TYPE . " wt ON wt.id = i.work_type_id AND wt.status='A'
-                        LEFT JOIN " . USR_USER . " u ON u.id = i.assignee_user_id AND u.status='A'
-                        WHERE i.id='" . $insertedId . "' LIMIT 1";
+            $itemSql = "SELECT id,column_id,title,'' AS description,0 AS project_key_id,work_type_id,assignee_user_id,0 AS reporter_user_id,
+                        'Medium' AS priority,due_date AS start_date,due_date,'' AS task_status,'' AS create_date,'' AS update_date,
+                        '' AS original_estimate,NULL AS amendement_date,NULL AS amendement_time,NULL AS second_amendement_date,NULL AS second_amendement_time
+                        FROM " . TASK_ITEM . "
+                        WHERE id='" . $insertedId . "' LIMIT 1";
             $itemRst = mysqli_query($connect, $itemSql);
         }
         $item = array(
@@ -3400,17 +3663,22 @@ if (!function_exists('taskCreateItem')) {
             $item['project_key_id'] = isset($item['project_key_id']) ? (int) $item['project_key_id'] : 0;
             $item['work_type_id'] = isset($item['work_type_id']) ? (int) $item['work_type_id'] : 0;
             $item['assignee_user_id'] = isset($item['assignee_user_id']) ? (int) $item['assignee_user_id'] : 0;
-            $item['work_type_name'] = isset($item['work_type_name']) && $item['work_type_name'] !== null ? (string) $item['work_type_name'] : 'Task';
-            $itemProjectKey = isset($item['item_project_key']) && $item['item_project_key'] !== null ? taskNormalizeProjectKey($item['item_project_key']) : '';
+
+            $workTypeMap = taskFetchWorkTypeInfoMap($connect, array($item['work_type_id']), true);
+            $projectMap = taskFetchProjectKeyMap($connect, array($item['project_key_id']), true);
+            $userMap = taskFetchUserDisplayMap($connect, array($item['assignee_user_id'], isset($item['reporter_user_id']) ? (int) $item['reporter_user_id'] : 0), true);
+
+            $item['work_type_name'] = isset($workTypeMap[$item['work_type_id']]['name']) ? (string) $workTypeMap[$item['work_type_id']]['name'] : 'Task';
+            $itemProjectKey = isset($projectMap[$item['project_key_id']]) ? (string) $projectMap[$item['project_key_id']] : '';
             if ($itemProjectKey === '') {
                 $itemProjectKey = taskNormalizeProjectKey($projectKeyText);
             }
             $item['project_key'] = $itemProjectKey;
             $item['work_item_key'] = taskBuildWorkItemKey($itemProjectKey, $insertedId);
-            $item['work_type_svg_icon'] = taskNormalizeWorkTypeSvgIcon(isset($item['work_type_svg_icon']) ? $item['work_type_svg_icon'] : '', $item['work_type_name']);
-            $item['assignee_name'] = isset($item['assignee_name']) ? (string) $item['assignee_name'] : '';
+            $item['work_type_svg_icon'] = isset($workTypeMap[$item['work_type_id']]['svg_icon']) ? (string) $workTypeMap[$item['work_type_id']]['svg_icon'] : taskDefaultWorkTypeSvgIcon($item['work_type_name']);
+            $item['assignee_name'] = isset($userMap[$item['assignee_user_id']]) ? (string) $userMap[$item['assignee_user_id']] : '';
             $item['reporter_user_id'] = isset($item['reporter_user_id']) ? (int) $item['reporter_user_id'] : 0;
-            $item['reporter_name'] = isset($item['reporter_name']) ? (string) $item['reporter_name'] : '';
+            $item['reporter_name'] = isset($userMap[$item['reporter_user_id']]) ? (string) $userMap[$item['reporter_user_id']] : '';
             $item['priority'] = taskNormalizePriority(isset($item['priority']) ? $item['priority'] : 'Medium');
             $item['start_date'] = isset($item['start_date']) && $item['start_date'] !== null ? (string) $item['start_date'] : '';
             $item['due_date'] = isset($item['due_date']) && $item['due_date'] !== null ? (string) $item['due_date'] : '';
@@ -3425,7 +3693,6 @@ if (!function_exists('taskCreateItem')) {
             $item['amendement_time_minutes'] = taskSqlTimeToMinutes(isset($item['amendement_time']) ? $item['amendement_time'] : '');
             $item['second_amendement_date'] = isset($item['second_amendement_date']) && $item['second_amendement_date'] !== null ? (string) $item['second_amendement_date'] : '';
             $item['second_amendement_time_minutes'] = taskSqlTimeToMinutes(isset($item['second_amendement_time']) ? $item['second_amendement_time'] : '');
-            unset($item['item_project_key']);
             unset($item['original_estimate']);
             unset($item['amendement_time']);
             unset($item['second_amendement_time']);
@@ -3824,17 +4091,14 @@ if (!function_exists('taskSetItemAssignee')) {
             );
         }
 
-        $itemSql = "SELECT i.assignee_user_id,
-                    COALESCE(NULLIF(TRIM(u.name), ''), u.username, '') AS assignee_name
-                    FROM " . TASK_ITEM . " i
-                    LEFT JOIN " . USR_USER . " u ON u.id = i.assignee_user_id AND u.status='A'
-                    WHERE i.id='" . $itemId . "' LIMIT 1";
+        $itemSql = "SELECT assignee_user_id FROM " . TASK_ITEM . " WHERE id='" . $itemId . "' LIMIT 1";
         $itemRst = mysqli_query($connect, $itemSql);
         $assigneeName = '';
         if ($itemRst && $itemRst->num_rows > 0) {
             $row = $itemRst->fetch_assoc();
             $assigneeUserId = isset($row['assignee_user_id']) ? (int) $row['assignee_user_id'] : 0;
-            $assigneeName = isset($row['assignee_name']) ? (string) $row['assignee_name'] : '';
+            $userMap = taskFetchUserDisplayMap($connect, array($assigneeUserId), true);
+            $assigneeName = isset($userMap[$assigneeUserId]) ? (string) $userMap[$assigneeUserId] : '';
         }
 
         return array(
@@ -3857,10 +4121,9 @@ if (!function_exists('taskSetItemWorkType')) {
             return array('ok' => 0, 'message' => 'Invalid work type request.');
         }
 
-        $itemSql = "SELECT i.id,i.work_type_id,COALESCE(NULLIF(TRIM(wt.name), ''), 'Task') AS work_type_name
-                    FROM " . TASK_ITEM . " i
-                    LEFT JOIN " . TASK_WORK_TYPE . " wt ON wt.id = i.work_type_id AND wt.status='A'
-                    WHERE i.id='" . $itemId . "' AND i.status='A'
+        $itemSql = "SELECT id,work_type_id
+                    FROM " . TASK_ITEM . "
+                    WHERE id='" . $itemId . "' AND status='A'
                     LIMIT 1";
         $itemRst = mysqli_query($connect, $itemSql);
         if (!$itemRst || $itemRst->num_rows === 0) {
@@ -3869,7 +4132,8 @@ if (!function_exists('taskSetItemWorkType')) {
 
         $itemRow = $itemRst->fetch_assoc();
         $previousWorkTypeId = isset($itemRow['work_type_id']) ? (int) $itemRow['work_type_id'] : 0;
-        $previousWorkTypeName = isset($itemRow['work_type_name']) ? (string) $itemRow['work_type_name'] : 'Task';
+        $previousTypeMap = taskFetchWorkTypeInfoMap($connect, array($previousWorkTypeId), true);
+        $previousWorkTypeName = isset($previousTypeMap[$previousWorkTypeId]['name']) ? (string) $previousTypeMap[$previousWorkTypeId]['name'] : 'Task';
         $previousParentInfo = taskGetParentRelationInfo($connect, $itemId);
 
         $workTypeSql = "SELECT id,name,remark,svg_icon
@@ -4702,28 +4966,13 @@ if (!function_exists('taskDeleteStatusLabel')) {
 if (!function_exists('taskGetItemLabels')) {
     function taskGetItemLabels($connect, $itemId)
     {
-        $rows = array();
         $itemId = (int) $itemId;
         if ($itemId <= 0) {
-            return $rows;
+            return array();
         }
 
-        $sql = "SELECT l.id, l.name
-                FROM " . TASK_ITEM_LABEL . " il
-                INNER JOIN " . TASK_LABEL . " l ON l.id = il.label_id AND l.status='A'
-                WHERE il.status='A' AND il.item_id='" . $itemId . "'
-                ORDER BY l.name ASC";
-        $rst = mysqli_query($connect, $sql);
-        if ($rst) {
-            while ($row = $rst->fetch_assoc()) {
-                $rows[] = array(
-                    'id' => (int) $row['id'],
-                    'name' => (string) $row['name'],
-                );
-            }
-        }
-
-        return $rows;
+        $map = taskGetItemLabelsByItemIds($connect, array($itemId));
+        return isset($map[$itemId]) ? $map[$itemId] : array();
     }
 }
 
@@ -4892,5 +5141,953 @@ if (!function_exists('taskDeleteItem')) {
         );
 
         return array('ok' => 1, 'message' => 'Work item deleted successfully.');
+    }
+}
+
+if (!function_exists('taskGetAllItemsFlat')) {
+    /**
+     * Return all active work items as a flat array with time_tracking resolved.
+     * Used by the Sheets view.
+     */
+    function taskGetAllItemsFlat($connect)
+    {
+        $projectKeySetting = taskGetProjectKeySetting($connect);
+        $defaultProjectKeyId = isset($projectKeySetting['id']) ? (int) $projectKeySetting['id'] : 0;
+        $defaultProjectKey = isset($projectKeySetting['project_key']) ? (string) $projectKeySetting['project_key'] : '';
+
+        $sql = "SELECT id,column_id,title,description,work_type_id,assignee_user_id,reporter_user_id,
+            priority,start_date,due_date,task_status,create_date,update_date,
+            original_estimate,time_tracking,
+            amendement_date,amendement_time,second_amendement_date,second_amendement_time,
+            sort_order,project_key_id
+            FROM " . TASK_ITEM . "
+            WHERE status='A'
+            ORDER BY id DESC";
+
+        $items = array();
+        $allItemIds = array();
+        $rst = mysqli_query($connect, $sql);
+        if ($rst) {
+            $rows = array();
+            $workTypeIds = array();
+            $projectKeyIds = array();
+            $assigneeIds = array();
+            $reporterIds = array();
+
+            while ($row = $rst->fetch_assoc()) {
+                $rows[] = $row;
+                $workTypeIds[] = isset($row['work_type_id']) ? (int) $row['work_type_id'] : 0;
+                $projectKeyIds[] = isset($row['project_key_id']) ? (int) $row['project_key_id'] : 0;
+                $assigneeIds[] = isset($row['assignee_user_id']) ? (int) $row['assignee_user_id'] : 0;
+                $reporterIds[] = isset($row['reporter_user_id']) ? (int) $row['reporter_user_id'] : 0;
+            }
+
+            $workTypeMap = taskFetchWorkTypeInfoMap($connect, $workTypeIds, true);
+            $projectKeyMap = taskFetchProjectKeyMap($connect, $projectKeyIds, true);
+            $userMap = taskFetchUserDisplayMap($connect, array_merge($assigneeIds, $reporterIds), true);
+
+            foreach ($rows as $row) {
+                $resolvedProjectKeyId = isset($row['project_key_id']) ? (int) $row['project_key_id'] : 0;
+                $resolvedProjectKey = isset($projectKeyMap[$resolvedProjectKeyId]) ? (string) $projectKeyMap[$resolvedProjectKeyId] : '';
+                if ($resolvedProjectKey === '') {
+                    $resolvedProjectKey = taskNormalizeProjectKey($defaultProjectKey);
+                }
+                if ($resolvedProjectKeyId <= 0) {
+                    $resolvedProjectKeyId = $defaultProjectKeyId;
+                }
+                $estimate = taskParseOriginalEstimate(isset($row['original_estimate']) ? $row['original_estimate'] : '');
+                $timeTracking = isset($row['time_tracking']) ? trim((string) $row['time_tracking']) : '';
+                if ($timeTracking !== '') {
+                    $ttSeconds = taskParseWorklogDurationSeconds($timeTracking);
+                    $timeTracking = $ttSeconds > 0 ? taskFormatWorklogDuration($ttSeconds) : 'No time logged';
+                } else {
+                    $timeTracking = 'No time logged';
+                }
+
+                $workTypeId = isset($row['work_type_id']) ? (int) $row['work_type_id'] : 0;
+                $assigneeUserId = isset($row['assignee_user_id']) ? (int) $row['assignee_user_id'] : 0;
+                $reporterUserId = isset($row['reporter_user_id']) ? (int) $row['reporter_user_id'] : 0;
+                $workTypeInfo = isset($workTypeMap[$workTypeId]) ? $workTypeMap[$workTypeId] : array(
+                    'name' => 'Task',
+                    'svg_icon' => taskDefaultWorkTypeSvgIcon('Task'),
+                );
+
+                $item = array(
+                    'id' => (int) $row['id'],
+                    'column_id' => (int) $row['column_id'],
+                    'title' => (string) $row['title'],
+                    'description' => isset($row['description']) && $row['description'] !== null ? (string) $row['description'] : '',
+                    'sort_order' => isset($row['sort_order']) ? (int) $row['sort_order'] : 0,
+                    'project_key_id' => $resolvedProjectKeyId,
+                    'project_key' => $resolvedProjectKey,
+                    'work_item_key' => taskBuildWorkItemKey($resolvedProjectKey, (int) $row['id']),
+                    'work_type_id' => $workTypeId,
+                    'work_type_name' => isset($workTypeInfo['name']) ? (string) $workTypeInfo['name'] : 'Task',
+                    'work_type_svg_icon' => isset($workTypeInfo['svg_icon']) ? (string) $workTypeInfo['svg_icon'] : taskDefaultWorkTypeSvgIcon('Task'),
+                    'assignee_user_id' => $assigneeUserId,
+                    'assignee_name' => isset($userMap[$assigneeUserId]) ? (string) $userMap[$assigneeUserId] : '',
+                    'reporter_user_id' => $reporterUserId,
+                    'reporter_name' => isset($userMap[$reporterUserId]) ? (string) $userMap[$reporterUserId] : '',
+                    'priority' => taskNormalizePriority(isset($row['priority']) ? $row['priority'] : 'Medium'),
+                    'original_estimate_value' => isset($estimate['value']) ? (int) $estimate['value'] : 0,
+                    'original_estimate_unit' => isset($estimate['unit']) ? (string) $estimate['unit'] : 'minutes',
+                    'task_status' => isset($row['task_status']) && $row['task_status'] !== null ? (string) $row['task_status'] : '',
+                    'time_tracking' => $timeTracking,
+                    'start_date' => isset($row['start_date']) && $row['start_date'] !== null ? (string) $row['start_date'] : '',
+                    'due_date' => isset($row['due_date']) && $row['due_date'] !== null ? (string) $row['due_date'] : '',
+                    'create_date' => isset($row['create_date']) && $row['create_date'] !== null ? (string) $row['create_date'] : '',
+                    'update_date' => isset($row['update_date']) && $row['update_date'] !== null ? (string) $row['update_date'] : '',
+                    'amendement_date' => isset($row['amendement_date']) && $row['amendement_date'] !== null ? (string) $row['amendement_date'] : '',
+                    'amendement_time_minutes' => taskSqlTimeToMinutes(isset($row['amendement_time']) ? $row['amendement_time'] : ''),
+                    'second_amendement_date' => isset($row['second_amendement_date']) && $row['second_amendement_date'] !== null ? (string) $row['second_amendement_date'] : '',
+                    'second_amendement_time_minutes' => taskSqlTimeToMinutes(isset($row['second_amendement_time']) ? $row['second_amendement_time'] : ''),
+                );
+
+                $items[] = $item;
+                $allItemIds[] = (int) $row['id'];
+            }
+        }
+
+        // Enrich with labels and parent
+        $labelsMap = taskGetItemLabelsByItemIds($connect, $allItemIds);
+        $parentMap = taskGetParentMapByChildIds($connect, $allItemIds);
+        foreach ($items as $index => $item) {
+            $itemId = (int) $item['id'];
+            $items[$index]['labels'] = isset($labelsMap[$itemId]) ? $labelsMap[$itemId] : array();
+            $items[$index]['parent_item_id'] = isset($parentMap[$itemId]) ? (int) $parentMap[$itemId] : 0;
+        }
+
+        return $items;
+    }
+}
+
+/* ───── Sheets Column Configuration ───── */
+
+if (!function_exists('taskGetSheetsColumns')) {
+    function taskGetSheetsColumns($connect, $userId) {
+        $userId = (int) $userId;
+        $sql = "SELECT id, column_key, sort_order FROM " . TASK_SHEETS . " WHERE user_id = $userId AND status = 'A' ORDER BY sort_order ASC";
+        $result = mysqli_query($connect, $sql);
+        $cols = array();
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
+                $cols[] = array(
+                    'id' => (int) $row['id'],
+                    'column_key' => (string) $row['column_key'],
+                    'sort_order' => (int) $row['sort_order'],
+                );
+            }
+        }
+        return $cols;
+    }
+}
+
+if (!function_exists('taskSaveSheetsColumns')) {
+    function taskSaveSheetsColumns($connect, $userId, $columnsJson) {
+        $userId = (int) $userId;
+        $currentUser = defined('USER_ID') ? USER_ID : '';
+        $cdate = date('Y-m-d');
+        $ctime = date('G:i:s');
+
+        // Soft-delete existing
+        $delSql = "UPDATE " . TASK_SHEETS . " SET status = 'D', update_by = '" . mysqli_real_escape_string($connect, $currentUser) . "', update_date = '$cdate', update_time = '$ctime' WHERE user_id = $userId AND status = 'A'";
+        mysqli_query($connect, $delSql);
+
+        // Insert new
+        $cols = json_decode($columnsJson, true);
+        if (!is_array($cols)) return array();
+
+        foreach ($cols as $idx => $col) {
+            $key = mysqli_real_escape_string($connect, $col['column_key']);
+            $order = (int) (isset($col['sort_order']) ? $col['sort_order'] : $idx);
+            $sql = "INSERT INTO " . TASK_SHEETS . " (user_id, column_key, sort_order, create_by, create_date, create_time, status) VALUES ($userId, '$key', $order, '" . mysqli_real_escape_string($connect, $currentUser) . "', '$cdate', '$ctime', 'A')";
+            mysqli_query($connect, $sql);
+        }
+
+        return taskGetSheetsColumns($connect, $userId);
+    }
+}
+
+/* ───── Summary page helpers ───── */
+
+if (!function_exists('taskSummaryNormalizeUnit')) {
+    function taskSummaryNormalizeUnit($unit)
+    {
+        $raw = strtolower(trim((string) $unit));
+        if ($raw === 'minute' || $raw === 'minutes' || $raw === 'min' || $raw === 'mins') {
+            return 'MINUTE';
+        }
+        if ($raw === 'hour' || $raw === 'hours' || $raw === 'hr' || $raw === 'hrs') {
+            return 'HOUR';
+        }
+        if ($raw === 'week' || $raw === 'weeks' || $raw === 'w') {
+            return 'WEEK';
+        }
+        return 'DAY';
+    }
+}
+
+if (!function_exists('taskSummaryIsValidDate')) {
+    function taskSummaryIsValidDate($value)
+    {
+        return is_string($value) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $value);
+    }
+}
+
+if (!function_exists('taskSummaryParseRelativeDurationSeconds')) {
+    function taskSummaryParseRelativeDurationSeconds($text)
+    {
+        $value = trim((string) $text);
+        if ($value === '') {
+            return null;
+        }
+
+        $globalSign = 1;
+        if (strpos($value, '-') === 0) {
+            $globalSign = -1;
+            $value = ltrim(substr($value, 1));
+        } elseif (strpos($value, '+') === 0) {
+            $value = ltrim(substr($value, 1));
+        }
+
+        if (!preg_match_all('/([+-]?\d+)\s*([wdhm])/i', $value, $matches, PREG_SET_ORDER)) {
+            return null;
+        }
+
+        $seconds = 0;
+        foreach ($matches as $match) {
+            $num = isset($match[1]) ? (int) $match[1] : 0;
+            $unit = isset($match[2]) ? strtolower($match[2]) : '';
+            if ($num === 0 || $unit === '') {
+                continue;
+            }
+
+            $absNum = abs($num);
+            $unitSeconds = 0;
+            if ($unit === 'w') {
+                $unitSeconds = 7 * 24 * 3600;
+            } elseif ($unit === 'd') {
+                $unitSeconds = 24 * 3600;
+            } elseif ($unit === 'h') {
+                $unitSeconds = 3600;
+            } elseif ($unit === 'm') {
+                $unitSeconds = 60;
+            }
+
+            $sign = $num < 0 ? -1 : 1;
+            $seconds += ($absNum * $unitSeconds * $sign);
+        }
+
+        if ($seconds === 0) {
+            return 0;
+        }
+
+        return $seconds * $globalSign;
+    }
+}
+
+if (!function_exists('taskSummaryBuildListConditionSql')) {
+    function taskSummaryBuildListConditionSql($connect, $expression, $values, $operator = 'eq', $isNumeric = true, $allowNone = false)
+    {
+        if (!is_array($values)) {
+            return '';
+        }
+
+        $op = strtolower(trim((string) $operator)) === 'neq' ? 'neq' : 'eq';
+        $parts = array();
+        $normalized = array();
+        $hasNone = false;
+
+        foreach ($values as $value) {
+            $strVal = trim((string) $value);
+            if ($strVal === '') {
+                continue;
+            }
+
+            if ($allowNone && ($strVal === '0' || strtolower($strVal) === 'none' || strtolower($strVal) === 'unassigned')) {
+                $hasNone = true;
+                continue;
+            }
+
+            if ($isNumeric) {
+                if (ctype_digit($strVal)) {
+                    $num = (int) $strVal;
+                    if ($num > 0) {
+                        $normalized[] = $num;
+                    }
+                }
+            } else {
+                $normalized[] = taskEsc($connect, $strVal);
+            }
+        }
+
+        if (!empty($normalized)) {
+            if ($isNumeric) {
+                $parts[] = $expression . ' IN (' . implode(',', array_map('intval', $normalized)) . ')';
+            } else {
+                $quoted = array();
+                foreach ($normalized as $val) {
+                    $quoted[] = "'" . $val . "'";
+                }
+                $parts[] = $expression . ' IN (' . implode(',', $quoted) . ')';
+            }
+        }
+
+        if ($allowNone && $hasNone) {
+            $parts[] = '(' . $expression . ' IS NULL OR ' . $expression . " = 0 OR " . $expression . " = '')";
+        }
+
+        if (empty($parts)) {
+            return '';
+        }
+
+        $baseExpr = '(' . implode(' OR ', $parts) . ')';
+        return $op === 'neq' ? '(NOT ' . $baseExpr . ')' : $baseExpr;
+    }
+}
+
+if (!function_exists('taskSummaryBuildDateConditionSql')) {
+    function taskSummaryBuildDateConditionSql($alias, $column, $filter)
+    {
+        if (!is_array($filter)) {
+            return '';
+        }
+
+        $mode = strtolower(trim((string) (isset($filter['mode']) ? $filter['mode'] : '')));
+        $field = $alias . '.' . $column;
+        $dateTimeField = 'CAST(' . $field . ' AS DATETIME)';
+
+        if ($mode === 'within' || $mode === 'more') {
+            $value = isset($filter['value']) ? (int) $filter['value'] : 0;
+            if ($value <= 0) {
+                return '';
+            }
+            $unit = taskSummaryNormalizeUnit(isset($filter['unit']) ? $filter['unit'] : 'days');
+            $cmp = $mode === 'within' ? '>=' : '<';
+            return '(' . $field . ' IS NOT NULL AND ' . $dateTimeField . ' ' . $cmp . ' DATE_SUB(NOW(), INTERVAL ' . $value . ' ' . $unit . '))';
+        }
+
+        if ($mode === 'between') {
+            $from = isset($filter['from']) ? trim((string) $filter['from']) : '';
+            $to = isset($filter['to']) ? trim((string) $filter['to']) : '';
+            if (!taskSummaryIsValidDate($from) || !taskSummaryIsValidDate($to)) {
+                return '';
+            }
+            if ($from > $to) {
+                $tmp = $from;
+                $from = $to;
+                $to = $tmp;
+            }
+            return '(' . $field . ' IS NOT NULL AND DATE(' . $field . ") BETWEEN '" . $from . "' AND '" . $to . "')";
+        }
+
+        if ($mode === 'range') {
+            $fromSeconds = taskSummaryParseRelativeDurationSeconds(isset($filter['range_from']) ? $filter['range_from'] : '');
+            $toSeconds = taskSummaryParseRelativeDurationSeconds(isset($filter['range_to']) ? $filter['range_to'] : '');
+            if ($fromSeconds === null || $toSeconds === null) {
+                return '';
+            }
+
+            $startTs = time() + (int) $fromSeconds;
+            $endTs = time() + (int) $toSeconds;
+            if ($startTs > $endTs) {
+                $tmp = $startTs;
+                $startTs = $endTs;
+                $endTs = $tmp;
+            }
+
+            $start = date('Y-m-d H:i:s', $startTs);
+            $end = date('Y-m-d H:i:s', $endTs);
+            return '(' . $field . ' IS NOT NULL AND ' . $dateTimeField . " BETWEEN '" . $start . "' AND '" . $end . "')";
+        }
+
+        return '';
+    }
+}
+
+if (!function_exists('taskSummaryBuildDueDateConditionSql')) {
+    function taskSummaryBuildDueDateConditionSql($alias, $filter)
+    {
+        if (!is_array($filter)) {
+            return '';
+        }
+
+        $mode = strtolower(trim((string) (isset($filter['mode']) ? $filter['mode'] : '')));
+        $field = $alias . '.due_date';
+        $dateTimeField = 'CAST(' . $field . ' AS DATETIME)';
+
+        if ($mode === 'overdue') {
+            return '(' . $field . ' IS NOT NULL AND DATE(' . $field . ') < CURDATE())';
+        }
+
+        if ($mode === 'more') {
+            $value = isset($filter['value']) ? (int) $filter['value'] : 0;
+            if ($value <= 0) {
+                return '';
+            }
+            $unit = taskSummaryNormalizeUnit(isset($filter['unit']) ? $filter['unit'] : 'days');
+            return '(' . $field . ' IS NOT NULL AND ' . $dateTimeField . ' <= DATE_SUB(NOW(), INTERVAL ' . $value . ' ' . $unit . '))';
+        }
+
+        if ($mode === 'due_next') {
+            $value = isset($filter['value']) ? (int) $filter['value'] : 0;
+            if ($value <= 0) {
+                return '';
+            }
+            $unit = taskSummaryNormalizeUnit(isset($filter['unit']) ? $filter['unit'] : 'days');
+            $includeOverdue = !empty($filter['include_overdue']);
+            $cond = '(' . $field . ' IS NOT NULL AND ' . $dateTimeField . ' <= DATE_ADD(NOW(), INTERVAL ' . $value . ' ' . $unit . '))';
+            if (!$includeOverdue) {
+                $cond = '(' . $cond . ' AND DATE(' . $field . ') >= CURDATE())';
+            }
+            return $cond;
+        }
+
+        if ($mode === 'between') {
+            $from = isset($filter['from']) ? trim((string) $filter['from']) : '';
+            $to = isset($filter['to']) ? trim((string) $filter['to']) : '';
+            if (!taskSummaryIsValidDate($from) || !taskSummaryIsValidDate($to)) {
+                return '';
+            }
+            if ($from > $to) {
+                $tmp = $from;
+                $from = $to;
+                $to = $tmp;
+            }
+            return '(' . $field . ' IS NOT NULL AND DATE(' . $field . ") BETWEEN '" . $from . "' AND '" . $to . "')";
+        }
+
+        if ($mode === 'range') {
+            $fromSeconds = taskSummaryParseRelativeDurationSeconds(isset($filter['range_from']) ? $filter['range_from'] : '');
+            $toSeconds = taskSummaryParseRelativeDurationSeconds(isset($filter['range_to']) ? $filter['range_to'] : '');
+            if ($fromSeconds === null || $toSeconds === null) {
+                return '';
+            }
+
+            $startTs = time() + (int) $fromSeconds;
+            $endTs = time() + (int) $toSeconds;
+            if ($startTs > $endTs) {
+                $tmp = $startTs;
+                $startTs = $endTs;
+                $endTs = $tmp;
+            }
+
+            $start = date('Y-m-d H:i:s', $startTs);
+            $end = date('Y-m-d H:i:s', $endTs);
+            return '(' . $field . ' IS NOT NULL AND ' . $dateTimeField . " BETWEEN '" . $start . "' AND '" . $end . "')";
+        }
+
+        return '';
+    }
+}
+
+if (!function_exists('taskBuildSummaryItemFilterSql')) {
+    function taskBuildSummaryItemFilterSql($connect, $filters = array(), $alias = 'i')
+    {
+        $clauses = array();
+
+        if (!empty($filters['assignee_id'])) {
+            $clauses[] = $alias . '.assignee_user_id = ' . (int) $filters['assignee_id'];
+        }
+
+        if (!empty($filters['assignee']) && is_array($filters['assignee'])) {
+            $assigneeValues = isset($filters['assignee']['values']) && is_array($filters['assignee']['values']) ? $filters['assignee']['values'] : array();
+            $assigneeOp = isset($filters['assignee']['op']) ? $filters['assignee']['op'] : 'eq';
+            $assigneeClause = taskSummaryBuildListConditionSql($connect, $alias . '.assignee_user_id', $assigneeValues, $assigneeOp, true, true);
+            if ($assigneeClause !== '') {
+                $clauses[] = $assigneeClause;
+            }
+        }
+
+        if (!empty($filters['work_type']) && is_array($filters['work_type'])) {
+            $workTypeValues = isset($filters['work_type']['values']) && is_array($filters['work_type']['values']) ? $filters['work_type']['values'] : array();
+            $workTypeOp = isset($filters['work_type']['op']) ? $filters['work_type']['op'] : 'eq';
+            $workTypeClause = taskSummaryBuildListConditionSql($connect, $alias . '.work_type_id', $workTypeValues, $workTypeOp, true, false);
+            if ($workTypeClause !== '') {
+                $clauses[] = $workTypeClause;
+            }
+        }
+
+        if (!empty($filters['status']) && is_array($filters['status'])) {
+            $statusValues = isset($filters['status']['values']) && is_array($filters['status']['values']) ? $filters['status']['values'] : array();
+            $statusOp = isset($filters['status']['op']) ? $filters['status']['op'] : 'eq';
+            $statusClause = taskSummaryBuildListConditionSql($connect, $alias . '.column_id', $statusValues, $statusOp, true, false);
+            if ($statusClause !== '') {
+                $clauses[] = $statusClause;
+            }
+        }
+
+        if (!empty($filters['priority']) && is_array($filters['priority'])) {
+            $priorityValues = isset($filters['priority']['values']) && is_array($filters['priority']['values']) ? $filters['priority']['values'] : array();
+            $priorityOp = isset($filters['priority']['op']) ? $filters['priority']['op'] : 'eq';
+            $priorityClause = taskSummaryBuildListConditionSql($connect, "COALESCE(NULLIF(TRIM(" . $alias . ".priority),''), 'Medium')", $priorityValues, $priorityOp, false, false);
+            if ($priorityClause !== '') {
+                $clauses[] = $priorityClause;
+            }
+        }
+
+        if (!empty($filters['parent']) && is_array($filters['parent'])) {
+            $parentOp = strtolower(trim((string) (isset($filters['parent']['op']) ? $filters['parent']['op'] : 'eq'))) === 'neq' ? 'neq' : 'eq';
+            $rawValues = isset($filters['parent']['values']) && is_array($filters['parent']['values']) ? $filters['parent']['values'] : array();
+            $parentIds = array();
+            $includeNone = false;
+            foreach ($rawValues as $rawVal) {
+                $rawStr = trim((string) $rawVal);
+                if ($rawStr === '' || $rawStr === '0' || strtolower($rawStr) === 'none') {
+                    $includeNone = true;
+                    continue;
+                }
+                if (ctype_digit($rawStr)) {
+                    $num = (int) $rawStr;
+                    if ($num > 0) {
+                        $parentIds[] = $num;
+                    }
+                }
+            }
+
+            $parentParts = array();
+            if (!empty($parentIds)) {
+                $idSql = implode(',', array_map('intval', array_unique($parentIds)));
+                $parentParts[] = '(' . $alias . '.parent_item_id IN (' . $idSql . ') OR EXISTS (SELECT 1 FROM ' . TASK_ITEM_RELATION . ' srpr WHERE srpr.status=\'A\' AND srpr.child_board_item_id=' . $alias . '.id AND srpr.parent_board_item_id IN (' . $idSql . ')))';
+            }
+            if ($includeNone) {
+                $parentParts[] = '(COALESCE(' . $alias . '.parent_item_id,0)=0 AND NOT EXISTS (SELECT 1 FROM ' . TASK_ITEM_RELATION . ' srpr WHERE srpr.status=\'A\' AND srpr.child_board_item_id=' . $alias . '.id AND srpr.parent_board_item_id > 0))';
+            }
+
+            if (!empty($parentParts)) {
+                $parentExpr = '(' . implode(' OR ', $parentParts) . ')';
+                $clauses[] = $parentOp === 'neq' ? '(NOT ' . $parentExpr . ')' : $parentExpr;
+            }
+        }
+
+        if (!empty($filters['created']) && is_array($filters['created'])) {
+            $createdClause = taskSummaryBuildDateConditionSql($alias, 'create_date', $filters['created']);
+            if ($createdClause !== '') {
+                $clauses[] = $createdClause;
+            }
+        }
+
+        if (!empty($filters['updated']) && is_array($filters['updated'])) {
+            $updatedClause = taskSummaryBuildDateConditionSql($alias, 'update_date', $filters['updated']);
+            if ($updatedClause !== '') {
+                $clauses[] = $updatedClause;
+            }
+        }
+
+        if (!empty($filters['due_date']) && is_array($filters['due_date'])) {
+            $dueClause = taskSummaryBuildDueDateConditionSql($alias, $filters['due_date']);
+            if ($dueClause !== '') {
+                $clauses[] = $dueClause;
+            }
+        }
+
+        if (empty($clauses)) {
+            return '1=1';
+        }
+
+        return implode(' AND ', $clauses);
+    }
+}
+
+if (!function_exists('taskGetSummaryStats')) {
+    /**
+     * Return summary statistics for the task board.
+     */
+    function taskGetSummaryStats($connect, $filters = array())
+    {
+        $now = date('Y-m-d');
+        $sevenDaysAgo = date('Y-m-d', strtotime('-7 days'));
+        $sevenDaysLater = date('Y-m-d', strtotime('+7 days'));
+
+        $itemFilterSql = taskBuildSummaryItemFilterSql($connect, $filters, 'i');
+        $where = "i.status='A'";
+        if ($itemFilterSql !== '1=1') {
+            $where .= ' AND ' . $itemFilterSql;
+        }
+
+        $statusCounts = array();
+        $totalItems = 0;
+        $statusRows = array();
+        $columnIds = array();
+        $sql = "SELECT i.column_id, COUNT(i.id) AS cnt
+                FROM " . TASK_ITEM . " i
+                WHERE $where
+                GROUP BY i.column_id";
+        $rst = mysqli_query($connect, $sql);
+        if ($rst) {
+            while ($row = $rst->fetch_assoc()) {
+                $statusRows[] = $row;
+                $columnIds[] = isset($row['column_id']) ? (int) $row['column_id'] : 0;
+            }
+        }
+
+        $columnMap = taskFetchColumnInfoMap($connect, $columnIds, true);
+        usort($statusRows, function ($a, $b) use ($columnMap) {
+            $colA = isset($a['column_id']) ? (int) $a['column_id'] : 0;
+            $colB = isset($b['column_id']) ? (int) $b['column_id'] : 0;
+            $sortA = isset($columnMap[$colA]['sort_order']) ? (int) $columnMap[$colA]['sort_order'] : PHP_INT_MAX;
+            $sortB = isset($columnMap[$colB]['sort_order']) ? (int) $columnMap[$colB]['sort_order'] : PHP_INT_MAX;
+            if ($sortA === $sortB) {
+                return $colA <=> $colB;
+            }
+            return $sortA <=> $sortB;
+        });
+
+        foreach ($statusRows as $row) {
+            $columnId = isset($row['column_id']) ? (int) $row['column_id'] : 0;
+            $name = isset($columnMap[$columnId]['name']) && trim((string) $columnMap[$columnId]['name']) !== ''
+                ? (string) $columnMap[$columnId]['name']
+                : 'Unknown';
+            $cnt = isset($row['cnt']) ? (int) $row['cnt'] : 0;
+            $statusCounts[] = array('name' => $name, 'count' => $cnt);
+            $totalItems += $cnt;
+        }
+
+        $parentCount = 0;
+        $parentIds = array();
+        $rstP1 = mysqli_query($connect, "SELECT DISTINCT i.parent_item_id AS pid FROM " . TASK_ITEM . " i WHERE $where AND i.parent_item_id IS NOT NULL AND i.parent_item_id > 0");
+        if ($rstP1) {
+            while ($row = $rstP1->fetch_assoc()) {
+                $pid = isset($row['pid']) ? (int) $row['pid'] : 0;
+                if ($pid > 0) {
+                    $parentIds[$pid] = true;
+                }
+            }
+        }
+        $rstP2 = mysqli_query(
+            $connect,
+            "SELECT DISTINCT r.parent_board_item_id AS pid
+             FROM " . TASK_ITEM_RELATION . " r
+             WHERE r.status='A' AND r.parent_board_item_id > 0
+               AND r.child_board_item_id IN (SELECT i.id FROM " . TASK_ITEM . " i WHERE $where)"
+        );
+        if ($rstP2) {
+            while ($row = $rstP2->fetch_assoc()) {
+                $pid = isset($row['pid']) ? (int) $row['pid'] : 0;
+                if ($pid > 0) {
+                    $parentIds[$pid] = true;
+                }
+            }
+        }
+        $parentCount = count($parentIds);
+
+        $completedCount = 0;
+        $sqlCompleted = "SELECT COUNT(*) AS cnt FROM " . TASK_ITEM_HISTORY . " h
+                         WHERE h.status='A' AND h.event_type='change_status'
+                           AND h.create_date >= '$sevenDaysAgo'
+                           AND h.item_id IN (SELECT i.id FROM " . TASK_ITEM . " i WHERE $where)";
+
+        $lastCol = '';
+        $sqlLastCol = "SELECT name FROM " . TASK_COLUMN . " WHERE status='A' ORDER BY sort_order DESC, id DESC LIMIT 1";
+        $rstLC = mysqli_query($connect, $sqlLastCol);
+        if ($rstLC && $rowLC = $rstLC->fetch_assoc()) {
+            $lastCol = (string) $rowLC['name'];
+        }
+        if ($lastCol !== '') {
+            $sqlCompleted .= " AND h.to_value = '" . mysqli_real_escape_string($connect, $lastCol) . "'";
+        }
+        $rstC = mysqli_query($connect, $sqlCompleted);
+        if ($rstC && $rowC = $rstC->fetch_assoc()) {
+            $completedCount = (int) $rowC['cnt'];
+        }
+
+        $updatedCount = 0;
+                $sqlUpdated = "SELECT COUNT(DISTINCT h.item_id) AS cnt FROM " . TASK_ITEM_HISTORY . " h
+                                             WHERE h.status='A' AND h.create_date >= '$sevenDaysAgo'
+                                                 AND h.item_id IN (SELECT i.id FROM " . TASK_ITEM . " i WHERE $where)";
+        $rstU = mysqli_query($connect, $sqlUpdated);
+        if ($rstU && $rowU = $rstU->fetch_assoc()) {
+            $updatedCount = (int) $rowU['cnt'];
+        }
+
+        $createdCount = 0;
+        $sqlCreated = "SELECT COUNT(*) AS cnt FROM " . TASK_ITEM . " i
+                       WHERE i.status='A' AND i.create_date >= '$sevenDaysAgo'";
+        if ($itemFilterSql !== '1=1') {
+            $sqlCreated .= ' AND ' . $itemFilterSql;
+        }
+        $rstCr = mysqli_query($connect, $sqlCreated);
+        if ($rstCr && $rowCr = $rstCr->fetch_assoc()) {
+            $createdCount = (int) $rowCr['cnt'];
+        }
+
+        $dueSoonCount = 0;
+        $sqlDue = "SELECT COUNT(*) AS cnt FROM " . TASK_ITEM . " i
+                   WHERE i.status='A' AND i.due_date IS NOT NULL
+                     AND i.due_date >= '$now' AND i.due_date <= '$sevenDaysLater'";
+        if ($itemFilterSql !== '1=1') {
+            $sqlDue .= ' AND ' . $itemFilterSql;
+        }
+        $rstD = mysqli_query($connect, $sqlDue);
+        if ($rstD && $rowD = $rstD->fetch_assoc()) {
+            $dueSoonCount = (int) $rowD['cnt'];
+        }
+
+        $workTypeCounts = array();
+        $sqlWT = "SELECT i.work_type_id, COUNT(i.id) AS cnt
+                  FROM " . TASK_ITEM . " i
+                  WHERE $where
+                  GROUP BY i.work_type_id
+                  ORDER BY cnt DESC";
+        $rstWT = mysqli_query($connect, $sqlWT);
+        $wtRows = array();
+        $wtIds = array();
+        if ($rstWT) {
+            while ($row = $rstWT->fetch_assoc()) {
+                $wtRows[] = $row;
+                $wtIds[] = isset($row['work_type_id']) ? (int) $row['work_type_id'] : 0;
+            }
+        }
+        $wtMap = taskFetchWorkTypeInfoMap($connect, $wtIds, true);
+        foreach ($wtRows as $row) {
+            $wtId = isset($row['work_type_id']) ? (int) $row['work_type_id'] : 0;
+            $name = isset($wtMap[$wtId]['name']) ? (string) $wtMap[$wtId]['name'] : 'Unknown';
+            $workTypeCounts[] = array(
+                'name' => $name,
+                'count' => isset($row['cnt']) ? (int) $row['cnt'] : 0,
+            );
+        }
+
+        $priorityCounts = array();
+        $sqlPri = "SELECT COALESCE(NULLIF(TRIM(i.priority),''), 'Medium') AS pri, COUNT(*) AS cnt
+                   FROM " . TASK_ITEM . " i
+                   WHERE $where
+                   GROUP BY pri
+                   ORDER BY FIELD(pri, 'Highest', 'High', 'Medium', 'Low', 'Lowest')";
+        $rstPri = mysqli_query($connect, $sqlPri);
+        if ($rstPri) {
+            while ($row = $rstPri->fetch_assoc()) {
+                $priorityCounts[] = array(
+                    'name' => (string) $row['pri'],
+                    'count' => (int) $row['cnt'],
+                );
+            }
+        }
+
+        return array(
+            'total_items' => $totalItems,
+            'completed_7d' => $completedCount,
+            'updated_7d' => $updatedCount,
+            'created_7d' => $createdCount,
+            'due_soon_7d' => $dueSoonCount,
+            'status_counts' => $statusCounts,
+            'parent_count' => $parentCount,
+            'work_type_counts' => $workTypeCounts,
+            'priority_counts' => $priorityCounts,
+        );
+    }
+}
+
+if (!function_exists('taskGetGlobalActivity')) {
+    /**
+     * Fetch combined activity (history + comments + replies) across all items.
+     * Returns unified entries sorted by date desc with pagination.
+     */
+    function taskGetGlobalActivity($connect, $page = 1, $perPage = 10, $filters = array())
+    {
+        $page = max(1, (int) $page);
+        $perPage = max(1, min(100000, (int) $perPage));
+        $offset = ($page - 1) * $perPage;
+        $itemFilterSql = taskBuildSummaryItemFilterSql($connect, $filters, 'i');
+
+        $where = "i.status='A'";
+        if ($itemFilterSql !== '1=1') {
+            $where .= ' AND ' . $itemFilterSql;
+        }
+
+        $itemMap = array();
+        $itemIds = array();
+        $workTypeIds = array();
+        $projectKeyIds = array();
+        $itemRst = mysqli_query($connect, "SELECT i.id,i.title,i.work_type_id,i.project_key_id,i.task_status FROM " . TASK_ITEM . " i WHERE $where");
+        if ($itemRst) {
+            while ($row = $itemRst->fetch_assoc()) {
+                $itemId = isset($row['id']) ? (int) $row['id'] : 0;
+                if ($itemId <= 0) {
+                    continue;
+                }
+                $itemMap[$itemId] = array(
+                    'title' => isset($row['title']) ? (string) $row['title'] : '',
+                    'work_type_id' => isset($row['work_type_id']) ? (int) $row['work_type_id'] : 0,
+                    'project_key_id' => isset($row['project_key_id']) ? (int) $row['project_key_id'] : 0,
+                    'task_status' => isset($row['task_status']) ? (string) $row['task_status'] : '',
+                );
+                $itemIds[] = $itemId;
+                $workTypeIds[] = isset($row['work_type_id']) ? (int) $row['work_type_id'] : 0;
+                $projectKeyIds[] = isset($row['project_key_id']) ? (int) $row['project_key_id'] : 0;
+            }
+        }
+
+        if (empty($itemIds)) {
+            return array(
+                'rows' => array(),
+                'total' => 0,
+                'page' => $page,
+                'per_page' => $perPage,
+                'total_pages' => 1,
+            );
+        }
+
+        $itemIdSql = implode(',', taskUniquePositiveIntIds($itemIds));
+        $workTypeMap = taskFetchWorkTypeInfoMap($connect, $workTypeIds, true);
+        $projectKeyMap = taskFetchProjectKeyMap($connect, $projectKeyIds, true);
+
+        $rawRows = array();
+        $actorIds = array();
+
+        $historySql = "SELECT id AS record_id,item_id AS h_item_id,event_type,field_name,from_value,to_value,remark,
+                              '' AS comment_html,'' AS comment_text,create_by,create_date,create_time,'history' AS record_type
+                       FROM " . TASK_ITEM_HISTORY . "
+                       WHERE status='A' AND event_type <> 'comment' AND item_id IN (" . $itemIdSql . ")";
+        $historyRst = mysqli_query($connect, $historySql);
+        if ($historyRst) {
+            while ($row = $historyRst->fetch_assoc()) {
+                $rawRows[] = $row;
+                $actorIds[] = isset($row['create_by']) ? (int) $row['create_by'] : 0;
+            }
+        }
+
+        $commentSql = "SELECT id AS record_id,item_id AS h_item_id,'comment' AS event_type,'' AS field_name,'' AS from_value,'' AS to_value,'' AS remark,
+                              comment_html,comment_text,create_by,create_date,create_time,'comment' AS record_type
+                       FROM " . TASK_ITEM_COMMENT . "
+                       WHERE status='A' AND item_id IN (" . $itemIdSql . ")";
+        $commentRst = mysqli_query($connect, $commentSql);
+        if ($commentRst) {
+            while ($row = $commentRst->fetch_assoc()) {
+                $rawRows[] = $row;
+                $actorIds[] = isset($row['create_by']) ? (int) $row['create_by'] : 0;
+            }
+        }
+
+        $replySql = "SELECT id AS record_id,item_id AS h_item_id,'reply' AS event_type,'' AS field_name,'' AS from_value,'' AS to_value,'' AS remark,
+                            reply_html AS comment_html,reply_text AS comment_text,create_by,create_date,create_time,'reply' AS record_type
+                     FROM " . TASK_ITEM_COMMENT_REPLY . "
+                     WHERE status='A' AND item_id IN (" . $itemIdSql . ")";
+        $replyRst = mysqli_query($connect, $replySql);
+        if ($replyRst) {
+            while ($row = $replyRst->fetch_assoc()) {
+                $rawRows[] = $row;
+                $actorIds[] = isset($row['create_by']) ? (int) $row['create_by'] : 0;
+            }
+        }
+
+        $actorMap = taskFetchUserDisplayMap($connect, $actorIds, false);
+        $search = isset($filters['search']) ? trim((string) $filters['search']) : '';
+        $hasSearch = $search !== '';
+        $searchLower = strtolower($search);
+
+        $rows = array();
+        foreach ($rawRows as $row) {
+            $itemId = isset($row['h_item_id']) ? (int) $row['h_item_id'] : 0;
+            if ($itemId <= 0 || !isset($itemMap[$itemId])) {
+                continue;
+            }
+
+            $itemMeta = $itemMap[$itemId];
+            $workTypeId = isset($itemMeta['work_type_id']) ? (int) $itemMeta['work_type_id'] : 0;
+            $projectKeyId = isset($itemMeta['project_key_id']) ? (int) $itemMeta['project_key_id'] : 0;
+            $projectKey = isset($projectKeyMap[$projectKeyId]) ? (string) $projectKeyMap[$projectKeyId] : '';
+            $workItemKey = taskBuildWorkItemKey($projectKey, $itemId);
+            $workTypeName = isset($workTypeMap[$workTypeId]['name']) ? (string) $workTypeMap[$workTypeId]['name'] : '';
+            $workTypeIcon = isset($workTypeMap[$workTypeId]['svg_icon']) ? (string) $workTypeMap[$workTypeId]['svg_icon'] : '';
+            $createById = isset($row['create_by']) ? (int) $row['create_by'] : 0;
+            $actorName = isset($actorMap[$createById]) ? (string) $actorMap[$createById] : 'User';
+
+            $eventType = isset($row['event_type']) ? trim((string) $row['event_type']) : '';
+            $fieldName = isset($row['field_name']) ? trim((string) $row['field_name']) : '';
+            $fromValue = isset($row['from_value']) ? (string) $row['from_value'] : '';
+            $toValue = isset($row['to_value']) ? (string) $row['to_value'] : '';
+            $remark = isset($row['remark']) ? trim((string) $row['remark']) : '';
+            $recordType = isset($row['record_type']) ? (string) $row['record_type'] : 'history';
+            $commentText = isset($row['comment_text']) ? (string) $row['comment_text'] : '';
+
+            if ($recordType === 'history' && $remark === '') {
+                if ($eventType === 'create_item') {
+                    $remark = 'created the Work item';
+                } elseif ($eventType === 'change_status') {
+                    $remark = 'changed the Status';
+                } elseif ($eventType === 'worklog_saved') {
+                    $remark = $toValue !== '' ? ('logged ' . $toValue) : 'logged work time';
+                } elseif ($eventType === 'delete_item') {
+                    $remark = 'deleted the Work item';
+                } elseif ($fieldName !== '') {
+                    $remark = 'changed ' . $fieldName;
+                } else {
+                    $remark = 'updated the Work item';
+                }
+            } elseif ($recordType === 'comment') {
+                $remark = 'added a comment';
+            } elseif ($recordType === 'reply') {
+                $remark = 'replied to a comment';
+            }
+
+            if ($hasSearch) {
+                $searchPool = array(
+                    strtolower((string) $itemMeta['title']),
+                    strtolower($workItemKey),
+                    strtolower($actorName),
+                    strtolower($remark),
+                    strtolower($fieldName),
+                    strtolower($fromValue),
+                    strtolower($toValue),
+                    strtolower($commentText),
+                );
+                $matched = false;
+                foreach ($searchPool as $poolText) {
+                    if ($poolText !== '' && strpos($poolText, $searchLower) !== false) {
+                        $matched = true;
+                        break;
+                    }
+                }
+                if (!$matched) {
+                    continue;
+                }
+            }
+
+            $rows[] = array(
+                'record_id' => isset($row['record_id']) ? (int) $row['record_id'] : 0,
+                'record_type' => $recordType,
+                'item_id' => $itemId,
+                'event_type' => $eventType,
+                'field_name' => $fieldName,
+                'from_value' => $fromValue,
+                'to_value' => $toValue,
+                'remark' => $remark,
+                'comment_html' => isset($row['comment_html']) ? (string) $row['comment_html'] : '',
+                'comment_text' => $commentText,
+                'actor_name' => $actorName,
+                'create_by' => isset($row['create_by']) ? (string) $row['create_by'] : '',
+                'create_date' => isset($row['create_date']) ? (string) $row['create_date'] : '',
+                'create_time' => isset($row['create_time']) ? (string) $row['create_time'] : '',
+                'item_title' => isset($itemMeta['title']) ? (string) $itemMeta['title'] : '',
+                'work_item_key' => $workItemKey,
+                'work_type_name' => $workTypeName,
+                'work_type_svg_icon' => $workTypeIcon,
+                'item_task_status' => isset($itemMeta['task_status']) ? (string) $itemMeta['task_status'] : '',
+            );
+        }
+
+        usort($rows, function ($a, $b) {
+            $dateCmp = strcmp((string) $b['create_date'], (string) $a['create_date']);
+            if ($dateCmp !== 0) {
+                return $dateCmp;
+            }
+            $timeCmp = strcmp((string) $b['create_time'], (string) $a['create_time']);
+            if ($timeCmp !== 0) {
+                return $timeCmp;
+            }
+            return ((int) $b['record_id']) <=> ((int) $a['record_id']);
+        });
+
+        $totalRecords = count($rows);
+        $pagedRows = array_slice($rows, $offset, $perPage);
+
+        return array(
+            'rows' => $pagedRows,
+            'total' => $totalRecords,
+            'page' => $page,
+            'per_page' => $perPage,
+            'total_pages' => $totalRecords > 0 ? (int) ceil($totalRecords / $perPage) : 1,
+        );
     }
 }
