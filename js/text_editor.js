@@ -2804,7 +2804,7 @@
     draftItemContextId = Number(itemDetailModalState.itemId || 0);
     descriptionDraftClearedByUser = false; // reset on each new modal open
     capturedInitialDescription = String(
-      itemDetailModalState.initialDescription || "",
+      itemDetailModalState.initialDescription || ""
     );
     ensureCommentEditorReady().then(function () {
       setCommentComposerVisible(false, true, false);

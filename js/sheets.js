@@ -981,7 +981,7 @@
           '">',
       );
       $popup.append(
-        '<div class="filter-text-options"><label title="Case sensitive"><input type="checkbox" class="filter-cs"> Aa</label><label title="Regex"><input type="checkbox" class="filter-regex"' +
+        '<div class="filter-text-options"><label title="Regex"><input type="checkbox" class="filter-regex"' +
           rc +
           "> .*</label></div>",
       );
@@ -1362,7 +1362,7 @@
       { key: "task_status", label: "Status", icon: "fa-solid fa-circle-check" },
       { key: "labels", label: "Labels", icon: "fa-solid fa-tags" },
       {
-        key: "column_name",
+        key: "board_status",
         label: "Status Column",
         icon: "fa-solid fa-columns",
       },

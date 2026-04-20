@@ -1437,6 +1437,32 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Failed creating `" . TASK_ITEM_COMMENT_REPLY . "`: " . $conn->error . "</p>";
     }
 
+    // MIGRATION: Update indexes for existing Task Item Comment tables
+
+    // 1. Migration for TASK_ITEM_COMMENT
+    $checkCommentIdx = $conn->query("SHOW INDEX FROM `" . TASK_ITEM_COMMENT . "` WHERE Key_name = 'idx_task_item_comment_main'");
+    if ($checkCommentIdx && $checkCommentIdx->num_rows === 0) {
+        // Drop old legacy indexes (using @ to suppress errors in case they don't exist)
+        @$conn->query("ALTER TABLE `" . TASK_ITEM_COMMENT . "` DROP INDEX `idx_task_item_comment_item`");
+        @$conn->query("ALTER TABLE `" . TASK_ITEM_COMMENT . "` DROP INDEX `idx_task_item_comment_created`");
+        
+        // Add new optimized composite index
+        $conn->query("ALTER TABLE `" . TASK_ITEM_COMMENT . "` ADD INDEX `idx_task_item_comment_main` (`item_id`, `status`, `create_date`, `create_time`)");
+    }
+
+    // 2. Migration for TASK_ITEM_COMMENT_REPLY
+    $checkReplyIdx = $conn->query("SHOW INDEX FROM `" . TASK_ITEM_COMMENT_REPLY . "` WHERE Key_name = 'idx_task_item_comment_reply_main'");
+    if ($checkReplyIdx && $checkReplyIdx->num_rows === 0) {
+        // Drop old legacy indexes
+        @$conn->query("ALTER TABLE `" . TASK_ITEM_COMMENT_REPLY . "` DROP INDEX `idx_task_item_comment_reply_item`");
+        @$conn->query("ALTER TABLE `" . TASK_ITEM_COMMENT_REPLY . "` DROP INDEX `idx_task_item_comment_reply_comment`");
+        @$conn->query("ALTER TABLE `" . TASK_ITEM_COMMENT_REPLY . "` DROP INDEX `idx_task_item_comment_reply_created`");
+        
+        // Add new optimized composite indexes
+        $conn->query("ALTER TABLE `" . TASK_ITEM_COMMENT_REPLY . "` ADD INDEX `idx_task_item_comment_reply_main` (`comment_id`, `status`, `create_date`, `create_time`)");
+        $conn->query("ALTER TABLE `" . TASK_ITEM_COMMENT_REPLY . "` ADD INDEX `idx_task_item_comment_reply_item` (`item_id`, `status`)");
+    }
+
     $createTaskSheetsSql = "CREATE TABLE IF NOT EXISTS `" . TASK_SHEETS . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `user_id` INT NOT NULL,

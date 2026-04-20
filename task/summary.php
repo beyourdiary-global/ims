@@ -65,7 +65,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['summary_action'])) {
     if ($action === 'get_activity') {
         $page = isset($_POST['page']) ? max(1, (int) $_POST['page']) : 1;
         $perPageRaw = isset($_POST['per_page']) ? trim((string) $_POST['per_page']) : '10';
-        $perPage = strtolower($perPageRaw) === 'all' ? 100000 : max(1, min(1000, (int) $perPageRaw));
+        $maxPerPage = 1000;
+        $perPage = strtolower($perPageRaw) === 'all' ? $maxPerPage : max(1, min($maxPerPage, (int) $perPageRaw));
         if (!empty($_POST['assignee_id'])) {
             $filters['assignee_id'] = (int) $_POST['assignee_id'];
         }
