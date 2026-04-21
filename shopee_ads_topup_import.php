@@ -1348,7 +1348,7 @@ function parseShopeeAdsTopupPdf($pdfContent, $fileName, $shopeeAccounts, $curren
     }
 
     if ($data['shopee_acc'] === '') {
-        $errors[] = 'Shopee account could not be matched from the PDF. Please ensure the account exists in database.';
+        $warnings[] = 'Shopee account was not matched automatically from the PDF. Please choose the correct account before inserting.';
     }
 
     if ($data['currency'] === '') {
