@@ -721,7 +721,7 @@ if ($urbanismOrderFbLink === '' && $urbanismFormName !== '') {
                                         'order_no' => isset($shopeeOrderRow['orderID']) ? (string) $shopeeOrderRow['orderID'] : ('SHOPEE-' . (isset($shopeeOrderRow['id']) ? (int) $shopeeOrderRow['id'] : 0)),
                                         'order_date' => isset($shopeeOrderRow['date']) ? (string) $shopeeOrderRow['date'] : '',
                                         'package' => commonResolvePackageNamesFromCsv(isset($shopeeOrderRow['package']) ? $shopeeOrderRow['package'] : '', $connect),
-                                        'buyer_pay_method' => isset($shopeeOrderRow['buyer_pay_meth']) ? (string) $shopeeOrderRow['buyer_pay_meth'] : '',
+                                        'buyer_pay_method' => commonResolvePaymentMethodName(isset($shopeeOrderRow['buyer_pay_meth']) ? $shopeeOrderRow['buyer_pay_meth'] : '', $finance_connect),
                                         'fees' => isset($shopeeOrderRow['fees']) ? (string) $shopeeOrderRow['fees'] : '0.00',
                                         'final_amount' => isset($shopeeOrderRow['final_amt']) ? (string) $shopeeOrderRow['final_amt'] : '0.00',
                                         'detail_url' => $SITEURL . '/shopee/shopee_order_req.php?id=' . (isset($shopeeOrderRow['id']) ? (int) $shopeeOrderRow['id'] : 0) . '&act=E',
@@ -774,7 +774,7 @@ if ($urbanismOrderFbLink === '' && $urbanismFormName !== '') {
                                                 <td><?= $orderSN++ ?></td>
                                                 <td>
                                                     <?php if ($detailUrl !== '') { ?>
-                                                        <a class="btn btn-sm btn-rounded btn-primary" href="<?= htmlspecialchars($detailUrl, ENT_QUOTES, 'UTF-8') ?>">Show Order Detail</a>
+                                                        <a class="btn btn-sm btn-rounded btn-primary" style="white-space:nowrap;" href="<?= htmlspecialchars($detailUrl, ENT_QUOTES, 'UTF-8') ?>">Show Order Detail</a>
                                                     <?php } else { ?>
                                                         <span class="text-muted">N/A</span>
                                                     <?php } ?>
@@ -807,35 +807,7 @@ if ($urbanismOrderFbLink === '' && $urbanismFormName !== '') {
                 </form>
 
                 <?php
-                $urbanCustomerId = (isset($dataExisted) && isset($row['id'])) ? (int) $row['id'] : 0;
-                if ($act === 'E' && $urbanCustomerId > 0) {
-                    $customerLogReturnUrl = $SITEURL . '/urb_cust_reg.php?id=' . urlencode((string) $dataID);
-                    if ($act !== '') {
-                        $customerLogReturnUrl .= '&act=' . urlencode((string) $act);
-                    }
-                    if ($returnPageInput !== '') {
-                        $customerLogReturnUrl .= '&return_page=' . urlencode((string) $returnPageInput);
-                    }
-                    if ($returnLabelInput !== '') {
-                        $customerLogReturnUrl .= '&return_label=' . urlencode((string) $returnLabelInput);
-                    }
-
-                    $customerLogContext = urlResolveUserRecordLogContext($connect, $connect, array(
-                        'customer_id' => $urbanCustomerId,
-                        'customer_column' => 'urbanism_member_id',
-                        'customer_label' => $urbanismFormName,
-                        'return_url' => $customerLogReturnUrl,
-                        'ajax_url' => $SITEURL . '/user_record_log.php',
-                        'customer_only' => true,
-                    ));
-
-                    urlRenderUserRecordLogModule($connect, $connect, array(
-                        'table_name' => USER_RECORD_LOG,
-                        'context' => $customerLogContext,
-                        'section_heading' => 'User Record Log',
-                        'show_scope_note' => true,
-                    ));
-                }
+                /* User Record Log removed from Urbanism Member page */
                 ?>
 
                 <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">

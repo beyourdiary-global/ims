@@ -26,6 +26,9 @@
     var $existingAttachment = $("#url_existing_attachment");
     var $submitBtn = $("#url_submit_btn");
     var $cancelEditBtn = $("#url_cancel_edit_btn");
+    var $attachmentModal = $("#url_attachment_preview_modal");
+    var $attachmentModalClose = $("#url_attachment_modal_close");
+    var $attachmentPreviewContent = $("#url_attachment_preview_content");
     var currentPage = 1;
     var currentPageSize = parseInt($pageSize.val() || "10", 10) || 10;
 
@@ -52,6 +55,64 @@
         $loading.addClass("d-none");
         $submitBtn.prop("disabled", false);
       }
+    }
+
+    function closeAttachmentModal() {
+      if (!$attachmentModal.length) {
+        return;
+      }
+      $attachmentPreviewContent.empty();
+      $attachmentModal.addClass("d-none");
+      $("body").removeClass("url-modal-open");
+    }
+
+    function getFileExtension(filePath) {
+      var cleanPath = String(filePath || "").split("?")[0].split("#")[0];
+      var idx = cleanPath.lastIndexOf(".");
+      if (idx < 0) {
+        return "";
+      }
+      return cleanPath.substring(idx + 1).toLowerCase();
+    }
+
+    function buildAttachmentPreviewHtml(fileUrl) {
+      var safeUrl = $("<div>").text(String(fileUrl || "")).html();
+      var ext = getFileExtension(fileUrl);
+      var imageExts = {
+        png: true,
+        jpg: true,
+        jpeg: true,
+        gif: true,
+        webp: true,
+        bmp: true,
+        svg: true,
+      };
+
+      if (imageExts[ext]) {
+        return '<img src="' + safeUrl + '" alt="Attachment preview">';
+      }
+
+      if (ext === "pdf") {
+        return '<iframe src="' + safeUrl + '" title="Attachment PDF preview"></iframe>';
+      }
+
+      return (
+        '<div style="width:100%;height:100%;display:flex;flex-direction:column;">' +
+        '<iframe src="' +
+        safeUrl +
+        '" title="Attachment preview"></iframe>' +
+        '<div class="small text-muted text-center mt-2">Preview depends on browser support for this file type.</div>' +
+        "</div>"
+      );
+    }
+
+    function openAttachmentModal(fileUrl) {
+      if (!$attachmentModal.length || !fileUrl) {
+        return;
+      }
+      $attachmentPreviewContent.html(buildAttachmentPreviewHtml(fileUrl));
+      $attachmentModal.removeClass("d-none");
+      $("body").addClass("url-modal-open");
     }
 
     function resetForm() {
@@ -305,19 +366,10 @@
 
           resetForm();
           loadList();
-
-          if (typeof confirmationDialog === "function") {
-            confirmationDialog(
-              "",
-              "",
-              confirmationPageName,
-              "",
-              pathReturn,
-              actionType,
-            );
-          } else {
-            showAlert("success", res.message || "Saved successfully.");
-          }
+          showAlert(
+            "success",
+            res && res.message ? res.message : "Record saved successfully.",
+          );
         })
         .fail(function (xhr) {
           var extra = "";
@@ -417,6 +469,30 @@
       if (e.keyCode === 13) {
         currentPage = 1;
         loadList();
+      }
+    });
+
+    $list.on("click", ".url-view-attachment-btn", function () {
+      var fileUrl = String($(this).data("url") || "");
+      if (!fileUrl) {
+        return;
+      }
+      openAttachmentModal(fileUrl);
+    });
+
+    $attachmentModalClose.on("click", function () {
+      closeAttachmentModal();
+    });
+
+    $attachmentModal.on("click", function (e) {
+      if (e.target === this) {
+        closeAttachmentModal();
+      }
+    });
+
+    $(document).on("keydown", function (e) {
+      if (e.key === "Escape" && !$attachmentModal.hasClass("d-none")) {
+        closeAttachmentModal();
       }
     });
 

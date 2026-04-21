@@ -365,7 +365,7 @@ $result = getData('*', '', '', SHOPEE_SG_ORDER_REQ, $finance_connect);
                     <a id='resetButton' href="../reset.php?redirect=shopee/shopee_order_req_income_table.php" class="btn btn-sm btn-rounded btn-primary"> <i class="fa fa-refresh"></i> Reset </a>
                     </div>
                 </div>
-                <table class="table table-striped" id="shopee_order_req_table">
+                <table class="table table-striped w-100" id="shopee_order_req_table" style="width:100%">
                     <thead>
                         <tr>
                             <th class="hideColumn" scope="col">ID</th>

@@ -374,7 +374,7 @@ function cmpFieldValue($row, $field)
                         </div>
                         <div class="col-md-6">
                             <label class="form-label form_lbl" for="idType">ID Type<span class="requireRed">*</span></label>
-                            <select class="form-control" name="idType" id="idType" <?= $isReadonly ? 'disabled' : '' ?> required>
+                            <select class="form-select" name="idType" id="idType" <?= $isReadonly ? 'disabled' : '' ?> required>
                                 <option value="">Select ID Type</option>
                                 <?php foreach ($idTypeOptions as $v => $label) { ?>
                                     <option value="<?= htmlspecialchars((string) $v, ENT_QUOTES, 'UTF-8') ?>" <?= (cmpFieldValue($row, 'id_type') === (string) $v) ? 'selected' : '' ?>><?= htmlspecialchars((string) $label, ENT_QUOTES, 'UTF-8') ?></option>
@@ -384,7 +384,7 @@ function cmpFieldValue($row, $field)
 
                         <div class="col-md-6">
                             <label class="form-label form_lbl" for="sqlAccountId">SQL Account<span class="requireRed">*</span></label>
-                            <select class="form-control" name="sqlAccountId" id="sqlAccountId" <?= $isReadonly ? 'disabled' : '' ?> required>
+                            <select class="form-select" name="sqlAccountId" id="sqlAccountId" <?= $isReadonly ? 'disabled' : '' ?> required>
                                 <option value="">Select SQL Account</option>
                                 <?php foreach ($sqlAccountOptions as $accId => $accName) { ?>
                                     <option value="<?= (int) $accId ?>" <?= ((int) cmpFieldValue($row, 'sql_account_id') === (int) $accId) ? 'selected' : '' ?>><?= htmlspecialchars((string) $accName, ENT_QUOTES, 'UTF-8') ?></option>
