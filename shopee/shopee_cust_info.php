@@ -659,13 +659,34 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 </thead>
                                 <tbody>
                                     <?php if (!empty($orderRows)) {
+                                        $shopeePaymentMethodMap = array();
+                                        $payMethodRst = mysqli_query($finance_connect, "SELECT id, name FROM " . PAY_MTHD_SHOPEE . " WHERE status='A'");
+                                        if ($payMethodRst) {
+                                            while ($payMethodRow = $payMethodRst->fetch_assoc()) {
+                                                $payMethodId = isset($payMethodRow['id']) ? trim((string) $payMethodRow['id']) : '';
+                                                if ($payMethodId !== '') {
+                                                    $shopeePaymentMethodMap[$payMethodId] = isset($payMethodRow['name']) ? (string) $payMethodRow['name'] : '';
+                                                }
+                                            }
+                                        }
+
                                         $orderSN = 1;
                                         foreach ($orderRows as $orderRow) {
                                             $orderId = isset($orderRow['id']) ? (int) $orderRow['id'] : 0;
                                             $orderNo = isset($orderRow['orderID']) ? $orderRow['orderID'] : '';
                                             $orderDate = isset($orderRow['date']) ? $orderRow['date'] : '';
                                             $orderPackage = commonResolvePackageNamesFromCsv(isset($orderRow['package']) ? $orderRow['package'] : '', $connect);
-                                            $buyerPayMethod = commonResolvePaymentMethodName(isset($orderRow['buyer_pay_meth']) ? $orderRow['buyer_pay_meth'] : '', $finance_connect);
+                                            $buyerPayMethodRaw = isset($orderRow['buyer_pay_meth']) ? (string) $orderRow['buyer_pay_meth'] : '';
+                                            $buyerPayMethodIds = array_values(array_filter(array_map('trim', explode(',', $buyerPayMethodRaw)), 'strlen'));
+                                            $buyerPayMethodNames = array();
+                                            foreach ($buyerPayMethodIds as $buyerPayMethodId) {
+                                                if (isset($shopeePaymentMethodMap[$buyerPayMethodId]) && $shopeePaymentMethodMap[$buyerPayMethodId] !== '') {
+                                                    $buyerPayMethodNames[] = $shopeePaymentMethodMap[$buyerPayMethodId];
+                                                } else {
+                                                    $buyerPayMethodNames[] = $buyerPayMethodId;
+                                                }
+                                            }
+                                            $buyerPayMethod = !empty($buyerPayMethodNames) ? implode(', ', $buyerPayMethodNames) : '';
                                             $orderFees = isset($orderRow['fees']) ? $orderRow['fees'] : '0.00';
                                             $finalAmount = isset($orderRow['final_amt']) ? $orderRow['final_amt'] : '0.00';
                                             ?>
