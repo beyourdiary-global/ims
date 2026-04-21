@@ -366,7 +366,10 @@
 
           resetForm();
           loadList();
-          hideAlert();
+          showAlert(
+            "success",
+            res && res.message ? res.message : "Record saved successfully.",
+          );
         })
         .fail(function (xhr) {
           var extra = "";
