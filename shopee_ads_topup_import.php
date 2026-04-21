@@ -608,22 +608,126 @@ function satExtractPdfTextTokensFromDecodedStream($decoded, $unicodeMap = array(
     return $lines;
 }
 
-function satExtractTextFromPdfViaCommand($filePath)
+function satIsWindowsEnvironment()
 {
-    $filePath = trim((string) $filePath);
-    if ($filePath === '' || !is_file($filePath) || !function_exists('shell_exec')) {
+    return strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+}
+
+function satIsPhpFunctionCallable($functionName)
+{
+    $functionName = trim((string) $functionName);
+    if ($functionName === '' || !function_exists($functionName)) {
+        return false;
+    }
+
+    $disabledFunctions = (string) ini_get('disable_functions');
+    if ($disabledFunctions === '') {
+        return true;
+    }
+
+    $disabledList = array_map('trim', explode(',', $disabledFunctions));
+    return !in_array($functionName, $disabledList, true);
+}
+
+function satRunCommandWithTimeout($command, $timeoutSeconds = 15)
+{
+    $command = trim((string) $command);
+    $timeoutSeconds = (int) $timeoutSeconds;
+    if ($command === '') {
         return '';
     }
 
+    if (satIsWindowsEnvironment()) {
+        if (!satIsPhpFunctionCallable('shell_exec')) {
+            return '';
+        }
+
+        $output = @shell_exec($command);
+        return is_string($output) ? trim($output) : '';
+    }
+
+    if (!satIsPhpFunctionCallable('proc_open')) {
+        return '';
+    }
+
+    $descriptors = array(
+        0 => array('pipe', 'r'),
+        1 => array('pipe', 'w'),
+        2 => array('pipe', 'w'),
+    );
+    $pipes = array();
+    $process = @proc_open(array('/bin/sh', '-c', $command), $descriptors, $pipes);
+    if (!is_resource($process)) {
+        return '';
+    }
+
+    fclose($pipes[0]);
+    stream_set_blocking($pipes[1], false);
+    stream_set_blocking($pipes[2], false);
+
+    $stdout = '';
+    $stderr = '';
+    $startTime = microtime(true);
+
+    while (true) {
+        $status = proc_get_status($process);
+        $stdoutChunk = stream_get_contents($pipes[1]);
+        if (is_string($stdoutChunk) && $stdoutChunk !== '') {
+            $stdout .= $stdoutChunk;
+        }
+
+        $stderrChunk = stream_get_contents($pipes[2]);
+        if (is_string($stderrChunk) && $stderrChunk !== '') {
+            $stderr .= $stderrChunk;
+        }
+
+        if (!$status['running']) {
+            break;
+        }
+
+        if ($timeoutSeconds > 0 && (microtime(true) - $startTime) >= $timeoutSeconds) {
+            @proc_terminate($process);
+            fclose($pipes[1]);
+            fclose($pipes[2]);
+            @proc_close($process);
+            return '';
+        }
+
+        usleep(100000);
+    }
+
+    $stdoutChunk = stream_get_contents($pipes[1]);
+    if (is_string($stdoutChunk) && $stdoutChunk !== '') {
+        $stdout .= $stdoutChunk;
+    }
+    $stderrChunk = stream_get_contents($pipes[2]);
+    if (is_string($stderrChunk) && $stderrChunk !== '') {
+        $stderr .= $stderrChunk;
+    }
+
+    fclose($pipes[1]);
+    fclose($pipes[2]);
+    @proc_close($process);
+
+    return trim($stdout);
+}
+
+function satExtractTextFromPdfViaCommand($filePath)
+{
+    $filePath = trim((string) $filePath);
+    if ($filePath === '' || !is_file($filePath)) {
+        return '';
+    }
+
+    $stderrRedirect = satIsWindowsEnvironment() ? '2>NUL' : '2>/dev/null';
     $escapedFile = escapeshellarg($filePath);
     $commands = array(
-        'pdftotext -enc UTF-8 -layout ' . $escapedFile . ' - 2>NUL',
-        'pdftotext -enc UTF-8 ' . $escapedFile . ' - 2>NUL',
+        'pdftotext -enc UTF-8 -layout ' . $escapedFile . ' - ' . $stderrRedirect,
+        'pdftotext -enc UTF-8 ' . $escapedFile . ' - ' . $stderrRedirect,
     );
 
     foreach ($commands as $command) {
-        $output = @shell_exec($command);
-        $output = is_string($output) ? trim($output) : '';
+        $output = satRunCommandWithTimeout($command, 15);
         if ($output !== '') {
             return $output;
         }
