@@ -322,37 +322,39 @@ if ($getYearlyGoalTargetByYear != false && $getYearlyGoalTargetByYear->num_rows 
         
         echo '</div>'; // End of main dashboard
         
-        // Now handle "Sales Final Amount" section
-        echo '<h2 class="mt-2">Sales (Final Amount)</h2>';
-        echo '<div class="platformsepearatorLine row">';
-        
-        $finalAmounts = [
-            24 => [
-                'title' => "Shopee SG Received Final Amount",
-                'income' => $ShopeeSgTotalFinalAmtIncome,
-                'goal' => $yearlyShopee_sg_goal,
-            ],
-            25 => [
-                'title' => "Shopee MY Received Final Amount",
-                'income' => $ShopeeTotalFinalAmtIncome,
-                'goal' => $yearlyShopee_my_goal,
-            ],
-        ];
-        
-        // Reset counter
-        $counter = 0;
-        
-        foreach ($finalAmounts as $key => $platform) {
-            if (in_array($key, $accessActionKey)) {
-                $counter++;
-                $containerClass = ($counter % 2 == 0) ? "separatorContainer2" : "separatorContainer";
-                
-                $salesData = generateSalesData($platform['title'], $platform['income'], $platform['goal']);
-                generateDashboardPlateformAnalysis($salesData['title'], $salesData['data'], $containerClass);
+        // Only show "Sales Final Amount" when user has view permission for at least one final-amount tile.
+        if (array_intersect([24, 25], $accessActionKey)) {
+            echo '<h2 class="mt-2">Sales (Final Amount)</h2>';
+            echo '<div class="platformsepearatorLine row">';
+
+            $finalAmounts = [
+                24 => [
+                    'title' => "Shopee SG Received Final Amount",
+                    'income' => $ShopeeSgTotalFinalAmtIncome,
+                    'goal' => $yearlyShopee_sg_goal,
+                ],
+                25 => [
+                    'title' => "Shopee MY Received Final Amount",
+                    'income' => $ShopeeTotalFinalAmtIncome,
+                    'goal' => $yearlyShopee_my_goal,
+                ],
+            ];
+
+            // Reset counter
+            $counter = 0;
+
+            foreach ($finalAmounts as $key => $platform) {
+                if (in_array($key, $accessActionKey)) {
+                    $counter++;
+                    $containerClass = ($counter % 2 == 0) ? "separatorContainer2" : "separatorContainer";
+
+                    $salesData = generateSalesData($platform['title'], $platform['income'], $platform['goal']);
+                    generateDashboardPlateformAnalysis($salesData['title'], $salesData['data'], $containerClass);
+                }
             }
+
+            echo '</div>'; // End of final amount section
         }
-        
-        echo '</div>'; // End of final amount section
         ?>
 
     </div>

@@ -868,7 +868,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                                     <tr>
                                                         <td><?= $orderSN++ ?></td>
                                                         <td>
-                                                            <a class="btn btn-sm btn-rounded btn-primary"
+                                                            <a class="btn btn-sm btn-rounded btn-primary" style="white-space:nowrap;"
                                                                href="<?= $SITEURL . '/fb_cust_deals.php?id=' . (int) $dataID . '&act=' . $act_2 . '&open_order_id=' . $orderId ?>">
                                                                 Show Order Detail
                                                             </a>

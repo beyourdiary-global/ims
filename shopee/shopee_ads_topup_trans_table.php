@@ -465,7 +465,7 @@ function sat_is_in_interval($paymentDate, $interval, $dateFilter, $start, $end)
                     <a id='resetButton' href="../reset.php?redirect=shopee/shopee_ads_topup_trans_table.php" class="btn btn-sm btn-rounded btn-primary"> <i class="fa fa-refresh"></i> Reset </a>
                 </div>
             </div>
-            <table class="table table-striped" id="shopee_ads_topup_trans_table">
+            <table class="table table-striped w-100" id="shopee_ads_topup_trans_table" style="width:100%">
                 <thead>
                     <tr>
                     <?php if (!isset($_GET['group'])): ?>
@@ -608,7 +608,10 @@ function sat_is_in_interval($paymentDate, $interval, $dateFilter, $start, $end)
                     <th><?php echo number_format($totalGST, 2, '.', ''); ?></th>
                     <th colspan="2"></th>
                     <?php else: ?>
-                    <th colspan="4" class="text-end">Total:</th>
+                    <th class="hideColumn" scope="row">0</th>
+                    <th class="text-center"></th>
+                    <th scope="row"></th>
+                    <th class="text-end">Total:</th>
                     <th><?php echo number_format($totalTopupAmount, 2, '.', ''); ?></th>
                     <?php endif; ?>
                 </tr>

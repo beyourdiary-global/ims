@@ -217,9 +217,10 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
                 $voucher = parseShopeeOrderAmountByLabels($cleanText, ['Vouchers & Rebates', 'Shopee Voucher', 'Seller Voucher', 'Shop voucher']);
             }
 
-            $actShippingFee = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Estimated Shipping Subtotal', 'Shipping Subtotal', 'Estimated Shipping Fee Charged by Logistic Provider', 'Shipping Fee Paid by Buyer']);
+            // Actual shipping must follow Shipping Subtotal (buyer shipping subtotal), not logistic provider fee.
+            $actShippingFee = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Shipping Subtotal', 'Estimated Shipping Subtotal']);
             if ($actShippingFee === '') {
-                $actShippingFee = parseShopeeOrderAmountByLabels($cleanText, ['Shipping Subtotal', 'Estimated Shipping Subtotal', 'Estimated Shipping Fee Charged by Logistic Provider', 'Shipping Fee Paid by Buyer']);
+                $actShippingFee = parseShopeeOrderAmountByLabels($cleanText, ['Shipping Subtotal', 'Estimated Shipping Subtotal']);
             }
 
             // Required mapping:
@@ -2333,35 +2334,13 @@ function extractShopeePdfVoucherAmount($text)
 {
     $boundaries = getShopeePdfMoneyBoundaryLabels();
 
-    $vouchersAndRebates = extractShopeePdfAmountByStrictLabels($text, ['Vouchers & Rebates'], $boundaries, 260, true);
-    if ($vouchersAndRebates === '') {
-        $vouchersAndRebates = extractShopeePdfAmountByLooseLabels($text, ['Vouchers & Rebates']);
-    }
-
     $voucherPart = extractShopeePdfAmountByStrictLabels($text, ['Shopee Voucher', 'Shop Voucher', 'Seller Voucher'], $boundaries, 220, true);
     if ($voucherPart === '') {
         $voucherPart = extractShopeePdfAmountByLooseLabels($text, ['Shopee Voucher', 'Shop Voucher', 'Seller Voucher']);
     }
 
-    $coinsPart = extractShopeePdfAmountByStrictLabels($text, ['Coins Redeemed', 'Shopee Coins'], $boundaries, 220, true);
-    if ($coinsPart === '') {
-        $coinsPart = extractShopeePdfAmountByLooseLabels($text, ['Coins Redeemed', 'Shopee Coins']);
-    }
-
-    if ($voucherPart !== '' && $coinsPart !== '') {
-        return number_format(((float) $voucherPart + (float) $coinsPart), 2, '.', '');
-    }
-
-    if ($vouchersAndRebates !== '') {
-        return $vouchersAndRebates;
-    }
-
     if ($voucherPart !== '') {
         return $voucherPart;
-    }
-
-    if ($coinsPart !== '') {
-        return $coinsPart;
     }
 
     return '';
@@ -2383,22 +2362,16 @@ function extractShopeePdfMonetaryValues($text)
 
     $voucher = extractShopeePdfVoucherAmount($text);
 
+    // Actual shipping must be based on Shipping Subtotal (not logistic provider fee lines).
     $shippingFee = extractShopeePdfAmountByStrictLabels($text, [
-        'Shipping Fee Charged by Logistic Provider',
-        'Estimated Shipping Fee Charged by Logistic Provider',
-    ], $boundaries, 280, true);
+        'Shipping Subtotal',
+        'Estimated Shipping Subtotal',
+    ], $boundaries, 260, false);
     if ($shippingFee === '') {
         $shippingFee = extractShopeePdfAmountByLooseLabels($text, [
-            'Shipping Fee Charged by Logistic Provider',
-            'Estimated Shipping Fee Charged by Logistic Provider',
-        ]);
-    }
-    if ($shippingFee === '') {
-        $shippingFee = extractShopeePdfAmountByStrictLabels($text, [
-            'Shipping Fee Paid by Buyer',
             'Shipping Subtotal',
             'Estimated Shipping Subtotal',
-        ], $boundaries, 260, true);
+        ]);
     }
 
     $serviceFee = extractShopeePdfAmountByStrictLabels($text, ['Service Fee'], $boundaries, 220, true);

@@ -665,14 +665,14 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                             $orderNo = isset($orderRow['orderID']) ? $orderRow['orderID'] : '';
                                             $orderDate = isset($orderRow['date']) ? $orderRow['date'] : '';
                                             $orderPackage = commonResolvePackageNamesFromCsv(isset($orderRow['package']) ? $orderRow['package'] : '', $connect);
-                                            $buyerPayMethod = isset($orderRow['buyer_pay_meth']) ? $orderRow['buyer_pay_meth'] : '';
+                                            $buyerPayMethod = commonResolvePaymentMethodName(isset($orderRow['buyer_pay_meth']) ? $orderRow['buyer_pay_meth'] : '', $finance_connect);
                                             $orderFees = isset($orderRow['fees']) ? $orderRow['fees'] : '0.00';
                                             $finalAmount = isset($orderRow['final_amt']) ? $orderRow['final_amt'] : '0.00';
                                             ?>
                                             <tr>
                                                 <td><?= $orderSN++ ?></td>
                                                 <td>
-                                                    <a class="btn btn-sm btn-rounded btn-primary"
+                                                    <a class="btn btn-sm btn-rounded btn-primary" style="white-space:nowrap;"
                                                        href="<?= $SITEURL . '/shopee/shopee_cust_info.php?id=' . (int) $dataID . '&act=' . $act_2 . '&open_order_id=' . $orderId ?>">
                                                         Show Order Detail
                                                     </a>
