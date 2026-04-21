@@ -686,22 +686,19 @@ body.task-global-sidebar-open #dispTable {
 }
 
 /* Keep grouped/filter DataTables horizontally balanced (same left/right gap) */
-#shopee_ads_topup_trans_table_wrapper .row.table-responsive,
-#shopee_order_req_table_wrapper .row.table-responsive {
+#shopee_ads_topup_trans_table_wrapper .row.table-responsive {
   margin-left: 0 !important;
   margin-right: 0 !important;
 }
 
-#shopee_ads_topup_trans_table_wrapper .row.table-responsive > .col-sm-12,
-#shopee_order_req_table_wrapper .row.table-responsive > .col-sm-12 {
+#shopee_ads_topup_trans_table_wrapper .row.table-responsive > .col-sm-12 {
   display: flex;
   justify-content: center;
   padding-left: 0.75rem !important;
   padding-right: 0.75rem !important;
 }
 
-#shopee_ads_topup_trans_table_wrapper table.dataTable,
-#shopee_order_req_table_wrapper table.dataTable {
+#shopee_ads_topup_trans_table_wrapper table.dataTable {
   width: auto !important;
   min-width: calc(100% - 1.5rem) !important;
   margin-left: auto !important;
