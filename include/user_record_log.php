@@ -409,24 +409,40 @@ if (!function_exists('urlBuildListHtml')) {
                 $editBtn = '<button type="button" class="btn btn-sm btn-rounded btn-warning url-edit-btn" data-id="' . $recordId . '">Edit</button>';
             }
 
-            $attachmentHtml = '<span class="text-muted">No attachment</span>';
-            if ($attachment !== '') {
-                $href = rtrim((string) $GLOBALS['SITEURL'], '/') . '/' . ltrim($uploadWebDir, '/') . rawurlencode($attachment);
-                $attachmentHtml = '<a target="_blank" href="' . htmlspecialchars($href, ENT_QUOTES, 'UTF-8') . '">View Attachment</a>';
+            $isSameAuditInfo = (
+                trim((string) $createdAt) === trim((string) $updatedAt) &&
+                trim((string) $createdBy) === trim((string) $updatedBy)
+            );
+
+            $createdMeta = 'Created: ' . htmlspecialchars((string) $createdAt, ENT_QUOTES, 'UTF-8') . ' by ' . htmlspecialchars((string) $createdBy, ENT_QUOTES, 'UTF-8');
+            $updatedMeta = 'Updated: ' . htmlspecialchars((string) $updatedAt, ENT_QUOTES, 'UTF-8') . ' by ' . htmlspecialchars((string) $updatedBy, ENT_QUOTES, 'UTF-8');
+            $auditMeta = $createdMeta;
+            if (!$isSameAuditInfo && trim((string) $updatedAt) !== '') {
+                $auditMeta .= ' <span class="url-meta-sep">|</span> ' . $updatedMeta;
             }
 
-            $html .= '<div class="card mb-3">';
-            $html .= '  <div class="card-header d-flex justify-content-between align-items-center">';
-            $html .= '    <div><strong>#' . $displayNo . '</strong> <span class="ms-2 text-muted">Created: ' . htmlspecialchars((string) $createdAt, ENT_QUOTES, 'UTF-8') . ' by ' . htmlspecialchars((string) $createdBy, ENT_QUOTES, 'UTF-8') . '</span></div>';
-            $html .= '    <div>';
-            $html .= '      <button type="button" class="btn btn-sm btn-rounded btn-info text-white url-toggle-btn" data-target="url-body-' . $recordId . '">Collapse/Expand</button> ';
+            $attachmentButtonHtml = '';
+            if ($attachment !== '') {
+                $href = rtrim((string) $GLOBALS['SITEURL'], '/') . '/' . ltrim($uploadWebDir, '/') . rawurlencode($attachment);
+                $attachmentButtonHtml = '<button type="button" class="btn btn-sm btn-rounded btn-outline-primary url-view-attachment-btn" data-url="' . htmlspecialchars($href, ENT_QUOTES, 'UTF-8') . '" data-file="' . htmlspecialchars((string) $attachment, ENT_QUOTES, 'UTF-8') . '">View Attachment</button>';
+            }
+
+            $rowClass = ($count % 2 === 1) ? ' url-row-odd' : ' url-row-even';
+            $html .= '<div class="card mb-3 url-log-row' . $rowClass . '">';
+            $html .= '  <div class="card-header">';
+            $html .= '    <div><strong>#' . $displayNo . '</strong> <span class="ms-2 text-muted small">' . $auditMeta . '</span></div>';
+            $html .= '    <div class="d-flex align-items-center gap-2 mt-2">';
+            $html .= '      <button type="button" class="btn btn-sm btn-rounded btn-info text-white url-toggle-btn" data-target="url-body-' . $recordId . '">Collapse/Expand</button>';
             $html .= $editBtn;
             $html .= '    </div>';
             $html .= '  </div>';
             $html .= '  <div id="url-body-' . $recordId . '" class="card-body">';
-            $html .= '    <div class="mb-2"><strong>Content:</strong><br>' . nl2br(htmlspecialchars((string) $content, ENT_QUOTES, 'UTF-8')) . '</div>';
-            $html .= '    <div class="mb-2"><strong>Attachment:</strong> ' . $attachmentHtml . '</div>';
-            $html .= '    <div class="small text-muted">Updated: ' . htmlspecialchars((string) $updatedAt, ENT_QUOTES, 'UTF-8') . ' by ' . htmlspecialchars((string) $updatedBy, ENT_QUOTES, 'UTF-8') . '</div>';
+            $html .= '    <div class="url-content-row d-flex justify-content-between align-items-start gap-2 flex-wrap">';
+            $html .= '      <div class="mb-0"><strong>Content:</strong><br>' . nl2br(htmlspecialchars((string) $content, ENT_QUOTES, 'UTF-8')) . '</div>';
+            if ($attachmentButtonHtml !== '') {
+                $html .= '      <div class="url-attachment-action ms-auto">' . $attachmentButtonHtml . '</div>';
+            }
+            $html .= '    </div>';
             $html .= '    <input type="hidden" class="url-edit-content" value="' . htmlspecialchars((string) $content, ENT_QUOTES, 'UTF-8') . '">';
             $html .= '    <input type="hidden" class="url-edit-attachment" value="' . htmlspecialchars((string) $attachment, ENT_QUOTES, 'UTF-8') . '">';
             $html .= '  </div>';
@@ -751,6 +767,86 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
         $moduleActionUrl = rtrim((string) $GLOBALS['SITEURL'], '/') . '/user_record_log.php';
         ?>
         <div class="user-record-log-module mt-4">
+            <style>
+                .user-record-log-module .url-log-row.url-row-odd .card-header,
+                .user-record-log-module .url-log-row.url-row-odd .card-body {
+                    background-color: #ffffff;
+                }
+
+                .user-record-log-module .url-log-row.url-row-even .card-header,
+                .user-record-log-module .url-log-row.url-row-even .card-body {
+                    background-color: #F7F3E1;
+                }
+
+                .user-record-log-module .url-content-row {
+                    width: 100%;
+                }
+
+                .user-record-log-module .url-content-row > div:first-child {
+                    flex: 1 1 260px;
+                }
+
+                .user-record-log-module .url-attachment-action {
+                    flex: 0 0 auto;
+                }
+
+                .user-record-log-module .url-filter-label-nowrap {
+                    white-space: nowrap;
+                }
+
+                .user-record-log-module .url-attachment-modal {
+                    position: fixed;
+                    inset: 0;
+                    z-index: 1050;
+                    background: rgba(0, 0, 0, 0.7);
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 20px;
+                }
+
+                .user-record-log-module .url-attachment-modal-dialog {
+                    position: relative;
+                    width: min(1200px, 96vw);
+                    height: min(88vh, 900px);
+                    background: #ffffff;
+                    border-radius: 8px;
+                    padding: 18px;
+                }
+
+                .user-record-log-module .url-attachment-modal-close {
+                    position: absolute;
+                    top: 2px;
+                    right: 10px;
+                    border: 0;
+                    background: transparent;
+                    font-size: 28px;
+                    line-height: 1;
+                    color: #333333;
+                    cursor: pointer;
+                }
+
+                .user-record-log-module .url-attachment-preview-content {
+                    width: 100%;
+                    height: 100%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding-top: 12px;
+                }
+
+                .user-record-log-module .url-attachment-preview-content img,
+                .user-record-log-module .url-attachment-preview-content iframe {
+                    width: 100%;
+                    height: 100%;
+                    border: 0;
+                    object-fit: contain;
+                }
+
+                body.url-modal-open {
+                    overflow: hidden;
+                }
+            </style>
             <?php if ($sectionHeading !== '') { ?>
                 <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
                     <h5 class="mb-0"><?php echo htmlspecialchars($sectionHeading, ENT_QUOTES, 'UTF-8'); ?></h5>
@@ -792,8 +888,8 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
             <div class="card mb-3">
                 <div class="card-body">
                     <h5 class="mb-3">Search &amp; Filter</h5>
-                    <div class="row g-3">
-                        <div class="col-md-4">
+                    <div class="row g-3 url-filter-row">
+                        <div class="col-md-3">
                             <label class="form-label" for="url_keyword">Keyword (content)</label>
                             <input class="form-control" type="text" id="url_keyword" placeholder="Type keyword...">
                         </div>
@@ -803,7 +899,7 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                         </div>
                         <div class="col-md-3">
                             <label class="form-label" for="url_filter_user">User</label>
-                            <select class="form-control" id="url_filter_user">
+                            <select class="form-select" id="url_filter_user">
                                 <option value="">All Users</option>
                                 <?php
                                 $safeUserTable = defined('USR_USER') ? USR_USER : 'user';
@@ -818,19 +914,29 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                                 ?>
                             </select>
                         </div>
-                        <div class="col-md-2">
-                            <label class="form-label" for="url_filter_attachment">Has Attachment</label>
-                            <select class="form-control" id="url_filter_attachment">
+                        <div class="col-md-3">
+                            <label class="form-label url-filter-label-nowrap" for="url_filter_attachment">Has Attachment</label>
+                            <select class="form-select" id="url_filter_attachment">
                                 <option value="">All</option>
                                 <option value="Y">Yes</option>
                                 <option value="N">No</option>
                             </select>
                         </div>
-                        <div class="col-12 d-flex gap-2 flex-wrap">
-                            <button type="button" class="btn btn-sm btn-rounded btn-info text-white" id="url_apply_filter_btn">Apply</button>
-                            <button type="button" class="btn btn-sm btn-rounded btn-secondary" id="url_reset_filter_btn">Reset</button>
-                            <button type="button" class="btn btn-sm btn-rounded btn-outline-primary" id="url_expand_all_btn">Expand All</button>
-                            <button type="button" class="btn btn-sm btn-rounded btn-outline-primary" id="url_collapse_all_btn">Collapse All</button>
+                        <div class="col-12">
+                            <div class="row g-2">
+                                <div class="col-6 col-md-auto d-grid">
+                                    <button type="button" class="btn btn-sm btn-rounded btn-info text-white w-100" id="url_apply_filter_btn">Apply</button>
+                                </div>
+                                <div class="col-6 col-md-auto d-grid">
+                                    <button type="button" class="btn btn-sm btn-rounded btn-secondary w-100" id="url_reset_filter_btn">Reset</button>
+                                </div>
+                                <div class="col-12 col-md-auto d-grid">
+                                    <button type="button" class="btn btn-sm btn-rounded btn-outline-primary w-100" id="url_expand_all_btn">Expand All</button>
+                                </div>
+                                <div class="col-12 col-md-auto d-grid">
+                                    <button type="button" class="btn btn-sm btn-rounded btn-outline-primary w-100" id="url_collapse_all_btn">Collapse All</button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -856,6 +962,13 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
             <div class="d-flex justify-content-between align-items-center flex-wrap mt-3">
                 <div id="url_paging_summary" class="dataTables_info" role="status" aria-live="polite"></div>
                 <div id="url_pagination" class="dataTables_paginate paging_simple_numbers"></div>
+            </div>
+
+            <div id="url_attachment_preview_modal" class="url-attachment-modal d-none" role="dialog" aria-modal="true" aria-label="Attachment preview">
+                <div class="url-attachment-modal-dialog">
+                    <button type="button" class="url-attachment-modal-close" id="url_attachment_modal_close" aria-label="Close">&times;</button>
+                    <div id="url_attachment_preview_content" class="url-attachment-preview-content"></div>
+                </div>
             </div>
         </div>
 

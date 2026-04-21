@@ -331,37 +331,326 @@ function cleanPdfTextOperand($text)
     return normalizeImportText(preg_replace('/[^[:print:] ]/', ' ', $text));
 }
 
+function satPdfHexToUtf8($hex)
+{
+    $hex = preg_replace('/[^0-9A-Fa-f]/', '', (string) $hex);
+    if ($hex === '') {
+        return '';
+    }
+
+    if ((strlen($hex) % 2) === 1) {
+        $hex .= '0';
+    }
+
+    $bin = @hex2bin($hex);
+    if ($bin === false) {
+        return '';
+    }
+
+    if (strlen($hex) <= 2) {
+        return cleanPdfTextOperand($bin);
+    }
+
+    if ((strlen($hex) % 4) === 0 && function_exists('mb_convert_encoding')) {
+        $text = @mb_convert_encoding($bin, 'UTF-8', 'UTF-16BE');
+        if (is_string($text) && $text !== '') {
+            return $text;
+        }
+    }
+
+    return cleanPdfTextOperand($bin);
+}
+
+function satPdfIncrementHex($hex, $step)
+{
+    $hex = strtoupper(preg_replace('/[^0-9A-F]/', '', (string) $hex));
+    $step = (int) $step;
+    if ($hex === '' || $step < 0) {
+        return '';
+    }
+
+    $width = strlen($hex);
+    if ($width > 8) {
+        return '';
+    }
+
+    $value = hexdec($hex);
+    $next = $value + $step;
+    if ($next < 0) {
+        return '';
+    }
+
+    return strtoupper(str_pad(dechex($next), $width, '0', STR_PAD_LEFT));
+}
+
+function satBuildPdfUnicodeMapFromContent($content)
+{
+    $map = array();
+    $codeLengths = array();
+
+    preg_match_all('/stream\s*\r?\n(.*?)\r?\n?endstream/s', (string) $content, $streamMatches);
+    $streams = isset($streamMatches[1]) && is_array($streamMatches[1]) ? $streamMatches[1] : array();
+
+    foreach ($streams as $stream) {
+        $decoded = decodePdfStream($stream);
+        if ($decoded === false || $decoded === '') {
+            continue;
+        }
+
+        if (stripos($decoded, 'beginbfchar') === false && stripos($decoded, 'beginbfrange') === false) {
+            continue;
+        }
+
+        if (preg_match_all('/beginbfchar(.*?)endbfchar/si', $decoded, $bfCharBlocks)) {
+            foreach ($bfCharBlocks[1] as $block) {
+                if (preg_match_all('/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/', $block, $pairs, PREG_SET_ORDER)) {
+                    foreach ($pairs as $pair) {
+                        $src = strtoupper($pair[1]);
+                        $dst = satPdfHexToUtf8($pair[2]);
+                        if ($src === '' || $dst === '') {
+                            continue;
+                        }
+                        $map[$src] = $dst;
+                        $codeLengths[strlen($src)] = true;
+                    }
+                }
+            }
+        }
+
+        if (preg_match_all('/beginbfrange(.*?)endbfrange/si', $decoded, $bfRangeBlocks)) {
+            foreach ($bfRangeBlocks[1] as $block) {
+                if (preg_match_all('/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/', $block, $rangeMatches, PREG_SET_ORDER)) {
+                    foreach ($rangeMatches as $rangeMatch) {
+                        $start = strtoupper($rangeMatch[1]);
+                        $end = strtoupper($rangeMatch[2]);
+                        $destStart = strtoupper($rangeMatch[3]);
+
+                        if ($start === '' || $end === '' || $destStart === '' || strlen($start) !== strlen($end)) {
+                            continue;
+                        }
+
+                        $startVal = hexdec($start);
+                        $endVal = hexdec($end);
+                        if ($endVal < $startVal) {
+                            continue;
+                        }
+
+                        $total = $endVal - $startVal;
+                        if ($total > 1024) {
+                            continue;
+                        }
+
+                        for ($offset = 0; $offset <= $total; $offset++) {
+                            $src = satPdfIncrementHex($start, $offset);
+                            $dstHex = satPdfIncrementHex($destStart, $offset);
+                            $dst = satPdfHexToUtf8($dstHex);
+
+                            if ($src === '' || $dst === '') {
+                                continue;
+                            }
+
+                            $map[$src] = $dst;
+                            $codeLengths[strlen($src)] = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    $lengths = array_map('intval', array_keys($codeLengths));
+    rsort($lengths, SORT_NUMERIC);
+
+    return array(
+        'map' => $map,
+        'code_lengths' => $lengths,
+    );
+}
+
+function satDecodePdfHexTokenWithUnicodeMap($hex, $unicodeMap)
+{
+    $hex = strtoupper(preg_replace('/[^0-9A-F]/', '', (string) $hex));
+    if ($hex === '') {
+        return '';
+    }
+
+    $map = isset($unicodeMap['map']) && is_array($unicodeMap['map']) ? $unicodeMap['map'] : array();
+    $lengths = isset($unicodeMap['code_lengths']) && is_array($unicodeMap['code_lengths']) ? $unicodeMap['code_lengths'] : array();
+
+    if (empty($map) || empty($lengths)) {
+        return '';
+    }
+
+    foreach ($lengths as $codeLen) {
+        $codeLen = (int) $codeLen;
+        if ($codeLen <= 0 || (strlen($hex) % $codeLen) !== 0) {
+            continue;
+        }
+
+        $parts = str_split($hex, $codeLen);
+        $hits = 0;
+        $out = '';
+
+        foreach ($parts as $part) {
+            if (isset($map[$part])) {
+                $out .= $map[$part];
+                $hits++;
+            }
+        }
+
+        if ($hits > 0 && $hits >= (int) ceil(count($parts) * 0.6)) {
+            return cleanPdfTextOperand($out);
+        }
+    }
+
+    return '';
+}
+
+function satDecodePdfLiteralToken($token, $unicodeMap = array())
+{
+    $token = trim((string) $token);
+    if ($token === '') {
+        return '';
+    }
+
+    if ($token[0] === '<' && substr($token, -1) === '>') {
+        $hex = preg_replace('/[^0-9A-Fa-f]/', '', substr($token, 1, -1));
+        if ($hex === '') {
+            return '';
+        }
+        $decodedWithMap = satDecodePdfHexTokenWithUnicodeMap($hex, $unicodeMap);
+        if ($decodedWithMap !== '') {
+            return $decodedWithMap;
+        }
+        if ((strlen($hex) % 2) === 1) {
+            $hex .= '0';
+        }
+        $bin = @hex2bin($hex);
+        return $bin === false ? '' : cleanPdfTextOperand($bin);
+    }
+
+    if ($token[0] === '(' && substr($token, -1) === ')') {
+        $inner = substr($token, 1, -1);
+    } else {
+        $inner = $token;
+    }
+
+    $inner = preg_replace_callback(
+        '/\\\\([0-7]{1,3})/',
+        function ($m) {
+            return chr(octdec($m[1]));
+        },
+        $inner,
+    );
+
+    $inner = str_replace(array('\\n', '\\r', '\\t', '\\b', '\\f', '\\(', '\\)', '\\\\'), array("\n", "\r", "\t", "\b", "\f", "(", ")", "\\"), $inner);
+    $inner = preg_replace('/\\\\\r\n|\\\\\n|\\\\\r/', '', $inner);
+
+    return cleanPdfTextOperand($inner);
+}
+
+function satExtractPdfTextTokensFromDecodedStream($decoded, $unicodeMap = array())
+{
+    $decoded = (string) $decoded;
+    if ($decoded === '') {
+        return array();
+    }
+
+    $lines = array();
+    $singleTokenPattern = '/(\((?:\\\\.|[^\\\\\)])*\)|<[0-9A-Fa-f\s]+>)\s*Tj/s';
+    if (preg_match_all($singleTokenPattern, $decoded, $matches)) {
+        foreach ($matches[1] as $token) {
+            $line = satDecodePdfLiteralToken($token, $unicodeMap);
+            if ($line !== '') {
+                $lines[] = $line;
+            }
+        }
+    }
+
+    $apostrophePattern = '/(\((?:\\\\.|[^\\\\\)])*\)|<[0-9A-Fa-f\s]+>)\s*\'/s';
+    if (preg_match_all($apostrophePattern, $decoded, $matches)) {
+        foreach ($matches[1] as $token) {
+            $line = satDecodePdfLiteralToken($token, $unicodeMap);
+            if ($line !== '') {
+                $lines[] = $line;
+            }
+        }
+    }
+
+    $quotePattern = '/[-+0-9.\s]+[-+0-9.\s]+(\((?:\\\\.|[^\\\\\)])*\)|<[0-9A-Fa-f\s]+>)\s*"/s';
+    if (preg_match_all($quotePattern, $decoded, $matches)) {
+        foreach ($matches[1] as $token) {
+            $line = satDecodePdfLiteralToken($token, $unicodeMap);
+            if ($line !== '') {
+                $lines[] = $line;
+            }
+        }
+    }
+
+    if (preg_match_all('/\[(.*?)\]\s*TJ/s', $decoded, $arrayMatches)) {
+        foreach ($arrayMatches[1] as $chunk) {
+            if (preg_match_all('/(\((?:\\\\.|[^\\\\\)])*\)|<[0-9A-Fa-f\s]+>)/s', $chunk, $innerMatches)) {
+                $parts = array();
+                foreach ($innerMatches[1] as $token) {
+                    $part = satDecodePdfLiteralToken($token, $unicodeMap);
+                    if ($part !== '') {
+                        $parts[] = $part;
+                    }
+                }
+                $line = cleanPdfTextOperand(implode('', $parts));
+                if ($line !== '') {
+                    $lines[] = $line;
+                }
+            }
+        }
+    }
+
+    return $lines;
+}
+
+function satExtractTextFromPdfViaCommand($filePath)
+{
+    $filePath = trim((string) $filePath);
+    if ($filePath === '' || !is_file($filePath) || !function_exists('shell_exec')) {
+        return '';
+    }
+
+    $escapedFile = escapeshellarg($filePath);
+    $commands = array(
+        'pdftotext -enc UTF-8 -layout ' . $escapedFile . ' - 2>NUL',
+        'pdftotext -enc UTF-8 ' . $escapedFile . ' - 2>NUL',
+    );
+
+    foreach ($commands as $command) {
+        $output = @shell_exec($command);
+        $output = is_string($output) ? trim($output) : '';
+        if ($output !== '') {
+            return $output;
+        }
+    }
+
+    return '';
+}
+
 function extractTextFromPdfContent($content)
 {
     if ((string) $content === '') {
         return '';
     }
 
-    preg_match_all('/stream\r?\n(.*?)endstream/s', (string) $content, $streamMatches);
+    $unicodeMap = satBuildPdfUnicodeMapFromContent($content);
+    preg_match_all('/stream\s*\r?\n(.*?)\r?\n?endstream/s', (string) $content, $streamMatches);
     $lines = array();
 
     foreach ($streamMatches[1] as $stream) {
         $decoded = decodePdfStream($stream);
         if ($decoded === false) {
-            continue;
+            $decoded = (string) $stream;
         }
-
-        if (preg_match_all('/\(([^\)]{1,500})\)\s*Tj/s', $decoded, $textMatches)) {
-            foreach ($textMatches[1] as $match) {
-                $cleanLine = cleanPdfTextOperand($match);
-                if ($cleanLine !== '') {
-                    $lines[] = $cleanLine;
-                }
-            }
-        }
-
-        if (preg_match_all('/\[(.*?)\]\s*TJ/s', $decoded, $arrayMatches)) {
-            foreach ($arrayMatches[1] as $chunk) {
-                preg_match_all('/\(([^\)]*)\)/', $chunk, $innerMatches);
-                $cleanLine = cleanPdfTextOperand(implode('', $innerMatches[1]));
-                if ($cleanLine !== '') {
-                    $lines[] = $cleanLine;
-                }
+        $streamLines = satExtractPdfTextTokensFromDecodedStream($decoded, $unicodeMap);
+        if (!empty($streamLines)) {
+            foreach ($streamLines as $line) {
+                $lines[] = $line;
             }
         }
     }
@@ -384,6 +673,289 @@ function getPdfTextLines($text)
     return $normalizedLines;
 }
 
+function satRepairSplitPdfWords($text)
+{
+    $text = (string) $text;
+    if ($text === '') {
+        return '';
+    }
+
+    // Repair OCR-like token splits: "Or der", "P a yment", "W allet"
+    do {
+        $text = preg_replace('/\b([A-Za-z]{1,2})\s+([A-Za-z]{2,})\b/u', '$1$2', $text, -1, $count);
+    } while ($count > 0);
+
+    return $text;
+}
+
+function scoreShopeeAdsPdfReadability($text)
+{
+    $text = normalizeImportLookup($text);
+    if ($text === '') {
+        return 0;
+    }
+
+    $keywords = array(
+        'completed',
+        'shopeeads',
+        'orderid',
+        'paymenttotal',
+        'subtotal',
+        'sst',
+        'gst',
+        'paymentmethod',
+        'shopeewallet',
+        'shopname',
+        'orderdetails',
+        'topuphistory',
+    );
+
+    $score = 0;
+    foreach ($keywords as $keyword) {
+        if (strpos($text, $keyword) !== false) {
+            $score++;
+        }
+    }
+
+    return $score;
+}
+
+function decodeShopeeAdsPdfShiftedGlyphText($text, $mapDigits = true)
+{
+    $text = (string) $text;
+    if ($text === '') {
+        return '';
+    }
+
+    $decoded = '';
+    $length = strlen($text);
+
+    for ($i = 0; $i < $length; $i++) {
+        $char = $text[$i];
+        $ord = ord($char);
+
+        if ($ord >= 69 && $ord <= 94) {
+            $decoded .= chr($ord - 4);
+            continue;
+        }
+
+        if ($mapDigits && $ord >= 39 && $ord <= 63) {
+            $decoded .= chr($ord + 28);
+            continue;
+        }
+
+        $decoded .= $char;
+    }
+
+    return $decoded;
+}
+
+function satSelectBestShopeeAdsPdfText($text)
+{
+    $source = (string) $text;
+    $candidates = array();
+
+    $candidates[] = $source;
+    $candidates[] = satRepairSplitPdfWords($source);
+
+    $decodedWithDigits = decodeShopeeAdsPdfShiftedGlyphText($source, true);
+    $decodedNoDigits = decodeShopeeAdsPdfShiftedGlyphText($source, false);
+
+    $candidates[] = $decodedWithDigits;
+    $candidates[] = satRepairSplitPdfWords($decodedWithDigits);
+    $candidates[] = $decodedNoDigits;
+    $candidates[] = satRepairSplitPdfWords($decodedNoDigits);
+
+    $bestText = $source;
+    $bestScore = -1;
+
+    foreach ($candidates as $candidate) {
+        $candidate = (string) $candidate;
+        $candidate = str_replace("\r", '', $candidate);
+        $candidate = preg_replace('/[^[:print:]\n\t]/', ' ', $candidate);
+        $candidate = preg_replace('/[ \t]+/', ' ', $candidate);
+        $candidate = preg_replace('/\n{3,}/', "\n\n", $candidate);
+        $candidate = trim($candidate);
+        if ($candidate === '') {
+            continue;
+        }
+
+        $score = scoreShopeeAdsPdfReadability($candidate);
+        if (preg_match('/Order\s*ID\s*:\s*[0-9]{12,20}/i', $candidate)) {
+            $score += 2;
+        }
+        if (preg_match('/(?:Payment\s*Total|Subtotal|SST|GST)\s*:\s*(RM|MYR|S\$|SGD|USD)?\s*[0-9]/i', $candidate)) {
+            $score += 2;
+        }
+        if (preg_match('/\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}/', $candidate)) {
+            $score += 1;
+        }
+
+        if ($score > $bestScore) {
+            $bestScore = $score;
+            $bestText = $candidate;
+        }
+    }
+
+    return array(
+        'text' => $bestText,
+        'score' => $bestScore,
+        'source_score' => scoreShopeeAdsPdfReadability($source),
+    );
+}
+
+function satBuildFlexibleLabelRegex($label)
+{
+    $chars = preg_replace('/[^A-Za-z0-9]/', '', strtoupper((string) $label));
+    if ($chars === '') {
+        return '';
+    }
+
+    return implode('\\W*', str_split($chars));
+}
+
+function satExtractRawPdfSearchText($content)
+{
+    $chunks = array();
+    preg_match_all('/stream\s*\r?\n(.*?)\r?\n?endstream/s', (string) $content, $streamMatches);
+    $streams = isset($streamMatches[1]) && is_array($streamMatches[1]) ? $streamMatches[1] : array();
+
+    foreach ($streams as $stream) {
+        $decoded = decodePdfStream($stream);
+        if ($decoded === false) {
+            $decoded = (string) $stream;
+        }
+        $chunks[] = (string) $decoded;
+    }
+
+    $text = implode("\n", $chunks);
+    $text = str_replace("\r", '', $text);
+    $text = preg_replace('/[^[:print:]\n\t]/', ' ', $text);
+    $text = preg_replace('/[ \t]+/', ' ', $text);
+    return trim((string) $text);
+}
+
+function satExtractMoneyNearLabel($text, $label)
+{
+    $labelRegex = satBuildFlexibleLabelRegex($label);
+    if ($labelRegex === '') {
+        return array('currency' => '', 'amount' => '');
+    }
+
+    $moneyRegex = '/(?:RM|MYR|S\$|SGD|USD)?\s*([0-9][0-9,]*\.?[0-9]*)/i';
+    if (preg_match('/' . $labelRegex . '(.{0,80})/is', (string) $text, $windowMatch)) {
+        $window = (string) $windowMatch[1];
+        if (preg_match($moneyRegex, $window, $moneyMatch)) {
+            $currency = '';
+            if (preg_match('/(RM|MYR|S\$|SGD|USD)/i', $window, $currencyMatch)) {
+                $currency = strtoupper((string) $currencyMatch[1]);
+            }
+            return array(
+                'currency' => $currency,
+                'amount' => number_format((float) str_replace(',', '', (string) $moneyMatch[1]), 2, '.', ''),
+            );
+        }
+    }
+
+    return array('currency' => '', 'amount' => '');
+}
+
+function satIsGenericShopeeAccountCandidate($value)
+{
+    $lookup = normalizeImportLookup((string) $value);
+    if ($lookup === '') {
+        return true;
+    }
+
+    $generic = array(
+        'shopee',
+        'shopeeads',
+        'shopeewallet',
+        'wallet',
+        'shopname',
+        'orderdetails',
+    );
+
+    return in_array($lookup, $generic, true);
+}
+
+function satResolveBestShopeeAccountFromText($textLines, $shopeeAccounts)
+{
+    $bestId = '';
+    $bestScore = 0;
+
+    foreach ($shopeeAccounts as $accId => $accName) {
+        $label = (string) $accName;
+        $normalizedLabel = normalizeImportLookup($label);
+        if ($normalizedLabel === '') {
+            continue;
+        }
+
+        $variants = array(
+            $label,
+            str_replace(array('.', '_', '-'), ' ', $label),
+            str_replace(array('.', '_', '-'), '', $label),
+        );
+        $scoreBase = strlen($normalizedLabel);
+
+        foreach ($textLines as $line) {
+            $lineNorm = normalizeImportLookup($line);
+            if ($lineNorm === '') {
+                continue;
+            }
+
+            $score = 0;
+            if (strpos($lineNorm, $normalizedLabel) !== false) {
+                $score = $scoreBase + 20;
+            } else {
+                foreach ($variants as $variant) {
+                    $variant = trim((string) $variant);
+                    if ($variant !== '' && stripos((string) $line, $variant) !== false) {
+                        $score = max($score, $scoreBase + 10);
+                    }
+                }
+            }
+
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $bestId = (string) $accId;
+            }
+        }
+    }
+
+    return array(
+        'id' => $bestId,
+        'score' => $bestScore,
+    );
+}
+
+function satResolveBestOptionIdFromText($text, $options)
+{
+    $bestId = '';
+    $bestScore = 0;
+    $textLookup = normalizeImportLookup((string) $text);
+    if ($textLookup === '') {
+        return '';
+    }
+
+    foreach ($options as $optionId => $optionLabel) {
+        $labelLookup = normalizeImportLookup((string) $optionLabel);
+        if ($labelLookup === '') {
+            continue;
+        }
+
+        if (strpos($textLookup, $labelLookup) !== false) {
+            $score = strlen($labelLookup);
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $bestId = (string) $optionId;
+            }
+        }
+    }
+
+    return $bestId;
+}
+
 function extractPdfFieldByLabels($text, $labels)
 {
     $lines = getPdfTextLines($text);
@@ -402,13 +974,16 @@ function extractPdfFieldByLabels($text, $labels)
 
             if (preg_match('/' . preg_quote($label, '/') . '\s*:?\s*(.+)/i', $line, $matches)) {
                 $value = normalizeImportText($matches[1]);
-                if ($value !== '' && normalizeImportLookup($value) !== $labelLookup) {
+                if ($value !== '' && preg_match('/[A-Za-z0-9]/', $value) && normalizeImportLookup($value) !== $labelLookup) {
                     return $value;
                 }
             }
 
             if (isset($lines[$index + 1])) {
-                return normalizeImportText($lines[$index + 1]);
+                $nextValue = normalizeImportText($lines[$index + 1]);
+                if ($nextValue !== '' && preg_match('/[A-Za-z0-9]/', $nextValue)) {
+                    return $nextValue;
+                }
             }
         }
     }
@@ -455,6 +1030,19 @@ function parseShopeeAdsTopupPdf($pdfContent, $fileName, $shopeeAccounts, $curren
     $warnings = array();
 
     $text = extractTextFromPdfContent($pdfContent);
+
+    if ($text === '') {
+        $tmpFile = tempnam(sys_get_temp_dir(), 'sat_pdf_');
+        if ($tmpFile !== false) {
+            @file_put_contents($tmpFile, $pdfContent);
+            $commandText = satExtractTextFromPdfViaCommand($tmpFile);
+            if ($commandText !== '') {
+                $text = $commandText;
+            }
+            @unlink($tmpFile);
+        }
+    }
+
     if ($text === '') {
         return array(
             'data' => $data,
@@ -463,19 +1051,134 @@ function parseShopeeAdsTopupPdf($pdfContent, $fileName, $shopeeAccounts, $curren
         );
     }
 
-    $data['source_shop_name'] = extractPdfFieldByLabels($text, array('Shop Name', 'Shopee Account', 'Shop'));
-    $data['order_id'] = extractPdfFieldByLabels($text, array('Order ID', 'Order No', 'Order Number'));
-    $data['payment_date'] = parseShopeeDatetime(extractPdfFieldByLabels($text, array('Completed', 'Payment Date', 'DateTime', 'Invoice Date')));
-    $data['source_payment_method'] = extractPdfFieldByLabels($text, array('Payment Method'));
+    $bestTextBundle = satSelectBestShopeeAdsPdfText($text);
+    $textForParse = isset($bestTextBundle['text']) ? (string) $bestTextBundle['text'] : satRepairSplitPdfWords($text);
+    $rawCorpus = satExtractRawPdfSearchText($pdfContent);
+    $parseCorpus = trim($textForParse . "\n" . satRepairSplitPdfWords($rawCorpus));
+    $textLines = getPdfTextLines($textForParse);
 
-    $paymentTotal = extractPdfMoneyByLabels($text, array('Payment Total', 'Top-up Amount', 'Top Up Amount', 'Amount'));
-    $subtotal = extractPdfMoneyByLabels($text, array('Subtotal'));
-    $taxValue = extractPdfMoneyByLabels($text, array('GST', 'SST', 'Tax'));
+    $data['source_shop_name'] = extractPdfFieldByLabels($parseCorpus, array('Shop Name', 'Shopee Account'));
+    $data['order_id'] = extractPdfFieldByLabels($parseCorpus, array('Order ID', 'Order No', 'Order Number'));
+    $data['payment_date'] = parseShopeeDatetime(extractPdfFieldByLabels($parseCorpus, array('Completed', 'Payment Date', 'DateTime', 'Invoice Date')));
+    $data['source_payment_method'] = extractPdfFieldByLabels($parseCorpus, array('Payment Method'));
+
+    if (satIsGenericShopeeAccountCandidate($data['source_shop_name'])) {
+        $data['source_shop_name'] = '';
+    }
+
+    if ($data['source_shop_name'] === '' && preg_match('/Shop\s*Name\s*:?\s*([A-Za-z0-9 ._\-]{3,80})/i', $parseCorpus, $match)) {
+        $data['source_shop_name'] = normalizeImportText($match[1]);
+    }
+
+    if ($data['order_id'] === '') {
+        $orderLabelRegex = satBuildFlexibleLabelRegex('Order ID');
+        if ($orderLabelRegex !== '' && preg_match('/' . $orderLabelRegex . '\W*([0-9\W]{12,40})/i', $parseCorpus, $match)) {
+            $digits = preg_replace('/\D+/', '', (string) $match[1]);
+            if (strlen($digits) >= 12 && strlen($digits) <= 20) {
+                $data['order_id'] = $digits;
+            }
+        }
+    }
+
+    if ($data['order_id'] === '' && preg_match('/Order\s*ID\s*:\s*([0-9]{12,20})/i', $parseCorpus, $match)) {
+        $data['order_id'] = $match[1];
+    }
+
+    if ($data['order_id'] === '' && preg_match('/Order\W*ID\W*([0-9\W]{12,40})/i', $parseCorpus, $match)) {
+        $digits = preg_replace('/\D+/', '', (string) $match[1]);
+        if (strlen($digits) >= 12 && strlen($digits) <= 20) {
+            $data['order_id'] = $digits;
+        }
+    }
+
+    if ($data['order_id'] === '' && preg_match('/\b([0-9]{12,20})\b/', $parseCorpus, $match)) {
+        $data['order_id'] = $match[1];
+    }
+
+    if ($data['payment_date'] === '' && preg_match('/topped\s*up\s*at\s*(\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}(?::\d{2})?)/i', $parseCorpus, $match)) {
+        $data['payment_date'] = parseShopeeDatetime($match[1]);
+    }
+
+    if ($data['payment_date'] === '' && preg_match('/order\s*is\s*completed\s*(\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}(?::\d{2})?)/i', $parseCorpus, $match)) {
+        $data['payment_date'] = parseShopeeDatetime($match[1]);
+    }
+
+    if ($data['payment_date'] === '' && preg_match('/\b(\d{1,2}\/\d{1,2}\/\d{4}\s+\d{1,2}:\d{2}(?::\d{2})?)\b/', $parseCorpus, $match)) {
+        $data['payment_date'] = parseShopeeDatetime($match[1]);
+    }
+
+    if ($data['source_payment_method'] === '' && preg_match('/Payment\s*Method\s*:\s*([^\r\n]+)/i', $parseCorpus, $match)) {
+        $data['source_payment_method'] = normalizeImportText($match[1]);
+    }
+
+    if ($data['source_payment_method'] !== '' && !preg_match('/[A-Za-z0-9]/', $data['source_payment_method'])) {
+        $data['source_payment_method'] = '';
+    }
+
+    if ($data['source_payment_method'] === '') {
+        $walletRegex = satBuildFlexibleLabelRegex('Shopee Wallet');
+        if ($walletRegex !== '' && preg_match('/' . $walletRegex . '/i', $parseCorpus)) {
+            $data['source_payment_method'] = 'Shopee Wallet';
+        }
+    }
+
+    if ($data['source_payment_method'] === '' && preg_match('/Shopee\s*Wallet/i', $parseCorpus)) {
+        $data['source_payment_method'] = 'Shopee Wallet';
+    }
+
+    $paymentTotal = extractPdfMoneyByLabels($parseCorpus, array('Payment Total', 'Top-up Amount', 'Top Up Amount', 'Amount'));
+    $subtotal = extractPdfMoneyByLabels($parseCorpus, array('Subtotal'));
+    $taxValue = extractPdfMoneyByLabels($parseCorpus, array('GST', 'SST', 'Tax'));
+
+    if ($paymentTotal['amount'] === '') {
+        $paymentTotal = satExtractMoneyNearLabel($parseCorpus, 'Payment Total');
+    }
+    if ($subtotal['amount'] === '') {
+        $subtotal = satExtractMoneyNearLabel($parseCorpus, 'Subtotal');
+    }
+    if ($taxValue['amount'] === '') {
+        $taxValue = satExtractMoneyNearLabel($parseCorpus, 'SST');
+    }
+    if ($taxValue['amount'] === '') {
+        $taxValue = satExtractMoneyNearLabel($parseCorpus, 'GST');
+    }
+
+    if ($paymentTotal['amount'] === '' && preg_match('/Payment\s*Total\s*:\s*(RM|MYR|S\$|SGD|USD)?\s*([0-9][0-9,]*\.?[0-9]*)/i', $parseCorpus, $match)) {
+        $paymentTotal = array(
+            'currency' => strtoupper(isset($match[1]) ? $match[1] : ''),
+            'amount' => number_format((float) str_replace(',', '', $match[2]), 2, '.', ''),
+        );
+    }
+
+    if ($subtotal['amount'] === '' && preg_match('/Subtotal\s*:\s*(RM|MYR|S\$|SGD|USD)?\s*([0-9][0-9,]*\.?[0-9]*)/i', $parseCorpus, $match)) {
+        $subtotal = array(
+            'currency' => strtoupper(isset($match[1]) ? $match[1] : ''),
+            'amount' => number_format((float) str_replace(',', '', $match[2]), 2, '.', ''),
+        );
+    }
+
+    if ($taxValue['amount'] === '' && preg_match('/(?:SST|GST|Tax)\s*:\s*(RM|MYR|S\$|SGD|USD)?\s*([0-9][0-9,]*\.?[0-9]*)/i', $parseCorpus, $match)) {
+        $taxValue = array(
+            'currency' => strtoupper(isset($match[1]) ? $match[1] : ''),
+            'amount' => number_format((float) str_replace(',', '', $match[2]), 2, '.', ''),
+        );
+    }
 
     $data['source_currency'] = $paymentTotal['currency'] !== '' ? $paymentTotal['currency'] : $subtotal['currency'];
     $data['topup_amt'] = $paymentTotal['amount'];
     $data['subtotal'] = $subtotal['amount'];
     $data['gst'] = $taxValue['amount'];
+
+    // For Shopee ads receipts, GST/SST should reconcile to (Payment Total - Subtotal)
+    if ($data['topup_amt'] !== '' && $data['subtotal'] !== '' && is_numeric($data['topup_amt']) && is_numeric($data['subtotal'])) {
+        $calculatedTax = round(((float) $data['topup_amt']) - ((float) $data['subtotal']), 2);
+        if ($calculatedTax >= 0) {
+            if ($data['gst'] === '' || !is_numeric($data['gst']) || abs(((float) $data['gst']) - $calculatedTax) > 0.009) {
+                $data['gst'] = number_format($calculatedTax, 2, '.', '');
+            }
+        }
+    }
+
     $data['remark'] = 'Imported from Shopee text-based PDF';
 
     if ($data['order_id'] !== '') {
@@ -490,8 +1193,31 @@ function parseShopeeAdsTopupPdf($pdfContent, $fileName, $shopeeAccounts, $curren
     }
 
     $data['shopee_acc'] = resolveImportOptionId($data['source_shop_name'], $shopeeAccounts);
+    $bestAccount = satResolveBestShopeeAccountFromText($textLines, $shopeeAccounts);
+    if ($bestAccount['id'] !== '') {
+        $currentLabel = getImportLabelById($shopeeAccounts, $data['shopee_acc']);
+        $bestLabel = getImportLabelById($shopeeAccounts, $bestAccount['id']);
+
+        if (
+            $data['shopee_acc'] === '' ||
+            satIsGenericShopeeAccountCandidate($data['source_shop_name']) ||
+            satIsGenericShopeeAccountCandidate($currentLabel) ||
+            strlen(normalizeImportLookup($bestLabel)) > strlen(normalizeImportLookup($currentLabel))
+        ) {
+            $data['shopee_acc'] = (string) $bestAccount['id'];
+            $data['source_shop_name'] = (string) $bestLabel;
+        }
+    }
+
     $data['currency'] = resolveImportOptionId($data['source_currency'], $currencyUnits, $currencyFallbacks);
     $data['pay_meth'] = resolveImportOptionId($data['source_payment_method'], $paymentMethods);
+    if ($data['pay_meth'] === '') {
+        $bestPayMethodId = satResolveBestOptionIdFromText($parseCorpus, $paymentMethods);
+        if ($bestPayMethodId !== '') {
+            $data['pay_meth'] = $bestPayMethodId;
+            $data['source_payment_method'] = (string) getImportLabelById($paymentMethods, $bestPayMethodId);
+        }
+    }
 
     if ($data['source_shop_name'] === '') {
         $errors[] = 'Shop name could not be detected from the PDF file.';
@@ -518,7 +1244,7 @@ function parseShopeeAdsTopupPdf($pdfContent, $fileName, $shopeeAccounts, $curren
     }
 
     if ($data['shopee_acc'] === '') {
-        $warnings[] = 'Shopee account was not matched automatically. Please choose the correct account before inserting.';
+        $errors[] = 'Shopee account could not be matched from the PDF. Please ensure the account exists in database.';
     }
 
     if ($data['currency'] === '') {
