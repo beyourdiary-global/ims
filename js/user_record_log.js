@@ -402,12 +402,8 @@
           resetForm();
           loadList();
 
-          if (actionType === "I" || actionType === "E") {
-            hideAlert();
-            showSuccessPopup(successMessage);
-          } else {
-            showAlert("success", successMessage);
-          }
+          hideAlert();
+          showSuccessPopup(successMessage);
         })
         .fail(function (xhr) {
           var extra = "";
