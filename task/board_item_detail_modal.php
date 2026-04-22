@@ -3,14 +3,18 @@
         <div class="modal-content">
             <div class="modal-header">
                 <h5 id="taskItemDetailModalTitle" class="modal-title">Work item</h5>
-                <div class="task-item-detail-header-actions">
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
             </div>
             <div class="modal-body">
+                <div class="task-item-detail-top-row">
+                    <div class="task-item-detail-main-head">
+                        <div id="taskItemDetailKeyTrail" class="task-item-detail-key-trail d-none"></div>
+                    </div>
+                    <div class="task-item-detail-top-actions">
+                        <button type="button" class="btn-close task-item-detail-close-btn" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                </div>
                 <div class="row g-3">
                     <div class="col-12 col-lg-8 task-item-detail-main-col">
-                        <div id="taskItemDetailKeyTrail" class="task-item-detail-key-trail d-none"></div>
                         <div class="mb-3">
                             <div class="task-item-detail-title-row">
                                 <input id="taskItemDetailTitleInput" class="form-control task-item-detail-title-input" type="text" maxlength="255" placeholder="Work item name">
@@ -39,7 +43,7 @@
                                         <button id="taskItemDetailDescriptionCollapseBtn" type="button" class="btn task-item-detail-description-collapse-btn" aria-expanded="true" title="Collapse description">
                                             <i class="fa-solid fa-chevron-down"></i>
                                         </button>
-                                        <label class="form-label mb-0" for="taskItemDetailDescriptionInput">Description</label>
+                                        <label class="form-label mb-0 task-item-detail-section-title" for="taskItemDetailDescriptionInput">Description</label>
                                     </div>
                                     <div id="taskItemDetailDescriptionBody" class="task-item-detail-description-body">
                                         <div id="taskItemDetailDescriptionViewWrap" class="task-item-detail-description-view-wrap">
@@ -151,16 +155,16 @@
                         <?php taskRenderBoardItemHistorySection(); ?>
                     </div>
                     <div class="col-12 col-lg-4 task-item-detail-side-col">
-                        <div id="taskItemDetailSideCard" class="task-item-detail-side-card">
-                            <div class="task-item-detail-board-status-wrap mb-3">
-                                <div class="dropdown task-item-detail-board-status-dropdown">
-                                    <button id="taskItemDetailBoardStatusBtn" class="btn task-item-detail-board-status-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Select status</button>
-                                    <div id="taskItemDetailBoardStatusMenu" class="dropdown-menu task-item-detail-board-status-menu p-2">
-                                        <div id="taskItemDetailBoardStatusOptionList" class="task-item-detail-board-status-option-list"></div>
-                                    </div>
+                        <div class="task-item-detail-board-status-wrap task-item-detail-board-status-wrap-rail">
+                            <div class="dropdown task-item-detail-board-status-dropdown">
+                                <button id="taskItemDetailBoardStatusBtn" class="btn task-item-detail-board-status-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false">Select status</button>
+                                <div id="taskItemDetailBoardStatusMenu" class="dropdown-menu task-item-detail-board-status-menu p-2">
+                                    <div id="taskItemDetailBoardStatusOptionList" class="task-item-detail-board-status-option-list"></div>
                                 </div>
                             </div>
+                        </div>
 
+                        <div id="taskItemDetailSideCard" class="task-item-detail-side-card">
                             <div class="task-item-detail-side-head mb-3">
                                 <button id="taskItemDetailSideCollapseBtn" type="button" class="btn task-item-detail-side-collapse-btn" aria-expanded="true" title="Collapse details">
                                     <i class="fa-solid fa-chevron-down"></i>
@@ -310,42 +314,52 @@
                                 </select>
                             </div>
                             </div>
+                        </div>
 
-                            <div id="taskItemWorklogTimerSection" class="task-item-worklog-section mt-3">
-                                <div class="task-item-worklog-header">
-                                    <button id="taskItemWorklogToggleBtn" type="button" class="btn task-item-worklog-toggle-btn" aria-expanded="true" title="Collapse worklog timer">
-                                        <i class="fa-solid fa-chevron-down"></i>
-                                    </button>
-                                    <span class="task-item-worklog-title">Simple Worklog Timer</span>
+                        <div id="taskItemWorklogTimerSection" class="task-item-worklog-section">
+                            <div class="task-item-worklog-header">
+                                <button id="taskItemWorklogToggleBtn" type="button" class="btn task-item-worklog-toggle-btn" aria-expanded="true" title="Collapse worklog timer">
+                                    <i class="fa-solid fa-chevron-down"></i>
+                                </button>
+                                <span class="task-item-worklog-title">Simple Worklog Timer</span>
+                            </div>
+                            <div id="taskItemWorklogBody" class="task-item-worklog-body">
+                                <div class="task-item-worklog-display" id="taskItemWorklogDisplay">
+                                    <div class="task-item-worklog-number" id="taskItemWorklogDays">00</div>
+                                    <div class="task-item-worklog-sep">:</div>
+                                    <div class="task-item-worklog-number" id="taskItemWorklogHours">00</div>
+                                    <div class="task-item-worklog-sep">:</div>
+                                    <div class="task-item-worklog-number" id="taskItemWorklogMinutes">00</div>
+                                    <div class="task-item-worklog-sep">:</div>
+                                    <div class="task-item-worklog-number" id="taskItemWorklogSeconds">00</div>
+                                    <div class="task-item-worklog-label">DAYS</div>
+                                    <div></div>
+                                    <div class="task-item-worklog-label">HOURS</div>
+                                    <div></div>
+                                    <div class="task-item-worklog-label">MINUTES</div>
+                                    <div></div>
+                                    <div class="task-item-worklog-label">SECONDS</div>
                                 </div>
-                                <div id="taskItemWorklogBody" class="task-item-worklog-body">
-                                    <div class="task-item-worklog-display" id="taskItemWorklogDisplay">
-                                        <div class="task-item-worklog-number" id="taskItemWorklogDays">00</div>
-                                        <div class="task-item-worklog-sep">:</div>
-                                        <div class="task-item-worklog-number" id="taskItemWorklogHours">00</div>
-                                        <div class="task-item-worklog-sep">:</div>
-                                        <div class="task-item-worklog-number" id="taskItemWorklogMinutes">00</div>
-                                        <div class="task-item-worklog-sep">:</div>
-                                        <div class="task-item-worklog-number" id="taskItemWorklogSeconds">00</div>
-                                        <div class="task-item-worklog-label">DAYS</div>
-                                        <div></div>
-                                        <div class="task-item-worklog-label">HOURS</div>
-                                        <div></div>
-                                        <div class="task-item-worklog-label">MINUTES</div>
-                                        <div></div>
-                                        <div class="task-item-worklog-label">SECONDS</div>
-                                    </div>
-                                    <div id="taskItemWorklogActions" class="task-item-worklog-actions mt-3">
-                                        <button type="button" id="taskItemWorklogStartBtn" class="btn task-worklog-btn task-worklog-btn-start">Start <i class="fa-solid fa-play"></i></button>
-                                        <button type="button" id="taskItemWorklogSaveBtn" class="btn task-worklog-btn task-worklog-btn-save d-none">Save in Work log</button>
-                                        <button type="button" id="taskItemWorklogStopBtn" class="btn task-worklog-btn task-worklog-btn-stop d-none">Stop <i class="fa-solid fa-stop"></i></button>
-                                        <button type="button" id="taskItemWorklogContinueBtn" class="btn task-worklog-btn task-worklog-btn-continue d-none">Continue</button>
-                                        <button type="button" id="taskItemWorklogResetBtn" class="btn task-worklog-btn task-worklog-btn-reset d-none">Reset time</button>
-                                    </div>
+                                <div id="taskItemWorklogActions" class="task-item-worklog-actions mt-3">
+                                    <button type="button" id="taskItemWorklogStartBtn" class="btn task-worklog-btn task-worklog-btn-start">Start <i class="fa-solid fa-play"></i></button>
+                                    <button type="button" id="taskItemWorklogSaveBtn" class="btn task-worklog-btn task-worklog-btn-save d-none">Save in Work log</button>
+                                    <button type="button" id="taskItemWorklogStopBtn" class="btn task-worklog-btn task-worklog-btn-stop d-none">Stop <i class="fa-solid fa-stop"></i></button>
+                                    <button type="button" id="taskItemWorklogContinueBtn" class="btn task-worklog-btn task-worklog-btn-continue d-none">Continue</button>
+                                    <button type="button" id="taskItemWorklogResetBtn" class="btn task-worklog-btn task-worklog-btn-reset d-none">Reset time</button>
                                 </div>
                             </div>
                         </div>
-                    </div>
+
+                        <div class="task-item-detail-meta-block" aria-live="polite">
+                            <div class="task-item-detail-meta-row">
+                                <span class="task-item-detail-meta-label">Created</span>
+                                <span id="taskItemDetailCreatedMeta" class="task-item-detail-meta-value">-</span>
+                            </div>
+                            <div class="task-item-detail-meta-row">
+                                <span class="task-item-detail-meta-label">Updated</span>
+                                <span id="taskItemDetailUpdatedMeta" class="task-item-detail-meta-value">-</span>
+                            </div>
+                        </div>
                 </div>
             </div>
         </div>

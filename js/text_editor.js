@@ -850,6 +850,9 @@
     var showCompose = canCompose && !!visible;
 
     if (!canCompose) {
+      if (typeof window.setTaskItemDetailMobileOverlayState === "function") {
+        window.setTaskItemDetailMobileOverlayState("comment", false);
+      }
       $("#taskItemCommentComposeLauncherWrap").addClass("d-none");
       $("#taskItemCommentComposeWrap").addClass("d-none");
       updateCommentActionButtons();
@@ -862,6 +865,9 @@
 
     $("#taskItemCommentComposeLauncherWrap").toggleClass("d-none", showCompose);
     $("#taskItemCommentComposeWrap").toggleClass("d-none", !showCompose);
+    if (typeof window.setTaskItemDetailMobileOverlayState === "function") {
+      window.setTaskItemDetailMobileOverlayState("comment", showCompose);
+    }
     updateCommentActionButtons();
 
     if (showCompose && shouldFocus) {
@@ -1296,6 +1302,7 @@
   function createBaseEditorConfig(selector, setupCallback, opts) {
     opts = opts || {};
     var isDescription = !!opts.isDescription;
+    var isCompactMobile = window.matchMedia("(max-width: 767.98px)").matches;
     return {
       selector: selector,
       base_url: window.taskBoardConfig.siteUrl + "/header/tinymce",
@@ -1306,7 +1313,7 @@
       resize: false,
       promotion: false,
       plugins: "autolink advlist lists link code",
-      toolbar_mode: "floating",
+      toolbar_mode: isCompactMobile ? "wrap" : "floating",
       contextmenu: false,
       convert_urls: false,
       relative_urls: false,
