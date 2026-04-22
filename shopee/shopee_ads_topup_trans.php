@@ -57,7 +57,7 @@ if (!function_exists('satStoreAttachmentUpload')) {
         }
 
         $relDir = 'attachment/sqlaccount/' . substr((string) comYMD, 0, 4) . '/' . substr((string) comYMD, 4, 2) . '/' . $safePage . '/';
-        $absDir = ROOT . img_server . $relDir;
+        $absDir = ROOT . $relDir;
         if (!is_dir($absDir)) {
             @mkdir($absDir, 0777, true);
         }
@@ -678,9 +678,9 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                     if ($attachmentRaw !== '') {
                                         $normalizedAttach = ltrim(str_replace('\\', '/', $attachmentRaw), '/');
                                         if (strpos($normalizedAttach, '/') !== false) {
-                                            $attachmentUrl = rtrim((string) $SITEURL, '/') . '/' . trim((string) img_server, '/\\') . '/' . $normalizedAttach;
+                                            $attachmentUrl = rtrim((string) $SITEURL, '/') . '/' . '/' . $normalizedAttach;
                                         } else {
-                                            $attachmentUrl = rtrim((string) $SITEURL, '/') . '/' . trim((string) img_server, '/\\') . '/finance/shopee_ads_topup_trans/' . rawurlencode(basename($normalizedAttach));
+                                            $attachmentUrl = rtrim((string) $SITEURL, '/') . '/' . '/finance/shopee_ads_topup_trans/' . rawurlencode(basename($normalizedAttach));
                                         }
                                     }
                                     ?>

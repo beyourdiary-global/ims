@@ -263,8 +263,12 @@ var itemDetailModalState = {
     done: 0,
     progress_percent: 0,
   },
+  childTitleEditingItemId: 0,
+  childPickerItemId: 0,
+  childPickerField: "",
   childWorkItemsCollapsed: false,
   history: [],
+  activityCollapsed: false,
   activityTab: "all",
   activitySortDirection: "desc",
 };
