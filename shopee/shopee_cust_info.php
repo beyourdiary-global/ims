@@ -660,7 +660,8 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 <tbody>
                                     <?php if (!empty($orderRows)) {
                                         $shopeePaymentMethodMap = array();
-                                        $payMethodRst = mysqli_query($finance_connect, "SELECT id, name FROM " . PAY_MTHD_SHOPEE . " WHERE status='A'");
+                                        $payMethodSql = "SELECT id, name FROM " . PAY_MTHD_SHOPEE . " WHERE status='A'";
+                                        $payMethodRst = mysqli_query($finance_connect, $payMethodSql);
                                         if ($payMethodRst) {
                                             while ($payMethodRow = $payMethodRst->fetch_assoc()) {
                                                 $payMethodId = isset($payMethodRow['id']) ? trim((string) $payMethodRow['id']) : '';
@@ -668,6 +669,8 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                                     $shopeePaymentMethodMap[$payMethodId] = isset($payMethodRow['name']) ? (string) $payMethodRow['name'] : '';
                                                 }
                                             }
+                                        } else {
+                                            error_log("Failed to load Shopee payment methods: " . mysqli_error($finance_connect) . ". SQL: " . $payMethodSql);
                                         }
 
                                         $orderSN = 1;
