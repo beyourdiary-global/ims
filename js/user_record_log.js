@@ -54,11 +54,11 @@
         var $modal = $("#url_success_popup_modal");
         if (!$modal.length) {
           $("body").append(
-            '<div class="modal fade" id="url_success_popup_modal" tabindex="-1" aria-hidden="true">' +
+            '<div class="modal fade" id="url_success_popup_modal" tabindex="-1" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="url_success_popup_title">' +
               '<div class="modal-dialog modal-dialog-centered">' +
                 '<div class="modal-content">' +
                   '<div class="modal-header">' +
-                    '<h5 class="modal-title">Success</h5>' +
+                    '<h5 class="modal-title" id="url_success_popup_title">Success</h5>' +
                     '<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>' +
                   "</div>" +
                   '<div class="modal-body" id="url_success_popup_message"></div>' +
