@@ -1524,6 +1524,7 @@ if (!function_exists('taskGetEpicChildWorkItemsSummary')) {
             'progress_percent' => 0,
             'time_tracking' => 'No time logged',
             'time_tracking_seconds' => 0,
+            'original_estimate_seconds' => 0,
         );
         if ($epicItemId <= 0) {
             return $summary;
@@ -1539,7 +1540,7 @@ if (!function_exists('taskGetEpicChildWorkItemsSummary')) {
             $lastColumnSortOrder = isset($lastColumnRow['max_sort_order']) ? (int) $lastColumnRow['max_sort_order'] : 0;
         }
 
-        $sql = "SELECT id,title,priority,assignee_user_id,sort_order,time_tracking,column_id,project_key_id
+        $sql = "SELECT id,title,priority,assignee_user_id,sort_order,time_tracking,original_estimate,column_id,project_key_id
                 FROM " . TASK_ITEM . "
                 WHERE status='A' AND (
                     parent_item_id='" . $epicItemId . "'
@@ -1596,6 +1597,11 @@ if (!function_exists('taskGetEpicChildWorkItemsSummary')) {
             $timeTracking = isset($row['time_tracking']) ? trim((string) $row['time_tracking']) : '';
             $timeTrackingSeconds = taskParseWorklogDurationSeconds($timeTracking);
             $summary['time_tracking_seconds'] += $timeTrackingSeconds;
+            $estimateInfo = taskParseOriginalEstimate(isset($row['original_estimate']) ? $row['original_estimate'] : '');
+            $summary['original_estimate_seconds'] += taskEstimateToSeconds(
+                isset($estimateInfo['value']) ? $estimateInfo['value'] : 0,
+                isset($estimateInfo['unit']) ? $estimateInfo['unit'] : 'minutes'
+            );
 
             $assigneeUserId = isset($row['assignee_user_id']) ? (int) $row['assignee_user_id'] : 0;
 
@@ -1764,6 +1770,26 @@ if (!function_exists('taskSqlTimeToMinutes')) {
         $hours = (int) $parts[0];
         $mins = (int) $parts[1];
         return max(0, ($hours * 60) + $mins);
+    }
+}
+
+if (!function_exists('taskEstimateToSeconds')) {
+    function taskEstimateToSeconds($value, $unit)
+    {
+        $amount = max(0, (int) $value);
+        $normalizedUnit = taskNormalizeEstimateUnit($unit);
+
+        if ($normalizedUnit === 'weeks') {
+            return $amount * 604800;
+        }
+        if ($normalizedUnit === 'days') {
+            return $amount * 86400;
+        }
+        if ($normalizedUnit === 'hours') {
+            return $amount * 3600;
+        }
+
+        return $amount * 60;
     }
 }
 
@@ -2359,6 +2385,9 @@ if (!function_exists('taskGetItemDetail')) {
             $childSeconds = is_array($childWorkItems) && isset($childWorkItems['time_tracking_seconds'])
                 ? (int) $childWorkItems['time_tracking_seconds']
                 : 0;
+            $childEstimateSeconds = is_array($childWorkItems) && isset($childWorkItems['original_estimate_seconds'])
+                ? (int) $childWorkItems['original_estimate_seconds']
+                : 0;
             $canIncludeChild = is_array($childWorkItems) && isset($childWorkItems['total']) && (int) $childWorkItems['total'] > 0;
             $combinedSeconds = $ownSeconds + $childSeconds;
 
@@ -2370,6 +2399,7 @@ if (!function_exists('taskGetItemDetail')) {
                 'own_time_tracking_seconds' => $ownSeconds,
                 'child_time_tracking' => $childSeconds > 0 ? taskFormatWorklogDuration($childSeconds) : 'No time logged',
                 'child_time_tracking_seconds' => $childSeconds,
+                'child_original_estimate_seconds' => $childEstimateSeconds,
                 'combined_time_tracking' => $combinedSeconds > 0 ? taskFormatWorklogDuration($combinedSeconds) : 'No time logged',
                 'combined_time_tracking_seconds' => $combinedSeconds,
                 'can_include_child_time_tracking' => $canIncludeChild ? 1 : 0,
@@ -2475,6 +2505,7 @@ if (!function_exists('taskGetItemDetail')) {
             'own_time_tracking_seconds' => isset($timeTrackingDetail['own_time_tracking_seconds']) ? (int) $timeTrackingDetail['own_time_tracking_seconds'] : 0,
             'child_time_tracking' => isset($timeTrackingDetail['child_time_tracking']) ? (string) $timeTrackingDetail['child_time_tracking'] : 'No time logged',
             'child_time_tracking_seconds' => isset($timeTrackingDetail['child_time_tracking_seconds']) ? (int) $timeTrackingDetail['child_time_tracking_seconds'] : 0,
+            'child_original_estimate_seconds' => isset($timeTrackingDetail['child_original_estimate_seconds']) ? (int) $timeTrackingDetail['child_original_estimate_seconds'] : 0,
             'combined_time_tracking' => isset($timeTrackingDetail['combined_time_tracking']) ? (string) $timeTrackingDetail['combined_time_tracking'] : 'No time logged',
             'combined_time_tracking_seconds' => isset($timeTrackingDetail['combined_time_tracking_seconds']) ? (int) $timeTrackingDetail['combined_time_tracking_seconds'] : 0,
             'can_include_child_time_tracking' => isset($timeTrackingDetail['can_include_child_time_tracking']) ? (int) $timeTrackingDetail['can_include_child_time_tracking'] : 0,
@@ -3292,7 +3323,7 @@ if (!function_exists('taskRenderBoardColumn')) {
         }
         echo '  </div>';
 
-        echo '  <button class="btn task-open-composer-btn" type="button"><i class="fa-solid fa-plus"></i> Create</button>';
+        echo '  <button class="btn task-open-composer-btn" type="button"><span class="task-open-composer-btn-icon">+</span><span class="task-open-composer-btn-text">Create</span></button>';
         taskRenderComposer($columnId, $workTypes, $assignees);
         echo '</section>';
     }

@@ -1017,7 +1017,16 @@
     deleteCookie(key);
   }
 
-  function flushCommentDraftNow() {
+  function flushCommentDraftNow(options) {
+    var settings = options && typeof options === "object" ? options : {};
+    if (
+      settings.preserveExistingNotice &&
+      hasDraftNoticeFlag(getCommentDraftNoticeKey()) &&
+      !isCommentComposerVisible()
+    ) {
+      return !!String(getDraftCookie(getCommentDraftKey()) || "").trim();
+    }
+
     var html = getCommentEditorHtml();
     if (hasCommentContent(html)) {
       setDraftCookie(getCommentDraftKey(), html);
@@ -1047,7 +1056,17 @@
     return false;
   }
 
-  function flushDescriptionDraftNow() {
+  function flushDescriptionDraftNow(options) {
+    var settings = options && typeof options === "object" ? options : {};
+
+    if (
+      settings.preserveExistingNotice &&
+      hasDraftNoticeFlag(getDescriptionDraftNoticeKey()) &&
+      !itemDetailModalState.descriptionEditing
+    ) {
+      return !!String(getDraftCookie(getDescriptionDraftKey()) || "").trim();
+    }
+
     // If the user explicitly saved or cancelled, never re-save the draft on close
     if (descriptionDraftClearedByUser) {
       clearDraftCookie(getDescriptionDraftKey());
@@ -1313,7 +1332,7 @@
       resize: false,
       promotion: false,
       plugins: "autolink advlist lists link code",
-      toolbar_mode: isCompactMobile ? "wrap" : "floating",
+      toolbar_mode: isCompactMobile ? "scrolling" : "floating",
       contextmenu: false,
       convert_urls: false,
       relative_urls: false,
@@ -2808,6 +2827,10 @@
   });
 
   $(document).on("shown.bs.modal", "#taskItemDetailModal", function () {
+    if (typeof window.syncTaskItemDetailMobileLayout === "function") {
+      window.syncTaskItemDetailMobileLayout();
+    }
+
     draftItemContextId = Number(itemDetailModalState.itemId || 0);
     descriptionDraftClearedByUser = false; // reset on each new modal open
     capturedInitialDescription = String(
@@ -2859,8 +2882,12 @@
   $(document).on("hidden.bs.modal", "#taskItemDetailModal", function () {
     commentSaving = false;
     commentLoadToken += 1;
-    var commentHasDraft = flushCommentDraftNow();
-    var descriptionHasDraft = flushDescriptionDraftNow();
+    var commentHasDraft = flushCommentDraftNow({
+      preserveExistingNotice: true,
+    });
+    var descriptionHasDraft = flushDescriptionDraftNow({
+      preserveExistingNotice: true,
+    });
     var openReplyId = Number(openReplyCommentId || 0);
     var replyHasDraft =
       openReplyId > 0 ? flushReplyDraftNow(openReplyId) : false;
@@ -2905,10 +2932,18 @@
   });
 
   window.addEventListener("beforeunload", function () {
-    if (flushCommentDraftNow()) {
+    if (
+      flushCommentDraftNow({
+        preserveExistingNotice: true,
+      })
+    ) {
       setDraftNoticeFlag(getCommentDraftNoticeKey());
     }
-    if (flushDescriptionDraftNow()) {
+    if (
+      flushDescriptionDraftNow({
+        preserveExistingNotice: true,
+      })
+    ) {
       setDraftNoticeFlag(getDescriptionDraftNoticeKey());
     }
     if (
