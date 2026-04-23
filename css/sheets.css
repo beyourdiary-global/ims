@@ -820,6 +820,37 @@
   .sheets-toolbar {
     padding: 6px 8px;
   }
+
+  .sheets-toolbar-right {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .sheets-group-popup {
+    position: fixed !important;
+    left: 12px !important;
+    right: 12px !important;
+    top: calc(72px + env(safe-area-inset-top)) !important;
+    bottom: 12px !important;
+    min-width: 0;
+    max-width: none;
+    max-height: none;
+    width: auto;
+    display: flex;
+    flex-direction: column;
+    z-index: 1200;
+  }
+
+  .sheets-group-popup .filter-search {
+    flex: 0 0 auto;
+  }
+
+  .sheets-group-list {
+    flex: 1 1 auto;
+    min-height: 0;
+    max-height: none;
+  }
 }
 
 @media (max-width: 991.98px) {

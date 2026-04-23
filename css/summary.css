@@ -106,7 +106,7 @@
 .summary-filter-options li label {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   padding: 6px 12px;
   font-size: 13px;
   color: #172b4d;
@@ -118,6 +118,10 @@
 }
 .summary-filter-options li label input[type="checkbox"] {
   accent-color: #0c66e4;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  flex: 0 0 auto;
 }
 .summary-filter-panel-footer {
   padding: 6px 12px 4px;
@@ -152,7 +156,6 @@
   width: min(560px, calc(100vw - 42px));
 }
 .summary-filter-sub-panel-inner label {
-  display: block;
   font-size: 13px;
   color: #44546f;
   margin-bottom: 4px;
@@ -238,9 +241,9 @@
 .summary-sub-filter-option {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   min-height: 36px;
-  padding: 6px 10px;
+  padding: 7px 12px;
   margin: 0;
   cursor: pointer;
 }
@@ -251,7 +254,10 @@
 
 .summary-sub-filter-option input[type="checkbox"] {
   margin: 0;
+  width: 18px;
+  height: 18px;
   flex: 0 0 auto;
+  align-self: center;
   accent-color: #0c66e4;
 }
 
@@ -298,8 +304,11 @@
 .summary-sub-filter-option-text {
   font-size: 13px;
   color: #172b4d;
-  line-height: 1.35;
-  display: inline-block;
+  line-height: 1.2;
+  display: inline-flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-height: 18px;
 }
 
 .summary-date-mode-row {

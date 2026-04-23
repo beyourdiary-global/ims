@@ -977,7 +977,7 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                     </div>
                     <div class="task-board-toolbar-actions ms-auto">
                         <div id="taskBoardGroupDropdown" class="dropdown task-board-group-wrap">
-                            <button id="taskBoardGroupBtn" class="btn task-board-group-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                            <button id="taskBoardGroupBtn" class="btn task-board-group-btn" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
                                 <span id="taskBoardGroupLabel">Group: Status</span>
                             </button>
                             <div class="dropdown-menu dropdown-menu-end task-board-group-menu p-2">
@@ -1001,18 +1001,18 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                             <i class="fa-solid fa-sliders"></i>
                         </button>
                         <div id="taskBoardSettingsPanel" class="dropdown-menu dropdown-menu-end task-board-settings-panel p-3">
-                            <div class="task-board-settings-header">
-                                <h6 class="mb-0">View settings</h6>
-                            </div>
                             <div class="task-board-settings-section mb-3">
                                 <label class="form-label mb-1" for="taskProjectKeyInput">Project Key fields</label>
                                 <div class="task-project-key-row">
                                     <input id="taskProjectKeyInput" type="text" class="form-control form-control-sm" maxlength="20" placeholder="Example: BCS" value="<?= htmlspecialchars(isset($projectKeySetting['project_key']) ? (string) $projectKeySetting['project_key'] : '', ENT_QUOTES, 'UTF-8') ?>">
                                     <button id="taskProjectKeySaveBtn" class="btn btn-light task-project-key-action-btn" type="button" title="Save project key"><i class="fa-solid fa-check"></i></button>
-                                    <button id="taskProjectKeyClearBtn" class="btn btn-light task-project-key-action-btn" type="button" title="Clear project key"><i class="fa-solid fa-xmark"></i></button>
+                                    <button id="taskProjectKeyClearBtn" class="btn btn-light task-project-key-action-btn" type="button" title="Close project key editor"><i class="fa-solid fa-xmark"></i></button>
                                 </div>
                             </div>
                             <div class="task-board-settings-divider"></div>
+                            <div class="task-board-settings-header">
+                                <h6 class="mb-0">View settings</h6>
+                            </div>
                             <h6 class="task-board-settings-section-title mb-2">Fields</h6>
                             <div class="task-board-settings-fields">
                                 <?php
