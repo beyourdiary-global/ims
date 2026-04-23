@@ -287,7 +287,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             $connect,
             isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
             isset($_POST['title']) ? $_POST['title'] : '',
-            isset($_POST['description']) ? $_POST['description'] : '',
+            isset($_POST['description']) ? $_POST['description'] : null,
             $currentUserId,
             $cdate,
             $ctime

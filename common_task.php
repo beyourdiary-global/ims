@@ -1606,6 +1606,7 @@ if (!function_exists('taskGetEpicChildWorkItemsSummary')) {
                 'priority' => taskNormalizePriority(isset($row['priority']) ? $row['priority'] : 'Medium'),
                 'assignee_user_id' => $assigneeUserId,
                 'assignee_name' => isset($assigneeMap[$assigneeUserId]) ? (string) $assigneeMap[$assigneeUserId] : '',
+                'column_id' => $columnId,
                 'status_name' => $statusName,
                 'is_done' => $isDone ? 1 : 0,
                 'time_tracking' => $timeTracking !== '' ? $timeTracking : 'No time logged',
@@ -2385,18 +2386,18 @@ if (!function_exists('taskGetItemDetail')) {
         }
 
         $sql = "SELECT id,column_id,title,description,work_type_id,project_key_id,assignee_user_id,reporter_user_id,
-                   priority,original_estimate,task_status,parent_item_id,time_tracking,
-                   due_date,start_date,amendement_date,amendement_time,second_amendement_date,second_amendement_time,
-                   create_date,update_date
+               priority,original_estimate,task_status,parent_item_id,time_tracking,
+               due_date,start_date,amendement_date,amendement_time,second_amendement_date,second_amendement_time,
+               create_date,create_time,update_date,update_time
             FROM " . TASK_ITEM . "
             WHERE id='" . $itemId . "' AND status='A' LIMIT 1";
 
         $rst = mysqli_query($connect, $sql);
         if ($rst === false) {
-                   $sql = "SELECT id,column_id,title,'' AS description,work_type_id,0 AS project_key_id,assignee_user_id,0 AS reporter_user_id,
-                          'Medium' AS priority,'' AS original_estimate,'' AS task_status,0 AS parent_item_id,'' AS time_tracking,
-                          due_date,due_date AS start_date,NULL AS amendement_date,NULL AS amendement_time,NULL AS second_amendement_date,NULL AS second_amendement_time,
-                          '' AS create_date,'' AS update_date
+                     $sql = "SELECT id,column_id,title,'' AS description,work_type_id,0 AS project_key_id,assignee_user_id,0 AS reporter_user_id,
+                         'Medium' AS priority,'' AS original_estimate,'' AS task_status,0 AS parent_item_id,'' AS time_tracking,
+                         due_date,due_date AS start_date,NULL AS amendement_date,NULL AS amendement_time,NULL AS second_amendement_date,NULL AS second_amendement_time,
+                         '' AS create_date,'' AS create_time,'' AS update_date,'' AS update_time
                       FROM " . TASK_ITEM . "
                       WHERE id='" . $itemId . "' AND status='A' LIMIT 1";
             $rst = mysqli_query($connect, $sql);
@@ -2481,7 +2482,9 @@ if (!function_exists('taskGetItemDetail')) {
             'due_date' => isset($row['due_date']) && $row['due_date'] !== null ? (string) $row['due_date'] : '',
             'start_date' => isset($row['start_date']) && $row['start_date'] !== null ? (string) $row['start_date'] : '',
             'create_date' => isset($row['create_date']) && $row['create_date'] !== null ? (string) $row['create_date'] : '',
+            'create_time' => isset($row['create_time']) && $row['create_time'] !== null ? (string) $row['create_time'] : '',
             'update_date' => isset($row['update_date']) && $row['update_date'] !== null ? (string) $row['update_date'] : '',
+            'update_time' => isset($row['update_time']) && $row['update_time'] !== null ? (string) $row['update_time'] : '',
             'amendement_date' => isset($row['amendement_date']) && $row['amendement_date'] !== null ? (string) $row['amendement_date'] : '',
             'amendement_time_minutes' => taskSqlTimeToMinutes(isset($row['amendement_time']) ? $row['amendement_time'] : ''),
             'second_amendement_date' => isset($row['second_amendement_date']) && $row['second_amendement_date'] !== null ? (string) $row['second_amendement_date'] : '',
@@ -4267,7 +4270,6 @@ if (!function_exists('taskUpdateItemCore')) {
     {
         $itemId = (int) $itemId;
         $title = trim((string) $title);
-        $description = trim((string) $description);
 
         if ($itemId <= 0 || $title === '') {
             return array('ok' => 0, 'message' => 'Invalid work item update request.');
@@ -4282,6 +4284,8 @@ if (!function_exists('taskUpdateItemCore')) {
         $itemRow = $itemRst->fetch_assoc();
         $previousTitle = isset($itemRow['title']) ? trim((string) $itemRow['title']) : '';
         $previousDescription = isset($itemRow['description']) && $itemRow['description'] !== null ? trim((string) $itemRow['description']) : '';
+        $hasDescriptionUpdate = $description !== null;
+        $description = $hasDescriptionUpdate ? trim((string) $description) : $previousDescription;
 
         $safeTitle = taskEsc($connect, substr($title, 0, 255));
         $safeDescription = taskEsc($connect, substr($description, 0, 65535));
@@ -4289,13 +4293,22 @@ if (!function_exists('taskUpdateItemCore')) {
         $safeDate = taskEsc($connect, $cdate);
         $safeTime = taskEsc($connect, $ctime);
 
-        $updateSql = "UPDATE " . TASK_ITEM . " SET
-                        title='" . $safeTitle . "',
-                        description='" . $safeDescription . "',
-                        update_by='" . $safeUser . "',
-                        update_date='" . $safeDate . "',
-                        update_time='" . $safeTime . "'
-                      WHERE id='" . $itemId . "' AND status='A'";
+                if ($hasDescriptionUpdate) {
+                        $updateSql = "UPDATE " . TASK_ITEM . " SET
+                                                        title='" . $safeTitle . "',
+                                                        description='" . $safeDescription . "',
+                                                        update_by='" . $safeUser . "',
+                                                        update_date='" . $safeDate . "',
+                                                        update_time='" . $safeTime . "'
+                                                    WHERE id='" . $itemId . "' AND status='A'";
+                } else {
+                        $updateSql = "UPDATE " . TASK_ITEM . " SET
+                                                        title='" . $safeTitle . "',
+                                                        update_by='" . $safeUser . "',
+                                                        update_date='" . $safeDate . "',
+                                                        update_time='" . $safeTime . "'
+                                                    WHERE id='" . $itemId . "' AND status='A'";
+                }
 
         if (!mysqli_query($connect, $updateSql)) {
             $fallbackUpdateSql = "UPDATE " . TASK_ITEM . " SET
@@ -4324,7 +4337,7 @@ if (!function_exists('taskUpdateItemCore')) {
             );
         }
 
-        if ($previousDescription !== $description) {
+        if ($hasDescriptionUpdate && $previousDescription !== $description) {
             taskLogItemHistory(
                 $connect,
                 $itemId,
