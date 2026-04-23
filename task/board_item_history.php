@@ -4,7 +4,7 @@ if (!function_exists('taskRenderBoardItemHistorySection')) {
     function taskRenderBoardItemHistorySection()
     {
         ?>
-        <div class="task-item-activity-section">
+        <div id="taskItemActivitySection" class="task-item-activity-section">
             <div class="task-item-activity-header">
                 <button id="taskItemActivityCollapseBtn" type="button" class="btn task-item-activity-collapse-btn" aria-expanded="true" title="Collapse activity">
                     <i class="fa-solid fa-chevron-down"></i>
