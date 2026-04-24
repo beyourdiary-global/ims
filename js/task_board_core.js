@@ -778,7 +778,7 @@ function renderDetailTimeTracking(
       "> <span>Include child work items</span></label>"
     : "";
 
-  if (estimateSeconds <= 0 || loggedSeconds <= 0) {
+  if (estimateSeconds <= 0) {
     $target
       .removeClass("task-item-detail-time-tracking")
       .html(
@@ -792,29 +792,72 @@ function renderDetailTimeTracking(
     return;
   }
 
+  var isOvertime = loggedSeconds > estimateSeconds;
+  var overtimeSeconds = isOvertime ? loggedSeconds - estimateSeconds : 0;
   var loggedText =
     loggedSeconds > 0
       ? formatDurationBrief(loggedSeconds) + " logged"
       : "No time logged";
-  var remainingText = formatDurationBrief(remainingSeconds) + " remaining";
-  var loggedPercent = estimateSeconds > 0
-    ? Math.max(0, Math.min(100, (loggedSeconds / estimateSeconds) * 100))
+  var estimateTooltip = isOvertime
+    ? "Original estimate: " + formatDurationBrief(estimateSeconds)
+    : loggedSeconds > 0
+      ? loggedText +
+        " of " +
+        formatDurationBrief(estimateSeconds) +
+        " original estimate"
+      : "Original estimate: " + formatDurationBrief(estimateSeconds);
+  var overtimeTooltip = isOvertime
+    ? formatDurationBrief(overtimeSeconds) + " over original estimate"
+    : "";
+  var estimatePercent = 0;
+  var overtimePercent = 0;
+
+  if (loggedSeconds > 0) {
+    if (isOvertime) {
+      estimatePercent = Math.max(
+        0,
+        Math.min(100, (estimateSeconds / loggedSeconds) * 100),
+      );
+      overtimePercent = Math.max(0, 100 - estimatePercent);
+    } else {
+      estimatePercent = Math.max(
+        0,
+        Math.min(100, (loggedSeconds / estimateSeconds) * 100),
+      );
+    }
+  }
+
+  var remainingText = isOvertime
+    ? formatDurationBrief(overtimeSeconds) + " over original estimate"
+    : formatDurationBrief(remainingSeconds) + " remaining";
+  var markerPercent = !isOvertime && estimatePercent > 0
+    ? Math.min(100, Math.max(0, estimatePercent))
     : 0;
-  var markerPercent = loggedPercent > 0 ? Math.min(100, Math.max(0, loggedPercent)) : 0;
 
   var html =
     '<div class="task-item-detail-time-tracking-block">' +
     '<div class="task-item-detail-time-tracking-bar">' +
-    '<span class="task-item-detail-time-tracking-segment task-item-detail-time-tracking-segment-estimate" style="width:' +
-    loggedPercent.toFixed(2) +
+    '<span class="task-item-detail-time-tracking-segment task-item-detail-time-tracking-segment-estimate" title="' +
+    escHtml(estimateTooltip) +
+    '" style="width:' +
+    estimatePercent.toFixed(2) +
     '%"></span>' +
+    (isOvertime && overtimePercent > 0
+      ? '<span class="task-item-detail-time-tracking-segment task-item-detail-time-tracking-segment-overtime" title="' +
+        escHtml(overtimeTooltip) +
+        '" style="width:' +
+        overtimePercent.toFixed(2) +
+        '%"></span>'
+      : "") +
     (markerPercent > 0
       ? '<span class="task-item-detail-time-tracking-marker" style="left:' +
         markerPercent.toFixed(2) +
         '%"></span>'
       : "") +
     "</div>" +
-    '<div class="task-item-detail-time-tracking-summary">' +
+    '<div class="task-item-detail-time-tracking-summary task-item-detail-time-tracking-summary-muted' +
+    (isOvertime ? ' task-item-detail-time-tracking-summary-overtime' : '') +
+    '">' +
     escHtml(loggedText) +
     "</div>" +
     '<div class="task-item-detail-time-tracking-summary task-item-detail-time-tracking-summary-muted">' +
