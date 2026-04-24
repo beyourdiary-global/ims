@@ -3523,17 +3523,24 @@ body.task-local-sidebar-open
   justify-content: center;
   border-radius: 0;
   box-shadow: none !important;
-  outline: none;
 }
 
 .task-item-comment-action-btn:hover,
-.task-item-comment-action-btn:focus,
 .task-item-comment-action-btn:active,
 .task-item-comment-action-btn.is-open {
   border: 0 !important;
   background: transparent !important;
   box-shadow: none !important;
   color: #214b80;
+}
+
+.task-item-comment-action-btn:focus-visible {
+  border: 0 !important;
+  background: #eef4fb !important;
+  box-shadow: 0 0 0 2px rgba(33, 75, 128, 0.28) !important;
+  color: #214b80;
+  outline: 2px solid #214b80;
+  outline-offset: 2px;
 }
 
 .task-item-comment-more-wrap {
@@ -4514,6 +4521,7 @@ body.task-local-sidebar-open
 
 .task-item-detail-time-tracking-bar {
   position: relative;
+  display: flex;
   width: 100%;
   height: 6px;
   border-radius: 999px;
@@ -4524,11 +4532,16 @@ body.task-local-sidebar-open
 
 .task-item-detail-time-tracking-segment {
   display: block;
+  flex: 0 0 auto;
   height: 100%;
 }
 
 .task-item-detail-time-tracking-segment-estimate {
   background: #3572e5;
+}
+
+.task-item-detail-time-tracking-segment-overtime {
+  background: #f59e0b;
 }
 
 .task-item-detail-time-tracking-marker {
@@ -4549,6 +4562,10 @@ body.task-local-sidebar-open
 
 .task-item-detail-time-tracking-summary-muted {
   color: #6b778c;
+}
+
+.task-item-detail-time-tracking-summary-overtime {
+  color: #9a3412;
 }
 
 .task-item-detail-time-tracking-summary-plain {
