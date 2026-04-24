@@ -767,9 +767,10 @@ function renderDetailTimeTracking(
   var loggedSeconds = info.ownSeconds + (includeChild ? info.childSeconds : 0);
   var trackingText =
     loggedSeconds > 0 ? formatDurationBrief(loggedSeconds) : "No time logged";
-  var estimateSeconds = includeChild && Number(info.childEstimateSeconds || 0) > 0
-    ? Number(info.childEstimateSeconds || 0)
-    : estimateUnitToSeconds(estimateValue, estimateUnit);
+  var ownEstimateSeconds = estimateUnitToSeconds(estimateValue, estimateUnit);
+  var estimateSeconds = includeChild
+    ? ownEstimateSeconds + Number(info.childEstimateSeconds || 0)
+    : ownEstimateSeconds;
   var remainingSeconds = Math.max(estimateSeconds - loggedSeconds, 0);
   var toggleHtml = info.canIncludeChild
     ? '<label class="task-item-detail-time-tracking-toggle"><input id="taskItemDetailIncludeChildTimeTrackingInput" type="checkbox"' +
