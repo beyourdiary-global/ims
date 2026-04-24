@@ -877,6 +877,16 @@ $(document).on("input", "#taskProjectKeyInput", function () {
   $(this).val(value);
 });
 
+function closeProjectKeyEditor() {
+  var $input = $("#taskProjectKeyInput");
+  $input.trigger("blur");
+  $("#taskProjectKeySaveBtn, #taskProjectKeyClearBtn").trigger("blur");
+
+  if (document.activeElement && typeof document.activeElement.blur === "function") {
+    document.activeElement.blur();
+  }
+}
+
 $(document).on("click", "#taskProjectKeySaveBtn", function () {
   if (!canEdit) {
     notify("You do not have permission to change project key.");
@@ -897,12 +907,13 @@ $(document).on("click", "#taskProjectKeySaveBtn", function () {
           ? res.projectKey
           : { id: 0, project_key: key };
       refreshCardItemKeys();
+      closeProjectKeyEditor();
     },
   );
 });
 
 $(document).on("click", "#taskProjectKeyClearBtn", function () {
-  $("#taskProjectKeyInput").val("").trigger("focus");
+  closeProjectKeyEditor();
 });
 
 $app.on("click", ".task-create-item-btn", function () {
@@ -2558,6 +2569,68 @@ function openItemDetailModal($card) {
   modal.show();
 }
 
+function isTaskItemDetailMobileViewport() {
+  return window.matchMedia("(max-width: 767.98px)").matches;
+}
+
+function syncTaskItemDetailActivityPlacement() {
+  var $section = $("#taskItemActivitySection");
+  var $desktopMount = $("#taskItemActivityDesktopMount");
+  var $mobileMount = $("#taskItemActivityMobileMount");
+  if (!$section.length || !$desktopMount.length || !$mobileMount.length) {
+    return;
+  }
+
+  var $target = isTaskItemDetailMobileViewport() ? $mobileMount : $desktopMount;
+  if (!$section.parent().is($target)) {
+    $target.append($section);
+  }
+}
+
+function syncTaskItemDetailMobileViewportMetrics() {
+  var modal = document.getElementById("taskItemDetailModal");
+  if (!modal) {
+    return;
+  }
+
+  var layoutViewportHeight =
+    window.innerHeight || document.documentElement.clientHeight || 0;
+  var visualViewportHeight = layoutViewportHeight;
+  var visualViewportOffsetTop = 0;
+
+  if (window.visualViewport) {
+    visualViewportHeight = Math.round(
+      Number(window.visualViewport.height || layoutViewportHeight),
+    );
+    visualViewportOffsetTop = Math.round(
+      Number(window.visualViewport.offsetTop || 0),
+    );
+  }
+
+  var keyboardOffset = Math.max(
+    0,
+    layoutViewportHeight - visualViewportHeight - visualViewportOffsetTop,
+  );
+
+  if (visualViewportHeight > 0) {
+    modal.style.setProperty(
+      "--task-item-detail-mobile-viewport-height",
+      String(visualViewportHeight) + "px",
+    );
+  }
+  modal.style.setProperty(
+    "--task-item-detail-mobile-keyboard-offset",
+    String(keyboardOffset) + "px",
+  );
+}
+
+function syncTaskItemDetailMobileLayout() {
+  syncTaskItemDetailActivityPlacement();
+  syncTaskItemDetailMobileViewportMetrics();
+}
+
+window.syncTaskItemDetailMobileLayout = syncTaskItemDetailMobileLayout;
+
 function setTaskItemDetailMobileOverlayState(mode, enabled) {
   var $modal = $("#taskItemDetailModal");
   var normalizedMode = String(mode || "").trim().toLowerCase();
@@ -2584,9 +2657,31 @@ function setTaskItemDetailMobileOverlayState(mode, enabled) {
   $modal.removeClass(
     "task-item-detail-mobile-description-editing task-item-detail-mobile-comment-editing",
   );
+
+  window.setTimeout(syncTaskItemDetailMobileLayout, 0);
 }
 
 window.setTaskItemDetailMobileOverlayState = setTaskItemDetailMobileOverlayState;
+
+$(window).on(
+  "resize.taskItemDetailModalLayout orientationchange.taskItemDetailModalLayout",
+  function () {
+    syncTaskItemDetailMobileLayout();
+  },
+);
+
+if (window.visualViewport && typeof window.visualViewport.addEventListener === "function") {
+  window.visualViewport.addEventListener(
+    "resize",
+    syncTaskItemDetailMobileLayout,
+    { passive: true },
+  );
+  window.visualViewport.addEventListener(
+    "scroll",
+    syncTaskItemDetailMobileLayout,
+    { passive: true },
+  );
+}
 
 function isChildWorkItemDoneStatus(columnId, statusName) {
   var normalizedName = String(statusName || "")
@@ -2765,8 +2860,17 @@ function openChildWorkItemModal(itemId) {
 
   var $card = findCardByItemId(targetItemId);
   if (!$card.length) {
-    notify("Unable to find this child work item on the board.");
-    return;
+    var row = childWorkItemById(targetItemId) || {};
+    $card = $(
+      '<article class="task-item-card"><span class="task-item-title"></span></article>',
+    );
+    $card
+      .attr("data-item-id", targetItemId)
+      .attr("data-item-description", "")
+      .attr("data-work-item-key", String(row.work_item_key || ""))
+      .attr("data-work-type-name", String(row.work_type_name || "Task"))
+      .attr("data-work-type-icon", String(row.work_type_svg_icon || ""));
+    $card.find(".task-item-title").text(String(row.title || ""));
   }
 
   var modal = getItemDetailModalInstance();
@@ -4080,6 +4184,7 @@ $(document).on("hidden.bs.modal", "#taskItemDetailModal", function () {
   persistWorklogTimerState();
   stopWorklogTicker();
   setTaskItemDetailMobileOverlayState("", false);
+  syncTaskItemDetailMobileLayout();
 
   itemDetailModalState.itemId = 0;
   itemDetailModalState.cardEl = null;
@@ -4166,9 +4271,6 @@ $(document).on("hidden.bs.modal", "#taskItemDetailModal", function () {
     collapsed: false,
   };
 
-  if (typeof resetTaskCommentEditor === "function") {
-    resetTaskCommentEditor();
-  }
   applyWorklogTimerUi();
   renderItemHistoryPanels();
   setItemActivityTab("all");

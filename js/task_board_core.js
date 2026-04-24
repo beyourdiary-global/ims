@@ -726,6 +726,11 @@ function renderDetailTimeTracking(
               ) ||
               0,
           ),
+          childEstimateSeconds: Number(
+            timeTrackingText.childEstimateSeconds ||
+              timeTrackingText.child_original_estimate_seconds ||
+              0,
+          ),
           canIncludeChild:
             Number(
               timeTrackingText.canIncludeChild ||
@@ -746,6 +751,7 @@ function renderDetailTimeTracking(
           ),
           childText: "No time logged",
           childSeconds: 0,
+          childEstimateSeconds: 0,
           canIncludeChild: false,
           includeChild: false,
         };
@@ -761,33 +767,26 @@ function renderDetailTimeTracking(
   var loggedSeconds = info.ownSeconds + (includeChild ? info.childSeconds : 0);
   var trackingText =
     loggedSeconds > 0 ? formatDurationBrief(loggedSeconds) : "No time logged";
-  var estimateSeconds = estimateUnitToSeconds(estimateValue, estimateUnit);
+  var ownEstimateSeconds = estimateUnitToSeconds(estimateValue, estimateUnit);
+  var estimateSeconds = includeChild
+    ? ownEstimateSeconds + Number(info.childEstimateSeconds || 0)
+    : ownEstimateSeconds;
+  var remainingSeconds = Math.max(estimateSeconds - loggedSeconds, 0);
   var toggleHtml = info.canIncludeChild
     ? '<label class="task-item-detail-time-tracking-toggle"><input id="taskItemDetailIncludeChildTimeTrackingInput" type="checkbox"' +
       (includeChild ? " checked" : "") +
       "> <span>Include child work items</span></label>"
     : "";
-  var noteHtml =
-    info.canIncludeChild && info.childSeconds > 0
-      ? '<div class="task-item-detail-time-tracking-note">Child work items: ' +
-        escHtml(formatDurationBrief(info.childSeconds)) +
-        "</div>"
-      : "";
 
   if (estimateSeconds <= 0) {
     $target
       .removeClass("task-item-detail-time-tracking")
       .html(
         '<div class="task-item-detail-time-tracking-block">' +
-          (toggleHtml
-            ? '<div class="task-item-detail-time-tracking-header">' +
-              toggleHtml +
-              "</div>"
-            : "") +
-          '<div class="task-item-detail-time-tracking-caption">' +
+          '<div class="task-item-detail-time-tracking-summary task-item-detail-time-tracking-summary-plain">' +
           escHtml(trackingText) +
           "</div>" +
-          noteHtml +
+          toggleHtml +
           "</div>",
       );
     return;
@@ -828,45 +827,46 @@ function renderDetailTimeTracking(
     }
   }
 
+  var remainingText = isOvertime
+    ? formatDurationBrief(overtimeSeconds) + " over original estimate"
+    : formatDurationBrief(remainingSeconds) + " remaining";
+  var markerPercent = !isOvertime && estimatePercent > 0
+    ? Math.min(100, Math.max(0, estimatePercent))
+    : 0;
+
   var html =
     '<div class="task-item-detail-time-tracking-block">' +
-    (toggleHtml
-      ? '<div class="task-item-detail-time-tracking-header">' +
-        toggleHtml +
-        "</div>"
-      : "") +
     '<div class="task-item-detail-time-tracking-bar">' +
-    (estimatePercent > 0
-      ? '<span class="task-item-detail-time-tracking-segment task-item-detail-time-tracking-segment-estimate" style="width:' +
-        estimatePercent.toFixed(2) +
-        '%" data-bs-toggle="tooltip" data-bs-placement="top" title="' +
-        escHtml(estimateTooltip) +
-        '"></span>'
-      : "") +
-    (overtimePercent > 0
-      ? '<span class="task-item-detail-time-tracking-segment task-item-detail-time-tracking-segment-overtime" style="width:' +
-        overtimePercent.toFixed(2) +
-        '%" data-bs-toggle="tooltip" data-bs-placement="top" title="' +
+    '<span class="task-item-detail-time-tracking-segment task-item-detail-time-tracking-segment-estimate" title="' +
+    escHtml(estimateTooltip) +
+    '" style="width:' +
+    estimatePercent.toFixed(2) +
+    '%"></span>' +
+    (isOvertime && overtimePercent > 0
+      ? '<span class="task-item-detail-time-tracking-segment task-item-detail-time-tracking-segment-overtime" title="' +
         escHtml(overtimeTooltip) +
-        '"></span>'
+        '" style="width:' +
+        overtimePercent.toFixed(2) +
+        '%"></span>'
+      : "") +
+    (markerPercent > 0
+      ? '<span class="task-item-detail-time-tracking-marker" style="left:' +
+        markerPercent.toFixed(2) +
+        '%"></span>'
       : "") +
     "</div>" +
-    '<div class="task-item-detail-time-tracking-caption">' +
+    '<div class="task-item-detail-time-tracking-summary task-item-detail-time-tracking-summary-muted' +
+    (isOvertime ? ' task-item-detail-time-tracking-summary-overtime' : '') +
+    '">' +
     escHtml(loggedText) +
     "</div>" +
-    noteHtml +
+    '<div class="task-item-detail-time-tracking-summary task-item-detail-time-tracking-summary-muted">' +
+    escHtml(remainingText) +
+    "</div>" +
+    toggleHtml +
     "</div>";
 
   $target.addClass("task-item-detail-time-tracking").html(html);
-
-  if (window.bootstrap && bootstrap.Tooltip) {
-    $target.find('[data-bs-toggle="tooltip"]').each(function () {
-      bootstrap.Tooltip.getOrCreateInstance(this, {
-        container: "body",
-        trigger: "hover focus",
-      });
-    });
-  }
 }
 
 function renderActivityFeed($target, historyRows) {

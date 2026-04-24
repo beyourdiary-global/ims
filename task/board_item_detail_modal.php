@@ -152,7 +152,9 @@
                             <div id="taskItemWebLinkList" class="task-item-web-link-list"></div>
                         </div>
 
-                        <?php taskRenderBoardItemHistorySection(); ?>
+                        <div id="taskItemActivityDesktopMount">
+                            <?php taskRenderBoardItemHistorySection(); ?>
+                        </div>
                     </div>
                     <div class="col-12 col-lg-4 task-item-detail-side-col">
                         <div class="task-item-detail-board-status-wrap task-item-detail-board-status-wrap-rail">
@@ -218,16 +220,6 @@
                                 </div>
                             </div>
 
-                            <div class="task-item-detail-field-row" data-detail-field="assignee">
-                                <label class="task-item-detail-field-label" for="taskItemDetailAssigneeSelect">Assignee</label>
-                                <select id="taskItemDetailAssigneeSelect" class="form-select form-select-sm"></select>
-                            </div>
-
-                            <div class="task-item-detail-field-row" data-detail-field="reporter">
-                                <label class="task-item-detail-field-label" for="taskItemDetailReporterSelect">Reporter</label>
-                                <select id="taskItemDetailReporterSelect" class="form-select form-select-sm"></select>
-                            </div>
-
                             <div class="task-item-detail-field-row" data-detail-field="priority">
                                 <span class="task-item-detail-field-label">Priority</span>
                                 <div class="dropdown task-item-detail-priority-wrap">
@@ -240,6 +232,16 @@
                                         <li><a class="dropdown-item task-item-detail-priority-option" href="#" data-priority="Lowest"><i class="fa-solid fa-angles-down task-priority-icon task-priority-lowest"></i> Lowest</a></li>
                                     </ul>
                                 </div>
+                            </div>
+
+                            <div class="task-item-detail-field-row" data-detail-field="time_tracking">
+                                <span class="task-item-detail-field-label">Time Tracking</span>
+                                <span id="taskItemDetailTimeTrackingValue" class="task-item-detail-field-value">No time logged</span>
+                            </div>
+
+                            <div class="task-item-detail-field-row" data-detail-field="assignee">
+                                <label class="task-item-detail-field-label" for="taskItemDetailAssigneeSelect">Assignee</label>
+                                <select id="taskItemDetailAssigneeSelect" class="form-select form-select-sm"></select>
                             </div>
 
                             <div class="task-item-detail-field-row" data-detail-field="labels">
@@ -257,9 +259,9 @@
                                 </div>
                             </div>
 
-                            <div class="task-item-detail-field-row" data-detail-field="time_tracking">
-                                <span class="task-item-detail-field-label">Time Tracking</span>
-                                <span id="taskItemDetailTimeTrackingValue" class="task-item-detail-field-value">No time logged</span>
+                            <div class="task-item-detail-field-row" data-detail-field="due_date">
+                                <label class="task-item-detail-field-label" for="taskItemDetailDueDateInput">Due date</label>
+                                <input id="taskItemDetailDueDateInput" class="form-control form-control-sm" type="date">
                             </div>
 
                             <div class="task-item-detail-field-row" data-detail-field="start_date">
@@ -267,9 +269,9 @@
                                 <input id="taskItemDetailStartDateInput" class="form-control form-control-sm" type="date">
                             </div>
 
-                            <div class="task-item-detail-field-row" data-detail-field="due_date">
-                                <label class="task-item-detail-field-label" for="taskItemDetailDueDateInput">Due date</label>
-                                <input id="taskItemDetailDueDateInput" class="form-control form-control-sm" type="date">
+                            <div class="task-item-detail-field-row" data-detail-field="reporter">
+                                <label class="task-item-detail-field-label" for="taskItemDetailReporterSelect">Reporter</label>
+                                <select id="taskItemDetailReporterSelect" class="form-select form-select-sm"></select>
                             </div>
 
                             <div class="task-item-detail-field-row" data-detail-field="amendement_date">
@@ -360,6 +362,8 @@
                                 <span id="taskItemDetailUpdatedMeta" class="task-item-detail-meta-value">-</span>
                             </div>
                         </div>
+
+                        <div id="taskItemActivityMobileMount"></div>
                 </div>
             </div>
         </div>
