@@ -292,6 +292,15 @@
     var recordType = String(row.record_type || "history").toLowerCase();
     var itemLink = "";
     if (row.work_item_key && row.item_id) {
+      var statusName = "Unknown";
+      for (var i = 0; i < boardColumns.length; i++) {
+        if (String(boardColumns[i].id) === String(row.item_task_status)) {
+          statusName = boardColumns[i].name;
+          break;
+        }
+      }
+      var statusBadge = '<span class="summary-activity-status-badge" style="background:#e8eaf0;color:#44546f;border:1px solid #dcdfe4;margin-left:6px;padding:2px 6px;vertical-align:middle;cursor:pointer;text-transform:none;">' + esc(statusName) + '</span>';
+
       itemLink =
         ' on <a class="task-item-activity-item-link summary-activity-item-link" href="' +
         boardUrl +
@@ -305,6 +314,14 @@
         escAttr(row.work_item_key || "") +
         '" data-work-type-name="' +
         escAttr(row.work_type_name || "Task") +
+        '" data-work-type-icon="' +
+        escAttr(row.work_type_svg_icon || "") +
+        '" data-assignee-name="' +
+        escAttr(row.item_assignee_name || "Unassigned") +
+        '" data-priority="' +
+        escAttr(row.item_priority || "Medium") +
+        '" data-status-id="' +
+        escAttr(row.item_task_status || "") +
         '" data-description="' +
         escAttr(String(row.to_value || "")) +
         '" data-record-type="' +
@@ -313,7 +330,7 @@
         esc(row.work_item_key) +
         ":" +
         esc(row.item_title || "") +
-        "</a>";
+        "</a>" + statusBadge;
     }
 
     var detail = "";
@@ -1543,5 +1560,151 @@
         e.preventDefault();
       }
     });
+
+  function getColumnNameByIdLocal(id) {
+    var strId = String(id);
+    for (var i = 0; i < boardColumns.length; i++) {
+      if (String(boardColumns[i].id) === strId) {
+        return boardColumns[i].name;
+      }
+    }
+    return "Unknown";
+  }
+
+  var hoverCardTimeout = null;
+  var hoverCardHideTimeout = null;
+  var $hoverCard = $('<div class="task-summary-hover-card shadow-sm border rounded bg-white p-3" style="position: absolute; z-index: 1060; display: none; width: 340px; box-shadow: 0 4px 16px rgba(0,0,0,0.15) !important;"></div>');
+  $("body").append($hoverCard);
+
+  $(document).on("mouseenter", ".summary-activity-item-link", function() {
+    var $link = $(this);
+    clearTimeout(hoverCardHideTimeout);
+    
+    hoverCardTimeout = setTimeout(function() {
+      var offset = $link.offset();
+      var itemId = $link.data("item-id");
+      var title = $link.data("item-title");
+      var key = $link.data("work-item-key");
+      var workTypeIconData = $link.data("work-type-icon");
+      var workTypeIcon = '<i class="fa-solid fa-check-square text-primary"></i>';
+      if (workTypeIconData) {
+          if (String(workTypeIconData).indexOf('<') === 0) {
+              workTypeIcon = workTypeIconData;
+          } else {
+              workTypeIcon = '<img src="' + escAttr(workTypeIconData) + '" style="width:100%;height:100%;object-fit:contain;" />';
+          }
+      }
+      var assigneeName = $link.data("assignee-name");
+      var priority = $link.data("priority");
+      var statusId = $link.data("status-id");
+      
+      var priorityIcon = PRIORITY_ICONS[priority] || '<i class="fa-solid fa-equals"></i>';
+      
+      var statusDropdownHtml = 
+        '<div class="dropdown d-inline-block">' +
+          '<button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" style="font-size:11px;font-weight:600;padding:2px 8px;text-transform:none;">' +
+             esc(getColumnNameByIdLocal(statusId)) +
+          '</button>' +
+          '<ul class="dropdown-menu shadow-sm" style="min-width:140px;padding:4px 0;">';
+          
+      for (var i = 0; i < boardColumns.length; i++) {
+        var c = boardColumns[i];
+        statusDropdownHtml += '<li><a class="dropdown-item task-hover-status-option" href="#" data-item-id="' + itemId + '" data-status-id="' + c.id + '" style="font-size:12px;padding:4px 12px;font-weight:600;text-transform:none;">' + esc(c.name) + '</a></li>';
+      }
+      statusDropdownHtml += '</ul></div>';
+      
+      var html = '<div class="d-flex align-items-center gap-2 mb-2">' +
+                 '<div style="width:16px;height:16px;display:flex;align-items:center;">' + workTypeIcon + '</div>' +
+                 '<div style="flex:1;min-width:0;line-height:1.2;">' +
+                 '<a href="' + boardUrl + '?open_item=' + itemId + '" class="summary-hover-card-title-link" data-item-id="' + itemId + '" style="font-size:14px;font-weight:600;color:#0c66e4;text-decoration:none;">' + esc(key) + ': ' + esc(title) + '</a>' +
+                 '</div>' +
+                 '</div>' +
+                 '<div class="d-flex align-items-center gap-2 mt-3">' +
+                 '<div class="summary-activity-avatar" style="width:24px;height:24px;font-size:10px;border-radius:50%;background:#0c66e4;color:#fff;display:flex;align-items:center;justify-content:center;" title="' + escAttr(assigneeName) + '">' + esc(getInitials(assigneeName)) + '</div>' +
+                 statusDropdownHtml +
+                 '<div class="d-flex align-items-center gap-1" style="font-size:12px;color:#44546f;margin-left:auto;" title="' + escAttr(priority) + '">' + priorityIcon + ' ' + esc(priority) + '</div>' +
+                 '</div>';
+                 
+      $hoverCard.html(html);
+      
+      var topPos = offset.top + $link.outerHeight() + 5;
+      var leftPos = offset.left;
+      
+      if (leftPos + 340 > $(window).width()) {
+         leftPos = $(window).width() - 360;
+      }
+      
+      $hoverCard.css({
+        top: topPos,
+        left: leftPos,
+        display: "block"
+      });
+    }, 400); 
+  });
+
+  $(document).on("mouseleave", ".summary-activity-item-link", function() {
+    clearTimeout(hoverCardTimeout);
+    hoverCardHideTimeout = setTimeout(function() {
+      $hoverCard.hide();
+    }, 300);
+  });
+
+  $hoverCard.on("mouseenter", function() {
+    clearTimeout(hoverCardHideTimeout);
+  });
+
+  $hoverCard.on("mouseleave", function() {
+    hoverCardHideTimeout = setTimeout(function() {
+      $hoverCard.hide();
+    }, 300);
+  });
+  
+  $hoverCard.on("click", ".task-hover-status-option", function(e) {
+    e.preventDefault();
+    var $option = $(this);
+    var itemId = $option.data("item-id");
+    var newStatus = $option.data("status-id");
+    
+    var $btn = $option.closest(".dropdown").find(".dropdown-toggle");
+    $btn.prop("disabled", true).text("Saving...");
+    
+    var postData = {
+      task_action: "change_item_status",
+      item_id: itemId,
+      target_column_id: newStatus,
+      csrf_token: csrfToken
+    };
+    
+    $.ajax({
+      url: boardUrl,
+      method: "POST",
+      data: postData,
+      dataType: "json",
+      success: function (resp) {
+        if (resp && resp.ok) {
+          $hoverCard.hide();
+          refreshAll(); 
+        } else {
+          $btn.prop("disabled", false).text(esc(getColumnNameByIdLocal(newStatus)));
+          alert(resp.error || "Failed to update status");
+        }
+      },
+      error: function() {
+        $btn.prop("disabled", false).text(esc(getColumnNameByIdLocal(newStatus)));
+        alert("Server error");
+      }
+    });
+  });
+  
+  $(document).on("click", ".summary-hover-card-title-link", function (e) {
+      e.preventDefault();
+      var itemId = $(this).data("item-id");
+      var $originalLink = $('.summary-activity-item-link[data-item-id="' + itemId + '"]').first();
+      if ($originalLink.length) {
+          $originalLink.trigger("click");
+      }
+      $hoverCard.hide();
+  });
+
   });
 })(jQuery);

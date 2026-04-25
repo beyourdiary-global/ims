@@ -3217,6 +3217,97 @@ $(document).on("click", ".task-item-title, .task-item-key", function (e) {
   openItemDetailModal($card);
 });
 
+$(document).on("click", ".task-item-edit-btn", function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  var $card = $(this).closest(".task-item-card");
+  var $title = $card.find(".task-item-title");
+  
+  if ($card.find(".task-item-inline-edit").length > 0) {
+    return;
+  }
+  
+  var currentTitle = $title.text();
+  $title.hide();
+  
+  var $editWrap = $('<div class="task-item-inline-edit mt-1 mb-2 d-flex align-items-center gap-1" style="flex: 1; min-width: 0;"></div>');
+  var $input = $('<input type="text" class="form-control form-control-sm" maxlength="255">').val(currentTitle);
+  var $actions = $('<div class="d-flex gap-1"></div>');
+  var $saveBtn = $('<button class="btn btn-light border btn-sm" type="button" style="width: 28px; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center;"><i class="fa-solid fa-check"></i></button>');
+  var $cancelBtn = $('<button class="btn btn-light border btn-sm" type="button" style="width: 28px; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center;"><i class="fa-solid fa-xmark"></i></button>');
+  
+  $actions.append($saveBtn, $cancelBtn);
+  $editWrap.append($input, $actions);
+  $title.after($editWrap);
+  
+  $editWrap.on("click", function(e) {
+    e.stopPropagation();
+  });
+  
+  $input.trigger("focus");
+  
+  var closeEdit = function() {
+    $editWrap.remove();
+    $title.show();
+  };
+  
+  $cancelBtn.on("click", function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    closeEdit();
+  });
+  
+  $saveBtn.on("click", function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    var newTitle = $input.val().trim();
+    if (!newTitle) {
+      if (typeof window.notify === "function") {
+        window.notify("Title cannot be empty.");
+      }
+      $input.trigger("focus");
+      return;
+    }
+    
+    var itemId = $card.data("item-id");
+    if (!itemId) {
+      closeEdit();
+      return;
+    }
+    
+    $saveBtn.prop("disabled", true);
+    $input.prop("disabled", true);
+    
+    if (typeof window.postAction === "function") {
+      window.postAction({
+        task_action: "update_item_core",
+        item_id: itemId,
+        title: newTitle
+      }, function() {
+        $title.text(newTitle);
+        closeEdit();
+      }, function() {
+        $saveBtn.prop("disabled", false);
+        $input.prop("disabled", false);
+        $input.trigger("focus");
+      });
+    } else {
+      $title.text(newTitle);
+      closeEdit();
+    }
+  });
+  
+  $input.on("keydown", function(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      $saveBtn.trigger("click");
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      closeEdit();
+    }
+  });
+});
+
 $(document).on("click", "#taskItemDetailDescriptionView", function (e) {
   if ($(e.target).closest("a").length) {
     return;

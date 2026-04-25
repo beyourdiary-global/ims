@@ -1,9 +1,10 @@
 <?php
 $currentPagePin = 138;
 $taskPageTitleByPin = array(
-    138 => 'Task Management Sheets',
+    138 => 'Sheets',
 );
 $pageTitle = isset($taskPageTitleByPin[$currentPagePin]) ? $taskPageTitleByPin[$currentPagePin] : 'Task Management';
+$taskParentTitle = 'Task Management';
 $isFinance = 1;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
@@ -234,11 +235,11 @@ if (empty($_SESSION['csrf_token'])) {
     <div class="col-12 col-md-11">
         <div class="d-flex flex-column mb-3">
             <div class="row">
-                <p><a href="<?= $SITEURL ?>/dashboard.php">Dashboard</a> <i class="fa-solid fa-chevron-right fa-xs"></i> Task Management Sheets</p>
+                <p><a href="<?= $SITEURL ?>/dashboard.php">Dashboard</a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?= htmlspecialchars($taskParentTitle, ENT_QUOTES, 'UTF-8') ?> <i class="fa-solid fa-chevron-right fa-xs"></i> <?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></p>
             </div>
             <div class="row">
                 <div class="col-12 d-flex justify-content-between flex-wrap align-items-center">
-                    <h2>Task Management Sheets</h2>
+                    <h2><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></h2>
                 </div>
             </div>
         </div>

@@ -1,9 +1,10 @@
 <?php
 $currentPagePin = 137;
 $taskPageTitleByPin = array(
-    137 => 'Task Management Summary',
+    137 => 'Summary',
 );
 $pageTitle = isset($taskPageTitleByPin[$currentPagePin]) ? $taskPageTitleByPin[$currentPagePin] : 'Task Management';
+$taskParentTitle = 'Task Management';
 $isFinance = 1;
 
 if (!function_exists('taskBoardAuditLog')) {
@@ -120,8 +121,10 @@ $parentOptions = taskGetEpicParentOptions($connect, 0);
 $labels = taskGetLabels($connect);
 $projectKeySetting = taskGetProjectKeySetting($connect);
 $workTypeIcons = taskGetSvgIconOptions();
-$canEdit = taskIsActionAllowed('edit', $pinAccess);
-$canAdd = taskIsActionAllowed('add', $pinAccess);
+    $boardPinAccess = taskGetPinAccessByGroupId($connect, 136);
+    $sheetsPinAccess = taskGetPinAccessByGroupId($connect, 138);
+    $canEdit = taskIsActionAllowed('edit', $pinAccess) || taskIsActionAllowed('edit', $boardPinAccess) || taskIsActionAllowed('edit', $sheetsPinAccess);
+    $canAdd = taskIsActionAllowed('add', $pinAccess) || taskIsActionAllowed('add', $boardPinAccess) || taskIsActionAllowed('add', $sheetsPinAccess);
 $currentUserId = USER_ID;
 $currentUserName = USER_NAME;
 
@@ -147,11 +150,11 @@ if (empty($_SESSION['csrf_token'])) {
         <div id="taskBoardApp" class="d-none" aria-hidden="true"></div>
         <div class="d-flex flex-column mb-3">
             <div class="row">
-                <p><a href="<?= $SITEURL ?>/dashboard.php">Dashboard</a> <i class="fa-solid fa-chevron-right fa-xs"></i> Task Management Summary</p>
+                <p><a href="<?= $SITEURL ?>/dashboard.php">Dashboard</a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?= htmlspecialchars($taskParentTitle, ENT_QUOTES, 'UTF-8') ?> <i class="fa-solid fa-chevron-right fa-xs"></i> <?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></p>
             </div>
             <div class="row">
                 <div class="col-12 d-flex justify-content-between flex-wrap align-items-center">
-                    <h2>Task Management Summary</h2>
+                    <h2><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></h2>
                 </div>
             </div>
         </div>
