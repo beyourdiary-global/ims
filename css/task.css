@@ -258,14 +258,6 @@ body.task-local-sidebar-open .menuBar>.container-fluid .nav.nav-tabs>.nav-item:f
   border-radius: 999px;
 }
 
-. {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  margin-bottom: 0.75rem;
-}
-
 .task-board-settings-header h6 {
   font-size: 1.02rem;
   font-weight: 600;
@@ -1953,6 +1945,7 @@ body.task-local-sidebar-open .menuBar>.container-fluid .nav.nav-tabs>.nav-item:f
   background: transparent !important;
   color: #42526e;
   border-radius: 0 0 10px 10px;
+  font-size: 14px;
   font-weight: 500;
   position: relative;
   z-index: 6;
