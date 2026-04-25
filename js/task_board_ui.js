@@ -2835,7 +2835,8 @@ function buildTaskCardHtml(item) {
     '<h6 class="task-item-title">' +
     escHtml(item.title || "") +
     "</h6>" +
-    '<div class="dropdown task-item-menu-dropdown">' +
+    '<div class="dropdown task-item-menu-dropdown" style="display: flex; gap: 2px;">' +
+    '<button class="btn task-item-menu-btn task-item-edit-btn" type="button" title="Edit title"><i class="fa-solid fa-pen"></i></button>' +
     '<button class="btn task-item-menu-btn task-open-item-actions-btn" type="button" title="Task options"><i class="fa-solid fa-ellipsis"></i></button>' +
     "</div>" +
     "</div>" +

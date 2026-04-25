@@ -542,6 +542,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         taskJsonResponse($result);
     }
 
+    if ($taskAction === 'upload_item_reply_attachment') {
+        if (!taskIsActionAllowed('edit', $pinAccess)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to upload reply attachment.'));
+        }
+
+        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $file = isset($_FILES['attachment']) ? $_FILES['attachment'] : null;
+
+        if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'File upload failed or no file selected.'));
+        }
+
+        $maxSizeBytes = 50 * 1024 * 1024;
+        if ((int) $file['size'] > $maxSizeBytes) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'File exceeds the 50MB size limit.'));
+        }
+
+        $allowedExts = array('jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt', 'zip');
+        $ext = strtolower(pathinfo((string) $file['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, $allowedExts, true)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'Invalid file extension. Allowed types: ' . implode(', ', $allowedExts) . '.'));
+        }
+
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime = $finfo ? finfo_file($finfo, $file['tmp_name']) : '';
+        if ($finfo) {
+            finfo_close($finfo);
+        }
+
+        $allowedMimes = array(
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'image/webp',
+            'image/bmp',
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'text/csv',
+            'text/plain',
+            'application/zip',
+            'application/x-zip-compressed'
+        );
+
+        if (!in_array((string) $mime, $allowedMimes, true)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'Invalid file format detected by server.'));
+        }
+
+        $result = taskUploadItemReplyAttachment(
+            $connect,
+            $itemId,
+            $file,
+            $currentUserId,
+            $cdate,
+            $ctime
+        );
+
+        taskJsonResponse($result);
+    }
+
     if ($taskAction === 'update_item_detail') {
         if (!taskIsActionAllowed('edit', $pinAccess)) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to update work item details.'));
@@ -1010,9 +1072,7 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                                 </div>
                             </div>
                             <div class="task-board-settings-divider"></div>
-                            <div class="task-board-settings-header">
-                                <h6 class="mb-0">View settings</h6>
-                            </div>
+                            
                             <h6 class="task-board-settings-section-title mb-2">Fields</h6>
                             <div class="task-board-settings-fields">
                                 <?php

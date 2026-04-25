@@ -447,16 +447,17 @@
     }
 
     var isDescription = opts && opts.isDescription;
+    var isReply = opts && opts.isReply;
     var formData = new FormData();
     if (isDescription) {
       formData.append("task_action", "upload_item_description_attachment");
-      formData.append("item_id", String(itemId));
-      formData.append("attachment", file);
+    } else if (isReply) {
+      formData.append("task_action", "upload_item_reply_attachment");
     } else {
       formData.append("task_action", "upload_item_comment_attachment");
-      formData.append("item_id", String(itemId));
-      formData.append("attachment", file);
     }
+    formData.append("item_id", String(itemId));
+    formData.append("attachment", file);
 
     return new Promise(function (resolve, reject) {
       postAction(
@@ -527,6 +528,8 @@
       return;
     }
 
+    var editorContext = editor._taskEditorContext || {};
+
     var input = document.createElement("input");
     input.type = "file";
     input.accept =
@@ -538,7 +541,7 @@
         return;
       }
 
-      uploadCommentAttachment(file)
+      uploadCommentAttachment(file, editorContext)
         .then(function (attachment) {
           insertAttachmentIntoEditor(editor, attachment);
           editor.focus();
@@ -1321,6 +1324,7 @@
   function createBaseEditorConfig(selector, setupCallback, opts) {
     opts = opts || {};
     var isDescription = !!opts.isDescription;
+    var isReply = !!opts.isReply;
     var isCompactMobile = window.matchMedia("(max-width: 767.98px)").matches;
     return {
       selector: selector,
@@ -1364,6 +1368,7 @@
       images_upload_handler: function (blobInfo) {
         return uploadCommentAttachment(blobInfo.blob(), {
           isDescription: isDescription,
+          isReply: isReply,
         }).then(function (attachment) {
           return String(attachment.fileUrl || "");
         });
@@ -1371,6 +1376,7 @@
       content_style:
         "body { font-family: Segoe UI, Arial, sans-serif; font-size: 14px; line-height: 1.45; color: #24364d; } ul.task-editor-checklist { list-style: none; margin-left: 0; padding-left: 0; } ul.task-editor-checklist li { list-style: none; display: flex; align-items: flex-start; gap: 0.4rem; } ul.task-editor-checklist li input.task-editor-checkbox { margin-top: 0.28rem; flex: 0 0 auto; cursor: pointer; pointer-events: auto; }",
       setup: function (editor) {
+        editor._taskEditorContext = { isDescription: isDescription, isReply: isReply };
         function findChecklistRowCheckbox(target) {
           if (!target || !target.closest) {
             return null;
@@ -1632,7 +1638,7 @@
         editor.on("keyup input undo redo paste", function () {
           scheduleReplyDraftSave(id);
         });
-      });
+      }, { isReply: true });
       config.height = 120;
       config.toolbar =
         "blocks bold styles taskListControl forecolor taskFileUpload taskSimpleLink undo redo";
@@ -1743,7 +1749,7 @@
       var config = createBaseEditorConfig(selector, function (editor) {
         registerMentionAutocompleter(editor);
         registerEditorToolbarControls(editor);
-      });
+      }, { isReply: true });
       config.height = 130;
       config.toolbar =
         "blocks bold styles taskListControl forecolor taskFileUpload taskSimpleLink undo redo";
