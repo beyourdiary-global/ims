@@ -3207,8 +3207,8 @@ if (!function_exists('taskRenderCard')) {
         echo '<div class="task-item-head">';
         echo '<h6 class="task-item-title">' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</h6>';
         echo '<div class="task-item-menu-dropdown" style="display: flex; gap: 2px;">';
-        echo '<button class="btn task-item-menu-btn task-item-edit-btn" type="button" title="Edit title"><i class="fa-solid fa-pen"></i></button>';
-        echo '<button class="btn task-item-menu-btn task-open-item-actions-btn" type="button" title="Task options"><i class="fa-solid fa-ellipsis"></i></button>';
+        echo '<button class="btn task-item-menu-btn task-item-edit-btn" type="button" title="Edit title" aria-label="Edit title"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>';
+        echo '<button class="btn task-item-menu-btn task-open-item-actions-btn" type="button" title="Task options" aria-label="Task options"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button>';
         echo '</div>';
         echo '</div>';
 
