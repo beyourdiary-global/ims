@@ -1591,7 +1591,7 @@
           if (String(workTypeIconData).indexOf('<') === 0) {
               workTypeIcon = workTypeIconData;
           } else {
-              workTypeIcon = '<img src="' + escAttr(workTypeIconData) + '" style="width:100%;height:100%;object-fit:contain;" />';
+              workTypeIcon = '<img src="' + escAttr(workTypeIconData) + '" alt="" aria-hidden="true" style="width:100%;height:100%;object-fit:contain;" />';
           }
       }
       var assigneeName = $link.data("assignee-name");
