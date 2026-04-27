@@ -29,6 +29,8 @@
   var replyEditEditorInitMap = {};
   var commentDraftTimer = 0;
   var replyDraftTimerByCommentId = {};
+  var editCommentDraftTimerByCommentId = {};
+  var editReplyDraftTimerByReplyId = {};
   var descriptionDraftTimer = 0;
   var draftItemContextId = 0;
   var descriptionDraftClearedByUser = false; // set when user explicitly saves or cancels
@@ -1000,6 +1002,30 @@
     return getReplyDraftKey(commentId) + "_notice";
   }
 
+  function getEditCommentDraftKey(commentId) {
+    return buildDraftCookieKey(
+      "comment_edit",
+      getDraftContextItemId(),
+      Number(commentId || 0),
+    );
+  }
+
+  function getEditCommentDraftNoticeKey(commentId) {
+    return getEditCommentDraftKey(commentId) + "_notice";
+  }
+
+  function getEditReplyDraftKey(replyId) {
+    return buildDraftCookieKey(
+      "reply_edit",
+      getDraftContextItemId(),
+      Number(replyId || 0),
+    );
+  }
+
+  function getEditReplyDraftNoticeKey(replyId) {
+    return getEditReplyDraftKey(replyId) + "_notice";
+  }
+
   function getDescriptionDraftKey() {
     return buildDraftCookieKey("description", getDraftContextItemId(), 0);
   }
@@ -1056,6 +1082,84 @@
 
     clearDraftCookie(getReplyDraftKey(id));
     clearDraftNoticeFlag(getReplyDraftNoticeKey(id));
+    return false;
+  }
+
+  function getCommentOriginalHtml(commentId) {
+    var id = Number(commentId || 0);
+    var rows = Array.isArray(itemDetailModalState.comments)
+      ? itemDetailModalState.comments
+      : [];
+    for (var i = 0; i < rows.length; i++) {
+      var row = rows[i] || {};
+      if (Number(row.id || 0) !== id) {
+        continue;
+      }
+      var html = String(row.comment_html || "").trim();
+      if (html) {
+        return html;
+      }
+      return "<p>" + escHtml(String(row.comment_text || "")) + "</p>";
+    }
+    return "";
+  }
+
+  function flushEditCommentDraftNow(commentId) {
+    var id = Number(commentId || 0);
+    if (id <= 0) {
+      return false;
+    }
+
+    var editor = getEditEditorInstance(id);
+    var html = editor ? String(editor.getContent() || "") : "";
+    var original = getCommentOriginalHtml(id);
+    if (
+      hasCommentContent(html) &&
+      normalizeHtmlForComparison(html) !== normalizeHtmlForComparison(original)
+    ) {
+      setDraftCookie(getEditCommentDraftKey(id), html);
+      return true;
+    }
+
+    clearDraftCookie(getEditCommentDraftKey(id));
+    clearDraftNoticeFlag(getEditCommentDraftNoticeKey(id));
+    return false;
+  }
+
+  function getReplyOriginalHtml(replyId) {
+    var id = Number(replyId || 0);
+    var record = findReplyRecord(id);
+    if (!record || !record.reply) {
+      return "";
+    }
+
+    var row = record.reply || {};
+    var html = String(row.reply_html || "").trim();
+    if (html) {
+      return html;
+    }
+    return "<p>" + escHtml(String(row.reply_text || "")) + "</p>";
+  }
+
+  function flushEditReplyDraftNow(replyId) {
+    var id = Number(replyId || 0);
+    if (id <= 0) {
+      return false;
+    }
+
+    var editor = getReplyEditEditorInstance(id);
+    var html = editor ? String(editor.getContent() || "") : "";
+    var original = getReplyOriginalHtml(id);
+    if (
+      hasCommentContent(html) &&
+      normalizeHtmlForComparison(html) !== normalizeHtmlForComparison(original)
+    ) {
+      setDraftCookie(getEditReplyDraftKey(id), html);
+      return true;
+    }
+
+    clearDraftCookie(getEditReplyDraftKey(id));
+    clearDraftNoticeFlag(getEditReplyDraftNoticeKey(id));
     return false;
   }
 
@@ -1202,6 +1306,35 @@
     ).toggleClass("d-none", !shouldShow);
   }
 
+  function updateEditCommentDraftNotice(commentId) {
+    var id = Number(commentId || 0);
+    if (id <= 0) {
+      return;
+    }
+
+    var hasDraft = !!String(
+      getDraftCookie(getEditCommentDraftKey(id)) || "",
+    ).trim();
+    var shouldShow =
+      hasDraft && hasDraftNoticeFlag(getEditCommentDraftNoticeKey(id));
+    $(
+      '.task-item-comment-edit-draft-notice[data-comment-id="' + id + '"]',
+    ).toggleClass("d-none", !shouldShow);
+  }
+
+  function updateEditReplyDraftNotice(replyId) {
+    var id = Number(replyId || 0);
+    if (id <= 0) {
+      return;
+    }
+
+    var hasDraft = !!String(getDraftCookie(getEditReplyDraftKey(id)) || "").trim();
+    var shouldShow = hasDraft && hasDraftNoticeFlag(getEditReplyDraftNoticeKey(id));
+    $(
+      '.task-item-reply-edit-draft-notice[data-reply-id="' + id + '"]',
+    ).toggleClass("d-none", !shouldShow);
+  }
+
   function restoreReplyDraft(commentId) {
     var id = Number(commentId || 0);
     if (id <= 0) {
@@ -1219,6 +1352,24 @@
       editor.focus();
     }
     updateReplyDraftNotice(id);
+  }
+
+  function restoreEditCommentDraft(commentId, triggerEl) {
+    var id = Number(commentId || 0);
+    if (id <= 0) {
+      return;
+    }
+
+    var draft = String(getDraftCookie(getEditCommentDraftKey(id)) || "");
+    if (!draft) {
+      return;
+    }
+
+    clearDraftNoticeFlag(getEditCommentDraftNoticeKey(id));
+    openEditComposer(id, triggerEl, {
+      draftHtml: draft,
+    });
+    updateEditCommentDraftNotice(id);
   }
 
   function scheduleDescriptionDraftSave() {
@@ -1695,6 +1846,9 @@
       var config = createBaseEditorConfig(selector, function (editor) {
         registerMentionAutocompleter(editor);
         registerEditorToolbarControls(editor);
+        editor.on("keyup input undo redo paste", function () {
+          scheduleEditCommentDraftSave(id);
+        });
       });
       config.height = 140;
       config.toolbar =
@@ -1749,6 +1903,12 @@
       var config = createBaseEditorConfig(selector, function (editor) {
         registerMentionAutocompleter(editor);
         registerEditorToolbarControls(editor);
+        editor.on("init", function () {
+          updateEditReplyDraftNotice(id);
+        });
+        editor.on("keyup input undo redo paste", function () {
+          scheduleEditReplyDraftSave(id);
+        });
       }, { isReply: true });
       config.height = 130;
       config.toolbar =
@@ -1836,6 +1996,9 @@
     }
 
     var commentId = Number(openEditCommentId || 0);
+    if (flushEditCommentDraftNow(commentId)) {
+      setDraftNoticeFlag(getEditCommentDraftNoticeKey(commentId));
+    }
     destroyEditEditor(commentId);
     $(
       '.task-item-comment-edit-box[data-comment-id="' + commentId + '"]',
@@ -1851,11 +2014,15 @@
     }
 
     var replyId = Number(openEditReplyId || 0);
+    if (flushEditReplyDraftNow(replyId)) {
+      setDraftNoticeFlag(getEditReplyDraftNoticeKey(replyId));
+    }
     destroyReplyEditEditor(replyId);
     $('.task-item-comment-edit-box[data-reply-id="' + replyId + '"]').remove();
     $("#taskItemReplyEditBox_" + replyId).remove();
     openEditReplyId = 0;
     openEditReplyEntryRef = null;
+    updateEditReplyDraftNotice(replyId);
   }
 
   function destroyAllReplyEditors() {
@@ -1963,6 +2130,8 @@
         closeCommentActionMenus();
         renderItemHistoryPanels();
         refreshVisibleReplyDraftNotices();
+        refreshVisibleEditCommentDraftNotices();
+        refreshVisibleEditReplyDraftNotices();
         updateCommentDraftNotice();
       },
       function () {
@@ -1972,6 +2141,8 @@
         itemDetailModalState.commentsLoading = false;
         renderItemHistoryPanels();
         refreshVisibleReplyDraftNotices();
+        refreshVisibleEditCommentDraftNotices();
+        refreshVisibleEditReplyDraftNotices();
         updateCommentDraftNotice();
       },
     );
@@ -1984,6 +2155,62 @@
         updateReplyDraftNotice(id);
       }
     });
+  }
+
+  function refreshVisibleEditCommentDraftNotices() {
+    $(".task-item-comment-edit-draft-notice[data-comment-id]").each(
+      function () {
+        var id = Number($(this).data("commentId") || 0);
+        if (id > 0) {
+          updateEditCommentDraftNotice(id);
+        }
+      },
+    );
+  }
+
+  function refreshVisibleEditReplyDraftNotices() {
+    $(".task-item-reply-edit-draft-notice[data-reply-id]").each(function () {
+      var id = Number($(this).data("replyId") || 0);
+      if (id > 0) {
+        updateEditReplyDraftNotice(id);
+      }
+    });
+  }
+
+  function scheduleEditCommentDraftSave(commentId) {
+    var id = Number(commentId || 0);
+    if (id <= 0) {
+      return;
+    }
+
+    if (editCommentDraftTimerByCommentId[id]) {
+      window.clearTimeout(editCommentDraftTimerByCommentId[id]);
+    }
+
+    editCommentDraftTimerByCommentId[id] = window.setTimeout(function () {
+      editCommentDraftTimerByCommentId[id] = 0;
+      flushEditCommentDraftNow(id);
+      clearDraftNoticeFlag(getEditCommentDraftNoticeKey(id));
+      updateEditCommentDraftNotice(id);
+    }, 220);
+  }
+
+  function scheduleEditReplyDraftSave(replyId) {
+    var id = Number(replyId || 0);
+    if (id <= 0) {
+      return;
+    }
+
+    if (editReplyDraftTimerByReplyId[id]) {
+      window.clearTimeout(editReplyDraftTimerByReplyId[id]);
+    }
+
+    editReplyDraftTimerByReplyId[id] = window.setTimeout(function () {
+      editReplyDraftTimerByReplyId[id] = 0;
+      flushEditReplyDraftNow(id);
+      clearDraftNoticeFlag(getEditReplyDraftNoticeKey(id));
+      updateEditReplyDraftNotice(id);
+    }, 220);
   }
 
   function submitCommentHtml(commentHtml, afterDone) {
@@ -2025,6 +2252,8 @@
         closeCommentActionMenus();
         renderItemHistoryPanels();
         refreshVisibleReplyDraftNotices();
+        refreshVisibleEditCommentDraftNotices();
+        refreshVisibleEditReplyDraftNotices();
         setCommentComposerVisible(false, true, false);
         setItemActivityTab("comment");
         loadItemHistory(itemId);
@@ -2084,6 +2313,8 @@
         closeCommentActionMenus();
         renderItemHistoryPanels();
         refreshVisibleReplyDraftNotices();
+        refreshVisibleEditCommentDraftNotices();
+        refreshVisibleEditReplyDraftNotices();
         setItemActivityTab("comment");
         loadItemHistory(itemId);
 
@@ -2134,6 +2365,8 @@
         itemDetailModalState.comments = Array.isArray(res.comments)
           ? res.comments.slice()
           : itemDetailModalState.comments;
+        clearDraftCookie(getEditCommentDraftKey(id));
+        clearDraftNoticeFlag(getEditCommentDraftNoticeKey(id));
         closeCommentActionMenus();
         renderItemHistoryPanels();
         setItemActivityTab("comment");
@@ -2212,6 +2445,8 @@
         itemDetailModalState.comments = Array.isArray(res.comments)
           ? res.comments.slice()
           : itemDetailModalState.comments;
+        clearDraftCookie(getEditReplyDraftKey(id));
+        clearDraftNoticeFlag(getEditReplyDraftNoticeKey(id));
         closeCommentActionMenus();
         renderItemHistoryPanels();
         setItemActivityTab("comment");
@@ -2228,8 +2463,9 @@
     );
   }
 
-  function openReplyEditComposer(replyId, triggerEl) {
+  function openReplyEditComposer(replyId, triggerEl, options) {
     var id = Number(replyId || 0);
+    var settings = options && typeof options === "object" ? options : {};
     if (id <= 0) {
       return;
     }
@@ -2277,6 +2513,20 @@
     if (!initialHtml) {
       initialHtml = "<p>" + escHtml(String(replyRow.reply_text || "")) + "</p>";
     }
+    if (typeof settings.draftHtml === "string") {
+      initialHtml = settings.draftHtml;
+    } else {
+      var storedEditReplyDraft = String(
+        getDraftCookie(getEditReplyDraftKey(id)) || "",
+      );
+      var shouldRecoverEditReplyDraft =
+        !!storedEditReplyDraft.trim() &&
+        hasDraftNoticeFlag(getEditReplyDraftNoticeKey(id));
+      if (shouldRecoverEditReplyDraft) {
+        initialHtml = storedEditReplyDraft;
+        clearDraftNoticeFlag(getEditReplyDraftNoticeKey(id));
+      }
+    }
 
     var replyEditEditorId = getReplyEditEditorId(id);
     var html =
@@ -2308,11 +2558,13 @@
         editor.setContent(initialHtml);
         editor.focus();
       }
+      updateEditReplyDraftNotice(id);
     });
   }
 
-  function openEditComposer(commentId, triggerEl) {
+  function openEditComposer(commentId, triggerEl, options) {
     var id = Number(commentId || 0);
+    var settings = options && typeof options === "object" ? options : {};
     if (id <= 0) {
       return;
     }
@@ -2366,6 +2618,18 @@
     if (!initialHtml) {
       initialHtml =
         "<p>" + escHtml(String(current.comment_text || "")) + "</p>";
+    }
+    if (typeof settings.draftHtml === "string") {
+      initialHtml = settings.draftHtml;
+    } else {
+      var storedEditDraft = String(getDraftCookie(getEditCommentDraftKey(id)) || "");
+      var shouldRecoverEditDraft =
+        !!storedEditDraft.trim() &&
+        hasDraftNoticeFlag(getEditCommentDraftNoticeKey(id));
+      if (shouldRecoverEditDraft) {
+        initialHtml = storedEditDraft;
+        clearDraftNoticeFlag(getEditCommentDraftNoticeKey(id));
+      }
     }
 
     var editEditorId = getEditEditorId(id);
@@ -2439,6 +2703,13 @@
       return;
     }
 
+    var storedReplyDraft = String(getDraftCookie(getReplyDraftKey(id)) || "");
+    var shouldRecoverReplyDraft =
+      !!storedReplyDraft.trim() && hasDraftNoticeFlag(getReplyDraftNoticeKey(id));
+    if (shouldRecoverReplyDraft) {
+      clearDraftNoticeFlag(getReplyDraftNoticeKey(id));
+    }
+
     var replyEditorId = getReplyEditorId(id);
     var html =
       '<div id="taskItemCommentReplyBox_' +
@@ -2468,6 +2739,9 @@
 
     ensureReplyEditorReady(id, actorName).then(function (editor) {
       if (editor) {
+        if (shouldRecoverReplyDraft) {
+          editor.setContent(storedReplyDraft);
+        }
         editor.focus();
       }
       updateReplyDraftNotice(id);
@@ -2641,6 +2915,14 @@
     restoreCommentDraft();
   });
 
+  $(document).on("keydown", "#taskItemCommentDraftRestoreBtn", function (e) {
+    var key = String(e.key || "").toLowerCase();
+    if (key === "enter" || key === " ") {
+      e.preventDefault();
+      restoreCommentDraft();
+    }
+  });
+
   $(document).on("click", ".task-item-comment-reply-btn", function () {
     var commentId = Number($(this).data("commentId") || 0);
     var actorName = String(
@@ -2663,20 +2945,6 @@
       clearReplyDraft(commentId);
     }
     closeReplyComposer();
-  });
-
-  $(document).on("click", ".task-item-reply-draft-restore-btn", function () {
-    var commentId = Number($(this).data("commentId") || 0);
-    if (commentId <= 0) {
-      return;
-    }
-
-    var $entry = $(this).closest(".task-item-comment-entry");
-    var actorName = String($entry.data("actorName") || "User");
-    openReplyComposer(commentId, actorName, this);
-    ensureReplyEditorReady(commentId, actorName).then(function () {
-      restoreReplyDraft(commentId);
-    });
   });
 
   $(document).on("click", ".task-item-comment-edit-cancel-btn", function () {
@@ -2828,6 +3096,8 @@
 
   $(document).on("task:historyPanelsRendered", function () {
     refreshVisibleReplyDraftNotices();
+    refreshVisibleEditCommentDraftNotices();
+    refreshVisibleEditReplyDraftNotices();
     updateCommentDraftNotice();
     updateDescriptionDraftNotice();
   });
@@ -2850,6 +3120,8 @@
 
     updateDescriptionDraftNotice();
     refreshVisibleReplyDraftNotices();
+    refreshVisibleEditCommentDraftNotices();
+    refreshVisibleEditReplyDraftNotices();
 
     if (
       Number(itemDetailModalState.itemId || 0) > 0 &&
@@ -2869,6 +3141,8 @@
         updateCommentActionButtons();
         updateCommentDraftNotice();
         refreshVisibleReplyDraftNotices();
+        refreshVisibleEditCommentDraftNotices();
+        refreshVisibleEditReplyDraftNotices();
         if (editor && isCommentComposerVisible()) {
           editor.focus();
         }
@@ -2897,6 +3171,14 @@
     var openReplyId = Number(openReplyCommentId || 0);
     var replyHasDraft =
       openReplyId > 0 ? flushReplyDraftNow(openReplyId) : false;
+    var openEditId = Number(openEditCommentId || 0);
+    var editCommentHasDraft =
+      openEditId > 0 ? flushEditCommentDraftNow(openEditId) : false;
+    var openEditReplyIdValue = Number(openEditReplyId || 0);
+    var editReplyHasDraft =
+      openEditReplyIdValue > 0
+        ? flushEditReplyDraftNow(openEditReplyIdValue)
+        : false;
 
     if (commentHasDraft) {
       setDraftNoticeFlag(getCommentDraftNoticeKey());
@@ -2906,6 +3188,12 @@
     }
     if (replyHasDraft && openReplyId > 0) {
       setDraftNoticeFlag(getReplyDraftNoticeKey(openReplyId));
+    }
+    if (editCommentHasDraft && openEditId > 0) {
+      setDraftNoticeFlag(getEditCommentDraftNoticeKey(openEditId));
+    }
+    if (editReplyHasDraft && openEditReplyIdValue > 0) {
+      setDraftNoticeFlag(getEditReplyDraftNoticeKey(openEditReplyIdValue));
     }
 
     if (commentDraftTimer) {
@@ -2926,6 +3214,26 @@
       }
       replyDraftTimerByCommentId[replyTimerKeys[i]] = 0;
     }
+    var editTimerKeys = Object.keys(editCommentDraftTimerByCommentId || {});
+    for (var j = 0; j < editTimerKeys.length; j++) {
+      var editTimerId = Number(
+        editCommentDraftTimerByCommentId[editTimerKeys[j]] || 0,
+      );
+      if (editTimerId) {
+        window.clearTimeout(editTimerId);
+      }
+      editCommentDraftTimerByCommentId[editTimerKeys[j]] = 0;
+    }
+    var editReplyTimerKeys = Object.keys(editReplyDraftTimerByReplyId || {});
+    for (var k = 0; k < editReplyTimerKeys.length; k++) {
+      var editReplyTimerId = Number(
+        editReplyDraftTimerByReplyId[editReplyTimerKeys[k]] || 0,
+      );
+      if (editReplyTimerId) {
+        window.clearTimeout(editReplyTimerId);
+      }
+      editReplyDraftTimerByReplyId[editReplyTimerKeys[k]] = 0;
+    }
     setCommentComposerVisible(false, true, false);
     closeCommentActionMenus();
     destroyAllReplyEditEditors();
@@ -2935,6 +3243,8 @@
     updateCommentDraftNotice();
     updateDescriptionDraftNotice();
     refreshVisibleReplyDraftNotices();
+    refreshVisibleEditCommentDraftNotices();
+    refreshVisibleEditReplyDraftNotices();
   });
 
   window.addEventListener("beforeunload", function () {
@@ -2958,6 +3268,18 @@
     ) {
       setDraftNoticeFlag(getReplyDraftNoticeKey(openReplyCommentId));
     }
+    if (
+      Number(openEditCommentId || 0) > 0 &&
+      flushEditCommentDraftNow(openEditCommentId)
+    ) {
+      setDraftNoticeFlag(getEditCommentDraftNoticeKey(openEditCommentId));
+    }
+    if (
+      Number(openEditReplyId || 0) > 0 &&
+      flushEditReplyDraftNow(openEditReplyId)
+    ) {
+      setDraftNoticeFlag(getEditReplyDraftNoticeKey(openEditReplyId));
+    }
   });
 
   window.loadItemComments = loadItemComments;
@@ -2969,6 +3291,8 @@
     destroyAllReplyEditors();
     updateCommentDraftNotice();
     refreshVisibleReplyDraftNotices();
+    refreshVisibleEditCommentDraftNotices();
+    refreshVisibleEditReplyDraftNotices();
     updateDescriptionDraftNotice();
   };
 

@@ -3253,6 +3253,43 @@ body.task-local-sidebar-open .menuBar>.container-fluid .nav.nav-tabs>.nav-item:f
   background: #ffffff;
 }
 
+.task-item-comment-draft-line {
+  margin-bottom: 0.8rem;
+  border: 1px solid #8c9aac;
+  border-radius: 3px;
+  background: #ffffff;
+  color: #4a607d;
+  padding: 0.62rem 0.85rem;
+  font-size: 1rem;
+  font-weight: 400;
+}
+
+.task-item-comment-draft-link,
+.task-item-inline-draft-link {
+  color: #4a607d;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.task-item-comment-draft-link:hover,
+.task-item-comment-draft-link:focus,
+.task-item-inline-draft-link:hover,
+.task-item-inline-draft-link:focus {
+  color: #214b80;
+  outline: none;
+}
+
+.task-item-inline-draft-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  font-size: 0.98rem;
+  font-weight: 400;
+  white-space: nowrap;
+  cursor: default;
+  pointer-events: none;
+}
+
 .task-item-draft-reminder {
   margin-bottom: 0.55rem;
 }
@@ -3731,6 +3768,13 @@ body.task-local-sidebar-open .menuBar>.container-fluid .nav.nav-tabs>.nav-item:f
   margin: 0;
   color: #172b4d;
   font-size: 1.22rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.task-item-description-draft-status {
+  color: #2f3b48;
+  font-size: 0.9rem;
   font-weight: 600;
   line-height: 1.2;
 }

@@ -38,8 +38,8 @@ if (!function_exists('taskRenderBoardItemHistorySection')) {
                 </div>
 
                 <div id="taskItemActivityPanelComment" class="task-item-activity-panel d-none" role="tabpanel" aria-labelledby="taskItemActivityTabComment">
-                <div id="taskItemCommentDraftNotice" class="task-item-draft-reminder d-none">
-                    <button id="taskItemCommentDraftRestoreBtn" type="button" class="btn task-item-draft-reminder-btn">You have an unsaved comment</button>
+                <div id="taskItemCommentDraftNotice" class="task-item-comment-draft-line d-none">
+                    <span id="taskItemCommentDraftRestoreBtn" class="task-item-comment-draft-link" role="button" tabindex="0">• You have an unsaved comment</span>
                 </div>
                 <div id="taskItemCommentComposeLauncherWrap" class="task-item-comment-compose-launcher-wrap">
                     <button id="taskItemCommentComposeLauncher" type="button" class="btn task-item-comment-compose-launcher" aria-label="Add comment">Add a comment...</button>

@@ -44,15 +44,13 @@
                                             <i class="fa-solid fa-chevron-down"></i>
                                         </button>
                                         <label class="form-label mb-0 task-item-detail-section-title" for="taskItemDetailDescriptionInput">Description</label>
+                                        <span id="taskItemDetailDescriptionDraftNotice" class="task-item-description-draft-status d-none">• Unsaved changes</span>
                                     </div>
                                     <div id="taskItemDetailDescriptionBody" class="task-item-detail-description-body">
                                         <div id="taskItemDetailDescriptionViewWrap" class="task-item-detail-description-view-wrap">
                                             <div id="taskItemDetailDescriptionView" class="task-item-detail-description-view is-empty" role="button" tabindex="0" aria-label="Add or edit description">
                                                 <span id="taskItemDetailDescriptionViewText" class="task-item-detail-description-view-text">Add a description...</span>
                                                 <div id="taskItemDetailDescriptionViewContent" class="task-item-detail-description-rendered d-none"></div>
-                                            </div>
-                                            <div id="taskItemDetailDescriptionDraftNotice" class="task-item-draft-reminder d-none">
-                                                <button id="taskItemDetailDescriptionDraftRestoreBtn" type="button" class="btn task-item-draft-reminder-btn">You have unsaved description</button>
                                             </div>
                                         </div>
                                         <div id="taskItemDetailDescriptionEditWrap" class="task-item-detail-description-edit-wrap d-none">

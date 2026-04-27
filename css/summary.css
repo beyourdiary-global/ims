@@ -671,6 +671,21 @@
   margin-left: 4px;
 }
 
+.summary-hover-status-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.summary-hover-status-toggle::after {
+  display: none !important;
+}
+
+.summary-hover-status-caret {
+  font-size: 9px;
+  line-height: 1;
+}
+
 /* Priority breakdown */
 .summary-priority-item {
   display: flex;
