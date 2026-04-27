@@ -1685,12 +1685,12 @@
           $hoverCard.hide();
           refreshAll(); 
         } else {
-          $btn.prop("disabled", false).text(esc(getColumnNameByIdLocal(newStatus)));
-          alert(resp.error || "Failed to update status");
+          $btn.prop("disabled", false).text(getColumnNameByIdLocal(newStatus));
+          alert((resp && (resp.message || resp.error)) || "Failed to update status");
         }
       },
       error: function() {
-        $btn.prop("disabled", false).text(esc(getColumnNameByIdLocal(newStatus)));
+        $btn.prop("disabled", false).text(getColumnNameByIdLocal(newStatus));
         alert("Server error");
       }
     });
