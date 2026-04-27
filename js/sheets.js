@@ -33,6 +33,32 @@
   var globalSearch = "";
   var showSummaryRow = false;
   var toolbarAssigneeFilter = ""; // '' = all, '__unassigned__' = unassigned, or user id string
+  var columnWidths = {}; // colKey -> pixel width
+  var activeColumnResize = null;
+
+  var DEFAULT_COLUMN_WIDTHS = {
+    work_type: 80,
+    work_item_key: 100,
+    title: 280,
+    description: 200,
+    board_status: 150,
+    original_estimate: 120,
+    task_status: 130,
+    parent_display: 120,
+    assignee_name: 150,
+    reporter_name: 150,
+    priority: 100,
+    labels: 140,
+    time_tracking: 130,
+    start_date: 120,
+    due_date: 120,
+    amendement_date: 120,
+    amendement_time_minutes: 110,
+    second_amendement_date: 120,
+    second_amendement_time_minutes: 110,
+  };
+
+  var MIN_COLUMN_WIDTH = 46;
 
   function setCookie(name, value, days) {
     var expires = "";
@@ -70,6 +96,7 @@
       collapsedGroups: collapsedGroups,
       showSummaryRow: !!showSummaryRow,
       toolbarAssigneeFilter: toolbarAssigneeFilter,
+      columnWidths: columnWidths,
     };
     setCookie(viewPrefCookieName, JSON.stringify(payload), 180);
   }
@@ -103,6 +130,10 @@
         typeof saved.toolbarAssigneeFilter === "string"
           ? saved.toolbarAssigneeFilter
           : "";
+      columnWidths =
+        saved.columnWidths && typeof saved.columnWidths === "object"
+          ? saved.columnWidths
+          : {};
     } catch (e) {
       sortCol = "";
       sortDir = "";
@@ -111,7 +142,17 @@
       collapsedGroups = {};
       showSummaryRow = false;
       toolbarAssigneeFilter = "";
+      columnWidths = {};
     }
+  }
+
+  function getColumnWidth(colKey) {
+    var key = String(colKey || "");
+    var stored = Number(columnWidths[key] || 0);
+    if (stored > 0) {
+      return Math.max(MIN_COLUMN_WIDTH, Math.round(stored));
+    }
+    return Number(DEFAULT_COLUMN_WIDTHS[key] || 140);
   }
 
   /* ───── master column definitions ───── */
@@ -369,6 +410,69 @@
     return names;
   }
 
+  function estimateUnitToMinutes(value, unit) {
+    var amount = Number(value || 0);
+    if (!isFinite(amount) || amount <= 0) return 0;
+    var u = String(unit || "minutes")
+      .trim()
+      .toLowerCase();
+    if (u === "weeks" || u === "week" || u === "w") return amount * 7 * 24 * 60;
+    if (u === "days" || u === "day" || u === "d") return amount * 24 * 60;
+    if (u === "hours" || u === "hour" || u === "h") return amount * 60;
+    if (
+      u === "minutes" ||
+      u === "minute" ||
+      u === "mins" ||
+      u === "min" ||
+      u === "m"
+    )
+      return amount;
+    if (u === "seconds" || u === "second" || u === "secs" || u === "sec" || u === "s")
+      return amount / 60;
+    return 0;
+  }
+
+  function parseDurationToMinutes(text) {
+    var raw = String(text || "").trim();
+    if (!raw) return 0;
+    if (/^no time logged$/i.test(raw)) return 0;
+
+    var total = 0;
+    var re =
+      /(\d+(?:\.\d+)?)\s*(weeks?|week|w|days?|day|d|hours?|hour|h|minutes?|minute|mins?|min|m|seconds?|second|secs?|sec|s)\b/gi;
+    var match = null;
+    while ((match = re.exec(raw))) {
+      var n = Number(match[1] || 0);
+      var u = String(match[2] || "").toLowerCase();
+      total += estimateUnitToMinutes(n, u);
+    }
+
+    if (total > 0) return total;
+
+    var asNum = Number(raw);
+    return isFinite(asNum) && asNum > 0 ? asNum : 0;
+  }
+
+  function formatMinutesTotal(minutes) {
+    var total = Math.round(Number(minutes || 0));
+    if (!isFinite(total) || total <= 0) return "0m";
+
+    var weeks = Math.floor(total / (7 * 24 * 60));
+    total -= weeks * 7 * 24 * 60;
+    var days = Math.floor(total / (24 * 60));
+    total -= days * 24 * 60;
+    var hours = Math.floor(total / 60);
+    total -= hours * 60;
+    var mins = total;
+
+    var out = [];
+    if (weeks) out.push(weeks + "w");
+    if (days) out.push(days + "d");
+    if (hours) out.push(hours + "h");
+    if (mins || !out.length) out.push(mins + "m");
+    return out.join(" ");
+  }
+
   /**
    * Strip HTML tags; detect media elements and append [Media].
    */
@@ -601,7 +705,12 @@
     var $wrap = $("#sheetsTableWrap");
     var html = '<table class="sheets-table"><colgroup>';
     COLUMNS.forEach(function (c) {
-      html += '<col class="' + c.css + '">';
+      html +=
+        '<col class="' +
+        c.css +
+        '" style="width:' +
+        getColumnWidth(c.key) +
+        'px;">';
     });
     html += "</colgroup><thead><tr>";
     COLUMNS.forEach(function (c, colIdx) {
@@ -640,7 +749,9 @@
         '" data-col-idx="' +
         colIdx +
         '" title="More"><i class="fa-solid fa-ellipsis-vertical"></i></button>' +
-        "</span></div></th>";
+        '</span></div><div class="sheets-col-resize-handle" data-col="' +
+        c.key +
+        '" aria-hidden="true"></div></th>';
     });
     html += "</tr></thead><tbody>";
 
@@ -699,11 +810,105 @@
     updateToolbarInfo();
   }
 
+  function applyColumnWidth(colKey, px, saveImmediately) {
+    var key = String(colKey || "");
+    if (!key) {
+      return;
+    }
+    var width = Math.max(MIN_COLUMN_WIDTH, Math.round(Number(px || 0)));
+    columnWidths[key] = width;
+
+    var $table = $("#sheetsTableWrap .sheets-table");
+    var colIndex = -1;
+    for (var i = 0; i < COLUMNS.length; i++) {
+      if (COLUMNS[i].key === key) {
+        colIndex = i;
+        break;
+      }
+    }
+    if (colIndex < 0 || !$table.length) {
+      return;
+    }
+
+    $table.find("colgroup col").eq(colIndex).css("width", width + "px");
+    if (saveImmediately !== false) {
+      saveViewPrefs();
+    }
+  }
+
+  function startColumnResize(evt, colKey) {
+    var $table = $("#sheetsTableWrap .sheets-table");
+    if (!$table.length) {
+      return;
+    }
+
+    var $th = $table.find('thead th[data-col="' + colKey + '"]').first();
+    if (!$th.length) {
+      return;
+    }
+
+    var startX = evt.pageX;
+    var startWidth = $th.outerWidth();
+    activeColumnResize = {
+      key: colKey,
+      startX: startX,
+      startWidth: startWidth,
+    };
+
+    $(document.body).addClass("sheets-col-resizing");
+  }
+
   function renderSummaryRow() {
     var html = '<tr class="sheets-summary-row">';
     COLUMNS.forEach(function (c) {
       if (c.key === "work_item_key") {
         html += "<td>" + displayItems.length + " work items</td>";
+      } else if (c.key === "original_estimate") {
+        var estimateMins = 0;
+        displayItems.forEach(function (it) {
+          estimateMins += estimateUnitToMinutes(
+            it.original_estimate_value || 0,
+            it.original_estimate_unit || "minutes",
+          );
+        });
+        html += "<td>" + esc(formatMinutesTotal(estimateMins)) + "</td>";
+      } else if (c.key === "time_tracking") {
+        var trackingMins = 0;
+        displayItems.forEach(function (it) {
+          trackingMins += parseDurationToMinutes(it.time_tracking || "");
+        });
+        html += "<td>" + esc(formatMinutesTotal(trackingMins)) + "</td>";
+      } else if (c.key === "task_status") {
+        var statusTypeSet = {};
+        displayItems.forEach(function (it) {
+          var ids = String(it.task_status || "")
+            .split(",")
+            .map(function (x) {
+              return parseInt(x, 10);
+            })
+            .filter(function (x) {
+              return Number(x || 0) > 0;
+            });
+          ids.forEach(function (id) {
+            statusTypeSet[id] = 1;
+          });
+        });
+        html += "<td>" + Object.keys(statusTypeSet).length + "</td>";
+      } else if (c.key === "labels") {
+        var labelTypeSet = {};
+        displayItems.forEach(function (it) {
+          var arr = Array.isArray(it.labels) ? it.labels : [];
+          arr.forEach(function (l) {
+            var id = Number((l && l.id) || 0);
+            var name = String((l && l.name) || "").trim();
+            if (id > 0) {
+              labelTypeSet["id:" + id] = 1;
+            } else if (name) {
+              labelTypeSet["name:" + name.toLowerCase()] = 1;
+            }
+          });
+        });
+        html += "<td>" + Object.keys(labelTypeSet).length + "</td>";
       } else if (
         c.key === "assignee_name" ||
         c.key === "reporter_name" ||
@@ -914,6 +1119,35 @@
     }
     saveViewPrefs();
     renderTable();
+  });
+
+  $(document).on("mousedown", ".sheets-col-resize-handle", function (e) {
+    if (e.which !== 1) {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    startColumnResize(e, $(this).data("col"));
+  });
+
+  $(document).on("mousemove", function (e) {
+    if (!activeColumnResize) {
+      return;
+    }
+    e.preventDefault();
+    var nextWidth =
+      Number(activeColumnResize.startWidth || 0) +
+      (Number(e.pageX || 0) - Number(activeColumnResize.startX || 0));
+    applyColumnWidth(activeColumnResize.key, nextWidth, false);
+  });
+
+  $(document).on("mouseup", function () {
+    if (!activeColumnResize) {
+      return;
+    }
+    saveViewPrefs();
+    activeColumnResize = null;
+    $(document.body).removeClass("sheets-col-resizing");
   });
 
   /* ───── filter ───── */

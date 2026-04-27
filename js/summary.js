@@ -1601,9 +1601,10 @@
       var priorityIcon = PRIORITY_ICONS[priority] || '<i class="fa-solid fa-equals"></i>';
       
       var statusDropdownHtml = 
-        '<div class="dropdown d-inline-block">' +
-          '<button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" style="font-size:11px;font-weight:600;padding:2px 8px;text-transform:none;">' +
-             esc(getColumnNameByIdLocal(statusId)) +
+        '<div class="dropdown d-inline-block summary-hover-status-dropdown">' +
+          '<button class="btn btn-outline-secondary btn-sm dropdown-toggle summary-hover-status-toggle" type="button" data-bs-toggle="dropdown" style="font-size:11px;font-weight:600;padding:2px 8px;text-transform:none;">' +
+             '<span class="summary-hover-status-text">' + esc(getColumnNameByIdLocal(statusId)) + '</span>' +
+             '<i class="fa-solid fa-chevron-down summary-hover-status-caret" aria-hidden="true"></i>' +
           '</button>' +
           '<ul class="dropdown-menu shadow-sm" style="min-width:140px;padding:4px 0;">';
           
@@ -1672,7 +1673,7 @@
     var newStatus = $option.data("status-id");
     
     var $btn = $option.closest(".dropdown").find(".dropdown-toggle");
-    $btn.prop("disabled", true).text("Saving...");
+    $btn.prop("disabled", true).find(".summary-hover-status-text").text("Saving...");
     
     var postData = {
       task_action: "change_item_status",
@@ -1691,12 +1692,12 @@
           $hoverCard.hide();
           refreshAll(); 
         } else {
-          $btn.prop("disabled", false).text(getColumnNameByIdLocal(newStatus));
+          $btn.prop("disabled", false).find(".summary-hover-status-text").text(getColumnNameByIdLocal(newStatus));
           alert((resp && (resp.message || resp.error)) || "Failed to update status");
         }
       },
       error: function() {
-        $btn.prop("disabled", false).text(getColumnNameByIdLocal(newStatus));
+        $btn.prop("disabled", false).find(".summary-hover-status-text").text(getColumnNameByIdLocal(newStatus));
         alert("Server error");
       }
     });

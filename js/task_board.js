@@ -3312,6 +3312,14 @@ $(document).on("click", "#taskItemDetailDescriptionView", function (e) {
   if ($(e.target).closest("a").length) {
     return;
   }
+  if (
+    !$("#taskItemDetailDescriptionDraftNotice").hasClass("d-none") &&
+    window.taskBoardDescriptionDraft &&
+    typeof window.taskBoardDescriptionDraft.restore === "function"
+  ) {
+    window.taskBoardDescriptionDraft.restore();
+    return;
+  }
   setItemDetailDescriptionEditMode(true, {
     focus: true,
   });
@@ -3324,6 +3332,14 @@ $(document).on("keydown", "#taskItemDetailDescriptionView", function (e) {
   var key = String(e.key || "").toLowerCase();
   if (key === "enter" || key === " ") {
     e.preventDefault();
+    if (
+      !$("#taskItemDetailDescriptionDraftNotice").hasClass("d-none") &&
+      window.taskBoardDescriptionDraft &&
+      typeof window.taskBoardDescriptionDraft.restore === "function"
+    ) {
+      window.taskBoardDescriptionDraft.restore();
+      return;
+    }
     setItemDetailDescriptionEditMode(true, {
       focus: true,
     });

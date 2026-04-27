@@ -980,6 +980,9 @@ function buildCommentRepliesHtml(commentRow) {
         '<button type="button" class="btn task-item-comment-action-btn task-item-reply-edit-btn" data-reply-id="' +
         replyId +
         '" title="Edit" aria-label="Edit reply"><i class="fa-solid fa-pen-to-square"></i></button>' +
+        '<span class="task-item-inline-draft-link task-item-reply-edit-draft-notice d-none" data-reply-id="' +
+        replyId +
+        '">(Unsaved changes)</span>' +
         '<div class="task-item-comment-more-wrap">' +
         '<button type="button" class="btn task-item-comment-action-btn task-item-reply-more-btn" data-reply-id="' +
         replyId +
@@ -1063,6 +1066,12 @@ function buildCommentEntryHtml(row, entryPrefix) {
       '<button type="button" class="btn task-item-comment-action-btn task-item-comment-edit-btn" data-comment-id="' +
       commentId +
       '" title="Edit" aria-label="Edit comment"><i class="fa-solid fa-pen-to-square"></i></button>' +
+      '<span class="task-item-inline-draft-link task-item-comment-edit-draft-notice d-none" data-comment-id="' +
+      commentId +
+      '">(Unsaved changes)</span>' +
+      '<span class="task-item-inline-draft-link task-item-reply-draft-notice d-none" data-comment-id="' +
+      commentId +
+      '">(Unsaved Reply)</span>' +
       '<div class="task-item-comment-more-wrap">' +
       '<button type="button" class="btn task-item-comment-action-btn task-item-comment-more-btn" data-comment-id="' +
       commentId +
@@ -1076,13 +1085,6 @@ function buildCommentEntryHtml(row, entryPrefix) {
       '">Delete</button>' +
       "</div>" +
       "</div>" +
-      "</div>" +
-      '<div class="task-item-draft-reminder task-item-reply-draft-notice d-none" data-comment-id="' +
-      commentId +
-      '">' +
-      '<button type="button" class="btn task-item-draft-reminder-btn task-item-reply-draft-restore-btn" data-comment-id="' +
-      commentId +
-      '">You have unsaved reply</button>' +
       "</div>"
       : "") +
     '<div class="task-item-comment-edit-slot" data-comment-id="' +
