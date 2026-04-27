@@ -3233,8 +3233,8 @@ $(document).on("click", ".task-item-edit-btn", function(e) {
   var $editWrap = $('<div class="task-item-inline-edit mt-1 mb-2 d-flex align-items-center gap-1" style="flex: 1; min-width: 0;"></div>');
   var $input = $('<input type="text" class="form-control form-control-sm" maxlength="255">').val(currentTitle);
   var $actions = $('<div class="d-flex gap-1"></div>');
-  var $saveBtn = $('<button class="btn btn-light border btn-sm" type="button" style="width: 28px; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center;"><i class="fa-solid fa-check"></i></button>');
-  var $cancelBtn = $('<button class="btn btn-light border btn-sm" type="button" style="width: 28px; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center;"><i class="fa-solid fa-xmark"></i></button>');
+  var $saveBtn = $('<button class="btn btn-light border btn-sm" type="button" aria-label="Save title" title="Save title" style="width: 28px; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center;"><i class="fa-solid fa-check" aria-hidden="true"></i></button>');
+  var $cancelBtn = $('<button class="btn btn-light border btn-sm" type="button" aria-label="Cancel editing" title="Cancel editing" style="width: 28px; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center;"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>');
   
   $actions.append($saveBtn, $cancelBtn);
   $editWrap.append($input, $actions);
