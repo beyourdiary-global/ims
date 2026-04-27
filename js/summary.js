@@ -1629,14 +1629,20 @@
       
       var topPos = offset.top + $link.outerHeight() + 5;
       var leftPos = offset.left;
+      var viewportWidth = $(window).width();
+      var minLeft = 8;
+      var hoverCardWidth = 340;
       
-      if (leftPos + 340 > $(window).width()) {
-         leftPos = $(window).width() - 360;
+      if (leftPos + hoverCardWidth + minLeft > viewportWidth) {
+         leftPos = viewportWidth - hoverCardWidth - minLeft;
       }
+      
+      leftPos = Math.max(minLeft, leftPos);
       
       $hoverCard.css({
         top: topPos,
         left: leftPos,
+        maxWidth: "calc(100vw - 16px)",
         display: "block"
       });
     }, 400); 
