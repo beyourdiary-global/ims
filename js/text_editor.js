@@ -1354,24 +1354,6 @@
     updateReplyDraftNotice(id);
   }
 
-  function restoreEditCommentDraft(commentId, triggerEl) {
-    var id = Number(commentId || 0);
-    if (id <= 0) {
-      return;
-    }
-
-    var draft = String(getDraftCookie(getEditCommentDraftKey(id)) || "");
-    if (!draft) {
-      return;
-    }
-
-    clearDraftNoticeFlag(getEditCommentDraftNoticeKey(id));
-    openEditComposer(id, triggerEl, {
-      draftHtml: draft,
-    });
-    updateEditCommentDraftNotice(id);
-  }
-
   function scheduleDescriptionDraftSave() {
     if (descriptionDraftTimer) {
       window.clearTimeout(descriptionDraftTimer);
