@@ -2629,6 +2629,7 @@
       if (shouldRecoverEditDraft) {
         initialHtml = storedEditDraft;
         clearDraftNoticeFlag(getEditCommentDraftNoticeKey(id));
+        updateEditCommentDraftNotice(id);
       }
     }
 
