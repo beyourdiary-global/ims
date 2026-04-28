@@ -3346,23 +3346,6 @@ $(document).on("keydown", "#taskItemDetailDescriptionView", function (e) {
   }
 });
 
-$(document).on(
-  "click",
-  "#taskItemDetailDescriptionDraftRestoreBtn",
-  function () {
-    if (
-      window.taskBoardDescriptionDraft &&
-      typeof window.taskBoardDescriptionDraft.restore === "function"
-    ) {
-      window.taskBoardDescriptionDraft.restore();
-      return;
-    }
-
-    setItemDetailDescriptionEditMode(true, {
-      focus: true,
-    });
-  },
-);
 
 $(document).on("click", "#taskItemDetailDescriptionSaveBtn", function () {
   saveItemCoreFromModal(false, {

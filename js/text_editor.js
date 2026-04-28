@@ -1828,6 +1828,9 @@
       var config = createBaseEditorConfig(selector, function (editor) {
         registerMentionAutocompleter(editor);
         registerEditorToolbarControls(editor);
+        editor.on("init", function () {
+          updateEditCommentDraftNotice(id);
+        });
         editor.on("keyup input undo redo paste", function () {
           scheduleEditCommentDraftSave(id);
         });
