@@ -834,9 +834,9 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                                     class="requireRed">*</span></label>
                             <input class="form-control" type="time" name="sor_time" id="sor_time" value="<?php
                             if (isset($dataExisted) && isset($row['time']) && !isset($sor_time)) {
-                                echo $row['time'];
+                                echo !empty($row['time']) ? date('H:i', strtotime($row['time'])) : '';
                             } else if (isset($sor_time)) {
-                                echo $sor_time;
+                                echo !empty($sor_time) ? date('H:i', strtotime($sor_time)) : '';
                             } else {
                                 echo date('H:i');
                             }
@@ -1141,7 +1141,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label form_lbl" id="sor_voucher_lbl" for="sor_voucher">Voucher </label>
-                            <input class="form-control" type="number" step="1" name="sor_voucher" id="sor_voucher"
+                            <input class="form-control" type="number" step="0.01" name="sor_voucher" id="sor_voucher"
                                 value="<?php
                                 if (isset($dataExisted) && isset($row['voucher']) && !isset($sor_voucher)) {
                                     echo $row['voucher'];
