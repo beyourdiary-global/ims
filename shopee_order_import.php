@@ -189,9 +189,11 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
 
             $paymentInfoPairs = [];
             $buyerPaymentPairs = [];
+            $paymentSectionText = '';
             if ($xpath instanceof DOMXPath) {
                 $paymentInfoPairs = collectShopeeOrderAmountPairsFromDom($xpath, "//*[@data-testid='odp-order-payment']//*[contains(@class,'income-item')]");
                 $buyerPaymentPairs = collectShopeeOrderAmountPairsFromDom($xpath, "//*[@data-testid='odp-buyer-payment']//*[contains(@class,'income-item')]");
+                $paymentSectionText = extractShopeeOrderPaymentSectionText($xpath);
 
                 if (empty($paymentInfoPairs)) {
                     $paymentInfoPairs = collectShopeeOrderAmountPairsFromDom($xpath);
@@ -209,12 +211,12 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
                 $product_price = parseShopeeOrderAmountByLabels($cleanText, ['Product Price', 'Deal Price', 'Merchandise Subtotal']);
             }
 
-            $voucher = parseShopeeOrderAmountFromPairs($buyerPaymentPairs, ['Vouchers & Rebates', 'Shopee Voucher', 'Seller Voucher', 'Shop voucher']);
+            $voucher = parseShopeeOrderAmountFromPairs($buyerPaymentPairs, ['Seller Voucher', 'Shop voucher']);
             if ($voucher === '') {
-                $voucher = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Vouchers & Rebates', 'Shopee Voucher', 'Seller Voucher', 'Shop voucher']);
+                $voucher = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Seller Voucher', 'Shop voucher']);
             }
             if ($voucher === '') {
-                $voucher = parseShopeeOrderAmountByLabels($cleanText, ['Vouchers & Rebates', 'Shopee Voucher', 'Seller Voucher', 'Shop voucher']);
+                $voucher = parseShopeeOrderAmountByLabels($cleanText, ['Seller Voucher', 'Shop voucher']);
             }
 
             // Actual shipping must follow Shipping Subtotal (buyer shipping subtotal), not logistic provider fee.
@@ -244,8 +246,14 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
                 $amsFee = parseShopeeOrderAmountByLabels($cleanText, ['Commission Fee']);
             }
 
-            // Special fee is only available in PDF imports.
-            $saverProgramFee = '0.00';
+            $saverProgramFee = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Saver Programme Fee', 'Saver Program Fee']);
+            if ($saverProgramFee === '') {
+                if ($extension === 'pdf') {
+                    $saverProgramFee = parseShopeeOrderAmountByLabels($cleanText, ['Saver Programme Fee', 'Saver Program Fee']);
+                } else if ($paymentSectionText !== '') {
+                    $saverProgramFee = parseShopeeOrderAmountByLabels($paymentSectionText, ['Saver Programme Fee', 'Saver Program Fee']);
+                }
+            }
 
             // Required mapping:
             // fees <- Fees & Charges
@@ -2334,9 +2342,9 @@ function extractShopeePdfVoucherAmount($text)
 {
     $boundaries = getShopeePdfMoneyBoundaryLabels();
 
-    $voucherPart = extractShopeePdfAmountByStrictLabels($text, ['Shopee Voucher', 'Shop Voucher', 'Seller Voucher'], $boundaries, 220, true);
+    $voucherPart = extractShopeePdfAmountByStrictLabels($text, ['Seller Voucher', 'Shop Voucher'], $boundaries, 220, true);
     if ($voucherPart === '') {
-        $voucherPart = extractShopeePdfAmountByLooseLabels($text, ['Shopee Voucher', 'Shop Voucher', 'Seller Voucher']);
+        $voucherPart = extractShopeePdfAmountByLooseLabels($text, ['Seller Voucher', 'Shop Voucher']);
     }
 
     if ($voucherPart !== '') {
@@ -2479,6 +2487,42 @@ function parseShopeeOrderAmountToken($text)
     return '';
 }
 
+function extractShopeeAmountNearLabel($text, $label)
+{
+    $normalizedText = normalizeImportText($text);
+    $normalizedLabel = normalizeImportText($label);
+
+    if ($normalizedText === '' || $normalizedLabel === '') {
+        return '';
+    }
+
+    $labelPos = stripos($normalizedText, $normalizedLabel);
+    if ($labelPos === false) {
+        return '';
+    }
+
+    $afterLabel = trim(substr($normalizedText, $labelPos + strlen($normalizedLabel)));
+    if ($afterLabel === '') {
+        return '';
+    }
+
+    if (preg_match('/-?\s*(?:RM|MYR|SGD|USD)\s*[0-9][0-9,]*\.?[0-9]*(?!\s*%)/i', $afterLabel, $matches)) {
+        $amount = normalizeImportAmount($matches[0]);
+        if ($amount !== '') {
+            return $amount;
+        }
+    }
+
+    if (preg_match('/-?\s*[0-9][0-9,]*\.[0-9]{2}(?!\s*%)/', $afterLabel, $matches)) {
+        $amount = normalizeImportAmount($matches[0]);
+        if ($amount !== '') {
+            return $amount;
+        }
+    }
+
+    return '';
+}
+
 function collectShopeeOrderAmountPairsFromDom($xpath, $itemQuery = "//*[contains(@class,'income-item')]")
 {
     $pairs = [];
@@ -2498,6 +2542,10 @@ function collectShopeeOrderAmountPairsFromDom($xpath, $itemQuery = "//*[contains
         $amount = parseShopeeOrderAmountToken($value);
 
         if ($amount === '') {
+            $amount = extractShopeeAmountNearLabel($item->textContent, $label);
+        }
+
+        if ($amount === '') {
             $amount = parseShopeeOrderAmountToken($item->textContent);
         }
 
@@ -2510,6 +2558,35 @@ function collectShopeeOrderAmountPairsFromDom($xpath, $itemQuery = "//*[contains
     }
 
     return $pairs;
+}
+
+function extractShopeeOrderPaymentSectionText($xpath)
+{
+    if (!($xpath instanceof DOMXPath)) {
+        return '';
+    }
+
+    $sectionQueries = array(
+        "//*[@data-testid='odp-order-payment']",
+        "//*[@data-testid='odp-buyer-payment']",
+        "//*[contains(@class,'income-container')]",
+    );
+
+    foreach ($sectionQueries as $query) {
+        $nodes = $xpath->query($query);
+        if (!$nodes || $nodes->length === 0) {
+            continue;
+        }
+
+        foreach ($nodes as $node) {
+            $text = normalizeImportText($node->textContent);
+            if ($text !== '') {
+                return $text;
+            }
+        }
+    }
+
+    return '';
 }
 
 function parseShopeeOrderAmountFromPairs($pairs, $labels)
