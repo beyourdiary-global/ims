@@ -3151,7 +3151,7 @@ if (!function_exists('taskRenderAssigneeDropdownItems')) {
 }
 
 if (!function_exists('taskRenderCard')) {
-    function taskRenderCard($taskItem, $assignees = array())
+    function taskRenderCard($taskItem, $assignees = array(), $canEdit = true)
     {
         $title = isset($taskItem['title']) ? (string) $taskItem['title'] : '';
         $description = isset($taskItem['description']) ? (string) $taskItem['description'] : '';
@@ -3207,7 +3207,9 @@ if (!function_exists('taskRenderCard')) {
         echo '<div class="task-item-head">';
         echo '<h6 class="task-item-title">' . htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '</h6>';
         echo '<div class="task-item-menu-dropdown" style="display: flex; gap: 2px;">';
-        echo '<button class="btn task-item-menu-btn task-item-edit-btn" type="button" title="Edit title" aria-label="Edit title"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>';
+        if ($canEdit) {
+            echo '<button class="btn task-item-menu-btn task-item-edit-btn" type="button" title="Edit title" aria-label="Edit title"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>';
+        }
         echo '<button class="btn task-item-menu-btn task-open-item-actions-btn" type="button" title="Task options" aria-label="Task options"><i class="fa-solid fa-ellipsis" aria-hidden="true"></i></button>';
         echo '</div>';
         echo '</div>';
@@ -3291,7 +3293,7 @@ if (!function_exists('taskRenderComposer')) {
 }
 
 if (!function_exists('taskRenderBoardColumn')) {
-    function taskRenderBoardColumn($column, $items, $workTypes, $assignees)
+    function taskRenderBoardColumn($column, $items, $workTypes, $assignees, $canEdit = true)
     {
         $columnId = (int) $column['id'];
         $columnName = isset($column['name']) ? (string) $column['name'] : '';
@@ -3320,7 +3322,7 @@ if (!function_exists('taskRenderBoardColumn')) {
 
         echo '  <div class="task-item-list">';
         foreach ($items as $taskItem) {
-            taskRenderCard($taskItem, $assignees);
+            taskRenderCard($taskItem, $assignees, $canEdit);
         }
         echo '  </div>';
 
@@ -4460,6 +4462,7 @@ if (!function_exists('taskBuildWorkItemKeyFolder')) {
 
         $projectKeySetting = taskGetProjectKeySetting($connect);
         $projectKey = isset($projectKeySetting['project_key']) ? trim((string) $projectKeySetting['project_key']) : '';
+        $projectKey = strtoupper((string) preg_replace('/[^A-Z0-9_-]+/i', '', $projectKey));
 
         if ($projectKey !== '') {
             return $projectKey . '-' . $itemId;

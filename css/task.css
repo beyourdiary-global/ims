@@ -3271,13 +3271,11 @@ body.task-local-sidebar-open .menuBar>.container-fluid .nav.nav-tabs>.nav-item:f
   text-decoration: none;
 }
 
-.task-item-comment-draft-link:hover,
-.task-item-inline-draft-link:hover {
+.task-item-comment-draft-link:hover {
   color: #214b80;
 }
 
-.task-item-comment-draft-link:focus,
-.task-item-inline-draft-link:focus {
+.task-item-comment-draft-link:focus {
   color: #214b80;
   outline: 2px solid #214b80;
   outline-offset: 2px;

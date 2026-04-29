@@ -3220,6 +3220,10 @@ $(document).on("click", ".task-item-title, .task-item-key", function (e) {
 $(document).on("click", ".task-item-edit-btn", function(e) {
   e.preventDefault();
   e.stopPropagation();
+  if (!canEdit) {
+    notify("You do not have permission to update work item.");
+    return;
+  }
   var $card = $(this).closest(".task-item-card");
   var $title = $card.find(".task-item-title");
   
