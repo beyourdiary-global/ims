@@ -1573,10 +1573,10 @@
       var workTypeIconData = $link.data("work-type-icon");
       var workTypeIcon = '<i class="fa-solid fa-check-square text-primary"></i>';
       if (workTypeIconData) {
-          if (String(workTypeIconData).indexOf('<') === 0) {
-              workTypeIcon = workTypeIconData;
-          } else {
-              workTypeIcon = '<img src="' + escAttr(workTypeIconData) + '" alt="" aria-hidden="true" style="width:100%;height:100%;object-fit:contain;" />';
+          var normalizedWorkTypeIcon = normalizeWorkTypeIcon(workTypeIconData, $link.data("work-type-name"));
+          var safeWorkTypeIconHtml = workTypeIconHtml(normalizedWorkTypeIcon);
+          if (safeWorkTypeIconHtml) {
+              workTypeIcon = safeWorkTypeIconHtml;
           }
       }
       var assigneeName = $link.data("assignee-name");
@@ -1658,6 +1658,9 @@
     var newStatus = $option.data("status-id");
     
     var $btn = $option.closest(".dropdown").find(".dropdown-toggle");
+    var previousStatusLabel = String(
+      $btn.find(".summary-hover-status-text").text() || getColumnNameByIdLocal(newStatus),
+    );
     $btn.prop("disabled", true).find(".summary-hover-status-text").text("Saving...");
     
     var postData = {
@@ -1677,12 +1680,12 @@
           $hoverCard.hide();
           refreshAll(); 
         } else {
-          $btn.prop("disabled", false).find(".summary-hover-status-text").text(getColumnNameByIdLocal(newStatus));
+          $btn.prop("disabled", false).find(".summary-hover-status-text").text(previousStatusLabel);
           alert((resp && (resp.message || resp.error)) || "Failed to update status");
         }
       },
       error: function() {
-        $btn.prop("disabled", false).find(".summary-hover-status-text").text(getColumnNameByIdLocal(newStatus));
+        $btn.prop("disabled", false).find(".summary-hover-status-text").text(previousStatusLabel);
         alert("Server error");
       }
     });

@@ -1999,6 +1999,10 @@
     }
 
     var replyId = Number(openEditReplyId || 0);
+    if (editReplyDraftTimerByReplyId[replyId]) {
+      window.clearTimeout(editReplyDraftTimerByReplyId[replyId]);
+      editReplyDraftTimerByReplyId[replyId] = 0;
+    }
     if (flushEditReplyDraftNow(replyId)) {
       setDraftNoticeFlag(getEditReplyDraftNoticeKey(replyId));
     }

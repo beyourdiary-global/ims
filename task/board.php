@@ -1117,7 +1117,7 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                             <?php
                                 $columnId = (int) $column['id'];
                                 $columnItems = isset($itemsByColumn[$columnId]) ? $itemsByColumn[$columnId] : array();
-                                taskRenderBoardColumn($column, $columnItems, $workTypes, $assignees);
+                                taskRenderBoardColumn($column, $columnItems, $workTypes, $assignees, $canEdit);
                             ?>
                         <?php endforeach; ?>
                     </div>
