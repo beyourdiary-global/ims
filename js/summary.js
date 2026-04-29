@@ -186,20 +186,6 @@
     return false;
   }
 
-  function activityTypeBadgeHtml(type) {
-    var value = String(type || "history").toLowerCase();
-    var isComment = value === "comment" || value === "reply";
-    return (
-      '<span class="task-item-activity-type-badge ' +
-      (isComment
-        ? "task-item-activity-type-comment"
-        : "task-item-activity-type-history") +
-      '">' +
-      (value === "reply" ? "REPLY" : isComment ? "COMMENT" : "HISTORY") +
-      "</span>"
-    );
-  }
-
   function activityValueHasRichContent(fieldName, value) {
     if (
       String(fieldName || "")
@@ -371,7 +357,6 @@
       '<div class="task-item-activity-ago summary-activity-time">' +
       esc(timeAgo(row.create_date, row.create_time)) +
       "</div>" +
-      activityTypeBadgeHtml(recordType) +
       "</div>" +
       detail +
       "</div>" +
