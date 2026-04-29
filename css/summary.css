@@ -646,7 +646,7 @@
 .summary-activity-item-link {
   color: #0c66e4;
   text-decoration: none;
-  font-size: 12px;
+  font-size: 14px;
 }
 
 .summary-activity-item-link:hover {
@@ -665,7 +665,7 @@
   display: inline-block;
   padding: 1px 6px;
   border-radius: 3px;
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 600;
   text-transform: uppercase;
   margin-left: 4px;
@@ -870,8 +870,9 @@
 
 #activityList .task-item-activity-diff,
 #activityModalList .task-item-activity-diff {
+  gap: 10px;
   flex-wrap: wrap;
-  align-items: flex-start;
+  align-items: center;
 }
 
 #activityList .task-item-activity-rich-value,
@@ -881,6 +882,20 @@
   max-width: 100%;
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+#activityList .task-item-activity-diff .task-item-activity-rich-value,
+#activityModalList .task-item-activity-diff .task-item-activity-rich-value {
+  min-width: 0;
+  flex: 0 1 auto;
+  display: inline-block;
+}
+
+#activityList .task-item-activity-diff .task-item-activity-badge,
+#activityModalList .task-item-activity-diff .task-item-activity-badge,
+#activityList .task-item-activity-diff .task-item-activity-arrow,
+#activityModalList .task-item-activity-diff .task-item-activity-arrow {
+  flex: 0 0 auto;
 }
 
 .summary-activity-modal-size-label {
