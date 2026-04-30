@@ -16,11 +16,13 @@
   var currentUserName = String(cfg.currentUserName || "Current User");
   var statusLabels = cfg.statusLabels || [];
   var boardUrl = cfg.boardUrl || "board.php";
+  var currentProjectId = Number(cfg.currentProjectId || 0);
 
   var stats = cfg.initialStats || {};
   var activityData = cfg.initialActivity || {};
 
-  var summaryFilterCookieName = "task_summary_filters_v1";
+  var summaryFilterCookieName =
+    "task_summary_filters_v1_project_" + String(currentProjectId > 0 ? currentProjectId : 0);
   var summaryFilterKeys = [
     "assignee",
     "created",
@@ -140,6 +142,46 @@
 
   function escAttr(value) {
     return esc(value).replace(/"/g, "&quot;");
+  }
+
+  function normalizeHexColorValueLocal(color, fallback) {
+    var value = String(color || "")
+      .trim()
+      .toUpperCase();
+    var defaultColor = String(fallback || "#DFE1E6")
+      .trim()
+      .toUpperCase();
+
+    if (/^#[0-9A-F]{6}$/.test(value)) {
+      return value;
+    }
+    if (/^#[0-9A-F]{3}$/.test(value)) {
+      return (
+        "#" +
+        value.charAt(1) +
+        value.charAt(1) +
+        value.charAt(2) +
+        value.charAt(2) +
+        value.charAt(3) +
+        value.charAt(3)
+      );
+    }
+
+    return /^#[0-9A-F]{6}$/.test(defaultColor) ? defaultColor : "#DFE1E6";
+  }
+
+  function getReadableTextColorLocal(backgroundColor) {
+    return "#292A2E";
+  }
+
+  function getColumnMetaByIdLocal(id) {
+    var strId = String(id);
+    for (var i = 0; i < boardColumns.length; i++) {
+      if (String(boardColumns[i].id) === strId) {
+        return boardColumns[i];
+      }
+    }
+    return null;
   }
 
   function buildBoardModalCardMock(item) {
@@ -1547,13 +1589,8 @@
     });
 
   function getColumnNameByIdLocal(id) {
-    var strId = String(id);
-    for (var i = 0; i < boardColumns.length; i++) {
-      if (String(boardColumns[i].id) === strId) {
-        return boardColumns[i].name;
-      }
-    }
-    return "Unknown";
+    var meta = getColumnMetaByIdLocal(id);
+    return meta ? meta.name : "Unknown";
   }
 
   var hoverCardTimeout = null;
@@ -1582,20 +1619,28 @@
       var assigneeName = $link.data("assignee-name");
       var priority = $link.data("priority");
       var statusId = $link.data("status-id");
+      var currentStatusMeta = getColumnMetaByIdLocal(statusId) || {};
+      var currentStatusColor = normalizeHexColorValueLocal(
+        currentStatusMeta.color || "",
+        "#DFE1E6",
+      );
+      var currentStatusTextColor = getReadableTextColorLocal(currentStatusColor);
       
       var priorityIcon = PRIORITY_ICONS[priority] || '<i class="fa-solid fa-equals"></i>';
       
       var statusDropdownHtml = 
         '<div class="dropdown d-inline-block summary-hover-status-dropdown">' +
-          '<button class="btn btn-outline-secondary btn-sm dropdown-toggle summary-hover-status-toggle" type="button" data-bs-toggle="dropdown" style="font-size:11px;font-weight:600;padding:2px 8px;text-transform:none;">' +
+          '<button class="btn btn-outline-secondary btn-sm dropdown-toggle summary-hover-status-toggle" type="button" data-bs-toggle="dropdown" style="--summary-status-bg:' + escAttr(currentStatusColor) + ';--summary-status-text:' + escAttr(currentStatusTextColor) + ';">' +
              '<span class="summary-hover-status-text">' + esc(getColumnNameByIdLocal(statusId)) + '</span>' +
              '<i class="fa-solid fa-chevron-down summary-hover-status-caret" aria-hidden="true"></i>' +
           '</button>' +
-          '<ul class="dropdown-menu shadow-sm" style="min-width:140px;padding:4px 0;">';
+          '<ul class="dropdown-menu shadow-sm summary-hover-status-menu">';
           
       for (var i = 0; i < boardColumns.length; i++) {
         var c = boardColumns[i];
-        statusDropdownHtml += '<li><a class="dropdown-item task-hover-status-option" href="#" data-item-id="' + itemId + '" data-status-id="' + c.id + '" style="font-size:12px;padding:4px 12px;font-weight:600;text-transform:none;">' + esc(c.name) + '</a></li>';
+        var optionColor = normalizeHexColorValueLocal(c.color || "", "#DFE1E6");
+        var optionTextColor = getReadableTextColorLocal(optionColor);
+        statusDropdownHtml += '<li><a class="dropdown-item task-hover-status-option summary-hover-status-option" href="#" data-item-id="' + itemId + '" data-status-id="' + c.id + '" style="--summary-status-option-bg:' + escAttr(optionColor) + ';--summary-status-option-text:' + escAttr(optionTextColor) + ';"><span class="summary-hover-status-option-pill">' + esc(c.name) + '</span></a></li>';
       }
       statusDropdownHtml += '</ul></div>';
       

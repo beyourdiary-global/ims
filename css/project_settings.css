@@ -1,0 +1,210 @@
+.project-settings-page .task-module-layout,
+.project-settings-page #taskModuleLayout {
+  column-gap: 28px;
+  padding-right: 28px;
+  box-sizing: border-box;
+}
+
+.project-settings-page .task-main-content {
+  padding: 12px 0 0;
+  box-sizing: border-box;
+}
+
+.project-settings-page .task-main-content > .task-project-settings-form,
+.project-settings-page .task-main-content > .task-empty-board-note {
+  margin-left: 28px;
+  margin-right: 28px;
+}
+
+/* make top settings row use the same card-like spacing as statuses / task types / labels */
+.project-settings-page .task-project-settings-top-row {
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  margin-bottom: 1.5rem !important;
+  padding: 1rem !important;
+  background: #ffffff;
+  border: 1px solid #d9e2ef;
+  border-radius: 12px;
+  box-shadow: 0 8px 22px rgba(18, 38, 63, 0.06);
+}
+
+/* bootstrap row creates negative margins; remove them so input aligns with cards */
+.project-settings-page .task-project-settings-top-row.row {
+  --bs-gutter-x: 1rem;
+}
+
+.project-settings-page .task-project-settings-top-row > [class*="col-"] {
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}
+
+.task-project-settings-form .card {
+  border: 1px solid #d9e2ef;
+  border-radius: 12px;
+}
+
+.task-project-settings-form .card-header {
+  background: #f6f9fc;
+  border-bottom: 1px solid #dfe7f1;
+}
+
+.task-project-settings-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1.8fr) minmax(240px, 1fr) 140px;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.task-project-worktype-row {
+  grid-template-columns: minmax(0, 1.8fr) 96px 140px;
+}
+
+.task-project-settings-row .btn,
+.task-project-settings-row .form-control-color,
+.task-project-settings-row .form-select,
+.task-project-settings-row .form-control {
+  width: 100%;
+}
+
+.task-project-color-control {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.task-project-reset-color-btn {
+  min-width: 128px;
+  white-space: nowrap;
+}
+
+.task-project-worktype-name-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.task-project-worktype-icon-preview {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  border-radius: 8px;
+  border: 1px solid #d7e0ea;
+  background: #ffffff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.task-project-worktype-icon-preview img,
+.task-project-icon-picker-btn img,
+.task-project-icon-option img {
+  width: 18px;
+  height: 18px;
+  display: block;
+}
+
+.task-project-icon-picker {
+  width: 100%;
+  position: relative;
+}
+
+.task-project-icon-picker-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  border: 1px solid #ced8e6;
+  background: #ffffff;
+  position: relative;
+  padding-right: 1.6rem;
+}
+
+.task-project-icon-picker-btn.dropdown-toggle::after {
+  border: 0 !important;
+  margin: 0 !important;
+  content: "\f078";
+  font-family: "Font Awesome 6 Free";
+  font-weight: 900;
+  font-size: 0.7rem;
+  color: #5f7188;
+  position: absolute;
+  right: 0.55rem;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.task-project-icon-picker-menu {
+  left: auto;
+  right: 0;
+  width: 64px;
+  min-width: 64px;
+  max-width: 64px;
+  max-height: 152px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0.35rem;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.task-project-icon-picker-menu:not(.show) {
+  display: none !important;
+}
+
+.task-project-icon-picker-menu.show {
+  display: flex !important;
+}
+
+.task-project-icon-option {
+  width: 100%;
+  min-width: 0;
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  padding: 0;
+}
+
+@media (max-width: 991.98px) {
+  .project-settings-page .task-main-content {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .project-settings-page .task-main-content > .task-project-settings-form,
+  .project-settings-page .task-main-content > .task-empty-board-note {
+    margin-left: 20px;
+    margin-right: 20px;
+  }
+
+  .project-settings-page .task-module-layout,
+  .project-settings-page #taskModuleLayout {
+    column-gap: 20px;
+    padding-right: 20px;
+  }
+
+  .task-project-settings-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .project-settings-page .task-main-content {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .project-settings-page .task-main-content > .task-project-settings-form,
+  .project-settings-page .task-main-content > .task-empty-board-note {
+    margin-left: 16px;
+    margin-right: 16px;
+  }
+
+  .project-settings-page .task-module-layout,
+  .project-settings-page #taskModuleLayout {
+    column-gap: 16px;
+    padding-right: 16px;
+  }
+}

@@ -15,12 +15,21 @@
   var labels = cfg.labels || [];
   var statusLabels = cfg.statusLabels || [];
   var columns = cfg.columns || [];
+  var isProjectOwner = !!cfg.isProjectOwner;
+  var columnPermissions =
+    cfg.columnPermissions && typeof cfg.columnPermissions === "object"
+      ? cfg.columnPermissions
+      : {};
   var projectKey = cfg.projectKey || {};
+  var currentProjectId = Number(cfg.currentProjectId || 0);
   var sheetsDataAjaxUrl =
     cfg.sheetsDataAjaxUrl || cfg.sheetsColumnAjaxUrl || "sheets.php";
   var prefUserId = String(cfg.currentUserId || "").trim();
   var viewPrefCookieName =
-    "task_sheets_view_pref_v1" + (prefUserId ? "_u" + prefUserId : "");
+    "task_sheets_view_pref_v1" +
+    (prefUserId ? "_u" + prefUserId : "") +
+    "_p" +
+    String(currentProjectId > 0 ? currentProjectId : 0);
 
   /* ───── state ───── */
   var allItems = cfg.items || [];
@@ -59,6 +68,193 @@
   };
 
   var MIN_COLUMN_WIDTH = 46;
+
+  function normalizePermissionFieldKey(fieldKey) {
+    var key = String(fieldKey || "")
+      .trim()
+      .toLowerCase();
+    if (key === "parent") return "parent_display";
+    if (key === "assignee") return "assignee_name";
+    if (key === "reporter") return "reporter_name";
+    return key;
+  }
+
+  function hasAnyColumnPermission(fieldKey) {
+    if (isProjectOwner) {
+      return true;
+    }
+    var row = columnPermissions[normalizePermissionFieldKey(fieldKey)];
+    return !!(
+      row &&
+      (Number(row.add || 0) > 0 ||
+        Number(row.edit || 0) > 0 ||
+        Number(row.delete || 0) > 0)
+    );
+  }
+
+  function isColumnPermissionGuarded(fieldKey) {
+    switch (normalizePermissionFieldKey(fieldKey)) {
+      case "original_estimate":
+      case "task_status":
+      case "parent_display":
+      case "assignee_name":
+      case "reporter_name":
+      case "priority":
+      case "labels":
+      case "start_date":
+      case "due_date":
+      case "amendement_date":
+      case "amendement_time_minutes":
+      case "second_amendement_date":
+      case "second_amendement_time_minutes":
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  function hasColumnActionPermission(fieldKey, action) {
+    if (isProjectOwner) {
+      return true;
+    }
+    var row = columnPermissions[normalizePermissionFieldKey(fieldKey)];
+    return !!(row && Number(row[action] || 0) > 0);
+  }
+
+  function isFieldValueEmpty(fieldKey, value) {
+    var key = normalizePermissionFieldKey(fieldKey);
+    if (Array.isArray(value)) {
+      return value.length === 0;
+    }
+    switch (key) {
+      case "original_estimate":
+      case "amendement_time_minutes":
+      case "second_amendement_time_minutes":
+        return Number(value || 0) <= 0;
+      case "task_status":
+        return !String(value || "")
+          .split(",")
+          .map(function (x) {
+            return parseInt(x, 10);
+          })
+          .filter(function (x) {
+            return x > 0;
+          }).length;
+      case "parent_display":
+      case "assignee_name":
+      case "reporter_name":
+        return Number(value || 0) <= 0;
+      case "priority":
+        return !value || String(value).toLowerCase() === "none";
+      case "labels":
+        return !Array.isArray(value) || value.length === 0;
+      default:
+        return !value;
+    }
+  }
+
+  function getCurrentFieldValue(item, fieldKey) {
+    switch (normalizePermissionFieldKey(fieldKey)) {
+      case "original_estimate":
+        return Number(item.original_estimate_value || 0);
+      case "task_status":
+        return item.task_status || "";
+      case "parent_display":
+        return Number(item.parent_item_id || 0);
+      case "assignee_name":
+        return Number(item.assignee_user_id || 0);
+      case "reporter_name":
+        return Number(item.reporter_user_id || 0);
+      case "priority":
+        return item.priority || "";
+      case "labels":
+        return Array.isArray(item.labels) ? item.labels : [];
+      case "start_date":
+      case "due_date":
+      case "amendement_date":
+      case "second_amendement_date":
+        return item[fieldKey] || "";
+      case "amendement_time_minutes":
+      case "second_amendement_time_minutes":
+        return Number(item[fieldKey] || 0);
+      default:
+        return item[fieldKey];
+    }
+  }
+
+  function inferColumnPermissionAction(item, fieldKey, nextValue) {
+    var currentEmpty = isFieldValueEmpty(
+      fieldKey,
+      getCurrentFieldValue(item, fieldKey),
+    );
+    if (nextValue === undefined) {
+      return currentEmpty ? "add" : "edit";
+    }
+    var nextEmpty = isFieldValueEmpty(fieldKey, nextValue);
+    if (currentEmpty && !nextEmpty) {
+      return "add";
+    }
+    if (!currentEmpty && nextEmpty) {
+      return "delete";
+    }
+    return "edit";
+  }
+
+  function getColumnPermissionDeniedMessage(action) {
+    if (action === "add") {
+      return "Cell cannot add - You don't have access to add data on this field";
+    }
+    if (action === "delete") {
+      return "Cell cannot delete - You don't have access to delete data on this field";
+    }
+    return "Cell uneditable - You don't have access to edit data on this field";
+  }
+
+  function showColumnPermissionDenied(item, fieldKey, nextValue) {
+    var action = inferColumnPermissionAction(item, fieldKey, nextValue);
+    showToast(getColumnPermissionDeniedMessage(action));
+  }
+
+  function ensureColumnActionAllowed(item, fieldKey, nextValue) {
+    if (!isColumnPermissionGuarded(fieldKey)) {
+      return true;
+    }
+    var action = inferColumnPermissionAction(item, fieldKey, nextValue);
+    if (hasColumnActionPermission(fieldKey, action)) {
+      return true;
+    }
+    showToast(getColumnPermissionDeniedMessage(action));
+    return false;
+  }
+
+  function canEditCellByPermission(item, colKey) {
+    if (!canEdit) {
+      return false;
+    }
+
+    switch (String(colKey || "")) {
+      case "work_type":
+        return Array.isArray(workTypes) && workTypes.length > 0;
+      case "board_status":
+        return Array.isArray(columns) && columns.length > 0;
+      case "original_estimate":
+      case "task_status":
+      case "parent_display":
+      case "assignee_name":
+      case "reporter_name":
+      case "priority":
+      case "labels":
+      case "start_date":
+      case "due_date":
+      case "amendement_date":
+      case "amendement_time_minutes":
+      case "second_amendement_date":
+      case "second_amendement_time_minutes":
+        return hasAnyColumnPermission(colKey);
+      default:
+        return true;
+    }
+  }
 
   function setCookie(name, value, days) {
     var expires = "";
@@ -932,7 +1128,7 @@
     var html = '<tr data-item-id="' + item.id + '">';
     COLUMNS.forEach(function (c) {
       var editCls =
-        canEdit && c.editable && c.key !== "work_item_key"
+        canEditCellByPermission(item, c.key) && c.editable && c.key !== "work_item_key"
           ? " sheets-cell-editable"
           : "";
       html +=
@@ -1720,6 +1916,49 @@
     ).remove();
   }
 
+  document.addEventListener(
+    "dblclick",
+    function (e) {
+      var td = e.target && e.target.closest
+        ? e.target.closest(".sheets-table tbody td")
+        : null;
+      if (!td) return;
+
+      var colKey = td.getAttribute("data-col");
+      var tr = td.closest("tr");
+      var itemId = tr ? Number(tr.getAttribute("data-item-id") || 0) : 0;
+      if (!itemId) return;
+
+      var colDef = COLUMNS.find(function (c) {
+        return c.key === colKey;
+      });
+      if (!colDef || !colDef.editable) return;
+
+      if (!canEdit) {
+        showToast("Cell uneditable - You don't have access to edit data on this field");
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return;
+      }
+
+      var item = allItems.find(function (it) {
+        return Number(it.id || 0) === itemId;
+      });
+      if (!item) return;
+
+      if (!canEditCellByPermission(item, colKey)) {
+        if (isColumnPermissionGuarded(colKey)) {
+          showColumnPermissionDenied(item, colKey);
+        } else {
+          showToast("Cell uneditable - You don't have access to edit data on this field");
+        }
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      }
+    },
+    true,
+  );
+
   $(document).on("dblclick", ".sheets-table tbody td", function (e) {
     if (!canEdit) {
       showToast("Cell uneditable – This data can't be edited.");
@@ -1741,6 +1980,10 @@
       return it.id === itemId;
     });
     if (!item) return;
+    if (!canEditCellByPermission(item, colKey)) {
+      showToast("Cell uneditable â€“ This data can't be edited.");
+      return;
+    }
     e.stopPropagation();
     closeAllDropdowns();
 
@@ -1816,6 +2059,10 @@
             estUnit = "minutes";
           else estUnit += "s";
         }
+        if (!ensureColumnActionAllowed(item, "original_estimate", estVal)) {
+          renderCellInPlace($td, item, colKey);
+          return;
+        }
         saveItemDetail(
           item,
           { original_estimate_value: estVal, original_estimate_unit: estUnit },
@@ -1857,6 +2104,10 @@
       var newVal = $input.val();
       $td.removeClass("sheets-cell-editing");
       if (newVal === (item[colKey] || "")) {
+        renderCellInPlace($td, item, colKey);
+        return;
+      }
+      if (!ensureColumnActionAllowed(item, colKey, newVal)) {
         renderCellInPlace($td, item, colKey);
         return;
       }
@@ -1969,6 +2220,10 @@
       var userId = parseInt($(this).data("user-id"), 10),
         payload = {};
       if (field === "assignee") {
+        if (!ensureColumnActionAllowed(item, "assignee_name", userId)) {
+          closeAllDropdowns();
+          return;
+        }
         payload.assignee_user_id = userId;
         saveItemDetail(item, payload, function () {
           item.assignee_user_id = userId;
@@ -1976,6 +2231,10 @@
           renderCellInPlace($td, item, "assignee_name");
         });
       } else {
+        if (!ensureColumnActionAllowed(item, "reporter_name", userId)) {
+          closeAllDropdowns();
+          return;
+        }
         payload.reporter_user_id = userId;
         saveItemDetail(item, payload, function () {
           item.reporter_user_id = userId;
@@ -2007,6 +2266,10 @@
     $dd.on("click", ".sheets-priority-option", function () {
       var newP = $(this).data("priority");
       if (newP === item.priority) {
+        closeAllDropdowns();
+        return;
+      }
+      if (!ensureColumnActionAllowed(item, "priority", newP)) {
         closeAllDropdowns();
         return;
       }
@@ -2063,6 +2326,10 @@
         sel.push(parseInt($(this).val(), 10));
       });
       var csv = sel.join(",");
+      if (!ensureColumnActionAllowed(item, "task_status", csv)) {
+        closeAllDropdowns();
+        return;
+      }
       saveItemDetail(item, { task_status_label_ids: csv }, function () {
         item.task_status = csv;
         renderCellInPlace($td, item, "task_status");
@@ -2110,6 +2377,10 @@
       $dd.find("input[type=checkbox]:checked").each(function () {
         sel.push(parseInt($(this).val(), 10));
       });
+      if (!ensureColumnActionAllowed(item, "labels", sel)) {
+        closeAllDropdowns();
+        return;
+      }
       saveField(
         item,
         "set_item_labels",
@@ -2152,6 +2423,10 @@
     $dd.on("click", ".sheets-priority-option", function () {
       var val = parseInt($(this).data("val"), 10),
         payload = {};
+      if (!ensureColumnActionAllowed(item, colKey, val)) {
+        closeAllDropdowns();
+        return;
+      }
       payload[colKey] = val;
       saveItemDetail(item, payload, function () {
         item[colKey] = val;
@@ -2207,6 +2482,10 @@
     $dd.on("click", ".sheets-wt-option", function () {
       var parentId = parseInt($(this).data("parent-id"), 10);
       if (parentId === currentParentId) {
+        closeAllDropdowns();
+        return;
+      }
+      if (!ensureColumnActionAllowed(item, "parent_display", parentId)) {
         closeAllDropdowns();
         return;
       }
@@ -2419,7 +2698,12 @@
       return;
     }
 
-    var boardUrl = ajaxUrl.replace(/\?.*$/, "") + "?open_item=" + item.id;
+    var boardUrl =
+      ajaxUrl.replace(/\?.*$/, "") +
+      "?project_id=" +
+      String(currentProjectId > 0 ? currentProjectId : 0) +
+      "&open_item=" +
+      item.id;
     window.location.href = boardUrl;
   }
 
