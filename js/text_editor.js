@@ -447,16 +447,17 @@
     }
 
     var isDescription = opts && opts.isDescription;
+    var isReply = opts && opts.isReply;
     var formData = new FormData();
     if (isDescription) {
       formData.append("task_action", "upload_item_description_attachment");
-      formData.append("item_id", String(itemId));
-      formData.append("attachment", file);
+    } else if (isReply) {
+      formData.append("task_action", "upload_item_reply_attachment");
     } else {
       formData.append("task_action", "upload_item_comment_attachment");
-      formData.append("item_id", String(itemId));
-      formData.append("attachment", file);
     }
+    formData.append("item_id", String(itemId));
+    formData.append("attachment", file);
 
     return new Promise(function (resolve, reject) {
       postAction(
@@ -527,6 +528,8 @@
       return;
     }
 
+    var editorContext = editor._taskEditorContext || {};
+
     var input = document.createElement("input");
     input.type = "file";
     input.accept =
@@ -538,7 +541,7 @@
         return;
       }
 
-      uploadCommentAttachment(file)
+      uploadCommentAttachment(file, editorContext)
         .then(function (attachment) {
           insertAttachmentIntoEditor(editor, attachment);
           editor.focus();
@@ -850,6 +853,9 @@
     var showCompose = canCompose && !!visible;
 
     if (!canCompose) {
+      if (typeof window.setTaskItemDetailMobileOverlayState === "function") {
+        window.setTaskItemDetailMobileOverlayState("comment", false);
+      }
       $("#taskItemCommentComposeLauncherWrap").addClass("d-none");
       $("#taskItemCommentComposeWrap").addClass("d-none");
       updateCommentActionButtons();
@@ -862,6 +868,9 @@
 
     $("#taskItemCommentComposeLauncherWrap").toggleClass("d-none", showCompose);
     $("#taskItemCommentComposeWrap").toggleClass("d-none", !showCompose);
+    if (typeof window.setTaskItemDetailMobileOverlayState === "function") {
+      window.setTaskItemDetailMobileOverlayState("comment", showCompose);
+    }
     updateCommentActionButtons();
 
     if (showCompose && shouldFocus) {
@@ -1011,7 +1020,16 @@
     deleteCookie(key);
   }
 
-  function flushCommentDraftNow() {
+  function flushCommentDraftNow(options) {
+    var settings = options && typeof options === "object" ? options : {};
+    if (
+      settings.preserveExistingNotice &&
+      hasDraftNoticeFlag(getCommentDraftNoticeKey()) &&
+      !isCommentComposerVisible()
+    ) {
+      return !!String(getDraftCookie(getCommentDraftKey()) || "").trim();
+    }
+
     var html = getCommentEditorHtml();
     if (hasCommentContent(html)) {
       setDraftCookie(getCommentDraftKey(), html);
@@ -1041,7 +1059,17 @@
     return false;
   }
 
-  function flushDescriptionDraftNow() {
+  function flushDescriptionDraftNow(options) {
+    var settings = options && typeof options === "object" ? options : {};
+
+    if (
+      settings.preserveExistingNotice &&
+      hasDraftNoticeFlag(getDescriptionDraftNoticeKey()) &&
+      !itemDetailModalState.descriptionEditing
+    ) {
+      return !!String(getDraftCookie(getDescriptionDraftKey()) || "").trim();
+    }
+
     // If the user explicitly saved or cancelled, never re-save the draft on close
     if (descriptionDraftClearedByUser) {
       clearDraftCookie(getDescriptionDraftKey());
@@ -1296,6 +1324,8 @@
   function createBaseEditorConfig(selector, setupCallback, opts) {
     opts = opts || {};
     var isDescription = !!opts.isDescription;
+    var isReply = !!opts.isReply;
+    var isCompactMobile = window.matchMedia("(max-width: 767.98px)").matches;
     return {
       selector: selector,
       base_url: window.taskBoardConfig.siteUrl + "/header/tinymce",
@@ -1306,7 +1336,7 @@
       resize: false,
       promotion: false,
       plugins: "autolink advlist lists link code",
-      toolbar_mode: "floating",
+      toolbar_mode: isCompactMobile ? "scrolling" : "floating",
       contextmenu: false,
       convert_urls: false,
       relative_urls: false,
@@ -1338,6 +1368,7 @@
       images_upload_handler: function (blobInfo) {
         return uploadCommentAttachment(blobInfo.blob(), {
           isDescription: isDescription,
+          isReply: isReply,
         }).then(function (attachment) {
           return String(attachment.fileUrl || "");
         });
@@ -1345,6 +1376,7 @@
       content_style:
         "body { font-family: Segoe UI, Arial, sans-serif; font-size: 14px; line-height: 1.45; color: #24364d; } ul.task-editor-checklist { list-style: none; margin-left: 0; padding-left: 0; } ul.task-editor-checklist li { list-style: none; display: flex; align-items: flex-start; gap: 0.4rem; } ul.task-editor-checklist li input.task-editor-checkbox { margin-top: 0.28rem; flex: 0 0 auto; cursor: pointer; pointer-events: auto; }",
       setup: function (editor) {
+        editor._taskEditorContext = { isDescription: isDescription, isReply: isReply };
         function findChecklistRowCheckbox(target) {
           if (!target || !target.closest) {
             return null;
@@ -1606,7 +1638,7 @@
         editor.on("keyup input undo redo paste", function () {
           scheduleReplyDraftSave(id);
         });
-      });
+      }, { isReply: true });
       config.height = 120;
       config.toolbar =
         "blocks bold styles taskListControl forecolor taskFileUpload taskSimpleLink undo redo";
@@ -1717,7 +1749,7 @@
       var config = createBaseEditorConfig(selector, function (editor) {
         registerMentionAutocompleter(editor);
         registerEditorToolbarControls(editor);
-      });
+      }, { isReply: true });
       config.height = 130;
       config.toolbar =
         "blocks bold styles taskListControl forecolor taskFileUpload taskSimpleLink undo redo";
@@ -2801,6 +2833,10 @@
   });
 
   $(document).on("shown.bs.modal", "#taskItemDetailModal", function () {
+    if (typeof window.syncTaskItemDetailMobileLayout === "function") {
+      window.syncTaskItemDetailMobileLayout();
+    }
+
     draftItemContextId = Number(itemDetailModalState.itemId || 0);
     descriptionDraftClearedByUser = false; // reset on each new modal open
     capturedInitialDescription = String(
@@ -2852,8 +2888,12 @@
   $(document).on("hidden.bs.modal", "#taskItemDetailModal", function () {
     commentSaving = false;
     commentLoadToken += 1;
-    var commentHasDraft = flushCommentDraftNow();
-    var descriptionHasDraft = flushDescriptionDraftNow();
+    var commentHasDraft = flushCommentDraftNow({
+      preserveExistingNotice: true,
+    });
+    var descriptionHasDraft = flushDescriptionDraftNow({
+      preserveExistingNotice: true,
+    });
     var openReplyId = Number(openReplyCommentId || 0);
     var replyHasDraft =
       openReplyId > 0 ? flushReplyDraftNow(openReplyId) : false;
@@ -2898,10 +2938,18 @@
   });
 
   window.addEventListener("beforeunload", function () {
-    if (flushCommentDraftNow()) {
+    if (
+      flushCommentDraftNow({
+        preserveExistingNotice: true,
+      })
+    ) {
       setDraftNoticeFlag(getCommentDraftNoticeKey());
     }
-    if (flushDescriptionDraftNow()) {
+    if (
+      flushDescriptionDraftNow({
+        preserveExistingNotice: true,
+      })
+    ) {
       setDraftNoticeFlag(getDescriptionDraftNoticeKey());
     }
     if (

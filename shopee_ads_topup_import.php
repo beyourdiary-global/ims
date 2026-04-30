@@ -1283,7 +1283,7 @@ function parseShopeeAdsTopupPdf($pdfContent, $fileName, $shopeeAccounts, $curren
         }
     }
 
-    $data['remark'] = 'Imported from Shopee text-based PDF';
+    $data['remark'] = 'Imported from Shopee Ads Top Up Transaction PDF';
 
     if ($data['order_id'] !== '') {
         $data['remark'] .= ' (' . $data['order_id'] . ')';

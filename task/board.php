@@ -287,7 +287,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             $connect,
             isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
             isset($_POST['title']) ? $_POST['title'] : '',
-            isset($_POST['description']) ? $_POST['description'] : '',
+            isset($_POST['description']) ? $_POST['description'] : null,
             $currentUserId,
             $cdate,
             $ctime
@@ -531,6 +531,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         }
 
         $result = taskUploadItemDescriptionAttachment(
+            $connect,
+            $itemId,
+            $file,
+            $currentUserId,
+            $cdate,
+            $ctime
+        );
+
+        taskJsonResponse($result);
+    }
+
+    if ($taskAction === 'upload_item_reply_attachment') {
+        if (!taskIsActionAllowed('edit', $pinAccess)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to upload reply attachment.'));
+        }
+
+        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $file = isset($_FILES['attachment']) ? $_FILES['attachment'] : null;
+
+        if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'File upload failed or no file selected.'));
+        }
+
+        $maxSizeBytes = 50 * 1024 * 1024;
+        if ((int) $file['size'] > $maxSizeBytes) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'File exceeds the 50MB size limit.'));
+        }
+
+        $allowedExts = array('jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt', 'zip');
+        $ext = strtolower(pathinfo((string) $file['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, $allowedExts, true)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'Invalid file extension. Allowed types: ' . implode(', ', $allowedExts) . '.'));
+        }
+
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime = $finfo ? finfo_file($finfo, $file['tmp_name']) : '';
+        if ($finfo) {
+            finfo_close($finfo);
+        }
+
+        $allowedMimes = array(
+            'image/jpeg',
+            'image/png',
+            'image/gif',
+            'image/webp',
+            'image/bmp',
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'text/csv',
+            'text/plain',
+            'application/zip',
+            'application/x-zip-compressed'
+        );
+
+        if (!in_array((string) $mime, $allowedMimes, true)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'Invalid file format detected by server.'));
+        }
+
+        $result = taskUploadItemReplyAttachment(
             $connect,
             $itemId,
             $file,
@@ -977,7 +1039,7 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                     </div>
                     <div class="task-board-toolbar-actions ms-auto">
                         <div id="taskBoardGroupDropdown" class="dropdown task-board-group-wrap">
-                            <button id="taskBoardGroupBtn" class="btn task-board-group-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                            <button id="taskBoardGroupBtn" class="btn task-board-group-btn" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
                                 <span id="taskBoardGroupLabel">Group: Status</span>
                             </button>
                             <div class="dropdown-menu dropdown-menu-end task-board-group-menu p-2">
@@ -1001,18 +1063,16 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                             <i class="fa-solid fa-sliders"></i>
                         </button>
                         <div id="taskBoardSettingsPanel" class="dropdown-menu dropdown-menu-end task-board-settings-panel p-3">
-                            <div class="task-board-settings-header">
-                                <h6 class="mb-0">View settings</h6>
-                            </div>
                             <div class="task-board-settings-section mb-3">
                                 <label class="form-label mb-1" for="taskProjectKeyInput">Project Key fields</label>
                                 <div class="task-project-key-row">
                                     <input id="taskProjectKeyInput" type="text" class="form-control form-control-sm" maxlength="20" placeholder="Example: BCS" value="<?= htmlspecialchars(isset($projectKeySetting['project_key']) ? (string) $projectKeySetting['project_key'] : '', ENT_QUOTES, 'UTF-8') ?>">
                                     <button id="taskProjectKeySaveBtn" class="btn btn-light task-project-key-action-btn" type="button" title="Save project key"><i class="fa-solid fa-check"></i></button>
-                                    <button id="taskProjectKeyClearBtn" class="btn btn-light task-project-key-action-btn" type="button" title="Clear project key"><i class="fa-solid fa-xmark"></i></button>
+                                    <button id="taskProjectKeyClearBtn" class="btn btn-light task-project-key-action-btn" type="button" title="Close project key editor"><i class="fa-solid fa-xmark"></i></button>
                                 </div>
                             </div>
                             <div class="task-board-settings-divider"></div>
+                            
                             <h6 class="task-board-settings-section-title mb-2">Fields</h6>
                             <div class="task-board-settings-fields">
                                 <?php

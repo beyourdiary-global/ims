@@ -47,6 +47,39 @@
       $alert.addClass("d-none").text("");
     }
 
+    function showSuccessPopup(text) {
+      var message = String(text || "Record added successfully.");
+
+      if (window.bootstrap && typeof window.bootstrap.Modal === "function") {
+        var $modal = $("#url_success_popup_modal");
+        if (!$modal.length) {
+          $("body").append(
+            '<div class="modal fade" id="url_success_popup_modal" tabindex="-1" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="url_success_popup_title">' +
+              '<div class="modal-dialog modal-dialog-centered">' +
+                '<div class="modal-content">' +
+                  '<div class="modal-header">' +
+                    '<h5 class="modal-title" id="url_success_popup_title">Success</h5>' +
+                    '<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>' +
+                  "</div>" +
+                  '<div class="modal-body" id="url_success_popup_message"></div>' +
+                  '<div class="modal-footer">' +
+                    '<button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>' +
+                  "</div>" +
+                "</div>" +
+              "</div>" +
+            "</div>",
+          );
+          $modal = $("#url_success_popup_modal");
+        }
+
+        $("#url_success_popup_message").text(message);
+        window.bootstrap.Modal.getOrCreateInstance($modal.get(0)).show();
+        return;
+      }
+
+      window.alert(message);
+    }
+
     function setLoading(on) {
       if (on) {
         $loading.removeClass("d-none");
@@ -364,12 +397,13 @@
             return;
           }
 
+          var successMessage =
+            res && res.message ? res.message : "Record saved successfully.";
           resetForm();
           loadList();
-          showAlert(
-            "success",
-            res && res.message ? res.message : "Record saved successfully.",
-          );
+
+          hideAlert();
+          showSuccessPopup(successMessage);
         })
         .fail(function (xhr) {
           var extra = "";

@@ -132,7 +132,7 @@ function setSidebar(open) {
 
   try {
     window.localStorage.setItem(sidebarStorageKey, open ? "1" : "0");
-  } catch (e) {}
+  } catch (e) { }
 }
 
 if ($layout.length) {
@@ -143,7 +143,7 @@ if ($layout.length) {
   }
   try {
     shouldOpen = window.localStorage.getItem(sidebarStorageKey) !== "0";
-  } catch (e) {}
+  } catch (e) { }
 
   if (hasGlobalTaskSidebar) {
     shouldOpen = false;
@@ -263,8 +263,12 @@ var itemDetailModalState = {
     done: 0,
     progress_percent: 0,
   },
+  childTitleEditingItemId: 0,
+  childPickerItemId: 0,
+  childPickerField: "",
   childWorkItemsCollapsed: false,
   history: [],
+  activityCollapsed: false,
   activityTab: "all",
   activitySortDirection: "desc",
 };
@@ -686,65 +690,71 @@ function renderDetailTimeTracking(
   var info =
     timeTrackingText && typeof timeTrackingText === "object"
       ? {
-          ownText:
+        ownText:
+          String(
+            timeTrackingText.ownText ||
+            timeTrackingText.own_time_tracking ||
+            "",
+          ).trim() || "No time logged",
+        ownSeconds: Number(
+          timeTrackingText.ownSeconds ||
+          timeTrackingText.own_time_tracking_seconds ||
+          parseDurationTextToSeconds(
             String(
               timeTrackingText.ownText ||
-                timeTrackingText.own_time_tracking ||
-                "",
-            ).trim() || "No time logged",
-          ownSeconds: Number(
-            timeTrackingText.ownSeconds ||
-              timeTrackingText.own_time_tracking_seconds ||
-              parseDurationTextToSeconds(
-                String(
-                  timeTrackingText.ownText ||
-                    timeTrackingText.own_time_tracking ||
-                    "",
-                ),
-              ) ||
-              0,
-          ),
-          childText:
+              timeTrackingText.own_time_tracking ||
+              "",
+            ),
+          ) ||
+          0,
+        ),
+        childText:
+          String(
+            timeTrackingText.childText ||
+            timeTrackingText.child_time_tracking ||
+            "",
+          ).trim() || "No time logged",
+        childSeconds: Number(
+          timeTrackingText.childSeconds ||
+          timeTrackingText.child_time_tracking_seconds ||
+          parseDurationTextToSeconds(
             String(
               timeTrackingText.childText ||
-                timeTrackingText.child_time_tracking ||
-                "",
-            ).trim() || "No time logged",
-          childSeconds: Number(
-            timeTrackingText.childSeconds ||
-              timeTrackingText.child_time_tracking_seconds ||
-              parseDurationTextToSeconds(
-                String(
-                  timeTrackingText.childText ||
-                    timeTrackingText.child_time_tracking ||
-                    "",
-                ),
-              ) ||
-              0,
-          ),
-          canIncludeChild:
-            Number(
-              timeTrackingText.canIncludeChild ||
-                timeTrackingText.can_include_child_time_tracking ||
-                0,
-            ) > 0,
-          includeChild:
-            Number(
-              timeTrackingText.includeChild ||
-                timeTrackingText.include_child_time_tracking ||
-                0,
-            ) > 0,
-        }
+              timeTrackingText.child_time_tracking ||
+              "",
+            ),
+          ) ||
+          0,
+        ),
+        childEstimateSeconds: Number(
+          timeTrackingText.childEstimateSeconds ||
+          timeTrackingText.child_original_estimate_seconds ||
+          0,
+        ),
+        canIncludeChild:
+          Number(
+            timeTrackingText.canIncludeChild ||
+            timeTrackingText.can_include_child_time_tracking ||
+            0,
+          ) > 0,
+        includeChild:
+          Number(
+            timeTrackingText.includeChild ||
+            timeTrackingText.include_child_time_tracking ||
+            0,
+          ) > 0,
+      }
       : {
-          ownText: String(timeTrackingText || "").trim() || "No time logged",
-          ownSeconds: parseDurationTextToSeconds(
-            String(timeTrackingText || ""),
-          ),
-          childText: "No time logged",
-          childSeconds: 0,
-          canIncludeChild: false,
-          includeChild: false,
-        };
+        ownText: String(timeTrackingText || "").trim() || "No time logged",
+        ownSeconds: parseDurationTextToSeconds(
+          String(timeTrackingText || ""),
+        ),
+        childText: "No time logged",
+        childSeconds: 0,
+        childEstimateSeconds: 0,
+        canIncludeChild: false,
+        includeChild: false,
+      };
 
   itemDetailModalState.timeTracking = info;
 
@@ -757,34 +767,27 @@ function renderDetailTimeTracking(
   var loggedSeconds = info.ownSeconds + (includeChild ? info.childSeconds : 0);
   var trackingText =
     loggedSeconds > 0 ? formatDurationBrief(loggedSeconds) : "No time logged";
-  var estimateSeconds = estimateUnitToSeconds(estimateValue, estimateUnit);
+  var ownEstimateSeconds = estimateUnitToSeconds(estimateValue, estimateUnit);
+  var estimateSeconds = includeChild
+    ? ownEstimateSeconds + Number(info.childEstimateSeconds || 0)
+    : ownEstimateSeconds;
+  var remainingSeconds = Math.max(estimateSeconds - loggedSeconds, 0);
   var toggleHtml = info.canIncludeChild
     ? '<label class="task-item-detail-time-tracking-toggle"><input id="taskItemDetailIncludeChildTimeTrackingInput" type="checkbox"' +
-      (includeChild ? " checked" : "") +
-      "> <span>Include child work items</span></label>"
+    (includeChild ? " checked" : "") +
+    "> <span>Include child work items</span></label>"
     : "";
-  var noteHtml =
-    info.canIncludeChild && info.childSeconds > 0
-      ? '<div class="task-item-detail-time-tracking-note">Child work items: ' +
-        escHtml(formatDurationBrief(info.childSeconds)) +
-        "</div>"
-      : "";
 
   if (estimateSeconds <= 0) {
     $target
       .removeClass("task-item-detail-time-tracking")
       .html(
         '<div class="task-item-detail-time-tracking-block">' +
-          (toggleHtml
-            ? '<div class="task-item-detail-time-tracking-header">' +
-              toggleHtml +
-              "</div>"
-            : "") +
-          '<div class="task-item-detail-time-tracking-caption">' +
-          escHtml(trackingText) +
-          "</div>" +
-          noteHtml +
-          "</div>",
+        '<div class="task-item-detail-time-tracking-summary task-item-detail-time-tracking-summary-plain">' +
+        escHtml(trackingText) +
+        "</div>" +
+        toggleHtml +
+        "</div>",
       );
     return;
   }
@@ -799,9 +802,9 @@ function renderDetailTimeTracking(
     ? "Original estimate: " + formatDurationBrief(estimateSeconds)
     : loggedSeconds > 0
       ? loggedText +
-        " of " +
-        formatDurationBrief(estimateSeconds) +
-        " original estimate"
+      " of " +
+      formatDurationBrief(estimateSeconds) +
+      " original estimate"
       : "Original estimate: " + formatDurationBrief(estimateSeconds);
   var overtimeTooltip = isOvertime
     ? formatDurationBrief(overtimeSeconds) + " over original estimate"
@@ -824,45 +827,46 @@ function renderDetailTimeTracking(
     }
   }
 
+  var remainingText = isOvertime
+    ? formatDurationBrief(overtimeSeconds) + " over original estimate"
+    : formatDurationBrief(remainingSeconds) + " remaining";
+  var markerPercent = !isOvertime && estimatePercent > 0
+    ? Math.min(100, Math.max(0, estimatePercent))
+    : 0;
+
   var html =
     '<div class="task-item-detail-time-tracking-block">' +
-    (toggleHtml
-      ? '<div class="task-item-detail-time-tracking-header">' +
-        toggleHtml +
-        "</div>"
-      : "") +
     '<div class="task-item-detail-time-tracking-bar">' +
-    (estimatePercent > 0
-      ? '<span class="task-item-detail-time-tracking-segment task-item-detail-time-tracking-segment-estimate" style="width:' +
-        estimatePercent.toFixed(2) +
-        '%" data-bs-toggle="tooltip" data-bs-placement="top" title="' +
-        escHtml(estimateTooltip) +
-        '"></span>'
+    '<span class="task-item-detail-time-tracking-segment task-item-detail-time-tracking-segment-estimate" title="' +
+    escHtml(estimateTooltip) +
+    '" style="width:' +
+    estimatePercent.toFixed(2) +
+    '%"></span>' +
+    (isOvertime && overtimePercent > 0
+      ? '<span class="task-item-detail-time-tracking-segment task-item-detail-time-tracking-segment-overtime" title="' +
+      escHtml(overtimeTooltip) +
+      '" style="width:' +
+      overtimePercent.toFixed(2) +
+      '%"></span>'
       : "") +
-    (overtimePercent > 0
-      ? '<span class="task-item-detail-time-tracking-segment task-item-detail-time-tracking-segment-overtime" style="width:' +
-        overtimePercent.toFixed(2) +
-        '%" data-bs-toggle="tooltip" data-bs-placement="top" title="' +
-        escHtml(overtimeTooltip) +
-        '"></span>'
+    (markerPercent > 0
+      ? '<span class="task-item-detail-time-tracking-marker" style="left:' +
+      markerPercent.toFixed(2) +
+      '%"></span>'
       : "") +
     "</div>" +
-    '<div class="task-item-detail-time-tracking-caption">' +
+    '<div class="task-item-detail-time-tracking-summary task-item-detail-time-tracking-summary-muted' +
+    (isOvertime ? ' task-item-detail-time-tracking-summary-overtime' : '') +
+    '">' +
     escHtml(loggedText) +
     "</div>" +
-    noteHtml +
+    '<div class="task-item-detail-time-tracking-summary task-item-detail-time-tracking-summary-muted">' +
+    escHtml(remainingText) +
+    "</div>" +
+    toggleHtml +
     "</div>";
 
   $target.addClass("task-item-detail-time-tracking").html(html);
-
-  if (window.bootstrap && bootstrap.Tooltip) {
-    $target.find('[data-bs-toggle="tooltip"]').each(function () {
-      bootstrap.Tooltip.getOrCreateInstance(this, {
-        container: "body",
-        trigger: "hover focus",
-      });
-    });
-  }
 }
 
 function renderActivityFeed($target, historyRows) {
@@ -960,11 +964,11 @@ function buildCommentRepliesHtml(commentRow) {
       '<div class="task-item-activity-meta">' +
       (ago
         ? '<div class="task-item-activity-ago">' +
-          escHtml(ago) +
-          (isEdited
-            ? ' <span class="task-item-comment-edited">(edited)</span>'
-            : "") +
-          "</div>"
+        escHtml(ago) +
+        (isEdited
+          ? ' <span class="task-item-comment-edited">(edited)</span>'
+          : "") +
+        "</div>"
         : "") +
       '<span class="task-item-activity-type-badge task-item-activity-type-comment">REPLY</span>' +
       "</div>" +
@@ -973,26 +977,26 @@ function buildCommentRepliesHtml(commentRow) {
       "</div>" +
       (canReplyAction && replyId > 0
         ? '<div class="task-item-comment-actions-row task-item-reply-actions-row">' +
-          '<button type="button" class="btn task-item-comment-action-btn task-item-reply-edit-btn" data-reply-id="' +
-          replyId +
-          '" title="Edit" aria-label="Edit reply"><i class="fa-solid fa-pen-to-square"></i></button>' +
-          '<div class="task-item-comment-more-wrap">' +
-          '<button type="button" class="btn task-item-comment-action-btn task-item-reply-more-btn" data-reply-id="' +
-          replyId +
-          '" title="More" aria-label="More reply actions"><i class="fa-solid fa-ellipsis"></i></button>' +
-          '<div class="task-item-comment-more-menu task-item-reply-more-menu d-none">' +
-          '<button type="button" class="dropdown-item task-item-reply-copy-link-btn" data-reply-id="' +
-          replyId +
-          '">Copy link</button>' +
-          '<button type="button" class="dropdown-item task-item-reply-delete-btn text-danger" data-reply-id="' +
-          replyId +
-          '">Delete</button>' +
-          "</div>" +
-          "</div>" +
-          "</div>" +
-          '<div class="task-item-comment-reply-edit-slot" data-reply-id="' +
-          replyId +
-          '"></div>'
+        '<button type="button" class="btn task-item-comment-action-btn task-item-reply-edit-btn" data-reply-id="' +
+        replyId +
+        '" title="Edit" aria-label="Edit reply"><i class="fa-solid fa-pen-to-square"></i></button>' +
+        '<div class="task-item-comment-more-wrap">' +
+        '<button type="button" class="btn task-item-comment-action-btn task-item-reply-more-btn" data-reply-id="' +
+        replyId +
+        '" title="More" aria-label="More reply actions"><i class="fa-solid fa-ellipsis"></i></button>' +
+        '<div class="task-item-comment-more-menu task-item-reply-more-menu d-none">' +
+        '<button type="button" class="dropdown-item task-item-reply-copy-link-btn" data-reply-id="' +
+        replyId +
+        '">Copy link</button>' +
+        '<button type="button" class="dropdown-item task-item-reply-delete-btn text-danger" data-reply-id="' +
+        replyId +
+        '">Delete</button>' +
+        "</div>" +
+        "</div>" +
+        "</div>" +
+        '<div class="task-item-comment-reply-edit-slot" data-reply-id="' +
+        replyId +
+        '"></div>'
         : "") +
       "</div>" +
       "</div>";
@@ -1034,16 +1038,16 @@ function buildCommentEntryHtml(row, entryPrefix) {
     '<div class="task-item-activity-text"><span class="task-item-activity-actor">' +
     escHtml(actor) +
     "</span> " +
-    (isDeleted ? "deleted a comment" : "added a comment") +
+    (isDeleted ? "deleted a comment" : "commented") +
     "</div>" +
     '<div class="task-item-activity-meta">' +
     (ago
       ? '<div class="task-item-activity-ago">' +
-        escHtml(ago) +
-        (isEdited
-          ? ' <span class="task-item-comment-edited">(edited)</span>'
-          : "") +
-        "</div>"
+      escHtml(ago) +
+      (isEdited
+        ? ' <span class="task-item-comment-edited">(edited)</span>'
+        : "") +
+      "</div>"
       : "") +
     activityTypeBadgeHtml("comment") +
     "</div>" +
@@ -1053,33 +1057,33 @@ function buildCommentEntryHtml(row, entryPrefix) {
     buildCommentRepliesHtml(row) +
     (canCommentAction
       ? '<div class="task-item-comment-actions-row">' +
-        '<button type="button" class="btn task-item-comment-action-btn task-item-comment-reply-btn" data-comment-id="' +
-        commentId +
-        '" title="Reply" aria-label="Reply"><i class="fa-solid fa-reply"></i></button>' +
-        '<button type="button" class="btn task-item-comment-action-btn task-item-comment-edit-btn" data-comment-id="' +
-        commentId +
-        '" title="Edit" aria-label="Edit comment"><i class="fa-solid fa-pen-to-square"></i></button>' +
-        '<div class="task-item-comment-more-wrap">' +
-        '<button type="button" class="btn task-item-comment-action-btn task-item-comment-more-btn" data-comment-id="' +
-        commentId +
-        '" title="More" aria-label="More actions"><i class="fa-solid fa-ellipsis"></i></button>' +
-        '<div class="task-item-comment-more-menu d-none">' +
-        '<button type="button" class="dropdown-item task-item-comment-copy-link-btn" data-comment-id="' +
-        commentId +
-        '">Copy link</button>' +
-        '<button type="button" class="dropdown-item task-item-comment-delete-btn text-danger" data-comment-id="' +
-        commentId +
-        '">Delete</button>' +
-        "</div>" +
-        "</div>" +
-        "</div>" +
-        '<div class="task-item-draft-reminder task-item-reply-draft-notice d-none" data-comment-id="' +
-        commentId +
-        '">' +
-        '<button type="button" class="btn task-item-draft-reminder-btn task-item-reply-draft-restore-btn" data-comment-id="' +
-        commentId +
-        '">You have unsaved reply</button>' +
-        "</div>"
+      '<button type="button" class="btn task-item-comment-action-btn task-item-comment-reply-btn" data-comment-id="' +
+      commentId +
+      '" title="Reply" aria-label="Reply"><i class="fa-solid fa-reply"></i></button>' +
+      '<button type="button" class="btn task-item-comment-action-btn task-item-comment-edit-btn" data-comment-id="' +
+      commentId +
+      '" title="Edit" aria-label="Edit comment"><i class="fa-solid fa-pen-to-square"></i></button>' +
+      '<div class="task-item-comment-more-wrap">' +
+      '<button type="button" class="btn task-item-comment-action-btn task-item-comment-more-btn" data-comment-id="' +
+      commentId +
+      '" title="More" aria-label="More actions"><i class="fa-solid fa-ellipsis"></i></button>' +
+      '<div class="task-item-comment-more-menu d-none">' +
+      '<button type="button" class="dropdown-item task-item-comment-copy-link-btn" data-comment-id="' +
+      commentId +
+      '">Copy link</button>' +
+      '<button type="button" class="dropdown-item task-item-comment-delete-btn text-danger" data-comment-id="' +
+      commentId +
+      '">Delete</button>' +
+      "</div>" +
+      "</div>" +
+      "</div>" +
+      '<div class="task-item-draft-reminder task-item-reply-draft-notice d-none" data-comment-id="' +
+      commentId +
+      '">' +
+      '<button type="button" class="btn task-item-draft-reminder-btn task-item-reply-draft-restore-btn" data-comment-id="' +
+      commentId +
+      '">You have unsaved reply</button>' +
+      "</div>"
       : "") +
     '<div class="task-item-comment-edit-slot" data-comment-id="' +
     commentId +
@@ -1195,14 +1199,14 @@ function focusCommentFromHash() {
   if (target.type === "reply") {
     $entry = $(
       '#taskItemActivityCommentList .task-item-comment-reply-entry[data-reply-id="' +
-        target.replyId +
-        '"]',
+      target.replyId +
+      '"]',
     ).first();
   } else {
     $entry = $(
       '#taskItemActivityCommentList .task-item-comment-entry[data-comment-id="' +
-        target.commentId +
-        '"]',
+      target.commentId +
+      '"]',
     ).first();
   }
   if (!$entry.length) {
@@ -1552,7 +1556,7 @@ function writeWorklogTimerState(stateData) {
         collapsed: !!data.collapsed,
       }),
     );
-  } catch (e) {}
+  } catch (e) { }
 }
 
 function currentWorklogSeconds() {
@@ -1902,7 +1906,7 @@ function saveBoardFiltersToCookie() {
       JSON.stringify(boardFilterCookieValue()),
       30,
     );
-  } catch (e) {}
+  } catch (e) { }
 }
 
 function loadBoardFiltersFromCookie() {
@@ -1945,7 +1949,7 @@ function loadBoardFiltersFromCookie() {
     boardFilterState.partB.updatedFrom = String(partB.updatedFrom || "");
     boardFilterState.partB.updatedTo = String(partB.updatedTo || "");
     boardFilterState.partB.workTypeIds = normalizeIdList(partB.workTypeIds);
-  } catch (e) {}
+  } catch (e) { }
 
   syncBoardFilterActivePart();
 }
@@ -1976,7 +1980,7 @@ function saveBoardViewFieldsToCookie() {
       JSON.stringify(normalizeBoardViewFieldState(boardViewFieldState)),
       30,
     );
-  } catch (e) {}
+  } catch (e) { }
 }
 
 function loadBoardViewFieldsFromCookie() {
@@ -2037,7 +2041,7 @@ function saveBoardGroupToCookie() {
       JSON.stringify({ groupBy: getBoardGroupBy() }),
       30,
     );
-  } catch (e) {}
+  } catch (e) { }
 }
 
 function loadBoardGroupFromCookie() {
@@ -2123,6 +2127,28 @@ function captureBoardStatusColumnsFromDom() {
       name: title || "Untitled",
     });
   });
+
+  if (cols.length === 0) {
+    var fallback = [];
+    if (typeof window.sheetsConfig !== "undefined" && Array.isArray(window.sheetsConfig.columns)) {
+      fallback = window.sheetsConfig.columns;
+    } else if (typeof window.summaryConfig !== "undefined" && Array.isArray(window.summaryConfig.columns)) {
+      fallback = window.summaryConfig.columns;
+    } else if (typeof window.taskBoardConfig !== "undefined" && Array.isArray(window.taskBoardConfig.columns)) {
+      fallback = window.taskBoardConfig.columns;
+    }
+
+    for (var i = 0; i < fallback.length; i++) {
+      var c = fallback[i] || {};
+      var cid = Number(c.id || 0);
+      if (cid > 0) {
+        cols.push({
+          id: cid,
+          name: String(c.name || "Untitled").trim() || "Untitled"
+        });
+      }
+    }
+  }
 
   setBoardStatusColumns(cols);
 }
@@ -3253,7 +3279,7 @@ function setCardLabels($card, labels) {
     .find(".task-item-label-submenu-toggle")
     .html(
       (ids.length ? "Edit label" : "Add labels") +
-        ' <i class="fa-solid fa-chevron-right task-submenu-chevron"></i>',
+      ' <i class="fa-solid fa-chevron-right task-submenu-chevron"></i>',
     );
   var $row = $card.find(".task-item-label-row");
   if (!ids.length) {
@@ -3295,7 +3321,7 @@ function setCardTaskStatusLabels($card, statusLabelIds) {
   if ($toggle.length) {
     $toggle.html(
       (ids.length ? "Edit task status labels" : "Add task status labels") +
-        ' <i class="fa-solid fa-chevron-right task-submenu-chevron"></i>',
+      ' <i class="fa-solid fa-chevron-right task-submenu-chevron"></i>',
     );
   }
 
@@ -3485,7 +3511,7 @@ function buildCardFieldRowsHtml($card) {
     "created",
     "Created",
     formatRelativeFromCardDate($card.attr("data-create-date")) ||
-      formatCardDateLabel($card.attr("data-create-date")),
+    formatCardDateLabel($card.attr("data-create-date")),
     false,
   );
   appendFieldRow(
@@ -3540,12 +3566,12 @@ function buildCardFieldRowsHtml($card) {
     "parent",
     "Parent",
     '<select class="form-select form-select-sm task-item-parent-select" data-item-id="' +
-      itemId +
-      '"' +
-      (canEdit ? "" : " disabled") +
-      ">" +
-      parentOptionsHtml +
-      "</select>",
+    itemId +
+    '"' +
+    (canEdit ? "" : " disabled") +
+    ">" +
+    parentOptionsHtml +
+    "</select>",
     true,
   );
 
@@ -3555,10 +3581,10 @@ function buildCardFieldRowsHtml($card) {
     "Reporter",
     reporterName
       ? '<span class="task-item-field-reporter"><span class="task-item-field-avatar">' +
-          escHtml(initials(reporterName)) +
-          "</span><span>" +
-          escHtml(reporterName) +
-          "</span></span>"
+      escHtml(initials(reporterName)) +
+      "</span><span>" +
+      escHtml(reporterName) +
+      "</span></span>"
       : "",
     true,
   );
@@ -3571,13 +3597,13 @@ function buildCardFieldRowsHtml($card) {
       $card.attr("data-original-estimate-unit"),
     )
       ? '<span class="task-item-field-badge">' +
-          escHtml(
-            formatEstimateCompact(
-              Number($card.attr("data-original-estimate-value") || 0),
-              $card.attr("data-original-estimate-unit"),
-            ),
-          ) +
-          "</span>"
+      escHtml(
+        formatEstimateCompact(
+          Number($card.attr("data-original-estimate-value") || 0),
+          $card.attr("data-original-estimate-unit"),
+        ),
+      ) +
+      "</span>"
       : "",
     true,
   );
@@ -3609,7 +3635,7 @@ function buildCardFieldRowsHtml($card) {
     "updated",
     "Updated",
     formatRelativeFromCardDate($card.attr("data-update-date")) ||
-      formatCardDateLabel($card.attr("data-update-date")),
+    formatCardDateLabel($card.attr("data-update-date")),
     false,
   );
 

@@ -877,6 +877,16 @@ $(document).on("input", "#taskProjectKeyInput", function () {
   $(this).val(value);
 });
 
+function closeProjectKeyEditor() {
+  var $input = $("#taskProjectKeyInput");
+  $input.trigger("blur");
+  $("#taskProjectKeySaveBtn, #taskProjectKeyClearBtn").trigger("blur");
+
+  if (document.activeElement && typeof document.activeElement.blur === "function") {
+    document.activeElement.blur();
+  }
+}
+
 $(document).on("click", "#taskProjectKeySaveBtn", function () {
   if (!canEdit) {
     notify("You do not have permission to change project key.");
@@ -897,12 +907,13 @@ $(document).on("click", "#taskProjectKeySaveBtn", function () {
           ? res.projectKey
           : { id: 0, project_key: key };
       refreshCardItemKeys();
+      closeProjectKeyEditor();
     },
   );
 });
 
 $(document).on("click", "#taskProjectKeyClearBtn", function () {
-  $("#taskProjectKeyInput").val("").trigger("focus");
+  closeProjectKeyEditor();
 });
 
 $app.on("click", ".task-create-item-btn", function () {
@@ -1909,6 +1920,24 @@ function setDescriptionPanelCollapsed(collapsed) {
   );
 }
 
+function setActivitySectionCollapsed(collapsed) {
+  var isCollapsed = !!collapsed;
+  itemDetailModalState.activityCollapsed = isCollapsed;
+  var $section = $("#taskItemActivitySection");
+  $section.toggleClass("task-item-activity-collapsed", isCollapsed);
+  $("#taskItemActivityBody").toggleClass("d-none", isCollapsed);
+
+  var $btn = $("#taskItemActivityCollapseBtn");
+  $btn.attr("aria-expanded", isCollapsed ? "false" : "true");
+  $btn
+    .find("i")
+    .attr(
+      "class",
+      "fa-solid " + (isCollapsed ? "fa-chevron-right" : "fa-chevron-down"),
+    );
+  $btn.attr("title", isCollapsed ? "Expand activity" : "Collapse activity");
+}
+
 function renderItemAttachments(attachments) {
   var list = Array.isArray(attachments) ? attachments : [];
   itemDetailModalState.attachments = list.slice();
@@ -2163,6 +2192,9 @@ function setItemDetailDescriptionEditMode(isEditing, options) {
 
   $("#taskItemDetailDescriptionViewWrap").toggleClass("d-none", editing);
   $("#taskItemDetailDescriptionEditWrap").toggleClass("d-none", !editing);
+  if (typeof window.setTaskItemDetailMobileOverlayState === "function") {
+    window.setTaskItemDetailMobileOverlayState("description", editing);
+  }
 
   if (editing) {
     if (!settings.skipEditorSync) {
@@ -2349,8 +2381,10 @@ function setItemDetailTitleEditMode(isEditing) {
 
 function resetItemDetailTitleEdit() {
   clearItemDetailAutosaveTimer("coreAutosaveTimer");
-  $("#taskItemDetailTitleInput").val("").trigger("focus");
-  setItemDetailTitleEditMode(true);
+  $("#taskItemDetailTitleInput").val(
+    String(itemDetailModalState.initialTitle || ""),
+  );
+  setItemDetailTitleEditMode(false);
 }
 
 function scheduleItemDetailCoreAutosave(delay) {
@@ -2462,8 +2496,12 @@ function openItemDetailModal($card) {
     done: 0,
     progress_percent: 0,
   };
+  itemDetailModalState.childTitleEditingItemId = 0;
+  itemDetailModalState.childPickerItemId = 0;
+  itemDetailModalState.childPickerField = "";
   itemDetailModalState.childWorkItemsCollapsed = false;
   itemDetailModalState.history = [];
+  itemDetailModalState.activityCollapsed = false;
   itemDetailModalState.activityTab = "all";
   itemDetailModalState.activitySortDirection = "desc";
   itemDetailModalState.detailsCollapsed = false;
@@ -2492,9 +2530,12 @@ function openItemDetailModal($card) {
   renderModalLabelOptions();
   renderChildWorkItemsSection();
   setChildWorkItemsCollapsed(false);
+  setActivitySectionCollapsed(false);
   applyDetailFieldVisibility();
   setDetailSideCollapsed(false);
   renderDetailKeyTrail();
+  $("#taskItemDetailCreatedMeta").text("-");
+  $("#taskItemDetailUpdatedMeta").text("-");
   setDetailPriority("Medium");
   renderDetailParentDropdown(0, []);
   setItemDetailAutosaveStatus("", "");
@@ -2526,6 +2567,583 @@ function openItemDetailModal($card) {
     loadItemComments(itemId);
   }
   modal.show();
+}
+
+function isTaskItemDetailMobileViewport() {
+  return window.matchMedia("(max-width: 767.98px)").matches;
+}
+
+function syncTaskItemDetailActivityPlacement() {
+  var $section = $("#taskItemActivitySection");
+  var $desktopMount = $("#taskItemActivityDesktopMount");
+  var $mobileMount = $("#taskItemActivityMobileMount");
+  if (!$section.length || !$desktopMount.length || !$mobileMount.length) {
+    return;
+  }
+
+  var $target = isTaskItemDetailMobileViewport() ? $mobileMount : $desktopMount;
+  if (!$section.parent().is($target)) {
+    $target.append($section);
+  }
+}
+
+function syncTaskItemDetailMobileViewportMetrics() {
+  var modal = document.getElementById("taskItemDetailModal");
+  if (!modal) {
+    return;
+  }
+
+  var layoutViewportHeight =
+    window.innerHeight || document.documentElement.clientHeight || 0;
+  var visualViewportHeight = layoutViewportHeight;
+  var visualViewportOffsetTop = 0;
+
+  if (window.visualViewport) {
+    visualViewportHeight = Math.round(
+      Number(window.visualViewport.height || layoutViewportHeight),
+    );
+    visualViewportOffsetTop = Math.round(
+      Number(window.visualViewport.offsetTop || 0),
+    );
+  }
+
+  var keyboardOffset = Math.max(
+    0,
+    layoutViewportHeight - visualViewportHeight - visualViewportOffsetTop,
+  );
+
+  if (visualViewportHeight > 0) {
+    modal.style.setProperty(
+      "--task-item-detail-mobile-viewport-height",
+      String(visualViewportHeight) + "px",
+    );
+  }
+  modal.style.setProperty(
+    "--task-item-detail-mobile-keyboard-offset",
+    String(keyboardOffset) + "px",
+  );
+}
+
+function syncTaskItemDetailMobileLayout() {
+  syncTaskItemDetailActivityPlacement();
+  syncTaskItemDetailMobileViewportMetrics();
+}
+
+window.syncTaskItemDetailMobileLayout = syncTaskItemDetailMobileLayout;
+
+function setTaskItemDetailMobileOverlayState(mode, enabled) {
+  var $modal = $("#taskItemDetailModal");
+  var normalizedMode = String(mode || "").trim().toLowerCase();
+  if (!$modal.length) {
+    return;
+  }
+
+  if (normalizedMode === "description") {
+    $modal.toggleClass("task-item-detail-mobile-description-editing", !!enabled);
+    if (enabled) {
+      $modal.removeClass("task-item-detail-mobile-comment-editing");
+    }
+    return;
+  }
+
+  if (normalizedMode === "comment") {
+    $modal.toggleClass("task-item-detail-mobile-comment-editing", !!enabled);
+    if (enabled) {
+      $modal.removeClass("task-item-detail-mobile-description-editing");
+    }
+    return;
+  }
+
+  $modal.removeClass(
+    "task-item-detail-mobile-description-editing task-item-detail-mobile-comment-editing",
+  );
+
+  window.setTimeout(syncTaskItemDetailMobileLayout, 0);
+}
+
+window.setTaskItemDetailMobileOverlayState = setTaskItemDetailMobileOverlayState;
+
+$(window).on(
+  "resize.taskItemDetailModalLayout orientationchange.taskItemDetailModalLayout",
+  function () {
+    syncTaskItemDetailMobileLayout();
+  },
+);
+
+if (window.visualViewport && typeof window.visualViewport.addEventListener === "function") {
+  window.visualViewport.addEventListener(
+    "resize",
+    syncTaskItemDetailMobileLayout,
+    { passive: true },
+  );
+  window.visualViewport.addEventListener(
+    "scroll",
+    syncTaskItemDetailMobileLayout,
+    { passive: true },
+  );
+}
+
+function isChildWorkItemDoneStatus(columnId, statusName) {
+  var normalizedName = String(statusName || "")
+    .trim()
+    .toLowerCase();
+  if (/(^|\b)(done|closed|complete|completed|resolved)(\b|$)/.test(normalizedName)) {
+    return true;
+  }
+
+  var columns = getBoardStatusColumns();
+  if (!columns.length) {
+    return false;
+  }
+
+  var lastColumnId = Number((columns[columns.length - 1] || {}).id || 0);
+  return lastColumnId > 0 && lastColumnId === Number(columnId || 0);
+}
+
+function updateChildWorkItemsState(items) {
+  var rows = Array.isArray(items) ? items : [];
+  var done = rows.filter(function (item) {
+    return Number(item && item.is_done ? item.is_done : 0) > 0;
+  }).length;
+
+  var editingItemId = Number(itemDetailModalState.childTitleEditingItemId || 0);
+  var pickerItemId = Number(itemDetailModalState.childPickerItemId || 0);
+  var hasEditingRow = false;
+  var hasPickerRow = false;
+
+  for (var index = 0; index < rows.length; index++) {
+    var row = rows[index] || {};
+    var rowId = Number(row.id || 0);
+    if (rowId && rowId === editingItemId) {
+      hasEditingRow = true;
+    }
+    if (rowId && rowId === pickerItemId) {
+      hasPickerRow = true;
+    }
+  }
+
+  if (!hasEditingRow) {
+    itemDetailModalState.childTitleEditingItemId = 0;
+  }
+  if (!hasPickerRow) {
+    itemDetailModalState.childPickerItemId = 0;
+    itemDetailModalState.childPickerField = "";
+  }
+
+  itemDetailModalState.childWorkItems = normalizeChildWorkItems({
+    items: rows,
+    total: rows.length,
+    done: done,
+    progress_percent: rows.length ? Math.round((done * 100) / rows.length) : 0,
+  });
+  renderChildWorkItemsSection();
+}
+
+function updateSingleChildWorkItem(itemId, mutator) {
+  var targetItemId = Number(itemId || 0);
+  if (targetItemId <= 0 || typeof mutator !== "function") {
+    return false;
+  }
+
+  var childInfo = normalizeChildWorkItems(itemDetailModalState.childWorkItems);
+  var rows = Array.isArray(childInfo.items) ? childInfo.items : [];
+  var changed = false;
+  var nextRows = rows.map(function (item) {
+    if (Number(item && item.id ? item.id : 0) !== targetItemId) {
+      return item;
+    }
+
+    var nextItem = $.extend({}, item);
+    mutator(nextItem);
+    changed = true;
+    return nextItem;
+  });
+
+  if (!changed) {
+    return false;
+  }
+
+  updateChildWorkItemsState(nextRows);
+  return true;
+}
+
+function childWorkItemById(itemId) {
+  var targetItemId = Number(itemId || 0);
+  var childInfo = normalizeChildWorkItems(itemDetailModalState.childWorkItems);
+  var rows = Array.isArray(childInfo.items) ? childInfo.items : [];
+
+  for (var index = 0; index < rows.length; index++) {
+    var item = rows[index] || {};
+    if (Number(item.id || 0) === targetItemId) {
+      return item;
+    }
+  }
+
+  return null;
+}
+
+function setChildWorkItemTitleEditState(itemId, enabled) {
+  var targetItemId = Number(itemId || 0);
+  itemDetailModalState.childTitleEditingItemId = enabled ? targetItemId : 0;
+  if (enabled) {
+    itemDetailModalState.childPickerItemId = 0;
+    itemDetailModalState.childPickerField = "";
+  }
+
+  renderChildWorkItemsSection();
+
+  if (!enabled || targetItemId <= 0) {
+    return;
+  }
+
+  window.setTimeout(function () {
+    var $input = $(
+      '.task-item-child-title-input[data-child-item-id="' + targetItemId + '"]',
+    );
+    if (!$input.length) {
+      return;
+    }
+    $input.trigger("focus");
+    var input = $input.get(0);
+    if (input && typeof input.setSelectionRange === "function") {
+      var value = String($input.val() || "");
+      input.setSelectionRange(value.length, value.length);
+    }
+  }, 0);
+}
+
+function setChildWorkItemPickerState(itemId, fieldName, shouldOpen) {
+  var targetItemId = Number(itemId || 0);
+  var field = String(fieldName || "").trim().toLowerCase();
+
+  itemDetailModalState.childPickerItemId = targetItemId > 0 ? targetItemId : 0;
+  itemDetailModalState.childPickerField = targetItemId > 0 ? field : "";
+  if (targetItemId > 0) {
+    itemDetailModalState.childTitleEditingItemId = 0;
+  }
+
+  renderChildWorkItemsSection();
+
+  if (!shouldOpen || targetItemId <= 0 || !field) {
+    return;
+  }
+
+  window.setTimeout(function () {
+    var $select = $(
+      '.task-item-child-picker-select[data-child-item-id="' +
+        targetItemId +
+        '"][data-child-field="' +
+        field +
+        '"]',
+    );
+    if (!$select.length) {
+      return;
+    }
+
+    var select = $select.get(0);
+    $select.trigger("focus");
+    if (select && typeof select.showPicker === "function") {
+      try {
+        select.showPicker();
+      } catch (error) {
+        // Ignore unsupported picker invocation.
+      }
+    }
+  }, 0);
+}
+
+function openChildWorkItemModal(itemId) {
+  var targetItemId = Number(itemId || 0);
+  if (targetItemId <= 0) {
+    return;
+  }
+
+  var $card = findCardByItemId(targetItemId);
+  if (!$card.length) {
+    var row = childWorkItemById(targetItemId) || {};
+    $card = $(
+      '<article class="task-item-card"><span class="task-item-title"></span></article>',
+    );
+    $card
+      .attr("data-item-id", targetItemId)
+      .attr("data-item-description", "")
+      .attr("data-work-item-key", String(row.work_item_key || ""))
+      .attr("data-work-type-name", String(row.work_type_name || "Task"))
+      .attr("data-work-type-icon", String(row.work_type_svg_icon || ""));
+    $card.find(".task-item-title").text(String(row.title || ""));
+  }
+
+  var modal = getItemDetailModalInstance();
+  var $modal = $("#taskItemDetailModal");
+  if (!modal || !$modal.hasClass("show")) {
+    openItemDetailModal($card);
+    return;
+  }
+
+  $modal
+    .off("hidden.bs.modal.taskChildOpen")
+    .one("hidden.bs.modal.taskChildOpen", function () {
+      openItemDetailModal($card);
+    });
+  modal.hide();
+}
+
+function buildChildDetailUpdatePayload(detail, overrides) {
+  var info = detail && typeof detail === "object" ? detail : {};
+  var next = overrides && typeof overrides === "object" ? overrides : {};
+  return {
+    task_action: "update_item_detail",
+    item_id: Number(info.id || 0),
+    assignee_user_id: Number(
+      Object.prototype.hasOwnProperty.call(next, "assignee_user_id")
+        ? next.assignee_user_id
+        : info.assignee_user_id || 0,
+    ),
+    reporter_user_id: Number(info.reporter_user_id || 0),
+    priority: String(
+      Object.prototype.hasOwnProperty.call(next, "priority")
+        ? next.priority
+        : info.priority || "Medium",
+    ),
+    original_estimate_value: Number(info.original_estimate_value || 0),
+    original_estimate_unit: String(info.original_estimate_unit || "minutes"),
+    task_status_label_ids: Array.isArray(info.task_status_label_ids)
+      ? info.task_status_label_ids.join(",")
+      : String(info.task_status || ""),
+    start_date: String(info.start_date || ""),
+    due_date: String(info.due_date || ""),
+    amendement_date: String(info.amendement_date || ""),
+    amendement_time_minutes: Number(info.amendement_time_minutes || 0),
+    second_amendement_date: String(info.second_amendement_date || ""),
+    second_amendement_time_minutes: Number(
+      info.second_amendement_time_minutes || 0,
+    ),
+  };
+}
+
+function updateChildWorkItemCardTitle(itemId, title) {
+  var $card = findCardByItemId(itemId);
+  if (!$card.length) {
+    return;
+  }
+
+  $card.find(".task-item-title").text(String(title || ""));
+}
+
+function updateChildWorkItemCardAssignee(itemId, userId, userName) {
+  var $card = findCardByItemId(itemId);
+  if (!$card.length) {
+    return;
+  }
+
+  var assigneeUserId = Number(userId || 0);
+  var assigneeName = String(userName || "").trim();
+  var $btn = $card.find(".task-item-assignee-btn");
+
+  $card
+    .attr("data-assignee-user-id", assigneeUserId)
+    .attr("data-assignee-name", assigneeName);
+
+  if ($btn.length) {
+    $btn
+      .attr("data-user-id", assigneeUserId)
+      .attr("title", assigneeName)
+      .toggleClass("task-assignee-pill-unassigned", assigneeUserId <= 0)
+      .html(assigneeButtonInner(assigneeUserId, assigneeName));
+  }
+}
+
+function commitChildWorkItemTitle($input, options) {
+  if (!canEdit || !$input || !$input.length) {
+    return;
+  }
+
+  var settings = options && typeof options === "object" ? options : {};
+
+  var itemId = Number($input.data("childItemId") || 0);
+  var row = childWorkItemById(itemId);
+  var previousTitle = String(row && row.title ? row.title : "").trim();
+  var nextTitle = String($input.val() || "").trim();
+
+  if (!itemId) {
+    return;
+  }
+
+  if (!nextTitle) {
+    notify("Work item title is required.");
+    $input.val(previousTitle);
+    return;
+  }
+
+  if (nextTitle === previousTitle) {
+    if (settings.closeOnNoChange) {
+      setChildWorkItemTitleEditState(itemId, false);
+    }
+    return;
+  }
+
+  $input.prop("disabled", true);
+  postAction(
+    {
+      task_action: "update_item_core",
+      item_id: itemId,
+      title: nextTitle,
+    },
+    function () {
+      updateSingleChildWorkItem(itemId, function (item) {
+        item.title = nextTitle;
+      });
+      updateChildWorkItemCardTitle(itemId, nextTitle);
+      setChildWorkItemTitleEditState(itemId, false);
+    },
+    function () {
+      $input.val(previousTitle);
+      $input.prop("disabled", false);
+    },
+  );
+}
+
+function saveChildWorkItemPriority($select) {
+  if (!canEdit || !$select || !$select.length) {
+    return;
+  }
+
+  var itemId = Number($select.data("childItemId") || 0);
+  var row = childWorkItemById(itemId);
+  var previousPriority = String(row && row.priority ? row.priority : "Medium");
+  var nextPriority = String($select.val() || "Medium").trim() || "Medium";
+
+  if (!itemId || nextPriority === previousPriority) {
+    return;
+  }
+
+  $select.prop("disabled", true);
+  postAction(
+    {
+      task_action: "get_item_detail",
+      item_id: itemId,
+    },
+    function (detailRes) {
+      var detail = detailRes && detailRes.detail ? detailRes.detail : {};
+      postAction(
+        buildChildDetailUpdatePayload(detail, {
+          priority: nextPriority,
+        }),
+        function (res) {
+          setChildWorkItemPickerState(0, "", false);
+          updateSingleChildWorkItem(itemId, function (item) {
+            item.priority = nextPriority;
+          });
+          if (res && res.detail && typeof updateCardFromDetail === "function") {
+            updateCardFromDetail(res.detail);
+          }
+        },
+        function () {
+          setChildWorkItemPickerState(0, "", false);
+          $select.val(previousPriority).prop("disabled", false);
+        },
+      );
+    },
+    function () {
+      setChildWorkItemPickerState(0, "", false);
+      $select.val(previousPriority).prop("disabled", false);
+    },
+  );
+}
+
+function saveChildWorkItemAssignee($select) {
+  if (!canEdit || !$select || !$select.length) {
+    return;
+  }
+
+  var itemId = Number($select.data("childItemId") || 0);
+  var row = childWorkItemById(itemId);
+  var previousUserId = Number(row && row.assignee_user_id ? row.assignee_user_id : 0);
+  var nextUserId = Number($select.val() || 0);
+
+  if (!itemId || nextUserId === previousUserId) {
+    return;
+  }
+
+  var previousName = String(row && row.assignee_name ? row.assignee_name : "").trim();
+  $select.prop("disabled", true);
+  postAction(
+    {
+      task_action: "set_item_assignee",
+      item_id: itemId,
+      assignee_user_id: nextUserId,
+    },
+    function (res) {
+      setChildWorkItemPickerState(0, "", false);
+      var assignee = res && res.assignee ? res.assignee : {};
+      var resolvedUserId = Number(assignee.user_id || nextUserId || 0);
+      var resolvedName =
+        String(assignee.name || "").trim() || (resolvedUserId > 0 ? String($select.find("option:selected").text() || "").trim() : "");
+
+      updateSingleChildWorkItem(itemId, function (item) {
+        item.assignee_user_id = resolvedUserId;
+        item.assignee_name = resolvedName;
+      });
+      updateChildWorkItemCardAssignee(itemId, resolvedUserId, resolvedName);
+    },
+    function () {
+      setChildWorkItemPickerState(0, "", false);
+      $select.val(String(previousUserId)).prop("disabled", false);
+      updateSingleChildWorkItem(itemId, function (item) {
+        item.assignee_user_id = previousUserId;
+        item.assignee_name = previousName;
+      });
+    },
+  );
+}
+
+function saveChildWorkItemStatus($select) {
+  if (!canEdit || !$select || !$select.length) {
+    return;
+  }
+
+  var itemId = Number($select.data("childItemId") || 0);
+  var row = childWorkItemById(itemId);
+  var previousColumnId = Number(row && row.column_id ? row.column_id : 0);
+  var nextColumnId = Number($select.val() || 0);
+  var nextStatusName = String($select.find("option:selected").text() || "").trim();
+
+  if (!itemId || !nextColumnId || nextColumnId === previousColumnId) {
+    return;
+  }
+
+  $select.prop("disabled", true);
+  postAction(
+    {
+      task_action: "change_item_status",
+      item_id: itemId,
+      target_column_id: nextColumnId,
+    },
+    function () {
+      setChildWorkItemPickerState(0, "", false);
+      updateSingleChildWorkItem(itemId, function (item) {
+        item.column_id = nextColumnId;
+        item.status_name = nextStatusName;
+        item.is_done = isChildWorkItemDoneStatus(nextColumnId, nextStatusName)
+          ? 1
+          : 0;
+      });
+
+      var $card = findCardByItemId(itemId);
+      if ($card.length) {
+        applyStatusChangeToBoard(
+          $card,
+          $card.closest(".task-column"),
+          nextColumnId,
+          false,
+        );
+      }
+    },
+    function () {
+      setChildWorkItemPickerState(0, "", false);
+      $select.val(String(previousColumnId)).prop("disabled", false);
+    },
+  );
 }
 
 function parseTaskCommentPermalinkHash() {
@@ -2599,6 +3217,97 @@ $(document).on("click", ".task-item-title, .task-item-key", function (e) {
   openItemDetailModal($card);
 });
 
+$(document).on("click", ".task-item-edit-btn", function(e) {
+  e.preventDefault();
+  e.stopPropagation();
+  var $card = $(this).closest(".task-item-card");
+  var $title = $card.find(".task-item-title");
+  
+  if ($card.find(".task-item-inline-edit").length > 0) {
+    return;
+  }
+  
+  var currentTitle = $title.text();
+  $title.hide();
+  
+  var $editWrap = $('<div class="task-item-inline-edit mt-1 mb-2 d-flex align-items-center gap-1" style="flex: 1; min-width: 0;"></div>');
+  var $input = $('<input type="text" class="form-control form-control-sm" maxlength="255">').val(currentTitle);
+  var $actions = $('<div class="d-flex gap-1"></div>');
+  var $saveBtn = $('<button class="btn btn-light border btn-sm" type="button" aria-label="Save title" title="Save title" style="width: 28px; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center;"><i class="fa-solid fa-check" aria-hidden="true"></i></button>');
+  var $cancelBtn = $('<button class="btn btn-light border btn-sm" type="button" aria-label="Cancel editing" title="Cancel editing" style="width: 28px; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center;"><i class="fa-solid fa-xmark" aria-hidden="true"></i></button>');
+  
+  $actions.append($saveBtn, $cancelBtn);
+  $editWrap.append($input, $actions);
+  $title.after($editWrap);
+  
+  $editWrap.on("click", function(e) {
+    e.stopPropagation();
+  });
+  
+  $input.trigger("focus");
+  
+  var closeEdit = function() {
+    $editWrap.remove();
+    $title.show();
+  };
+  
+  $cancelBtn.on("click", function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    closeEdit();
+  });
+  
+  $saveBtn.on("click", function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    var newTitle = $input.val().trim();
+    if (!newTitle) {
+      if (typeof window.notify === "function") {
+        window.notify("Title cannot be empty.");
+      }
+      $input.trigger("focus");
+      return;
+    }
+    
+    var itemId = $card.data("item-id");
+    if (!itemId) {
+      closeEdit();
+      return;
+    }
+    
+    $saveBtn.prop("disabled", true);
+    $input.prop("disabled", true);
+    
+    if (typeof window.postAction === "function") {
+      window.postAction({
+        task_action: "update_item_core",
+        item_id: itemId,
+        title: newTitle
+      }, function() {
+        $title.text(newTitle);
+        closeEdit();
+      }, function() {
+        $saveBtn.prop("disabled", false);
+        $input.prop("disabled", false);
+        $input.trigger("focus");
+      });
+    } else {
+      $title.text(newTitle);
+      closeEdit();
+    }
+  });
+  
+  $input.on("keydown", function(e) {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      $saveBtn.trigger("click");
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      closeEdit();
+    }
+  });
+});
+
 $(document).on("click", "#taskItemDetailDescriptionView", function (e) {
   if ($(e.target).closest("a").length) {
     return;
@@ -2669,6 +3378,102 @@ $(document).on("click", "#taskItemDetailDescriptionCancelBtn", function () {
 
 $(document).on("click", "#taskItemDetailDescriptionCollapseBtn", function () {
   setDescriptionPanelCollapsed(!itemDetailModalState.descriptionCollapsed);
+});
+
+$(document).on("click", ".task-item-child-open-trigger", function (e) {
+  e.preventDefault();
+  e.stopPropagation();
+  openChildWorkItemModal($(this).data("childItemId"));
+});
+
+$(document).on("click", ".task-item-child-title-edit-btn", function (e) {
+  e.preventDefault();
+  e.stopPropagation();
+  setChildWorkItemTitleEditState($(this).data("childItemId"), true);
+});
+
+$(document).on("click", ".task-item-child-title-save-btn", function (e) {
+  e.preventDefault();
+  e.stopPropagation();
+  var itemId = Number($(this).data("childItemId") || 0);
+  var $input = $(
+    '.task-item-child-title-input[data-child-item-id="' + itemId + '"]',
+  );
+  commitChildWorkItemTitle($input, {
+    closeOnNoChange: true,
+  });
+});
+
+$(document).on("click", ".task-item-child-title-cancel-btn", function (e) {
+  e.preventDefault();
+  e.stopPropagation();
+  setChildWorkItemTitleEditState($(this).data("childItemId"), false);
+});
+
+$(document).on("click", ".task-item-child-picker-trigger", function (e) {
+  e.preventDefault();
+  e.stopPropagation();
+  setChildWorkItemPickerState(
+    $(this).data("childItemId"),
+    $(this).data("childField"),
+    true,
+  );
+});
+
+$(document).on("keydown", ".task-item-child-title-input", function (e) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    commitChildWorkItemTitle($(this), {
+      closeOnNoChange: true,
+    });
+    return;
+  }
+
+  if (e.key === "Escape") {
+    e.preventDefault();
+    setChildWorkItemTitleEditState($(this).data("childItemId"), false);
+  }
+});
+
+$(document).on("blur", ".task-item-child-picker-select", function () {
+  var $select = $(this);
+  var itemId = Number($select.data("childItemId") || 0);
+  var field = String($select.data("childField") || "").trim();
+
+  window.setTimeout(function () {
+    if (
+      Number(itemDetailModalState.childPickerItemId || 0) !== itemId ||
+      String(itemDetailModalState.childPickerField || "").trim() !== field
+    ) {
+      return;
+    }
+    setChildWorkItemPickerState(0, "", false);
+  }, 120);
+});
+
+$(document).on("keydown", ".task-item-child-picker-select", function (e) {
+  if (e.key === "Escape") {
+    e.preventDefault();
+    e.stopPropagation();
+    setChildWorkItemPickerState(0, "", false);
+    return;
+  }
+});
+
+$(document).on("change", ".task-item-child-priority-select", function () {
+  saveChildWorkItemPriority($(this));
+});
+
+$(document).on("change", ".task-item-child-assignee-select", function () {
+  saveChildWorkItemAssignee($(this));
+});
+
+$(document).on("change", ".task-item-child-status-select", function () {
+  saveChildWorkItemStatus($(this));
+});
+
+$(document).on("click", "#taskItemActivityCollapseBtn", function () {
+  setActivitySectionCollapsed(!itemDetailModalState.activityCollapsed);
 });
 
 $(document).on("focus click", "#taskItemDetailTitleInput", function () {
@@ -3469,6 +4274,8 @@ $(document).on("change", "#taskItemAttachmentInput", function () {
 $(document).on("hidden.bs.modal", "#taskItemDetailModal", function () {
   persistWorklogTimerState();
   stopWorklogTicker();
+  setTaskItemDetailMobileOverlayState("", false);
+  syncTaskItemDetailMobileLayout();
 
   itemDetailModalState.itemId = 0;
   itemDetailModalState.cardEl = null;
@@ -3526,13 +4333,18 @@ $(document).on("hidden.bs.modal", "#taskItemDetailModal", function () {
     done: 0,
     progress_percent: 0,
   };
+  itemDetailModalState.childTitleEditingItemId = 0;
+  itemDetailModalState.childPickerItemId = 0;
+  itemDetailModalState.childPickerField = "";
   itemDetailModalState.childWorkItemsCollapsed = false;
   itemDetailModalState.history = [];
+  itemDetailModalState.activityCollapsed = false;
   itemDetailModalState.activityTab = "all";
   itemDetailModalState.activitySortDirection = "desc";
   $(".task-item-detail-title-row").removeClass("is-editing");
   $("#taskItemDetailDescriptionInput").val("");
   setDescriptionPanelCollapsed(false);
+  setActivitySectionCollapsed(false);
   renderItemDetailDescriptionPreview("");
   setItemDetailDescriptionEditMode(false, {
     skipPreviewUpdate: true,
@@ -3550,9 +4362,6 @@ $(document).on("hidden.bs.modal", "#taskItemDetailModal", function () {
     collapsed: false,
   };
 
-  if (typeof resetTaskCommentEditor === "function") {
-    resetTaskCommentEditor();
-  }
   applyWorklogTimerUi();
   renderItemHistoryPanels();
   setItemActivityTab("all");

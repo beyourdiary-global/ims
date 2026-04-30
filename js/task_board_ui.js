@@ -572,10 +572,16 @@ function normalizeParentOptions(list) {
 
     var title = String(item.title || "").trim();
     var key = String(item.work_item_key || "").trim();
+    var workTypeName = String(item.work_type_name || "Epic").trim() || "Epic";
     out.push({
       id: id,
       title: title,
       work_item_key: key,
+      work_type_name: workTypeName,
+      work_type_svg_icon: normalizeWorkTypeIcon(
+        item.work_type_svg_icon,
+        workTypeName,
+      ),
       display: String((key ? key + " " : "") + title).trim(),
     });
     seen[id] = true;
@@ -608,6 +614,10 @@ function getBoardEpicParentOptions(excludeItemId) {
       id: itemId,
       title: String($card.find(".task-item-title").text() || "").trim(),
       work_item_key: key,
+      work_type_name: String(
+        $card.attr("data-work-type-name") || "Epic",
+      ).trim(),
+      work_type_svg_icon: String($card.attr("data-work-type-icon") || ""),
     });
   });
 
@@ -773,6 +783,11 @@ function renderDetailParentOptions(filterText) {
     var option = options[i] || {};
     var parentId = Number(option.id || 0);
     var label = normalizeParentDisplayLabel(option.display || option.title);
+    var workTypeName = String(option.work_type_name || "Epic").trim() || "Epic";
+    var workTypeIcon = normalizeWorkTypeIcon(
+      option.work_type_svg_icon,
+      workTypeName,
+    );
     if (!parentId || !label) {
       continue;
     }
@@ -787,9 +802,15 @@ function renderDetailParentOptions(filterText) {
       (selectedId === parentId ? " active" : "") +
       '" data-parent-item-id="' +
       parentId +
-      '"><span class="task-item-detail-parent-option-name">' +
+      '"><span class="task-item-detail-parent-option-content">' +
+      workTypeIconHtml(
+        workTypeIcon,
+        workTypeName,
+        "task-item-detail-parent-option-icon",
+      ) +
+      '<span class="task-item-detail-parent-option-name">' +
       escHtml(label) +
-      "</span></button>";
+      "</span></span></button>";
   }
 
   $("#taskItemDetailParentOptionList")
@@ -813,6 +834,8 @@ function renderDetailParentDropdown(selectedParentId, parentOptions) {
     return label;
   };
   var selectedDisplay = "None";
+  var selectedWorkTypeName = "Epic";
+  var selectedWorkTypeIcon = normalizeWorkTypeIcon("", selectedWorkTypeName);
   var hasSelectedOption = selectedId === 0;
 
   itemDetailModalState.parentOptions = options.slice();
@@ -824,6 +847,11 @@ function renderDetailParentDropdown(selectedParentId, parentOptions) {
     }
 
     selectedDisplay = normalizeParentDisplayLabel(opt.display || opt.title);
+    selectedWorkTypeName = String(opt.work_type_name || "Epic").trim() || "Epic";
+    selectedWorkTypeIcon = normalizeWorkTypeIcon(
+      opt.work_type_svg_icon,
+      selectedWorkTypeName,
+    );
     hasSelectedOption = true;
     break;
   }
@@ -833,7 +861,19 @@ function renderDetailParentDropdown(selectedParentId, parentOptions) {
   }
 
   itemDetailModalState.parentItemId = selectedId;
-  $("#taskItemDetailParentSelectedText").text(selectedDisplay);
+  $("#taskItemDetailParentSelectedText").html(
+    selectedId > 0
+      ? '<span class="task-item-detail-parent-selected-value">' +
+          workTypeIconHtml(
+            selectedWorkTypeIcon,
+            selectedWorkTypeName,
+            "task-item-detail-parent-option-icon",
+          ) +
+          '<span class="task-item-detail-parent-selected-label">' +
+          escHtml(selectedDisplay) +
+          "</span></span>"
+      : escHtml(selectedDisplay),
+  );
   $("#taskItemDetailParentSearchInput").val("");
   renderDetailParentOptions("");
 
@@ -1291,15 +1331,178 @@ function renderStatusLabelOptions(keyword) {
 function normalizeChildWorkItems(raw) {
   var info = raw && typeof raw === "object" ? raw : {};
   var rows = Array.isArray(info.items) ? info.items : [];
+  var normalizedRows = rows.map(function (item) {
+    var row = item && typeof item === "object" ? item : {};
+    return {
+      id: Number(row.id || 0),
+      work_item_key: String(row.work_item_key || "").trim(),
+      title: String(row.title || "").trim(),
+      priority: String(row.priority || "Medium").trim() || "Medium",
+      assignee_user_id: Number(row.assignee_user_id || 0),
+      assignee_name: String(row.assignee_name || "").trim(),
+      column_id: Number(row.column_id || 0),
+      status_name: String(row.status_name || "").trim(),
+      is_done: Number(row.is_done || 0) > 0 ? 1 : 0,
+      time_tracking: String(row.time_tracking || "").trim(),
+    };
+  });
+
+  var total = Number(info.total || normalizedRows.length || 0);
+  if (total <= 0) {
+    total = normalizedRows.length;
+  }
+
+  var done = Number(info.done || 0);
+  if (done < 0) {
+    done = 0;
+  }
+  if (!done && normalizedRows.length) {
+    done = normalizedRows.filter(function (item) {
+      return Number(item.is_done || 0) > 0;
+    }).length;
+  }
+
+  var progress = Number(info.progress_percent || 0);
+  if ((!progress || progress < 0) && total > 0) {
+    progress = Math.round((done * 100) / total);
+  }
+
   return {
-    items: rows,
-    total: Number(info.total || rows.length || 0),
-    done: Number(info.done || 0),
-    progress_percent: Math.max(
-      0,
-      Math.min(100, Number(info.progress_percent || 0)),
-    ),
+    items: normalizedRows,
+    total: total,
+    done: done,
+    progress_percent: Math.max(0, Math.min(100, progress)),
   };
+}
+
+function childWorkItemStatusName(columnId, fallbackName) {
+  var selectedColumnId = Number(columnId || 0);
+  var fallback = String(fallbackName || "").trim();
+  var columns = getBoardStatusColumns();
+
+  for (var index = 0; index < columns.length; index++) {
+    var column = columns[index] || {};
+    if (Number(column.id || 0) === selectedColumnId) {
+      var statusName = String(column.name || "").trim();
+      return statusName || fallback || "-";
+    }
+  }
+
+  return fallback || "-";
+}
+
+function childWorkItemPriorityPreviewHtml(priority, iconOnly) {
+  var value = String(priority || "Medium").trim() || "Medium";
+  var html =
+    '<span class="task-item-child-priority-preview-icon">' +
+    priorityIconGlyphHtml(value) +
+    "</span>";
+
+  if (!iconOnly) {
+    html +=
+      '<span class="task-item-child-priority-preview-label">' +
+      escHtml(value) +
+      "</span>";
+  }
+
+  return html;
+}
+
+function childWorkItemPriorityOptionsHtml(selectedPriority) {
+  var value = String(selectedPriority || "Medium").trim() || "Medium";
+  var html = "";
+
+  for (var index = 0; index < taskPriorityValues.length; index++) {
+    var option = String(taskPriorityValues[index] || "Medium").trim();
+    if (!option) {
+      continue;
+    }
+
+    html +=
+      '<option value="' +
+      escHtml(option) +
+      '"' +
+      (option === value ? " selected" : "") +
+      ">" +
+      escHtml(option) +
+      "</option>";
+  }
+
+  return html;
+}
+
+function childWorkItemAssigneePreviewHtml(userId, userName) {
+  var id = Number(userId || 0);
+  var name = String(userName || "").trim() || "Unassigned";
+  var avatarHtml =
+    id > 0
+      ? '<span class="task-item-child-assignee-avatar">' +
+        escHtml(initials(name)) +
+        "</span>"
+      : '<span class="task-item-child-assignee-avatar task-item-child-assignee-avatar-unassigned"><i class="fa-regular fa-user"></i></span>';
+
+  return (
+    '<span class="task-item-child-assignee-preview">' +
+    avatarHtml +
+    '<span class="task-item-child-assignee-name">' +
+    escHtml(name) +
+    "</span>" +
+    "</span>"
+  );
+}
+
+function childWorkItemAssigneeOptionsHtml(selectedUserId) {
+  var value = Number(selectedUserId || 0);
+  var html =
+    '<option value="0"' +
+    (value <= 0 ? " selected" : "") +
+    ">Unassigned</option>";
+
+  for (var index = 0; index < state.assignees.length; index++) {
+    var item = state.assignees[index] || {};
+    var userId = Number(item.id || 0);
+    var userName = String(item.name || "").trim();
+    if (!userId || !userName) {
+      continue;
+    }
+
+    html +=
+      '<option value="' +
+      userId +
+      '"' +
+      (userId === value ? " selected" : "") +
+      ">" +
+      escHtml(userName) +
+      "</option>";
+  }
+
+  return html;
+}
+
+function childWorkItemStatusOptionsHtml(selectedColumnId) {
+  var value = Number(selectedColumnId || 0);
+  var columns = getBoardStatusColumns();
+  var html = "";
+
+  for (var index = 0; index < columns.length; index++) {
+    var column = columns[index] || {};
+    var columnId = Number(column.id || 0);
+    var columnName = String(column.name || "").trim();
+    if (!columnId || !columnName) {
+      continue;
+    }
+
+    html +=
+      '<option value="' +
+      columnId +
+      '"' +
+      (columnId === value ? " selected" : "") +
+      ">" +
+      escHtml(columnName) +
+      "</option>";
+  }
+
+  return html;
 }
 
 function setDetailSideCollapsed(collapsed) {
@@ -1407,35 +1610,184 @@ function renderChildWorkItemsSection() {
 
   var rows = Array.isArray(childInfo.items) ? childInfo.items : [];
   var html = "";
+  var editingTitleItemId = Number(itemDetailModalState.childTitleEditingItemId || 0);
+  var pickerItemId = Number(itemDetailModalState.childPickerItemId || 0);
+  var pickerField = String(itemDetailModalState.childPickerField || "").trim();
+
   for (var i = 0; i < rows.length; i++) {
     var row = rows[i] || {};
+    var childItemId = Number(row.id || 0);
     var workKey = String(row.work_item_key || "").trim();
     var workTitle = String(row.title || "").trim();
     var workText = String((workKey ? workKey + " " : "") + workTitle).trim();
     var priority = String(row.priority || "Medium").trim() || "Medium";
     var assignee = String(row.assignee_name || "").trim() || "Unassigned";
-    var statusName = String(row.status_name || "").trim() || "-";
+    var statusColumnId = Number(row.column_id || 0);
+    var statusName = childWorkItemStatusName(statusColumnId, row.status_name);
     var statusClass =
       Number(row.is_done || 0) > 0 ? " task-item-child-col-status-done" : "";
+    var workKeyText = workKey || (childItemId > 0 ? "Item #" + childItemId : "Work item");
+    var isTitleEditing = editingTitleItemId === childItemId;
+    var activeField = pickerItemId === childItemId ? pickerField : "";
+
+    if (canEdit) {
+      html +=
+        '<div class="task-item-child-row task-item-child-row-editable' +
+        (isTitleEditing ? " task-item-child-row-title-editing" : "") +
+        '" data-child-item-id="' +
+        childItemId +
+        '">' +
+        '<div class="task-item-child-col-work">' +
+        (isTitleEditing
+          ? '<div class="task-item-child-title-editor">' +
+            '<button type="button" class="btn task-item-child-open-trigger task-item-child-open-btn" data-child-item-id="' +
+            childItemId +
+            '" title="' +
+            escHtml(workText || workKeyText) +
+            '">' +
+            '<span class="task-item-child-open-key">' +
+            escHtml(workKeyText) +
+            "</span>" +
+            "</button>" +
+            '<input type="text" class="form-control form-control-sm task-item-child-title-input" data-child-item-id="' +
+            childItemId +
+            '" value="' +
+            escHtml(workTitle) +
+            '" maxlength="255" placeholder="Work item title">' +
+            '<div class="task-item-child-title-editor-actions">' +
+            '<button type="button" class="btn task-item-child-title-save-btn" data-child-item-id="' +
+            childItemId +
+            '" title="Save title"><i class="fa-solid fa-check"></i></button>' +
+            '<button type="button" class="btn task-item-child-title-cancel-btn" data-child-item-id="' +
+            childItemId +
+            '" title="Cancel title edit"><i class="fa-solid fa-xmark"></i></button>' +
+            "</div>" +
+            "</div>"
+          : '<div class="task-item-child-work-display">' +
+            '<button type="button" class="btn task-item-child-open-trigger task-item-child-open-btn" data-child-item-id="' +
+            childItemId +
+            '" title="' +
+            escHtml(workText || workKeyText) +
+            '">' +
+            '<span class="task-item-child-open-key">' +
+            escHtml(workKeyText) +
+            "</span>" +
+            "</button>" +
+            '<button type="button" class="btn task-item-child-open-trigger task-item-child-title-link" data-child-item-id="' +
+            childItemId +
+            '" title="' +
+            escHtml(workText || workKeyText) +
+            '">' +
+            escHtml(workTitle || "Open work item") +
+            "</button>" +
+            '<button type="button" class="btn task-item-child-title-edit-btn" data-child-item-id="' +
+            childItemId +
+            '" title="Edit title"><i class="fa-regular fa-pen-to-square"></i></button>' +
+            "</div>") +
+        "</div>" +
+        '<div class="task-item-child-col-priority">' +
+        (activeField === "priority"
+          ? '<select class="form-select form-select-sm task-item-child-picker-select task-item-child-priority-select" data-child-item-id="' +
+            childItemId +
+            '" data-child-field="priority">' +
+            childWorkItemPriorityOptionsHtml(priority) +
+            "</select>"
+          : '<button type="button" class="btn task-item-child-display-btn task-item-child-picker-trigger" data-child-item-id="' +
+            childItemId +
+            '" data-child-field="priority">' +
+            childWorkItemPriorityPreviewHtml(priority, false) +
+            "</button>") +
+        '<span class="task-item-child-mobile-priority" aria-hidden="true">' +
+        childWorkItemPriorityPreviewHtml(priority, true) +
+        "</span>" +
+        "</div>" +
+        '<div class="task-item-child-col-assignee">' +
+        (activeField === "assignee"
+          ? '<select class="form-select form-select-sm task-item-child-picker-select task-item-child-assignee-select" data-child-item-id="' +
+            childItemId +
+            '" data-child-field="assignee">' +
+            childWorkItemAssigneeOptionsHtml(Number(row.assignee_user_id || 0)) +
+            "</select>"
+          : '<button type="button" class="btn task-item-child-display-btn task-item-child-picker-trigger" data-child-item-id="' +
+            childItemId +
+            '" data-child-field="assignee">' +
+            childWorkItemAssigneePreviewHtml(Number(row.assignee_user_id || 0), assignee) +
+            "</button>") +
+        '<span class="task-item-child-mobile-assignee d-none">' +
+        escHtml(assignee) +
+        "</span>" +
+        "</div>" +
+        '<div class="task-item-child-col-status' +
+        statusClass +
+        '">' +
+        (activeField === "status"
+          ? '<select class="form-select form-select-sm task-item-child-picker-select task-item-child-status-select" data-child-item-id="' +
+            childItemId +
+            '" data-child-field="status">' +
+            childWorkItemStatusOptionsHtml(statusColumnId) +
+            "</select>"
+          : '<button type="button" class="btn task-item-child-display-btn task-item-child-display-btn-status task-item-child-picker-trigger' +
+            statusClass +
+            '" data-child-item-id="' +
+            childItemId +
+            '" data-child-field="status">' +
+            escHtml(statusName) +
+            '<i class="fa-solid fa-chevron-down"></i>' +
+            "</button>") +
+        "</div>" +
+        '<div class="task-item-child-mobile-meta">' +
+        '<span class="task-item-child-mobile-priority" aria-hidden="true">' +
+        childWorkItemPriorityPreviewHtml(priority, true) +
+        "</span>" +
+        '<span class="task-item-child-mobile-status' +
+        statusClass +
+        '">' +
+        escHtml(statusName) +
+        "</span>" +
+        "</div>" +
+        "</div>";
+      continue;
+    }
 
     html +=
       '<div class="task-item-child-row">' +
-      '<span class="task-item-child-col-work" title="' +
-      escHtml(workText) +
+      '<div class="task-item-child-col-work">' +
+      '<button type="button" class="btn task-item-child-open-btn" data-child-item-id="' +
+      childItemId +
+      '" title="' +
+      escHtml(workText || workKeyText) +
       '">' +
-      escHtml(workText) +
+      '<span class="task-item-child-open-key">' +
+      escHtml(workKeyText) +
       "</span>" +
-      '<span class="task-item-child-col-priority">' +
-      escHtml(priority) +
+      '<span class="task-item-child-open-title">' +
+      escHtml(workTitle || "Open work item") +
       "</span>" +
-      '<span class="task-item-child-col-assignee">' +
+      "</button>" +
+      "</div>" +
+      '<div class="task-item-child-col-priority">' +
+      '<span class="task-item-child-readonly-pill">' +
+      childWorkItemPriorityPreviewHtml(priority, false) +
+      "</span>" +
+      "</div>" +
+      '<div class="task-item-child-col-assignee">' +
       escHtml(assignee) +
+      "</div>" +
+      '<div class="task-item-child-col-status' +
+      statusClass +
+      '">' +
+      escHtml(statusName) +
+      "</div>" +
+      '<div class="task-item-child-mobile-meta">' +
+      '<span class="task-item-child-mobile-priority" aria-hidden="true">' +
+      childWorkItemPriorityPreviewHtml(priority, true) +
       "</span>" +
-      '<span class="task-item-child-col-status' +
+      '<span class="task-item-child-mobile-status' +
       statusClass +
       '">' +
       escHtml(statusName) +
       "</span>" +
+      "</div>" +
       "</div>";
   }
 
@@ -1527,9 +1879,70 @@ function renderDetailKeyTrail() {
       currentHtml;
   }
 
-  $("#taskItemDetailModalTitle").html(
-    '<span class="task-item-detail-key-main">' + html + "</span>",
+  $("#taskItemDetailKeyTrail")
+    .removeClass("d-none")
+    .html('<span class="task-item-detail-key-main">' + html + "</span>");
+  $("#taskItemDetailModalTitle").text(trail);
+}
+
+function formatDetailMetaTime(value) {
+  var text = String(value || "").trim();
+  if (!/^\d{2}:\d{2}(:\d{2})?$/.test(text)) {
+    return "";
+  }
+
+  var parts = text.split(":");
+  var hours = Number(parts[0] || 0);
+  var minutes = Number(parts[1] || 0);
+  if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+    return "";
+  }
+
+  var suffix = hours >= 12 ? "PM" : "AM";
+  var hourValue = hours % 12;
+  if (!hourValue) {
+    hourValue = 12;
+  }
+
+  return hourValue + ":" + String(minutes).padStart(2, "0") + " " + suffix;
+}
+
+function formatDetailMetaDateTime(dateValue, timeValue) {
+  var dateText = formatCardDateLabel(dateValue);
+  var timeText = formatDetailMetaTime(timeValue);
+  if (dateText && timeText) {
+    return dateText + " at " + timeText;
+  }
+  if (dateText) {
+    return dateText;
+  }
+  if (timeText) {
+    return timeText;
+  }
+  return "";
+}
+
+function renderDetailMeta(info) {
+  var detail = info && typeof info === "object" ? info : {};
+  var createdText = formatDetailMetaDateTime(
+    detail.create_date,
+    detail.create_time,
   );
+  var updatedExactText = formatDetailMetaDateTime(
+    detail.update_date,
+    detail.update_time,
+  );
+  var updatedRelativeText = formatRelativeFromCardDate(detail.update_date);
+  var updatedText = "";
+
+  if (updatedRelativeText && /ago/i.test(updatedRelativeText)) {
+    updatedText = updatedRelativeText;
+  } else {
+    updatedText = updatedExactText || updatedRelativeText;
+  }
+
+  $("#taskItemDetailCreatedMeta").text(createdText || "Not available");
+  $("#taskItemDetailUpdatedMeta").text(updatedText || "Not available");
 }
 
 function renderModalLabelChips() {
@@ -1830,6 +2243,7 @@ function applyItemDetailToModal(detail, statusLabels, parentOptions, webLinks) {
       "",
   );
   renderDetailKeyTrail();
+  renderDetailMeta(info);
   itemDetailModalState.childWorkItems = normalizeChildWorkItems(
     info.child_work_items,
   );
@@ -2421,8 +2835,9 @@ function buildTaskCardHtml(item) {
     '<h6 class="task-item-title">' +
     escHtml(item.title || "") +
     "</h6>" +
-    '<div class="dropdown task-item-menu-dropdown">' +
-    '<button class="btn task-item-menu-btn task-open-item-actions-btn" type="button" title="Task options"><i class="fa-solid fa-ellipsis"></i></button>' +
+    '<div class="dropdown task-item-menu-dropdown" style="display: flex; gap: 2px;">' +
+    '<button class="btn task-item-menu-btn task-item-edit-btn" type="button" title="Edit title" aria-label="Edit title"><i class="fa-solid fa-pen"></i></button>' +
+    '<button class="btn task-item-menu-btn task-open-item-actions-btn" type="button" title="Task options" aria-label="Task options"><i class="fa-solid fa-ellipsis"></i></button>' +
     "</div>" +
     "</div>" +
     (labelsHtml
