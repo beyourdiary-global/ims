@@ -81,8 +81,15 @@ var ajaxUrl = cfg.ajaxUrl || "";
 var csrfToken = String(cfg.csrfToken || "");
 var canAdd = !!cfg.canAdd;
 var canEdit = !!cfg.canEdit;
+var canDelete = !!cfg.canDelete;
 var state = {
   siteUrl: String(cfg.siteUrl || "").replace(/\/+$/, ""),
+  currentProjectId: Number(cfg.currentProjectId || 0),
+  isProjectOwner: !!cfg.isProjectOwner,
+  currentProject:
+    cfg.currentProject && typeof cfg.currentProject === "object"
+      ? cfg.currentProject
+      : {},
   projectKey:
     cfg.projectKey && typeof cfg.projectKey === "object"
       ? cfg.projectKey
@@ -94,7 +101,112 @@ var state = {
   assignees: Array.isArray(cfg.assignees) ? cfg.assignees.slice() : [],
   labels: Array.isArray(cfg.labels) ? cfg.labels.slice() : [],
   statusLabels: Array.isArray(cfg.statusLabels) ? cfg.statusLabels.slice() : [],
+  columns: Array.isArray(cfg.columns) ? cfg.columns.slice() : [],
+  allowedWorkTypeIds: Array.isArray(cfg.allowedWorkTypeIds)
+    ? cfg.allowedWorkTypeIds.slice()
+    : [],
+  allowedStatusIds: Array.isArray(cfg.allowedStatusIds)
+    ? cfg.allowedStatusIds.slice()
+    : [],
+  columnPermissions:
+    cfg.columnPermissions && typeof cfg.columnPermissions === "object"
+      ? cfg.columnPermissions
+      : {},
 };
+
+function normalizeProjectPermissionFieldKey(fieldKey) {
+  var key = String(fieldKey || "")
+    .trim()
+    .toLowerCase();
+
+  if (key === "parent") {
+    return "parent_display";
+  }
+  if (key === "assignee") {
+    return "assignee_name";
+  }
+  if (key === "reporter") {
+    return "reporter_name";
+  }
+
+  return key;
+}
+
+function getProjectColumnPermission(fieldKey) {
+  var key = normalizeProjectPermissionFieldKey(fieldKey);
+  var row = state.columnPermissions[key];
+  if (!row || typeof row !== "object") {
+    return { add: 0, edit: 0, delete: 0 };
+  }
+
+  return {
+    add: Number(row.add || 0) > 0 ? 1 : 0,
+    edit: Number(row.edit || 0) > 0 ? 1 : 0,
+    delete: Number(row.delete || 0) > 0 ? 1 : 0,
+  };
+}
+
+function hasAnyProjectFieldPermission(fieldKey) {
+  if (state.isProjectOwner) {
+    return true;
+  }
+
+  var permission = getProjectColumnPermission(fieldKey);
+  return !!(permission.add || permission.edit || permission.delete);
+}
+
+function canTargetStatusColumn(columnId) {
+  var id = Number(columnId || 0);
+  if (id <= 0) {
+    return false;
+  }
+
+  if (state.isProjectOwner) {
+    return true;
+  }
+
+  return state.allowedStatusIds.indexOf(id) !== -1;
+}
+
+function normalizeLabelColor(color, fallback) {
+  return normalizeHexColorValue(color || "", fallback || "#DCE8FF");
+}
+
+function labelTextColor(color) {
+  return getReadableTextColor(normalizeLabelColor(color, "#DCE8FF"));
+}
+
+function labelPillStyle(color, fallback) {
+  var bg = normalizeLabelColor(color, fallback || "#DCE8FF");
+  return (
+    '--task-label-bg:' +
+    escHtml(bg) +
+    ';--task-label-text:' +
+    escHtml(labelTextColor(bg))
+  );
+}
+
+function getLabelById(labelId) {
+  var id = Number(labelId || 0);
+  for (var i = 0; i < state.labels.length; i++) {
+    var label = state.labels[i] || {};
+    if (Number(label.id || 0) === id) {
+      return label;
+    }
+  }
+  return null;
+}
+
+function getStatusLabelById(labelId) {
+  var id = Number(labelId || 0);
+  for (var i = 0; i < state.statusLabels.length; i++) {
+    var label = state.statusLabels[i] || {};
+    if (Number(label.id || 0) === id) {
+      return label;
+    }
+  }
+  return null;
+}
 
 var dragState = {
   $item: null,
@@ -291,9 +403,7 @@ var worklogTickerId = null;
 var worklogStoragePrefix = "task_board_worklog_timer_v1_";
 
 var currentUserId = Number(cfg.currentUserId || 0);
-var boardProjectId = Number(
-  cfg.projectKey && cfg.projectKey.id ? cfg.projectKey.id : 0,
-);
+var boardProjectId = Number(cfg.currentProjectId || 0);
 var boardFilterCookiePrefix = "task_board_filters_v2_user_";
 var boardFilterCookieName =
   boardFilterCookiePrefix +
@@ -373,6 +483,36 @@ function normalizeProjectKey(projectKey) {
     .replace(/\s+/g, "")
     .replace(/[^A-Z0-9\-]/g, "")
     .slice(0, 20);
+}
+
+function normalizeHexColorValue(color, fallback) {
+  var value = String(color || "")
+    .trim()
+    .toUpperCase();
+  var defaultColor = String(fallback || "#DFE1E6")
+    .trim()
+    .toUpperCase();
+
+  if (/^#[0-9A-F]{6}$/.test(value)) {
+    return value;
+  }
+  if (/^#[0-9A-F]{3}$/.test(value)) {
+    return (
+      "#" +
+      value.charAt(1) +
+      value.charAt(1) +
+      value.charAt(2) +
+      value.charAt(2) +
+      value.charAt(3) +
+      value.charAt(3)
+    );
+  }
+
+  return /^#[0-9A-F]{6}$/.test(defaultColor) ? defaultColor : "#DFE1E6";
+}
+
+function getReadableTextColor(backgroundColor) {
+  return "#292A2E";
 }
 
 function buildWorkItemKey(itemId) {
@@ -2071,6 +2211,7 @@ function normalizeStatusColumnMeta(raw) {
   return {
     id: Number(item.id || 0),
     name: String(item.name || "").trim() || "Untitled",
+    color: normalizeHexColorValue(item.color || "", "#DFE1E6"),
   };
 }
 
@@ -2096,19 +2237,28 @@ function getBoardStatusColumns() {
 }
 
 function getBoardStatusColumnName(columnId) {
+  var meta = getBoardStatusColumnMeta(columnId);
+  return meta ? String(meta.name || "").trim() : "";
+}
+
+function getBoardStatusColumnMeta(columnId) {
   var id = Number(columnId || 0);
   if (id <= 0) {
-    return "";
+    return null;
   }
 
   for (var i = 0; i < boardStatusColumns.length; i++) {
     var col = boardStatusColumns[i] || {};
     if (Number(col.id || 0) === id) {
-      return String(col.name || "").trim();
+      return {
+        id: Number(col.id || 0),
+        name: String(col.name || "").trim(),
+        color: normalizeHexColorValue(col.color || "", "#DFE1E6"),
+      };
     }
   }
 
-  return "";
+  return null;
 }
 
 function captureBoardStatusColumnsFromDom() {
@@ -2123,10 +2273,12 @@ function captureBoardStatusColumnsFromDom() {
     var title = String(
       $column.find(".task-column-title").first().text() || "",
     ).trim();
+    var color = String($column.attr("data-column-color") || "").trim();
 
     cols.push({
       id: columnId,
       name: title || "Untitled",
+      color: normalizeHexColorValue(color, "#DFE1E6"),
     });
   });
 
@@ -2146,7 +2298,8 @@ function captureBoardStatusColumnsFromDom() {
       if (cid > 0) {
         cols.push({
           id: cid,
-          name: String(c.name || "Untitled").trim() || "Untitled"
+          name: String(c.name || "Untitled").trim() || "Untitled",
+          color: normalizeHexColorValue(c.color || "", "#DFE1E6"),
         });
       }
     }
@@ -2155,13 +2308,14 @@ function captureBoardStatusColumnsFromDom() {
   setBoardStatusColumns(cols);
 }
 
-function upsertBoardStatusColumn(columnId, columnName) {
+function upsertBoardStatusColumn(columnId, columnName, columnColor) {
   var id = Number(columnId || 0);
   if (id <= 0) {
     return;
   }
 
   var name = String(columnName || "").trim() || "Untitled";
+  var color = normalizeHexColorValue(columnColor || "", "#DFE1E6");
   var found = false;
 
   for (var i = 0; i < boardStatusColumns.length; i++) {
@@ -2169,13 +2323,13 @@ function upsertBoardStatusColumn(columnId, columnName) {
     if (Number(col.id || 0) !== id) {
       continue;
     }
-    boardStatusColumns[i] = { id: id, name: name };
+    boardStatusColumns[i] = { id: id, name: name, color: color };
     found = true;
     break;
   }
 
   if (!found) {
-    boardStatusColumns.push({ id: id, name: name });
+    boardStatusColumns.push({ id: id, name: name, color: color });
   }
 }
 
@@ -2241,6 +2395,16 @@ function setCardStatusColumn($card, columnId, columnName) {
   }
 }
 
+function setCardStatusColumnMeta($card, columnId, columnName, columnColor) {
+  if (!$card || !$card.length) {
+    return;
+  }
+
+  setCardStatusColumn($card, columnId, columnName);
+  var color = normalizeHexColorValue(columnColor || "", "#DFE1E6");
+  $card.attr("data-status-column-color", color);
+}
+
 function syncCardStatusMeta($card, force) {
   if (!$card || !$card.length) {
     return;
@@ -2261,7 +2425,8 @@ function syncCardStatusMeta($card, force) {
   var columnName = String(
     $column.find(".task-column-title").first().text() || "",
   ).trim();
-  setCardStatusColumn($card, columnId, columnName);
+  var columnColor = String($column.attr("data-column-color") || "").trim();
+  setCardStatusColumnMeta($card, columnId, columnName, columnColor);
 }
 
 function getCardStatusColumnId($card) {
@@ -3067,6 +3232,17 @@ function postAction(payload, onDone, onFail) {
   }
 
   var requestData = payload || {};
+  if (state.currentProjectId > 0) {
+    if (requestData instanceof FormData) {
+      if (!requestData.has("project_id")) {
+        requestData.append("project_id", state.currentProjectId);
+      }
+    } else {
+      requestData = $.extend({}, requestData, {
+        project_id: state.currentProjectId,
+      });
+    }
+  }
   if (csrfToken) {
     if (requestData instanceof FormData) {
       if (!requestData.has("csrf_token")) {
@@ -3133,6 +3309,71 @@ function postAction(payload, onDone, onFail) {
     });
 }
 
+function getCreateProjectModalInstance() {
+  var modalEl = document.getElementById("taskCreateProjectModal");
+  if (!modalEl || typeof bootstrap === "undefined" || !bootstrap.Modal) {
+    return null;
+  }
+  return bootstrap.Modal.getOrCreateInstance(modalEl);
+}
+
+$(document).on("click", "#taskCreateProjectBtn", function (e) {
+  e.preventDefault();
+  var modal = getCreateProjectModalInstance();
+  if (!modal) {
+    return;
+  }
+  $("#taskCreateProjectName").val("");
+  modal.show();
+  window.setTimeout(function () {
+    $("#taskCreateProjectName").trigger("focus");
+  }, 120);
+});
+
+$(document).on("click", "#taskCreateProjectSubmitBtn", function () {
+  var name = $.trim($("#taskCreateProjectName").val() || "");
+  if (!name) {
+    notify("Project task name is required.");
+    $("#taskCreateProjectName").trigger("focus");
+    return;
+  }
+
+  var $btn = $(this);
+  $btn.prop("disabled", true);
+  postAction(
+    {
+      task_action: "create_project",
+      project_name: name,
+    },
+    function (res) {
+      var modal = getCreateProjectModalInstance();
+      if (modal) {
+        modal.hide();
+      }
+      if (res && res.project && Number(res.project.id || 0) > 0) {
+        window.location.href =
+          state.siteUrl +
+          "/task/summary.php?project_id=" +
+          Number(res.project.id || 0);
+        return;
+      }
+      window.location.reload();
+    },
+    function () {
+      $btn.prop("disabled", false);
+    },
+  ).always(function () {
+    $btn.prop("disabled", false);
+  });
+});
+
+$(document).on("keydown", "#taskCreateProjectName", function (e) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    $("#taskCreateProjectSubmitBtn").trigger("click");
+  }
+});
+
 function recoverJsonResponse(xhr) {
   var responseText =
     xhr && typeof xhr.responseText === "string" ? xhr.responseText : "";
@@ -3177,11 +3418,13 @@ function workTypeMenuHtml() {
       "</a></li>";
   }
 
-  html += '<li><hr class="dropdown-divider"></li>';
-  html +=
-    '<li><a class="dropdown-item task-work-type-action" href="#" data-action="add">Add work type</a></li>';
-  html +=
-    '<li><a class="dropdown-item task-work-type-action" href="#" data-action="edit">Edit work type</a></li>';
+  if (state.isProjectOwner) {
+    html += '<li><hr class="dropdown-divider"></li>';
+    html +=
+      '<li><a class="dropdown-item task-work-type-action" href="#" data-action="add">Add work type</a></li>';
+    html +=
+      '<li><a class="dropdown-item task-work-type-action" href="#" data-action="edit">Edit work type</a></li>';
+  }
 
   return html;
 }
@@ -3273,7 +3516,12 @@ function setCardLabels($card, labels) {
       continue;
     }
     ids.push(id);
-    html += '<span class="task-label-pill">' + escHtml(name) + "</span>";
+    html +=
+      '<span class="task-label-pill" style="' +
+      labelPillStyle(label.color, "#DCE8FF") +
+      '">' +
+      escHtml(name) +
+      "</span>";
   }
 
   $card.attr("data-label-ids", ids.join(","));

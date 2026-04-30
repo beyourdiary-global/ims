@@ -11,7 +11,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     include_once '../include/connection.php';
     include_once ROOT . '/include/common.php';
     include_once ROOT . '/include/common_variable.php';
-    include_once '../common_task.php';
+    include_once './common_task.php';
 
     if (empty($_SESSION['csrf_token'])) {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -31,12 +31,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     }
 
     $currentUserId = (int) USER_ID;
+    $currentProjectId = taskResolveCurrentProjectId($connect, 0);
+    if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $currentPagePin)) {
+        header('Content-Type: application/json');
+        echo json_encode(array('ok' => 0, 'message' => 'You do not have access to this project sheets.'));
+        exit;
+    }
     $taskAction    = trim((string) $_POST['task_action']);
     $safeUserName  = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
 
     if ($taskAction === 'sheets_get_data') {
-        $items = taskGetAllItemsFlat($connect);
-        $itemsByColumn = taskGetItemsGroupedByColumn($connect);
+        $items = taskGetAllItemsFlat($connect, $currentProjectId);
+        $itemsByColumn = taskGetItemsGroupedByColumn($connect, $currentProjectId);
         header('Content-Type: application/json');
         echo json_encode(array('ok' => 1, 'items' => $items, 'itemsByColumn' => $itemsByColumn));
         exit;
@@ -72,14 +78,101 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         );
 
         // Capture previous columns before saving
-        $prevCols = taskGetSheetsColumns($connect, $currentUserId);
+        $prevCols = taskGetSheetsColumns($connect, $currentUserId, $currentProjectId);
         $prevKeys = array_column($prevCols, 'column_key');
 
         $columnsJson = isset($_POST['columns_json']) ? $_POST['columns_json'] : '[]';
-        $newCols     = taskSaveSheetsColumns($connect, $currentUserId, $columnsJson);
-        $newKeys     = array_column($newCols, 'column_key');
+        $requestedCols = json_decode($columnsJson, true);
+        if (!is_array($requestedCols)) {
+            header('Content-Type: application/json');
+            echo json_encode(array('ok' => 0, 'message' => 'Invalid columns data.'));
+            exit;
+        }
+
+        $allowedFieldMap = taskGetProjectAccessFieldKeyMap();
+        $isProjectOwner = taskIsProjectOwner($connect, $currentProjectId, $currentUserId);
+        $normalizedRequestedCols = array();
+        foreach ($requestedCols as $idx => $col) {
+            $columnKey = isset($col['column_key']) ? strtolower(trim((string) $col['column_key'])) : '';
+            if ($columnKey === '' || !isset($allowedFieldMap[$columnKey])) {
+                header('Content-Type: application/json');
+                echo json_encode(array('ok' => 0, 'message' => 'Invalid sheets column selection.'));
+                exit;
+            }
+            $normalizedRequestedCols[] = array(
+                'column_key' => $columnKey,
+                'sort_order' => isset($col['sort_order']) ? (int) $col['sort_order'] : $idx,
+            );
+        }
+        $columnsJson = json_encode($normalizedRequestedCols);
+        $requestedKeys = array_column($normalizedRequestedCols, 'column_key');
 
         $prevKeyCounts = array_count_values($prevKeys);
+        $requestedKeyCounts  = array_count_values($requestedKeys);
+        $allKeySet     = array_unique(array_merge(array_keys($prevKeyCounts), array_keys($requestedKeyCounts)));
+
+        $hasAdditions = false;
+        $hasRemovals = false;
+        foreach ($allKeySet as $key) {
+            $before = isset($prevKeyCounts[$key]) ? (int) $prevKeyCounts[$key] : 0;
+            $after  = isset($requestedKeyCounts[$key]) ? (int) $requestedKeyCounts[$key] : 0;
+            if ($after > $before) {
+                $hasAdditions = true;
+            } elseif ($after < $before) {
+                $hasRemovals = true;
+            }
+        }
+
+        if ($hasAdditions && !taskUserCanColumnAction($connect, $currentProjectId, 'add')) {
+            header('Content-Type: application/json');
+            echo json_encode(array('ok' => 0, 'message' => 'You do not have permission to add sheets columns in this project.'));
+            exit;
+        }
+        if ($hasAdditions && !$isProjectOwner) {
+            foreach ($requestedKeys as $columnKey) {
+                $before = isset($prevKeyCounts[$columnKey]) ? (int) $prevKeyCounts[$columnKey] : 0;
+                $after = isset($requestedKeyCounts[$columnKey]) ? (int) $requestedKeyCounts[$columnKey] : 0;
+                if ($after > $before && !taskUserCanColumnFieldAction($connect, $currentProjectId, $columnKey, 'add', $currentUserId)) {
+                    header('Content-Type: application/json');
+                    echo json_encode(array('ok' => 0, 'message' => 'You do not have access to add the selected column field.'));
+                    exit;
+                }
+            }
+        }
+        if ($hasRemovals && !taskUserCanColumnAction($connect, $currentProjectId, 'delete')) {
+            header('Content-Type: application/json');
+            echo json_encode(array('ok' => 0, 'message' => 'You do not have permission to remove sheets columns in this project.'));
+            exit;
+        }
+        if ($hasRemovals && !$isProjectOwner) {
+            foreach ($prevKeys as $columnKey) {
+                $before = isset($prevKeyCounts[$columnKey]) ? (int) $prevKeyCounts[$columnKey] : 0;
+                $after = isset($requestedKeyCounts[$columnKey]) ? (int) $requestedKeyCounts[$columnKey] : 0;
+                if ($after < $before && !taskUserCanColumnFieldAction($connect, $currentProjectId, $columnKey, 'delete', $currentUserId)) {
+                    header('Content-Type: application/json');
+                    echo json_encode(array('ok' => 0, 'message' => 'You do not have access to remove the selected column field.'));
+                    exit;
+                }
+            }
+        }
+        if (!$hasAdditions && !$hasRemovals && implode(',', $prevKeys) !== implode(',', $requestedKeys) && !taskUserCanColumnAction($connect, $currentProjectId, 'edit')) {
+            header('Content-Type: application/json');
+            echo json_encode(array('ok' => 0, 'message' => 'You do not have permission to reorder sheets columns in this project.'));
+            exit;
+        }
+        if (!$hasAdditions && !$hasRemovals && implode(',', $prevKeys) !== implode(',', $requestedKeys) && !$isProjectOwner) {
+            foreach (array_unique($requestedKeys) as $columnKey) {
+                if (!taskUserCanColumnFieldAction($connect, $currentProjectId, $columnKey, 'edit', $currentUserId)) {
+                    header('Content-Type: application/json');
+                    echo json_encode(array('ok' => 0, 'message' => 'You do not have access to edit the selected column field.'));
+                    exit;
+                }
+            }
+        }
+
+        $newCols     = taskSaveSheetsColumns($connect, $currentUserId, $currentProjectId, $columnsJson);
+        $newKeys     = array_column($newCols, 'column_key');
+
         $newKeyCounts  = array_count_values($newKeys);
         $allKeySet     = array_unique(array_merge(array_keys($prevKeyCounts), array_keys($newKeyCounts)));
 
@@ -166,7 +259,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
-include_once '../common_task.php';
+include_once './common_task.php';
 include_once './board_item_history.php';
 
 $pinAccess = taskGetPinAccessByGroupId($connect, $currentPagePin);
@@ -176,7 +269,18 @@ if (!taskIsActionAllowed('view', $pinAccess)) {
 }
 
 $currentUserId = USER_ID;
-taskEnsureDefaultWorkTypes($connect, $currentUserId, $cdate, $ctime);
+$currentProjectId = taskResolveCurrentProjectId($connect, 0);
+$currentProject = $currentProjectId > 0 ? taskGetProjectById($connect, $currentProjectId) : array();
+if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $currentPagePin)) {
+    echo "<script>alert('You do not have access to this project sheets.'); location.replace('../dashboard.php');</script>";
+    exit;
+}
+$taskParentTitle = !empty($currentProject) && isset($currentProject['name']) && trim((string) $currentProject['name']) !== ''
+    ? (string) $currentProject['name']
+    : 'Task Management';
+if ($currentProjectId > 0) {
+    taskEnsureDefaultWorkTypes($connect, $currentProjectId, $currentUserId, $cdate, $ctime);
+}
 
 $safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
 $safePageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
@@ -195,18 +299,36 @@ if (function_exists('audit_log')) {
     audit_log($log);
 }
 
-$canEdit = taskIsActionAllowed('edit', $pinAccess);
-$canAdd = taskIsActionAllowed('add', $pinAccess);
-$workTypes = taskGetWorkTypes($connect);
+$canEdit = taskIsActionAllowed('edit', $pinAccess) && taskUserCanColumnAction($connect, $currentProjectId, 'edit');
+$canAdd = taskIsActionAllowed('add', $pinAccess) && taskUserCanColumnAction($connect, $currentProjectId, 'add');
+$boardPinAccess = taskGetPinAccessByGroupId($connect, 136);
+$workItemCanAdd = taskIsActionAllowed('add', $boardPinAccess) && taskUserCanWorkItemAction($connect, $currentProjectId, 'add');
+$workItemCanEdit = taskIsActionAllowed('edit', $boardPinAccess) && taskUserCanWorkItemAction($connect, $currentProjectId, 'edit');
+$workItemCanDelete = taskIsActionAllowed('delete', $boardPinAccess) && taskUserCanWorkItemAction($connect, $currentProjectId, 'delete');
+$isProjectOwner = taskIsProjectOwner($connect, $currentProjectId, $currentUserId);
+$hasFullProjectAccess = taskUserHasFullProjectTaskAccess($connect, $currentProjectId, $currentUserId);
+$allowedWorkTypeIds = taskUserAllowedWorkTypeIds($connect, $currentProjectId, $currentUserId);
+$allowedStatusIds = taskUserAllowedStatusIds($connect, $currentProjectId, $currentUserId);
+$columnPermissions = taskGetProjectColumnAccessMap($connect, $currentProjectId, $currentUserId);
+$workTypes = taskGetWorkTypes($connect, $currentProjectId);
 $workTypeIcons = taskGetSvgIconOptions();
-$projectKeySetting = taskGetProjectKeySetting($connect);
+$projectKeySetting = taskGetProjectKeySetting($connect, $currentProjectId);
 $assignees = taskGetAssignees($connect);
 $labels = taskGetLabels($connect);
 $statusLabels = taskGetStatusLabels($connect);
-$columns = taskGetColumns($connect);
-$allItems = taskGetAllItemsFlat($connect);
-$itemsByColumn = taskGetItemsGroupedByColumn($connect);
-$sheetsColumns = taskGetSheetsColumns($connect, $currentUserId);
+$columns = taskGetColumns($connect, $currentProjectId);
+$allItems = taskGetAllItemsFlat($connect, $currentProjectId);
+$itemsByColumn = taskGetItemsGroupedByColumn($connect, $currentProjectId);
+$sheetsColumns = taskGetSheetsColumns($connect, $currentUserId, $currentProjectId);
+
+if (!$hasFullProjectAccess) {
+    $workTypes = array_values(array_filter($workTypes, function ($workType) use ($allowedWorkTypeIds) {
+        return isset($workType['id']) && in_array((int) $workType['id'], $allowedWorkTypeIds, true);
+    }));
+    $columns = array_values(array_filter($columns, function ($column) use ($allowedStatusIds) {
+        return isset($column['id']) && in_array((int) $column['id'], $allowedStatusIds, true);
+    }));
+}
 
 // Work types for JS (keep svg_icon as file path for <img> rendering)
 $workTypesForJs = array();
@@ -247,7 +369,7 @@ if (empty($_SESSION['csrf_token'])) {
         <section id="taskModuleLayout" class="task-module-layout task-sidebar-open">
             <aside class="task-module-sidebar" id="taskModuleSidebar">
                 <h5 class="mb-2">Task Management</h5>
-                <?php taskRenderSidebarMenu($SITEURL, 'sheets'); ?>
+                <?php taskRenderSidebarMenu($connect, $SITEURL, 'sheets', $currentProjectId); ?>
             </aside>
 
             <div id="taskSidebarBackdrop" class="task-sidebar-backdrop"></div>
@@ -301,31 +423,46 @@ if (empty($_SESSION['csrf_token'])) {
 </div>
 
 <?php include_once './board_item_detail_modal.php'; ?>
+<?php taskRenderCreateProjectModal(); ?>
 
 <div id="taskBoardToastHost" class="task-board-toast-host" aria-live="polite" aria-atomic="true"></div>
 
 <script>
 window.taskBoardConfig = {
-    ajaxUrl: 'board.php',
+    ajaxUrl: <?= json_encode('board.php' . ($currentProjectId > 0 ? '?project_id=' . $currentProjectId : ''), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     siteUrl: <?= json_encode(rtrim((string) $SITEURL, '/'), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     csrfToken: <?= json_encode($_SESSION['csrf_token'], JSON_UNESCAPED_UNICODE) ?>,
     currentUserId: <?= json_encode($currentUserId, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
-    canAdd: <?= $canAdd ? 'true' : 'false' ?>,
-    canEdit: <?= $canEdit ? 'true' : 'false' ?>,
+    currentProjectId: <?= (int) $currentProjectId ?>,
+    canAdd: <?= $workItemCanAdd ? 'true' : 'false' ?>,
+    canEdit: <?= $workItemCanEdit ? 'true' : 'false' ?>,
+    canDelete: <?= $workItemCanDelete ? 'true' : 'false' ?>,
+    isProjectOwner: <?= $isProjectOwner ? 'true' : 'false' ?>,
     projectKey: <?= json_encode($projectKeySetting, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    currentProject: <?= json_encode($currentProject, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    allowedWorkTypeIds: <?= json_encode(array_values($allowedWorkTypeIds), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    allowedStatusIds: <?= json_encode(array_values($allowedStatusIds), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    columnPermissions: <?= json_encode($columnPermissions, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     workTypes: <?= json_encode($workTypes, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     workTypeIcons: <?= json_encode($workTypeIcons, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     assignees: <?= json_encode($assignees, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     labels: <?= json_encode($labels, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
-    statusLabels: <?= json_encode($statusLabels, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>
+    statusLabels: <?= json_encode($statusLabels, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    columns: <?= json_encode($columns, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>
 };
 
 window.sheetsConfig = {
-    ajaxUrl: 'board.php',
-    sheetsDataAjaxUrl: 'sheets.php',
+    ajaxUrl: <?= json_encode('board.php' . ($currentProjectId > 0 ? '?project_id=' . $currentProjectId : ''), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    sheetsDataAjaxUrl: <?= json_encode('sheets.php' . ($currentProjectId > 0 ? '?project_id=' . $currentProjectId : ''), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     currentUserId: <?= json_encode($currentUserId, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     csrfToken: <?= json_encode($_SESSION['csrf_token'], JSON_UNESCAPED_UNICODE) ?>,
-    canEdit: <?= $canEdit ? 'true' : 'false' ?>,
+    canEdit: <?= $workItemCanEdit ? 'true' : 'false' ?>,
+    canAdd: <?= $canAdd ? 'true' : 'false' ?>,
+    currentProjectId: <?= (int) $currentProjectId ?>,
+    isProjectOwner: <?= $isProjectOwner ? 'true' : 'false' ?>,
+    allowedWorkTypeIds: <?= json_encode(array_values($allowedWorkTypeIds), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    allowedStatusIds: <?= json_encode(array_values($allowedStatusIds), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    columnPermissions: <?= json_encode($columnPermissions, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     projectKey: <?= json_encode($projectKeySetting, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     workTypes: <?= json_encode($workTypesForJs, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     assignees: <?= json_encode($assignees, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
@@ -335,7 +472,7 @@ window.sheetsConfig = {
     items: <?= json_encode($allItems, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     itemsByColumn: <?= json_encode($itemsByColumn, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     sheetsColumns: <?= json_encode($sheetsColumns, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
-    sheetsColumnAjaxUrl: 'sheets.php'
+    sheetsColumnAjaxUrl: <?= json_encode('sheets.php' . ($currentProjectId > 0 ? '?project_id=' . $currentProjectId : ''), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>
 };
 </script>
 <script src="../js/task_board_core.js"></script>

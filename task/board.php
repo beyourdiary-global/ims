@@ -30,7 +30,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     include_once '../include/connection.php';
     include_once ROOT . '/include/common.php';
     include_once ROOT . '/include/common_variable.php';
-    include_once '../common_task.php';
+    include_once './common_task.php';
 
     $pinAccess = taskGetPinAccessByGroupId($connect, $currentPagePin);
     if (!taskIsActionAllowed('view', $pinAccess)) {
@@ -49,18 +49,153 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     }
 
     $currentUserId = USER_ID;
-    taskEnsureDefaultWorkTypes($connect, $currentUserId, $cdate, $ctime);
-
+    $currentProjectId = taskResolveCurrentProjectId($connect, 0);
+    if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $currentPagePin)) {
+        taskJsonResponse(array('ok' => 0, 'message' => 'You do not have access to this project board.'));
+    }
+    if ($currentProjectId > 0) {
+        taskEnsureDefaultWorkTypes($connect, $currentProjectId, $currentUserId, $cdate, $ctime);
+    }
     $taskAction = isset($_POST['task_action']) ? trim((string) $_POST['task_action']) : '';
     $safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
     $safePageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
+
+    if ($taskAction === 'create_project') {
+        if (!taskCanCreateProject($connect)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to create project task.'));
+        }
+
+        $result = taskCreateProject(
+            $connect,
+            isset($_POST['project_name']) ? $_POST['project_name'] : '',
+            $currentUserId,
+            $cdate,
+            $ctime
+        );
+        taskJsonResponse($result);
+    }
+
+    $projectOwnerManageAccess = taskCanEditProjectSettings($connect, $currentProjectId);
+    $projectWorkItemCanAdd = taskUserCanWorkItemAction($connect, $currentProjectId, 'add');
+    $projectWorkItemCanEdit = taskUserCanWorkItemAction($connect, $currentProjectId, 'edit');
+    $projectWorkItemCanDelete = taskUserCanWorkItemAction($connect, $currentProjectId, 'delete');
+    $projectAllowedWorkTypeIds = taskUserAllowedWorkTypeIds($connect, $currentProjectId);
+    $projectAllowedStatusIds = taskUserAllowedStatusIds($connect, $currentProjectId);
+    $projectIsOwner = taskIsProjectOwner($connect, $currentProjectId, $currentUserId);
+    $projectHasFullAccess = taskUserHasFullProjectTaskAccess($connect, $currentProjectId, $currentUserId);
+    $projectColumnPermissions = taskGetProjectColumnAccessMap($connect, $currentProjectId, $currentUserId);
+
+    $loadItemDetailForPermission = function ($itemId) use ($connect) {
+        $detailResult = taskGetItemDetail($connect, $itemId);
+        if (empty($detailResult['ok']) || empty($detailResult['detail']) || !is_array($detailResult['detail'])) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'Work item not found.'));
+        }
+
+        return $detailResult['detail'];
+    };
+
+    $requireColumnTransition = function ($columnKey, $oldValue, $newValue) use ($connect, $currentProjectId, $currentUserId) {
+        $permissionResult = taskValidateProjectColumnFieldTransition(
+            $connect,
+            $currentProjectId,
+            $columnKey,
+            $oldValue,
+            $newValue,
+            $currentUserId
+        );
+
+        if (empty($permissionResult['ok'])) {
+            taskJsonResponse(array(
+                'ok' => 0,
+                'message' => isset($permissionResult['message']) ? (string) $permissionResult['message'] : 'You do not have permission to update this field.',
+            ));
+        }
+    };
+
+    $ownerOnlyActions = array(
+        'create_column',
+        'create_status',
+        'rename_status',
+        'move_status',
+        'delete_status',
+        'create_work_type',
+        'update_work_type',
+        'save_project_key',
+        'delete_status_label',
+        'create_status_label',
+        'create_label',
+        'delete_label',
+    );
+    if (in_array($taskAction, $ownerOnlyActions, true) && !$projectOwnerManageAccess) {
+        taskJsonResponse(array('ok' => 0, 'message' => 'Only the project owner can manage this project setting.'));
+    }
+
+    $editItemActions = array(
+        'set_item_assignee',
+        'set_item_work_type',
+        'update_item_core',
+        'create_item_comment',
+        'create_item_comment_reply',
+        'update_item_comment',
+        'update_item_comment_reply',
+        'delete_item_comment',
+        'delete_item_comment_reply',
+        'upload_item_comment_attachment',
+        'upload_item_description_attachment',
+        'upload_item_reply_attachment',
+        'update_item_detail',
+        'save_item_worklog',
+        'set_item_parent',
+        'create_item_web_link',
+        'delete_item_web_link',
+        'upload_item_attachment',
+        'delete_item_attachment',
+        'delete_all_item_attachments',
+        'set_item_labels',
+    );
+    if (in_array($taskAction, $editItemActions, true) && !$projectWorkItemCanEdit) {
+        taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to edit work items in this project.'));
+    }
+
+    if ($taskAction === 'create_item' && !$projectWorkItemCanAdd) {
+        taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to create work items in this project.'));
+    }
+
+    if ($taskAction === 'delete_item' && !$projectWorkItemCanDelete) {
+        taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to delete work items in this project.'));
+    }
+
+    if ($taskAction === 'set_item_work_type' && !$projectHasFullAccess) {
+        $targetWorkTypeId = isset($_POST['work_type_id']) ? (int) $_POST['work_type_id'] : 0;
+        if ($targetWorkTypeId <= 0 || empty($projectAllowedWorkTypeIds) || !in_array($targetWorkTypeId, $projectAllowedWorkTypeIds, true)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have access to this task type in the current project.'));
+        }
+    }
+
+    if (($taskAction === 'change_item_status' || $taskAction === 'move_item_drop') && !$projectHasFullAccess) {
+        $targetColumnId = isset($_POST['target_column_id']) ? (int) $_POST['target_column_id'] : 0;
+        if ($targetColumnId <= 0 || empty($projectAllowedStatusIds) || !in_array($targetColumnId, $projectAllowedStatusIds, true)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have access to move work items into that status.'));
+        }
+    }
+
+    if ($taskAction === 'create_item' && !$projectHasFullAccess) {
+        $targetColumnId = isset($_POST['column_id']) ? (int) $_POST['column_id'] : 0;
+        $targetWorkTypeId = isset($_POST['work_type_id']) ? (int) $_POST['work_type_id'] : 0;
+        if ($targetColumnId <= 0 || empty($projectAllowedStatusIds) || !in_array($targetColumnId, $projectAllowedStatusIds, true)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have access to create work items in that status.'));
+        }
+        if ($targetWorkTypeId <= 0 || empty($projectAllowedWorkTypeIds) || !in_array($targetWorkTypeId, $projectAllowedWorkTypeIds, true)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have access to use that task type in this project.'));
+        }
+    }
 
     if ($taskAction === 'create_column' || $taskAction === 'create_status') {
         if (!taskIsActionAllowed('add', $pinAccess)) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to create statuses.'));
         }
 
-        $result = taskCreateColumn($connect, isset($_POST['column_name']) ? $_POST['column_name'] : '', $currentUserId, $cdate, $ctime);
+        $result = taskCreateColumn($connect, $currentProjectId, isset($_POST['column_name']) ? $_POST['column_name'] : '', $currentUserId, $cdate, $ctime);
         if (!empty($result['ok'])) {
             $statusName = isset($result['column']['name']) ? htmlspecialchars((string) $result['column']['name'], ENT_QUOTES, 'UTF-8') : '';
             $viewActMsg = $safeUserName . " added new status <b>" . $statusName . "</b> on <b>" . $safePageTitle . "</b>.";
@@ -76,6 +211,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskRenameColumn(
             $connect,
+            $currentProjectId,
             isset($_POST['column_id']) ? (int) $_POST['column_id'] : 0,
             isset($_POST['column_name']) ? $_POST['column_name'] : '',
             $currentUserId,
@@ -97,6 +233,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskMoveColumn(
             $connect,
+            $currentProjectId,
             isset($_POST['column_id']) ? (int) $_POST['column_id'] : 0,
             isset($_POST['direction']) ? $_POST['direction'] : ''
         );
@@ -110,6 +247,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskDeleteColumn(
             $connect,
+            $currentProjectId,
             isset($_POST['column_id']) ? (int) $_POST['column_id'] : 0,
             $currentUserId,
             $cdate,
@@ -130,6 +268,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskCreateWorkType(
             $connect,
+            $currentProjectId,
             isset($_POST['work_type_name']) ? $_POST['work_type_name'] : '',
             isset($_POST['work_type_remark']) ? $_POST['work_type_remark'] : '',
             isset($_POST['work_type_svg_icon']) ? $_POST['work_type_svg_icon'] : '',
@@ -138,7 +277,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             $ctime
         );
         if (!empty($result['ok'])) {
-            $result['workTypes'] = taskGetWorkTypes($connect);
+            $result['workTypes'] = taskGetWorkTypes($connect, $currentProjectId);
         }
         taskJsonResponse($result);
     }
@@ -150,6 +289,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskUpdateWorkType(
             $connect,
+            $currentProjectId,
             isset($_POST['work_type_id']) ? (int) $_POST['work_type_id'] : 0,
             isset($_POST['work_type_name']) ? $_POST['work_type_name'] : '',
             isset($_POST['work_type_remark']) ? $_POST['work_type_remark'] : '',
@@ -160,7 +300,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         );
 
         if (!empty($result['ok'])) {
-            $result['workTypes'] = taskGetWorkTypes($connect);
+            $result['workTypes'] = taskGetWorkTypes($connect, $currentProjectId);
         }
         taskJsonResponse($result);
     }
@@ -172,6 +312,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskCreateItem(
             $connect,
+            $currentProjectId,
             isset($_POST['column_id']) ? (int) $_POST['column_id'] : 0,
             isset($_POST['title']) ? $_POST['title'] : '',
             isset($_POST['work_type_id']) ? (int) $_POST['work_type_id'] : 0,
@@ -236,10 +377,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to set assignee.'));
         }
 
+        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $detail = $loadItemDetailForPermission($itemId);
+        $assigneeUserId = isset($_POST['assignee_user_id']) ? (int) $_POST['assignee_user_id'] : 0;
+        $requireColumnTransition('assignee_name', isset($detail['assignee_user_id']) ? (int) $detail['assignee_user_id'] : 0, $assigneeUserId);
+
         $result = taskSetItemAssignee(
             $connect,
-            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
-            isset($_POST['assignee_user_id']) ? (int) $_POST['assignee_user_id'] : 0,
+            $itemId,
+            $assigneeUserId,
             $currentUserId,
             $cdate,
             $ctime
@@ -270,6 +416,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskSaveProjectKeySetting(
             $connect,
+            $currentProjectId,
             isset($_POST['project_key']) ? $_POST['project_key'] : '',
             $currentUserId,
             $cdate,
@@ -609,21 +756,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to update work item details.'));
         }
 
+        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $detail = $loadItemDetailForPermission($itemId);
+        $assigneeUserId = isset($_POST['assignee_user_id']) ? (int) $_POST['assignee_user_id'] : 0;
+        $reporterUserId = isset($_POST['reporter_user_id']) ? (int) $_POST['reporter_user_id'] : 0;
+        $priority = isset($_POST['priority']) ? $_POST['priority'] : 'Medium';
+        $originalEstimateValue = isset($_POST['original_estimate_value']) ? (int) $_POST['original_estimate_value'] : 0;
+        $originalEstimateUnit = isset($_POST['original_estimate_unit']) ? $_POST['original_estimate_unit'] : 'minutes';
+        $taskStatusLabelIds = isset($_POST['task_status_label_ids']) ? $_POST['task_status_label_ids'] : '';
+        $startDate = isset($_POST['start_date']) ? $_POST['start_date'] : '';
+        $dueDate = isset($_POST['due_date']) ? $_POST['due_date'] : '';
+        $amendementDate = isset($_POST['amendement_date']) ? $_POST['amendement_date'] : '';
+        $amendementTimeMinutes = isset($_POST['amendement_time_minutes']) ? (int) $_POST['amendement_time_minutes'] : 0;
+        $secondAmendementDate = isset($_POST['second_amendement_date']) ? $_POST['second_amendement_date'] : '';
+        $secondAmendementTimeMinutes = isset($_POST['second_amendement_time_minutes']) ? (int) $_POST['second_amendement_time_minutes'] : 0;
+
+        $requireColumnTransition('assignee_name', isset($detail['assignee_user_id']) ? (int) $detail['assignee_user_id'] : 0, $assigneeUserId);
+        $requireColumnTransition('reporter_name', isset($detail['reporter_user_id']) ? (int) $detail['reporter_user_id'] : 0, $reporterUserId);
+        $requireColumnTransition(
+            'priority',
+            isset($detail['priority']) ? (string) $detail['priority'] : '',
+            taskNormalizePriority($priority)
+        );
+        $requireColumnTransition(
+            'original_estimate',
+            array(
+                'value' => isset($detail['original_estimate_value']) ? (int) $detail['original_estimate_value'] : 0,
+                'unit' => isset($detail['original_estimate_unit']) ? (string) $detail['original_estimate_unit'] : 'minutes',
+            ),
+            array(
+                'value' => $originalEstimateValue,
+                'unit' => $originalEstimateUnit,
+            )
+        );
+        $requireColumnTransition(
+            'task_status',
+            isset($detail['task_status_label_ids']) ? (array) $detail['task_status_label_ids'] : array(),
+            $taskStatusLabelIds
+        );
+        $requireColumnTransition('start_date', isset($detail['start_date']) ? (string) $detail['start_date'] : '', $startDate);
+        $requireColumnTransition('due_date', isset($detail['due_date']) ? (string) $detail['due_date'] : '', $dueDate);
+        $requireColumnTransition('amendement_date', isset($detail['amendement_date']) ? (string) $detail['amendement_date'] : '', $amendementDate);
+        $requireColumnTransition(
+            'amendement_time_minutes',
+            isset($detail['amendement_time_minutes']) ? (int) $detail['amendement_time_minutes'] : 0,
+            $amendementTimeMinutes
+        );
+        $requireColumnTransition(
+            'second_amendement_date',
+            isset($detail['second_amendement_date']) ? (string) $detail['second_amendement_date'] : '',
+            $secondAmendementDate
+        );
+        $requireColumnTransition(
+            'second_amendement_time_minutes',
+            isset($detail['second_amendement_time_minutes']) ? (int) $detail['second_amendement_time_minutes'] : 0,
+            $secondAmendementTimeMinutes
+        );
+
         $result = taskUpdateItemDetail(
             $connect,
-            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
-            isset($_POST['assignee_user_id']) ? (int) $_POST['assignee_user_id'] : 0,
-            isset($_POST['reporter_user_id']) ? (int) $_POST['reporter_user_id'] : 0,
-            isset($_POST['priority']) ? $_POST['priority'] : 'Medium',
-            isset($_POST['original_estimate_value']) ? (int) $_POST['original_estimate_value'] : 0,
-            isset($_POST['original_estimate_unit']) ? $_POST['original_estimate_unit'] : 'minutes',
-            isset($_POST['task_status_label_ids']) ? $_POST['task_status_label_ids'] : '',
-            isset($_POST['start_date']) ? $_POST['start_date'] : '',
-            isset($_POST['due_date']) ? $_POST['due_date'] : '',
-            isset($_POST['amendement_date']) ? $_POST['amendement_date'] : '',
-            isset($_POST['amendement_time_minutes']) ? (int) $_POST['amendement_time_minutes'] : 0,
-            isset($_POST['second_amendement_date']) ? $_POST['second_amendement_date'] : '',
-            isset($_POST['second_amendement_time_minutes']) ? (int) $_POST['second_amendement_time_minutes'] : 0,
+            $itemId,
+            $assigneeUserId,
+            $reporterUserId,
+            $priority,
+            $originalEstimateValue,
+            $originalEstimateUnit,
+            $taskStatusLabelIds,
+            $startDate,
+            $dueDate,
+            $amendementDate,
+            $amendementTimeMinutes,
+            $secondAmendementDate,
+            $secondAmendementTimeMinutes,
             $currentUserId,
             $cdate,
             $ctime
@@ -637,10 +841,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to save worklog.'));
         }
 
+        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $detail = $loadItemDetailForPermission($itemId);
+        $durationSeconds = isset($_POST['duration_seconds']) ? (int) $_POST['duration_seconds'] : 0;
+        $oldSeconds = isset($detail['own_time_tracking_seconds']) ? (int) $detail['own_time_tracking_seconds'] : 0;
+        $requireColumnTransition('time_tracking', $oldSeconds, max(0, $oldSeconds + $durationSeconds));
+
         $result = taskSaveItemWorklog(
             $connect,
-            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
-            isset($_POST['duration_seconds']) ? (int) $_POST['duration_seconds'] : 0,
+            $itemId,
+            $durationSeconds,
             $currentUserId,
             $cdate,
             $ctime
@@ -656,6 +866,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
         $parentItemId = isset($_POST['parent_item_id']) ? (int) $_POST['parent_item_id'] : 0;
+        $detail = $loadItemDetailForPermission($itemId);
+        $requireColumnTransition('parent_display', isset($detail['parent_item_id']) ? (int) $detail['parent_item_id'] : 0, $parentItemId);
 
         try {
             $result = taskSetItemParentRelation(
@@ -720,7 +932,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     }
 
     if ($taskAction === 'delete_status_label') {
-        if (!taskIsActionAllowed('edit', $pinAccess)) {
+        if (!taskIsActionAllowed('edit', $pinAccess) || !taskIsProjectOwner($connect, $currentProjectId, $currentUserId)) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to delete task status labels.'));
         }
 
@@ -740,7 +952,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     }
 
     if ($taskAction === 'create_status_label') {
-        if (!taskIsActionAllowed('edit', $pinAccess)) {
+        if (!taskIsActionAllowed('edit', $pinAccess) || !taskIsProjectOwner($connect, $currentProjectId, $currentUserId)) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to create task status labels.'));
         }
 
@@ -873,7 +1085,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     }
 
     if ($taskAction === 'create_label') {
-        if (!taskIsActionAllowed('edit', $pinAccess)) {
+        if (!taskIsActionAllowed('edit', $pinAccess) || !taskIsProjectOwner($connect, $currentProjectId, $currentUserId)) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to create labels.'));
         }
 
@@ -893,7 +1105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     }
 
     if ($taskAction === 'delete_label') {
-        if (!taskIsActionAllowed('edit', $pinAccess)) {
+        if (!taskIsActionAllowed('edit', $pinAccess) || !taskIsProjectOwner($connect, $currentProjectId, $currentUserId)) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to delete labels.'));
         }
 
@@ -917,6 +1129,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to set labels.'));
         }
 
+        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $detail = $loadItemDetailForPermission($itemId);
         $labelIdsCsv = isset($_POST['label_ids']) ? trim((string) $_POST['label_ids']) : '';
         $labelIds = array();
         if ($labelIdsCsv !== '') {
@@ -927,10 +1141,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
                 }
             }
         }
+        $requireColumnTransition('labels', isset($detail['labels']) ? array_column((array) $detail['labels'], 'id') : array(), $labelIds);
 
         $result = taskAssignItemLabels(
             $connect,
-            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
+            $itemId,
             $labelIds,
             $currentUserId,
             $cdate,
@@ -964,7 +1179,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
-include_once '../common_task.php';
+include_once './common_task.php';
 include_once './board_item_history.php';
 
 $pageTitle = 'Board';
@@ -981,18 +1196,41 @@ $viewActMsg = $safeUserName . ' viewed the page ' . $safePageTitle . '.';
 taskBoardAuditLog($connect, $pageTitle, 'View', $viewActMsg, $cdate, $ctime);
 
 $currentUserId = USER_ID;
-taskEnsureDefaultWorkTypes($connect, $currentUserId, $cdate, $ctime);
+$currentProjectId = taskResolveCurrentProjectId($connect, 0);
+$currentProject = $currentProjectId > 0 ? taskGetProjectById($connect, $currentProjectId) : array();
+if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $currentPagePin)) {
+    echo "<script>alert('You do not have access to this project board.'); location.replace('../dashboard.php');</script>";
+    exit;
+}
+$taskParentTitle = !empty($currentProject) && isset($currentProject['name']) && trim((string) $currentProject['name']) !== ''
+    ? (string) $currentProject['name']
+    : 'Task Management';
+if ($currentProjectId > 0) {
+    taskEnsureDefaultWorkTypes($connect, $currentProjectId, $currentUserId, $cdate, $ctime);
+}
 
-$canAdd = taskIsActionAllowed('add', $pinAccess);
-$canEdit = taskIsActionAllowed('edit', $pinAccess);
-$workTypes = taskGetWorkTypes($connect);
+$canAdd = taskIsActionAllowed('add', $pinAccess) && taskUserCanWorkItemAction($connect, $currentProjectId, 'add');
+$canEdit = taskIsActionAllowed('edit', $pinAccess) && taskUserCanWorkItemAction($connect, $currentProjectId, 'edit');
+$canDelete = taskIsActionAllowed('delete', $pinAccess) && taskUserCanWorkItemAction($connect, $currentProjectId, 'delete');
+$isProjectOwner = taskIsProjectOwner($connect, $currentProjectId, $currentUserId);
+$hasFullProjectAccess = taskUserHasFullProjectTaskAccess($connect, $currentProjectId, $currentUserId);
+$allowedWorkTypeIds = taskUserAllowedWorkTypeIds($connect, $currentProjectId, $currentUserId);
+$allowedStatusIds = taskUserAllowedStatusIds($connect, $currentProjectId, $currentUserId);
+$columnPermissions = taskGetProjectColumnAccessMap($connect, $currentProjectId, $currentUserId);
+$workTypes = taskGetWorkTypes($connect, $currentProjectId);
+if (!$hasFullProjectAccess) {
+    $workTypes = array_values(array_filter($workTypes, function ($workType) use ($allowedWorkTypeIds) {
+        return isset($workType['id']) && in_array((int) $workType['id'], $allowedWorkTypeIds, true);
+    }));
+}
 $workTypeIcons = taskGetSvgIconOptions();
-$projectKeySetting = taskGetProjectKeySetting($connect);
+$projectKeySetting = taskGetProjectKeySetting($connect, $currentProjectId);
 $assignees = taskGetAssignees($connect);
 $labels = taskGetLabels($connect);
 $statusLabels = taskGetStatusLabels($connect);
-$columns = taskGetColumns($connect);
-$itemsByColumn = taskGetItemsGroupedByColumn($connect);
+$columns = taskGetColumns($connect, $currentProjectId);
+$itemsByColumn = taskGetItemsGroupedByColumn($connect, $currentProjectId);
+$projectBoardBackground = isset($currentProject['board_background_color']) ? (string) $currentProject['board_background_color'] : '#f4f7fb';
 ?>
 
 <!DOCTYPE html>
@@ -1001,16 +1239,18 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
     <link rel="stylesheet" href="../css/main.css">
     <link rel="stylesheet" href="../css/task.css">
 </head>
-<body class="task-board-page">
-<div class="container-fluid d-flex justify-content-center mt-3 task-page-wrap">
-    <div class="col-12 col-md-11">
-        <div class="d-flex flex-column mb-2">
-            <div class="row">
-                <p><a href="<?= $SITEURL ?>/dashboard.php">Dashboard</a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?= htmlspecialchars($taskParentTitle, ENT_QUOTES, 'UTF-8') ?> <i class="fa-solid fa-chevron-right fa-xs"></i> <?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></p>
-            </div>
-            <div class="row">
-                <div class="col-12 d-flex justify-content-between flex-wrap align-items-center">
-                    <h2><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></h2>
+<body class="task-board-page" style="--task-project-board-bg: <?= htmlspecialchars($projectBoardBackground, ENT_QUOTES, 'UTF-8') ?>;">
+<div class="container-fluid task-page-wrap px-0">
+    <div class="col-12 px-0">
+        <div class="col-12 col-md-11 mx-auto task-board-page-header">
+            <div class="d-flex flex-column mb-2">
+                <div class="row">
+                    <p><a href="<?= $SITEURL ?>/dashboard.php">Dashboard</a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?= htmlspecialchars($taskParentTitle, ENT_QUOTES, 'UTF-8') ?> <i class="fa-solid fa-chevron-right fa-xs"></i> <?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></p>
+                </div>
+                <div class="row">
+                    <div class="col-12 d-flex justify-content-between flex-wrap align-items-center">
+                        <h2><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></h2>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1018,12 +1258,12 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
         <section id="taskModuleLayout" class="task-module-layout task-sidebar-open">
             <aside class="task-module-sidebar" id="taskModuleSidebar">
                 <h5 class="mb-2">Task Management</h5>
-                <?php taskRenderSidebarMenu($SITEURL, 'board'); ?>
+                <?php taskRenderSidebarMenu($connect, $SITEURL, 'board', $currentProjectId); ?>
             </aside>
 
             <div id="taskSidebarBackdrop" class="task-sidebar-backdrop"></div>
 
-            <div class="task-main-content">
+            <div class="task-main-content" style="background: <?= htmlspecialchars($projectBoardBackground, ENT_QUOTES, 'UTF-8') ?>;">
                 <div class="task-board-toolbar mb-2">
                     <div class="task-board-search-group">
                         <i class="fa-solid fa-magnifying-glass"></i>
@@ -1063,16 +1303,6 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                             <i class="fa-solid fa-sliders"></i>
                         </button>
                         <div id="taskBoardSettingsPanel" class="dropdown-menu dropdown-menu-end task-board-settings-panel p-3">
-                            <div class="task-board-settings-section mb-3">
-                                <label class="form-label mb-1" for="taskProjectKeyInput">Project Key fields</label>
-                                <div class="task-project-key-row">
-                                    <input id="taskProjectKeyInput" type="text" class="form-control form-control-sm" maxlength="20" placeholder="Example: BCS" value="<?= htmlspecialchars(isset($projectKeySetting['project_key']) ? (string) $projectKeySetting['project_key'] : '', ENT_QUOTES, 'UTF-8') ?>">
-                                    <button id="taskProjectKeySaveBtn" class="btn btn-light task-project-key-action-btn" type="button" title="Save project key"><i class="fa-solid fa-check"></i></button>
-                                    <button id="taskProjectKeyClearBtn" class="btn btn-light task-project-key-action-btn" type="button" title="Close project key editor"><i class="fa-solid fa-xmark"></i></button>
-                                </div>
-                            </div>
-                            <div class="task-board-settings-divider"></div>
-                            
                             <h6 class="task-board-settings-section-title mb-2">Fields</h6>
                             <div class="task-board-settings-fields">
                                 <?php
@@ -1117,7 +1347,8 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
                             <?php
                                 $columnId = (int) $column['id'];
                                 $columnItems = isset($itemsByColumn[$columnId]) ? $itemsByColumn[$columnId] : array();
-                                taskRenderBoardColumn($column, $columnItems, $workTypes, $assignees, $canEdit);
+                                $canCreateInColumn = $canAdd && ($hasFullProjectAccess || in_array($columnId, $allowedStatusIds, true));
+                                taskRenderBoardColumn($column, $columnItems, $workTypes, $assignees, $canCreateInColumn, $canEdit, $canDelete, $isProjectOwner);
                             ?>
                         <?php endforeach; ?>
                     </div>
@@ -1212,6 +1443,7 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
 </div>
 
 <?php include_once './board_item_detail_modal.php'; ?>
+<?php taskRenderCreateProjectModal(); ?>
 
 <div id="taskBoardToastHost" class="task-board-toast-host" aria-live="polite" aria-atomic="true"></div>
 
@@ -1223,18 +1455,26 @@ $itemsByColumn = taskGetItemsGroupedByColumn($connect);
     }
 ?>
 window.taskBoardConfig = {
-    ajaxUrl: 'board.php',
+    ajaxUrl: <?= json_encode('board.php' . ($currentProjectId > 0 ? '?project_id=' . $currentProjectId : ''), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     siteUrl: <?= json_encode(rtrim((string) $SITEURL, '/'), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     csrfToken: <?= json_encode($_SESSION['csrf_token'], JSON_UNESCAPED_UNICODE) ?>,
     currentUserId: <?= json_encode($currentUserId, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    currentProjectId: <?= (int) $currentProjectId ?>,
     canAdd: <?= $canAdd ? 'true' : 'false' ?>,
     canEdit: <?= $canEdit ? 'true' : 'false' ?>,
+    canDelete: <?= $canDelete ? 'true' : 'false' ?>,
+    isProjectOwner: <?= $isProjectOwner ? 'true' : 'false' ?>,
     projectKey: <?= json_encode($projectKeySetting, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    currentProject: <?= json_encode($currentProject, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    allowedWorkTypeIds: <?= json_encode(array_values($allowedWorkTypeIds), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    allowedStatusIds: <?= json_encode(array_values($allowedStatusIds), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    columnPermissions: <?= json_encode($columnPermissions, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     workTypes: <?= json_encode($workTypes, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     workTypeIcons: <?= json_encode($workTypeIcons, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     assignees: <?= json_encode($assignees, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     labels: <?= json_encode($labels, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
-    statusLabels: <?= json_encode($statusLabels, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>
+    statusLabels: <?= json_encode($statusLabels, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    columns: <?= json_encode($columns, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>
 };
 </script>
 <script src="../js/task_board_core.js"></script>

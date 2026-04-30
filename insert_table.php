@@ -890,6 +890,57 @@ if (!$conn->select_db($db_fin)) {
 //     return ($rst && $rst->num_rows > 0);
 // }
 
+function migrationTableExists($conn, $dbName, $tableName)
+{
+    $safeDb = $conn->real_escape_string($dbName);
+    $safeTable = $conn->real_escape_string($tableName);
+    $sql = "SELECT 1 FROM information_schema.tables WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' LIMIT 1";
+    $rst = $conn->query($sql);
+    return ($rst && $rst->num_rows > 0);
+}
+
+function migrationColumnExists($conn, $dbName, $tableName, $columnName)
+{
+    $safeDb = $conn->real_escape_string($dbName);
+    $safeTable = $conn->real_escape_string($tableName);
+    $safeColumn = $conn->real_escape_string($columnName);
+    $sql = "SELECT 1 FROM information_schema.columns WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' AND column_name='" . $safeColumn . "' LIMIT 1";
+    $rst = $conn->query($sql);
+    return ($rst && $rst->num_rows > 0);
+}
+
+function migrationIndexExists($conn, $dbName, $tableName, $indexName)
+{
+    $safeDb = $conn->real_escape_string($dbName);
+    $safeTable = $conn->real_escape_string($tableName);
+    $safeIndex = $conn->real_escape_string($indexName);
+    $sql = "SELECT 1 FROM information_schema.statistics WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' AND index_name='" . $safeIndex . "' LIMIT 1";
+    $rst = $conn->query($sql);
+    return ($rst && $rst->num_rows > 0);
+}
+
+function migrationEnsureColumn($conn, $dbName, $tableName, $columnName, $alterSql, $successMessage)
+{
+    if (!migrationColumnExists($conn, $dbName, $tableName, $columnName)) {
+        if ($conn->query($alterSql)) {
+            echo "<p style='color:green;'>" . $successMessage . "</p>";
+        } else {
+            echo "<p style='color:red;'>Failed altering `" . $tableName . "` for column `" . $columnName . "`: " . $conn->error . "</p>";
+        }
+    }
+}
+
+function migrationEnsureIndex($conn, $dbName, $tableName, $indexName, $alterSql, $successMessage)
+{
+    if (!migrationIndexExists($conn, $dbName, $tableName, $indexName)) {
+        if ($conn->query($alterSql)) {
+            echo "<p style='color:green;'>" . $successMessage . "</p>";
+        } else {
+            echo "<p style='color:red;'>Failed altering `" . $tableName . "` for index `" . $indexName . "`: " . $conn->error . "</p>";
+        }
+    }
+}
+
 function removePinAccessIds($pinList, $removeIds = array(7, 8))
 {
     $values = array_filter(array_map('trim', explode(',', (string) $pinList)), 'strlen');
@@ -1121,9 +1172,34 @@ function pinBlockHasAccessId($allPins, $targetPinId, $accessId)
 // }
 
 if ($conn->select_db($db_cms)) {
+    $createTaskProjectSql = "CREATE TABLE IF NOT EXISTS `" . TASK_PROJECT . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `name` VARCHAR(180) NOT NULL,
+        `owner_user_id` INT DEFAULT NULL,
+        `board_background_color` VARCHAR(20) NOT NULL DEFAULT '#f4f7fb',
+        `remark` VARCHAR(255) DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_task_project_owner` (`owner_user_id`),
+        KEY `idx_task_project_name` (`name`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createTaskProjectSql)) {
+        echo "<p style='color:green;'>Verified table `" . TASK_PROJECT . "` for task projects.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . TASK_PROJECT . "`: " . $conn->error . "</p>";
+    }
+
     $createTaskStatusSql = "CREATE TABLE IF NOT EXISTS `" . TASK_COLUMN . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `project_id` INT DEFAULT NULL,
         `name` VARCHAR(150) NOT NULL,
+        `color` VARCHAR(20) NOT NULL DEFAULT '#dfe1e6',
         `sort_order` INT NOT NULL DEFAULT 0,
         `remark` VARCHAR(255) DEFAULT NULL,
         `create_by` VARCHAR(30) DEFAULT NULL,
@@ -1133,7 +1209,8 @@ if ($conn->select_db($db_cms)) {
         `update_date` DATE DEFAULT NULL,
         `update_time` TIME DEFAULT NULL,
         `status` CHAR(1) NOT NULL DEFAULT 'A',
-        KEY `idx_task_status_sort` (`sort_order`)
+        KEY `idx_task_status_sort` (`sort_order`),
+        KEY `idx_task_status_project_sort` (`project_id`, `status`, `sort_order`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
     if ($conn->query($createTaskStatusSql)) {
@@ -1144,6 +1221,7 @@ if ($conn->select_db($db_cms)) {
 
     $createTaskWorkTypeSql = "CREATE TABLE IF NOT EXISTS `" . TASK_WORK_TYPE . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `project_id` INT DEFAULT NULL,
         `name` VARCHAR(80) NOT NULL,
         `svg_icon` VARCHAR(255) DEFAULT NULL,
         `remark` VARCHAR(255) DEFAULT NULL,
@@ -1154,7 +1232,7 @@ if ($conn->select_db($db_cms)) {
         `update_date` DATE DEFAULT NULL,
         `update_time` TIME DEFAULT NULL,
         `status` CHAR(1) NOT NULL DEFAULT 'A',
-        UNIQUE KEY `uniq_task_work_type_name` (`name`)
+        KEY `idx_task_work_type_project` (`project_id`, `status`, `name`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
     if ($conn->query($createTaskWorkTypeSql)) {
@@ -1165,6 +1243,7 @@ if ($conn->select_db($db_cms)) {
 
     $createTaskProjectKeySql = "CREATE TABLE IF NOT EXISTS `" . TASK_PROJECT_KEY . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `project_id` INT DEFAULT NULL,
         `project_key` VARCHAR(20) DEFAULT NULL,
         `remark` VARCHAR(255) DEFAULT NULL,
         `create_by` VARCHAR(30) DEFAULT NULL,
@@ -1174,7 +1253,8 @@ if ($conn->select_db($db_cms)) {
         `update_date` DATE DEFAULT NULL,
         `update_time` TIME DEFAULT NULL,
         `status` CHAR(1) NOT NULL DEFAULT 'A',
-        KEY `idx_task_project_key` (`project_key`)
+        KEY `idx_task_project_key` (`project_key`),
+        KEY `idx_task_project_key_project` (`project_id`, `status`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
     if ($conn->query($createTaskProjectKeySql)) {
@@ -1183,8 +1263,88 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Failed creating `" . TASK_PROJECT_KEY . "`: " . $conn->error . "</p>";
     }
 
+    $createTaskProjectItemAccessSql = "CREATE TABLE IF NOT EXISTS `" . TASK_PROJECT_ITEM_ACCESS . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `project_id` INT NOT NULL,
+        `user_id` INT NOT NULL,
+        `can_add` TINYINT(1) NOT NULL DEFAULT 0,
+        `can_edit` TINYINT(1) NOT NULL DEFAULT 0,
+        `can_delete` TINYINT(1) NOT NULL DEFAULT 0,
+        `allowed_work_type_ids` TEXT DEFAULT NULL,
+        `remark` VARCHAR(255) DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        UNIQUE KEY `uniq_task_project_item_access` (`project_id`, `user_id`),
+        KEY `idx_task_project_item_access_user` (`user_id`, `status`),
+        KEY `idx_task_project_item_access_project` (`project_id`, `status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createTaskProjectItemAccessSql)) {
+        echo "<p style='color:green;'>Verified table `" . TASK_PROJECT_ITEM_ACCESS . "` for project work item access.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . TASK_PROJECT_ITEM_ACCESS . "`: " . $conn->error . "</p>";
+    }
+
+    $createTaskProjectColumnAccessSql = "CREATE TABLE IF NOT EXISTS `" . TASK_PROJECT_COLUMN_ACCESS . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `project_id` INT NOT NULL,
+        `user_id` INT NOT NULL,
+        `column_key` VARCHAR(80) NOT NULL,
+        `can_add` TINYINT(1) NOT NULL DEFAULT 0,
+        `can_edit` TINYINT(1) NOT NULL DEFAULT 0,
+        `can_delete` TINYINT(1) NOT NULL DEFAULT 0,
+        `remark` VARCHAR(255) DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        UNIQUE KEY `uniq_task_project_column_access` (`project_id`, `user_id`, `column_key`),
+        KEY `idx_task_project_column_access_user` (`user_id`, `status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createTaskProjectColumnAccessSql)) {
+        echo "<p style='color:green;'>Verified table `" . TASK_PROJECT_COLUMN_ACCESS . "` for project column access.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . TASK_PROJECT_COLUMN_ACCESS . "`: " . $conn->error . "</p>";
+    }
+
+    $createTaskProjectStatusAccessSql = "CREATE TABLE IF NOT EXISTS `" . TASK_PROJECT_STATUS_ACCESS . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `project_id` INT NOT NULL,
+        `user_id` INT NOT NULL,
+        `from_status_id` INT NOT NULL,
+        `to_status_id` INT NOT NULL,
+        `can_move` TINYINT(1) NOT NULL DEFAULT 0,
+        `remark` VARCHAR(255) DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        UNIQUE KEY `uniq_task_project_status_access` (`project_id`, `user_id`, `from_status_id`, `to_status_id`),
+        KEY `idx_task_project_status_access_user` (`user_id`, `status`),
+        KEY `idx_task_project_status_access_project` (`project_id`, `status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createTaskProjectStatusAccessSql)) {
+        echo "<p style='color:green;'>Verified table `" . TASK_PROJECT_STATUS_ACCESS . "` for project status access.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . TASK_PROJECT_STATUS_ACCESS . "`: " . $conn->error . "</p>";
+    }
+
     $createTaskItemSql = "CREATE TABLE IF NOT EXISTS `" . TASK_ITEM . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `project_id` INT DEFAULT NULL,
         `column_id` INT NOT NULL,
         `title` VARCHAR(255) NOT NULL,
         `description` TEXT DEFAULT NULL,
@@ -1217,7 +1377,8 @@ if ($conn->select_db($db_cms)) {
         KEY `idx_task_item_assignee` (`assignee_user_id`),
         KEY `idx_task_item_project_key` (`project_key_id`),
         KEY `idx_task_item_reporter` (`reporter_user_id`),
-        KEY `idx_task_item_parent` (`parent_item_id`)
+        KEY `idx_task_item_parent` (`parent_item_id`),
+        KEY `idx_task_item_project` (`project_id`, `column_id`, `sort_order`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
     if ($conn->query($createTaskItemSql)) {
@@ -1229,6 +1390,7 @@ if ($conn->select_db($db_cms)) {
     $createTaskLabelSql = "CREATE TABLE IF NOT EXISTS `" . TASK_LABEL . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `name` VARCHAR(120) NOT NULL,
+        `color` VARCHAR(7) NOT NULL DEFAULT '#DCE8FF',
         `sort_order` INT NOT NULL DEFAULT 0,
         `remark` VARCHAR(255) DEFAULT NULL,
         `create_by` VARCHAR(30) DEFAULT NULL,
@@ -1248,9 +1410,19 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Failed creating `" . TASK_LABEL . "`: " . $conn->error . "</p>";
     }
 
+    $taskLabelColorRst = $conn->query("SHOW COLUMNS FROM `" . TASK_LABEL . "` LIKE 'color'");
+    if ($taskLabelColorRst && $taskLabelColorRst->num_rows === 0) {
+        if ($conn->query("ALTER TABLE `" . TASK_LABEL . "` ADD COLUMN `color` VARCHAR(7) NOT NULL DEFAULT '#DCE8FF' AFTER `name`")) {
+            echo "<p style='color:green;'>Added `color` column to `" . TASK_LABEL . "`.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed adding `color` to `" . TASK_LABEL . "`: " . $conn->error . "</p>";
+        }
+    }
+
     $createTaskStatusLabelSql = "CREATE TABLE IF NOT EXISTS `" . TASK_STATUS_LABEL . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `name` VARCHAR(120) NOT NULL,
+        `color` VARCHAR(7) NOT NULL DEFAULT '#DCE8FF',
         `sort_order` INT NOT NULL DEFAULT 0,
         `remark` VARCHAR(255) DEFAULT NULL,
         `create_by` VARCHAR(30) DEFAULT NULL,
@@ -1268,6 +1440,15 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:green;'>Verified table `" . TASK_STATUS_LABEL . "` for task status labels.</p>";
     } else {
         echo "<p style='color:red;'>Failed creating `" . TASK_STATUS_LABEL . "`: " . $conn->error . "</p>";
+    }
+
+    $taskStatusLabelColorRst = $conn->query("SHOW COLUMNS FROM `" . TASK_STATUS_LABEL . "` LIKE 'color'");
+    if ($taskStatusLabelColorRst && $taskStatusLabelColorRst->num_rows === 0) {
+        if ($conn->query("ALTER TABLE `" . TASK_STATUS_LABEL . "` ADD COLUMN `color` VARCHAR(7) NOT NULL DEFAULT '#DCE8FF' AFTER `name`")) {
+            echo "<p style='color:green;'>Added `color` column to `" . TASK_STATUS_LABEL . "`.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed adding `color` to `" . TASK_STATUS_LABEL . "`: " . $conn->error . "</p>";
+        }
     }
 
     $createTaskItemLabelSql = "CREATE TABLE IF NOT EXISTS `" . TASK_ITEM_LABEL . "` (
@@ -1465,6 +1646,7 @@ if ($conn->select_db($db_cms)) {
 
     $createTaskSheetsSql = "CREATE TABLE IF NOT EXISTS `" . TASK_SHEETS . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `project_id` INT DEFAULT NULL,
         `user_id` INT NOT NULL,
         `column_key` VARCHAR(120) NOT NULL,
         `sort_order` INT NOT NULL DEFAULT 0,
@@ -1475,7 +1657,8 @@ if ($conn->select_db($db_cms)) {
         `update_date` DATE DEFAULT NULL,
         `update_time` TIME DEFAULT NULL,
         `status` CHAR(1) NOT NULL DEFAULT 'A',
-        KEY `idx_task_sheets_user` (`user_id`, `status`, `sort_order`)
+        KEY `idx_task_sheets_user` (`user_id`, `status`, `sort_order`),
+        KEY `idx_task_sheets_project_user` (`project_id`, `user_id`, `status`, `sort_order`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
     if ($conn->query($createTaskSheetsSql)) {
@@ -1484,28 +1667,210 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Failed creating `" . TASK_SHEETS . "`: " . $conn->error . "</p>";
     }
 
-    $seedWorkTypeSql = "INSERT IGNORE INTO `" . TASK_WORK_TYPE . "` (`name`, `svg_icon`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
-        ('Task', 'svg_icon/10318.svg', 'Default Task Work Type', '1', CURDATE(), CURTIME(), 'A'),
-        ('Epic', 'svg_icon/10307.svg', 'Default Epic Work Type', '1', CURDATE(), CURTIME(), 'A')";
-    if ($conn->query($seedWorkTypeSql)) {
-        echo "<p style='color:green;'>Verified default task work types (Task, Epic).</p>";
+    migrationEnsureColumn($conn, $db_cms, TASK_COLUMN, 'project_id', "ALTER TABLE `" . TASK_COLUMN . "` ADD COLUMN `project_id` INT DEFAULT NULL AFTER `id`", "Verified `" . TASK_COLUMN . "` includes `project_id`.");
+    migrationEnsureColumn($conn, $db_cms, TASK_COLUMN, 'color', "ALTER TABLE `" . TASK_COLUMN . "` ADD COLUMN `color` VARCHAR(20) NOT NULL DEFAULT '#dfe1e6' AFTER `name`", "Verified `" . TASK_COLUMN . "` includes `color`.");
+    migrationEnsureIndex($conn, $db_cms, TASK_COLUMN, 'idx_task_status_project_sort', "ALTER TABLE `" . TASK_COLUMN . "` ADD INDEX `idx_task_status_project_sort` (`project_id`, `status`, `sort_order`)", "Verified `" . TASK_COLUMN . "` project index.");
+
+    migrationEnsureColumn($conn, $db_cms, TASK_WORK_TYPE, 'project_id', "ALTER TABLE `" . TASK_WORK_TYPE . "` ADD COLUMN `project_id` INT DEFAULT NULL AFTER `id`", "Verified `" . TASK_WORK_TYPE . "` includes `project_id`.");
+    migrationEnsureIndex($conn, $db_cms, TASK_WORK_TYPE, 'idx_task_work_type_project', "ALTER TABLE `" . TASK_WORK_TYPE . "` ADD INDEX `idx_task_work_type_project` (`project_id`, `status`, `name`)", "Verified `" . TASK_WORK_TYPE . "` project index.");
+    if (migrationIndexExists($conn, $db_cms, TASK_WORK_TYPE, 'uniq_task_work_type_name')) {
+        @$conn->query("ALTER TABLE `" . TASK_WORK_TYPE . "` DROP INDEX `uniq_task_work_type_name`");
+    }
+
+    migrationEnsureColumn($conn, $db_cms, TASK_PROJECT_KEY, 'project_id', "ALTER TABLE `" . TASK_PROJECT_KEY . "` ADD COLUMN `project_id` INT DEFAULT NULL AFTER `id`", "Verified `" . TASK_PROJECT_KEY . "` includes `project_id`.");
+    migrationEnsureIndex($conn, $db_cms, TASK_PROJECT_KEY, 'idx_task_project_key_project', "ALTER TABLE `" . TASK_PROJECT_KEY . "` ADD INDEX `idx_task_project_key_project` (`project_id`, `status`)", "Verified `" . TASK_PROJECT_KEY . "` project index.");
+
+    migrationEnsureColumn($conn, $db_cms, TASK_ITEM, 'project_id', "ALTER TABLE `" . TASK_ITEM . "` ADD COLUMN `project_id` INT DEFAULT NULL AFTER `id`", "Verified `" . TASK_ITEM . "` includes `project_id`.");
+    migrationEnsureIndex($conn, $db_cms, TASK_ITEM, 'idx_task_item_project', "ALTER TABLE `" . TASK_ITEM . "` ADD INDEX `idx_task_item_project` (`project_id`, `column_id`, `sort_order`)", "Verified `" . TASK_ITEM . "` project index.");
+
+    migrationEnsureColumn($conn, $db_cms, TASK_SHEETS, 'project_id', "ALTER TABLE `" . TASK_SHEETS . "` ADD COLUMN `project_id` INT DEFAULT NULL AFTER `id`", "Verified `" . TASK_SHEETS . "` includes `project_id`.");
+    migrationEnsureIndex($conn, $db_cms, TASK_SHEETS, 'idx_task_sheets_project_user', "ALTER TABLE `" . TASK_SHEETS . "` ADD INDEX `idx_task_sheets_project_user` (`project_id`, `user_id`, `status`, `sort_order`)", "Verified `" . TASK_SHEETS . "` project index.");
+
+    $legacyProjectId = 0;
+    $legacyProjectResult = $conn->query("SELECT `id` FROM `" . TASK_PROJECT . "` WHERE `status` = 'A' ORDER BY `id` ASC LIMIT 1");
+    if ($legacyProjectResult && $legacyProjectResult->num_rows > 0) {
+        $legacyProjectRow = $legacyProjectResult->fetch_assoc();
+        $legacyProjectId = isset($legacyProjectRow['id']) ? (int) $legacyProjectRow['id'] : 0;
+    }
+
+    if ($legacyProjectId <= 0) {
+        $createLegacyProjectSql = "INSERT INTO `" . TASK_PROJECT . "` (`name`, `owner_user_id`, `board_background_color`, `remark`, `create_by`, `create_date`, `create_time`, `status`)
+            VALUES ('Task Management', 1, '#f4f7fb', 'Default migrated task project', '1', CURDATE(), CURTIME(), 'A')";
+        if ($conn->query($createLegacyProjectSql)) {
+            $legacyProjectId = (int) $conn->insert_id;
+            echo "<p style='color:green;'>Verified default task project created (ID " . $legacyProjectId . ").</p>";
+        } else {
+            echo "<p style='color:red;'>Failed creating default task project: " . $conn->error . "</p>";
+        }
+    }
+
+    if ($legacyProjectId > 0) {
+        $conn->query("UPDATE `" . TASK_COLUMN . "` SET `project_id` = " . $legacyProjectId . " WHERE IFNULL(`project_id`, 0) = 0 AND `status` = 'A'");
+        $conn->query("UPDATE `" . TASK_WORK_TYPE . "` SET `project_id` = " . $legacyProjectId . " WHERE IFNULL(`project_id`, 0) = 0 AND `status` = 'A'");
+        $conn->query("UPDATE `" . TASK_PROJECT_KEY . "` SET `project_id` = " . $legacyProjectId . " WHERE IFNULL(`project_id`, 0) = 0 AND `status` = 'A'");
+        $conn->query("UPDATE `" . TASK_ITEM . "` SET `project_id` = " . $legacyProjectId . " WHERE IFNULL(`project_id`, 0) = 0 AND `status` = 'A'");
+        $conn->query("UPDATE `" . TASK_SHEETS . "` SET `project_id` = " . $legacyProjectId . " WHERE IFNULL(`project_id`, 0) = 0 AND `status` = 'A'");
+
+        $legacyProjectKeyId = 0;
+        $legacyProjectKeyResult = $conn->query("SELECT `id` FROM `" . TASK_PROJECT_KEY . "` WHERE `status` = 'A' AND `project_id` = " . $legacyProjectId . " ORDER BY `id` DESC LIMIT 1");
+        if ($legacyProjectKeyResult && $legacyProjectKeyResult->num_rows > 0) {
+            $legacyProjectKeyRow = $legacyProjectKeyResult->fetch_assoc();
+            $legacyProjectKeyId = isset($legacyProjectKeyRow['id']) ? (int) $legacyProjectKeyRow['id'] : 0;
+        }
+
+        if ($legacyProjectKeyId <= 0) {
+            $seedLegacyProjectKeySql = "INSERT INTO `" . TASK_PROJECT_KEY . "` (`project_id`, `project_key`, `remark`, `create_by`, `create_date`, `create_time`, `status`)
+                VALUES (" . $legacyProjectId . ", 'TASK', 'Default project key', '1', CURDATE(), CURTIME(), 'A')";
+            if ($conn->query($seedLegacyProjectKeySql)) {
+                $legacyProjectKeyId = (int) $conn->insert_id;
+                echo "<p style='color:green;'>Verified default project key created for task project " . $legacyProjectId . ".</p>";
+            } else {
+                echo "<p style='color:red;'>Failed creating default project key for task project " . $legacyProjectId . ": " . $conn->error . "</p>";
+            }
+        }
+
+        if ($legacyProjectKeyId > 0) {
+            $conn->query("UPDATE `" . TASK_ITEM . "` SET `project_key_id` = " . $legacyProjectKeyId . " WHERE `project_id` = " . $legacyProjectId . " AND IFNULL(`project_key_id`, 0) = 0 AND `status` = 'A'");
+        }
+
+        $defaultStatusSeedCount = 0;
+        $defaultStatusCountResult = $conn->query("SELECT COUNT(*) AS `cnt` FROM `" . TASK_COLUMN . "` WHERE `status` = 'A' AND `project_id` = " . $legacyProjectId);
+        if ($defaultStatusCountResult && $defaultStatusCountResult->num_rows > 0) {
+            $defaultStatusCountRow = $defaultStatusCountResult->fetch_assoc();
+            $defaultStatusSeedCount = isset($defaultStatusCountRow['cnt']) ? (int) $defaultStatusCountRow['cnt'] : 0;
+        }
+
+        if ($defaultStatusSeedCount <= 0) {
+            $seedTaskStatusSql = "INSERT INTO `" . TASK_COLUMN . "` (`project_id`, `name`, `color`, `sort_order`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+                (" . $legacyProjectId . ", 'To Do', '#dfe1e6', 1, 'Default status', '1', CURDATE(), CURTIME(), 'A'),
+                (" . $legacyProjectId . ", 'In Progress', '#579dff', 2, 'Default status', '1', CURDATE(), CURTIME(), 'A'),
+                (" . $legacyProjectId . ", 'Done', '#4bce97', 3, 'Default status', '1', CURDATE(), CURTIME(), 'A')";
+            if ($conn->query($seedTaskStatusSql)) {
+                echo "<p style='color:green;'>Verified default statuses seeded for task project " . $legacyProjectId . ".</p>";
+            } else {
+                echo "<p style='color:red;'>Failed seeding default statuses for task project " . $legacyProjectId . ": " . $conn->error . "</p>";
+            }
+        }
+
+        $defaultWorkTypeSeedCount = 0;
+        $defaultWorkTypeCountResult = $conn->query("SELECT COUNT(*) AS `cnt` FROM `" . TASK_WORK_TYPE . "` WHERE `status` = 'A' AND `project_id` = " . $legacyProjectId);
+        if ($defaultWorkTypeCountResult && $defaultWorkTypeCountResult->num_rows > 0) {
+            $defaultWorkTypeCountRow = $defaultWorkTypeCountResult->fetch_assoc();
+            $defaultWorkTypeSeedCount = isset($defaultWorkTypeCountRow['cnt']) ? (int) $defaultWorkTypeCountRow['cnt'] : 0;
+        }
+
+        if ($defaultWorkTypeSeedCount <= 0) {
+            $seedWorkTypeSql = "INSERT INTO `" . TASK_WORK_TYPE . "` (`project_id`, `name`, `svg_icon`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+                (" . $legacyProjectId . ", 'Task', 'svg_icon/10318.svg', 'Default Task Work Type', '1', CURDATE(), CURTIME(), 'A'),
+                (" . $legacyProjectId . ", 'Epic', 'svg_icon/10307.svg', 'Default Epic Work Type', '1', CURDATE(), CURTIME(), 'A')";
+            if ($conn->query($seedWorkTypeSql)) {
+                echo "<p style='color:green;'>Verified default task work types (Task, Epic) for project " . $legacyProjectId . ".</p>";
+            } else {
+                echo "<p style='color:red;'>Failed seeding default task work types for project " . $legacyProjectId . ": " . $conn->error . "</p>";
+            }
+        }
+
+        $legacyWorkTypeIdsCsv = '';
+        $legacyWorkTypeIdsResult = $conn->query("SELECT GROUP_CONCAT(`id` ORDER BY `id` SEPARATOR ',') AS `ids` FROM `" . TASK_WORK_TYPE . "` WHERE `project_id` = " . $legacyProjectId . " AND `status` = 'A'");
+        if ($legacyWorkTypeIdsResult && $legacyWorkTypeIdsResult->num_rows > 0) {
+            $legacyWorkTypeIdsRow = $legacyWorkTypeIdsResult->fetch_assoc();
+            $legacyWorkTypeIdsCsv = isset($legacyWorkTypeIdsRow['ids']) ? trim((string) $legacyWorkTypeIdsRow['ids']) : '';
+        }
+
+        if ($legacyWorkTypeIdsCsv !== '') {
+            $safeLegacyWorkTypeIdsCsv = $conn->real_escape_string($legacyWorkTypeIdsCsv);
+            $seedProjectWorkTypeAccessSql = "INSERT INTO `" . TASK_PROJECT_ITEM_ACCESS . "` (
+                    `project_id`, `user_id`, `can_add`, `can_edit`, `can_delete`, `allowed_work_type_ids`,
+                    `remark`, `create_by`, `create_date`, `create_time`, `status`
+                )
+                SELECT
+                    " . $legacyProjectId . ",
+                    `u`.`id`,
+                    COALESCE(`existing`.`can_add`, 0),
+                    COALESCE(`existing`.`can_edit`, 0),
+                    COALESCE(`existing`.`can_delete`, 0),
+                    '" . $safeLegacyWorkTypeIdsCsv . "',
+                    'Seeded default work type access',
+                    '1',
+                    CURDATE(),
+                    CURTIME(),
+                    'A'
+                FROM `user` AS `u`
+                LEFT JOIN `" . TASK_PROJECT_ITEM_ACCESS . "` AS `existing`
+                    ON `existing`.`project_id` = " . $legacyProjectId . "
+                   AND `existing`.`user_id` = `u`.`id`
+                WHERE `u`.`status` = 'A'
+                ON DUPLICATE KEY UPDATE
+                    `allowed_work_type_ids` = VALUES(`allowed_work_type_ids`),
+                    `status` = 'A',
+                    `update_by` = '1',
+                    `update_date` = CURDATE(),
+                    `update_time` = CURTIME()";
+
+            if ($conn->query($seedProjectWorkTypeAccessSql)) {
+                echo "<p style='color:green;'>Verified work type access seeded for all active users in project " . $legacyProjectId . ".</p>";
+            } else {
+                echo "<p style='color:red;'>Failed seeding work type access for project " . $legacyProjectId . ": " . $conn->error . "</p>";
+            }
+        }
+
+        $seedAdminStatusAccessSql = "INSERT INTO `" . TASK_PROJECT_STATUS_ACCESS . "` (
+                `project_id`, `user_id`, `from_status_id`, `to_status_id`, `can_move`,
+                `remark`, `create_by`, `create_date`, `create_time`, `status`
+            )
+            SELECT
+                " . $legacyProjectId . ",
+                `u`.`id`,
+                `c`.`id`,
+                `c`.`id`,
+                1,
+                'Seeded admin status access',
+                '1',
+                CURDATE(),
+                CURTIME(),
+                'A'
+            FROM `user` AS `u`
+            INNER JOIN `" . TASK_COLUMN . "` AS `c`
+                ON `c`.`project_id` = " . $legacyProjectId . "
+               AND `c`.`status` = 'A'
+            WHERE `u`.`status` = 'A'
+              AND `u`.`access_id` IN (1, 2)
+            ON DUPLICATE KEY UPDATE
+                `can_move` = 1,
+                `status` = 'A',
+                `update_by` = '1',
+                `update_date` = CURDATE(),
+                `update_time` = CURTIME()";
+
+        if ($conn->query($seedAdminStatusAccessSql)) {
+            echo "<p style='color:green;'>Verified status access seeded for active users in access groups 1 and 2 for project " . $legacyProjectId . ".</p>";
+        } else {
+            echo "<p style='color:red;'>Failed seeding admin status access for project " . $legacyProjectId . ": " . $conn->error . "</p>";
+        }
+    }
+
+    if ($conn->query("DELETE FROM `pin` WHERE `id` = 26")) {
+        echo "<p style='color:green;'>Verified pin 26 (Create Project) removed.</p>";
     } else {
-        echo "<p style='color:red;'>Failed seeding default task work types: " . $conn->error . "</p>";
+        echo "<p style='color:red;'>Failed removing pin 26 (Create Project): " . $conn->error . "</p>";
     }
 
     $taskPinGroupSql = "INSERT INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
         (136, 'Board', '1,2,3,4', 'Task Board Management', '1', CURDATE(), CURTIME(), 'A'),
         (137, 'Summary', '1', 'Task Summary Management', '1', CURDATE(), CURTIME(), 'A'),
-        (138, 'Sheets', '1,2,3,4', 'Task Sheets Management', '1', CURDATE(), CURTIME(), 'A')
+        (138, 'Sheets', '1,2,3,4', 'Task Sheets Management', '1', CURDATE(), CURTIME(), 'A'),
+        (139, 'Project Task', '1,2,3,4', 'Project task navigation', '1', CURDATE(), CURTIME(), 'A'),
+        (140, 'Project Settings', '1,2,3,4', 'Project task settings management', '1', CURDATE(), CURTIME(), 'A'),
+        (141, 'Project User Access', '1,2,3,4', 'Project task user access management', '1', CURDATE(), CURTIME(), 'A')
         ON DUPLICATE KEY UPDATE
             `name` = VALUES(`name`),
             `pins` = VALUES(`pins`),
             `remark` = VALUES(`remark`),
             `status` = 'A'";
     if ($conn->query($taskPinGroupSql)) {
-        echo "<p style='color:green;'>Verified pin groups 136 (Board), 137 (Summary) and 138 (Sheets).</p>";
+        echo "<p style='color:green;'>Verified pin groups 136-141 for task management.</p>";
     } else {
-        echo "<p style='color:red;'>Failed creating task pin groups 136/137/138: " . $conn->error . "</p>";
+        echo "<p style='color:red;'>Failed creating task pin groups 136-141: " . $conn->error . "</p>";
     }
 
     foreach (array(1, 2, 3) as $groupId) {
@@ -1520,16 +1885,24 @@ if ($conn->select_db($db_cms)) {
         $updatedPins = addAccessToPinBlock($currentPins, 136, array(1, 2, 3, 4));
         $updatedPins = addAccessToPinBlock($updatedPins, 137, array(1));
         $updatedPins = addAccessToPinBlock($updatedPins, 138, array(1, 2, 3, 4));
+        $updatedPins = removeAccessFromPinBlock($updatedPins, 139, array(26));
+        $updatedPins = removePinBlockById($updatedPins, 139);
+
+        if ($groupId === 1 || $groupId === 2) {
+            $updatedPins = addAccessToPinBlock($updatedPins, 139, array(1, 2, 3, 4));
+            $updatedPins = addAccessToPinBlock($updatedPins, 140, array(1, 2, 3, 4));
+            $updatedPins = addAccessToPinBlock($updatedPins, 141, array(1, 2, 3, 4));
+        }
 
         if ($updatedPins !== $currentPins) {
             $safePins = $conn->real_escape_string($updatedPins);
             if ($conn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $groupId)) {
-                echo "<p style='color:green;'>Verified task pin access (136/137/138) for `user_group` id " . (int) $groupId . ".</p>";
+                echo "<p style='color:green;'>Verified task pin access for `user_group` id " . (int) $groupId . ".</p>";
             } else {
-                echo "<p style='color:red;'>Failed updating task pin access (136/137/138) for `user_group` id " . (int) $groupId . ": " . $conn->error . "</p>";
+                echo "<p style='color:red;'>Failed updating task pin access for `user_group` id " . (int) $groupId . ": " . $conn->error . "</p>";
             }
         } else {
-            echo "<p style='color:green;'>Verified task pin access (136/137/138) already exists for `user_group` id " . (int) $groupId . ".</p>";
+            echo "<p style='color:green;'>Verified task pin access already exists for `user_group` id " . (int) $groupId . ".</p>";
         }
     }
 } else {

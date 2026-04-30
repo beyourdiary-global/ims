@@ -1,0 +1,568 @@
+.project-user-access-page {
+  overflow-x: hidden;
+}
+
+.project-user-access-page .task-page-wrap {
+  margin-top: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  max-width: none !important;
+  width: 100% !important;
+}
+
+.project-user-access-page .task-page-wrap > .col-12 {
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  max-width: none !important;
+  width: 100% !important;
+}
+
+.project-user-access-page .project-access-page-header {
+  padding-left: 12px;
+  padding-right: 12px;
+  padding-top: 12px;
+}
+
+.project-user-access-page .task-module-layout,
+.project-user-access-page #taskModuleLayout {
+  width: 100% !important;
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: #f4f7fb;
+  box-sizing: border-box;
+}
+
+.project-user-access-page .task-main-content {
+  width: 100% !important;
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding: 12px 12px 48px !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: #f4f7fb;
+  box-sizing: border-box;
+}
+
+.project-access-subtitle {
+  color: #69768a;
+  font-size: 0.95rem;
+}
+
+.project-access-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.project-access-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  width: 100%;
+  margin: 0 0 12px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid #d8e1eb;
+  background: #f1f5f9;
+  box-sizing: border-box;
+}
+
+.project-access-tab {
+  border: 0;
+  background: transparent;
+  color: #5a6678;
+  font-weight: 600;
+  padding: 0.55rem 0.9rem;
+  border-radius: 10px;
+}
+
+.project-access-tab.active {
+  color: #1a57b8;
+  background: #edf4ff;
+}
+
+.project-access-panel {
+  display: none;
+}
+
+.project-access-panel.active {
+  display: block;
+}
+
+.project-access-card {
+  background: #ffffff;
+  border: 1px solid #d8e1eb;
+  border-radius: 6px;
+  padding: 1rem;
+  box-shadow: none;
+}
+
+.project-access-card h5 {
+  margin-bottom: 0.25rem;
+}
+
+.project-access-card-note {
+  color: #69768a;
+  margin-bottom: 1rem;
+}
+
+.project-access-table-wrap {
+  overflow-x: auto;
+}
+
+.project-access-table {
+  width: 100%;
+  min-width: 860px;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.project-access-table-wide {
+  min-width: 980px;
+}
+
+.project-access-table th,
+.project-access-table td {
+  padding: 0.9rem 0.75rem;
+  border-bottom: 1px solid #e5ebf3;
+  vertical-align: middle;
+  text-align: center;
+}
+
+.project-access-table th:first-child,
+.project-access-table td:first-child {
+  text-align: left;
+}
+
+.project-access-checkbox {
+  width: 1em;
+  height: 1em;
+  cursor: pointer;
+  margin: 0;
+  vertical-align: middle;
+}
+
+.project-access-user {
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+
+.project-access-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #e5ddff, #cbf1ef);
+  color: #38507c;
+  font-weight: 700;
+}
+
+.project-access-user-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.project-access-user-meta strong {
+  color: #223049;
+  font-size: 0.95rem;
+}
+
+.project-access-user-meta span {
+  color: #78859a;
+  font-size: 0.82rem;
+}
+
+.project-access-inline-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+.project-access-inline-icon {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.project-access-inline-icon img {
+  width: 18px;
+  height: 18px;
+  object-fit: contain;
+}
+
+.project-access-column-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.95rem 1rem;
+  border: 1px solid #e5ebf3;
+  border-radius: 12px;
+  margin-bottom: 1rem;
+}
+
+.project-access-column-select-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex: 1 1 auto;
+}
+
+.project-access-column-select-control {
+  position: relative;
+  width: 100%;
+  max-width: 260px;
+}
+
+.project-access-column-label {
+  margin: 0;
+  white-space: nowrap;
+  color: #223049;
+  font-size: 0.92rem;
+}
+
+.project-access-column-select {
+  max-width: none;
+  padding-right: 2.5rem;
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-image: none;
+}
+
+.project-access-column-select-icon {
+  position: absolute;
+  top: 50%;
+  right: 14px;
+  transform: translateY(-50%);
+  color: #6c7890;
+  pointer-events: none;
+}
+
+.project-access-column-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #78859a;
+  font-size: 0.84rem;
+}
+
+.project-access-column-options {
+  display: flex;
+  justify-content: center;
+  min-width: 0;
+}
+
+.project-access-column-option {
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+
+.project-access-column-option.active {
+  display: inline-flex;
+}
+
+.project-access-column-options-cell {
+  width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  border-bottom: 0;
+  overflow: hidden;
+}
+
+.project-access-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding-top: 0.5rem;
+}
+
+@media (max-width: 991.98px) {
+  .project-user-access-page .task-module-layout,
+  .project-user-access-page #taskModuleLayout {
+    column-gap: 20px;
+    padding-right: 20px;
+  }
+
+  .project-access-card {
+    padding: 0.9rem;
+  }
+
+  .project-access-table {
+    min-width: 760px;
+  }
+
+  .project-access-column-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .project-user-access-page .task-module-layout,
+  .project-user-access-page #taskModuleLayout {
+    column-gap: 16px;
+    padding-right: 16px;
+  }
+
+  .project-access-tabs {
+    gap: 0.4rem;
+  }
+
+  .project-access-tab {
+    width: 100%;
+    text-align: left;
+  }
+
+  .project-access-card {
+    padding: 0.8rem;
+  }
+
+  .project-access-column-select-wrap {
+    width: 100%;
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .project-access-column-select-control {
+    max-width: none;
+  }
+
+  .project-access-actions {
+    flex-direction: column-reverse;
+  }
+
+  .project-access-actions .btn {
+    width: 100%;
+  }
+}
+
+.project-access-column-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.project-access-column-section {
+  border: 1px solid #d8e1eb;
+  background: #ffffff;
+  color: #344054;
+  border-radius: 12px;
+  padding: 0.75rem 0.9rem;
+  text-align: left;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.project-access-column-section.active {
+  border-color: #2f6fed;
+  background: #edf4ff;
+  color: #0f4fb8;
+}
+
+/* =========================================================
+   Project User Access spacing fix
+   Match Board page layout/gap
+========================================================= */
+
+body.project-user-access-page {
+  overflow-x: hidden !important;
+}
+
+/* Keep same centered page shell as board.php */
+body.project-user-access-page .task-page-wrap {
+  margin-top: 1rem !important;
+}
+
+/* Header spacing same feeling as Board page */
+body.project-user-access-page .project-access-page-header {
+  margin-bottom: 0.5rem !important;
+}
+
+/* Main task module should behave like Board page */
+body.project-user-access-page #taskModuleLayout.task-module-layout {
+  margin-top: 0 !important;
+  border-radius: 0 !important;
+  border: 0 !important;
+  background: #f4f7fb !important;
+  overflow: visible !important;
+}
+
+/* This is the real gap: same as Board page task-main-content padding */
+body.project-user-access-page #taskModuleLayout .task-main-content {
+  padding: 0.75rem !important;
+  background: #f4f7fb !important;
+  border-radius: 0 !important;
+  overflow: visible !important;
+}
+
+/* Give tabs the same inner distance from left/right as board toolbar */
+body.project-user-access-page .project-access-tabs {
+  margin: 0 0 0.75rem 0 !important;
+  padding: 0.85rem 0.85rem 0.75rem !important;
+  background: #f1f5f9 !important;
+  border: 0 !important;
+  border-bottom: 1px solid #d8e1eb !important;
+  border-radius: 0 !important;
+  box-sizing: border-box !important;
+}
+
+/* Card should not touch the edge of task-main-content */
+body.project-user-access-page .project-access-card {
+  margin: 0 !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+}
+
+/* Remove any earlier CSS that added right-only gap */
+body.project-user-access-page #taskModuleLayout {
+  column-gap: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* =========================================================
+   Project User Access: make grey module area full-width
+   Header stays centered, module grey area expands to browser edge
+========================================================= */
+
+body.project-user-access-page {
+  overflow-x: hidden !important;
+}
+
+/* The page header remains inside col-md-11 */
+body.project-user-access-page .project-access-page-header {
+  margin-bottom: 0.5rem !important;
+}
+
+/* Break the whole grey module area out of the centered col-md-11 */
+body.project-user-access-page #taskModuleLayout.task-module-layout {
+  position: relative !important;
+  width: calc(100vw - var(--task-global-sidebar-width, 0px)) !important;
+  max-width: none !important;
+
+  left: 50% !important;
+  transform: translateX(-50%) !important;
+
+  margin-top: 0 !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: #f4f7fb !important;
+  overflow: visible !important;
+  box-sizing: border-box !important;
+}
+
+/* Keep the content inside the grey area with board-like padding */
+body.project-user-access-page #taskModuleLayout .task-main-content {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 !important;
+  padding: 0.75rem !important;
+  background: #f4f7fb !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  box-sizing: border-box !important;
+  overflow: visible !important;
+}
+
+/* Grey tabs now naturally follow the full-width module */
+body.project-user-access-page .project-access-tabs {
+  width: 100% !important;
+  max-width: none !important;
+  margin: 0 0 0.75rem 0 !important;
+  padding: 0.85rem 0.85rem 0.75rem !important;
+  background: #f1f5f9 !important;
+  border: 0 !important;
+  border-bottom: 1px solid #d8e1eb !important;
+  border-radius: 0 !important;
+  box-sizing: border-box !important;
+}
+
+/* White access card keeps normal inner gap from grey background */
+body.project-user-access-page .project-access-card {
+  margin: 0 !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+}
+
+/* Prevent old right-gap / column-gap rules from affecting this page */
+body.project-user-access-page #taskModuleLayout {
+  column-gap: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* =========================================================
+   Project User Access full grey module width
+   Header stays centered, grey module expands to browser edge
+========================================================= */
+
+body.project-user-access-page .task-page-wrap {
+  width: 100% !important;
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+body.project-user-access-page .project-access-page-header {
+  margin-bottom: 0.5rem !important;
+}
+
+body.project-user-access-page .project-access-full-module,
+body.project-user-access-page #taskModuleLayout {
+  flex: 0 0 100% !important;
+  width: 100% !important;
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  border: 0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  background: #f4f7fb !important;
+  overflow: visible !important;
+}
+
+body.project-user-access-page #taskModuleLayout .task-main-content {
+  width: 100% !important;
+  max-width: none !important;
+  padding: 0.75rem !important;
+  margin: 0 !important;
+  background: #f4f7fb !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+body.project-user-access-page .project-access-tabs {
+  width: 100% !important;
+  margin: 0 0 0.75rem 0 !important;
+  padding: 0.85rem 0.85rem 0.75rem !important;
+  background: #f1f5f9 !important;
+  border-bottom: 1px solid #d8e1eb !important;
+  border-radius: 0 !important;
+}
+
+body.project-user-access-page .project-access-card {
+  margin: 0 !important;
+  border-radius: 6px !important;
+}

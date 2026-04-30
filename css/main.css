@@ -448,13 +448,6 @@ input {
   padding: 12px 0;
 }
 
-.task-global-sidebar-title {
-  margin: 0;
-  padding: 0 16px 10px;
-  font-size: 14px;
-  color: #ffffff;
-}
-
 .task-global-sidebar-links {
   list-style: none;
   margin: 0;

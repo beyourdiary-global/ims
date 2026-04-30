@@ -205,10 +205,12 @@ if (in_array('130', GlobalPin)) {
     $userShopeeLink = $SITEURL . '/shopee/shopee_processing_order.php';
 }
 
-$hasTaskSummaryAccess = is_array(GlobalPin) && in_array('137', GlobalPin);
-$hasTaskBoardAccess = is_array(GlobalPin) && in_array('136', GlobalPin);
-$hasTaskSheetsAccess = is_array(GlobalPin) && in_array('138', GlobalPin);
-$hasTaskManagementAccess = $hasTaskSummaryAccess || $hasTaskBoardAccess || $hasTaskSheetsAccess;
+include_once ROOT . '/task/common_task.php';
+
+$hasTaskSummaryAccess = taskIsActionAllowed('view', taskGetPinAccessByGroupId($connect, 137));
+$hasTaskBoardAccess = taskIsActionAllowed('view', taskGetPinAccessByGroupId($connect, 136));
+$hasTaskSheetsAccess = taskIsActionAllowed('view', taskGetPinAccessByGroupId($connect, 138));
+$hasTaskManagementAccess = taskIsActionAllowed('view', taskGetPinAccessByGroupId($connect, 139));
 $taskManagementLandingUrl = $hasTaskSummaryAccess
     ? $SITEURL . '/task/summary.php'
     : ($hasTaskBoardAccess
@@ -231,7 +233,7 @@ $menuList = array(
         $taskManagementLandingUrl,
         'n',
         'expand' => array(),
-        'pin' => array('136', '137', '138')
+        'pin' => array('139')
     ),
     array(
         'Customer',
@@ -516,9 +518,17 @@ $menuList = array(
             }
             */
             foreach ($menuList as $innerList) {
+                if ($innerList[0] === 'Task Management' && !$hasTaskManagementAccess) {
+                    continue;
+                }
+
                 if (!empty(array_intersect($innerList['pin'], GlobalPin))) {
                     $isTaskTopMenu = $innerList[0] === 'Task Management';
-                    $li = $innerList[3] == 'y' ? "class=\"nav-item dropdown\"" : "class=\"nav-item\"";
+                    $liClass = $innerList[3] == 'y' ? 'nav-item dropdown' : 'nav-item';
+                    if ($isTaskTopMenu) {
+                        $liClass .= ' task-top-menu-trigger-item';
+                    }
+                    $li = "class=\"" . $liClass . "\"";
                     $linkClass = $innerList[3] == 'y' ? 'nav-link dropdown-toggle' : 'nav-link';
                     if ($isTaskTopMenu) {
                         $linkClass .= ' task-top-menu-trigger';
@@ -529,7 +539,10 @@ $menuList = array(
                         : "class=\"" . $linkClass . "\"" . $taskAriaLabel;
 
                     echo "<li $li>";
-                    echo "<a $a href=\"$innerList[2]\"><i class=\"$innerList[1]\"></i>";
+                    $iconHtml = $isTaskTopMenu
+                        ? '<i class="fa-solid fa-bars task-top-menu-icon" aria-hidden="true"></i>'
+                        : "<i class=\"$innerList[1]\"></i>";
+                    echo "<a $a href=\"$innerList[2]\">$iconHtml";
                     if (!$isTaskTopMenu) {
                         echo "<span> $innerList[0]</span>";
                     } else {
@@ -663,27 +676,136 @@ $taskCurrentPath = isset($_SERVER['REQUEST_URI']) ? (string) parse_url($_SERVER[
 $isTaskSummaryPage = strpos($taskCurrentPath, '/task/summary.php') !== false;
 $isTaskBoardPage = strpos($taskCurrentPath, '/task/board.php') !== false;
 $isTaskSheetsPage = strpos($taskCurrentPath, '/task/sheets.php') !== false;
+$isTaskProjectSettingsPage = strpos($taskCurrentPath, '/task/project_settings.php') !== false;
+$isTaskProjectUserAccessPage = strpos($taskCurrentPath, '/task/project_user_access.php') !== false;
+
+$taskCurrentProjectId = taskResolveCurrentProjectId($connect, isset($_GET['project_id']) ? (int) $_GET['project_id'] : 0);
+$taskProjectList = taskGetProjectList($connect);
+$canCreateTaskProject = taskCanCreateProject($connect);
 ?>
 
 <aside id="taskGlobalSidebar" class="task-global-sidebar" aria-hidden="true">
+    <button type="button" id="taskGlobalSidebarResizeHandle" class="task-global-sidebar-resize-handle" aria-label="Resize task sidebar" title="Drag to resize"></button>
     <div class="task-global-sidebar-inner">
-        <h6 class="task-global-sidebar-title">Task Management</h6>
-        <ul class="task-global-sidebar-links">
-            <?php if ($hasTaskSummaryAccess): ?>
-            <li><a class="<?= $isTaskSummaryPage ? 'task-global-link-active' : '' ?>" href="<?= $SITEURL ?>/task/summary.php">Summary</a></li>
+
+        <div class="task-global-project-section">
+            <div class="task-global-project-header">
+                <span>Project Task</span>
+
+                <?php if ($canCreateTaskProject): ?>
+                    <button type="button"
+                        id="taskCreateProjectBtn"
+                        class="task-global-create-project-btn"
+                        title="Create project task">
+                        <i class="fa-solid fa-plus"></i>
+                    </button>
+                <?php endif; ?>
+            </div>
+
+            <?php if ($canCreateTaskProject): ?>
+            <div class="task-global-create-project-row" id="taskGlobalCreateProjectRow">
+                <input type="text" id="taskGlobalCreateProjectInput" class="form-control task-global-create-project-input" maxlength="180" placeholder="Project task name">
+                <button type="button" class="btn task-global-create-project-confirm-btn" id="taskGlobalCreateProjectConfirmBtn" title="Create">
+                    <i class="fa-solid fa-check"></i>
+                </button>
+                <button type="button" class="btn task-global-create-project-cancel-btn" id="taskGlobalCreateProjectCancelBtn" title="Cancel">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
             <?php endif; ?>
-            <?php if ($hasTaskBoardAccess): ?>
-            <li><a class="<?= $isTaskBoardPage ? 'task-global-link-active' : '' ?>" href="<?= $SITEURL ?>/task/board.php">Board</a></li>
-            <?php endif; ?>
-            <?php if ($hasTaskSheetsAccess): ?>
-            <li><a class="<?= $isTaskSheetsPage ? 'task-global-link-active' : '' ?>" href="<?= $SITEURL ?>/task/sheets.php">Sheets</a></li>
-            <?php endif; ?>
-        </ul>
+
+            <ul class="task-global-project-list">
+                <?php foreach ($taskProjectList as $taskProject): ?>
+                    <?php
+                    $pid = (int) $taskProject['id'];
+                    $isActiveProject = $pid === (int) $taskCurrentProjectId;
+                    $projectHasSummaryAccess = taskUserCanAccessProjectPageByPin($connect, $pid, 137);
+                    $projectHasBoardAccess = taskUserCanAccessProjectPageByPin($connect, $pid, 136);
+                    $projectHasSheetsAccess = taskUserCanAccessProjectPageByPin($connect, $pid, 138);
+                    $canAccessProjectSettings = taskCanAccessProjectSettings($connect, $pid, false);
+                    $canAccessProjectUserAccess = taskCanAccessProjectUserAccess($connect, $pid);
+                    $canManageProjectActions = taskCanManageProjectActions($connect, $pid);
+                    $projectItemPanelId = 'taskGlobalProjectPanel' . $pid;
+                    $projectItemActionPanelId = 'taskGlobalProjectActions' . $pid;
+                    ?>
+                    <li class="task-global-project-item <?= $isActiveProject ? 'active' : '' ?> <?= $isActiveProject ? 'expanded' : '' ?>"
+                        data-project-id="<?= $pid ?>">
+                        <div class="task-global-project-row">
+                            <button type="button"
+                                    class="task-global-project-toggle"
+                                    data-task-project-toggle
+                                    aria-expanded="<?= $isActiveProject ? 'true' : 'false' ?>"
+                                    aria-controls="<?= $projectItemPanelId ?>">
+                                <span class="task-global-project-toggle-text"><?= htmlspecialchars($taskProject['name'], ENT_QUOTES, 'UTF-8') ?></span>
+                                <span class="task-global-project-toggle-icon" aria-hidden="true">
+                                    <i class="fa-solid fa-chevron-right"></i>
+                                </span>
+                            </button>
+
+                            <?php if ($canManageProjectActions): ?>
+                                <div class="task-global-project-actions">
+                                    <button type="button"
+                                            class="task-global-project-settings-link task-global-project-actions-btn"
+                                            data-task-project-actions-btn
+                                            aria-expanded="false"
+                                            aria-controls="<?= $projectItemActionPanelId ?>"
+                                            title="Project options">
+                                        <i class="fa-solid fa-ellipsis"></i>
+                                    </button>
+                                    <div class="task-global-project-actions-panel" id="<?= $projectItemActionPanelId ?>">
+                                        <?php if ($canAccessProjectUserAccess): ?>
+                                            <a href="<?= $SITEURL ?>/task/project_user_access.php?project_id=<?= $pid ?>">Project User Access</a>
+                                        <?php endif; ?>
+                                        <?php if ($canAccessProjectSettings): ?>
+                                            <a href="<?= $SITEURL ?>/task/project_settings.php?project_id=<?= $pid ?>">Project Settings</a>
+                                        <?php endif; ?>
+                                    </div>
+                                </div>
+                            <?php endif; ?>
+                        </div>
+
+                        <ul class="task-global-project-submenu <?= $isActiveProject ? 'active' : '' ?>"
+                            id="<?= $projectItemPanelId ?>">
+                            <?php if ($projectHasSummaryAccess): ?>
+                                <li>
+                                    <a class="<?= $isTaskSummaryPage && $isActiveProject ? 'task-global-link-active' : '' ?>"
+                                       href="<?= $SITEURL ?>/task/summary.php?project_id=<?= $pid ?>">
+                                        Summary
+                                    </a>
+                                </li>
+                            <?php endif; ?>
+                            <?php if ($projectHasBoardAccess): ?>
+                                <li>
+                                    <a class="<?= $isTaskBoardPage && $isActiveProject ? 'task-global-link-active' : '' ?>"
+                                       href="<?= $SITEURL ?>/task/board.php?project_id=<?= $pid ?>">
+                                        Board
+                                    </a>
+                                </li>
+                            <?php endif; ?>
+                            <?php if ($projectHasSheetsAccess): ?>
+                                <li>
+                                    <a class="<?= $isTaskSheetsPage && $isActiveProject ? 'task-global-link-active' : '' ?>"
+                                       href="<?= $SITEURL ?>/task/sheets.php?project_id=<?= $pid ?>">
+                                        Sheets
+                                    </a>
+                                </li>
+                            <?php endif; ?>
+                        </ul>
+                    </li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+
     </div>
 </aside>
 <?php endif; ?>
 
 <script>
+    <?php
+    if (empty($_SESSION['csrf_token'])) {
+        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+    }
+    ?>
     function isMobileViewport() {
         return window.matchMedia('(max-width: 768px)').matches;
     }
@@ -692,8 +814,13 @@ $isTaskSheetsPage = strpos($taskCurrentPath, '/task/sheets.php') !== false;
     var sidebar_toggleBtn = $("#sidebarCollapse"); // variable from menuHeader
     var opacityBackground = $('div#filter_screen');
     var taskTopMenuTrigger = $('.task-top-menu-trigger');
+    var taskTopMenuIcon = taskTopMenuTrigger.find('.task-top-menu-icon');
     var taskGlobalSidebar = $('#taskGlobalSidebar');
+    var taskGlobalSidebarResizeHandle = $('#taskGlobalSidebarResizeHandle');
     var taskSidebarStorageKey = 'task_global_sidebar_open';
+    var taskSidebarWidthStorageKey = 'task_global_sidebar_width';
+    var taskSidebarMinWidth = 260;
+    var taskSidebarMaxWidth = 520;
     var hasTaskManagementAccess = <?php echo $hasTaskManagementAccess ? 'true' : 'false'; ?>;
 
     if (hasTaskManagementAccess && taskGlobalSidebar.length) {
@@ -738,9 +865,72 @@ $isTaskSheetsPage = strpos($taskCurrentPath, '/task/sheets.php') !== false;
         } catch (e) {}
     }
 
+    function applyTaskSidebarWidth(width) {
+        var parsedWidth = Number(width) || 0;
+        if (!parsedWidth) {
+            return;
+        }
+
+        var clampedWidth = Math.max(taskSidebarMinWidth, Math.min(taskSidebarMaxWidth, parsedWidth));
+        document.documentElement.style.setProperty('--task-global-sidebar-width-expanded', clampedWidth + 'px');
+    }
+
+    function bindTaskSidebarResize() {
+        if (!taskGlobalSidebarResizeHandle.length) {
+            return;
+        }
+
+        var isDragging = false;
+        var dragStartX = 0;
+        var dragStartWidth = 0;
+
+        function onPointerMove(event) {
+            if (!isDragging) {
+                return;
+            }
+            var delta = event.clientX - dragStartX;
+            applyTaskSidebarWidth(dragStartWidth + delta);
+        }
+
+        function onPointerUp() {
+            if (!isDragging) {
+                return;
+            }
+            isDragging = false;
+            document.body.classList.remove('task-global-sidebar-resizing');
+            document.removeEventListener('pointermove', onPointerMove);
+            document.removeEventListener('pointerup', onPointerUp);
+
+            var finalWidth = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--task-global-sidebar-width-expanded')) || 0;
+            if (finalWidth > 0) {
+                try {
+                    window.localStorage.setItem(taskSidebarWidthStorageKey, String(Math.round(finalWidth)));
+                } catch (e) {}
+            }
+        }
+
+        taskGlobalSidebarResizeHandle.on('pointerdown', function (event) {
+            if (isMobileViewport() || !$('body').hasClass('task-global-sidebar-open')) {
+                return;
+            }
+
+            event.preventDefault();
+            isDragging = true;
+            dragStartX = event.clientX;
+            dragStartWidth = taskGlobalSidebar.outerWidth() || 0;
+            document.body.classList.add('task-global-sidebar-resizing');
+            document.addEventListener('pointermove', onPointerMove);
+            document.addEventListener('pointerup', onPointerUp);
+        });
+    }
+
     syncTaskSidebarTopOffset();
 
     if (hasTaskManagementAccess) {
+        try {
+            applyTaskSidebarWidth(window.localStorage.getItem(taskSidebarWidthStorageKey));
+        } catch (e) {}
+        bindTaskSidebarResize();
         try {
             setTaskGlobalSidebar(window.localStorage.getItem(taskSidebarStorageKey) === '1');
         } catch (e) {
@@ -816,5 +1006,169 @@ $isTaskSheetsPage = strpos($taskCurrentPath, '/task/sheets.php') !== false;
                     sidebar.removeClass('close');
                 }, 300);
             }
+        });
+
+        document.addEventListener('DOMContentLoaded', function () {
+
+        const createBtn = document.getElementById('taskCreateProjectBtn');
+        const createRow = document.querySelector('.task-global-create-project-row');
+        const input = createRow ? createRow.querySelector('input') : null;
+        const confirmBtn = document.getElementById('taskGlobalCreateProjectConfirmBtn');
+        const cancelBtn = document.getElementById('taskGlobalCreateProjectCancelBtn');
+        const csrfToken = <?php echo json_encode(isset($_SESSION['csrf_token']) ? $_SESSION['csrf_token'] : '', JSON_UNESCAPED_UNICODE); ?>;
+
+        // OPEN create row
+        if (createBtn && createRow) {
+            createBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            createRow.classList.add('active');
+
+            if (input) {
+                input.focus();
+                input.select();
+            }
+            });
+        }
+
+        // CANCEL
+        if (cancelBtn && createRow) {
+            cancelBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+            createRow.classList.remove('active');
+            });
+        }
+
+        // PRESS ESC = cancel
+        if (input && createRow) {
+            input.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape') {
+                createRow.classList.remove('active');
+            } else if (e.key === 'Enter' && confirmBtn) {
+                e.preventDefault();
+                confirmBtn.click();
+            }
+            });
+        }
+
+        // CREATE project
+        if (confirmBtn && input && createRow) {
+            confirmBtn.addEventListener('click', function (e) {
+            e.preventDefault();
+
+            const projectName = (input.value || '').trim();
+            if (!projectName) {
+                input.focus();
+                return;
+            }
+
+            confirmBtn.disabled = true;
+
+            const payload = new URLSearchParams();
+            payload.append('task_action', 'create_project');
+            payload.append('project_name', projectName);
+            payload.append('csrf_token', csrfToken);
+
+            fetch('<?php echo $SITEURL; ?>/task/board.php', {
+                method: 'POST',
+                headers: {
+                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8'
+                },
+                body: payload.toString()
+            })
+                .then(function (res) { return res.json(); })
+                .then(function (data) {
+                if (data && data.ok && data.project && Number(data.project.id || 0) > 0) {
+                    window.location.href = '<?php echo $SITEURL; ?>/task/summary.php?project_id=' + Number(data.project.id || 0);
+                    return;
+                }
+                confirmBtn.disabled = false;
+                if (data && data.message) {
+                    alert(data.message);
+                }
+                })
+                .catch(function () {
+                confirmBtn.disabled = false;
+                alert('Failed to create project task.');
+                });
+            });
+        }
+
+        document.querySelectorAll('[data-task-project-toggle]').forEach(function (toggleBtn) {
+            toggleBtn.addEventListener('click', function () {
+                var item = toggleBtn.closest('.task-global-project-item');
+                if (!item) {
+                    return;
+                }
+
+                var isExpanded = item.classList.contains('expanded');
+
+                document.querySelectorAll('.task-global-project-item.expanded').forEach(function (expandedItem) {
+                    expandedItem.classList.remove('expanded');
+                    var expandedBtn = expandedItem.querySelector('[data-task-project-toggle]');
+                    var expandedPanel = expandedItem.querySelector('.task-global-project-submenu');
+                    if (expandedBtn) {
+                        expandedBtn.setAttribute('aria-expanded', 'false');
+                    }
+                    if (expandedPanel) {
+                        expandedPanel.classList.remove('active');
+                    }
+                });
+
+                if (!isExpanded) {
+                    item.classList.add('expanded');
+                    toggleBtn.setAttribute('aria-expanded', 'true');
+                    var panel = item.querySelector('.task-global-project-submenu');
+                    if (panel) {
+                        panel.classList.add('active');
+                    }
+                }
+            });
+        });
+
+        document.querySelectorAll('[data-task-project-actions-btn]').forEach(function (actionBtn) {
+            actionBtn.addEventListener('click', function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+
+                var wrap = actionBtn.closest('.task-global-project-actions');
+                if (!wrap) {
+                    return;
+                }
+
+                var willOpen = !wrap.classList.contains('open');
+                document.querySelectorAll('.task-global-project-actions.open').forEach(function (openWrap) {
+                    openWrap.classList.remove('open');
+                    var openBtn = openWrap.querySelector('[data-task-project-actions-btn]');
+                    if (openBtn) {
+                        openBtn.setAttribute('aria-expanded', 'false');
+                    }
+                });
+
+                if (willOpen) {
+                    wrap.classList.add('open');
+                    actionBtn.setAttribute('aria-expanded', 'true');
+                } else {
+                    actionBtn.setAttribute('aria-expanded', 'false');
+                }
+            });
+        });
+
+        document.addEventListener('click', function (e) {
+            var actionWrap = e.target.closest('.task-global-project-actions');
+            if (actionWrap) {
+                return;
+            }
+
+            document.querySelectorAll('.task-global-project-actions.open').forEach(function (openWrap) {
+                openWrap.classList.remove('open');
+                var openBtn = openWrap.querySelector('[data-task-project-actions-btn]');
+                if (openBtn) {
+                    openBtn.setAttribute('aria-expanded', 'false');
+                }
+            });
+        });
+
         });
 </script>
