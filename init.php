@@ -52,7 +52,7 @@ $siteUrl = 'https://uatcms.beyourdiary.com';
 if (!$siteOrlocalMode) {
     $dbName = 'beyourdi_cms-uat';
     $dbFinanceName = 'beyourdi_financial-uat';
-    $siteUrl = 'http://localhost:8000';
+    $siteUrl = 'http://localhost/cms';
 } elseif ($hostOnly === 'cms.beyourdiary.com') {
     $dbName = 'beyourdi_cms';
     $dbFinanceName = 'beyourdi_financial';

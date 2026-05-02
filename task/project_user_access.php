@@ -3,7 +3,7 @@ ob_start();
 
 $currentPagePin = 141;
 $pageTitle = 'Project User Access';
-$taskParentTitle = 'Task Management';
+$taskParentTitle = 'Project Task';
 $isFinance = 1;
 
 include_once '../menuHeader.php';
@@ -169,7 +169,7 @@ if (!function_exists('taskProjectUserAccessWriteAudit')) {
         $newValue = trim((string) $newValue);
 
         if ($logAct === 'view') {
-            $actionMessage = USER_NAME . " viewed the project user access page (<b>" . htmlspecialchars($projectName, ENT_QUOTES, 'UTF-8') . "</b>).";
+            $actionMessage = USER_NAME . " viewed the page Project User Access (<b>" . htmlspecialchars($projectName, ENT_QUOTES, 'UTF-8') . "</b>).";
         } else {
             $fieldLabel = trim((string) $message);
             if ($fieldLabel === '') {
@@ -461,7 +461,7 @@ $currentProjectId = taskResolveCurrentProjectId($connect, 0);
 $currentProject = $currentProjectId > 0 ? taskGetProjectById($connect, $currentProjectId) : array();
 $taskParentTitle = !empty($currentProject) && isset($currentProject['name']) && trim((string) $currentProject['name']) !== ''
     ? (string) $currentProject['name']
-    : 'Task Management';
+    : 'Project Task';
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && $currentProjectId > 0) {
     $auditProjectName = isset($currentProject['name']) ? (string) $currentProject['name'] : ('Project #' . $currentProjectId);
@@ -606,6 +606,56 @@ function taskProjectAccessInitials($name)
     }
     return $initials !== '' ? $initials : strtoupper(substr($name, 0, 1));
 }
+
+function taskProjectAccessAvatarClass($index)
+{
+    $classes = array(
+        'project-access-avatar-blue',
+        'project-access-avatar-green',
+        'project-access-avatar-purple',
+        'project-access-avatar-amber',
+        'project-access-avatar-rose',
+    );
+
+    $index = (int) $index;
+    return $classes[$index % count($classes)];
+}
+
+function taskProjectAccessGroupKey($groupName)
+{
+    $groupName = strtolower(trim((string) $groupName));
+    if ($groupName === '') {
+        return 'group';
+    }
+
+    $groupName = preg_replace('/[^a-z0-9]+/', '-', $groupName);
+    $groupName = trim((string) $groupName, '-');
+
+    return $groupName !== '' ? $groupName : 'group';
+}
+
+$userDisplayMeta = array();
+$userGroupOptions = array();
+
+foreach ($accessUsers as $index => $accessUser) {
+    $userId = isset($accessUser['id']) ? (int) $accessUser['id'] : 0;
+    $groupLabel = isset($accessUser['user_group_name']) && trim((string) $accessUser['user_group_name']) !== ''
+        ? trim((string) $accessUser['user_group_name'])
+        : 'No Group';
+    $groupKey = taskProjectAccessGroupKey($groupLabel);
+
+    $userDisplayMeta[$userId] = array(
+        'avatar_class' => taskProjectAccessAvatarClass($index),
+        'group_label' => $groupLabel,
+        'group_key' => $groupKey,
+    );
+
+    if (!isset($userGroupOptions[$groupKey])) {
+        $userGroupOptions[$groupKey] = $groupLabel;
+    }
+}
+
+asort($userGroupOptions, SORT_NATURAL | SORT_FLAG_CASE);
 ?>
 <!DOCTYPE html>
 <html>
@@ -636,7 +686,7 @@ function taskProjectAccessInitials($name)
 
         <section id="taskModuleLayout" class="task-module-layout task-sidebar-open">
             <aside class="task-module-sidebar" id="taskModuleSidebar">
-                <h5 class="mb-2">Task Management</h5>
+                <h5 class="mb-2">Project Task</h5>
                 <?php taskRenderSidebarMenu($connect, $SITEURL, 'project_user_access', $currentProjectId); ?>
             </aside>
 
@@ -660,26 +710,58 @@ function taskProjectAccessInitials($name)
                             <input type="hidden" name="access_user_ids[]" value="<?= (int) $accessUser['id'] ?>">
                         <?php endforeach; ?>
 
-                        <div class="project-access-tabs" role="tablist" aria-label="Project user access sections">
-                            <button type="button" class="project-access-tab active" data-project-access-tab="work-item">Work Item Access</button>
-                            <button type="button" class="project-access-tab" data-project-access-tab="work-type">Work Type Access</button>
-                            <button type="button" class="project-access-tab" data-project-access-tab="status">Status Access</button>
-                            <button type="button" class="project-access-tab" data-project-access-tab="column">Column Access</button>
+                        <div class="project-access-toolbar-shell">
+                            <div class="project-access-tabs" role="tablist" aria-label="Project user access sections">
+                                <button type="button" class="project-access-tab active" data-project-access-tab="work-item">
+                                    <i class="fa-regular fa-clipboard"></i>
+                                    <span>Work Item Access</span>
+                                </button>
+                                <button type="button" class="project-access-tab" data-project-access-tab="work-type">
+                                    <i class="fa-solid fa-list-check"></i>
+                                    <span>Work Type Access</span>
+                                </button>
+                                <button type="button" class="project-access-tab" data-project-access-tab="status">
+                                    <i class="fa-regular fa-face-smile"></i>
+                                    <span>Status Access</span>
+                                </button>
+                                <button type="button" class="project-access-tab" data-project-access-tab="column">
+                                    <i class="fa-regular fa-table-columns"></i>
+                                    <span>Column Access</span>
+                                </button>
+                            </div>
+
+                            <div class="project-access-toolbar">
+                                <label class="project-access-search" for="projectAccessSearch">
+                                    <i class="fa-solid fa-magnifying-glass"></i>
+                                    <input type="search" id="projectAccessSearch" placeholder="Search users...">
+                                </label>
+
+                                <label class="project-access-role-filter" for="projectAccessRoleFilter">
+                                    <i class="fa-solid fa-filter"></i>
+                                    <select id="projectAccessRoleFilter">
+                                        <option value="">All User Groups</option>
+                                        <?php foreach ($userGroupOptions as $groupKey => $groupLabel): ?>
+                                            <option value="<?= htmlspecialchars($groupKey, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($groupLabel, ENT_QUOTES, 'UTF-8') ?></option>
+                                        <?php endforeach; ?>
+                                    </select>
+                                    <i class="fa-solid fa-chevron-down project-access-select-caret"></i>
+                                </label>
+                            </div>
                         </div>
 
                         <div class="project-access-panel active" data-project-access-panel="work-item">
-                            <div class="project-access-card">
-                                <h5>Work Item Access</h5>
-                                <p class="project-access-card-note">Control which users can create, edit, or delete work items.</p>
-                                <div class="project-access-table-wrap">
-                                    <table class="project-access-table">
+                            <div class="project-access-table-card">
+                                <div class="project-access-table-wrap project-access-main-table-wrap">
+                                    <table class="project-access-table project-access-table-work-item">
                                         <thead>
                                             <tr>
                                                 <th>User</th>
+                                                <th>User Group</th>
                                                 <th>Add</th>
                                                 <th>Edit</th>
                                                 <th>Delete</th>
-                                                <th>Tick All</th>
+                                                <th><span class="project-access-th-stack">All Access<small>Select All</small></span></th>
+                                                <th class="project-access-table-actions-col"></th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -693,20 +775,26 @@ function taskProjectAccessInitials($name)
                                                 <?php
                                                 $userId = (int) $accessUser['id'];
                                                 ?>
-                                                <tr>
+                                                <?php
+                                                $displayMeta = isset($userDisplayMeta[$userId]) ? $userDisplayMeta[$userId] : array('avatar_class' => 'project-access-avatar-blue', 'group_label' => 'No Group', 'group_key' => 'group');
+                                                $userSearchText = strtolower(trim((string) (isset($accessUser['name']) ? $accessUser['name'] : '') . ' ' . (isset($accessUser['email']) ? $accessUser['email'] : '') . ' ' . $displayMeta['group_label']));
+                                                ?>
+                                                <tr class="project-access-user-row" data-group="<?= htmlspecialchars($displayMeta['group_key'], ENT_QUOTES, 'UTF-8') ?>" data-search="<?= htmlspecialchars($userSearchText, ENT_QUOTES, 'UTF-8') ?>">
                                                     <td>
                                                         <div class="project-access-user">
-                                                            <span class="project-access-avatar"><?= htmlspecialchars(taskProjectAccessInitials(isset($accessUser['name']) ? $accessUser['name'] : ''), ENT_QUOTES, 'UTF-8') ?></span>
+                                                            <span class="project-access-avatar <?= htmlspecialchars($displayMeta['avatar_class'], ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(taskProjectAccessInitials(isset($accessUser['name']) ? $accessUser['name'] : ''), ENT_QUOTES, 'UTF-8') ?></span>
                                                             <div class="project-access-user-meta">
                                                                 <strong><?= htmlspecialchars(isset($accessUser['name']) ? (string) $accessUser['name'] : '', ENT_QUOTES, 'UTF-8') ?></strong>
                                                                 <span><?= htmlspecialchars(isset($accessUser['email']) ? (string) $accessUser['email'] : '', ENT_QUOTES, 'UTF-8') ?></span>
                                                             </div>
                                                         </div>
                                                     </td>
+                                                    <td><span class="project-access-role-badge"><?= htmlspecialchars($displayMeta['group_label'], ENT_QUOTES, 'UTF-8') ?></span></td>
                                                     <td><input class="form-check-input project-access-checkbox" type="checkbox" name="work_item_add[<?= $userId ?>]" value="1" <?= taskProjectAccessChecked($accessRow, 'work_item_add') ? 'checked' : '' ?>></td>
                                                     <td><input class="form-check-input project-access-checkbox" type="checkbox" name="work_item_edit[<?= $userId ?>]" value="1" <?= taskProjectAccessChecked($accessRow, 'work_item_edit') ? 'checked' : '' ?>></td>
                                                     <td><input class="form-check-input project-access-checkbox" type="checkbox" name="work_item_delete[<?= $userId ?>]" value="1" <?= taskProjectAccessChecked($accessRow, 'work_item_delete') ? 'checked' : '' ?>></td>
                                                     <td><input class="form-check-input project-access-checkbox project-access-row-toggle" type="checkbox"></td>
+                                                    <td><button type="button" class="project-access-row-menu" aria-label="More actions"><i class="fa-solid fa-ellipsis-vertical"></i></button></td>
                                                 </tr>
                                             <?php endforeach; ?>
                                         </tbody>
@@ -717,17 +805,23 @@ function taskProjectAccessInitials($name)
 
                         <div class="project-access-panel" data-project-access-panel="work-type">
                             <div class="project-access-card">
-                                <h5>Work Type Access</h5>
-                                <p class="project-access-card-note">Choose which task types each user can use in this project.</p>
+                                <div class="project-access-card-header">
+                                    <div>
+                                        <h5>Work Type Access</h5>
+                                        <p class="project-access-card-note">Choose which task types each user can use in this project.</p>
+                                    </div>
+                                </div>
                                 <div class="project-access-table-wrap">
                                     <table class="project-access-table project-access-table-wide">
                                         <thead>
                                             <tr>
                                                 <th>User</th>
+                                                <th>User Group</th>
                                                 <?php foreach ($workTypes as $workType): ?>
                                                     <th><?= htmlspecialchars(isset($workType['name']) ? (string) $workType['name'] : '', ENT_QUOTES, 'UTF-8') ?></th>
                                                 <?php endforeach; ?>
-                                                <th>Tick All</th>
+                                                <th><span class="project-access-th-stack">All Access<small>Select All</small></span></th>
+                                                <th class="project-access-table-actions-col"></th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -742,8 +836,21 @@ function taskProjectAccessInitials($name)
                                                 $userId = (int) $accessUser['id'];
                                                 $accessRow = isset($userAccessMap[$userId]) ? $userAccessMap[$userId] : array();
                                                 ?>
-                                                <tr>
-                                                    <td><?= htmlspecialchars(isset($accessUser['name']) ? (string) $accessUser['name'] : '', ENT_QUOTES, 'UTF-8') ?></td>
+                                                <?php
+                                                $displayMeta = isset($userDisplayMeta[$userId]) ? $userDisplayMeta[$userId] : array('avatar_class' => 'project-access-avatar-blue', 'group_label' => 'No Group', 'group_key' => 'group');
+                                                $userSearchText = strtolower(trim((string) (isset($accessUser['name']) ? $accessUser['name'] : '') . ' ' . (isset($accessUser['email']) ? $accessUser['email'] : '') . ' ' . $displayMeta['group_label']));
+                                                ?>
+                                                <tr class="project-access-user-row" data-group="<?= htmlspecialchars($displayMeta['group_key'], ENT_QUOTES, 'UTF-8') ?>" data-search="<?= htmlspecialchars($userSearchText, ENT_QUOTES, 'UTF-8') ?>">
+                                                    <td>
+                                                        <div class="project-access-user">
+                                                            <span class="project-access-avatar <?= htmlspecialchars($displayMeta['avatar_class'], ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(taskProjectAccessInitials(isset($accessUser['name']) ? $accessUser['name'] : ''), ENT_QUOTES, 'UTF-8') ?></span>
+                                                            <div class="project-access-user-meta">
+                                                                <strong><?= htmlspecialchars(isset($accessUser['name']) ? (string) $accessUser['name'] : '', ENT_QUOTES, 'UTF-8') ?></strong>
+                                                                <span><?= htmlspecialchars(isset($accessUser['email']) ? (string) $accessUser['email'] : '', ENT_QUOTES, 'UTF-8') ?></span>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td><span class="project-access-role-badge"><?= htmlspecialchars($displayMeta['group_label'], ENT_QUOTES, 'UTF-8') ?></span></td>
                                                     <?php foreach ($workTypes as $workType): ?>
                                                         <?php $workTypeId = isset($workType['id']) ? (int) $workType['id'] : 0; ?>
                                                         <td>
@@ -756,6 +863,7 @@ function taskProjectAccessInitials($name)
                                                         </td>
                                                     <?php endforeach; ?>
                                                     <td><input class="form-check-input project-access-checkbox project-access-row-toggle" type="checkbox"></td>
+                                                    <td><button type="button" class="project-access-row-menu" aria-label="More actions"><i class="fa-solid fa-ellipsis-vertical"></i></button></td>
                                                 </tr>
                                             <?php endforeach; ?>
                                         </tbody>
@@ -766,17 +874,23 @@ function taskProjectAccessInitials($name)
 
                         <div class="project-access-panel" data-project-access-panel="status">
                             <div class="project-access-card">
-                                <h5>Status Access</h5>
-                                <p class="project-access-card-note">Choose which board statuses each user can create into or move work items into.</p>
+                                <div class="project-access-card-header">
+                                    <div>
+                                        <h5>Status Access</h5>
+                                        <p class="project-access-card-note">Choose which board statuses each user can create into or move work items into.</p>
+                                    </div>
+                                </div>
                                 <div class="project-access-table-wrap">
                                     <table class="project-access-table project-access-table-wide">
                                         <thead>
                                             <tr>
                                                 <th>User</th>
+                                                <th>User Group</th>
                                                 <?php foreach ($statusRows as $statusRow): ?>
                                                     <th><?= htmlspecialchars(isset($statusRow['name']) ? (string) $statusRow['name'] : '', ENT_QUOTES, 'UTF-8') ?></th>
                                                 <?php endforeach; ?>
-                                                <th>Tick All</th>
+                                                <th><span class="project-access-th-stack">All Access<small>Select All</small></span></th>
+                                                <th class="project-access-table-actions-col"></th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -791,13 +905,27 @@ function taskProjectAccessInitials($name)
                                                 $userId = (int) $accessUser['id'];
                                                 $accessRow = isset($userAccessMap[$userId]) ? $userAccessMap[$userId] : array();
                                                 ?>
-                                                <tr>
-                                                    <td><?= htmlspecialchars(isset($accessUser['name']) ? (string) $accessUser['name'] : '', ENT_QUOTES, 'UTF-8') ?></td>
+                                                <?php
+                                                $displayMeta = isset($userDisplayMeta[$userId]) ? $userDisplayMeta[$userId] : array('avatar_class' => 'project-access-avatar-blue', 'group_label' => 'No Group', 'group_key' => 'group');
+                                                $userSearchText = strtolower(trim((string) (isset($accessUser['name']) ? $accessUser['name'] : '') . ' ' . (isset($accessUser['email']) ? $accessUser['email'] : '') . ' ' . $displayMeta['group_label']));
+                                                ?>
+                                                <tr class="project-access-user-row" data-group="<?= htmlspecialchars($displayMeta['group_key'], ENT_QUOTES, 'UTF-8') ?>" data-search="<?= htmlspecialchars($userSearchText, ENT_QUOTES, 'UTF-8') ?>">
+                                                    <td>
+                                                        <div class="project-access-user">
+                                                            <span class="project-access-avatar <?= htmlspecialchars($displayMeta['avatar_class'], ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(taskProjectAccessInitials(isset($accessUser['name']) ? $accessUser['name'] : ''), ENT_QUOTES, 'UTF-8') ?></span>
+                                                            <div class="project-access-user-meta">
+                                                                <strong><?= htmlspecialchars(isset($accessUser['name']) ? (string) $accessUser['name'] : '', ENT_QUOTES, 'UTF-8') ?></strong>
+                                                                <span><?= htmlspecialchars(isset($accessUser['email']) ? (string) $accessUser['email'] : '', ENT_QUOTES, 'UTF-8') ?></span>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td><span class="project-access-role-badge"><?= htmlspecialchars($displayMeta['group_label'], ENT_QUOTES, 'UTF-8') ?></span></td>
                                                     <?php foreach ($statusRows as $statusRow): ?>
                                                         <?php $statusId = isset($statusRow['id']) ? (int) $statusRow['id'] : 0; ?>
                                                         <td><input class="form-check-input project-access-checkbox" type="checkbox" name="allowed_status_ids[<?= $userId ?>][]" value="<?= $statusId ?>" <?= taskProjectAccessChecked($accessRow, 'allowed_status_ids', $statusId) ? 'checked' : '' ?>></td>
                                                     <?php endforeach; ?>
                                                     <td><input class="form-check-input project-access-checkbox project-access-row-toggle" type="checkbox"></td>
+                                                    <td><button type="button" class="project-access-row-menu" aria-label="More actions"><i class="fa-solid fa-ellipsis-vertical"></i></button></td>
                                                 </tr>
                                             <?php endforeach; ?>
                                         </tbody>
@@ -808,8 +936,12 @@ function taskProjectAccessInitials($name)
 
                         <div class="project-access-panel" data-project-access-panel="column">
                             <div class="project-access-card">
-                                <h5>Column Access</h5>
-                                <p class="project-access-card-note">Control user permissions for work item detail fields (columns).</p>
+                                <div class="project-access-card-header">
+                                    <div>
+                                        <h5>Column Access</h5>
+                                        <p class="project-access-card-note">Control user permissions for work item detail fields (columns).</p>
+                                    </div>
+                                </div>
                                 <div class="project-access-column-sections">
                                     <?php foreach ($fieldOptions as $index => $fieldOption): ?>
                                         <?php
@@ -828,10 +960,12 @@ function taskProjectAccessInitials($name)
                                         <thead>
                                             <tr>
                                                 <th>User</th>
+                                                <th>User Group</th>
                                                 <th>Add</th>
                                                 <th>Edit</th>
                                                 <th>Delete</th>
-                                                <th>Tick All</th>
+                                                <th><span class="project-access-th-stack">All Access<small>Select All</small></span></th>
+                                                <th class="project-access-table-actions-col"></th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -846,20 +980,26 @@ function taskProjectAccessInitials($name)
                                                 $userId = (int) $accessUser['id'];
                                                 $accessRow = isset($userAccessMap[$userId]) ? $userAccessMap[$userId] : array();
                                                 ?>
-                                                <tr>
+                                                <?php
+                                                $displayMeta = isset($userDisplayMeta[$userId]) ? $userDisplayMeta[$userId] : array('avatar_class' => 'project-access-avatar-blue', 'group_label' => 'No Group', 'group_key' => 'group');
+                                                $userSearchText = strtolower(trim((string) (isset($accessUser['name']) ? $accessUser['name'] : '') . ' ' . (isset($accessUser['email']) ? $accessUser['email'] : '') . ' ' . $displayMeta['group_label']));
+                                                ?>
+                                                <tr class="project-access-user-row" data-group="<?= htmlspecialchars($displayMeta['group_key'], ENT_QUOTES, 'UTF-8') ?>" data-search="<?= htmlspecialchars($userSearchText, ENT_QUOTES, 'UTF-8') ?>">
                                                     <td>
                                                         <div class="project-access-user">
-                                                            <span class="project-access-avatar"><?= htmlspecialchars(taskProjectAccessInitials(isset($accessUser['name']) ? $accessUser['name'] : ''), ENT_QUOTES, 'UTF-8') ?></span>
+                                                            <span class="project-access-avatar <?= htmlspecialchars($displayMeta['avatar_class'], ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(taskProjectAccessInitials(isset($accessUser['name']) ? $accessUser['name'] : ''), ENT_QUOTES, 'UTF-8') ?></span>
                                                             <div class="project-access-user-meta">
                                                                 <strong><?= htmlspecialchars(isset($accessUser['name']) ? (string) $accessUser['name'] : '', ENT_QUOTES, 'UTF-8') ?></strong>
                                                                 <span><?= htmlspecialchars(isset($accessUser['email']) ? (string) $accessUser['email'] : '', ENT_QUOTES, 'UTF-8') ?></span>
                                                             </div>
                                                         </div>
                                                     </td>
+                                                    <td><span class="project-access-role-badge"><?= htmlspecialchars($displayMeta['group_label'], ENT_QUOTES, 'UTF-8') ?></span></td>
                                                     <td><input class="form-check-input project-access-checkbox project-access-column-action" type="checkbox" data-column-action="add" data-user-id="<?= $userId ?>"></td>
                                                     <td><input class="form-check-input project-access-checkbox project-access-column-action" type="checkbox" data-column-action="edit" data-user-id="<?= $userId ?>"></td>
                                                     <td><input class="form-check-input project-access-checkbox project-access-column-action" type="checkbox" data-column-action="delete" data-user-id="<?= $userId ?>"></td>
                                                     <td><input class="form-check-input project-access-checkbox project-access-column-row-toggle" type="checkbox" data-user-id="<?= $userId ?>"></td>
+                                                    <td><button type="button" class="project-access-row-menu" aria-label="More actions"><i class="fa-solid fa-ellipsis-vertical"></i></button></td>
                                                 </tr>
                                             <?php endforeach; ?>
                                         </tbody>

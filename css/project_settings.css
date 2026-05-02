@@ -21,21 +21,45 @@
   margin-left: 0 !important;
   margin-right: 0 !important;
   margin-bottom: 1.5rem !important;
-  padding: 1rem !important;
+  padding: 0 !important;
   background: #ffffff;
   border: 1px solid #d9e2ef;
   border-radius: 12px;
   box-shadow: 0 8px 22px rgba(18, 38, 63, 0.06);
 }
 
-/* bootstrap row creates negative margins; remove them so input aligns with cards */
-.project-settings-page .task-project-settings-top-row.row {
-  --bs-gutter-x: 1rem;
+.task-project-settings-top-header {
+  background: #ffffff !important;
+  gap: 1rem;
+  padding: 1.35rem 1.5rem 1rem !important;
 }
 
-.project-settings-page .task-project-settings-top-row > [class*="col-"] {
-  padding-left: 0.5rem;
-  padding-right: 0.5rem;
+.task-project-settings-top-field {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  min-height: 100%;
+}
+
+.task-project-settings-top-label {
+  flex: 0 0 auto;
+  margin-bottom: 0 !important;
+  font-size: 1.25rem;
+  font-style: normal;
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+  color: inherit;
+}
+
+.task-project-settings-top-input {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.task-project-settings-top-input .form-control,
+.task-project-settings-top-input .task-project-color-control {
+  width: 100%;
 }
 
 .task-project-settings-form .card {
@@ -168,9 +192,14 @@
 }
 
 @media (max-width: 991.98px) {
+  .project-settings-page {
+    overflow-x: hidden;
+  }
+
   .project-settings-page .task-main-content {
     padding-left: 0;
     padding-right: 0;
+    overflow-x: hidden;
   }
 
   .project-settings-page .task-main-content > .task-project-settings-form,
@@ -183,6 +212,26 @@
   .project-settings-page #taskModuleLayout {
     column-gap: 20px;
     padding-right: 20px;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .task-project-settings-top-header {
+    flex-wrap: wrap;
+    align-items: stretch !important;
+  }
+
+  .task-project-settings-top-header > [class*="col-"] {
+    width: 100%;
+    max-width: 100%;
+    flex: 0 0 100%;
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  .task-project-settings-top-field {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .task-project-settings-row {
@@ -191,9 +240,14 @@
 }
 
 @media (max-width: 767.98px) {
+  .project-settings-page {
+    overflow-x: hidden;
+  }
+
   .project-settings-page .task-main-content {
     padding-left: 0;
     padding-right: 0;
+    overflow-x: hidden;
   }
 
   .project-settings-page .task-main-content > .task-project-settings-form,
@@ -206,5 +260,33 @@
   .project-settings-page #taskModuleLayout {
     column-gap: 16px;
     padding-right: 16px;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .task-project-settings-top-header {
+    padding: 1rem !important;
+  }
+
+  .task-project-settings-top-field,
+  .task-project-color-control {
+    gap: 0.75rem;
+  }
+
+  .task-project-settings-top-label {
+    white-space: normal;
+  }
+
+  .task-project-color-control {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .task-project-reset-color-btn {
+    min-width: 0;
+  }
+
+  .task-project-settings-row {
+    gap: 0.65rem;
   }
 }

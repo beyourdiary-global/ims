@@ -1,7 +1,7 @@
 <?php
 $currentPagePin = 136;
 $pageTitle = 'Board';
-$taskParentTitle = 'Task Management';
+$taskParentTitle = 'Project Task';
 $isFinance = 1;
 
 if (!function_exists('taskBoardAuditLog')) {
@@ -1191,10 +1191,6 @@ if (!taskIsActionAllowed('view', $pinAccess)) {
 }
 
 $safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
-$safePageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
-$viewActMsg = $safeUserName . ' viewed the page ' . $safePageTitle . '.';
-taskBoardAuditLog($connect, $pageTitle, 'View', $viewActMsg, $cdate, $ctime);
-
 $currentUserId = USER_ID;
 $currentProjectId = taskResolveCurrentProjectId($connect, 0);
 $currentProject = $currentProjectId > 0 ? taskGetProjectById($connect, $currentProjectId) : array();
@@ -1204,7 +1200,11 @@ if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $currentPage
 }
 $taskParentTitle = !empty($currentProject) && isset($currentProject['name']) && trim((string) $currentProject['name']) !== ''
     ? (string) $currentProject['name']
-    : 'Task Management';
+    : 'Project Task';
+$safePageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
+$safeProjectName = htmlspecialchars((string) $taskParentTitle, ENT_QUOTES, 'UTF-8');
+$viewActMsg = $safeUserName . ' viewed the page ' . $safePageTitle . ' (<b>' . $safeProjectName . '</b>).';
+taskBoardAuditLog($connect, $pageTitle, 'View', $viewActMsg, $cdate, $ctime);
 if ($currentProjectId > 0) {
     taskEnsureDefaultWorkTypes($connect, $currentProjectId, $currentUserId, $cdate, $ctime);
 }
@@ -1257,7 +1257,7 @@ $projectBoardBackground = isset($currentProject['board_background_color']) ? (st
 
         <section id="taskModuleLayout" class="task-module-layout task-sidebar-open">
             <aside class="task-module-sidebar" id="taskModuleSidebar">
-                <h5 class="mb-2">Task Management</h5>
+                <h5 class="mb-2">Project Task</h5>
                 <?php taskRenderSidebarMenu($connect, $SITEURL, 'board', $currentProjectId); ?>
             </aside>
 

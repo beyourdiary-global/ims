@@ -897,6 +897,13 @@
   color: #172b4d;
 }
 
+.summary-activity-modal-search:focus,
+.summary-activity-modal-search:focus-visible {
+  border-color: #d0d5dd;
+  outline: none;
+  box-shadow: none;
+}
+
 .summary-activity-modal-size-wrap {
   display: inline-flex;
   align-items: center;

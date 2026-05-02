@@ -1,5 +1,6 @@
 .project-user-access-page {
   overflow-x: hidden;
+  background: #ffffff;
 }
 
 .project-user-access-page .task-page-wrap {
@@ -13,79 +14,168 @@
 .project-user-access-page .task-page-wrap > .col-12 {
   padding-left: 0 !important;
   padding-right: 0 !important;
-  max-width: none !important;
-  width: 100% !important;
 }
 
 .project-user-access-page .project-access-page-header {
-  padding-left: 12px;
-  padding-right: 12px;
-  padding-top: 12px;
+  padding: 12px 12px 0;
 }
 
 .project-user-access-page .task-module-layout,
 .project-user-access-page #taskModuleLayout {
   width: 100% !important;
   max-width: none !important;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  background: #ffffff !important;
   border: 0 !important;
   border-radius: 0 !important;
   box-shadow: none !important;
-  background: #f4f7fb;
+  column-gap: 28px;
   box-sizing: border-box;
 }
 
 .project-user-access-page .task-main-content {
-  width: 100% !important;
-  max-width: none !important;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-  padding: 12px 12px 48px !important;
+  padding: 12px 0 40px !important;
+  background: #ffffff !important;
   border: 0 !important;
   border-radius: 0 !important;
   box-shadow: none !important;
-  background: #f4f7fb;
   box-sizing: border-box;
 }
 
 .project-access-subtitle {
-  color: #69768a;
+  color: #5f7188;
   font-size: 0.95rem;
 }
 
 .project-access-form {
   display: flex;
   flex-direction: column;
+  gap: 1.35rem;
+  margin: 0 28px;
+}
+
+.project-access-toolbar-shell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 1rem;
+  flex-wrap: wrap;
 }
 
 .project-access-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  width: 100%;
-  margin: 0 0 12px;
-  padding: 18px 18px 14px;
-  border-bottom: 1px solid #d8e1eb;
-  background: #f1f5f9;
-  box-sizing: border-box;
+  display: inline-grid;
+  grid-auto-flow: column;
+  grid-auto-columns: minmax(0, 1fr);
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  background: #ffffff;
+  border: 1px solid #dbe4f0;
+  border-radius: 12px;
+  overflow: hidden;
 }
 
 .project-access-tab {
+  min-height: 54px;
+  padding: 0.9rem 1.35rem;
   border: 0;
-  background: transparent;
-  color: #5a6678;
-  font-weight: 600;
-  padding: 0.55rem 0.9rem;
-  border-radius: 10px;
+  border-right: 1px solid #dbe4f0;
+  background: #ffffff;
+  color: #4f6483;
+  font-weight: 500;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  white-space: nowrap;
+}
+
+.project-access-tab:last-child {
+  border-right: 0;
+}
+
+.project-access-tab i {
+  font-size: 0.95rem;
 }
 
 .project-access-tab.active {
-  color: #1a57b8;
-  background: #edf4ff;
+  background: linear-gradient(135deg, #3d6ff2, #2f5be6);
+  color: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+
+.project-access-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.project-access-search,
+.project-access-role-filter {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-height: 50px;
+  padding: 0 1rem;
+  border: 1px solid #dbe4f0;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #344054;
+}
+
+.project-access-search {
+  width: 254px;
+}
+
+.project-access-search input,
+.project-access-role-filter select {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #344054;
+  font-size: 16px;
+  font-weight: 400;
+}
+
+.project-access-role-filter {
+  width: 220px;
+  padding-right: 2.75rem;
+}
+
+.project-access-role-filter select {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  cursor: pointer;
+}
+
+.project-access-select-caret {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.85rem;
+  pointer-events: none;
+  color: #64748b;
+}
+
+.project-access-row-menu {
+  border: 1px solid #dbe4f0;
+  background: #ffffff;
+  color: #344054;
+  border-radius: 12px;
+  min-height: 50px;
+  padding: 0 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.7rem;
+  white-space: nowrap;
 }
 
 .project-access-panel {
@@ -96,44 +186,70 @@
   display: block;
 }
 
-.project-access-card {
+.project-access-card,
+.project-access-table-card {
   background: #ffffff;
-  border: 1px solid #d8e1eb;
-  border-radius: 6px;
-  padding: 1rem;
-  box-shadow: none;
+  border: 1px solid #e5ebf3;
+  border-radius: 16px;
+  box-shadow: 0 18px 40px rgba(15, 23, 42, 0.06);
 }
 
-.project-access-card h5 {
-  margin-bottom: 0.25rem;
+.project-access-card-header h5 {
+  margin: 0;
+  font-size: 1.05rem;
+  color: #101828;
 }
 
 .project-access-card-note {
-  color: #69768a;
-  margin-bottom: 1rem;
+  margin: 0.2rem 0 0;
+  color: #667085;
+  font-size: 0.92rem;
+}
+
+.project-access-table-card,
+.project-access-card {
+  padding: 0.25rem 1.2rem 1rem;
+}
+
+.project-access-card-header {
+  padding: 1rem 0 0.6rem;
 }
 
 .project-access-table-wrap {
   overflow-x: auto;
 }
 
+.project-access-main-table-wrap {
+  padding-top: 0.2rem;
+}
+
 .project-access-table {
   width: 100%;
-  min-width: 860px;
+  min-width: 980px;
   border-collapse: separate;
   border-spacing: 0;
 }
 
 .project-access-table-wide {
-  min-width: 980px;
+  min-width: 1120px;
 }
 
 .project-access-table th,
 .project-access-table td {
-  padding: 0.9rem 0.75rem;
-  border-bottom: 1px solid #e5ebf3;
-  vertical-align: middle;
+  padding: 1rem 0.7rem;
+  border-bottom: 1px solid #edf2f7;
   text-align: center;
+  vertical-align: middle;
+}
+
+.project-access-table th {
+  color: #101828;
+  font-size: 0.98rem;
+  font-weight: 600;
+}
+
+.project-access-table tbody tr:last-child td {
+  border-bottom: 0;
 }
 
 .project-access-table th:first-child,
@@ -141,46 +257,97 @@
   text-align: left;
 }
 
-.project-access-checkbox {
-  width: 1em;
-  height: 1em;
-  cursor: pointer;
-  margin: 0;
-  vertical-align: middle;
+.project-access-th-stack {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.2;
+}
+
+.project-access-th-stack small {
+  color: #667085;
+  font-weight: 500;
+  font-size: 0.82rem;
 }
 
 .project-access-user {
   display: flex;
   align-items: center;
-  gap: 0.8rem;
+  gap: 0.9rem;
 }
 
 .project-access-avatar {
-  width: 40px;
-  height: 40px;
+  width: 48px;
+  height: 48px;
   border-radius: 999px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #e5ddff, #cbf1ef);
-  color: #38507c;
+  font-size: 1.05rem;
   font-weight: 700;
+}
+
+.project-access-avatar-blue {
+  background: #e8f0ff;
+  color: #2f5be6;
+}
+
+.project-access-avatar-green {
+  background: #eaf8ea;
+  color: #1f8f47;
+}
+
+.project-access-avatar-purple {
+  background: #f1e9ff;
+  color: #7c3aed;
+}
+
+.project-access-avatar-amber {
+  background: #fff3de;
+  color: #f59e0b;
+}
+
+.project-access-avatar-rose {
+  background: #ffe6e6;
+  color: #ef4444;
 }
 
 .project-access-user-meta {
   display: flex;
   flex-direction: column;
-  gap: 0.1rem;
+  gap: 0.18rem;
 }
 
 .project-access-user-meta strong {
-  color: #223049;
-  font-size: 0.95rem;
+  color: #101828;
+  font-size: 0.98rem;
+  font-weight: 700;
 }
 
 .project-access-user-meta span {
-  color: #78859a;
-  font-size: 0.82rem;
+  color: #667085;
+  font-size: 0.92rem;
+}
+
+.project-access-role-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 30px;
+  padding: 0 0.85rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 500;
+  background: #e8f0ff;
+  color: #2f5be6;
+}
+
+.project-access-checkbox {
+  width: 1.15rem;
+  height: 1.15rem;
+  margin: 0;
+  cursor: pointer;
+  border-radius: 5px;
 }
 
 .project-access-inline-option {
@@ -204,365 +371,165 @@
   object-fit: contain;
 }
 
-.project-access-column-toolbar {
+.project-access-table-actions-col {
+  width: 40px;
+}
+
+.project-access-row-menu {
+  width: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-color: transparent;
+  color: #475467;
+  background: transparent;
+  box-shadow: none;
+}
+
+.project-access-column-sections {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  padding: 0.95rem 1rem;
-  border: 1px solid #e5ebf3;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  margin: 0.3rem 0 1rem;
+}
+
+.project-access-column-section {
+  border: 1px solid #dbe4f0;
+  background: #ffffff;
+  color: #344054;
   border-radius: 12px;
-  margin-bottom: 1rem;
+  padding: 0.72rem 0.95rem;
+  text-align: left;
+  font-weight: 600;
 }
 
-.project-access-column-select-wrap {
-  display: flex;
-  align-items: center;
-  gap: 0.85rem;
-  flex: 1 1 auto;
+.project-access-column-section.active {
+  border-color: #bfd0ff;
+  background: #edf4ff;
+  color: #1647b7;
 }
 
-.project-access-column-select-control {
-  position: relative;
-  width: 100%;
-  max-width: 260px;
-}
-
-.project-access-column-label {
-  margin: 0;
-  white-space: nowrap;
-  color: #223049;
-  font-size: 0.92rem;
-}
-
-.project-access-column-select {
-  max-width: none;
-  padding-right: 2.5rem;
-  appearance: none;
-  -webkit-appearance: none;
-  -moz-appearance: none;
-  background-image: none;
-}
-
-.project-access-column-select-icon {
-  position: absolute;
-  top: 50%;
-  right: 14px;
-  transform: translateY(-50%);
-  color: #6c7890;
-  pointer-events: none;
-}
-
-.project-access-column-hint {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  color: #78859a;
-  font-size: 0.84rem;
-}
-
-.project-access-column-options {
-  display: flex;
-  justify-content: center;
-  min-width: 0;
-}
-
-.project-access-column-option {
+.project-access-hidden-row {
   display: none;
-  align-items: center;
-  justify-content: center;
-}
-
-.project-access-column-option.active {
-  display: inline-flex;
-}
-
-.project-access-column-options-cell {
-  width: 0;
-  padding-left: 0;
-  padding-right: 0;
-  border-bottom: 0;
-  overflow: hidden;
-}
-
-.project-access-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.75rem;
-  padding-top: 0.5rem;
 }
 
 @media (max-width: 991.98px) {
+  .project-user-access-page {
+    overflow-x: hidden;
+  }
+
   .project-user-access-page .task-module-layout,
   .project-user-access-page #taskModuleLayout {
     column-gap: 20px;
-    padding-right: 20px;
+    max-width: 100%;
+    overflow-x: hidden;
   }
 
+  .project-access-form {
+    margin: 0 20px;
+    min-width: 0;
+  }
+
+  .project-access-toolbar-shell {
+    align-items: stretch;
+    flex-direction: column;
+    min-width: 0;
+  }
+
+  .project-access-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .project-access-tab {
+    flex: 1 1 calc(50% - 1px);
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .project-access-toolbar {
+    justify-content: stretch;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .project-access-search,
+  .project-access-role-filter {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+
+  .project-access-search input,
+  .project-access-role-filter select {
+    min-width: 0;
+  }
+}
+
+@media (max-width: 767.98px) {
+  .project-user-access-page {
+    overflow-x: hidden;
+  }
+
+  .project-user-access-page .task-module-layout,
+  .project-user-access-page #taskModuleLayout {
+    column-gap: 16px;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .project-access-form {
+    margin: 0 16px;
+    min-width: 0;
+  }
+
+  .project-access-tabs {
+    flex-wrap: nowrap;
+    width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .project-access-tab {
+    flex: 0 0 auto;
+    min-width: max-content;
+    justify-content: flex-start;
+    border-bottom: 0;
+  }
+
+  .project-access-tab:last-child {
+    border-right: 0;
+  }
+
+  .project-access-table-card,
   .project-access-card {
-    padding: 0.9rem;
+    border-radius: 14px;
+  }
+
+  .project-access-table-card,
+  .project-access-card {
+    padding-left: 0.9rem;
+    padding-right: 0.9rem;
+  }
+
+  .project-access-toolbar,
+  .project-access-search,
+  .project-access-role-filter,
+  .project-access-panel,
+  .project-access-table-card,
+  .project-access-card,
+  .project-access-main-table-wrap {
+    min-width: 0;
+    max-width: 100%;
+    box-sizing: border-box;
   }
 
   .project-access-table {
     min-width: 760px;
   }
-
-  .project-access-column-toolbar {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-}
-
-@media (max-width: 767.98px) {
-  .project-user-access-page .task-module-layout,
-  .project-user-access-page #taskModuleLayout {
-    column-gap: 16px;
-    padding-right: 16px;
-  }
-
-  .project-access-tabs {
-    gap: 0.4rem;
-  }
-
-  .project-access-tab {
-    width: 100%;
-    text-align: left;
-  }
-
-  .project-access-card {
-    padding: 0.8rem;
-  }
-
-  .project-access-column-select-wrap {
-    width: 100%;
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .project-access-column-select-control {
-    max-width: none;
-  }
-
-  .project-access-actions {
-    flex-direction: column-reverse;
-  }
-
-  .project-access-actions .btn {
-    width: 100%;
-  }
-}
-
-.project-access-column-sections {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 0.65rem;
-  margin-bottom: 1rem;
-}
-
-.project-access-column-section {
-  border: 1px solid #d8e1eb;
-  background: #ffffff;
-  color: #344054;
-  border-radius: 12px;
-  padding: 0.75rem 0.9rem;
-  text-align: left;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.project-access-column-section.active {
-  border-color: #2f6fed;
-  background: #edf4ff;
-  color: #0f4fb8;
-}
-
-/* =========================================================
-   Project User Access spacing fix
-   Match Board page layout/gap
-========================================================= */
-
-body.project-user-access-page {
-  overflow-x: hidden !important;
-}
-
-/* Keep same centered page shell as board.php */
-body.project-user-access-page .task-page-wrap {
-  margin-top: 1rem !important;
-}
-
-/* Header spacing same feeling as Board page */
-body.project-user-access-page .project-access-page-header {
-  margin-bottom: 0.5rem !important;
-}
-
-/* Main task module should behave like Board page */
-body.project-user-access-page #taskModuleLayout.task-module-layout {
-  margin-top: 0 !important;
-  border-radius: 0 !important;
-  border: 0 !important;
-  background: #f4f7fb !important;
-  overflow: visible !important;
-}
-
-/* This is the real gap: same as Board page task-main-content padding */
-body.project-user-access-page #taskModuleLayout .task-main-content {
-  padding: 0.75rem !important;
-  background: #f4f7fb !important;
-  border-radius: 0 !important;
-  overflow: visible !important;
-}
-
-/* Give tabs the same inner distance from left/right as board toolbar */
-body.project-user-access-page .project-access-tabs {
-  margin: 0 0 0.75rem 0 !important;
-  padding: 0.85rem 0.85rem 0.75rem !important;
-  background: #f1f5f9 !important;
-  border: 0 !important;
-  border-bottom: 1px solid #d8e1eb !important;
-  border-radius: 0 !important;
-  box-sizing: border-box !important;
-}
-
-/* Card should not touch the edge of task-main-content */
-body.project-user-access-page .project-access-card {
-  margin: 0 !important;
-  border-radius: 6px !important;
-  box-shadow: none !important;
-}
-
-/* Remove any earlier CSS that added right-only gap */
-body.project-user-access-page #taskModuleLayout {
-  column-gap: 0 !important;
-  padding-right: 0 !important;
-}
-
-/* =========================================================
-   Project User Access: make grey module area full-width
-   Header stays centered, module grey area expands to browser edge
-========================================================= */
-
-body.project-user-access-page {
-  overflow-x: hidden !important;
-}
-
-/* The page header remains inside col-md-11 */
-body.project-user-access-page .project-access-page-header {
-  margin-bottom: 0.5rem !important;
-}
-
-/* Break the whole grey module area out of the centered col-md-11 */
-body.project-user-access-page #taskModuleLayout.task-module-layout {
-  position: relative !important;
-  width: calc(100vw - var(--task-global-sidebar-width, 0px)) !important;
-  max-width: none !important;
-
-  left: 50% !important;
-  transform: translateX(-50%) !important;
-
-  margin-top: 0 !important;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-
-  border: 0 !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
-  background: #f4f7fb !important;
-  overflow: visible !important;
-  box-sizing: border-box !important;
-}
-
-/* Keep the content inside the grey area with board-like padding */
-body.project-user-access-page #taskModuleLayout .task-main-content {
-  width: 100% !important;
-  max-width: none !important;
-  margin: 0 !important;
-  padding: 0.75rem !important;
-  background: #f4f7fb !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
-  box-sizing: border-box !important;
-  overflow: visible !important;
-}
-
-/* Grey tabs now naturally follow the full-width module */
-body.project-user-access-page .project-access-tabs {
-  width: 100% !important;
-  max-width: none !important;
-  margin: 0 0 0.75rem 0 !important;
-  padding: 0.85rem 0.85rem 0.75rem !important;
-  background: #f1f5f9 !important;
-  border: 0 !important;
-  border-bottom: 1px solid #d8e1eb !important;
-  border-radius: 0 !important;
-  box-sizing: border-box !important;
-}
-
-/* White access card keeps normal inner gap from grey background */
-body.project-user-access-page .project-access-card {
-  margin: 0 !important;
-  border-radius: 6px !important;
-  box-shadow: none !important;
-}
-
-/* Prevent old right-gap / column-gap rules from affecting this page */
-body.project-user-access-page #taskModuleLayout {
-  column-gap: 0 !important;
-  padding-right: 0 !important;
-}
-
-/* =========================================================
-   Project User Access full grey module width
-   Header stays centered, grey module expands to browser edge
-========================================================= */
-
-body.project-user-access-page .task-page-wrap {
-  width: 100% !important;
-  max-width: none !important;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-  padding-left: 0 !important;
-  padding-right: 0 !important;
-}
-
-body.project-user-access-page .project-access-page-header {
-  margin-bottom: 0.5rem !important;
-}
-
-body.project-user-access-page .project-access-full-module,
-body.project-user-access-page #taskModuleLayout {
-  flex: 0 0 100% !important;
-  width: 100% !important;
-  max-width: none !important;
-  margin-left: 0 !important;
-  margin-right: 0 !important;
-  border: 0 !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
-  background: #f4f7fb !important;
-  overflow: visible !important;
-}
-
-body.project-user-access-page #taskModuleLayout .task-main-content {
-  width: 100% !important;
-  max-width: none !important;
-  padding: 0.75rem !important;
-  margin: 0 !important;
-  background: #f4f7fb !important;
-  border-radius: 0 !important;
-  box-shadow: none !important;
-}
-
-body.project-user-access-page .project-access-tabs {
-  width: 100% !important;
-  margin: 0 0 0.75rem 0 !important;
-  padding: 0.85rem 0.85rem 0.75rem !important;
-  background: #f1f5f9 !important;
-  border-bottom: 1px solid #d8e1eb !important;
-  border-radius: 0 !important;
-}
-
-body.project-user-access-page .project-access-card {
-  margin: 0 !important;
-  border-radius: 6px !important;
 }
