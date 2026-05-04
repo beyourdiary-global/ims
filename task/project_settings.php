@@ -342,7 +342,7 @@ if (!function_exists('taskProjectSettingsWriteViewAudit')) {
             'oldval' => '',
             'changes' => '',
             'newval' => '',
-            'act_msg' => USER_NAME . " viewed the page Project Settings (<b>" . htmlspecialchars($projectName, ENT_QUOTES, 'UTF-8') . "</b>).",
+            'act_msg' => htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8') . " viewed the page Project Settings (<b>" . htmlspecialchars($projectName, ENT_QUOTES, 'UTF-8') . "</b>).",
             'page' => 'Project Settings',
             'connect' => $connect,
         ));
