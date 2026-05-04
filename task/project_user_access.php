@@ -177,7 +177,7 @@ if (!function_exists('taskProjectUserAccessWriteAudit')) {
                 $fieldLabel = 'Project User Access';
             }
 
-            $actionMessage = $safeUserName . " edit the data";
+            $actionMessage = $safeUserName . " edited the data";
             $actionMessage .= " [ <b> Project </b> : <b>'" . htmlspecialchars($projectName, ENT_QUOTES, 'UTF-8') . "'</b> ]";
             $actionMessage .= " , [ <b> " . htmlspecialchars($fieldLabel, ENT_QUOTES, 'UTF-8') . " </b> : <b>'" . htmlspecialchars($oldValue !== '' ? $oldValue : 'Empty Value', ENT_QUOTES, 'UTF-8') . "'</b>";
             $actionMessage .= " to <b>'" . htmlspecialchars($newValue !== '' ? $newValue : 'Empty Value', ENT_QUOTES, 'UTF-8') . "'</b> ]";
