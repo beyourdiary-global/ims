@@ -505,26 +505,42 @@ $menuList = array(
 </head>
 
 <?php
-$taskCurrentPath = isset($_SERVER['REQUEST_URI']) ? (string) parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) : '';
-$isTaskSummaryPage = strpos($taskCurrentPath, '/task/summary.php') !== false;
-$isTaskBoardPage = strpos($taskCurrentPath, '/task/board.php') !== false;
-$isTaskSheetsPage = strpos($taskCurrentPath, '/task/sheets.php') !== false;
-$isTaskProjectSettingsPage = strpos($taskCurrentPath, '/task/project_settings.php') !== false;
-$isTaskProjectUserAccessPage = strpos($taskCurrentPath, '/task/project_user_access.php') !== false;
-$taskCurrentProjectId = taskResolveCurrentProjectId($connect, isset($_GET['project_id']) ? (int) $_GET['project_id'] : 0);
-$taskProjectList = $hasTaskManagementAccess ? taskGetProjectList($connect) : array();
-$canCreateTaskProject = $hasTaskManagementAccess ? taskCanCreateProject($connect) : false;
+$taskCurrentPath = '';
+$isTaskSummaryPage = false;
+$isTaskBoardPage = false;
+$isTaskSheetsPage = false;
+$isTaskProjectSettingsPage = false;
+$isTaskProjectUserAccessPage = false;
+$taskCurrentProjectId = 0;
+$taskProjectList = array();
+$canCreateTaskProject = false;
 $taskActiveMenuKey = '';
-if ($isTaskSummaryPage) {
-    $taskActiveMenuKey = 'summary';
-} elseif ($isTaskBoardPage) {
-    $taskActiveMenuKey = 'board';
-} elseif ($isTaskSheetsPage) {
-    $taskActiveMenuKey = 'sheets';
-} elseif ($isTaskProjectUserAccessPage) {
-    $taskActiveMenuKey = 'project_user_access';
-} elseif ($isTaskProjectSettingsPage) {
-    $taskActiveMenuKey = 'project_settings';
+
+if ($hasTaskManagementAccess) {
+    $taskProjectList = taskGetProjectList($connect);
+    $canCreateTaskProject = taskCanCreateProject($connect);
+    $taskCurrentPath = isset($_SERVER['REQUEST_URI']) ? (string) parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) : '';
+
+    if (strpos($taskCurrentPath, '/task/') !== false) {
+        $isTaskSummaryPage = strpos($taskCurrentPath, '/task/summary.php') !== false;
+        $isTaskBoardPage = strpos($taskCurrentPath, '/task/board.php') !== false;
+        $isTaskSheetsPage = strpos($taskCurrentPath, '/task/sheets.php') !== false;
+        $isTaskProjectSettingsPage = strpos($taskCurrentPath, '/task/project_settings.php') !== false;
+        $isTaskProjectUserAccessPage = strpos($taskCurrentPath, '/task/project_user_access.php') !== false;
+        $taskCurrentProjectId = taskResolveCurrentProjectId($connect, isset($_GET['project_id']) ? (int) $_GET['project_id'] : 0);
+
+        if ($isTaskSummaryPage) {
+            $taskActiveMenuKey = 'summary';
+        } elseif ($isTaskBoardPage) {
+            $taskActiveMenuKey = 'board';
+        } elseif ($isTaskSheetsPage) {
+            $taskActiveMenuKey = 'sheets';
+        } elseif ($isTaskProjectUserAccessPage) {
+            $taskActiveMenuKey = 'project_user_access';
+        } elseif ($isTaskProjectSettingsPage) {
+            $taskActiveMenuKey = 'project_settings';
+        }
+    }
 }
 ?>
 
