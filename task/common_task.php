@@ -7380,7 +7380,7 @@ if (!function_exists('taskGetAllItemsFlat')) {
     }
 }
 
-/* ───── Sheets Column Configuration ───── */
+/* â”€â”€â”€â”€â”€ Sheets Column Configuration â”€â”€â”€â”€â”€ */
 
 if (!function_exists('taskGetSheetsColumns')) {
     function taskGetSheetsColumns($connect, $userId, $projectId = 0) {
@@ -7433,7 +7433,7 @@ if (!function_exists('taskSaveSheetsColumns')) {
     }
 }
 
-/* ───── Summary page helpers ───── */
+/* â”€â”€â”€â”€â”€ Summary page helpers â”€â”€â”€â”€â”€ */
 
 if (!function_exists('taskSummaryNormalizeUnit')) {
     function taskSummaryNormalizeUnit($unit)
