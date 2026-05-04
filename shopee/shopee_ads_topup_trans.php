@@ -710,6 +710,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                             echo 'disabled' ?>><?php if (isset($dataExisted) && isset($row['remark']))
                             echo $row['remark'] ?></textarea>
                         </div>
+                        <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
 
 
 

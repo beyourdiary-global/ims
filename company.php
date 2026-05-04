@@ -476,6 +476,7 @@ function cmpFieldValue($row, $field)
                             <label class="form-label form_lbl" for="currentDataRemark">Remark</label>
                             <textarea class="form-control" name="currentDataRemark" id="currentDataRemark" rows="3" <?= $isReadonly ? 'readonly' : '' ?>><?= htmlspecialchars(cmpFieldValue($row, 'remark'), ENT_QUOTES, 'UTF-8') ?></textarea>
                         </div>
+                        <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
                     </div>
 
                     <div id="err_msg" class="mt-2">

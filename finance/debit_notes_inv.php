@@ -904,7 +904,8 @@ span.input-group-text{
                                                                 id="dni_remark" rows="3" <?php if ($act == '')
                                                                     echo 'disabled' ?>><?php if (isset($row['remark']))
                                                                     echo $row['remark'] ?></textarea>
-                                                            </div>
+                                                        </div>
+                                                        <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
                                                         </div>
                                                         <div class="mt-auto mb-auto col-12 col-md-4 justify-content-end">
                                                             <div class="invoice-calculations">

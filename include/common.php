@@ -1116,6 +1116,105 @@ function monthNumberToString($monthNumber)
 	}
 }
 
+if (!function_exists('commonResolveUserDisplayName')) {
+    function commonResolveUserDisplayName($connect, $userId)
+    {
+        static $userNameCache = array();
+
+        $userId = trim((string) $userId);
+        if ($userId === '' || !ctype_digit($userId)) {
+            return '';
+        }
+
+        if (array_key_exists($userId, $userNameCache)) {
+            return $userNameCache[$userId];
+        }
+
+        $userTable = defined('USR_USER') ? USR_USER : 'user';
+        $result = getData('name', "id='" . mysqli_real_escape_string($connect, $userId) . "'", 'LIMIT 1', $userTable, $connect);
+        $userName = '';
+
+        if ($result && $result->num_rows > 0) {
+            $row = $result->fetch_assoc();
+            $userName = isset($row['name']) ? trim((string) $row['name']) : '';
+        }
+
+        if ($userName === '') {
+            $userName = $userId;
+        }
+
+        $userNameCache[$userId] = $userName;
+        return $userName;
+    }
+}
+
+if (!function_exists('commonFormatAuditDateTime')) {
+    function commonFormatAuditDateTime($cdate, $ctime)
+    {
+        $cdate = trim((string) $cdate);
+        $ctime = trim((string) $ctime);
+
+        if (
+            $cdate === '' ||
+            $cdate === '0000-00-00' ||
+            $ctime === '' ||
+            $ctime === '00:00:00'
+        ) {
+            return '';
+        }
+
+        $dateTime = strtotime($cdate . ' ' . $ctime);
+        if ($dateTime === false) {
+            return trim($cdate . ' ' . $ctime);
+        }
+
+        return date('Y-m-d', $dateTime) . ' ' . date('G:i:s', $dateTime);
+    }
+}
+
+if (!function_exists('commonRenderCreateUpdateInfo')) {
+    function commonRenderCreateUpdateInfo($row, $connect, $act = '')
+    {
+        if (!is_array($row) || empty($row) || trim((string) $act) === 'I') {
+            return '';
+        }
+
+        $lines = array();
+
+        $createUserId = isset($row['create_by']) ? $row['create_by'] : '';
+        $createDateTime = commonFormatAuditDateTime(
+            isset($row['create_date']) ? $row['create_date'] : '',
+            isset($row['create_time']) ? $row['create_time'] : ''
+        );
+
+        if ($createUserId !== '' && $createDateTime !== '') {
+            $lines[] = 'create by ' . commonResolveUserDisplayName($connect, $createUserId) . ' at ' . $createDateTime;
+        }
+
+        $updateUserId = isset($row['update_by']) ? $row['update_by'] : '';
+        $updateDateTime = commonFormatAuditDateTime(
+            isset($row['update_date']) ? $row['update_date'] : '',
+            isset($row['update_time']) ? $row['update_time'] : ''
+        );
+
+        if ($updateUserId !== '' && $updateDateTime !== '') {
+            $lines[] = 'update by ' . commonResolveUserDisplayName($connect, $updateUserId) . ' at ' . $updateDateTime;
+        }
+
+        if (empty($lines)) {
+            return '';
+        }
+
+        $html = '<div class="common-create-update-info mt-2">';
+        foreach ($lines as $line) {
+            $html .= '<div class="small text-muted">' . htmlspecialchars($line, ENT_QUOTES, 'UTF-8') . '</div>';
+        }
+        $html .= '</div>';
+
+        return $html;
+    }
+}
+
 function renderViewEditButton($action, $redirect_page, $row, $pinAccess, $act_2 = null)
 {
 	switch ($action) {

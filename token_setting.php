@@ -298,6 +298,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                         <label class="form-label" for="remark">Remark</label>
                         <textarea class="form-control" name="remark" id="remark" rows="3" <?= ($act == '') ? 'readonly' : '' ?>><?= isset($row['remark']) ? htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') : '' ?></textarea>
                     </div>
+                    <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
 
                     <div id="err_msg">
                         <span class="mt-n1" id="errorSpan"><?= isset($err) ? htmlspecialchars((string) $err, ENT_QUOTES, 'UTF-8') : '' ?></span>

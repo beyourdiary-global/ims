@@ -301,6 +301,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                                                                                                 echo '';
                                                                                                             } ?>"
                                     <?php if ($act == '') echo 'disabled' ?>>
+                                <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
 
                             </div>
                         </div>

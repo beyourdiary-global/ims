@@ -354,6 +354,7 @@ if ($submittedForSave) {
                         <label class="form-label" for="currentDataRemark"><?php echo $pageTitle ?> Remark</label>
                         <textarea class="form-control" name="currentDataRemark" id="currentDataRemark" rows="3" <?php if ($act == '') echo 'readonly' ?>><?= htmlspecialchars($retainFormInput ? (isset($_POST['currentDataRemark']) ? trim((string)$_POST['currentDataRemark']) : '') : (isset($row['remark']) ? $row['remark'] : ''), ENT_QUOTES, 'UTF-8') ?></textarea>
                     </div>
+                    <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
 
                     <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
                         <?php echo ($act) ? '<button class="btn btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="actionBtn" value="' . $actionBtnValue . '">' . $pageActionTitle . '</button>' : ''; ?>

@@ -358,6 +358,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                         <label class="form-label form_lbl" for="currentDataRemark_lbl"><?php echo $pageTitle ?> Remark</label>
                         <textarea class="form-control" name="currentDataRemark" id="currentDataRemark" rows="3" <?php if ($act == '') echo 'readonly' ?>><?php if (isset($row['remark'])) echo $row['remark'] ?></textarea>
                     </div>
+                    <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
 
                     <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
                         <?php
