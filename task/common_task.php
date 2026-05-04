@@ -1302,7 +1302,7 @@ if (!function_exists('taskGetProjectList')) {
         $sql = "SELECT id,name,owner_user_id,board_background_color FROM " . TASK_PROJECT . " WHERE status='A' ORDER BY name ASC, id ASC";
         $rst = mysqli_query($connect, $sql);
         if ($rst) {
-            $currentUserId = defined('USER_ID') ? (int) USER_ID : 0;
+            $currentUserId = USER_ID;
             while ($row = $rst->fetch_assoc()) {
                 $projectId = isset($row['id']) ? (int) $row['id'] : 0;
                 if ($projectId <= 0) {
@@ -4901,6 +4901,7 @@ if (!function_exists('taskRenderProjectBrowserMenu')) {
 
         echo '<ul class="task-global-project-list">';
 
+        $currentUserId = USER_ID;
         foreach ($projectList as $project) {
             $projectId = isset($project['id']) ? (int) $project['id'] : 0;
             $projectName = isset($project['name']) ? (string) $project['name'] : '';
@@ -4911,9 +4912,13 @@ if (!function_exists('taskRenderProjectBrowserMenu')) {
             $projectHasSummaryAccess = taskUserCanAccessProjectPageByPin($connect, $projectId, 137);
             $projectHasBoardAccess = taskUserCanAccessProjectPageByPin($connect, $projectId, 136);
             $projectHasSheetsAccess = taskUserCanAccessProjectPageByPin($connect, $projectId, 138);
-            $canAccessProjectSettings = taskCanAccessProjectSettings($connect, $projectId, false);
-            $canAccessProjectUserAccess = taskCanAccessProjectUserAccess($connect, $projectId);
-            $canManageProjectActions = taskCanManageProjectActions($connect, $projectId);
+            
+            $isProjectOwner = isset($project['owner_user_id'])
+                && (int) $project['owner_user_id'] === $currentUserId;
+
+            $canAccessProjectSettings = $isProjectOwner;
+            $canAccessProjectUserAccess = $isProjectOwner;
+            $canManageProjectActions = $isProjectOwner;
 
             if (!$projectHasSummaryAccess && !$projectHasBoardAccess && !$projectHasSheetsAccess && !$canManageProjectActions) {
                 continue;
@@ -7380,7 +7385,7 @@ if (!function_exists('taskGetAllItemsFlat')) {
     }
 }
 
-/* â”€â”€â”€â”€â”€ Sheets Column Configuration â”€â”€â”€â”€â”€ */
+/* ----- Sheets Column Configuration ----- */
 
 if (!function_exists('taskGetSheetsColumns')) {
     function taskGetSheetsColumns($connect, $userId, $projectId = 0) {
@@ -7433,7 +7438,7 @@ if (!function_exists('taskSaveSheetsColumns')) {
     }
 }
 
-/* â”€â”€â”€â”€â”€ Summary page helpers â”€â”€â”€â”€â”€ */
+/* ----- Summary page helpers ----- */
 
 if (!function_exists('taskSummaryNormalizeUnit')) {
     function taskSummaryNormalizeUnit($unit)

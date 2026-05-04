@@ -127,6 +127,12 @@
   color: #344054;
 }
 
+.project-access-search:focus-within,
+.project-access-role-filter:focus-within {
+  border-color: #98a2b3;
+  box-shadow: 0 0 0 3px rgba(52, 64, 84, 0.14);
+}
+
 .project-access-search {
   width: 254px;
 }

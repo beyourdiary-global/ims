@@ -167,16 +167,17 @@ if (!function_exists('taskProjectUserAccessWriteAudit')) {
 
         $oldValue = trim((string) $oldValue);
         $newValue = trim((string) $newValue);
+        $safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
 
         if ($logAct === 'view') {
-            $actionMessage = USER_NAME . " viewed the page Project User Access (<b>" . htmlspecialchars($projectName, ENT_QUOTES, 'UTF-8') . "</b>).";
+            $actionMessage = $safeUserName . " viewed the page Project User Access (<b>" . htmlspecialchars($projectName, ENT_QUOTES, 'UTF-8') . "</b>).";
         } else {
             $fieldLabel = trim((string) $message);
             if ($fieldLabel === '') {
                 $fieldLabel = 'Project User Access';
             }
 
-            $actionMessage = USER_NAME . " edit the data";
+            $actionMessage = $safeUserName . " edit the data";
             $actionMessage .= " [ <b> Project </b> : <b>'" . htmlspecialchars($projectName, ENT_QUOTES, 'UTF-8') . "'</b> ]";
             $actionMessage .= " , [ <b> " . htmlspecialchars($fieldLabel, ENT_QUOTES, 'UTF-8') . " </b> : <b>'" . htmlspecialchars($oldValue !== '' ? $oldValue : 'Empty Value', ENT_QUOTES, 'UTF-8') . "'</b>";
             $actionMessage .= " to <b>'" . htmlspecialchars($newValue !== '' ? $newValue : 'Empty Value', ENT_QUOTES, 'UTF-8') . "'</b> ]";
