@@ -1,6 +1,7 @@
 <?php
 ob_start();
 
+$taskParentPin = 139;
 $currentPagePin = 140;
 $pageTitle = 'Project Settings';
 $taskParentTitle = 'Project Task';
@@ -9,6 +10,8 @@ $isFinance = 1;
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
 include_once './common_task.php';
+$pageTitle = taskGetPinGroupTitleById($connect, $currentPagePin, $pageTitle);
+$taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParentTitle);
 
 if (!function_exists('taskProjectSettingsAuditValue')) {
     function taskProjectSettingsAuditValue($value)
@@ -361,7 +364,7 @@ $currentProject = $currentProjectId > 0 ? taskGetProjectById($connect, $currentP
 $isOwner = $currentProjectId > 0 ? taskIsProjectOwner($connect, $currentProjectId, $currentUserId) : false;
 $taskParentTitle = !empty($currentProject) && isset($currentProject['name']) && trim((string) $currentProject['name']) !== ''
     ? (string) $currentProject['name']
-    : 'Project Task';
+    : $taskParentTitle;
 $canEdit = $currentProjectId > 0 ? taskCanEditProjectSettings($connect, $currentProjectId) : false;
 if ($currentProjectId > 0 && !taskCanAccessProjectSettings($connect, $currentProjectId, true)) {
     echo "<script>alert('You do not have permission to view project settings.'); location.replace('../dashboard.php');</script>";

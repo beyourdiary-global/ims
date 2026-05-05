@@ -1,9 +1,7 @@
 <?php
+$taskParentPin = 139;
 $currentPagePin = 138;
-$taskPageTitleByPin = array(
-    138 => 'Sheets',
-);
-$pageTitle = isset($taskPageTitleByPin[$currentPagePin]) ? $taskPageTitleByPin[$currentPagePin] : 'Project Task';
+$pageTitle = 'Sheets';
 $taskParentTitle = 'Project Task';
 $isFinance = 1;
 
@@ -12,6 +10,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     include_once ROOT . '/include/common.php';
     include_once ROOT . '/include/common_variable.php';
     include_once './common_task.php';
+    $pageTitle = taskGetPinGroupTitleById($connect, $currentPagePin, $pageTitle);
+    $taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParentTitle);
 
     if (empty($_SESSION['csrf_token'])) {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -261,6 +261,8 @@ include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
 include_once './common_task.php';
 include_once './board_item_history.php';
+$pageTitle = taskGetPinGroupTitleById($connect, $currentPagePin, $pageTitle);
+$taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParentTitle);
 
 $pinAccess = taskGetPinAccessByGroupId($connect, $currentPagePin);
 if (!taskIsActionAllowed('view', $pinAccess)) {
@@ -277,7 +279,7 @@ if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $currentPage
 }
 $taskParentTitle = !empty($currentProject) && isset($currentProject['name']) && trim((string) $currentProject['name']) !== ''
     ? (string) $currentProject['name']
-    : 'Project Task';
+    : $taskParentTitle;
 if ($currentProjectId > 0) {
     taskEnsureDefaultWorkTypes($connect, $currentProjectId, $currentUserId, $cdate, $ctime);
 }

@@ -1,9 +1,7 @@
 <?php
+$taskParentPin = 139;
 $currentPagePin = 137;
-$taskPageTitleByPin = array(
-    137 => 'Summary',
-);
-$pageTitle = isset($taskPageTitleByPin[$currentPagePin]) ? $taskPageTitleByPin[$currentPagePin] : 'Project Task';
+$pageTitle = 'Summary';
 $taskParentTitle = 'Project Task';
 $isFinance = 1;
 
@@ -35,6 +33,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['summary_action'])) {
     include_once ROOT . '/include/common.php';
     include_once ROOT . '/include/common_variable.php';
     include_once './common_task.php';
+    $pageTitle = taskGetPinGroupTitleById($connect, $currentPagePin, $pageTitle);
+    $taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParentTitle);
 
     if (empty($_SESSION['csrf_token'])) {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -106,6 +106,8 @@ include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
 include_once './common_task.php';
 include_once './board_item_history.php';
+$pageTitle = taskGetPinGroupTitleById($connect, $currentPagePin, $pageTitle);
+$taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParentTitle);
 
 $pinAccess = taskGetPinAccessByGroupId($connect, $currentPagePin);
 if (!taskIsActionAllowed('view', $pinAccess)) {
@@ -117,7 +119,7 @@ $currentProjectId = taskResolveCurrentProjectId($connect, 0);
 $currentProject = $currentProjectId > 0 ? taskGetProjectById($connect, $currentProjectId) : array();
 $taskParentTitle = !empty($currentProject) && isset($currentProject['name']) && trim((string) $currentProject['name']) !== ''
     ? (string) $currentProject['name']
-    : 'Project Task';
+    : $taskParentTitle;
 if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $currentPagePin)) {
     echo "<script>alert('You do not have access to this project summary.'); location.replace('../dashboard.php');</script>";
     exit;
@@ -237,29 +239,41 @@ if (empty($_SESSION['csrf_token'])) {
                     <div class="summary-stat-card summary-stat-completed">
                         <div class="summary-stat-icon"><i class="fa-solid fa-circle-check"></i></div>
                         <div class="summary-stat-body">
-                            <div class="summary-stat-value" id="statCompleted"><?= $stats['completed_7d'] ?></div>
-                            <div class="summary-stat-label">completed<br><small>in the last 7 days</small></div>
+                            <div class="summary-stat-heading">
+                                <div class="summary-stat-value" id="statCompleted"><?= $stats['completed_7d'] ?></div>
+                                <div class="summary-stat-label">completed</div>
+                            </div>
+                            <small class="summary-stat-subtext">in the last 7 days</small>
                         </div>
                     </div>
                     <div class="summary-stat-card summary-stat-updated">
                         <div class="summary-stat-icon"><i class="fa-solid fa-pen-to-square"></i></div>
                         <div class="summary-stat-body">
-                            <div class="summary-stat-value" id="statUpdated"><?= $stats['updated_7d'] ?></div>
-                            <div class="summary-stat-label">updated<br><small>in the last 7 days</small></div>
+                            <div class="summary-stat-heading">
+                                <div class="summary-stat-value" id="statUpdated"><?= $stats['updated_7d'] ?></div>
+                                <div class="summary-stat-label">updated</div>
+                            </div>
+                            <small class="summary-stat-subtext">in the last 7 days</small>
                         </div>
                     </div>
                     <div class="summary-stat-card summary-stat-created">
                         <div class="summary-stat-icon"><i class="fa-solid fa-square-check"></i></div>
                         <div class="summary-stat-body">
-                            <div class="summary-stat-value" id="statCreated"><?= $stats['created_7d'] ?></div>
-                            <div class="summary-stat-label">created<br><small>in the last 7 days</small></div>
+                            <div class="summary-stat-heading">
+                                <div class="summary-stat-value" id="statCreated"><?= $stats['created_7d'] ?></div>
+                                <div class="summary-stat-label">created</div>
+                            </div>
+                            <small class="summary-stat-subtext">in the last 7 days</small>
                         </div>
                     </div>
                     <div class="summary-stat-card summary-stat-due">
                         <div class="summary-stat-icon"><i class="fa-solid fa-calendar-days"></i></div>
                         <div class="summary-stat-body">
-                            <div class="summary-stat-value" id="statDueSoon"><?= $stats['due_soon_7d'] ?></div>
-                            <div class="summary-stat-label">due soon<br><small>in the next 7 days</small></div>
+                            <div class="summary-stat-heading">
+                                <div class="summary-stat-value" id="statDueSoon"><?= $stats['due_soon_7d'] ?></div>
+                                <div class="summary-stat-label">due soon</div>
+                            </div>
+                            <small class="summary-stat-subtext">in the next 7 days</small>
                         </div>
                     </div>
                 </div>
