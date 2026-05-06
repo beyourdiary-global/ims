@@ -228,7 +228,7 @@ $menuList = array(
         'pin' => array('0')             // action
     ),
     array(
-        'Task Management',
+        'Project Task',
         'mdi mdi-menu',
         $taskManagementLandingUrl,
         'n',
@@ -504,6 +504,45 @@ $menuList = array(
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/sidebar_menu.css">
 </head>
 
+<?php
+$taskCurrentPath = '';
+$isTaskSummaryPage = false;
+$isTaskBoardPage = false;
+$isTaskSheetsPage = false;
+$isTaskProjectSettingsPage = false;
+$isTaskProjectUserAccessPage = false;
+$taskCurrentProjectId = 0;
+$taskProjectList = array();
+$canCreateTaskProject = false;
+$taskActiveMenuKey = '';
+
+if ($hasTaskManagementAccess) {
+    $taskProjectList = taskGetProjectList($connect);
+    $canCreateTaskProject = taskCanCreateProject($connect);
+    $taskCurrentPath = isset($_SERVER['REQUEST_URI']) ? (string) parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) : '';
+
+    if (strpos($taskCurrentPath, '/task/') !== false) {
+        $isTaskSummaryPage = strpos($taskCurrentPath, '/task/summary.php') !== false;
+        $isTaskBoardPage = strpos($taskCurrentPath, '/task/board.php') !== false;
+        $isTaskSheetsPage = strpos($taskCurrentPath, '/task/sheets.php') !== false;
+        $isTaskProjectSettingsPage = strpos($taskCurrentPath, '/task/project_settings.php') !== false;
+        $isTaskProjectUserAccessPage = strpos($taskCurrentPath, '/task/project_user_access.php') !== false;
+        $taskCurrentProjectId = taskResolveCurrentProjectId($connect, isset($_GET['project_id']) ? (int) $_GET['project_id'] : 0);
+
+        if ($isTaskSummaryPage) {
+            $taskActiveMenuKey = 'summary';
+        } elseif ($isTaskBoardPage) {
+            $taskActiveMenuKey = 'board';
+        } elseif ($isTaskSheetsPage) {
+            $taskActiveMenuKey = 'sheets';
+        } elseif ($isTaskProjectUserAccessPage) {
+            $taskActiveMenuKey = 'project_user_access';
+        } elseif ($isTaskProjectSettingsPage) {
+            $taskActiveMenuKey = 'project_settings';
+        }
+    }
+}
+?>
 
 <!-- H.Navbar -->
 <nav class="menuBar">
@@ -518,12 +557,12 @@ $menuList = array(
             }
             */
             foreach ($menuList as $innerList) {
-                if ($innerList[0] === 'Task Management' && !$hasTaskManagementAccess) {
+                if ($innerList[0] === 'Project Task' && !$hasTaskManagementAccess) {
                     continue;
                 }
 
                 if (!empty(array_intersect($innerList['pin'], GlobalPin))) {
-                    $isTaskTopMenu = $innerList[0] === 'Task Management';
+                    $isTaskTopMenu = $innerList[0] === 'Project Task';
                     $liClass = $innerList[3] == 'y' ? 'nav-item dropdown' : 'nav-item';
                     if ($isTaskTopMenu) {
                         $liClass .= ' task-top-menu-trigger-item';
@@ -533,7 +572,7 @@ $menuList = array(
                     if ($isTaskTopMenu) {
                         $linkClass .= ' task-top-menu-trigger';
                     }
-                    $taskAriaLabel = $isTaskTopMenu ? ' aria-label="Task Management" title="Task Management"' : '';
+                    $taskAriaLabel = $isTaskTopMenu ? ' aria-label="Project Task" title="Project Task"' : '';
                     $a = $innerList[3] == 'y'
                         ? "class=\"" . $linkClass . "\" data-bs-toggle=\"dropdown\" role=\"button\" aria-expanded=\"false\"" . $taskAriaLabel
                         : "class=\"" . $linkClass . "\"" . $taskAriaLabel;
@@ -596,7 +635,7 @@ $menuList = array(
                 <?php
                 foreach ($menuList as $innerList) {
                     if (!empty(array_intersect($innerList['pin'], GlobalPin))) {
-                        $isTaskManagementMenu = $innerList[0] === 'Task Management';
+                        $isTaskManagementMenu = $innerList[0] === 'Project Task';
                         $isDropdownMenu = $innerList[3] == 'y' || $isTaskManagementMenu;
                         $collapseId = $isTaskManagementMenu ? 'Task-Management' : $innerList[0];
                         $li = $isDropdownMenu ? "class=\"nav-item dropdown\"" : "class=\"nav-item\"";
@@ -616,6 +655,23 @@ $menuList = array(
                         echo "<li $li>";
                         echo "<a $a href=\"#\"><i class=\"$innerList[1]\"></i><span> $innerList[0]</span></a>";
                         echo "<div class=\"collapse\" id=\"$collapseId-collapse\">";
+                        if ($isTaskManagementMenu) {
+                            taskRenderProjectBrowserMenu(
+                                $connect,
+                                $SITEURL,
+                                $taskActiveMenuKey,
+                                $taskCurrentProjectId,
+                                array(
+                                    'section_class' => 'task-mobile-project-section',
+                                    'panel_id_prefix' => 'taskMobileProjectPanel',
+                                    'action_panel_id_prefix' => 'taskMobileProjectActions',
+                                )
+                            );
+                            echo "</div>";
+                            echo "</li>";
+                            continue;
+                        }
+
                         echo "<ul class=\"list-unstyled collapse-menu\">";
                         foreach ($expandMenus as $url) {
                             if (isset($url['expand'])) {
@@ -671,19 +727,6 @@ $menuList = array(
 <!-- V.Navbar -->
 
 <?php if ($hasTaskManagementAccess): ?>
-<?php
-$taskCurrentPath = isset($_SERVER['REQUEST_URI']) ? (string) parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) : '';
-$isTaskSummaryPage = strpos($taskCurrentPath, '/task/summary.php') !== false;
-$isTaskBoardPage = strpos($taskCurrentPath, '/task/board.php') !== false;
-$isTaskSheetsPage = strpos($taskCurrentPath, '/task/sheets.php') !== false;
-$isTaskProjectSettingsPage = strpos($taskCurrentPath, '/task/project_settings.php') !== false;
-$isTaskProjectUserAccessPage = strpos($taskCurrentPath, '/task/project_user_access.php') !== false;
-
-$taskCurrentProjectId = taskResolveCurrentProjectId($connect, isset($_GET['project_id']) ? (int) $_GET['project_id'] : 0);
-$taskProjectList = taskGetProjectList($connect);
-$canCreateTaskProject = taskCanCreateProject($connect);
-?>
-
 <aside id="taskGlobalSidebar" class="task-global-sidebar" aria-hidden="true">
     <button type="button" id="taskGlobalSidebarResizeHandle" class="task-global-sidebar-resize-handle" aria-label="Resize task sidebar" title="Drag to resize"></button>
     <div class="task-global-sidebar-inner">
@@ -767,28 +810,22 @@ $canCreateTaskProject = taskCanCreateProject($connect);
                         <ul class="task-global-project-submenu <?= $isActiveProject ? 'active' : '' ?>"
                             id="<?= $projectItemPanelId ?>">
                             <?php if ($projectHasSummaryAccess): ?>
-                                <li>
                                     <a class="<?= $isTaskSummaryPage && $isActiveProject ? 'task-global-link-active' : '' ?>"
                                        href="<?= $SITEURL ?>/task/summary.php?project_id=<?= $pid ?>">
                                         Summary
                                     </a>
-                                </li>
                             <?php endif; ?>
                             <?php if ($projectHasBoardAccess): ?>
-                                <li>
                                     <a class="<?= $isTaskBoardPage && $isActiveProject ? 'task-global-link-active' : '' ?>"
                                        href="<?= $SITEURL ?>/task/board.php?project_id=<?= $pid ?>">
                                         Board
                                     </a>
-                                </li>
                             <?php endif; ?>
                             <?php if ($projectHasSheetsAccess): ?>
-                                <li>
                                     <a class="<?= $isTaskSheetsPage && $isActiveProject ? 'task-global-link-active' : '' ?>"
                                        href="<?= $SITEURL ?>/task/sheets.php?project_id=<?= $pid ?>">
                                         Sheets
                                     </a>
-                                </li>
                             <?php endif; ?>
                         </ul>
                     </li>
@@ -822,6 +859,78 @@ $canCreateTaskProject = taskCanCreateProject($connect);
     var taskSidebarMinWidth = 260;
     var taskSidebarMaxWidth = 520;
     var hasTaskManagementAccess = <?php echo $hasTaskManagementAccess ? 'true' : 'false'; ?>;
+
+    function positionTaskProjectOptionsPanel(actionBtn) {
+        if (!actionBtn) {
+            return;
+        }
+
+        var wrap = actionBtn.closest('.task-global-project-actions');
+        var panelId = actionBtn.getAttribute('aria-controls') || '';
+        var panel = panelId ? document.getElementById(panelId) : null;
+        if (!wrap || !panel) {
+            return;
+        }
+
+        var buttonRect = actionBtn.getBoundingClientRect();
+        var viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+        var viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+        var panelWidth = panel.offsetWidth || 185;
+        var panelHeight = panel.offsetHeight || 0;
+        var left = buttonRect.right + 8;
+        var top = buttonRect.top;
+
+        if (left + panelWidth > viewportWidth - 12) {
+            left = Math.max(12, buttonRect.left - panelWidth - 8);
+        }
+
+        if (panelHeight > 0 && top + panelHeight > viewportHeight - 12) {
+            top = Math.max(12, viewportHeight - panelHeight - 12);
+        }
+
+        panel.style.left = left + 'px';
+        panel.style.top = top + 'px';
+    }
+
+    function mountTaskProjectOptionsPanel(actionBtn) {
+        if (!actionBtn) {
+            return null;
+        }
+
+        var wrap = actionBtn.closest('.task-global-project-actions');
+        var panelId = actionBtn.getAttribute('aria-controls') || '';
+        var panel = panelId ? document.getElementById(panelId) : null;
+        if (!wrap || !panel) {
+            return null;
+        }
+
+        if (panel.parentElement !== document.body) {
+            document.body.appendChild(panel);
+        }
+        panel.classList.add('task-global-project-actions-panel-open');
+        return panel;
+    }
+
+    function restoreTaskProjectOptionsPanel(wrap) {
+        if (!wrap) {
+            return;
+        }
+
+        var actionBtn = wrap.querySelector('[data-task-project-actions-btn]');
+        var panelId = actionBtn ? actionBtn.getAttribute('aria-controls') : '';
+        var panel = panelId ? document.getElementById(panelId) : null;
+        if (!panel) {
+            return;
+        }
+
+        panel.classList.remove('task-global-project-actions-panel-open');
+        panel.style.left = '';
+        panel.style.top = '';
+
+        if (panel.parentElement !== wrap) {
+            wrap.appendChild(panel);
+        }
+    }
 
     if (hasTaskManagementAccess && taskGlobalSidebar.length) {
         $('body').addClass('task-global-sidebar-enabled');
@@ -1144,13 +1253,19 @@ $canCreateTaskProject = taskCanCreateProject($connect);
                     if (openBtn) {
                         openBtn.setAttribute('aria-expanded', 'false');
                     }
+                    restoreTaskProjectOptionsPanel(openWrap);
                 });
 
                 if (willOpen) {
+                    mountTaskProjectOptionsPanel(actionBtn);
                     wrap.classList.add('open');
                     actionBtn.setAttribute('aria-expanded', 'true');
+                    window.requestAnimationFrame(function () {
+                        positionTaskProjectOptionsPanel(actionBtn);
+                    });
                 } else {
                     actionBtn.setAttribute('aria-expanded', 'false');
+                    restoreTaskProjectOptionsPanel(wrap);
                 }
             });
         });
@@ -1167,6 +1282,13 @@ $canCreateTaskProject = taskCanCreateProject($connect);
                 if (openBtn) {
                     openBtn.setAttribute('aria-expanded', 'false');
                 }
+                restoreTaskProjectOptionsPanel(openWrap);
+            });
+        });
+
+        window.addEventListener('resize', function () {
+            document.querySelectorAll('.task-global-project-actions.open [data-task-project-actions-btn]').forEach(function (actionBtn) {
+                positionTaskProjectOptionsPanel(actionBtn);
             });
         });
 

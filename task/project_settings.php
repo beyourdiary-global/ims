@@ -3,7 +3,7 @@ ob_start();
 
 $currentPagePin = 140;
 $pageTitle = 'Project Settings';
-$taskParentTitle = 'Task Management';
+$taskParentTitle = 'Project Task';
 $isFinance = 1;
 
 include_once '../menuHeader.php';
@@ -342,7 +342,7 @@ if (!function_exists('taskProjectSettingsWriteViewAudit')) {
             'oldval' => '',
             'changes' => '',
             'newval' => '',
-            'act_msg' => USER_NAME . " viewed the project settings page (<b>" . htmlspecialchars($projectName, ENT_QUOTES, 'UTF-8') . "</b>).",
+            'act_msg' => htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8') . " viewed the page Project Settings (<b>" . htmlspecialchars($projectName, ENT_QUOTES, 'UTF-8') . "</b>).",
             'page' => 'Project Settings',
             'connect' => $connect,
         ));
@@ -361,7 +361,7 @@ $currentProject = $currentProjectId > 0 ? taskGetProjectById($connect, $currentP
 $isOwner = $currentProjectId > 0 ? taskIsProjectOwner($connect, $currentProjectId, $currentUserId) : false;
 $taskParentTitle = !empty($currentProject) && isset($currentProject['name']) && trim((string) $currentProject['name']) !== ''
     ? (string) $currentProject['name']
-    : 'Task Management';
+    : 'Project Task';
 $canEdit = $currentProjectId > 0 ? taskCanEditProjectSettings($connect, $currentProjectId) : false;
 if ($currentProjectId > 0 && !taskCanAccessProjectSettings($connect, $currentProjectId, true)) {
     echo "<script>alert('You do not have permission to view project settings.'); location.replace('../dashboard.php');</script>";
@@ -524,7 +524,7 @@ $workTypeIconOptions = taskGetSvgIconOptions();
 
         <section id="taskModuleLayout" class="task-module-layout task-sidebar-open">
             <aside class="task-module-sidebar" id="taskModuleSidebar">
-                <h5 class="mb-2">Task Management</h5>
+                <h5 class="mb-2">Project Task</h5>
                 <?php taskRenderSidebarMenu($connect, $SITEURL, 'project_settings', $currentProjectId); ?>
             </aside>
 
@@ -537,23 +537,35 @@ $workTypeIconOptions = taskGetSvgIconOptions();
                     <form method="post" class="task-project-settings-form" id="taskProjectSettingsForm">
                         <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
                         <div class="task-project-settings-top-row mb-4">
-                            <div class="row g-3 mb-0">
-                                <div class="col-12 col-lg-7">
-                                    <label class="form-label" for="project_name">Project Task Name</label>
-                                    <input type="text" class="form-control" id="project_name" name="project_name" maxlength="180" value="<?= htmlspecialchars($projectNameValue, ENT_QUOTES, 'UTF-8') ?>" <?= $canEdit ? '' : 'disabled' ?>>
-                                </div>
-                                <div class="col-12 col-lg-3">
-                                    <label class="form-label" for="board_background_color">Board Background Color</label>
-                                    <div class="task-project-color-control">
-                                        <input type="color" class="form-control form-control-color w-100" id="board_background_color" name="board_background_color" value="<?= htmlspecialchars($boardBackgroundValue, ENT_QUOTES, 'UTF-8') ?>" data-default-color="#F4F7FB" <?= $canEdit ? '' : 'disabled' ?>>
-                                        <?php if ($canEdit): ?>
-                                            <button type="button" class="btn btn-outline-secondary task-project-reset-color-btn" data-confirm-text="Reset board background color to default?" data-color-target="#board_background_color" data-default-color="#F4F7FB">Reset Default</button>
-                                        <?php endif; ?>
+                            <div class="card-header d-flex justify-content-between align-items-center task-project-settings-top-header">
+                                <div class="col-12 col-lg-4">
+                                    <div class="task-project-settings-top-field">
+                                        <label class="form-label task-project-settings-top-label" for="project_name">Project Task Name</label>
+                                        <div class="task-project-settings-top-input">
+                                            <input type="text" class="form-control" id="project_name" name="project_name" maxlength="180" value="<?= htmlspecialchars($projectNameValue, ENT_QUOTES, 'UTF-8') ?>" <?= $canEdit ? '' : 'disabled' ?>>
+                                        </div>
                                     </div>
                                 </div>
-                                <div class="col-12 col-lg-2">
-                                    <label class="form-label" for="project_key">Project Key</label>
-                                    <input type="text" class="form-control" id="project_key" name="project_key" maxlength="20" value="<?= htmlspecialchars(isset($projectKeySetting['project_key']) ? (string) $projectKeySetting['project_key'] : '', ENT_QUOTES, 'UTF-8') ?>" <?= $canEdit ? '' : 'disabled' ?>>
+                                <div class="col-12 col-lg-4">
+                                    <div class="task-project-settings-top-field">
+                                        <label class="form-label task-project-settings-top-label" for="board_background_color">Board Background Color</label>
+                                        <div class="task-project-settings-top-input">
+                                            <div class="task-project-color-control">
+                                                <input type="color" class="form-control form-control-color w-100" id="board_background_color" name="board_background_color" value="<?= htmlspecialchars($boardBackgroundValue, ENT_QUOTES, 'UTF-8') ?>" data-default-color="#F4F7FB" <?= $canEdit ? '' : 'disabled' ?>>
+                                                <?php if ($canEdit): ?>
+                                                    <button type="button" class="btn btn-outline-secondary task-project-reset-color-btn" data-confirm-text="Reset board background color to default?" data-color-target="#board_background_color" data-default-color="#F4F7FB">Reset Default</button>
+                                                <?php endif; ?>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-12 col-lg-3">
+                                    <div class="task-project-settings-top-field">
+                                        <label class="form-label task-project-settings-top-label" for="project_key">Project Key</label>
+                                        <div class="task-project-settings-top-input">
+                                            <input type="text" class="form-control" id="project_key" name="project_key" maxlength="20" value="<?= htmlspecialchars(isset($projectKeySetting['project_key']) ? (string) $projectKeySetting['project_key'] : '', ENT_QUOTES, 'UTF-8') ?>" <?= $canEdit ? '' : 'disabled' ?>>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>

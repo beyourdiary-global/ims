@@ -3,8 +3,8 @@ $currentPagePin = 138;
 $taskPageTitleByPin = array(
     138 => 'Sheets',
 );
-$pageTitle = isset($taskPageTitleByPin[$currentPagePin]) ? $taskPageTitleByPin[$currentPagePin] : 'Task Management';
-$taskParentTitle = 'Task Management';
+$pageTitle = isset($taskPageTitleByPin[$currentPagePin]) ? $taskPageTitleByPin[$currentPagePin] : 'Project Task';
+$taskParentTitle = 'Project Task';
 $isFinance = 1;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
@@ -26,7 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     $pinAccess = taskGetPinAccessByGroupId($connect, $currentPagePin);
     if (!taskIsActionAllowed('view', $pinAccess)) {
         header('Content-Type: application/json');
-        echo json_encode(array('ok' => 0, 'message' => 'You do not have permission to access task management.'));
+        echo json_encode(array('ok' => 0, 'message' => 'You do not have permission to access Project Task.'));
         exit;
     }
 
@@ -264,7 +264,7 @@ include_once './board_item_history.php';
 
 $pinAccess = taskGetPinAccessByGroupId($connect, $currentPagePin);
 if (!taskIsActionAllowed('view', $pinAccess)) {
-    echo "<script>alert('You do not have permission to view task management.'); location.replace('../dashboard.php');</script>";
+    echo "<script>alert('You do not have permission to view Project Task.'); location.replace('../dashboard.php');</script>";
     exit;
 }
 
@@ -277,14 +277,15 @@ if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $currentPage
 }
 $taskParentTitle = !empty($currentProject) && isset($currentProject['name']) && trim((string) $currentProject['name']) !== ''
     ? (string) $currentProject['name']
-    : 'Task Management';
+    : 'Project Task';
 if ($currentProjectId > 0) {
     taskEnsureDefaultWorkTypes($connect, $currentProjectId, $currentUserId, $cdate, $ctime);
 }
 
 $safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
 $safePageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
-$viewActMsg = $safeUserName . ' viewed the page ' . $safePageTitle . '.';
+$safeProjectName = htmlspecialchars((string) $taskParentTitle, ENT_QUOTES, 'UTF-8');
+$viewActMsg = $safeUserName . ' viewed the page ' . $safePageTitle . ' (<b>' . $safeProjectName . '</b>).';
 if (function_exists('audit_log')) {
     $log = [
         'log_act' => 'View',
@@ -368,7 +369,7 @@ if (empty($_SESSION['csrf_token'])) {
 
         <section id="taskModuleLayout" class="task-module-layout task-sidebar-open">
             <aside class="task-module-sidebar" id="taskModuleSidebar">
-                <h5 class="mb-2">Task Management</h5>
+                <h5 class="mb-2">Project Task</h5>
                 <?php taskRenderSidebarMenu($connect, $SITEURL, 'sheets', $currentProjectId); ?>
             </aside>
 

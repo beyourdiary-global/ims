@@ -1302,7 +1302,7 @@ if (!function_exists('taskGetProjectList')) {
         $sql = "SELECT id,name,owner_user_id,board_background_color FROM " . TASK_PROJECT . " WHERE status='A' ORDER BY name ASC, id ASC";
         $rst = mysqli_query($connect, $sql);
         if ($rst) {
-            $currentUserId = defined('USER_ID') ? (int) USER_ID : 0;
+            $currentUserId = USER_ID;
             while ($row = $rst->fetch_assoc()) {
                 $projectId = isset($row['id']) ? (int) $row['id'] : 0;
                 if ($projectId <= 0) {
@@ -2865,7 +2865,16 @@ if (!function_exists('taskGetProjectAccessUsers')) {
         $project = $projectId > 0 ? taskGetProjectById($connect, $projectId) : array();
         $ownerUserId = isset($project['owner_user_id']) ? (int) $project['owner_user_id'] : 0;
 
-        $sql = "SELECT id, COALESCE(NULLIF(TRIM(name), ''), username) AS display_name, email FROM " . USR_USER . " WHERE status='A' ORDER BY display_name ASC";
+        $sql = "SELECT 
+                    u.id,
+                    COALESCE(NULLIF(TRIM(u.name), ''), u.username) AS display_name,
+                    u.email,
+                    u.access_id,
+                    COALESCE(NULLIF(TRIM(g.name), ''), CONCAT('Group #', u.access_id)) AS user_group_name
+                FROM " . USR_USER . " u
+                LEFT JOIN " . USR_GRP . " g ON g.id = u.access_id
+                WHERE u.status='A'
+                ORDER BY display_name ASC";
         $rst = mysqli_query($connect, $sql);
         if ($rst) {
             while ($row = $rst->fetch_assoc()) {
@@ -2878,6 +2887,8 @@ if (!function_exists('taskGetProjectAccessUsers')) {
                     'id' => $userId,
                     'name' => isset($row['display_name']) ? (string) $row['display_name'] : '',
                     'email' => isset($row['email']) ? (string) $row['email'] : '',
+                    'user_group_id' => isset($row['access_id']) ? (int) $row['access_id'] : 0,
+                    'user_group_name' => isset($row['user_group_name']) ? (string) $row['user_group_name'] : '',
                 );
             }
         }
@@ -4848,10 +4859,15 @@ if (!function_exists('taskBuildProjectPageUrl')) {
     }
 }
 
-if (!function_exists('taskRenderSidebarMenu')) {
-    function taskRenderSidebarMenu($connect, $siteUrl, $activeMenu, $currentProjectId = 0)
+if (!function_exists('taskRenderProjectBrowserMenu')) {
+    function taskRenderProjectBrowserMenu($connect, $siteUrl, $activeMenu, $currentProjectId = 0, $options = array())
     {
         $currentProjectId = (int) $currentProjectId;
+        $showCreateButton = !empty($options['show_create_button']);
+        $createButtonId = isset($options['create_button_id']) ? (string) $options['create_button_id'] : '';
+        $sectionClass = trim('task-global-project-section ' . (isset($options['section_class']) ? (string) $options['section_class'] : ''));
+        $panelIdPrefix = isset($options['panel_id_prefix']) ? (string) $options['panel_id_prefix'] : 'taskProjectPanel';
+        $actionIdPrefix = isset($options['action_panel_id_prefix']) ? (string) $options['action_panel_id_prefix'] : 'taskProjectActions';
 
         $menus = array(
             'summary' => array('label' => 'Summary', 'path' => '/task/summary.php', 'pin_id' => 137),
@@ -4860,89 +4876,119 @@ if (!function_exists('taskRenderSidebarMenu')) {
         );
 
         $hasTaskNavView = taskIsActionAllowed('view', taskGetProjectCreatorPinAccess($connect));
+        if (!$hasTaskNavView) {
+            return;
+        }
+
         $projectList = taskGetProjectList($connect);
-        $currentProject = $currentProjectId > 0 ? taskGetProjectById($connect, $currentProjectId) : array();
         $canCreateProject = taskCanCreateProject($connect);
 
-        $firstVisibleProjectUrl = function ($projectId) use ($connect, $siteUrl, $menus) {
-            foreach ($menus as $menu) {
-                $pinId = isset($menu['pin_id']) ? (int) $menu['pin_id'] : 0;
-                if ($pinId > 0 && taskUserCanAccessProjectPageByPin($connect, $projectId, $pinId)) {
-                    return taskBuildProjectPageUrl($siteUrl, $menu['path'], $projectId);
-                }
+        echo '<div class="' . htmlspecialchars($sectionClass, ENT_QUOTES, 'UTF-8') . '">';
+        echo '  <div class="task-global-project-header">';
+        echo '      <span>Project Task</span>';
+
+        if ($showCreateButton && $canCreateProject && $createButtonId !== '') {
+            echo '  <button type="button" id="' . htmlspecialchars($createButtonId, ENT_QUOTES, 'UTF-8') . '" class="btn task-global-create-project-btn" title="Create project task"><i class="fa-solid fa-plus"></i></button>';
+        }
+
+        echo '  </div>';
+
+        if (empty($projectList)) {
+            echo '<div class="task-global-project-empty">No project task found yet.</div>';
+            echo '</div>';
+            return;
+        }
+
+        echo '<ul class="task-global-project-list">';
+
+        $currentUserId = USER_ID;
+        foreach ($projectList as $project) {
+            $projectId = isset($project['id']) ? (int) $project['id'] : 0;
+            $projectName = isset($project['name']) ? (string) $project['name'] : '';
+            if ($projectId <= 0 || $projectName === '') {
+                continue;
             }
-            return '';
-        };
 
-        if ($hasTaskNavView && !empty($projectList)) {
-            echo '<div class="task-sidebar-section task-sidebar-project-browser">';
-            echo '  <div class="task-sidebar-section-header">';
-            echo '      <span class="task-sidebar-section-title">Project Task</span>';
+            $projectHasSummaryAccess = taskUserCanAccessProjectPageByPin($connect, $projectId, 137);
+            $projectHasBoardAccess = taskUserCanAccessProjectPageByPin($connect, $projectId, 136);
+            $projectHasSheetsAccess = taskUserCanAccessProjectPageByPin($connect, $projectId, 138);
+            
+            $isProjectOwner = isset($project['owner_user_id'])
+                && (int) $project['owner_user_id'] === $currentUserId;
 
-            if ($canCreateProject) {
-                echo '  <button type="button" id="taskCreateProjectBtn" class="btn task-sidebar-create-project-btn" title="Create project"><i class="fa-solid fa-plus"></i></button>';
+            $canAccessProjectSettings = $isProjectOwner;
+            $canAccessProjectUserAccess = $isProjectOwner;
+            $canManageProjectActions = $isProjectOwner;
+
+            if (!$projectHasSummaryAccess && !$projectHasBoardAccess && !$projectHasSheetsAccess && !$canManageProjectActions) {
+                continue;
+            }
+
+            $isActiveProject = $projectId === $currentProjectId;
+            $projectItemPanelId = $panelIdPrefix . $projectId;
+            $projectItemActionPanelId = $actionIdPrefix . $projectId;
+
+            echo '<li class="task-global-project-item' . ($isActiveProject ? ' active expanded' : '') . '" data-project-id="' . $projectId . '">';
+            echo '  <div class="task-global-project-row">';
+            echo '      <button type="button" class="task-global-project-toggle" data-task-project-toggle aria-expanded="' . ($isActiveProject ? 'true' : 'false') . '" aria-controls="' . htmlspecialchars($projectItemPanelId, ENT_QUOTES, 'UTF-8') . '">';
+            echo '          <span class="task-global-project-toggle-text">' . htmlspecialchars($projectName, ENT_QUOTES, 'UTF-8') . '</span>';
+            echo '          <span class="task-global-project-toggle-icon" aria-hidden="true"><i class="fa-solid fa-chevron-right"></i></span>';
+            echo '      </button>';
+
+            if ($canManageProjectActions) {
+                echo '  <div class="task-global-project-actions">';
+                echo '      <button type="button" class="task-global-project-settings-link task-global-project-actions-btn" data-task-project-actions-btn aria-expanded="false" aria-controls="' . htmlspecialchars($projectItemActionPanelId, ENT_QUOTES, 'UTF-8') . '" title="Project options">';
+                echo '          <i class="fa-solid fa-ellipsis"></i>';
+                echo '      </button>';
+                echo '      <div class="task-global-project-actions-panel" id="' . htmlspecialchars($projectItemActionPanelId, ENT_QUOTES, 'UTF-8') . '">';
+                if ($canAccessProjectUserAccess) {
+                    echo '      <a href="' . htmlspecialchars(taskBuildProjectPageUrl($siteUrl, '/task/project_user_access.php', $projectId), ENT_QUOTES, 'UTF-8') . '">Project User Access</a>';
+                }
+                if ($canAccessProjectSettings) {
+                    echo '      <a href="' . htmlspecialchars(taskBuildProjectPageUrl($siteUrl, '/task/project_settings.php', $projectId), ENT_QUOTES, 'UTF-8') . '">Project Settings</a>';
+                }
+                echo '      </div>';
+                echo '  </div>';
             }
 
             echo '  </div>';
-            echo '<div class="task-sidebar-project-list">';
-
-            foreach ($projectList as $project) {
-                $projectId = isset($project['id']) ? (int) $project['id'] : 0;
-                $projectName = isset($project['name']) ? (string) $project['name'] : '';
-                $projectHref = $firstVisibleProjectUrl($projectId);
-
-                if ($projectId <= 0 || $projectName === '' || $projectHref === '') {
-                    continue;
-                }
-
-                $isCurrentProject = $projectId === $currentProjectId;
-                $canAccessSettings = taskCanAccessProjectSettings($connect, $projectId, true);
-                $isOwner = taskIsProjectOwner($connect, $projectId);
-
-                echo '<div class="task-sidebar-project-item' . ($isCurrentProject ? ' active' : '') . '">';
-                echo '  <a class="task-sidebar-project-link" href="' . htmlspecialchars($projectHref, ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($projectName, ENT_QUOTES, 'UTF-8') . '</a>';
-
-                if ($isOwner && $canAccessSettings) {
-                    echo '  <a class="task-sidebar-project-settings-link" href="' . htmlspecialchars(taskBuildProjectPageUrl($siteUrl, '/task/project_settings.php', $projectId), ENT_QUOTES, 'UTF-8') . '" title="Project settings"><i class="fa-solid fa-gear"></i></a>';
-                }
-
-                echo '</div>';
-            }
-
-            echo '</div>';
-            echo '</div>';
-        }
-
-        if ($hasTaskNavView && !empty($currentProject) && taskCanAccessAnyProjectPage($connect, $currentProjectId)) {
-            echo '<div class="task-sidebar-section">';
-            echo '  <div class="task-sidebar-current-project-name">' . htmlspecialchars(isset($currentProject['name']) ? (string) $currentProject['name'] : '', ENT_QUOTES, 'UTF-8') . '</div>';
+            echo '  <ul class="task-global-project-submenu' . ($isActiveProject ? ' active' : '') . '" id="' . htmlspecialchars($projectItemPanelId, ENT_QUOTES, 'UTF-8') . '">';
 
             foreach ($menus as $menuKey => $menu) {
                 $pinId = isset($menu['pin_id']) ? (int) $menu['pin_id'] : 0;
-
-                if ($pinId > 0 && !taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $pinId)) {
+                if ($pinId > 0 && !taskUserCanAccessProjectPageByPin($connect, $projectId, $pinId)) {
                     continue;
                 }
 
-                $isActive = $activeMenu === $menuKey;
-
-                echo '<a class="task-sidebar-link' . ($isActive ? ' active' : '') . '" href="' . htmlspecialchars(taskBuildProjectPageUrl($siteUrl, $menu['path'], $currentProjectId), ENT_QUOTES, 'UTF-8') . '">';
-                echo htmlspecialchars($menu['label'], ENT_QUOTES, 'UTF-8');
-                echo '</a>';
+                $isActive = $isActiveProject && $activeMenu === $menuKey;
+                echo '      <li><a class="' . ($isActive ? 'task-global-link-active' : '') . '" href="' . htmlspecialchars(taskBuildProjectPageUrl($siteUrl, $menu['path'], $projectId), ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($menu['label'], ENT_QUOTES, 'UTF-8') . '</a></li>';
             }
 
-            if (taskCanAccessProjectUserAccess($connect, $currentProjectId)) {
-                $isUserAccessActive = $activeMenu === 'project_user_access';
-                echo '<a class="task-sidebar-link task-sidebar-link-bottom' . ($isUserAccessActive ? ' active' : '') . '" href="' . htmlspecialchars(taskBuildProjectPageUrl($siteUrl, '/task/project_user_access.php', $currentProjectId), ENT_QUOTES, 'UTF-8') . '">Project User Access</a>';
-            }
-
-            if (taskCanAccessProjectSettings($connect, $currentProjectId, true)) {
-                $isSettingsActive = $activeMenu === 'project_settings';
-                echo '<a class="task-sidebar-link task-sidebar-link-bottom' . ($isSettingsActive ? ' active' : '') . '" href="' . htmlspecialchars(taskBuildProjectPageUrl($siteUrl, '/task/project_settings.php', $currentProjectId), ENT_QUOTES, 'UTF-8') . '">Project Settings</a>';
-            }
-
-            echo '</div>';
+            echo '  </ul>';
+            echo '</li>';
         }
+
+        echo '</ul>';
+        echo '</div>';
+    }
+}
+
+if (!function_exists('taskRenderSidebarMenu')) {
+    function taskRenderSidebarMenu($connect, $siteUrl, $activeMenu, $currentProjectId = 0)
+    {
+        taskRenderProjectBrowserMenu(
+            $connect,
+            $siteUrl,
+            $activeMenu,
+            $currentProjectId,
+            array(
+                'show_create_button' => true,
+                'create_button_id' => 'taskCreateProjectBtn',
+                'section_class' => 'task-local-project-section',
+                'panel_id_prefix' => 'taskLocalProjectPanel',
+                'action_panel_id_prefix' => 'taskLocalProjectActions',
+            )
+        );
     }
 }
 
@@ -7339,7 +7385,7 @@ if (!function_exists('taskGetAllItemsFlat')) {
     }
 }
 
-/* ───── Sheets Column Configuration ───── */
+/* ----- Sheets Column Configuration ----- */
 
 if (!function_exists('taskGetSheetsColumns')) {
     function taskGetSheetsColumns($connect, $userId, $projectId = 0) {
@@ -7392,7 +7438,7 @@ if (!function_exists('taskSaveSheetsColumns')) {
     }
 }
 
-/* ───── Summary page helpers ───── */
+/* ----- Summary page helpers ----- */
 
 if (!function_exists('taskSummaryNormalizeUnit')) {
     function taskSummaryNormalizeUnit($unit)

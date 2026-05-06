@@ -3,8 +3,8 @@ $currentPagePin = 137;
 $taskPageTitleByPin = array(
     137 => 'Summary',
 );
-$pageTitle = isset($taskPageTitleByPin[$currentPagePin]) ? $taskPageTitleByPin[$currentPagePin] : 'Task Management';
-$taskParentTitle = 'Task Management';
+$pageTitle = isset($taskPageTitleByPin[$currentPagePin]) ? $taskPageTitleByPin[$currentPagePin] : 'Project Task';
+$taskParentTitle = 'Project Task';
 $isFinance = 1;
 
 if (!function_exists('taskBoardAuditLog')) {
@@ -109,25 +109,25 @@ include_once './board_item_history.php';
 
 $pinAccess = taskGetPinAccessByGroupId($connect, $currentPagePin);
 if (!taskIsActionAllowed('view', $pinAccess)) {
-    echo "<script>alert('You do not have permission to view task management.'); location.replace('../dashboard.php');</script>";
+    echo "<script>alert('You do not have permission to view Project Task.'); location.replace('../dashboard.php');</script>";
     exit;
 }
-
-// Add the audit log trigger here
-$safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
-$safePageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
-$viewActMsg = $safeUserName . ' viewed the page ' . $safePageTitle . '.';
-taskBoardAuditLog($connect, $pageTitle, 'View', $viewActMsg, $cdate, $ctime);
 
 $currentProjectId = taskResolveCurrentProjectId($connect, 0);
 $currentProject = $currentProjectId > 0 ? taskGetProjectById($connect, $currentProjectId) : array();
 $taskParentTitle = !empty($currentProject) && isset($currentProject['name']) && trim((string) $currentProject['name']) !== ''
     ? (string) $currentProject['name']
-    : 'Task Management';
+    : 'Project Task';
 if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $currentPagePin)) {
     echo "<script>alert('You do not have access to this project summary.'); location.replace('../dashboard.php');</script>";
     exit;
 }
+
+$safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
+$safePageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
+$safeProjectName = htmlspecialchars((string) $taskParentTitle, ENT_QUOTES, 'UTF-8');
+$viewActMsg = $safeUserName . ' viewed the page ' . $safePageTitle . ' (<b>' . $safeProjectName . '</b>).';
+taskBoardAuditLog($connect, $pageTitle, 'View', $viewActMsg, $cdate, $ctime);
 $assignees = taskGetAssignees($connect);
 $workTypes = taskGetWorkTypes($connect, $currentProjectId);
 $statusLabels = taskGetStatusLabels($connect);
@@ -189,7 +189,7 @@ if (empty($_SESSION['csrf_token'])) {
 
         <section id="taskModuleLayout" class="task-module-layout task-sidebar-open">
             <aside class="task-module-sidebar" id="taskModuleSidebar">
-                <h5 class="mb-2">Task Management</h5>
+                <h5 class="mb-2">Project Task</h5>
                 <?php taskRenderSidebarMenu($connect, $SITEURL, 'summary', $currentProjectId); ?>
             </aside>
 

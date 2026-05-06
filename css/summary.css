@@ -897,6 +897,14 @@
   color: #172b4d;
 }
 
+.summary-activity-modal-search:focus,
+.summary-activity-modal-search:focus-visible {
+  border-color: #0c66e4;
+  outline: 2px solid #0c66e4;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 3px rgba(12, 102, 228, 0.2);
+}
+
 .summary-activity-modal-size-wrap {
   display: inline-flex;
   align-items: center;

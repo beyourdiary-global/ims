@@ -2,7 +2,10 @@ $(function () {
   var columnState = window.projectUserAccessColumnState || {};
   var config = window.projectUserAccessConfig || {};
   var $form = $("#projectUserAccessForm");
-  var currentColumnKey = $(".project-access-column-section.active").data("column-key") || "";
+  var $search = $("#projectAccessSearch");
+  var $roleFilter = $("#projectAccessRoleFilter");
+  var currentColumnKey =
+    $(".project-access-column-section.active").data("column-key") || "";
   var saveTimer = null;
   var saveInFlight = false;
   var saveQueued = false;
@@ -28,7 +31,12 @@ $(function () {
     $(".project-access-column-row-toggle").each(function () {
       var userId = $(this).data("user-id");
       var row = getUserColumn(userId, currentColumnKey);
-      $(this).prop("checked", row.add == 1 && row.edit == 1 && row.delete == 1);
+      $(this).prop(
+        "checked",
+        Number(row.add || 0) === 1 &&
+          Number(row.edit || 0) === 1 &&
+          Number(row.delete || 0) === 1
+      );
     });
   }
 
@@ -55,6 +63,50 @@ $(function () {
     });
   }
 
+  function syncStandardRowToggles() {
+    $(".project-access-user-row").each(function () {
+      var $row = $(this);
+      var $toggle = $row.find(".project-access-row-toggle");
+      if (!$toggle.length) {
+        return;
+      }
+
+      var $others = $row
+        .find(".project-access-checkbox")
+        .not(".project-access-row-toggle, .project-access-column-action, .project-access-column-row-toggle");
+      if (!$others.length) {
+        return;
+      }
+
+      var allChecked = true;
+      $others.each(function () {
+        if (!$(this).is(":checked")) {
+          allChecked = false;
+          return false;
+        }
+      });
+      $toggle.prop("checked", allChecked);
+    });
+  }
+
+  function applyUserFilters() {
+    var query = String($search.val() || "")
+      .toLowerCase()
+      .trim();
+    var groupKey = String($roleFilter.val() || "").toLowerCase().trim();
+
+    $(".project-access-user-row").each(function () {
+      var $row = $(this);
+      var haystack = String($row.data("search") || "");
+      var rowGroup = String($row.data("group") || "");
+      var visible =
+        (!query || haystack.indexOf(query) !== -1) &&
+        (!groupKey || rowGroup === groupKey);
+
+      $row.toggleClass("project-access-hidden-row", !visible);
+    });
+  }
+
   function saveAccessNow() {
     if (!$form.length) {
       return;
@@ -74,19 +126,27 @@ $(function () {
       processData: false,
       contentType: false,
       dataType: "json"
-    }).done(function (res) {
-      if (!res || !res.ok) {
-        window.alert(res && res.message ? res.message : "Failed to update project user access.");
-      }
-    }).fail(function () {
-      window.alert("Failed to update project user access.");
-    }).always(function () {
-      saveInFlight = false;
-      if (saveQueued) {
-        saveQueued = false;
-        queueSave();
-      }
-    });
+    })
+      .done(function (res) {
+        if (!res || !res.ok) {
+          window.alert(
+            res && res.message
+              ? res.message
+              : "Failed to update project user access."
+          );
+          return;
+        }
+      })
+      .fail(function () {
+        window.alert("Failed to update project user access.");
+      })
+      .always(function () {
+        saveInFlight = false;
+        if (saveQueued) {
+          saveQueued = false;
+          queueSave();
+        }
+      });
   }
 
   function queueSave() {
@@ -134,25 +194,48 @@ $(function () {
 
   $(".project-access-row-toggle").on("change", function () {
     var checked = $(this).is(":checked");
-    $(this).closest("tr").find(".project-access-checkbox").not(this).prop("checked", checked);
+    $(this)
+      .closest("tr")
+      .find(".project-access-checkbox")
+      .not(this)
+      .not(".project-access-column-action, .project-access-column-row-toggle")
+      .prop("checked", checked);
+    syncStandardRowToggles();
     queueSave();
   });
 
-  $(".project-access-checkbox").not(".project-access-column-action, .project-access-column-row-toggle, .project-access-row-toggle").on("change", function () {
-    queueSave();
-  });
+  $(".project-access-checkbox")
+    .not(
+      ".project-access-column-action, .project-access-column-row-toggle, .project-access-row-toggle"
+    )
+    .on("change", function () {
+      syncStandardRowToggles();
+      queueSave();
+    });
 
   $(".project-access-tab").on("click", function () {
     var tab = $(this).data("project-access-tab");
     $(".project-access-tab").removeClass("active");
     $(this).addClass("active");
     $(".project-access-panel").removeClass("active");
-    $('.project-access-panel[data-project-access-panel="' + tab + '"]').addClass("active");
+    $('.project-access-panel[data-project-access-panel="' + tab + '"]').addClass(
+      "active"
+    );
+    applyUserFilters();
   });
 
   $(".project-access-form").on("submit", function (event) {
     event.preventDefault();
   });
 
+  $(".project-access-row-menu").on("click", function (event) {
+    event.preventDefault();
+  });
+
+  $search.on("input", applyUserFilters);
+  $roleFilter.on("change", applyUserFilters);
+
   renderColumnCheckboxes();
+  syncStandardRowToggles();
+  applyUserFilters();
 });
