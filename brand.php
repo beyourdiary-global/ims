@@ -373,7 +373,7 @@ if ($submittedForSave) {
     //Initial Page And Action Value
     var page = "<?= $pageTitle ?>";
     var action = "<?php echo isset($act) ? $act : ''; ?>";
-    var companyOptions = <?php echo json_encode($companyOptions); ?>;
+    var companyOptions = <?php echo json_encode($companyOptions, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 
     checkCurrentPage(page, action);
     centerAlignment("formContainer");
