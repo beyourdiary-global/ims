@@ -1188,7 +1188,7 @@ if (!function_exists('commonRenderCreateUpdateInfo')) {
         );
 
         if ($createUserId !== '' && $createDateTime !== '') {
-            $lines[] = 'create by ' . commonResolveUserDisplayName($connect, $createUserId) . ' at ' . $createDateTime;
+            $lines[] = 'Created by ' . commonResolveUserDisplayName($connect, $createUserId) . ' at ' . $createDateTime;
         }
 
         $updateUserId = isset($row['update_by']) ? $row['update_by'] : '';
@@ -1198,7 +1198,7 @@ if (!function_exists('commonRenderCreateUpdateInfo')) {
         );
 
         if ($updateUserId !== '' && $updateDateTime !== '') {
-            $lines[] = 'update by ' . commonResolveUserDisplayName($connect, $updateUserId) . ' at ' . $updateDateTime;
+            $lines[] = 'Updated by ' . commonResolveUserDisplayName($connect, $updateUserId) . ' at ' . $updateDateTime;
         }
 
         if (empty($lines)) {

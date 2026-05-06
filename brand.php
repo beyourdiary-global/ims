@@ -9,7 +9,11 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 $tblName = BRAND;
 
 //Current Page Action And Data ID
-$dataID = !empty(input('id')) ? input('id') : post('id');
+$rawDataID = !empty(input('id')) ? input('id') : post('id');
+$dataID = '';
+if ($rawDataID !== '' && ctype_digit((string) $rawDataID)) {
+    $dataID = (string) ((int) $rawDataID);
+}
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
@@ -24,7 +28,7 @@ $pageActionTitle = $pageAction . " " . $pageTitle;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 
 //Checking The Page ID , Action , Pin Access Exist Or Not
-if (!($dataID) && !($act) || !isActionAllowed($pageAction, $pinAccess))
+if (($rawDataID !== '' && $dataID === '') || (!($dataID) && !($act)) || !isActionAllowed($pageAction, $pinAccess))
     echo $redirectLink;
 
 //Get The Data From Database
@@ -150,17 +154,18 @@ if (post('actionBtn')) {
                 $hasValidationError = true;
             } else {
                 $isValidCompanySelection = false;
+                $matchedCompanyName = '';
 
-                if ($company && is_numeric($company) && isRecordExist(COMPANY, 'id', $company, $connect)) {
-                    $matchedCompanyName = '';
+                if ($company !== '' && ctype_digit((string) $company)) {
+                    $company = (string) ((int) $company);
                     foreach ($companyOptions as $companyOption) {
-                        if ((string)$companyOption['id'] === (string)$company) {
-                            $matchedCompanyName = trim((string)$companyOption['name']);
+                        if ((string) $companyOption['id'] === $company) {
+                            $matchedCompanyName = trim((string) $companyOption['name']);
                             break;
                         }
                     }
 
-                    if ($matchedCompanyName !== '' && strcasecmp($matchedCompanyName, trim((string)$companyName)) === 0) {
+                    if ($matchedCompanyName !== '' && strcasecmp($matchedCompanyName, trim((string) $companyName)) === 0) {
                         $isValidCompanySelection = true;
                     }
                 }
