@@ -16,11 +16,13 @@
   var currentUserName = String(cfg.currentUserName || "Current User");
   var statusLabels = cfg.statusLabels || [];
   var boardUrl = cfg.boardUrl || "board.php";
+  var currentProjectId = Number(cfg.currentProjectId || 0);
 
   var stats = cfg.initialStats || {};
   var activityData = cfg.initialActivity || {};
 
-  var summaryFilterCookieName = "task_summary_filters_v1";
+  var summaryFilterCookieName =
+    "task_summary_filters_v1_project_" + String(currentProjectId > 0 ? currentProjectId : 0);
   var summaryFilterKeys = [
     "assignee",
     "created",
@@ -142,6 +144,46 @@
     return esc(value).replace(/"/g, "&quot;");
   }
 
+  function normalizeHexColorValueLocal(color, fallback) {
+    var value = String(color || "")
+      .trim()
+      .toUpperCase();
+    var defaultColor = String(fallback || "#DFE1E6")
+      .trim()
+      .toUpperCase();
+
+    if (/^#[0-9A-F]{6}$/.test(value)) {
+      return value;
+    }
+    if (/^#[0-9A-F]{3}$/.test(value)) {
+      return (
+        "#" +
+        value.charAt(1) +
+        value.charAt(1) +
+        value.charAt(2) +
+        value.charAt(2) +
+        value.charAt(3) +
+        value.charAt(3)
+      );
+    }
+
+    return /^#[0-9A-F]{6}$/.test(defaultColor) ? defaultColor : "#DFE1E6";
+  }
+
+  function getReadableTextColorLocal(backgroundColor) {
+    return "#292A2E";
+  }
+
+  function getColumnMetaByIdLocal(id) {
+    var strId = String(id);
+    for (var i = 0; i < boardColumns.length; i++) {
+      if (String(boardColumns[i].id) === strId) {
+        return boardColumns[i];
+      }
+    }
+    return null;
+  }
+
   function buildBoardModalCardMock(item) {
     var cardHtml =
       '<article class="task-item-card" data-item-id="' +
@@ -184,20 +226,6 @@
       return true;
     }
     return false;
-  }
-
-  function activityTypeBadgeHtml(type) {
-    var value = String(type || "history").toLowerCase();
-    var isComment = value === "comment" || value === "reply";
-    return (
-      '<span class="task-item-activity-type-badge ' +
-      (isComment
-        ? "task-item-activity-type-comment"
-        : "task-item-activity-type-history") +
-      '">' +
-      (value === "reply" ? "REPLY" : isComment ? "COMMENT" : "HISTORY") +
-      "</span>"
-    );
   }
 
   function activityValueHasRichContent(fieldName, value) {
@@ -371,7 +399,6 @@
       '<div class="task-item-activity-ago summary-activity-time">' +
       esc(timeAgo(row.create_date, row.create_time)) +
       "</div>" +
-      activityTypeBadgeHtml(recordType) +
       "</div>" +
       detail +
       "</div>" +
@@ -1562,13 +1589,8 @@
     });
 
   function getColumnNameByIdLocal(id) {
-    var strId = String(id);
-    for (var i = 0; i < boardColumns.length; i++) {
-      if (String(boardColumns[i].id) === strId) {
-        return boardColumns[i].name;
-      }
-    }
-    return "Unknown";
+    var meta = getColumnMetaByIdLocal(id);
+    return meta ? meta.name : "Unknown";
   }
 
   var hoverCardTimeout = null;
@@ -1588,28 +1610,37 @@
       var workTypeIconData = $link.data("work-type-icon");
       var workTypeIcon = '<i class="fa-solid fa-check-square text-primary"></i>';
       if (workTypeIconData) {
-          if (String(workTypeIconData).indexOf('<') === 0) {
-              workTypeIcon = workTypeIconData;
-          } else {
-              workTypeIcon = '<img src="' + escAttr(workTypeIconData) + '" alt="" aria-hidden="true" style="width:100%;height:100%;object-fit:contain;" />';
+          var normalizedWorkTypeIcon = normalizeWorkTypeIcon(workTypeIconData, $link.data("work-type-name"));
+          var safeWorkTypeIconHtml = workTypeIconHtml(normalizedWorkTypeIcon);
+          if (safeWorkTypeIconHtml) {
+              workTypeIcon = safeWorkTypeIconHtml;
           }
       }
       var assigneeName = $link.data("assignee-name");
       var priority = $link.data("priority");
       var statusId = $link.data("status-id");
+      var currentStatusMeta = getColumnMetaByIdLocal(statusId) || {};
+      var currentStatusColor = normalizeHexColorValueLocal(
+        currentStatusMeta.color || "",
+        "#DFE1E6",
+      );
+      var currentStatusTextColor = getReadableTextColorLocal(currentStatusColor);
       
       var priorityIcon = PRIORITY_ICONS[priority] || '<i class="fa-solid fa-equals"></i>';
       
       var statusDropdownHtml = 
-        '<div class="dropdown d-inline-block">' +
-          '<button class="btn btn-outline-secondary btn-sm dropdown-toggle" type="button" data-bs-toggle="dropdown" style="font-size:11px;font-weight:600;padding:2px 8px;text-transform:none;">' +
-             esc(getColumnNameByIdLocal(statusId)) +
+        '<div class="dropdown d-inline-block summary-hover-status-dropdown">' +
+          '<button class="btn btn-outline-secondary btn-sm dropdown-toggle summary-hover-status-toggle" type="button" data-bs-toggle="dropdown" style="--summary-status-bg:' + escAttr(currentStatusColor) + ';--summary-status-text:' + escAttr(currentStatusTextColor) + ';">' +
+             '<span class="summary-hover-status-text">' + esc(getColumnNameByIdLocal(statusId)) + '</span>' +
+             '<i class="fa-solid fa-chevron-down summary-hover-status-caret" aria-hidden="true"></i>' +
           '</button>' +
-          '<ul class="dropdown-menu shadow-sm" style="min-width:140px;padding:4px 0;">';
+          '<ul class="dropdown-menu shadow-sm summary-hover-status-menu">';
           
       for (var i = 0; i < boardColumns.length; i++) {
         var c = boardColumns[i];
-        statusDropdownHtml += '<li><a class="dropdown-item task-hover-status-option" href="#" data-item-id="' + itemId + '" data-status-id="' + c.id + '" style="font-size:12px;padding:4px 12px;font-weight:600;text-transform:none;">' + esc(c.name) + '</a></li>';
+        var optionColor = normalizeHexColorValueLocal(c.color || "", "#DFE1E6");
+        var optionTextColor = getReadableTextColorLocal(optionColor);
+        statusDropdownHtml += '<li><a class="dropdown-item task-hover-status-option summary-hover-status-option" href="#" data-item-id="' + itemId + '" data-status-id="' + c.id + '" style="--summary-status-option-bg:' + escAttr(optionColor) + ';--summary-status-option-text:' + escAttr(optionTextColor) + ';"><span class="summary-hover-status-option-pill">' + esc(c.name) + '</span></a></li>';
       }
       statusDropdownHtml += '</ul></div>';
       
@@ -1672,7 +1703,10 @@
     var newStatus = $option.data("status-id");
     
     var $btn = $option.closest(".dropdown").find(".dropdown-toggle");
-    $btn.prop("disabled", true).text("Saving...");
+    var previousStatusLabel = String(
+      $btn.find(".summary-hover-status-text").text() || getColumnNameByIdLocal(newStatus),
+    );
+    $btn.prop("disabled", true).find(".summary-hover-status-text").text("Saving...");
     
     var postData = {
       task_action: "change_item_status",
@@ -1691,12 +1725,12 @@
           $hoverCard.hide();
           refreshAll(); 
         } else {
-          $btn.prop("disabled", false).text(getColumnNameByIdLocal(newStatus));
+          $btn.prop("disabled", false).find(".summary-hover-status-text").text(previousStatusLabel);
           alert((resp && (resp.message || resp.error)) || "Failed to update status");
         }
       },
       error: function() {
-        $btn.prop("disabled", false).text(getColumnNameByIdLocal(newStatus));
+        $btn.prop("disabled", false).find(".summary-hover-status-text").text(previousStatusLabel);
         alert("Server error");
       }
     });

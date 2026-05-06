@@ -13,7 +13,9 @@ function applyBoardViewSettingsToCard($card) {
         var item = state.labels[j] || {};
         if (Number(item.id || 0) === id) {
           labelHtml +=
-            '<span class="task-label-pill">' +
+            '<span class="task-label-pill" style="' +
+            labelPillStyle(item.color, "#DCE8FF") +
+            '">' +
             escHtml(String(item.name || "")) +
             "</span>";
           break;
@@ -339,12 +341,16 @@ function refreshInlineLabelList($submenu) {
       '" ' +
       (checked ? "checked" : "") +
       ">" +
-      '<span class="task-inline-label-option-name">' +
+      '<span class="task-inline-label-option-name task-label-pill" style="' +
+      labelPillStyle(label.color, "#DCE8FF") +
+      '">' +
       escHtml(labelName) +
       "</span>" +
-      '<button type="button" class="btn task-inline-label-delete-btn" data-label-id="' +
+      (state.isProjectOwner
+        ? '<button type="button" class="btn task-inline-label-delete-btn" data-label-id="' +
       labelId +
-      '" title="Delete label"><i class="fa-regular fa-trash-can"></i></button>' +
+      '" title="Delete label"><i class="fa-regular fa-trash-can"></i></button>'
+        : "") +
       "</label>";
   }
 
@@ -360,7 +366,7 @@ function refreshInlineLabelList($submenu) {
 
   $panel
     .find(".task-inline-label-create-row")
-    .toggleClass("d-none", !canCreate);
+    .toggleClass("d-none", !canCreate || !state.isProjectOwner);
   $panel
     .find(".task-inline-label-create-name")
     .text(canCreate ? '"' + search + '"' : "");
@@ -382,8 +388,11 @@ function renderInlineStatusLabelPanel($card, $submenu) {
     if (!selectedNames[c]) {
       continue;
     }
+    var statusLabelInfo = getStatusLabelById(selected[c]) || {};
     chipsHtml +=
-      '<span class="task-inline-label-chip">' +
+      '<span class="task-inline-label-chip task-label-pill" style="' +
+      labelPillStyle(statusLabelInfo.color, "#DCE8FF") +
+      '">' +
       escHtml(selectedNames[c]) +
       "</span>";
   }
@@ -436,12 +445,16 @@ function refreshInlineStatusLabelList($submenu) {
       '" ' +
       (checked ? "checked" : "") +
       ">" +
-      '<span class="task-inline-label-option-name">' +
+      '<span class="task-inline-label-option-name task-label-pill" style="' +
+      labelPillStyle(label.color, "#DCE8FF") +
+      '">' +
       escHtml(labelName) +
       "</span>" +
-      '<button type="button" class="btn task-inline-label-delete-btn task-inline-status-delete-btn" data-status-label-id="' +
+      (state.isProjectOwner
+        ? '<button type="button" class="btn task-inline-label-delete-btn task-inline-status-delete-btn" data-status-label-id="' +
       labelId +
-      '" title="Delete task status"><i class="fa-regular fa-trash-can"></i></button>' +
+      '" title="Delete task status"><i class="fa-regular fa-trash-can"></i></button>'
+        : "") +
       "</label>";
   }
 
@@ -459,7 +472,7 @@ function refreshInlineStatusLabelList($submenu) {
 
   $panel
     .find(".task-inline-label-create-row")
-    .toggleClass("d-none", !canCreate);
+    .toggleClass("d-none", !canCreate || !state.isProjectOwner);
   $panel
     .find(".task-inline-label-create-name")
     .text(canCreate ? '"' + search + '"' : "");
@@ -1089,7 +1102,10 @@ function renderDetailAssigneeSelect(selectedUserId) {
     html += '<option value="' + id + '">' + escHtml(name) + "</option>";
   }
 
-  $("#taskItemDetailAssigneeSelect").html(html).val(String(selectedId));
+  $("#taskItemDetailAssigneeSelect")
+    .html(html)
+    .val(String(selectedId))
+    .prop("disabled", !(canEdit && hasAnyProjectFieldPermission("assignee")));
 }
 
 function renderDetailReporterSelect(selectedUserId) {
@@ -1105,7 +1121,10 @@ function renderDetailReporterSelect(selectedUserId) {
     html += '<option value="' + id + '">' + escHtml(name) + "</option>";
   }
 
-  $("#taskItemDetailReporterSelect").html(html).val(String(selectedId));
+  $("#taskItemDetailReporterSelect")
+    .html(html)
+    .val(String(selectedId))
+    .prop("disabled", !(canEdit && hasAnyProjectFieldPermission("reporter")));
 }
 
 function normalizeStatusLabelIdList(rawList) {
@@ -1198,13 +1217,16 @@ function renderStatusLabelChips() {
   var html = "";
   for (var i = 0; i < ids.length; i++) {
     var id = Number(ids[i] || 0);
-    var name = statusLabelNameById(id);
+    var statusLabel = getStatusLabelById(id) || {};
+    var name = String(statusLabel.name || "").trim();
     if (!id || !name) {
       continue;
     }
 
     html +=
-      '<span class="task-label-pill task-item-detail-status-chip">' +
+      '<span class="task-label-pill task-item-detail-status-chip" style="' +
+      labelPillStyle(statusLabel.color, "#DCE8FF") +
+      '">' +
       escHtml(name) +
       '<button type="button" class="btn task-item-detail-status-chip-remove" data-status-label-id="' +
       id +
@@ -1227,11 +1249,17 @@ function setSelectedStatusLabels(ids) {
 
 function setDetailBoardStatus(columnId) {
   var id = Number(columnId || 0);
-  var name = getBoardStatusColumnName(id);
+  var meta = getBoardStatusColumnMeta(id);
+  var name = meta ? String(meta.name || "").trim() : "";
+  var color = meta ? normalizeHexColorValue(meta.color || "", "#DFE1E6") : "";
   if (!name && id > 0) {
     var $card = $(itemDetailModalState.cardEl || null);
     if ($card.length) {
       name = String($card.attr("data-status-column-name") || "").trim();
+      color = normalizeHexColorValue(
+        $card.attr("data-status-column-color") || "",
+        "#DFE1E6",
+      );
     }
   }
 
@@ -1240,7 +1268,15 @@ function setDetailBoardStatus(columnId) {
   }
 
   itemDetailModalState.detailStatusColumnId = id > 0 ? id : 0;
-  $("#taskItemDetailBoardStatusBtn").text(name);
+  $("#taskItemDetailBoardStatusBtn")
+    .text(name)
+    .css({
+      "--task-detail-status-bg": color || "#669DF1",
+      "--task-detail-status-text": color
+        ? getReadableTextColor(color)
+        : "#FFFFFF",
+    })
+    .prop("disabled", !canEdit);
 }
 
 function renderDetailBoardStatusOptions() {
@@ -1255,14 +1291,24 @@ function renderDetailBoardStatusOptions() {
     if (!colId || !colName) {
       continue;
     }
+    if (colId !== currentId && !canTargetStatusColumn(colId)) {
+      continue;
+    }
 
     html +=
       '<button type="button" class="dropdown-item task-item-detail-board-status-option' +
       (colId === currentId ? " active" : "") +
       '" data-target-column-id="' +
       colId +
-      '">' +
+      '" style="--task-detail-status-option-bg:' +
+      escHtml(normalizeHexColorValue(col.color || "", "#DFE1E6")) +
+      ";--task-detail-status-option-text:" +
+      escHtml(
+        getReadableTextColor(normalizeHexColorValue(col.color || "", "#DFE1E6")),
+      ) +
+      '"><span class="task-item-detail-board-status-option-pill">' +
       escHtml(colName) +
+      "</span>" +
       "</button>";
   }
 
@@ -1314,12 +1360,16 @@ function renderStatusLabelOptions(keyword) {
       '"' +
       checked +
       ">" +
-      '<span class="task-item-detail-status-option-name">' +
+      '<span class="task-item-detail-status-option-name task-label-pill" style="' +
+      labelPillStyle(item.color, "#DCE8FF") +
+      '">' +
       escHtml(name) +
       "</span>" +
-      '<button type="button" class="btn task-item-detail-status-option-delete-btn" data-status-label-id="' +
+      (state.isProjectOwner
+        ? '<button type="button" class="btn task-item-detail-status-option-delete-btn" data-status-label-id="' +
       id +
-      '" title="Delete status label"><i class="fa-regular fa-trash-can"></i></button>' +
+      '" title="Delete status label"><i class="fa-regular fa-trash-can"></i></button>'
+        : "") +
       "</label>";
   }
 
@@ -1572,13 +1622,19 @@ function applyDetailFieldVisibility() {
 
       if (!isEpic) {
         $(this).removeClass("d-none");
-        return;
+      } else {
+        $(this).toggleClass(
+          "d-none",
+          !Object.prototype.hasOwnProperty.call(epicFields, field),
+        );
       }
 
-      $(this).toggleClass(
-        "d-none",
-        !Object.prototype.hasOwnProperty.call(epicFields, field),
-      );
+      var hasPermission = hasAnyProjectFieldPermission(field);
+      $(this).toggleClass("task-item-detail-field-row-readonly", !hasPermission);
+      $(this)
+        .find("input, select, textarea, button")
+        .not(".task-item-detail-collapse-btn")
+        .prop("disabled", !hasPermission || !canEdit);
     },
   );
 
@@ -1958,7 +2014,9 @@ function renderModalLabelChips() {
       continue;
     }
     html +=
-      '<span class="task-label-pill task-item-detail-label-chip">' +
+      '<span class="task-label-pill task-item-detail-label-chip" style="' +
+      labelPillStyle(item.color, "#DCE8FF") +
+      '">' +
       escHtml(name) +
       '<button type="button" class="btn task-item-detail-label-chip-remove" data-label-id="' +
       id +
@@ -2000,12 +2058,16 @@ function renderModalLabelOptions() {
       '"' +
       checked +
       ">" +
-      '<span class="task-item-detail-label-option-name">' +
+      '<span class="task-item-detail-label-option-name task-label-pill" style="' +
+      labelPillStyle(item.color, "#DCE8FF") +
+      '">' +
       escHtml(name) +
       "</span>" +
-      '<button type="button" class="btn task-item-detail-label-option-delete-btn" data-label-id="' +
+      (state.isProjectOwner
+        ? '<button type="button" class="btn task-item-detail-label-option-delete-btn" data-label-id="' +
       id +
-      '" title="Delete label"><i class="fa-regular fa-trash-can"></i></button>' +
+      '" title="Delete label"><i class="fa-regular fa-trash-can"></i></button>'
+        : "") +
       "</label>";
   }
 
@@ -2338,6 +2400,21 @@ function setItemDetailAutosaveStatus(stateName, message) {
   $status.text(text);
 }
 
+function isPermissionDeniedResponse(res) {
+  var message =
+    res && typeof res.message === "string" ? String(res.message) : "";
+  return message.toLowerCase().indexOf("permission") !== -1;
+}
+
+function restoreItemDetailStateAfterDeniedSave() {
+  var itemId = Number(itemDetailModalState.itemId || 0);
+  setItemDetailAutosaveStatus("", "");
+  if (!itemId) {
+    return;
+  }
+  loadItemDetail(itemId);
+}
+
 function getModalCoreValues() {
   var descriptionValue = String(
     $("#taskItemDetailDescriptionInput").val() || "",
@@ -2510,8 +2587,13 @@ function persistModalLabels(onDone, options) {
         setItemDetailAutosaveStatus("saved", "All changes saved");
       }
     },
-    function () {
+    function (res) {
       itemDetailModalState.labelsSaveInFlight = false;
+      if (isPermissionDeniedResponse(res)) {
+        itemDetailModalState.queuedLabelsSave = false;
+        restoreItemDetailStateAfterDeniedSave();
+        return;
+      }
       setItemDetailAutosaveStatus("error", "Failed to save changes");
     },
   );
@@ -2643,8 +2725,13 @@ function saveItemDetailsFromModal(closeAfterSave, options) {
         }
       }
     },
-    function () {
+    function (res) {
       itemDetailModalState.detailSaveInFlight = false;
+      if (isPermissionDeniedResponse(res)) {
+        itemDetailModalState.queuedDetailSave = false;
+        restoreItemDetailStateAfterDeniedSave();
+        return;
+      }
       setItemDetailAutosaveStatus("error", "Failed to save changes");
     },
   );
@@ -2735,7 +2822,11 @@ function buildTaskCardHtml(item) {
     }
     labelIds.push(labelId);
     labelsHtml +=
-      '<span class="task-label-pill">' + escHtml(labelName) + "</span>";
+      '<span class="task-label-pill" style="' +
+      labelPillStyle(label.color, "#DCE8FF") +
+      '">' +
+      escHtml(labelName) +
+      "</span>";
   }
 
   var labelActionText = labelIds.length ? "Edit label" : "Add labels";
@@ -2750,6 +2841,9 @@ function buildTaskCardHtml(item) {
   var statusLabelActionText = statusLabelIds.length
     ? "Edit task status labels"
     : "Add task status labels";
+  var canManageWorkType = canEdit && state.workTypes.length > 0;
+  var canManageAssignee = canEdit && hasAnyProjectFieldPermission("assignee");
+  var canOpenActions = canEdit || canDelete;
 
   var statusLabelMenuHtml = "";
   var parentMenuHtml = "";
@@ -2836,8 +2930,12 @@ function buildTaskCardHtml(item) {
     escHtml(item.title || "") +
     "</h6>" +
     '<div class="dropdown task-item-menu-dropdown" style="display: flex; gap: 2px;">' +
-    '<button class="btn task-item-menu-btn task-item-edit-btn" type="button" title="Edit title" aria-label="Edit title"><i class="fa-solid fa-pen"></i></button>' +
-    '<button class="btn task-item-menu-btn task-open-item-actions-btn" type="button" title="Task options" aria-label="Task options"><i class="fa-solid fa-ellipsis"></i></button>' +
+    (canEdit
+      ? '<button class="btn task-item-menu-btn task-item-edit-btn" type="button" title="Edit title" aria-label="Edit title"><i class="fa-solid fa-pen"></i></button>'
+      : "") +
+    (canOpenActions
+      ? '<button class="btn task-item-menu-btn task-open-item-actions-btn" type="button" title="Task options" aria-label="Task options"><i class="fa-solid fa-ellipsis"></i></button>'
+      : "") +
     "</div>" +
     "</div>" +
     (labelsHtml
@@ -2846,7 +2944,11 @@ function buildTaskCardHtml(item) {
     '<div class="task-item-meta">' +
     '<div class="task-item-meta-left">' +
     '<div class="dropdown task-item-type-wrap">' +
-    '<button class="btn task-item-type-btn task-work-type-toggle dropdown-toggle" type="button" data-bs-toggle="dropdown" aria-expanded="false" data-work-type-id="' +
+    '<button class="btn task-item-type-btn task-work-type-toggle' +
+    (canManageWorkType ? " dropdown-toggle" : "") +
+    '" type="button"' +
+    (canManageWorkType ? ' data-bs-toggle="dropdown" aria-expanded="false"' : ' disabled aria-disabled="true"') +
+    ' data-work-type-id="' +
     workTypeId +
     '" data-work-type-name="' +
     escHtml(workTypeName) +
@@ -2859,9 +2961,11 @@ function buildTaskCardHtml(item) {
     '">' +
     workTypeIconHtml(workTypeIcon, workTypeName, "task-type-pill-icon") +
     "</button>" +
-    '<ul class="dropdown-menu task-work-type-menu task-item-work-type-menu">' +
-    workTypeMenuHtml() +
-    "</ul>" +
+    (canManageWorkType
+      ? '<ul class="dropdown-menu task-work-type-menu task-item-work-type-menu">' +
+        workTypeMenuHtml() +
+        "</ul>"
+      : "") +
     "</div>" +
     '<span class="task-item-key ' +
     (workItemKey ? "" : "d-none") +
@@ -2874,18 +2978,23 @@ function buildTaskCardHtml(item) {
     priorityIconGlyphHtml(priorityValue) +
     "</span>" +
     '<div class="dropdown task-item-assignee-wrap">' +
-    '<button class="btn task-assignee-pill task-item-assignee-btn dropdown-toggle ' +
+    '<button class="btn task-assignee-pill task-item-assignee-btn' +
+    (canManageAssignee ? " dropdown-toggle " : " ") +
     (assigneeUserId > 0 ? "" : "task-assignee-pill-unassigned") +
-    '" type="button" data-bs-toggle="dropdown" data-user-id="' +
+    '" type="button"' +
+    (canManageAssignee ? ' data-bs-toggle="dropdown"' : ' disabled aria-disabled="true"') +
+    ' data-user-id="' +
     assigneeUserId +
     '" title="' +
     escHtml(assigneeName) +
     '">' +
     assigneeButtonInner(assigneeUserId, assigneeName) +
     "</button>" +
-    '<ul class="dropdown-menu task-assignee-menu task-assignee-menu-scroll task-item-assignee-menu">' +
-    assigneeMenuHtml() +
-    "</ul>" +
+    (canManageAssignee
+      ? '<ul class="dropdown-menu task-assignee-menu task-assignee-menu-scroll task-item-assignee-menu">' +
+        assigneeMenuHtml() +
+        "</ul>"
+      : "") +
     "</div>" +
     "</div>" +
     "</div>" +
@@ -2904,10 +3013,17 @@ function buildTaskCardHtml(item) {
 
 function buildColumnHtml(column) {
   var def = defaultWorkType();
+  var columnColor = normalizeHexColorValue(column.color || "", "#DFE1E6");
+  var canCreateInColumn =
+    canAdd && state.workTypes.length > 0 && canTargetStatusColumn(column.id);
 
   return (
     '<section class="task-column" data-column-id="' +
     Number(column.id || 0) +
+    '" data-column-color="' +
+    escHtml(columnColor) +
+    '" style="--task-column-color:' +
+    escHtml(columnColor) +
     '">' +
     '<div class="task-column-header">' +
     '<div class="task-column-title-wrap">' +
@@ -2917,20 +3033,24 @@ function buildColumnHtml(column) {
     "</div>" +
     '<div class="task-column-header-actions">' +
     '<button class="btn task-column-collapse-btn" type="button" title="Collapse status"><i class="fa-solid fa-left-right"></i></button>' +
-    '<div class="dropdown">' +
-    '<button class="btn task-column-menu-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="fa-solid fa-ellipsis"></i></button>' +
-    '<ul class="dropdown-menu task-column-menu-list">' +
-    '<li><a class="dropdown-item task-column-action" href="#" data-action="rename">Rename status</a></li>' +
-    '<li><a class="dropdown-item task-column-action" href="#" data-action="move_left">Move status left</a></li>' +
-    '<li><a class="dropdown-item task-column-action" href="#" data-action="move_right">Move status right</a></li>' +
-    '<li><hr class="dropdown-divider"></li>' +
-    '<li><a class="dropdown-item task-column-action text-danger" href="#" data-action="delete">Delete status</a></li>' +
-    "</ul>" +
-    "</div>" +
+    (state.isProjectOwner
+      ? '<div class="dropdown">' +
+        '<button class="btn task-column-menu-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="fa-solid fa-ellipsis"></i></button>' +
+        '<ul class="dropdown-menu task-column-menu-list">' +
+        '<li><a class="dropdown-item task-column-action" href="#" data-action="rename">Rename status</a></li>' +
+        '<li><a class="dropdown-item task-column-action" href="#" data-action="move_left">Move status left</a></li>' +
+        '<li><a class="dropdown-item task-column-action" href="#" data-action="move_right">Move status right</a></li>' +
+        '<li><hr class="dropdown-divider"></li>' +
+        '<li><a class="dropdown-item task-column-action text-danger" href="#" data-action="delete">Delete status</a></li>' +
+        "</ul>" +
+        "</div>"
+      : "") +
     "</div>" +
     "</div>" +
     '<div class="task-item-list"></div>' +
-    '<button class="btn task-open-composer-btn" type="button"><i class="fa-solid fa-plus"></i> Create</button>' +
+    (canCreateInColumn
+      ? '<button class="btn task-open-composer-btn" type="button"><i class="fa-solid fa-plus"></i> Create</button>'
+      : "") +
     '<div class="task-composer d-none" data-column-id="' +
     Number(column.id || 0) +
     '">' +
@@ -2965,7 +3085,9 @@ function buildColumnHtml(column) {
     "</div>" +
     "</div>" +
     '<div class="task-composer-controls-right">' +
-    '<button class="btn task-create-item-btn" type="button" disabled title="Create work item"><span class="mdi mdi-keyboard-return"></span></button>' +
+    '<button class="btn task-create-item-btn" type="button" disabled title="Create work item"' +
+    (canCreateInColumn ? "" : ' style="display:none;"') +
+    '><span class="mdi mdi-keyboard-return"></span></button>' +
     "</div>" +
     "</div>" +
     "</div>" +
@@ -3038,6 +3160,7 @@ function buildBoardGroupsByStatus(cards) {
       key: "status_" + String(statusId),
       title: String(statusCol.name || "").trim() || "Untitled",
       statusId: statusId,
+      color: normalizeHexColorValue(statusCol.color || "", "#DFE1E6"),
       cards: [],
     };
     groups.push(base);
@@ -3050,10 +3173,12 @@ function buildBoardGroupsByStatus(cards) {
     if (currentStatusId <= 0 && statusColumns.length) {
       currentStatusId = Number((statusColumns[0] && statusColumns[0].id) || 0);
       if (currentStatusId > 0) {
-        setCardStatusColumn(
+        var fallbackMeta = getBoardStatusColumnMeta(currentStatusId);
+        setCardStatusColumnMeta(
           $card,
           currentStatusId,
           getBoardStatusColumnName(currentStatusId),
+          fallbackMeta ? fallbackMeta.color : "#DFE1E6",
         );
       }
     }
@@ -3075,6 +3200,7 @@ function buildBoardGroupsByStatus(cards) {
         key: "status_" + key,
         title: statusName,
         statusId: currentStatusId,
+        color: (getBoardStatusColumnMeta(currentStatusId) || {}).color || "#DFE1E6",
         cards: [],
       };
       groups.push(lookup[key]);
@@ -3213,6 +3339,7 @@ function renderBoardGroupingLayout() {
         buildColumnHtml({
           id: Number(group.statusId || 0),
           name: String(group.title || "Untitled"),
+          color: String(group.color || "#DFE1E6"),
         }),
       );
     } else {
@@ -3638,6 +3765,7 @@ function createStatus(columnName) {
       upsertBoardStatusColumn(
         Number(column.id || 0),
         String(column.name || ""),
+        String(column.color || "#DFE1E6"),
       );
       renderBoardGroupingLayout();
       refreshEmptyBoardState();
@@ -3663,7 +3791,8 @@ function renameStatus(columnId, newName, $column) {
       column_name: nextName,
     },
     function () {
-      upsertBoardStatusColumn(id, nextName);
+      var currentColor = String($column.attr("data-column-color") || "#DFE1E6");
+      upsertBoardStatusColumn(id, nextName, currentColor);
       var $targetColumn =
         $column && $column.length
           ? $column
@@ -3672,7 +3801,12 @@ function renameStatus(columnId, newName, $column) {
       if ($targetColumn.length) {
         $targetColumn.find(".task-column-title").text(nextName);
         $targetColumn.find(".task-item-card").each(function () {
-          setCardStatusColumn($(this), id, nextName);
+          setCardStatusColumnMeta(
+            $(this),
+            id,
+            nextName,
+            String($targetColumn.attr("data-column-color") || "#DFE1E6"),
+          );
         });
       }
 

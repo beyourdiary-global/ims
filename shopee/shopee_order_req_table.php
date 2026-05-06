@@ -64,7 +64,7 @@ if (isset($_GET['verify_id'])) {
     $checkResult = mysqli_query($finance_connect, $checkSql);
     if ($checkResult && $row = mysqli_fetch_assoc($checkResult)) {
         if ($row['order_status'] === 'OC') {
-            $updateSql = "UPDATE " . SHOPEE_SG_ORDER_REQ . " SET order_status = 'C' WHERE id = $orderId";
+            $updateSql = "UPDATE " . SHOPEE_SG_ORDER_REQ . " SET order_status = 'C', update_by = '" . USER_ID . "', update_date = curdate(), update_time = curtime() WHERE id = $orderId";
             $updateResult = mysqli_query($finance_connect, $updateSql);
             if ($updateResult) {
                 $auditData = array(

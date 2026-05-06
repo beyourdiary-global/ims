@@ -153,6 +153,9 @@ function renderTaskItemActionModal($card) {
     if (!statusColumnId || statusColumnId === currentColumnId) {
       continue;
     }
+    if (!canTargetStatusColumn(statusColumnId)) {
+      continue;
+    }
 
     var statusName = String(statusColumn.name || "").trim();
     if (!statusName) {
@@ -165,25 +168,29 @@ function renderTaskItemActionModal($card) {
     });
   }
 
-  var sectionsHtml =
-    buildTaskActionModalSection(
-      "Move work item",
-      '<div class="task-item-action-modal-button-list">' +
-        (moveHtml ||
-          '<div class="task-item-action-modal-empty">No move options</div>') +
-        "</div>",
-      false,
-    ) +
-    buildTaskActionModalSection(
-      "Change status",
-      '<div class="task-item-action-modal-button-list">' +
-        (statusHtml ||
-          '<div class="task-item-action-modal-empty">No other status</div>') +
-        "</div>",
-      false,
-    );
+  var sectionsHtml = "";
 
-  if (!isEpicCard) {
+  if (canEdit) {
+    sectionsHtml +=
+      buildTaskActionModalSection(
+        "Move work item",
+        '<div class="task-item-action-modal-button-list">' +
+          (moveHtml ||
+            '<div class="task-item-action-modal-empty">No move options</div>') +
+          "</div>",
+        false,
+      ) +
+      buildTaskActionModalSection(
+        "Change status",
+        '<div class="task-item-action-modal-button-list">' +
+          (statusHtml ||
+            '<div class="task-item-action-modal-empty">No other status</div>') +
+          "</div>",
+        false,
+      );
+  }
+
+  if (canEdit && !isEpicCard && hasAnyProjectFieldPermission("parent")) {
     sectionsHtml += buildTaskActionModalSection(
       parentItemId > 0 ? "Change parent" : "Change parent",
       '<div class="task-item-parent-submenu task-item-action-modal-panel"><div class="task-item-parent-submenu-content"></div></div>',
@@ -191,13 +198,15 @@ function renderTaskItemActionModal($card) {
     );
   }
 
-  sectionsHtml += buildTaskActionModalSection(
-    hasLabels ? "Edit labels" : "Add labels",
-    '<div class="task-item-label-submenu task-item-action-modal-panel"><div class="task-item-label-submenu-content"></div></div>',
-    false,
-  );
+  if (canEdit && hasAnyProjectFieldPermission("labels")) {
+    sectionsHtml += buildTaskActionModalSection(
+      hasLabels ? "Edit labels" : "Add labels",
+      '<div class="task-item-label-submenu task-item-action-modal-panel"><div class="task-item-label-submenu-content"></div></div>',
+      false,
+    );
+  }
 
-  if (!isEpicCard) {
+  if (canEdit && !isEpicCard && hasAnyProjectFieldPermission("task_status")) {
     sectionsHtml += buildTaskActionModalSection(
       hasStatusLabels ? "Edit task status labels" : "Add task status labels",
       '<div class="task-item-status-label-submenu task-item-action-modal-panel"><div class="task-item-status-label-submenu-content"></div></div>',
@@ -205,10 +214,12 @@ function renderTaskItemActionModal($card) {
     );
   }
 
-  sectionsHtml +=
-    '<section class="task-item-action-modal-section task-item-action-modal-section-delete">' +
-    buildTaskActionModalButton("Delete", { "data-action": "delete" }, true) +
-    "</section>";
+  if (canDelete) {
+    sectionsHtml +=
+      '<section class="task-item-action-modal-section task-item-action-modal-section-delete">' +
+      buildTaskActionModalButton("Delete", { "data-action": "delete" }, true) +
+      "</section>";
+  }
 
   $modal.attr("data-item-id", itemId);
   $("#taskItemActionModalTitle").text(currentTitle || "Task options");
@@ -217,20 +228,26 @@ function renderTaskItemActionModal($card) {
     .text(currentKey || "");
   $("#taskItemActionModalSections").html(sectionsHtml);
 
-  renderInlineLabelPanel(
-    $card,
-    $("#taskItemActionModalSections .task-item-label-submenu").first(),
-  );
+  if (canEdit && hasAnyProjectFieldPermission("labels")) {
+    renderInlineLabelPanel(
+      $card,
+      $("#taskItemActionModalSections .task-item-label-submenu").first(),
+    );
+  }
 
-  if (!isEpicCard) {
-    renderParentSubmenu(
-      $card,
-      $("#taskItemActionModalSections .task-item-parent-submenu").first(),
-    );
-    renderInlineStatusLabelPanel(
-      $card,
-      $("#taskItemActionModalSections .task-item-status-label-submenu").first(),
-    );
+  if (canEdit && !isEpicCard) {
+    if (hasAnyProjectFieldPermission("parent")) {
+      renderParentSubmenu(
+        $card,
+        $("#taskItemActionModalSections .task-item-parent-submenu").first(),
+      );
+    }
+    if (hasAnyProjectFieldPermission("task_status")) {
+      renderInlineStatusLabelPanel(
+        $card,
+        $("#taskItemActionModalSections .task-item-status-label-submenu").first(),
+      );
+    }
   }
 }
 
@@ -463,6 +480,7 @@ function openComposerForColumn($column) {
     return;
   }
 
+  var columnId = Number($column.data("columnId") || 0);
   var $composer = $column.find(".task-composer");
   if (!$composer.length) {
     return;
@@ -470,6 +488,9 @@ function openComposerForColumn($column) {
 
   if (!canAdd) {
     notify("You do not have permission to create work items.");
+    return;
+  }
+  if (!canTargetStatusColumn(columnId)) {
     return;
   }
 
@@ -925,6 +946,9 @@ $app.on("click", ".task-create-item-btn", function () {
   var $composer = $(this).closest(".task-composer");
   var $column = $composer.closest(".task-column");
   var columnId = Number($column.data("columnId") || 0);
+  if (!canTargetStatusColumn(columnId)) {
+    return;
+  }
   var title = String($composer.find(".task-title-input").val() || "").trim();
   var workTypeId = Number(
     $composer.find(".task-work-type-toggle").attr("data-work-type-id") || 0,
@@ -1025,6 +1049,9 @@ $(document).on("show.bs.dropdown", ".task-item-menu-dropdown", function () {
     var statusColumn = statusColumns[s] || {};
     var statusColumnId = Number(statusColumn.id || 0);
     if (!statusColumnId || statusColumnId === currentColumnId) {
+      continue;
+    }
+    if (!canTargetStatusColumn(statusColumnId)) {
       continue;
     }
 
@@ -1541,11 +1568,6 @@ $(document).on("click", ".task-inline-status-save", function (e) {
 $(document).on("click", ".task-item-action", function (e) {
   e.preventDefault();
 
-  if (!canEdit) {
-    notify("You do not have permission to manage work items.");
-    return;
-  }
-
   var $action = $(this);
   var closeActionModal = $action.closest("#taskItemActionModal").length > 0;
   var action = String($action.data("action") || "");
@@ -1557,6 +1579,16 @@ $(document).on("click", ".task-item-action", function (e) {
   var itemId = Number($card.data("itemId") || 0);
 
   if (!itemId) {
+    return;
+  }
+
+  if (action === "delete") {
+    if (!canDelete) {
+      notify("You do not have permission to delete work items.");
+      return;
+    }
+  } else if (!canEdit) {
+    notify("You do not have permission to manage work items.");
     return;
   }
 
@@ -1602,7 +1634,7 @@ $(document).on("click", ".task-item-action", function (e) {
 
   if (action === "change_status") {
     var targetColumnId = Number($action.data("targetColumnId") || 0);
-    if (!targetColumnId) {
+    if (!targetColumnId || !canTargetStatusColumn(targetColumnId)) {
       return;
     }
 
@@ -1662,7 +1694,13 @@ function applyStatusChangeToBoard(
     return;
   }
 
-  setCardStatusColumn($card, targetId, getBoardStatusColumnName(targetId));
+  var targetMeta = getBoardStatusColumnMeta(targetId);
+  setCardStatusColumnMeta(
+    $card,
+    targetId,
+    getBoardStatusColumnName(targetId),
+    targetMeta ? targetMeta.color : "#DFE1E6",
+  );
 
   if (!isBoardGroupedByStatus()) {
     if (closeActionModal) {
@@ -2356,8 +2394,13 @@ function saveItemCoreFromModal(closeAfterSave) {
         }
       }
     },
-    function () {
+    function (res) {
       itemDetailModalState.coreSaveInFlight = false;
+      if (isPermissionDeniedResponse(res)) {
+        itemDetailModalState.queuedCoreSave = false;
+        restoreItemDetailStateAfterDeniedSave();
+        return;
+      }
       setItemDetailAutosaveStatus("error", "Failed to save changes");
     },
   );
@@ -3220,6 +3263,10 @@ $(document).on("click", ".task-item-title, .task-item-key", function (e) {
 $(document).on("click", ".task-item-edit-btn", function(e) {
   e.preventDefault();
   e.stopPropagation();
+  if (!canEdit) {
+    notify("You do not have permission to update work item.");
+    return;
+  }
   var $card = $(this).closest(".task-item-card");
   var $title = $card.find(".task-item-title");
   
@@ -3312,6 +3359,14 @@ $(document).on("click", "#taskItemDetailDescriptionView", function (e) {
   if ($(e.target).closest("a").length) {
     return;
   }
+  if (
+    !$("#taskItemDetailDescriptionDraftNotice").hasClass("d-none") &&
+    window.taskBoardDescriptionDraft &&
+    typeof window.taskBoardDescriptionDraft.restore === "function"
+  ) {
+    window.taskBoardDescriptionDraft.restore();
+    return;
+  }
   setItemDetailDescriptionEditMode(true, {
     focus: true,
   });
@@ -3324,29 +3379,20 @@ $(document).on("keydown", "#taskItemDetailDescriptionView", function (e) {
   var key = String(e.key || "").toLowerCase();
   if (key === "enter" || key === " ") {
     e.preventDefault();
-    setItemDetailDescriptionEditMode(true, {
-      focus: true,
-    });
-  }
-});
-
-$(document).on(
-  "click",
-  "#taskItemDetailDescriptionDraftRestoreBtn",
-  function () {
     if (
+      !$("#taskItemDetailDescriptionDraftNotice").hasClass("d-none") &&
       window.taskBoardDescriptionDraft &&
       typeof window.taskBoardDescriptionDraft.restore === "function"
     ) {
       window.taskBoardDescriptionDraft.restore();
       return;
     }
-
     setItemDetailDescriptionEditMode(true, {
       focus: true,
     });
-  },
-);
+  }
+});
+
 
 $(document).on("click", "#taskItemDetailDescriptionSaveBtn", function () {
   saveItemCoreFromModal(false, {
@@ -3576,6 +3622,9 @@ $(document).on("click", ".task-item-detail-board-status-option", function (e) {
   var itemId = Number(itemDetailModalState.itemId || 0);
   var targetColumnId = Number($(this).data("targetColumnId") || 0);
   if (!itemId || !targetColumnId) {
+    return;
+  }
+  if (!canTargetStatusColumn(targetColumnId)) {
     return;
   }
 
@@ -4097,11 +4146,15 @@ $(document).on("click", ".task-item-detail-parent-option", function (e) {
         document.getElementById("taskItemDetailParentDropdownBtn"),
       ).hide();
     },
-    function () {
+    function (res) {
       renderDetailParentDropdown(
         previousParentId,
         itemDetailModalState.parentOptions,
       );
+      if (isPermissionDeniedResponse(res)) {
+        restoreItemDetailStateAfterDeniedSave();
+        return;
+      }
       setItemDetailAutosaveStatus("error", "Failed to save changes");
     },
   );
@@ -4424,8 +4477,15 @@ $app.on("dragover", ".task-item-list", function (e) {
     return;
   }
 
-  e.preventDefault();
   var $list = $(this);
+  var targetColumnId = Number(
+    $list.closest(".task-column").data("columnId") || 0,
+  );
+  if (!canTargetStatusColumn(targetColumnId)) {
+    return;
+  }
+
+  e.preventDefault();
   var target = getDropTargetElement(
     $list,
     e.originalEvent && e.originalEvent.clientY ? e.originalEvent.clientY : 0,
@@ -4475,14 +4535,21 @@ $app.on("drop", ".task-item-list", function (e) {
     } else {
       $sourceList.append($item);
     }
-    setCardStatusColumn(
+    var sourceMeta = getBoardStatusColumnMeta(sourceStatusColumnId);
+    setCardStatusColumnMeta(
       $item,
       sourceStatusColumnId,
       getBoardStatusColumnName(sourceStatusColumnId),
+      sourceMeta ? sourceMeta.color : "#DFE1E6",
     );
     updateAllColumnCounts();
     applyBoardFilters();
   };
+
+  if (!canTargetStatusColumn(targetColumnId)) {
+    revertDrop();
+    return;
+  }
 
   postAction(
     {
@@ -4492,10 +4559,12 @@ $app.on("drop", ".task-item-list", function (e) {
       target_index: targetIndex,
     },
     function () {
-      setCardStatusColumn(
+      var targetMeta = getBoardStatusColumnMeta(targetColumnId);
+      setCardStatusColumnMeta(
         $item,
         targetColumnId,
         getBoardStatusColumnName(targetColumnId),
+        targetMeta ? targetMeta.color : "#DFE1E6",
       );
       updateAllColumnCounts();
       applyBoardFilters();

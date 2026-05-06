@@ -115,9 +115,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
 
 if (post('updateStatusBtn')) {
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
-    $newStatus = post('updateStatusBtn'); // Will receive 'SP' (Processing) or 'OC' (Order Received)
+    $newStatus = post('updateStatusBtn'); // Will receive 'SP', 'OC', or 'C'
 
-    if (in_array($newStatus, ['SP', 'OC'])) {
+    if (in_array($newStatus, ['SP', 'OC', 'C'])) {
         try {
             // 1. Get old data before update
             $getOldQuery = "SELECT order_status FROM " . $tblName . " WHERE id = " . intval($dataID);
@@ -127,7 +127,7 @@ if (post('updateStatusBtn')) {
             $oldStatus = $oldRow['order_status'];
 
             // 2. Perform update
-            $queryStatusUpdate = "UPDATE " . $tblName . " SET order_status='$newStatus' WHERE id = " . intval($dataID);
+            $queryStatusUpdate = "UPDATE " . $tblName . " SET order_status='$newStatus', update_by='" . USER_ID . "', update_date=curdate(), update_time=curtime() WHERE id = " . intval($dataID);
             $returnData = mysqli_query($finance_connect, $queryStatusUpdate);
 
             // 3. Only log if update was successful
@@ -137,7 +137,9 @@ if (post('updateStatusBtn')) {
                 array_push($oldvalarr, $oldStatus);
                 array_push($chgvalarr, $newStatus);
 
-                $statusLabel = ($newStatus === 'SP') ? "Processing" : "Order Received";
+                $statusLabel = ($newStatus === 'SP')
+                    ? "Processing"
+                    : (($newStatus === 'OC') ? "Order Received" : "Completed");
 
                 $log = [
                     'log_act'      => 'edit',
@@ -991,17 +993,23 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                                 Username<span class="requireRed">*</span></label>
                             <?php
                             unset($echoVal);
+                            $buyerDisplayValue = '';
                             if (isset($row['buyer']))
                                 $echoVal = $row['buyer'];
 
                             if (isset($echoVal)) {
                                 $user_rst = getData('*', "id = '$echoVal'", '', SHOPEE_CUST_INFO, $finance_connect);
                                 $user_row = $user_rst ? $user_rst->fetch_assoc() : [];
+                                if (isset($user_row['buyer_username'])) {
+                                    $buyerDisplayValue = $user_row['buyer_username'];
+                                } else {
+                                    $buyerDisplayValue = $echoVal;
+                                }
                             }
                             ?>
                             <input class="form-control" type="text" name="sor_user" id="sor_user" <?php if ($act == '')
                                 echo 'disabled' ?>
-                                    value="<?php echo !empty($echoVal) ? $user_row['buyer_username'] : '' ?>">
+                                    value="<?php echo !empty($echoVal) ? $buyerDisplayValue : '' ?>">
                             <input type="hidden" name="sor_user_hidden" id="sor_user_hidden"
                                 value="<?php echo (isset($row['buyer'])) ? $row['buyer'] : ''; ?>">
                             <?php if (isset($user_err)) { ?>
@@ -1093,6 +1101,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                                 Charge<span class="requireRed">*</span></label>
                             <?php
                             unset($echoVal);
+                            $picDisplayValue = '';
 
                             if (isset($row['pic']))
                                 $echoVal = $row['pic'];
@@ -1100,10 +1109,15 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                             if (isset($echoVal)) {
                                 $user_rst = getData('name', "id = '$echoVal'", '', USR_USER, $connect);
                                 $user_row = $user_rst ? $user_rst->fetch_assoc() : [];
+                                if (isset($user_row['name'])) {
+                                    $picDisplayValue = $user_row['name'];
+                                } else {
+                                    $picDisplayValue = $echoVal;
+                                }
                             }
                             ?>
                             <input class="form-control" type="text" name="sor_pic" id="sor_pic" <?php if ($act == '')
-                                echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $user_row['name'] : '' ?>">
+                                echo 'disabled' ?> value="<?php echo !empty($echoVal) ? $picDisplayValue : '' ?>">
                             <input type="hidden" name="sor_pic_hidden" id="sor_pic_hidden"
                                 value="<?php echo (isset($row['pic'])) ? $row['pic'] : ''; ?>">
 
@@ -1306,6 +1320,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                     <textarea class="form-control" name="sor_remark" id="sor_remark" rows="3" <?php if ($act == '')
                         echo 'disabled' ?>><?php if (isset($dataExisted) && isset($row['remark']))
                         echo $row['remark'] ?></textarea>
+                    <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
                     </div>
                 <?php
                 if(isset($row['order_status'])){

@@ -231,6 +231,14 @@ input {
   .menuBar {
     display: none !important;
   }
+
+  .topNav.navbar-expand-md .navbar-toggler {
+    display: block;
+  }
+
+  .topNav.navbar-expand-md #navbarSupportedContent {
+    display: none !important;
+  }
 }
 
 @media (width > 768px) {
@@ -446,13 +454,6 @@ input {
 
 .task-global-sidebar-inner {
   padding: 12px 0;
-}
-
-.task-global-sidebar-title {
-  margin: 0;
-  padding: 0 16px 10px;
-  font-size: 14px;
-  color: #ffffff;
 }
 
 .task-global-sidebar-links {

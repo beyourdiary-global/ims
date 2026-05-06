@@ -9,7 +9,11 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 $tblName = BRAND;
 
 //Current Page Action And Data ID
-$dataID = !empty(input('id')) ? input('id') : post('id');
+$rawDataID = !empty(input('id')) ? input('id') : post('id');
+$dataID = '';
+if ($rawDataID !== '' && ctype_digit((string) $rawDataID)) {
+    $dataID = (string) ((int) $rawDataID);
+}
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
@@ -24,7 +28,7 @@ $pageActionTitle = $pageAction . " " . $pageTitle;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 
 //Checking The Page ID , Action , Pin Access Exist Or Not
-if (!($dataID) && !($act) || !isActionAllowed($pageAction, $pinAccess))
+if (($rawDataID !== '' && $dataID === '') || (!($dataID) && !($act)) || !isActionAllowed($pageAction, $pinAccess))
     echo $redirectLink;
 
 //Get The Data From Database
@@ -97,10 +101,15 @@ if ($dataID && !$act && USER_ID && !$_SESSION['viewChk'] && !$_SESSION['delChk']
 
     $_SESSION['viewChk'] = 1;
 
+    $safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
+    $safeDataID = htmlspecialchars((string) $dataID, ENT_QUOTES, 'UTF-8');
+    $safeTblName = htmlspecialchars((string) $tblName, ENT_QUOTES, 'UTF-8');
+
     if (isset($errorExist)) {
-        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataID . "</b> ] from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = $safeUserName . " fail to viewed the data [<b> ID = " . $safeDataID . "</b> ] from <b><i>" . $safeTblName . " Table</i></b>.";
     } else {
-        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataID . "</b> ] <b>" . $row['name'] . "</b> from <b><i>$tblName Table</i></b>.";
+        $safeRowName = htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8');
+        $viewActMsg = $safeUserName . " viewed the data [<b> ID = " . $safeDataID . "</b> ] <b>" . $safeRowName . "</b> from <b><i>" . $safeTblName . " Table</i></b>.";
     }
 
     $log = [
@@ -145,17 +154,18 @@ if (post('actionBtn')) {
                 $hasValidationError = true;
             } else {
                 $isValidCompanySelection = false;
+                $matchedCompanyName = '';
 
-                if ($company && is_numeric($company) && isRecordExist(COMPANY, 'id', $company, $connect)) {
-                    $matchedCompanyName = '';
+                if ($company !== '' && ctype_digit((string) $company)) {
+                    $company = (string) ((int) $company);
                     foreach ($companyOptions as $companyOption) {
-                        if ((string)$companyOption['id'] === (string)$company) {
-                            $matchedCompanyName = trim((string)$companyOption['name']);
+                        if ((string) $companyOption['id'] === $company) {
+                            $matchedCompanyName = trim((string) $companyOption['name']);
                             break;
                         }
                     }
 
-                    if ($matchedCompanyName !== '' && strcasecmp($matchedCompanyName, trim((string)$companyName)) === 0) {
+                    if ($matchedCompanyName !== '' && strcasecmp($matchedCompanyName, trim((string) $companyName)) === 0) {
                         $isValidCompanySelection = true;
                     }
                 }
@@ -354,6 +364,7 @@ if ($submittedForSave) {
                         <label class="form-label" for="currentDataRemark"><?php echo $pageTitle ?> Remark</label>
                         <textarea class="form-control" name="currentDataRemark" id="currentDataRemark" rows="3" <?php if ($act == '') echo 'readonly' ?>><?= htmlspecialchars($retainFormInput ? (isset($_POST['currentDataRemark']) ? trim((string)$_POST['currentDataRemark']) : '') : (isset($row['remark']) ? $row['remark'] : ''), ENT_QUOTES, 'UTF-8') ?></textarea>
                     </div>
+                    <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
 
                     <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
                         <?php echo ($act) ? '<button class="btn btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="actionBtn" value="' . $actionBtnValue . '">' . $pageActionTitle . '</button>' : ''; ?>
@@ -367,7 +378,7 @@ if ($submittedForSave) {
     //Initial Page And Action Value
     var page = "<?= $pageTitle ?>";
     var action = "<?php echo isset($act) ? $act : ''; ?>";
-    var companyOptions = <?php echo json_encode($companyOptions); ?>;
+    var companyOptions = <?php echo json_encode($companyOptions, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT); ?>;
 
     checkCurrentPage(page, action);
     centerAlignment("formContainer");

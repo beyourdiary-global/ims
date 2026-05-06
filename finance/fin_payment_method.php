@@ -255,6 +255,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                                                 } else if (isset($dataExisted) && isset($row['remark']) && isset($pmf_remark)) {
                                                                     echo $pmf_remark;
                                                                 } ?></textarea>
+                    <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
                 </div>
 
                 <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">

@@ -15,12 +15,21 @@
   var labels = cfg.labels || [];
   var statusLabels = cfg.statusLabels || [];
   var columns = cfg.columns || [];
+  var isProjectOwner = !!cfg.isProjectOwner;
+  var columnPermissions =
+    cfg.columnPermissions && typeof cfg.columnPermissions === "object"
+      ? cfg.columnPermissions
+      : {};
   var projectKey = cfg.projectKey || {};
+  var currentProjectId = Number(cfg.currentProjectId || 0);
   var sheetsDataAjaxUrl =
     cfg.sheetsDataAjaxUrl || cfg.sheetsColumnAjaxUrl || "sheets.php";
   var prefUserId = String(cfg.currentUserId || "").trim();
   var viewPrefCookieName =
-    "task_sheets_view_pref_v1" + (prefUserId ? "_u" + prefUserId : "");
+    "task_sheets_view_pref_v1" +
+    (prefUserId ? "_u" + prefUserId : "") +
+    "_p" +
+    String(currentProjectId > 0 ? currentProjectId : 0);
 
   /* ───── state ───── */
   var allItems = cfg.items || [];
@@ -33,6 +42,219 @@
   var globalSearch = "";
   var showSummaryRow = false;
   var toolbarAssigneeFilter = ""; // '' = all, '__unassigned__' = unassigned, or user id string
+  var columnWidths = {}; // colKey -> pixel width
+  var activeColumnResize = null;
+
+  var DEFAULT_COLUMN_WIDTHS = {
+    work_type: 80,
+    work_item_key: 100,
+    title: 280,
+    description: 200,
+    board_status: 150,
+    original_estimate: 120,
+    task_status: 130,
+    parent_display: 120,
+    assignee_name: 150,
+    reporter_name: 150,
+    priority: 100,
+    labels: 140,
+    time_tracking: 130,
+    start_date: 120,
+    due_date: 120,
+    amendement_date: 120,
+    amendement_time_minutes: 110,
+    second_amendement_date: 120,
+    second_amendement_time_minutes: 110,
+  };
+
+  var MIN_COLUMN_WIDTH = 46;
+
+  function normalizePermissionFieldKey(fieldKey) {
+    var key = String(fieldKey || "")
+      .trim()
+      .toLowerCase();
+    if (key === "parent") return "parent_display";
+    if (key === "assignee") return "assignee_name";
+    if (key === "reporter") return "reporter_name";
+    return key;
+  }
+
+  function hasAnyColumnPermission(fieldKey) {
+    if (isProjectOwner) {
+      return true;
+    }
+    var row = columnPermissions[normalizePermissionFieldKey(fieldKey)];
+    return !!(
+      row &&
+      (Number(row.add || 0) > 0 ||
+        Number(row.edit || 0) > 0 ||
+        Number(row.delete || 0) > 0)
+    );
+  }
+
+  function isColumnPermissionGuarded(fieldKey) {
+    switch (normalizePermissionFieldKey(fieldKey)) {
+      case "original_estimate":
+      case "task_status":
+      case "parent_display":
+      case "assignee_name":
+      case "reporter_name":
+      case "priority":
+      case "labels":
+      case "start_date":
+      case "due_date":
+      case "amendement_date":
+      case "amendement_time_minutes":
+      case "second_amendement_date":
+      case "second_amendement_time_minutes":
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  function hasColumnActionPermission(fieldKey, action) {
+    if (isProjectOwner) {
+      return true;
+    }
+    var row = columnPermissions[normalizePermissionFieldKey(fieldKey)];
+    return !!(row && Number(row[action] || 0) > 0);
+  }
+
+  function isFieldValueEmpty(fieldKey, value) {
+    var key = normalizePermissionFieldKey(fieldKey);
+    if (Array.isArray(value)) {
+      return value.length === 0;
+    }
+    switch (key) {
+      case "original_estimate":
+      case "amendement_time_minutes":
+      case "second_amendement_time_minutes":
+        return Number(value || 0) <= 0;
+      case "task_status":
+        return !String(value || "")
+          .split(",")
+          .map(function (x) {
+            return parseInt(x, 10);
+          })
+          .filter(function (x) {
+            return x > 0;
+          }).length;
+      case "parent_display":
+      case "assignee_name":
+      case "reporter_name":
+        return Number(value || 0) <= 0;
+      case "priority":
+        return !value || String(value).toLowerCase() === "none";
+      case "labels":
+        return !Array.isArray(value) || value.length === 0;
+      default:
+        return !value;
+    }
+  }
+
+  function getCurrentFieldValue(item, fieldKey) {
+    switch (normalizePermissionFieldKey(fieldKey)) {
+      case "original_estimate":
+        return Number(item.original_estimate_value || 0);
+      case "task_status":
+        return item.task_status || "";
+      case "parent_display":
+        return Number(item.parent_item_id || 0);
+      case "assignee_name":
+        return Number(item.assignee_user_id || 0);
+      case "reporter_name":
+        return Number(item.reporter_user_id || 0);
+      case "priority":
+        return item.priority || "";
+      case "labels":
+        return Array.isArray(item.labels) ? item.labels : [];
+      case "start_date":
+      case "due_date":
+      case "amendement_date":
+      case "second_amendement_date":
+        return item[fieldKey] || "";
+      case "amendement_time_minutes":
+      case "second_amendement_time_minutes":
+        return Number(item[fieldKey] || 0);
+      default:
+        return item[fieldKey];
+    }
+  }
+
+  function inferColumnPermissionAction(item, fieldKey, nextValue) {
+    var currentEmpty = isFieldValueEmpty(
+      fieldKey,
+      getCurrentFieldValue(item, fieldKey),
+    );
+    if (nextValue === undefined) {
+      return currentEmpty ? "add" : "edit";
+    }
+    var nextEmpty = isFieldValueEmpty(fieldKey, nextValue);
+    if (currentEmpty && !nextEmpty) {
+      return "add";
+    }
+    if (!currentEmpty && nextEmpty) {
+      return "delete";
+    }
+    return "edit";
+  }
+
+  function getColumnPermissionDeniedMessage(action) {
+    if (action === "add") {
+      return "Cell cannot add - You don't have access to add data on this field";
+    }
+    if (action === "delete") {
+      return "Cell cannot delete - You don't have access to delete data on this field";
+    }
+    return "Cell uneditable - You don't have access to edit data on this field";
+  }
+
+  function showColumnPermissionDenied(item, fieldKey, nextValue) {
+    var action = inferColumnPermissionAction(item, fieldKey, nextValue);
+    showToast(getColumnPermissionDeniedMessage(action));
+  }
+
+  function ensureColumnActionAllowed(item, fieldKey, nextValue) {
+    if (!isColumnPermissionGuarded(fieldKey)) {
+      return true;
+    }
+    var action = inferColumnPermissionAction(item, fieldKey, nextValue);
+    if (hasColumnActionPermission(fieldKey, action)) {
+      return true;
+    }
+    showToast(getColumnPermissionDeniedMessage(action));
+    return false;
+  }
+
+  function canEditCellByPermission(item, colKey) {
+    if (!canEdit) {
+      return false;
+    }
+
+    switch (String(colKey || "")) {
+      case "work_type":
+        return Array.isArray(workTypes) && workTypes.length > 0;
+      case "board_status":
+        return Array.isArray(columns) && columns.length > 0;
+      case "original_estimate":
+      case "task_status":
+      case "parent_display":
+      case "assignee_name":
+      case "reporter_name":
+      case "priority":
+      case "labels":
+      case "start_date":
+      case "due_date":
+      case "amendement_date":
+      case "amendement_time_minutes":
+      case "second_amendement_date":
+      case "second_amendement_time_minutes":
+        return hasAnyColumnPermission(colKey);
+      default:
+        return true;
+    }
+  }
 
   function setCookie(name, value, days) {
     var expires = "";
@@ -70,6 +292,7 @@
       collapsedGroups: collapsedGroups,
       showSummaryRow: !!showSummaryRow,
       toolbarAssigneeFilter: toolbarAssigneeFilter,
+      columnWidths: columnWidths,
     };
     setCookie(viewPrefCookieName, JSON.stringify(payload), 180);
   }
@@ -103,6 +326,10 @@
         typeof saved.toolbarAssigneeFilter === "string"
           ? saved.toolbarAssigneeFilter
           : "";
+      columnWidths =
+        saved.columnWidths && typeof saved.columnWidths === "object"
+          ? saved.columnWidths
+          : {};
     } catch (e) {
       sortCol = "";
       sortDir = "";
@@ -111,7 +338,17 @@
       collapsedGroups = {};
       showSummaryRow = false;
       toolbarAssigneeFilter = "";
+      columnWidths = {};
     }
+  }
+
+  function getColumnWidth(colKey) {
+    var key = String(colKey || "");
+    var stored = Number(columnWidths[key] || 0);
+    if (stored > 0) {
+      return Math.max(MIN_COLUMN_WIDTH, Math.round(stored));
+    }
+    return Number(DEFAULT_COLUMN_WIDTHS[key] || 140);
   }
 
   /* ───── master column definitions ───── */
@@ -369,6 +606,69 @@
     return names;
   }
 
+  function estimateUnitToMinutes(value, unit) {
+    var amount = Number(value || 0);
+    if (!isFinite(amount) || amount <= 0) return 0;
+    var u = String(unit || "minutes")
+      .trim()
+      .toLowerCase();
+    if (u === "weeks" || u === "week" || u === "w") return amount * 7 * 24 * 60;
+    if (u === "days" || u === "day" || u === "d") return amount * 24 * 60;
+    if (u === "hours" || u === "hour" || u === "h") return amount * 60;
+    if (
+      u === "minutes" ||
+      u === "minute" ||
+      u === "mins" ||
+      u === "min" ||
+      u === "m"
+    )
+      return amount;
+    if (u === "seconds" || u === "second" || u === "secs" || u === "sec" || u === "s")
+      return amount / 60;
+    return 0;
+  }
+
+  function parseDurationToMinutes(text) {
+    var raw = String(text || "").trim();
+    if (!raw) return 0;
+    if (/^no time logged$/i.test(raw)) return 0;
+
+    var total = 0;
+    var re =
+      /(\d+(?:\.\d+)?)\s*(weeks?|week|w|days?|day|d|hours?|hour|h|minutes?|minute|mins?|min|m|seconds?|second|secs?|sec|s)\b/gi;
+    var match = null;
+    while ((match = re.exec(raw))) {
+      var n = Number(match[1] || 0);
+      var u = String(match[2] || "").toLowerCase();
+      total += estimateUnitToMinutes(n, u);
+    }
+
+    if (total > 0) return total;
+
+    var asNum = Number(raw);
+    return isFinite(asNum) && asNum > 0 ? asNum : 0;
+  }
+
+  function formatMinutesTotal(minutes) {
+    var total = Math.round(Number(minutes || 0));
+    if (!isFinite(total) || total <= 0) return "0m";
+
+    var weeks = Math.floor(total / (7 * 24 * 60));
+    total -= weeks * 7 * 24 * 60;
+    var days = Math.floor(total / (24 * 60));
+    total -= days * 24 * 60;
+    var hours = Math.floor(total / 60);
+    total -= hours * 60;
+    var mins = total;
+
+    var out = [];
+    if (weeks) out.push(weeks + "w");
+    if (days) out.push(days + "d");
+    if (hours) out.push(hours + "h");
+    if (mins || !out.length) out.push(mins + "m");
+    return out.join(" ");
+  }
+
   /**
    * Strip HTML tags; detect media elements and append [Media].
    */
@@ -601,7 +901,12 @@
     var $wrap = $("#sheetsTableWrap");
     var html = '<table class="sheets-table"><colgroup>';
     COLUMNS.forEach(function (c) {
-      html += '<col class="' + c.css + '">';
+      html +=
+        '<col class="' +
+        c.css +
+        '" style="width:' +
+        getColumnWidth(c.key) +
+        'px;">';
     });
     html += "</colgroup><thead><tr>";
     COLUMNS.forEach(function (c, colIdx) {
@@ -640,7 +945,9 @@
         '" data-col-idx="' +
         colIdx +
         '" title="More"><i class="fa-solid fa-ellipsis-vertical"></i></button>' +
-        "</span></div></th>";
+        '</span></div><div class="sheets-col-resize-handle" data-col="' +
+        c.key +
+        '" aria-hidden="true"></div></th>';
     });
     html += "</tr></thead><tbody>";
 
@@ -699,11 +1006,105 @@
     updateToolbarInfo();
   }
 
+  function applyColumnWidth(colKey, px, saveImmediately) {
+    var key = String(colKey || "");
+    if (!key) {
+      return;
+    }
+    var width = Math.max(MIN_COLUMN_WIDTH, Math.round(Number(px || 0)));
+    columnWidths[key] = width;
+
+    var $table = $("#sheetsTableWrap .sheets-table");
+    var colIndex = -1;
+    for (var i = 0; i < COLUMNS.length; i++) {
+      if (COLUMNS[i].key === key) {
+        colIndex = i;
+        break;
+      }
+    }
+    if (colIndex < 0 || !$table.length) {
+      return;
+    }
+
+    $table.find("colgroup col").eq(colIndex).css("width", width + "px");
+    if (saveImmediately !== false) {
+      saveViewPrefs();
+    }
+  }
+
+  function startColumnResize(evt, colKey) {
+    var $table = $("#sheetsTableWrap .sheets-table");
+    if (!$table.length) {
+      return;
+    }
+
+    var $th = $table.find('thead th[data-col="' + colKey + '"]').first();
+    if (!$th.length) {
+      return;
+    }
+
+    var startX = evt.pageX;
+    var startWidth = $th.outerWidth();
+    activeColumnResize = {
+      key: colKey,
+      startX: startX,
+      startWidth: startWidth,
+    };
+
+    $(document.body).addClass("sheets-col-resizing");
+  }
+
   function renderSummaryRow() {
     var html = '<tr class="sheets-summary-row">';
     COLUMNS.forEach(function (c) {
       if (c.key === "work_item_key") {
         html += "<td>" + displayItems.length + " work items</td>";
+      } else if (c.key === "original_estimate") {
+        var estimateMins = 0;
+        displayItems.forEach(function (it) {
+          estimateMins += estimateUnitToMinutes(
+            it.original_estimate_value || 0,
+            it.original_estimate_unit || "minutes",
+          );
+        });
+        html += "<td>" + esc(formatMinutesTotal(estimateMins)) + "</td>";
+      } else if (c.key === "time_tracking") {
+        var trackingMins = 0;
+        displayItems.forEach(function (it) {
+          trackingMins += parseDurationToMinutes(it.time_tracking || "");
+        });
+        html += "<td>" + esc(formatMinutesTotal(trackingMins)) + "</td>";
+      } else if (c.key === "task_status") {
+        var statusTypeSet = {};
+        displayItems.forEach(function (it) {
+          var ids = String(it.task_status || "")
+            .split(",")
+            .map(function (x) {
+              return parseInt(x, 10);
+            })
+            .filter(function (x) {
+              return Number(x || 0) > 0;
+            });
+          ids.forEach(function (id) {
+            statusTypeSet[id] = 1;
+          });
+        });
+        html += "<td>" + Object.keys(statusTypeSet).length + "</td>";
+      } else if (c.key === "labels") {
+        var labelTypeSet = {};
+        displayItems.forEach(function (it) {
+          var arr = Array.isArray(it.labels) ? it.labels : [];
+          arr.forEach(function (l) {
+            var id = Number((l && l.id) || 0);
+            var name = String((l && l.name) || "").trim();
+            if (id > 0) {
+              labelTypeSet["id:" + id] = 1;
+            } else if (name) {
+              labelTypeSet["name:" + name.toLowerCase()] = 1;
+            }
+          });
+        });
+        html += "<td>" + Object.keys(labelTypeSet).length + "</td>";
       } else if (
         c.key === "assignee_name" ||
         c.key === "reporter_name" ||
@@ -727,7 +1128,7 @@
     var html = '<tr data-item-id="' + item.id + '">';
     COLUMNS.forEach(function (c) {
       var editCls =
-        canEdit && c.editable && c.key !== "work_item_key"
+        canEditCellByPermission(item, c.key) && c.editable && c.key !== "work_item_key"
           ? " sheets-cell-editable"
           : "";
       html +=
@@ -914,6 +1315,35 @@
     }
     saveViewPrefs();
     renderTable();
+  });
+
+  $(document).on("mousedown", ".sheets-col-resize-handle", function (e) {
+    if (e.which !== 1) {
+      return;
+    }
+    e.preventDefault();
+    e.stopPropagation();
+    startColumnResize(e, $(this).data("col"));
+  });
+
+  $(document).on("mousemove", function (e) {
+    if (!activeColumnResize) {
+      return;
+    }
+    e.preventDefault();
+    var nextWidth =
+      Number(activeColumnResize.startWidth || 0) +
+      (Number(e.pageX || 0) - Number(activeColumnResize.startX || 0));
+    applyColumnWidth(activeColumnResize.key, nextWidth, false);
+  });
+
+  $(document).on("mouseup", function () {
+    if (!activeColumnResize) {
+      return;
+    }
+    saveViewPrefs();
+    activeColumnResize = null;
+    $(document.body).removeClass("sheets-col-resizing");
   });
 
   /* ───── filter ───── */
@@ -1486,6 +1916,49 @@
     ).remove();
   }
 
+  document.addEventListener(
+    "dblclick",
+    function (e) {
+      var td = e.target && e.target.closest
+        ? e.target.closest(".sheets-table tbody td")
+        : null;
+      if (!td) return;
+
+      var colKey = td.getAttribute("data-col");
+      var tr = td.closest("tr");
+      var itemId = tr ? Number(tr.getAttribute("data-item-id") || 0) : 0;
+      if (!itemId) return;
+
+      var colDef = COLUMNS.find(function (c) {
+        return c.key === colKey;
+      });
+      if (!colDef || !colDef.editable) return;
+
+      if (!canEdit) {
+        showToast("Cell uneditable - You don't have access to edit data on this field");
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return;
+      }
+
+      var item = allItems.find(function (it) {
+        return Number(it.id || 0) === itemId;
+      });
+      if (!item) return;
+
+      if (!canEditCellByPermission(item, colKey)) {
+        if (isColumnPermissionGuarded(colKey)) {
+          showColumnPermissionDenied(item, colKey);
+        } else {
+          showToast("Cell uneditable - You don't have access to edit data on this field");
+        }
+        e.preventDefault();
+        e.stopImmediatePropagation();
+      }
+    },
+    true,
+  );
+
   $(document).on("dblclick", ".sheets-table tbody td", function (e) {
     if (!canEdit) {
       showToast("Cell uneditable – This data can't be edited.");
@@ -1507,6 +1980,10 @@
       return it.id === itemId;
     });
     if (!item) return;
+    if (!canEditCellByPermission(item, colKey)) {
+      showToast("Cell uneditable â€“ This data can't be edited.");
+      return;
+    }
     e.stopPropagation();
     closeAllDropdowns();
 
@@ -1582,6 +2059,10 @@
             estUnit = "minutes";
           else estUnit += "s";
         }
+        if (!ensureColumnActionAllowed(item, "original_estimate", estVal)) {
+          renderCellInPlace($td, item, colKey);
+          return;
+        }
         saveItemDetail(
           item,
           { original_estimate_value: estVal, original_estimate_unit: estUnit },
@@ -1623,6 +2104,10 @@
       var newVal = $input.val();
       $td.removeClass("sheets-cell-editing");
       if (newVal === (item[colKey] || "")) {
+        renderCellInPlace($td, item, colKey);
+        return;
+      }
+      if (!ensureColumnActionAllowed(item, colKey, newVal)) {
         renderCellInPlace($td, item, colKey);
         return;
       }
@@ -1735,6 +2220,10 @@
       var userId = parseInt($(this).data("user-id"), 10),
         payload = {};
       if (field === "assignee") {
+        if (!ensureColumnActionAllowed(item, "assignee_name", userId)) {
+          closeAllDropdowns();
+          return;
+        }
         payload.assignee_user_id = userId;
         saveItemDetail(item, payload, function () {
           item.assignee_user_id = userId;
@@ -1742,6 +2231,10 @@
           renderCellInPlace($td, item, "assignee_name");
         });
       } else {
+        if (!ensureColumnActionAllowed(item, "reporter_name", userId)) {
+          closeAllDropdowns();
+          return;
+        }
         payload.reporter_user_id = userId;
         saveItemDetail(item, payload, function () {
           item.reporter_user_id = userId;
@@ -1773,6 +2266,10 @@
     $dd.on("click", ".sheets-priority-option", function () {
       var newP = $(this).data("priority");
       if (newP === item.priority) {
+        closeAllDropdowns();
+        return;
+      }
+      if (!ensureColumnActionAllowed(item, "priority", newP)) {
         closeAllDropdowns();
         return;
       }
@@ -1829,6 +2326,10 @@
         sel.push(parseInt($(this).val(), 10));
       });
       var csv = sel.join(",");
+      if (!ensureColumnActionAllowed(item, "task_status", csv)) {
+        closeAllDropdowns();
+        return;
+      }
       saveItemDetail(item, { task_status_label_ids: csv }, function () {
         item.task_status = csv;
         renderCellInPlace($td, item, "task_status");
@@ -1876,6 +2377,10 @@
       $dd.find("input[type=checkbox]:checked").each(function () {
         sel.push(parseInt($(this).val(), 10));
       });
+      if (!ensureColumnActionAllowed(item, "labels", sel)) {
+        closeAllDropdowns();
+        return;
+      }
       saveField(
         item,
         "set_item_labels",
@@ -1918,6 +2423,10 @@
     $dd.on("click", ".sheets-priority-option", function () {
       var val = parseInt($(this).data("val"), 10),
         payload = {};
+      if (!ensureColumnActionAllowed(item, colKey, val)) {
+        closeAllDropdowns();
+        return;
+      }
       payload[colKey] = val;
       saveItemDetail(item, payload, function () {
         item[colKey] = val;
@@ -1973,6 +2482,10 @@
     $dd.on("click", ".sheets-wt-option", function () {
       var parentId = parseInt($(this).data("parent-id"), 10);
       if (parentId === currentParentId) {
+        closeAllDropdowns();
+        return;
+      }
+      if (!ensureColumnActionAllowed(item, "parent_display", parentId)) {
         closeAllDropdowns();
         return;
       }
@@ -2185,7 +2698,12 @@
       return;
     }
 
-    var boardUrl = ajaxUrl.replace(/\?.*$/, "") + "?open_item=" + item.id;
+    var boardUrl =
+      ajaxUrl.replace(/\?.*$/, "") +
+      "?project_id=" +
+      String(currentProjectId > 0 ? currentProjectId : 0) +
+      "&open_item=" +
+      item.id;
     window.location.href = boardUrl;
   }
 

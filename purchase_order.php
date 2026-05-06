@@ -544,6 +544,7 @@ $currentCompanyName = poFieldValue($row, 'company_name');
                             <label class="form-label form_lbl" for="remark">Remark</label>
                             <textarea class="form-control" name="remark" id="remark" rows="3" <?= $isReadonly ? 'readonly' : '' ?>><?= htmlspecialchars(poFieldValue($row, 'remark'), ENT_QUOTES, 'UTF-8') ?></textarea>
                         </div>
+                        <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
                     </div>
 
                     <div id="err_msg" class="mt-2">

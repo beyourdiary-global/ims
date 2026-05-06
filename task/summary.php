@@ -1,10 +1,8 @@
 <?php
+$taskParentPin = 139;
 $currentPagePin = 137;
-$taskPageTitleByPin = array(
-    137 => 'Summary',
-);
-$pageTitle = isset($taskPageTitleByPin[$currentPagePin]) ? $taskPageTitleByPin[$currentPagePin] : 'Task Management';
-$taskParentTitle = 'Task Management';
+$pageTitle = 'Summary';
+$taskParentTitle = 'Project Task';
 $isFinance = 1;
 
 if (!function_exists('taskBoardAuditLog')) {
@@ -34,7 +32,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['summary_action'])) {
     include_once '../include/connection.php';
     include_once ROOT . '/include/common.php';
     include_once ROOT . '/include/common_variable.php';
-    include_once '../common_task.php';
+    include_once './common_task.php';
+    $pageTitle = taskGetPinGroupTitleById($connect, $currentPagePin, $pageTitle);
+    $taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParentTitle);
 
     if (empty($_SESSION['csrf_token'])) {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -54,6 +54,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['summary_action'])) {
     }
 
     $action = trim((string) $_POST['summary_action']);
+    $currentProjectId = taskResolveCurrentProjectId($connect, 0);
+    if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $currentPagePin)) {
+        header('Content-Type: application/json');
+        echo json_encode(array('ok' => 0, 'message' => 'You do not have access to this project summary.'));
+        exit;
+    }
 
     $filters = array();
     if (!empty($_POST['filters_json'])) {
@@ -74,7 +80,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['summary_action'])) {
         if (isset($_POST['search']) && trim((string) $_POST['search']) !== '') {
             $filters['search'] = trim((string) $_POST['search']);
         }
-        $result = taskGetGlobalActivity($connect, $page, $perPage, $filters);
+        $result = taskGetGlobalActivity($connect, $page, $perPage, $filters, $currentProjectId);
         header('Content-Type: application/json');
         echo json_encode(array('ok' => 1, 'data' => $result));
         exit;
@@ -84,8 +90,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['summary_action'])) {
         if (!empty($_POST['assignee_id'])) {
             $filters['assignee_id'] = (int) $_POST['assignee_id'];
         }
-        $stats = taskGetSummaryStats($connect, $filters);
-        $activity = taskGetGlobalActivity($connect, 1, 10, $filters);
+        $stats = taskGetSummaryStats($connect, $filters, $currentProjectId);
+        $activity = taskGetGlobalActivity($connect, 1, 10, $filters, $currentProjectId);
         header('Content-Type: application/json');
         echo json_encode(array('ok' => 1, 'stats' => $stats, 'activity' => $activity));
         exit;
@@ -98,39 +104,63 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['summary_action'])) {
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
-include_once '../common_task.php';
+include_once './common_task.php';
 include_once './board_item_history.php';
+$pageTitle = taskGetPinGroupTitleById($connect, $currentPagePin, $pageTitle);
+$taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParentTitle);
 
 $pinAccess = taskGetPinAccessByGroupId($connect, $currentPagePin);
 if (!taskIsActionAllowed('view', $pinAccess)) {
-    echo "<script>alert('You do not have permission to view task management.'); location.replace('../dashboard.php');</script>";
+    echo "<script>alert('You do not have permission to view Project Task.'); location.replace('../dashboard.php');</script>";
     exit;
 }
 
-// Add the audit log trigger here
+$currentProjectId = taskResolveCurrentProjectId($connect, 0);
+$currentProject = $currentProjectId > 0 ? taskGetProjectById($connect, $currentProjectId) : array();
+$taskParentTitle = !empty($currentProject) && isset($currentProject['name']) && trim((string) $currentProject['name']) !== ''
+    ? (string) $currentProject['name']
+    : $taskParentTitle;
+if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $currentPagePin)) {
+    echo "<script>alert('You do not have access to this project summary.'); location.replace('../dashboard.php');</script>";
+    exit;
+}
+
 $safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
 $safePageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
-$viewActMsg = $safeUserName . ' viewed the page ' . $safePageTitle . '.';
+$safeProjectName = htmlspecialchars((string) $taskParentTitle, ENT_QUOTES, 'UTF-8');
+$viewActMsg = $safeUserName . ' viewed the page ' . $safePageTitle . ' (<b>' . $safeProjectName . '</b>).';
 taskBoardAuditLog($connect, $pageTitle, 'View', $viewActMsg, $cdate, $ctime);
-
 $assignees = taskGetAssignees($connect);
-$workTypes = taskGetWorkTypes($connect);
+$workTypes = taskGetWorkTypes($connect, $currentProjectId);
 $statusLabels = taskGetStatusLabels($connect);
-$columns = taskGetColumns($connect);
-$parentOptions = taskGetEpicParentOptions($connect, 0);
+$columns = taskGetColumns($connect, $currentProjectId);
+$parentOptions = taskGetEpicParentOptions($connect, 0, $currentProjectId);
 $labels = taskGetLabels($connect);
-$projectKeySetting = taskGetProjectKeySetting($connect);
+$projectKeySetting = taskGetProjectKeySetting($connect, $currentProjectId);
 $workTypeIcons = taskGetSvgIconOptions();
-    $boardPinAccess = taskGetPinAccessByGroupId($connect, 136);
-    $sheetsPinAccess = taskGetPinAccessByGroupId($connect, 138);
-    $canEdit = taskIsActionAllowed('edit', $pinAccess) || taskIsActionAllowed('edit', $boardPinAccess) || taskIsActionAllowed('edit', $sheetsPinAccess);
-    $canAdd = taskIsActionAllowed('add', $pinAccess) || taskIsActionAllowed('add', $boardPinAccess) || taskIsActionAllowed('add', $sheetsPinAccess);
+$boardPinAccess = taskGetPinAccessByGroupId($connect, 136);
+$canEdit = taskIsActionAllowed('edit', $boardPinAccess) && taskUserCanWorkItemAction($connect, $currentProjectId, 'edit');
+$canAdd = taskIsActionAllowed('add', $boardPinAccess) && taskUserCanWorkItemAction($connect, $currentProjectId, 'add');
+$canDelete = taskIsActionAllowed('delete', $boardPinAccess) && taskUserCanWorkItemAction($connect, $currentProjectId, 'delete');
+$isProjectOwner = taskIsProjectOwner($connect, $currentProjectId, USER_ID);
+$hasFullProjectAccess = taskUserHasFullProjectTaskAccess($connect, $currentProjectId, USER_ID);
+$allowedWorkTypeIds = taskUserAllowedWorkTypeIds($connect, $currentProjectId, USER_ID);
+$allowedStatusIds = taskUserAllowedStatusIds($connect, $currentProjectId, USER_ID);
+$columnPermissions = taskGetProjectColumnAccessMap($connect, $currentProjectId, USER_ID);
+if (!$hasFullProjectAccess) {
+    $workTypes = array_values(array_filter($workTypes, function ($workType) use ($allowedWorkTypeIds) {
+        return isset($workType['id']) && in_array((int) $workType['id'], $allowedWorkTypeIds, true);
+    }));
+    $columns = array_values(array_filter($columns, function ($column) use ($allowedStatusIds) {
+        return isset($column['id']) && in_array((int) $column['id'], $allowedStatusIds, true);
+    }));
+}
 $currentUserId = USER_ID;
 $currentUserName = USER_NAME;
 
 // Initial data load
-$stats = taskGetSummaryStats($connect, array());
-$activity = taskGetGlobalActivity($connect, 1, 10, array());
+$stats = taskGetSummaryStats($connect, array(), $currentProjectId);
+$activity = taskGetGlobalActivity($connect, 1, 10, array(), $currentProjectId);
 
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -161,8 +191,8 @@ if (empty($_SESSION['csrf_token'])) {
 
         <section id="taskModuleLayout" class="task-module-layout task-sidebar-open">
             <aside class="task-module-sidebar" id="taskModuleSidebar">
-                <h5 class="mb-2">Task Management</h5>
-                <?php taskRenderSidebarMenu($SITEURL, 'summary'); ?>
+                <h5 class="mb-2">Project Task</h5>
+                <?php taskRenderSidebarMenu($connect, $SITEURL, 'summary', $currentProjectId); ?>
             </aside>
 
             <div id="taskSidebarBackdrop" class="task-sidebar-backdrop"></div>
@@ -209,29 +239,41 @@ if (empty($_SESSION['csrf_token'])) {
                     <div class="summary-stat-card summary-stat-completed">
                         <div class="summary-stat-icon"><i class="fa-solid fa-circle-check"></i></div>
                         <div class="summary-stat-body">
-                            <div class="summary-stat-value" id="statCompleted"><?= $stats['completed_7d'] ?></div>
-                            <div class="summary-stat-label">completed<br><small>in the last 7 days</small></div>
+                            <div class="summary-stat-heading">
+                                <div class="summary-stat-value" id="statCompleted"><?= $stats['completed_7d'] ?></div>
+                                <div class="summary-stat-label">completed</div>
+                            </div>
+                            <small class="summary-stat-subtext">in the last 7 days</small>
                         </div>
                     </div>
                     <div class="summary-stat-card summary-stat-updated">
                         <div class="summary-stat-icon"><i class="fa-solid fa-pen-to-square"></i></div>
                         <div class="summary-stat-body">
-                            <div class="summary-stat-value" id="statUpdated"><?= $stats['updated_7d'] ?></div>
-                            <div class="summary-stat-label">updated<br><small>in the last 7 days</small></div>
+                            <div class="summary-stat-heading">
+                                <div class="summary-stat-value" id="statUpdated"><?= $stats['updated_7d'] ?></div>
+                                <div class="summary-stat-label">updated</div>
+                            </div>
+                            <small class="summary-stat-subtext">in the last 7 days</small>
                         </div>
                     </div>
                     <div class="summary-stat-card summary-stat-created">
                         <div class="summary-stat-icon"><i class="fa-solid fa-square-check"></i></div>
                         <div class="summary-stat-body">
-                            <div class="summary-stat-value" id="statCreated"><?= $stats['created_7d'] ?></div>
-                            <div class="summary-stat-label">created<br><small>in the last 7 days</small></div>
+                            <div class="summary-stat-heading">
+                                <div class="summary-stat-value" id="statCreated"><?= $stats['created_7d'] ?></div>
+                                <div class="summary-stat-label">created</div>
+                            </div>
+                            <small class="summary-stat-subtext">in the last 7 days</small>
                         </div>
                     </div>
                     <div class="summary-stat-card summary-stat-due">
                         <div class="summary-stat-icon"><i class="fa-solid fa-calendar-days"></i></div>
                         <div class="summary-stat-body">
-                            <div class="summary-stat-value" id="statDueSoon"><?= $stats['due_soon_7d'] ?></div>
-                            <div class="summary-stat-label">due soon<br><small>in the next 7 days</small></div>
+                            <div class="summary-stat-heading">
+                                <div class="summary-stat-value" id="statDueSoon"><?= $stats['due_soon_7d'] ?></div>
+                                <div class="summary-stat-label">due soon</div>
+                            </div>
+                            <small class="summary-stat-subtext">in the next 7 days</small>
                         </div>
                     </div>
                 </div>
@@ -310,26 +352,36 @@ if (empty($_SESSION['csrf_token'])) {
 </div>
 
 <?php include_once './board_item_detail_modal.php'; ?>
+<?php taskRenderCreateProjectModal(); ?>
 
 <script>
 window.taskBoardConfig = {
-    ajaxUrl: 'board.php',
+    ajaxUrl: <?= json_encode('board.php' . ($currentProjectId > 0 ? '?project_id=' . $currentProjectId : ''), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     siteUrl: <?= json_encode(rtrim((string) $SITEURL, '/'), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     csrfToken: <?= json_encode($_SESSION['csrf_token'], JSON_UNESCAPED_UNICODE) ?>,
     currentUserId: <?= json_encode($currentUserId, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    currentProjectId: <?= (int) $currentProjectId ?>,
     canAdd: <?= $canAdd ? 'true' : 'false' ?>,
     canEdit: <?= $canEdit ? 'true' : 'false' ?>,
+    canDelete: <?= $canDelete ? 'true' : 'false' ?>,
+    isProjectOwner: <?= $hasFullProjectAccess ? 'true' : 'false' ?>,
     projectKey: <?= json_encode($projectKeySetting, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    currentProject: <?= json_encode($currentProject, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    allowedWorkTypeIds: <?= json_encode(array_values($allowedWorkTypeIds), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    allowedStatusIds: <?= json_encode(array_values($allowedStatusIds), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    columnPermissions: <?= json_encode($columnPermissions, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     workTypes: <?= json_encode($workTypes, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     workTypeIcons: <?= json_encode($workTypeIcons, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     assignees: <?= json_encode($assignees, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     labels: <?= json_encode($labels, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
-    statusLabels: <?= json_encode($statusLabels, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>
+    statusLabels: <?= json_encode($statusLabels, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    columns: <?= json_encode($columns, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>
 };
 
 window.summaryConfig = {
-    ajaxUrl: 'summary.php',
+    ajaxUrl: <?= json_encode('summary.php' . ($currentProjectId > 0 ? '?project_id=' . $currentProjectId : ''), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     csrfToken: <?= json_encode($_SESSION['csrf_token'], JSON_UNESCAPED_UNICODE) ?>,
+    currentProjectId: <?= (int) $currentProjectId ?>,
     currentUserId: <?= json_encode($currentUserId, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     currentUserName: <?= json_encode($currentUserName, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     assignees: <?= json_encode($assignees, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
@@ -339,7 +391,7 @@ window.summaryConfig = {
     statusLabels: <?= json_encode($statusLabels, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     initialStats: <?= json_encode($stats, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     initialActivity: <?= json_encode($activity, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
-    boardUrl: 'board.php'
+    boardUrl: <?= json_encode('board.php' . ($currentProjectId > 0 ? '?project_id=' . $currentProjectId : ''), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>
 };
 </script>
 <script src="../js/task_board_core.js"></script>

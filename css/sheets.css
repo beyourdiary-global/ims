@@ -177,6 +177,39 @@
   vertical-align: middle;
 }
 
+.sheets-col-resize-handle {
+  position: absolute;
+  right: -4px;
+  top: 0;
+  width: 8px;
+  height: 100%;
+  cursor: col-resize;
+  z-index: 25;
+}
+
+.sheets-col-resize-handle::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 22%;
+  width: 2px;
+  height: 56%;
+  transform: translateX(-50%);
+  background: transparent;
+  border-radius: 999px;
+  transition: background 0.12s ease;
+}
+
+.sheets-table thead th:hover .sheets-col-resize-handle::before {
+  background: #89a4c7;
+}
+
+body.sheets-col-resizing,
+body.sheets-col-resizing * {
+  cursor: col-resize !important;
+  user-select: none !important;
+}
+
 .sheets-table thead th:last-child {
   border-right: none;
 }
@@ -233,6 +266,16 @@
   color: #0c66e4;
 }
 
+.sheets-th-btn.btn-more,
+.sheets-th-btn.btn-more i {
+  color: #626f86 !important;
+}
+
+.sheets-th-btn.btn-more:hover,
+.sheets-th-btn.btn-more:hover i {
+  color: #172b4d !important;
+}
+
 /* ===== Summary row ===== */
 
 .sheets-summary-row td {
@@ -272,7 +315,7 @@
   display: inline-block;
   background: #e9ebf0;
   color: #44546f;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
   padding: 1px 8px;
   border-radius: 10px;
@@ -804,7 +847,7 @@
 .sheets-status-badge {
   display: inline-block;
   background: #dfe1e6;
-  color: #172b4d;
+  color: #292A2E;
   font-size: 11px;
   font-weight: 500;
   padding: 1px 6px;

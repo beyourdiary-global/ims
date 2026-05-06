@@ -199,6 +199,10 @@ define('TASK_ITEM_HISTORY', 'task_board_item_history');
 define('TASK_ITEM_COMMENT', 'task_board_item_comment');
 define('TASK_ITEM_COMMENT_REPLY', 'task_board_comment_reply');
 define('TASK_SHEETS', 'task_sheets_column');
+define('TASK_PROJECT', 'task_project');
+define('TASK_PROJECT_ITEM_ACCESS', 'task_project_item_access');
+define('TASK_PROJECT_COLUMN_ACCESS', 'task_project_column_access');
+define('TASK_PROJECT_STATUS_ACCESS', 'task_project_status_access');
 
 
 
