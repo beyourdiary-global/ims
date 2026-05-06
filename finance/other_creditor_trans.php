@@ -617,6 +617,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                     <label class="form-label form_lbl" id="ocr_remark_lbl" for="ocr_remark">Remark</label>
                     <textarea class="form-control" name="ocr_remark" id="ocr_remark" rows="3" <?php if ($act == '') echo 'disabled' ?>><?php if (isset($dataExisted) && isset($row['remark'])) echo $row['remark'] ?></textarea>
                 </div>
+                <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
 
                 <div class="form-group mb-3">
                     <div class="row">

@@ -604,6 +604,7 @@ if ($dataID && !$act && USER_ID && !$_SESSION['viewChk'] && !$_SESSION['delChk']
                                         echo $invtr_remark;
                                     ?></textarea>
                                 </div>
+                                <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
                             </div>
                         </div>
                         <div class="form-group">

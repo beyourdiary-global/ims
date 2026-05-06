@@ -1010,6 +1010,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                     <textarea class="form-control" name="for_remark" id="for_remark" rows="3" <?php if ($act == '')
                         echo 'disabled' ?>><?php if (isset($dataExisted) && isset($row['remark']))
                         echo $row['remark'] ?></textarea>
+                    <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
                     </div>
                     <div class="form-group">
                         <div class="row">

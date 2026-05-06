@@ -191,6 +191,7 @@ if (post('actionBtn')) {
                     <textarea class="form-control" name="currentDataRemark" id="currentDataRemark" rows="3"
                               <?= ($act == '') ? 'readonly' : '' ?>><?= isset($row['remark']) ? $row['remark'] : '' ?></textarea>
                 </div>
+                <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
 
                 <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
                     <?= ($act) ? '<button class="btn btn-rounded btn-primary mx-2 mb-2" name="actionBtn" value="' . $actionBtnValue . '">' . $pageActionTitle . '</button>' : '' ?>

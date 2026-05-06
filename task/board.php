@@ -1,4 +1,5 @@
 <?php
+$taskParentPin = 139;
 $currentPagePin = 136;
 $pageTitle = 'Board';
 $taskParentTitle = 'Project Task';
@@ -31,6 +32,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     include_once ROOT . '/include/common.php';
     include_once ROOT . '/include/common_variable.php';
     include_once './common_task.php';
+    $pageTitle = taskGetPinGroupTitleById($connect, $currentPagePin, $pageTitle);
+    $taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParentTitle);
 
     $pinAccess = taskGetPinAccessByGroupId($connect, $currentPagePin);
     if (!taskIsActionAllowed('view', $pinAccess)) {
@@ -1181,8 +1184,8 @@ include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
 include_once './common_task.php';
 include_once './board_item_history.php';
-
-$pageTitle = 'Board';
+$pageTitle = taskGetPinGroupTitleById($connect, $currentPagePin, $pageTitle);
+$taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParentTitle);
 
 $pinAccess = taskGetPinAccessByGroupId($connect, $currentPagePin);
 if (!taskIsActionAllowed('view', $pinAccess)) {
@@ -1200,7 +1203,7 @@ if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $currentPage
 }
 $taskParentTitle = !empty($currentProject) && isset($currentProject['name']) && trim((string) $currentProject['name']) !== ''
     ? (string) $currentProject['name']
-    : 'Project Task';
+    : $taskParentTitle;
 $safePageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
 $safeProjectName = htmlspecialchars((string) $taskParentTitle, ENT_QUOTES, 'UTF-8');
 $viewActMsg = $safeUserName . ' viewed the page ' . $safePageTitle . ' (<b>' . $safeProjectName . '</b>).';

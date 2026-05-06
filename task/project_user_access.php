@@ -1,6 +1,7 @@
 <?php
 ob_start();
 
+$taskParentPin = 139;
 $currentPagePin = 141;
 $pageTitle = 'Project User Access';
 $taskParentTitle = 'Project Task';
@@ -9,6 +10,8 @@ $isFinance = 1;
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
 include_once './common_task.php';
+$pageTitle = taskGetPinGroupTitleById($connect, $currentPagePin, $pageTitle);
+$taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParentTitle);
 
 if (!function_exists('taskProjectUserAccessAuditValue')) {
     function taskProjectUserAccessAuditValue($connect, $projectId, $accessUsers, $workTypes, $statusRows, $fieldOptions)
@@ -462,7 +465,7 @@ $currentProjectId = taskResolveCurrentProjectId($connect, 0);
 $currentProject = $currentProjectId > 0 ? taskGetProjectById($connect, $currentProjectId) : array();
 $taskParentTitle = !empty($currentProject) && isset($currentProject['name']) && trim((string) $currentProject['name']) !== ''
     ? (string) $currentProject['name']
-    : 'Project Task';
+    : $taskParentTitle;
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && $currentProjectId > 0) {
     $auditProjectName = isset($currentProject['name']) ? (string) $currentProject['name'] : ('Project #' . $currentProjectId);

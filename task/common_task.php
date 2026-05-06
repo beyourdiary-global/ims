@@ -991,6 +991,32 @@ if (!function_exists('taskGetPinAccessByGroupId')) {
     }
 }
 
+if (!function_exists('taskGetPinGroupTitleById')) {
+    function taskGetPinGroupTitleById($connect, $pinGroupId, $fallback = '')
+    {
+        static $cache = array();
+
+        $pinGroupId = (int) $pinGroupId;
+        $fallback = (string) $fallback;
+        if ($pinGroupId <= 0) {
+            return $fallback;
+        }
+
+        if (!array_key_exists($pinGroupId, $cache)) {
+            $cache[$pinGroupId] = '';
+            $rst = getData('name', "id='" . $pinGroupId . "'", 'LIMIT 1', PIN_GRP, $connect);
+            if ($rst && $rst->num_rows > 0) {
+                $row = $rst->fetch_assoc();
+                if (isset($row['name']) && trim((string) $row['name']) !== '') {
+                    $cache[$pinGroupId] = trim((string) $row['name']);
+                }
+            }
+        }
+
+        return $cache[$pinGroupId] !== '' ? $cache[$pinGroupId] : $fallback;
+    }
+}
+
 if (!function_exists('taskIsActionAllowed')) {
     function taskIsActionAllowed($actionName, $pinAccess)
     {

@@ -423,6 +423,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                         <label class="form-label form_lbl" for="currentDataRemark">Remark</label>
                         <textarea class="form-control" name="currentDataRemark" id="currentDataRemark" rows="3" <?php if ($act == '') echo 'readonly' ?>><?php if (isset($row['remark'])) echo $row['remark'] ?></textarea>
                     </div>
+                    <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
 
                     <div class="form-group">
                         <div class="row">

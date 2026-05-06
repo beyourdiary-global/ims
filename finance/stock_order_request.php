@@ -1550,6 +1550,7 @@ function sorAttachmentUrl($relativePath, $siteUrl)
                             <label class="form-label form_lbl" for="sor_remark">Remark</label>
                             <textarea class="form-control" id="sor_remark" name="sor_remark" rows="3" <?= ($act == '') ? 'readonly' : '' ?> autocomplete="off"><?= sorEcho(isset($_POST['sor_remark']) ? $_POST['sor_remark'] : (($act === 'I') ? '' : (isset($row['remark']) ? $row['remark'] : ''))) ?></textarea>
                         </div>
+                        <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
                     </div>
 
                     <div class="form-group mt-4 d-flex justify-content-center flex-md-row flex-column">

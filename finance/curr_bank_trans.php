@@ -613,6 +613,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                         <label class="form-label form_lbl" id="cba_remark_lbl" for="cba_remark">Transaction Remark</label>
                         <textarea class="form-control" name="cba_remark" id="cba_remark" rows="3" <?php if ($act == '') echo 'disabled' ?>><?php if (isset($dataExisted) && isset($row['remark'])) echo $row['remark'] ?></textarea>
                     </div>
+                    <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
 
                     <div class="form-group ">
                         <div class="row">
