@@ -77,6 +77,27 @@
         renderIconPickerMenu(menu, iconValue);
     }
 
+    function closeAllIconPickerMenus(exceptMenu) {
+        form.querySelectorAll('.task-project-worktype-row.task-project-icon-picker-open').forEach(function (openRow) {
+            openRow.classList.remove('task-project-icon-picker-open');
+        });
+
+        form.querySelectorAll('.task-project-icon-picker-menu.show').forEach(function (openMenu) {
+            if (exceptMenu && openMenu === exceptMenu) {
+                var activeRow = openMenu.closest('.task-project-worktype-row');
+                if (activeRow) {
+                    activeRow.classList.add('task-project-icon-picker-open');
+                }
+                return;
+            }
+            openMenu.classList.remove('show');
+            var openBtn = openMenu.parentElement ? openMenu.parentElement.querySelector('.task-project-icon-picker-btn') : null;
+            if (openBtn) {
+                openBtn.setAttribute('aria-expanded', 'false');
+            }
+        });
+    }
+
     function bindIconPicker(row) {
         if (!row || row.getAttribute('data-icon-picker-bound') === '1') {
             return;
@@ -93,10 +114,20 @@
         }
 
         pickerBtn.addEventListener('click', function (event) {
-            if (window.bootstrap && window.bootstrap.Dropdown) {
-                event.preventDefault();
-                event.stopPropagation();
-                window.bootstrap.Dropdown.getOrCreateInstance(pickerBtn).toggle();
+            event.preventDefault();
+            event.stopPropagation();
+
+            var isOpen = menu.classList.contains('show');
+            closeAllIconPickerMenus(isOpen ? null : menu);
+
+            if (isOpen) {
+                menu.classList.remove('show');
+                row.classList.remove('task-project-icon-picker-open');
+                pickerBtn.setAttribute('aria-expanded', 'false');
+            } else {
+                menu.classList.add('show');
+                row.classList.add('task-project-icon-picker-open');
+                pickerBtn.setAttribute('aria-expanded', 'true');
             }
         });
 
@@ -110,9 +141,9 @@
                 optionBtn.getAttribute('data-icon-value') || '',
                 optionBtn.getAttribute('data-icon-src') || ''
             );
-            if (window.bootstrap && window.bootstrap.Dropdown) {
-                window.bootstrap.Dropdown.getOrCreateInstance(pickerBtn).hide();
-            }
+            menu.classList.remove('show');
+            row.classList.remove('task-project-icon-picker-open');
+            pickerBtn.setAttribute('aria-expanded', 'false');
             saveSettings();
         });
     }
@@ -321,7 +352,7 @@
             }
             var row = document.createElement('div');
             row.className = 'task-project-settings-row task-project-worktype-row';
-            var defaultIcon = iconOptions.length ? iconOptions[0] : { value: 'svg_icon/10318.svg', src: 'svg_icon/10318.svg' };
+            var defaultIcon = iconOptions.length ? iconOptions[0] : { value: 'svg_icon/10318.svg', src: 'svg_icon/10318.svg', label: '' };
             row.innerHTML = '<input type="hidden" name="work_type_ids[]" value="0">' +
                 '<div class="task-project-worktype-name-wrap">' +
                 '<span class="task-project-worktype-icon-preview"><img src="' + String(defaultIcon.src) + '" alt=""></span>' +
@@ -331,7 +362,6 @@
                 '<input type="hidden" name="work_type_icons[]" value="' + String(defaultIcon.value) + '">' +
                 '<button type="button" class="btn btn-light task-project-icon-picker-btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">' +
                 '<img src="' + String(defaultIcon.src) + '" alt="">' +
-                '<span class="task-project-icon-picker-label">' + String(defaultIcon.label) + '</span>' +
                 '</button>' +
                 '<div class="dropdown-menu task-project-icon-picker-menu"></div>' +
                 '</div>' +
@@ -386,6 +416,12 @@
             return;
         }
         saveSettings();
+    });
+
+    document.addEventListener('click', function (event) {
+        if (!event.target || !event.target.closest('.task-project-icon-picker')) {
+            closeAllIconPickerMenus(null);
+        }
     });
 
     bindDynamicControls(form);

@@ -88,6 +88,11 @@
 
 .task-project-worktype-row {
   grid-template-columns: minmax(0, 1.8fr) 96px 140px;
+  position: relative;
+}
+
+.task-project-worktype-row.task-project-icon-picker-open {
+  z-index: 30;
 }
 
 .task-project-settings-row .btn,
@@ -169,6 +174,7 @@
 .task-project-icon-picker-menu {
   left: auto;
   right: 0;
+  top: calc(100% + 6px);
   width: 220px;
   min-width: 220px;
   max-width: 220px;
