@@ -78,13 +78,28 @@
     }
 
     function bindIconPicker(row) {
-        var hiddenInput = row.querySelector('input[name="work_type_icons[]"]');
-        var menu = row.querySelector('.task-project-icon-picker-menu');
-        var initialValue = hiddenInput ? hiddenInput.value : '';
-        renderIconPickerMenu(menu, initialValue);
-        if (!menu) {
+        if (!row || row.getAttribute('data-icon-picker-bound') === '1') {
             return;
         }
+        row.setAttribute('data-icon-picker-bound', '1');
+
+        var hiddenInput = row.querySelector('input[name="work_type_icons[]"]');
+        var menu = row.querySelector('.task-project-icon-picker-menu');
+        var pickerBtn = row.querySelector('.task-project-icon-picker-btn');
+        var initialValue = hiddenInput ? hiddenInput.value : '';
+        renderIconPickerMenu(menu, initialValue);
+        if (!menu || !pickerBtn) {
+            return;
+        }
+
+        pickerBtn.addEventListener('click', function (event) {
+            if (window.bootstrap && window.bootstrap.Dropdown) {
+                event.preventDefault();
+                event.stopPropagation();
+                window.bootstrap.Dropdown.getOrCreateInstance(pickerBtn).toggle();
+            }
+        });
+
         menu.addEventListener('click', function (event) {
             var optionBtn = event.target.closest('.task-project-icon-option');
             if (!optionBtn) {
@@ -95,6 +110,9 @@
                 optionBtn.getAttribute('data-icon-value') || '',
                 optionBtn.getAttribute('data-icon-src') || ''
             );
+            if (window.bootstrap && window.bootstrap.Dropdown) {
+                window.bootstrap.Dropdown.getOrCreateInstance(pickerBtn).hide();
+            }
             saveSettings();
         });
     }
@@ -309,7 +327,6 @@
                 '<span class="task-project-worktype-icon-preview"><img src="' + String(defaultIcon.src) + '" alt=""></span>' +
                 '<input type="text" class="form-control" name="work_type_names[]" maxlength="80" value="">' +
                 '</div>' +
-                '<div class="dropdown task-project-icon-picker">' +
                 '<div class="dropdown task-project-icon-picker">' +
                 '<input type="hidden" name="work_type_icons[]" value="' + String(defaultIcon.value) + '">' +
                 '<button type="button" class="btn btn-light task-project-icon-picker-btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">' +

@@ -65,11 +65,18 @@
 .task-project-settings-form .card {
   border: 1px solid #d9e2ef;
   border-radius: 12px;
+  overflow: visible;
 }
 
 .task-project-settings-form .card-header {
   background: #f6f9fc;
   border-bottom: 1px solid #dfe7f1;
+}
+
+.task-project-settings-form .card-body,
+.task-project-settings-row,
+.task-project-worktype-row {
+  overflow: visible;
 }
 
 .task-project-settings-row {
@@ -130,6 +137,7 @@
 .task-project-icon-picker {
   width: 100%;
   position: relative;
+  z-index: 5;
 }
 
 .task-project-icon-picker-btn {
@@ -161,15 +169,20 @@
 .task-project-icon-picker-menu {
   left: auto;
   right: 0;
-  width: 64px;
-  min-width: 64px;
-  max-width: 64px;
-  max-height: 152px;
+  width: 220px;
+  min-width: 220px;
+  max-width: 220px;
+  max-height: 220px;
   overflow-y: auto;
   overflow-x: hidden;
   padding: 0.35rem;
-  flex-direction: column;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 0.35rem;
+  z-index: 1200;
+  border: 1px solid #d5deea;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.16);
 }
 
 .task-project-icon-picker-menu:not(.show) {
@@ -177,7 +190,7 @@
 }
 
 .task-project-icon-picker-menu.show {
-  display: flex !important;
+  display: grid !important;
 }
 
 .task-project-icon-option {
