@@ -97,10 +97,15 @@ if ($dataID && !$act && USER_ID && !$_SESSION['viewChk'] && !$_SESSION['delChk']
 
     $_SESSION['viewChk'] = 1;
 
+    $safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
+    $safeDataID = htmlspecialchars((string) $dataID, ENT_QUOTES, 'UTF-8');
+    $safeTblName = htmlspecialchars((string) $tblName, ENT_QUOTES, 'UTF-8');
+
     if (isset($errorExist)) {
-        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataID . "</b> ] from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = $safeUserName . " fail to viewed the data [<b> ID = " . $safeDataID . "</b> ] from <b><i>" . $safeTblName . " Table</i></b>.";
     } else {
-        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataID . "</b> ] <b>" . $row['name'] . "</b> from <b><i>$tblName Table</i></b>.";
+        $safeRowName = htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8');
+        $viewActMsg = $safeUserName . " viewed the data [<b> ID = " . $safeDataID . "</b> ] <b>" . $safeRowName . "</b> from <b><i>" . $safeTblName . " Table</i></b>.";
     }
 
     $log = [
