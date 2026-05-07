@@ -113,6 +113,10 @@
             return;
         }
 
+        // This picker uses custom show/hide handling, so disable Bootstrap's
+        // delegated dropdown toggle to avoid double-open state on repeat clicks.
+        pickerBtn.removeAttribute('data-bs-toggle');
+
         pickerBtn.addEventListener('click', function (event) {
             event.preventDefault();
             event.stopPropagation();
