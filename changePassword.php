@@ -12,6 +12,19 @@ if (input('token') && input('email'))
 else
     $pageMode = 'userChgPassword';
 
+if ($pageMode == 'emailRstPassword') {
+    $img_path = $SITEURL . img_server . 'themes/';
+    $rstProj = getData('*', "id = '1'", '', PROJ, $connect);
+
+    if ($rstProj != false) {
+        $dataExisted = 1;
+        $row = $rstProj->fetch_assoc();
+    } else {
+        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+        echo "<script>location.href ='$SITEURL/index.php';</script>";
+    }
+}
+
 // Load full authenticated layout only for in-session password change.
 if ($pageMode == 'userChgPassword') {
     $pageTitle = getPinGroupNameById($connect, $currentPagePin);
@@ -181,14 +194,15 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 <html>
 
 <head>
-    <?php 
-    if ($pageMode == 'emailRstPassword') { 
-        include "header.php"; 
-    } 
+    <?php
+    if ($pageMode == 'emailRstPassword') {
+        include "header.php";
+    }
     ?>
     <link rel="stylesheet" href="./css/main.css">
     <?php if ($pageMode == 'emailRstPassword') { ?>
         <link rel="stylesheet" href="./css/login.css">
+        <link rel="icon" type="image" href="<?php echo ($dataExisted ? $img_path . $row['meta_logo'] : 'img/byd_logo'); ?>">
     <?php } ?>
 </head>
 
@@ -220,7 +234,10 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                 <div class="row">
                     <div class="col-12">
                         <div class="d-flex justify-content-center my-4" id="logo_element">
-                            <img src="./image/logo2.png">
+                            <a href="<?= $SITEURL ?>/index.php">
+                                <img id="logo" style="min-height:100px; max-height : 150px; width : auto;"
+                                    src="<?php echo ($dataExisted ? $img_path . $row['logo'] : 'img/byd_logo'); ?>">
+                            </a>
                         </div>
                     </div>
                 </div>
@@ -238,7 +255,12 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                         <div class="col-10">
                             <div class="form-group mb-3">
                                 <label class="form-label" id="newpass_lbl" for="rstnewpass">New password</label>
-                                <input class="form-control" type="password" name="rstnewpass" id="rstnewpass">
+                                <div id="row-password-input">
+                                    <div class="d-flex justify-content-end">
+                                        <i class="fa fa-eye-slash icon" id="showRstnewpass" onclick="togglePassword('rstnewpass')"></i>
+                                    </div>
+                                    <input class="form-control" type="password" name="rstnewpass" id="rstnewpass">
+                                </div>
                                 <div id="err_msg">
                                     <span class="mt-n1"><?php if (isset($newpassErr)) echo $newpassErr;
                                                         else echo ''; ?></span>
@@ -251,7 +273,12 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                         <div class="col-10">
                             <div class="form-group mb-3">
                                 <label class="form-label" id="confirmpass_lbl" for="rstconfirmpass">Confirm password</label>
-                                <input class="form-control" type="password" name="rstconfirmpass" id="rstconfirmpass">
+                                <div id="row-password-input">
+                                    <div class="d-flex justify-content-end">
+                                        <i class="fa fa-eye-slash icon" id="showRstconfirmpass" onclick="togglePassword('rstconfirmpass')"></i>
+                                    </div>
+                                    <input class="form-control" type="password" name="rstconfirmpass" id="rstconfirmpass">
+                                </div>
                                 <div id="err_msg">
                                     <span class="mt-n1"><?php if (isset($confirmpassErr)) echo $confirmpassErr;
                                                         else echo ''; ?></span>
@@ -265,19 +292,23 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                             <div class="form-group mt-5 d-flex justify-content-center">
                                 <button class="btn btn-lg btn-rounded btn-primary" name="actionBtn" id="actionBtn" value="rstpass">Update Password</button>
                             </div>
-                        </div>
-                    </div>
-
-                    <div class="row d-flex justify-content-center">
-                        <div class="col-12">
-                            <div class="d-flex justify-content-center my-4">
-                                <div id="err_msg">
-                                    <span><?php if (isset($commonErr)) echo $commonErr;
-                                            else echo ''; ?></span>
-                                </div>
+                            <div class="d-flex justify-content-center mt-4 mb-3">
+                                <a id="forgot-password_link" href="<?= $SITEURL ?>/index.php">Back to Login</a>
                             </div>
                         </div>
                     </div>
+
+                    <?php if (isset($commonErr) && $commonErr !== '') { ?>
+                        <div class="row d-flex justify-content-center">
+                            <div class="col-12">
+                                <div class="d-flex justify-content-center my-4">
+                                    <div id="err_msg">
+                                        <span><?php echo $commonErr; ?></span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    <?php } ?>
                 </form>
             <?php } else if ($pageMode == 'userChgPassword') { ?>
                 <div class="col-6 col-md-6 formWidthAdjust">
@@ -357,6 +388,22 @@ if (isset($_SESSION['tempValConfirmBox'])) {
     </div>
 
     <script>
+        function togglePassword(inputId) {
+            var input = document.getElementById(inputId);
+            var icon = document.getElementById('show' + inputId.charAt(0).toUpperCase() + inputId.slice(1));
+            if (!input || !icon) return;
+
+            if (input.getAttribute('type') === 'password') {
+                input.setAttribute('type', 'text');
+                icon.classList.remove('fa-eye-slash');
+                icon.classList.add('fa-eye');
+            } else {
+                input.setAttribute('type', 'password');
+                icon.classList.remove('fa-eye');
+                icon.classList.add('fa-eye-slash');
+            }
+        }
+
         if (typeof checkCurrentPage === 'function') {
             checkCurrentPage('invalid');
         }
