@@ -406,7 +406,7 @@ if (!function_exists('urlBuildListHtml')) {
             $editBtn = '';
 
             if ($canEdit) {
-                $editBtn = '<button type="button" class="btn btn-sm btn-rounded btn-warning url-edit-btn" data-id="' . $recordId . '">Edit</button>';
+                $editBtn = '<button type="button" class="btn btn-sm btn-rounded btn-warning url-edit-btn" data-id="' . $recordId . '">Edit User Log</button>';
             }
 
             $isSameAuditInfo = (
@@ -768,6 +768,10 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
         ?>
         <div class="user-record-log-module mt-4">
             <style>
+                .user-record-log-module .btn {
+                    text-transform: none !important;
+                }
+
                 .user-record-log-module .url-log-row.url-row-odd .card-header,
                 .user-record-log-module .url-log-row.url-row-odd .card-body {
                     background-color: #ffffff;
@@ -860,7 +864,7 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
 
             <div class="card mb-3">
                 <div class="card-body">
-                    <h5 class="mb-3">Add / Edit Record</h5>
+                    <h5 class="mb-3">Add / Edit User Log</h5>
                     <form id="url_form" method="post" action="<?php echo htmlspecialchars($moduleActionUrl, ENT_QUOTES, 'UTF-8'); ?>" enctype="multipart/form-data" autocomplete="off">
                         <input type="hidden" name="url_action" value="save">
                         <input type="hidden" name="record_id" id="url_record_id" value="0">
@@ -878,7 +882,7 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                             <input class="form-control" type="file" id="url_attachment" name="attachment">
                         </div>
                         <div class="d-flex gap-2 flex-wrap">
-                            <button type="submit" class="btn btn-sm btn-rounded btn-primary" id="url_submit_btn">Save Record</button>
+                            <button type="submit" class="btn btn-sm btn-rounded btn-primary" id="url_submit_btn">Save User Log</button>
                             <button type="button" class="btn btn-sm btn-rounded btn-secondary" id="url_cancel_edit_btn" style="display:none;">Cancel Edit</button>
                         </div>
                     </form>
