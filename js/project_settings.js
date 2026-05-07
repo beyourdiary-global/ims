@@ -77,14 +77,64 @@
         renderIconPickerMenu(menu, iconValue);
     }
 
+    function closeAllIconPickerMenus(exceptMenu) {
+        form.querySelectorAll('.task-project-worktype-row.task-project-icon-picker-open').forEach(function (openRow) {
+            openRow.classList.remove('task-project-icon-picker-open');
+        });
+
+        form.querySelectorAll('.task-project-icon-picker-menu.show').forEach(function (openMenu) {
+            if (exceptMenu && openMenu === exceptMenu) {
+                var activeRow = openMenu.closest('.task-project-worktype-row');
+                if (activeRow) {
+                    activeRow.classList.add('task-project-icon-picker-open');
+                }
+                return;
+            }
+            openMenu.classList.remove('show');
+            var openBtn = openMenu.parentElement ? openMenu.parentElement.querySelector('.task-project-icon-picker-btn') : null;
+            if (openBtn) {
+                openBtn.setAttribute('aria-expanded', 'false');
+            }
+        });
+    }
+
     function bindIconPicker(row) {
-        var hiddenInput = row.querySelector('input[name="work_type_icons[]"]');
-        var menu = row.querySelector('.task-project-icon-picker-menu');
-        var initialValue = hiddenInput ? hiddenInput.value : '';
-        renderIconPickerMenu(menu, initialValue);
-        if (!menu) {
+        if (!row || row.getAttribute('data-icon-picker-bound') === '1') {
             return;
         }
+        row.setAttribute('data-icon-picker-bound', '1');
+
+        var hiddenInput = row.querySelector('input[name="work_type_icons[]"]');
+        var menu = row.querySelector('.task-project-icon-picker-menu');
+        var pickerBtn = row.querySelector('.task-project-icon-picker-btn');
+        var initialValue = hiddenInput ? hiddenInput.value : '';
+        renderIconPickerMenu(menu, initialValue);
+        if (!menu || !pickerBtn) {
+            return;
+        }
+
+        // This picker uses custom show/hide handling, so disable Bootstrap's
+        // delegated dropdown toggle to avoid double-open state on repeat clicks.
+        pickerBtn.removeAttribute('data-bs-toggle');
+
+        pickerBtn.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            var isOpen = menu.classList.contains('show');
+            closeAllIconPickerMenus(isOpen ? null : menu);
+
+            if (isOpen) {
+                menu.classList.remove('show');
+                row.classList.remove('task-project-icon-picker-open');
+                pickerBtn.setAttribute('aria-expanded', 'false');
+            } else {
+                menu.classList.add('show');
+                row.classList.add('task-project-icon-picker-open');
+                pickerBtn.setAttribute('aria-expanded', 'true');
+            }
+        });
+
         menu.addEventListener('click', function (event) {
             var optionBtn = event.target.closest('.task-project-icon-option');
             if (!optionBtn) {
@@ -95,6 +145,9 @@
                 optionBtn.getAttribute('data-icon-value') || '',
                 optionBtn.getAttribute('data-icon-src') || ''
             );
+            menu.classList.remove('show');
+            row.classList.remove('task-project-icon-picker-open');
+            pickerBtn.setAttribute('aria-expanded', 'false');
             saveSettings();
         });
     }
@@ -303,18 +356,16 @@
             }
             var row = document.createElement('div');
             row.className = 'task-project-settings-row task-project-worktype-row';
-            var defaultIcon = iconOptions.length ? iconOptions[0] : { value: 'svg_icon/10318.svg', src: 'svg_icon/10318.svg' };
+            var defaultIcon = iconOptions.length ? iconOptions[0] : { value: 'svg_icon/10318.svg', src: 'svg_icon/10318.svg', label: '' };
             row.innerHTML = '<input type="hidden" name="work_type_ids[]" value="0">' +
                 '<div class="task-project-worktype-name-wrap">' +
                 '<span class="task-project-worktype-icon-preview"><img src="' + String(defaultIcon.src) + '" alt=""></span>' +
                 '<input type="text" class="form-control" name="work_type_names[]" maxlength="80" value="">' +
                 '</div>' +
                 '<div class="dropdown task-project-icon-picker">' +
-                '<div class="dropdown task-project-icon-picker">' +
                 '<input type="hidden" name="work_type_icons[]" value="' + String(defaultIcon.value) + '">' +
                 '<button type="button" class="btn btn-light task-project-icon-picker-btn dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">' +
                 '<img src="' + String(defaultIcon.src) + '" alt="">' +
-                '<span class="task-project-icon-picker-label">' + String(defaultIcon.label) + '</span>' +
                 '</button>' +
                 '<div class="dropdown-menu task-project-icon-picker-menu"></div>' +
                 '</div>' +
@@ -369,6 +420,12 @@
             return;
         }
         saveSettings();
+    });
+
+    document.addEventListener('click', function (event) {
+        if (!event.target || !event.target.closest('.task-project-icon-picker')) {
+            closeAllIconPickerMenus(null);
+        }
     });
 
     bindDynamicControls(form);

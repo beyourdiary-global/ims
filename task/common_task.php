@@ -1054,7 +1054,7 @@ if (!function_exists('taskGetSvgIconOptions')) {
         }
 
         $cache = array();
-        $iconDir = __DIR__ . '/task/svg_icon';
+        $iconDir = __DIR__ . '/svg_icon';
         if (!is_dir($iconDir)) {
             return $cache;
         }

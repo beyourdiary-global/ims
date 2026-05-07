@@ -193,6 +193,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 </head>
 
 <body>
+    <div<?php if ($pageMode == 'userChgPassword') echo ' class="task-page-wrap"'; ?>>
     <?php if ($pageMode == 'userChgPassword') { ?>
         <div class="d-flex flex-column my-3 ms-3">
             <div class="row">
@@ -347,11 +348,12 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                             </div>
                         </div>
                     </form>
-                <?php } else {
+            <?php } else {
                 echo 'Error.';
             } ?>
                 </div>
             </div>
+    </div>
     </div>
 
     <script>
