@@ -234,6 +234,26 @@ input {
 
   .topNav.navbar-expand-md .navbar-toggler {
     display: block;
+    width: 50px;
+    height: 50px;
+    padding: 0 !important;
+    border: 0;
+    border-radius: 0;
+    color: #aeb7c2;
+    background-color: transparent;
+    box-shadow: none;
+  }
+
+  .topNav.navbar-expand-md .navbar-toggler:hover,
+  .topNav.navbar-expand-md .navbar-toggler:focus,
+  .topNav.navbar-expand-md .navbar-toggler:active {
+    color: #aeb7c2;
+    background-color: rgba(255, 255, 255, 0.08);
+    box-shadow: none;
+  }
+
+  .topNav.navbar-expand-md .navbar-toggler .fa-bars {
+    color: inherit !important;
   }
 
   .topNav.navbar-expand-md #navbarSupportedContent {
@@ -298,6 +318,8 @@ input {
 .menuBar > .container-fluid {
   display: flex;
   align-items: flex-start;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
 }
 
 .menuBar > .container-fluid > .nav.nav-tabs {
@@ -306,14 +328,28 @@ input {
   flex-wrap: wrap;
   align-items: stretch;
   row-gap: 0;
+  margin: 0;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .menuBar > .container-fluid > .nav.nav-tabs > .nav-item {
   flex: 0 0 auto;
 }
 
+.menuBar > .container-fluid > .nav.nav-tabs > .task-top-menu-trigger-item {
+  flex: 0 0 52px;
+}
+
 .menuBar > .container-fluid > .nav.nav-tabs .nav-link {
   white-space: nowrap;
+}
+
+.menuBar > .container-fluid > .nav.nav-tabs .task-top-menu-trigger {
+  width: 100%;
+  justify-content: center;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
 }
 
 .dropdown-menu li {
