@@ -153,7 +153,7 @@
       $content.val("");
       $("#url_attachment").val("");
       $existingAttachment.val("");
-      $submitBtn.text("Save Record");
+      $submitBtn.text("Save User Log");
       $cancelEditBtn.hide();
     }
 
@@ -484,7 +484,7 @@
       $existingAttachment.val(
         $.trim($card.find(".url-edit-attachment").val() || ""),
       );
-      $submitBtn.text("Update Record");
+      $submitBtn.text("Save User Log");
       $cancelEditBtn.show();
 
       if ($form.offset()) {

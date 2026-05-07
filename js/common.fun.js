@@ -2132,6 +2132,10 @@ function preloader(additionalDelay, action) {
       }
 
       setAutofocus(action);
+
+      if (typeof commonInitMobileActionEnhancements === "function") {
+        commonInitMobileActionEnhancements();
+      }
     }, additionalDelay || 0);
   }
 
@@ -2191,3 +2195,309 @@ function exportData() {
 function showExportNotification() {
   alert("Export successful!");
 }
+
+function commonMobileActionIsVisible(element) {
+  if (!element) {
+    return false;
+  }
+
+  if (element.offsetParent === null) {
+    return false;
+  }
+
+  var style = window.getComputedStyle(element);
+  return style.display !== "none" && style.visibility !== "hidden";
+}
+
+function commonNormalizeButtonText(text) {
+  return (text || "").replace(/\s+/g, " ").trim();
+}
+
+function commonResolvePageTitle() {
+  var path = (window.location.pathname || "").toLowerCase();
+
+  if (
+    /\/shopee\/(shopee_order_req_table|shopee_processing_order|shopee_verify)\.php$/.test(
+      path,
+    )
+  ) {
+    return "Shopee Order Request";
+  }
+
+  return commonNormalizeButtonText(document.title || "");
+}
+
+function commonResolveButtonTitle(element, pageTitle) {
+  if (!element) {
+    return "";
+  }
+
+  var text = commonNormalizeButtonText(element.textContent || element.value || "");
+  var value = commonNormalizeButtonText(element.value || "");
+  var href = (element.getAttribute("href") || "").toLowerCase();
+  var existingTitle = commonNormalizeButtonText(element.getAttribute("title") || "");
+  var iconClass = "";
+  var iconElement = element.querySelector("i");
+
+  if (iconElement) {
+    iconClass = iconElement.className || "";
+  }
+
+  var hasGenericTitle =
+    existingTitle === "" ||
+    /^(add|edit|view|delete|back|add record|edit record)$/i.test(existingTitle);
+
+  if (!hasGenericTitle) {
+    return existingTitle;
+  }
+
+  if (
+    element.id === "addBtn" ||
+    element.getAttribute("name") === "addBtn" ||
+    value === "addRecord" ||
+    /^Add Record$/i.test(text)
+  ) {
+    return pageTitle ? "Add " + pageTitle : "Add Record";
+  }
+
+  if (
+    /^upd/i.test(value) ||
+    ((element.id === "actionBtn" || element.classList.contains("submitBtn")) &&
+      /^Edit\b/i.test(text))
+  ) {
+    return pageTitle ? "Edit " + pageTitle : "Edit Record";
+  }
+
+  if (value === "back" || /^Back$/i.test(text)) {
+    return pageTitle ? "Back to " + pageTitle : "Back";
+  }
+
+  if (/fa-eye/.test(iconClass) || (/id=/.test(href) && !/act=/.test(href) && text === "")) {
+    return pageTitle ? "View " + pageTitle : "View";
+  }
+
+  if (/fa-edit/.test(iconClass) || /act=e/i.test(href)) {
+    return pageTitle ? "Edit " + pageTitle : "Edit";
+  }
+
+  if (/fa-trash/.test(iconClass)) {
+    return pageTitle ? "Delete " + pageTitle : "Delete";
+  }
+
+  if (text !== "") {
+    return text;
+  }
+
+  return existingTitle;
+}
+
+function commonApplyButtonTitles() {
+  var pageTitle = commonResolvePageTitle();
+  var buttons = document.querySelectorAll("a.btn, button.btn");
+
+  for (var i = 0; i < buttons.length; i++) {
+    var title = commonResolveButtonTitle(buttons[i], pageTitle);
+    if (title !== "") {
+      buttons[i].setAttribute("title", title);
+      if (!buttons[i].getAttribute("aria-label")) {
+        buttons[i].setAttribute("aria-label", title);
+      }
+    }
+  }
+}
+
+function commonApplyVisibleActionLabels() {
+  var pageTitle = commonResolvePageTitle();
+  if (!pageTitle) {
+    return;
+  }
+
+  var buttons = document.querySelectorAll("a.btn, button.btn");
+  for (var i = 0; i < buttons.length; i++) {
+    var button = buttons[i];
+    var text = commonNormalizeButtonText(button.textContent || "");
+    var value = commonNormalizeButtonText(button.value || "");
+
+    if (
+      /^upd/i.test(value) ||
+      ((button.id === "actionBtn" || button.classList.contains("submitBtn")) &&
+        /^Edit\b/i.test(text))
+    ) {
+      button.textContent = "Edit " + pageTitle;
+      continue;
+    }
+  }
+}
+
+function commonSyncButtonVisualStyle(sourceButton, targetButton) {
+  if (!sourceButton || !targetButton) {
+    return;
+  }
+
+  var computedStyle = window.getComputedStyle(sourceButton);
+  var properties = [
+    "background",
+    "backgroundColor",
+    "border",
+    "borderColor",
+    "borderRadius",
+    "boxShadow",
+    "color",
+    "font",
+    "fontFamily",
+    "fontSize",
+    "fontWeight",
+    "height",
+    "letterSpacing",
+    "lineHeight",
+    "minHeight",
+    "padding",
+    "textTransform",
+  ];
+
+  for (var i = 0; i < properties.length; i++) {
+    var property = properties[i];
+    targetButton.style[property] = computedStyle[property];
+  }
+}
+
+function commonBuildMobileFloatingAddButton() {
+  if (document.querySelector(".mobile-floating-action-bar")) {
+    return;
+  }
+
+  var sourceButton = document.querySelector(
+    "a#addBtn.btn, button#addBtn.btn, a[name='addBtn'].btn, button[name='addBtn'].btn",
+  );
+
+  if (!sourceButton || !commonMobileActionIsVisible(sourceButton)) {
+    return;
+  }
+
+  var stickyBar = document.createElement("div");
+  stickyBar.className = "mobile-floating-action-bar mobile-floating-action-bar--single";
+
+  var buttonClone = sourceButton.cloneNode(true);
+  buttonClone.removeAttribute("id");
+  buttonClone.classList.add("mobile-floating-primary-action");
+  commonSyncButtonVisualStyle(sourceButton, buttonClone);
+
+  stickyBar.appendChild(buttonClone);
+  document.body.appendChild(stickyBar);
+
+  sourceButton.classList.add("mobile-floating-source-btn");
+  document.body.classList.add("has-mobile-floating-add-btn");
+}
+
+function commonBuildMobileStickyFormActions() {
+  var selector =
+  "button.submitBtn, button.cancel, button#actionBtn, button#backBtn, button[name='actionBtn'], button[name='updateStatusBtn'], a.submitBtn, a.cancel, a#actionBtn, a#backBtn";
+  var buttons = Array.prototype.slice.call(document.querySelectorAll(selector)).filter(function (
+    button,
+  ) {
+    return (
+      !button.closest("td") &&
+      !button.closest(".mobile-floating-action-bar") &&
+      !button.closest(".mobile-sticky-form-actions")
+    );
+  });
+
+  if (buttons.length === 0) {
+    return;
+  }
+
+  var groupedParents = [];
+
+  for (var i = 0; i < buttons.length; i++) {
+    var parent = buttons[i].parentElement;
+    if (!parent) {
+      continue;
+    }
+
+    var existingGroup = null;
+    for (var j = 0; j < groupedParents.length; j++) {
+      if (groupedParents[j].element === parent) {
+        existingGroup = groupedParents[j];
+        break;
+      }
+    }
+
+    if (existingGroup) {
+      existingGroup.buttons.push(buttons[i]);
+    } else {
+      groupedParents.push({
+        element: parent,
+        buttons: [buttons[i]],
+      });
+    }
+  }
+
+  if (groupedParents.length === 0) {
+    return;
+  }
+
+  groupedParents.sort(function (a, b) {
+    if (b.buttons.length !== a.buttons.length) {
+      return b.buttons.length - a.buttons.length;
+    }
+
+    return (
+      b.element.getBoundingClientRect().top - a.element.getBoundingClientRect().top
+    );
+  });
+
+  var actionContainer = groupedParents[0].element;
+    actionContainer.classList.add("mobile-sticky-form-actions");
+    document.body.classList.add("has-mobile-sticky-form-actions");
+
+    var stickyButtons = groupedParents[0].buttons;
+
+    stickyButtons.sort(function (a, b) {
+      var aText = commonNormalizeButtonText(a.textContent || a.value || "").toLowerCase();
+      var bText = commonNormalizeButtonText(b.textContent || b.value || "").toLowerCase();
+
+      var aIsBack =
+        a.id === "backBtn" ||
+        a.classList.contains("backBtn") ||
+        a.classList.contains("cancel") ||
+        a.value === "back" ||
+        aText === "back";
+
+      var bIsBack =
+        b.id === "backBtn" ||
+        b.classList.contains("backBtn") ||
+        b.classList.contains("cancel") ||
+        b.value === "back" ||
+        bText === "back";
+
+      if (aIsBack && !bIsBack) {
+        return -1;
+      }
+
+      if (!aIsBack && bIsBack) {
+        return 1;
+      }
+
+      return 0;
+    });
+
+    for (var k = 0; k < stickyButtons.length; k++) {
+      stickyButtons[k].classList.add("mobile-sticky-form-button");
+      actionContainer.appendChild(stickyButtons[k]);
+    }
+}
+
+function commonInitMobileActionEnhancements() {
+  commonApplyVisibleActionLabels();
+  commonApplyButtonTitles();
+  commonBuildMobileFloatingAddButton();
+  commonBuildMobileStickyFormActions();
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", commonInitMobileActionEnhancements);
+} else {
+  commonInitMobileActionEnhancements();
+}
+
+window.addEventListener("load", commonInitMobileActionEnhancements);
