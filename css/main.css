@@ -628,6 +628,11 @@ body.task-global-sidebar-open #dispTable {
   box-shadow: 0px 0px 1px 1px #e4e6e6;
 }
 
+#resetPasswordForm {
+  border: 1px solid #e4e6e6;
+  box-shadow: none;
+}
+
 #login_btn,
 #resetpass_btn {
   height: 50px;
