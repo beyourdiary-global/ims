@@ -137,6 +137,8 @@ if (post('actionBtn')) {
             $dataRemark = postSpaceFilter('currentDataRemark');
 
             $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
+            $returnData = null;
+            $errorMsg = '';
 
             if (isDuplicateRecord("name", $currentDataName, $tblName, $connect, $dataID)) {
                 $err = "Duplicate record found for " . $pageTitle . " name.";
@@ -200,9 +202,28 @@ if (post('actionBtn')) {
                         array_push($datafield, 'remark');
                     }
 
-                    $query = "INSERT INTO " . $tblName . "(name,item_code,item_description,brand,cost,cost_curr,agent_cost,price,currency_unit,product,barcode_slot_total,remark,create_by,create_date,create_time) VALUES ('$currentDataName','$item_code','$item_description','$brand','$cost', '$cost_curr','$agent_cost','$pkg_price','$cur_unit','$prod_list','$barcode_slot_total','$dataRemark','" . USER_ID . "',curdate(),curtime())";
+                    $safeCurrentDataName = mysqli_real_escape_string($connect, (string) $currentDataName);
+                    $safeItemCode = mysqli_real_escape_string($connect, (string) $item_code);
+                    $safeItemDescription = mysqli_real_escape_string($connect, (string) $item_description);
+                    $safeBrand = mysqli_real_escape_string($connect, (string) $brand);
+                    $safeCost = mysqli_real_escape_string($connect, (string) $cost);
+                    $safeCostCurr = mysqli_real_escape_string($connect, (string) $cost_curr);
+                    $safeAgentCost = mysqli_real_escape_string($connect, (string) $agent_cost);
+                    $safePkgPrice = mysqli_real_escape_string($connect, (string) $pkg_price);
+                    $safeCurUnit = mysqli_real_escape_string($connect, (string) $cur_unit);
+                    $safeProdList = mysqli_real_escape_string($connect, (string) $prod_list);
+                    $safeBarcodeSlotTotal = mysqli_real_escape_string($connect, (string) $barcode_slot_total);
+                    $safeDataRemark = mysqli_real_escape_string($connect, (string) $dataRemark);
+
+                    $query = "INSERT INTO " . $tblName . "(name,item_code,item_description,brand,cost,cost_curr,agent_cost,price,currency_unit,product,barcode_slot_total,remark,create_by,create_date,create_time) VALUES ('$safeCurrentDataName','$safeItemCode','$safeItemDescription','$safeBrand','$safeCost', '$safeCostCurr','$safeAgentCost','$safePkgPrice','$safeCurUnit','$safeProdList','$safeBarcodeSlotTotal','$safeDataRemark','" . USER_ID . "',curdate(),curtime())";
                     $returnData = mysqli_query($connect, $query);
-                    $dataID = $connect->insert_id;
+                    if ($returnData) {
+                        $dataID = $connect->insert_id;
+                        generateDBData($tblName, $connect);
+                    } else {
+                        $errorMsg = mysqli_error($connect);
+                        $act = "F";
+                    }
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
                     $act = "F";
@@ -288,8 +309,28 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if ($oldvalarr && $chgvalarr) {
-                        $query = "UPDATE " . $tblName . " SET name ='$currentDataName', item_code='$item_code', item_description='$item_description', brand='$brand',cost='$cost',cost_curr='$cost_curr',agent_cost='$agent_cost',price ='$pkg_price', currency_unit ='$cur_unit', product ='$prod_list', barcode_slot_total ='$barcode_slot_total', remark ='$dataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
+                        $safeCurrentDataName = mysqli_real_escape_string($connect, (string) $currentDataName);
+                        $safeItemCode = mysqli_real_escape_string($connect, (string) $item_code);
+                        $safeItemDescription = mysqli_real_escape_string($connect, (string) $item_description);
+                        $safeBrand = mysqli_real_escape_string($connect, (string) $brand);
+                        $safeCost = mysqli_real_escape_string($connect, (string) $cost);
+                        $safeCostCurr = mysqli_real_escape_string($connect, (string) $cost_curr);
+                        $safeAgentCost = mysqli_real_escape_string($connect, (string) $agent_cost);
+                        $safePkgPrice = mysqli_real_escape_string($connect, (string) $pkg_price);
+                        $safeCurUnit = mysqli_real_escape_string($connect, (string) $cur_unit);
+                        $safeProdList = mysqli_real_escape_string($connect, (string) $prod_list);
+                        $safeBarcodeSlotTotal = mysqli_real_escape_string($connect, (string) $barcode_slot_total);
+                        $safeDataRemark = mysqli_real_escape_string($connect, (string) $dataRemark);
+                        $safeDataId = (int) $dataID;
+
+                        $query = "UPDATE " . $tblName . " SET name ='$safeCurrentDataName', item_code='$safeItemCode', item_description='$safeItemDescription', brand='$safeBrand',cost='$safeCost',cost_curr='$safeCostCurr',agent_cost='$safeAgentCost',price ='$safePkgPrice', currency_unit ='$safeCurUnit', product ='$safeProdList', barcode_slot_total ='$safeBarcodeSlotTotal', remark ='$safeDataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$safeDataId'";
                         $returnData = mysqli_query($connect, $query);
+                        if (!$returnData) {
+                            $errorMsg = mysqli_error($connect);
+                            $act = "F";
+                        } else {
+                            generateDBData($tblName, $connect);
+                        }
                     } else {
                         $act = 'NC';
                     }
@@ -316,11 +357,11 @@ if (post('actionBtn')) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, $returnData ? '' : $errorMsg);
                 } else if ($pageAction == 'Edit') {
                     $log['oldval']  = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, $returnData ? '' : $errorMsg);
                 }
                 audit_log($log);
             }

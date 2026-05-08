@@ -741,11 +741,17 @@ body.task-global-sidebar-open #dispTable {
   margin-top: 20px;
 }
 
+.autocomplete {
+  position: relative;
+}
+
 .autocomplete .searchResult {
   list-style: none;
   padding: 0px;
-  width: 0px;
+  width: 100%;
   position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
   margin: 0;
   background: white;
   border: 1px solid #000000;
@@ -768,6 +774,31 @@ body.task-global-sidebar-open #dispTable {
 .autocomplete .searchResult li:hover {
   cursor: pointer;
   background: #cacfd2;
+}
+
+.input-group.sor-pkg-row,
+.input-group.sor-brand-row {
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent;
+  padding: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.sor-pkg-row > .sor-pkg-input,
+.sor-brand-row > .sor-brand-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  border: 1px solid #ced4da;
+  border-radius: 0.25rem !important;
+}
+
+.sor-pkg-row > .sor-remove-row-btn,
+.sor-brand-row > .sor-remove-row-btn {
+  flex: 0 0 auto;
+  border-radius: 0 !important;
 }
 
 .readonlyInput {
