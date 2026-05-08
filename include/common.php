@@ -332,11 +332,13 @@ function isStatusFieldAvailable($tbl, $conn)
 function isDuplicateRecord($fieldName, $fieldValue, $tbl, $connect, $primaryKeyValue)
 {
 	if ($fieldValue !== null) {
-		$query = "SELECT COUNT(*) as count FROM `$tbl` WHERE `$fieldName` = '$fieldValue' AND `status` = 'A'";
+		$safeFieldValue = mysqli_real_escape_string($connect, (string) $fieldValue);
+		$query = "SELECT COUNT(*) as count FROM `$tbl` WHERE `$fieldName` = '$safeFieldValue' AND `status` = 'A'";
 		//Help to check the query where wrong
 		// If editing an existing record, exclude the current record from the duplicate check
 		if ($primaryKeyValue) {
-			$query .= " AND id != '$primaryKeyValue'";
+			$safePrimaryKeyValue = mysqli_real_escape_string($connect, (string) $primaryKeyValue);
+			$query .= " AND id != '$safePrimaryKeyValue'";
 		}
 
 		$result = mysqli_query($connect, $query);
@@ -347,6 +349,8 @@ function isDuplicateRecord($fieldName, $fieldValue, $tbl, $connect, $primaryKeyV
 			return $count > 0; // If count is greater than 0, it's a duplicate
 		}
 	}
+
+	return false;
 }
 
 //example: isDuplicateRecordWithConditions(['month', 'year'], [$btb_month, $btb_year], $tblName, $finance_connect, $dataID)
