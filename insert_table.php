@@ -1189,6 +1189,74 @@ if ($conn->select_db($db_cms)) {
         KEY `idx_task_project_name` (`name`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
+    $createCustomerLevelTableSql = "CREATE TABLE IF NOT EXISTS `" . CUS_LEVEL . "` (
+        `id` INT NOT NULL AUTO_INCREMENT,
+        `name` VARCHAR(100) CHARACTER SET latin1 COLLATE latin1_swedish_ci DEFAULT NULL,
+        `colorCode` VARCHAR(12) CHARACTER SET latin1 COLLATE latin1_swedish_ci DEFAULT NULL,
+        `create_by` VARCHAR(255) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(255) CHARACTER SET latin1 COLLATE latin1_swedish_ci DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) CHARACTER SET latin1 COLLATE latin1_swedish_ci DEFAULT 'A',
+        `purchaseAmountFrom` DECIMAL(10,2) DEFAULT NULL,
+        `purchaseAmountUntil` DECIMAL(10,2) DEFAULT NULL,
+        `currency` INT DEFAULT NULL,
+        `remark` VARCHAR(255) CHARACTER SET latin1 COLLATE latin1_swedish_ci DEFAULT NULL,
+        PRIMARY KEY (`id`)
+    ) ENGINE=MyISAM DEFAULT CHARSET=latin1";
+
+    if ($conn->query($createCustomerLevelTableSql)) {
+        echo "<p style='color:green;'>Verified table `" . CUS_LEVEL . "` is ready.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . CUS_LEVEL . "`: " . $conn->error . "</p>";
+    }
+
+    $createCustomerRepeatTableSql = "CREATE TABLE IF NOT EXISTS `" . CUS_REPEAT . "` (
+        `id` INT NOT NULL AUTO_INCREMENT,
+        `name` VARCHAR(100) CHARACTER SET latin1 COLLATE latin1_swedish_ci DEFAULT NULL,
+        `colorCode` VARCHAR(12) CHARACTER SET latin1 COLLATE latin1_swedish_ci DEFAULT NULL,
+        `create_by` VARCHAR(255) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(255) CHARACTER SET latin1 COLLATE latin1_swedish_ci DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) CHARACTER SET latin1 COLLATE latin1_swedish_ci DEFAULT 'A',
+        `orderFrequencyFrom` DECIMAL(10,2) DEFAULT NULL,
+        `orderFrequencyUntil` DECIMAL(10,2) DEFAULT NULL,
+        `remark` VARCHAR(255) CHARACTER SET latin1 COLLATE latin1_swedish_ci DEFAULT NULL,
+        PRIMARY KEY (`id`)
+    ) ENGINE=MyISAM DEFAULT CHARSET=latin1";
+
+    if ($conn->query($createCustomerRepeatTableSql)) {
+        echo "<p style='color:green;'>Verified table `" . CUS_REPEAT . "` is ready.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . CUS_REPEAT . "`: " . $conn->error . "</p>";
+    }
+
+    $createMessageShortcutsTableSql = "CREATE TABLE IF NOT EXISTS `" . MESSAGE_SHORTCUTS . "` (
+        `id` INT NOT NULL AUTO_INCREMENT,
+        `shortcuts_tag` VARCHAR(120) NOT NULL,
+        `shortcuts_message` MEDIUMTEXT DEFAULT NULL,
+        `create_by` VARCHAR(255) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(255) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        PRIMARY KEY (`id`),
+        KEY `idx_message_shortcuts_tag_status` (`shortcuts_tag`, `status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createMessageShortcutsTableSql)) {
+        echo "<p style='color:green;'>Verified table `" . MESSAGE_SHORTCUTS . "` is ready.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . MESSAGE_SHORTCUTS . "`: " . $conn->error . "</p>";
+    }
+
     if ($conn->query($createTaskProjectSql)) {
         echo "<p style='color:green;'>Verified table `" . TASK_PROJECT . "` for task projects.</p>";
     } else {
@@ -1861,16 +1929,19 @@ if ($conn->select_db($db_cms)) {
         (138, 'Sheets', '1,2,3,4', 'Task Sheets Management', '1', CURDATE(), CURTIME(), 'A'),
         (139, 'Project Task', '1,2,3,4', 'Project task navigation', '1', CURDATE(), CURTIME(), 'A'),
         (140, 'Project Settings', '1,2,3,4', 'Project task settings management', '1', CURDATE(), CURTIME(), 'A'),
-        (141, 'Project User Access', '1,2,3,4', 'Project task user access management', '1', CURDATE(), CURTIME(), 'A')
+        (141, 'Project User Access', '1,2,3,4', 'Project task user access management', '1', CURDATE(), CURTIME(), 'A'),
+        (142, 'Customer Level', '1,2,3,4', 'Customer level management', '1', CURDATE(), CURTIME(), 'A'),
+        (143, 'Customer Repeat', '1,2,3,4', 'Customer repeat management', '1', CURDATE(), CURTIME(), 'A'),
+        (144, 'Message Shortcuts', '1,2,3,4', 'Message shortcuts management', '1', CURDATE(), CURTIME(), 'A')
         ON DUPLICATE KEY UPDATE
             `name` = VALUES(`name`),
             `pins` = VALUES(`pins`),
             `remark` = VALUES(`remark`),
             `status` = 'A'";
     if ($conn->query($taskPinGroupSql)) {
-        echo "<p style='color:green;'>Verified pin groups 136-141 for task management.</p>";
+        echo "<p style='color:green;'>Verified pin groups 136-144 for task and customer settings management.</p>";
     } else {
-        echo "<p style='color:red;'>Failed creating task pin groups 136-141: " . $conn->error . "</p>";
+        echo "<p style='color:red;'>Failed creating task/customer setting pin groups 136-144: " . $conn->error . "</p>";
     }
 
     foreach (array(1, 2, 3) as $groupId) {
@@ -1892,6 +1963,8 @@ if ($conn->select_db($db_cms)) {
             $updatedPins = addAccessToPinBlock($updatedPins, 139, array(1, 2, 3, 4));
             $updatedPins = addAccessToPinBlock($updatedPins, 140, array(1, 2, 3, 4));
             $updatedPins = addAccessToPinBlock($updatedPins, 141, array(1, 2, 3, 4));
+            $updatedPins = addAccessToPinBlock($updatedPins, 142, array(1, 2, 3, 4));
+            $updatedPins = addAccessToPinBlock($updatedPins, 143, array(1, 2, 3, 4));
         }
 
         if ($updatedPins !== $currentPins) {
@@ -1903,6 +1976,46 @@ if ($conn->select_db($db_cms)) {
             }
         } else {
             echo "<p style='color:green;'>Verified task pin access already exists for `user_group` id " . (int) $groupId . ".</p>";
+        }
+    }
+
+    $messageShortcutAccessGroups = array();
+    $messageShortcutUserResult = $conn->query("SELECT DISTINCT `access_id` FROM `user` WHERE `id` IN (1, 2) AND `status` = 'A'");
+    if ($messageShortcutUserResult) {
+        while ($messageShortcutUserRow = $messageShortcutUserResult->fetch_assoc()) {
+            $accessId = isset($messageShortcutUserRow['access_id']) ? (int) $messageShortcutUserRow['access_id'] : 0;
+            if ($accessId > 0) {
+                $messageShortcutAccessGroups[] = $accessId;
+            }
+        }
+    }
+
+    if (empty($messageShortcutAccessGroups)) {
+        $messageShortcutAccessGroups = array(1, 2);
+    }
+
+    $messageShortcutAccessGroups = array_values(array_unique($messageShortcutAccessGroups));
+
+    foreach ($messageShortcutAccessGroups as $groupId) {
+        $userGroupResult = $conn->query("SELECT `pins` FROM `user_group` WHERE `id` = " . (int) $groupId . " LIMIT 1");
+        if (!$userGroupResult || $userGroupResult->num_rows === 0) {
+            echo "<p style='color:orange;'>`user_group` id " . (int) $groupId . " not found. Skipped Message Shortcuts pin assignment.</p>";
+            continue;
+        }
+
+        $userGroupRow = $userGroupResult->fetch_assoc();
+        $currentPins = isset($userGroupRow['pins']) ? (string) $userGroupRow['pins'] : '';
+        $updatedPins = addAccessToPinBlock($currentPins, 144, array(1, 2, 3, 4));
+
+        if ($updatedPins !== $currentPins) {
+            $safePins = $conn->real_escape_string($updatedPins);
+            if ($conn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $groupId)) {
+                echo "<p style='color:green;'>Verified Message Shortcuts pin access for `user_group` id " . (int) $groupId . ".</p>";
+            } else {
+                echo "<p style='color:red;'>Failed updating Message Shortcuts pin access for `user_group` id " . (int) $groupId . ": " . $conn->error . "</p>";
+            }
+        } else {
+            echo "<p style='color:green;'>Verified Message Shortcuts pin access already exists for `user_group` id " . (int) $groupId . ".</p>";
         }
     }
 } else {

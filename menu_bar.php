@@ -253,12 +253,15 @@ $menuList = array(
                 'y',
                 'expand' => array(
                     array('Customer Segmentation', 'mdi mdi-account-group-outline', $SITEURL . '/cus_segmentation_table.php', '29'),
+                    array('Customer Level', 'mdi mdi-account-group-outline', $SITEURL . '/cus_level_table.php', '142'),
+                    array('Customer Repeat', 'mdi mdi-account-group-outline', $SITEURL . '/cus_repeat_table.php', '143'),
+                    array('Message Shortcuts', 'mdi mdi-message-text-outline', $SITEURL . '/message_shortcuts_table.php', '144'),
                     array('Tag', 'mdi mdi-account-group-outline', $SITEURL . '/tagTable.php', '35'),
                 ),
-                'pin' => array('29', '35'),
+                'pin' => array('29', '142', '143', '144', '35'),
             ),
         ),
-        'pin' => array('85', '91', '75', '84', '38', '29', '35')
+        'pin' => array('85', '91', '75', '84', '38', '29', '142', '143', '144', '35')
     ),
     array(
         'Order',
