@@ -219,6 +219,7 @@ if (post('actionBtn')) {
                     $returnData = mysqli_query($connect, $query);
                     if ($returnData) {
                         $dataID = $connect->insert_id;
+                        generateDBData($tblName, $connect);
                     } else {
                         $errorMsg = mysqli_error($connect);
                         $act = "F";
@@ -327,6 +328,8 @@ if (post('actionBtn')) {
                         if (!$returnData) {
                             $errorMsg = mysqli_error($connect);
                             $act = "F";
+                        } else {
+                            generateDBData($tblName, $connect);
                         }
                     } else {
                         $act = 'NC';

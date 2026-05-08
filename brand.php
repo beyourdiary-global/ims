@@ -213,7 +213,10 @@ if (post('actionBtn')) {
 
                     $query = "INSERT INTO " . $tblName . "(name,company,remark,create_by,create_date,create_time) VALUES ('$safeName','$safeCompany','$safeRemark','" . USER_ID . "',curdate(),curtime())";
                     $returnData = mysqli_query($connect, $query);
-                    $dataID = $connect->insert_id;
+                    if ($returnData) {
+                        $dataID = $connect->insert_id;
+                        generateDBData($tblName, $connect);
+                    }
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
                     $act = "F";
@@ -249,6 +252,9 @@ if (post('actionBtn')) {
 
                         $query = "UPDATE " . $tblName . " SET name ='$safeName', company ='$safeCompany', remark ='$safeRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$safeID'";
                         $returnData = mysqli_query($connect, $query);
+                        if ($returnData) {
+                            generateDBData($tblName, $connect);
+                        }
                     } else {
                         $act = 'NC';
                     }
