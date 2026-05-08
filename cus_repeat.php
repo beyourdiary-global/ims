@@ -1,49 +1,43 @@
 <?php
-$currentPagePin = 29;
-$pageTitle = "Customer Segmentation";
+$currentPagePin = 143;
+$pageTitle = "Customer Repeat";
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+$resolvedPageTitle = getPinGroupNameById($connect, $currentPagePin);
+if (!empty($resolvedPageTitle)) {
+    $pageTitle = $resolvedPageTitle;
+}
 
-$tblName = CUR_SEGMENTATION;
+$tblName = CUS_REPEAT;
 
-//Current Page Action And Data ID
 $dataID = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
-//Page Redirect Link , Clean LocalStorage , Error Alert Msg 
-$redirect_page = $SITEURL . '/cus_segmentation_table.php';
+$redirect_page = $SITEURL . '/cus_repeat_table.php';
 $redirectLink = ("<script>location.href = '$redirect_page';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
-//Check a current page pin is exist or not
 $pageAction = getPageAction($act);
 $pageActionTitle = $pageAction . " " . $pageTitle;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 
-//Checking The Page ID , Action , Pin Access Exist Or Not
 if (!($dataID) && !($act) || !isActionAllowed($pageAction, $pinAccess))
     echo $redirectLink;
 
-//Get The Data From Database
 $rst = getData('*', "id = '$dataID'", '', $tblName, $connect);
 
-//Checking Data Error When Retrieved From Database
 if ($act != 'I' && (!$rst || !($row = $rst->fetch_assoc()))) {
     $errorExist = 1;
-    // $_SESSION['tempValConfirmBox'] = true;
     $act = "F";
 }
 
-//Delete Data
 if ($act == 'D') {
     deleteRecord($tblName, '', $dataID, $row['name'], $connect, $connect, $cdate, $ctime, $pageTitle);
     $_SESSION['delChk'] = 1;
 }
 
-//View Data
 if ($dataID && !$act && USER_ID && !$_SESSION['viewChk'] && !$_SESSION['delChk']) {
 
     $_SESSION['viewChk'] = 1;
@@ -68,7 +62,6 @@ if ($dataID && !$act && USER_ID && !$_SESSION['viewChk'] && !$_SESSION['delChk']
     audit_log($log);
 }
 
-//Edit And Add Data
 if (post('actionBtn')) {
 
     $action = post('actionBtn');
@@ -79,9 +72,8 @@ if (post('actionBtn')) {
 
             $currentDataName = postSpaceFilter('currentDataName');
             $colorSegmentation =  postSpaceFilter('segmentationColor');
-            $currentDataboxFrom = postSpaceFilter('boxFrom');
-            $currentDataboxUntil = postSpaceFilter('boxUntil');
-            $brandSeries = postSpaceFilter('brandSeries_hidden');
+            $orderFrequencyFrom = postSpaceFilter('orderFrequencyFrom');
+            $orderFrequencyUntil = postSpaceFilter('orderFrequencyUntil');
             $dataRemark = postSpaceFilter('currentDataRemark');
 
             $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
@@ -109,22 +101,27 @@ if (post('actionBtn')) {
                         array_push($datafield, 'name');
                     }
 
-                    if ($colorSegmentation)
+                    if ($colorSegmentation) {
                         array_push($newvalarr, $colorSegmentation);
+                        array_push($datafield, 'colorCode');
+                    }
 
-                    if ($currentDataboxFrom)
-                        array_push($newvalarr, $currentDataboxFrom);
+                    if ($orderFrequencyFrom !== '') {
+                        array_push($newvalarr, $orderFrequencyFrom);
+                        array_push($datafield, 'orderFrequencyFrom');
+                    }
 
-                    if ($currentDataboxUntil)
-                        array_push($newvalarr, $currentDataboxUntil);
+                    if ($orderFrequencyUntil !== '') {
+                        array_push($newvalarr, $orderFrequencyUntil);
+                        array_push($datafield, 'orderFrequencyUntil');
+                    }
 
-                    if ($dataRemark)
+                    if ($dataRemark) {
                         array_push($newvalarr, $dataRemark);
+                        array_push($datafield, 'remark');
+                    }
 
-                    if ($brandSeries)
-                        array_push($newvalarr, $brandSeries);
-
-                    $query = "INSERT INTO " . $tblName . "(name,colorCode,remark,boxFrom,boxUntil,brandSeries,create_by,create_date,create_time) VALUES ('$currentDataName','$colorSegmentation','$dataRemark','$currentDataboxFrom','$currentDataboxUntil','$brandSeries','" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . "(name,colorCode,remark,orderFrequencyFrom,orderFrequencyUntil,create_by,create_date,create_time) VALUES ('$currentDataName','$colorSegmentation','$dataRemark','$orderFrequencyFrom','$orderFrequencyUntil','" . USER_ID . "',curdate(),curtime())";
 
                     $returnData = mysqli_query($connect, $query);
                     $dataID = $connect->insert_id;
@@ -151,19 +148,16 @@ if (post('actionBtn')) {
                         array_push($datafield, 'colorCode');
                     }
 
-                    if ($row['box_from'] != $currentDataboxFrom) {
-                        array_push($oldvalarr, $row['boxFrom']);
-                        array_push($chgvalarr, $currentDataboxFrom);
+                    if ($row['orderFrequencyFrom'] != $orderFrequencyFrom) {
+                        array_push($oldvalarr, $row['orderFrequencyFrom']);
+                        array_push($chgvalarr, $orderFrequencyFrom);
+                        array_push($datafield, 'orderFrequencyFrom');
                     }
 
-                    if ($row['box_until'] != $currentDataboxUntil) {
-                        array_push($oldvalarr, $row['boxUntil']);
-                        array_push($chgvalarr, $currentDataboxUntil);
-                    }
-
-                    if ($row['brandSeries'] != $brandSeries) {
-                        array_push($oldvalarr, $row['brandSeries']);
-                        array_push($chgvalarr, $brandSeries);
+                    if ($row['orderFrequencyUntil'] != $orderFrequencyUntil) {
+                        array_push($oldvalarr, $row['orderFrequencyUntil']);
+                        array_push($chgvalarr, $orderFrequencyUntil);
+                        array_push($datafield, 'orderFrequencyUntil');
                     }
 
                     if ($row['remark'] != $dataRemark) {
@@ -175,7 +169,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if ($oldvalarr && $chgvalarr) {
-                        $query = "UPDATE " . $tblName . " SET name ='$currentDataName', colorCode = '$colorSegmentation' , boxFrom='$currentDataboxFrom', boxUntil='$currentDataboxUntil', brandSeries='$brandSeries', remark ='$dataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
+                        $query = "UPDATE " . $tblName . " SET name ='$currentDataName', colorCode = '$colorSegmentation' , orderFrequencyFrom='$orderFrequencyFrom', orderFrequencyUntil='$orderFrequencyUntil', remark ='$dataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
                         $returnData = mysqli_query($connect, $query);
                         if ($returnData) {
                             $act = 'E';
@@ -191,7 +185,6 @@ if (post('actionBtn')) {
                 }
             }
 
-            // audit log
             if (isset($query)) {
 
                 $log = [
@@ -224,9 +217,6 @@ if (post('actionBtn')) {
             break;
     }
 }
-
-//Function(title, subtitle, page name, ajax url path, redirect path, action)
-//To show action dialog after finish certain action (eg. edit)
 
 if (isset($_SESSION['tempValConfirmBox'])) {
     unset($_SESSION['tempValConfirmBox']);
@@ -278,7 +268,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                 <label class=" form-label form_lbl" for="segmentationColor"><?php echo $pageTitle ?> Color</label><br>
                                 <div class="col d-flex justify-content-start align-items-center">
                                     <input type="color" name="segmentationColor" id="segmentationColor" <?php if ($act == '') echo 'disabled ' ?> value="<?php if (isset($row['colorCode'])) echo $row['colorCode'] ?>" class="form-control" style="height: 40px;">
-                                    <span id="color-display"><?php if (isset($dataExisted) && isset($row['colorCode'])) echo $row['colorCode']; ?></span>
+                                    <span id="color-display"><?php if (isset($row['colorCode'])) echo $row['colorCode']; ?></span>
                                 </div>
                                 <div id="err_msg">
                                     <span class="mt-n1"><?php if (isset($err2)) echo $err2; ?></span>
@@ -290,50 +280,18 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                     <div class="form-group">
                         <div class="row">
                             <div class="col-sm mb-3">
-                                <label class="form-label form_lbl" for="boxFrom">Box From*</label>
-                                <input class="form-control" type="text" name="boxFrom" id="boxFrom" value="<?php if (isset($row['boxFrom'])) echo $row['boxFrom'] ?>" <?php if ($act == '') echo 'readonly' ?> required autocomplete="off" oninput="validateNumericInput(this, 'boxFromErrorMsg', 'boxUntilErrorMsg')">
-                                <div id="boxFromErrorMsg" class="error-message">
+                                <label class="form-label form_lbl" for="orderFrequencyFrom">Order Frequency From*</label>
+                                <input class="form-control" type="text" name="orderFrequencyFrom" id="orderFrequencyFrom" value="<?php if (isset($row['orderFrequencyFrom'])) echo $row['orderFrequencyFrom'] ?>" <?php if ($act == '') echo 'readonly' ?> required autocomplete="off" oninput="validateNumericInput(this, 'orderFrequencyFromErrorMsg', 'orderFrequencyUntilErrorMsg')">
+                                <div id="orderFrequencyFromErrorMsg" class="error-message">
                                     <span class="mt-n1"></span>
                                 </div>
                             </div>
                             <div class="col-sm mb-3">
-                                <label class="form-label form_lbl" for="boxUntil">Box Until*</label>
-                                <input class="form-control" type="text" name="boxUntil" id="boxUntil" value="<?php if (isset($row['boxUntil'])) echo $row['boxUntil'] ?>" <?php if ($act == '') echo 'readonly' ?> required autocomplete="off" oninput="validateNumericInput(this, 'boxUntilErrorMsg', 'boxFromErrorMsg')">
-                                <div id="boxUntilErrorMsg" class="error-message">
+                                <label class="form-label form_lbl" for="orderFrequencyUntil">Order Frequency Until*</label>
+                                <input class="form-control" type="text" name="orderFrequencyUntil" id="orderFrequencyUntil" value="<?php if (isset($row['orderFrequencyUntil'])) echo $row['orderFrequencyUntil'] ?>" <?php if ($act == '') echo 'readonly' ?> required autocomplete="off" oninput="validateNumericInput(this, 'orderFrequencyUntilErrorMsg', 'orderFrequencyFromErrorMsg')">
+                                <div id="orderFrequencyUntilErrorMsg" class="error-message">
                                     <span class="mt-n1"></span>
                                 </div>
-                            </div>
-                            <div class="col-sm mb-3 autocomplete">
-                            <label class="form-label form_lbl" id="brandSeries_lbl" for="brandSeries">Brand Series</label>
-                                <?php
-                                                        unset($echoVal);
-
-                                                        if (isset($row['brandSeries']))
-                                                            $echoVal = $row['brandSeries'];
-
-                                                        if (isset($echoVal)) {
-                                                            $brd_rst = getData('name', "id = '$echoVal'", '', BRD_SERIES, $connect);
-                                                            if (!$brd_rst) {
-                                                                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-                                                                echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
-                                                            }
-                                                            $brd_row = $brd_rst->fetch_assoc();
-                                                        }
-                                                        ?>
-                                                        <input class="form-control" type="text" name="brandSeries"
-                                                            id="brandSeries" <?php if ($act == '')
-                                                                echo 'disabled' ?>
-                                                                value="<?php echo !empty($echoVal) ? $brd_row['name'] : '' ?>">
-                                                        <input type="hidden" name="brandSeries_hidden" id="brandSeries_hidden"
-                                                            value="<?php echo (isset($row['brandSeries'])) ? $row['brandSeries'] : ''; ?>">
-
-                                                        <?php if (isset($curr_err)) { ?>
-                                                            <div id="err_msg">
-                                                                <span class="mt-n1">
-                                                                    <?php echo $brandseries_err; ?>
-                                                                </span>
-                                                            </div>
-                                                        <?php } ?>
                             </div>
                         </div>
                     </div>
@@ -353,7 +311,6 @@ if (isset($_SESSION['tempValConfirmBox'])) {
         </div>
     </div>
     <script>
-        //Initial Page And Action Value
         var page = "<?= $pageTitle ?>";
         var action = "<?php echo isset($act) ? $act : ''; ?>";
 
@@ -362,7 +319,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
         setButtonColor();
         preloader(300, action);
         
-        <?php include "js/cus_segmentation.js" ?>
+        <?php include "js/cus_repeat.js" ?>
     </script>
 
 </body>
