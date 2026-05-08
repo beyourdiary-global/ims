@@ -2395,7 +2395,14 @@ function commonBuildMobileStickyFormActions() {
   var buttons = Array.prototype.slice.call(document.querySelectorAll(selector)).filter(function (
     button,
   ) {
+    var parentForm = button.closest("form");
+    var isUploadAnalyzeButton =
+      parentForm &&
+      parentForm.querySelector("input[type='file']") &&
+      !button.hasAttribute("formnovalidate");
+
     return (
+      !isUploadAnalyzeButton &&
       !button.closest("td") &&
       !button.closest(".mobile-floating-action-bar") &&
       !button.closest(".mobile-sticky-form-actions")

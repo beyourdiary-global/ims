@@ -556,12 +556,14 @@ if (!function_exists('sorImpRehomeAttachmentByCompany')) {
 if (!function_exists('sorImpDateToYmd')) {
     function sorImpDateToYmd($text)
     {
-        $text = trim(str_replace(array('"', "'", ','), '', (string) $text));
-        if ($text === '') return '';
-        $text = strtr($text, array('O' => '0', 'o' => '0', 'I' => '1', 'l' => '1'));
-        $text = preg_replace('/\s+/', '', (string) $text);
+        $rawText = trim(str_replace(array('"', "'"), '', (string) $text));
+        if ($rawText === '') return '';
 
-        if (preg_match('/(\d{4})[\/.\-\s]+(\d{1,2})[\/.\-\s]+(\d{1,2})/', $text, $m)) {
+        $numericText = strtr($rawText, array('O' => '0', 'o' => '0', 'I' => '1', 'l' => '1'));
+        $numericText = str_replace(',', '', (string) $numericText);
+        $numericText = preg_replace('/\s+/', '', (string) $numericText);
+
+        if (preg_match('/(\d{4})[\/.\-\s]+(\d{1,2})[\/.\-\s]+(\d{1,2})/', $numericText, $m)) {
             $y = (int) $m[1];
             $mo = (int) $m[2];
             $d = (int) $m[3];
@@ -570,7 +572,7 @@ if (!function_exists('sorImpDateToYmd')) {
             }
         }
 
-        if (preg_match('/(\d{1,2})[\/.\-\s]+(\d{1,2})[\/.\-\s]+(\d{4})/', $text, $m)) {
+        if (preg_match('/(\d{1,2})[\/.\-\s]+(\d{1,2})[\/.\-\s]+(\d{4})/', $numericText, $m)) {
             $d = (int) $m[1];
             $mo = (int) $m[2];
             $y = (int) $m[3];
@@ -579,7 +581,12 @@ if (!function_exists('sorImpDateToYmd')) {
             }
         }
 
-        $ts = strtotime(str_replace('/', '-', $text));
+        $textualDate = preg_replace('/\s+/', ' ', str_replace(',', ' ', (string) $rawText));
+        $textualDate = trim((string) $textualDate);
+        $ts = strtotime(str_replace('/', '-', $textualDate));
+        if ($ts !== false) return date('Y-m-d', $ts);
+
+        $ts = strtotime(str_replace('/', '-', $numericText));
         if ($ts !== false) return date('Y-m-d', $ts);
         return '';
     }
@@ -617,13 +624,21 @@ if (!function_exists('sorImpFindInvoiceDate')) {
     {
         $lines = sorImpGetPdfTextLines((string) $text);
         foreach ($lines as $line) {
-            if (!preg_match('/(?:invoice|voice)\s*date/i', (string) $line)) continue;
+            if (!preg_match('/(?:(?:invoice|voice|invoices?)\s*date|\bdate\b)/i', (string) $line)) continue;
             if (preg_match('/([0-9OIl]{4}[\/.\-][0-9OIl]{1,2}[\/.\-][0-9OIl]{1,2}|[0-9OIl]{1,2}[\/.\-][0-9OIl]{1,2}[\/.\-][0-9OIl]{4})/iu', (string) $line, $m)) {
                 $v = sorImpDateToYmd((string) $m[1]);
                 if ($v !== '') return $v;
             }
+            if (preg_match('/\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2},?\s+\d{4}\b/iu', (string) $line, $m)) {
+                $v = sorImpDateToYmd((string) $m[0]);
+                if ($v !== '') return $v;
+            }
         }
         if (preg_match('/(?:invoice|voice)\s*date[^0-9OIl]{0,20}([0-9OIl]{4}[\/.\-][0-9OIl]{1,2}[\/.\-][0-9OIl]{1,2}|[0-9OIl]{1,2}[\/.\-][0-9OIl]{1,2}[\/.\-][0-9OIl]{4})/iu', (string) $text, $m)) {
+            $v = sorImpDateToYmd((string) $m[1]);
+            if ($v !== '') return $v;
+        }
+        if (preg_match('/(?:invoice|voice|invoices?|order(?:ed)?)?\s*date[^A-Za-z]{0,10}((?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2},?\s+\d{4})/iu', (string) $text, $m)) {
             $v = sorImpDateToYmd((string) $m[1]);
             if ($v !== '') return $v;
         }
@@ -656,6 +671,121 @@ if (!function_exists('sorImpFindInvoiceDate')) {
         }
 
         return '';
+    }
+}
+
+if (!function_exists('sorImpParseChooseAnyInvoiceItems')) {
+    function sorImpParseChooseAnyInvoiceItems($text)
+    {
+        $lineItems = array();
+        $lines = sorImpGetPdfTextLines($text);
+        if (count($lines) === 0) return $lineItems;
+
+        $headerIdx = -1;
+        for ($i = 0; $i < count($lines); $i++) {
+            $line = trim((string) $lines[$i]);
+            if (preg_match('/^product(?:\s+sku)?$/i', $line) || (preg_match('/\bproduct\b/i', $line) && preg_match('/\bsku\b/i', $line))) {
+                $headerIdx = $i;
+                break;
+            }
+        }
+        if ($headerIdx < 0) {
+            return $lineItems;
+        }
+
+        $packageText = '';
+        $products = array();
+        $rowQty = 1;
+        $lineTotal = 0.00;
+        $mode = '';
+        $lastProductIdx = -1;
+
+        $foundTotal = sorImpFindTotalPrice($text);
+        if ($foundTotal !== '') {
+            $lineTotal = (float) $foundTotal;
+        }
+
+        for ($i = $headerIdx + 1; $i < count($lines); $i++) {
+            $line = sorImpNorm($lines[$i]);
+            if ($line === '') continue;
+
+            if (preg_match('/^(sub\s*total|grand\s*total|total\s*amount|remarks?|note|thank you)\b/i', $line)) {
+                break;
+            }
+
+            if ($packageText === '' && !preg_match('/^(choose\s+any|free\s+item|qty\b|sku\b)/i', $line)) {
+                $packageText = sorImpSanitizeExtractedName($line);
+                continue;
+            }
+
+            if (preg_match('/^free\s+item\b/i', $line)) {
+                $mode = 'free';
+                continue;
+            }
+
+            if (preg_match('/^choose\s+any\b/i', $line)) {
+                $mode = 'paid';
+                continue;
+            }
+
+            if (preg_match('/^qty\s*[:：]?\s*(\d{1,4})\b/i', $line, $m)) {
+                $qty = (int) $m[1];
+                if ($qty > 0 && $lastProductIdx >= 0 && isset($products[$lastProductIdx])) {
+                    $products[$lastProductIdx]['qty'] = $qty;
+                }
+                continue;
+            }
+
+            if ($mode === 'free') {
+                continue;
+            }
+
+            if (preg_match('/\bsku\b/i', $line)) {
+                continue;
+            }
+
+            if (sorImpIsNoiseLine($line) || sorImpIsCustomerInfoLine($line)) {
+                continue;
+            }
+
+            $productName = sorImpSanitizeExtractedName($line);
+            if ($productName === '') {
+                continue;
+            }
+
+            $products[] = array(
+                'name' => $productName,
+                'qty' => 1,
+            );
+            $lastProductIdx = count($products) - 1;
+        }
+
+        if ($packageText === '' || count($products) === 0) {
+            return array();
+        }
+
+        $packageText = sorImpNormalizePackageLabelText($packageText);
+        foreach ($products as $idx => $product) {
+            $products[$idx]['name'] = sorImpNormalizeProductLabelText($product['name']);
+            if ($products[$idx]['name'] === '') {
+                unset($products[$idx]);
+            }
+        }
+        $products = array_values($products);
+        if (count($products) === 0) {
+            return array();
+        }
+
+        $lineItems[] = array(
+            'index' => 1,
+            'package_text' => $packageText,
+            'products' => $products,
+            'row_qty' => $rowQty,
+            'line_total_price' => (float) $lineTotal,
+            'has_section_marker' => true,
+        );
+
+        return $lineItems;
     }
 }
 
@@ -692,6 +822,107 @@ if (!function_exists('sorImpFindTotalPrice')) {
         }
 
         return '';
+    }
+}
+
+if (!function_exists('sorImpParseMixMatchCandyInvoiceItems')) {
+    function sorImpParseMixMatchCandyInvoiceItems($text)
+    {
+        $lines = sorImpGetPdfTextLines($text);
+        if (count($lines) === 0) return array();
+
+        $packageText = '';
+        $products = array();
+        $mode = '';
+        $lastProductKey = '';
+        $lineTotal = 0.00;
+
+        $foundTotal = sorImpFindTotalPrice($text);
+        if ($foundTotal !== '') {
+            $lineTotal = (float) $foundTotal;
+        }
+
+        foreach ($lines as $lineRaw) {
+            $line = sorImpNorm($lineRaw);
+            if ($line === '') continue;
+
+            if ($packageText === '' && preg_match('/^mix\s*&\s*match/i', $line)) {
+                $packageText = sorImpSanitizeExtractedName($line);
+                continue;
+            }
+
+            if (preg_match('/^free\s+item\b/i', $line)) {
+                $mode = 'free';
+                continue;
+            }
+
+            if (preg_match('/^choose\s+any\b/i', $line)) {
+                $mode = 'paid';
+                continue;
+            }
+
+            if (preg_match('/^qty\s*[:：]?\s*(\d{1,4})\b/i', $line, $m)) {
+                $qty = (int) $m[1];
+                if ($qty > 0 && $lastProductKey !== '' && isset($products[$lastProductKey])) {
+                    if ($mode === 'free' || (int) $products[$lastProductKey]['qty'] > 0) {
+                        $products[$lastProductKey]['qty'] += $qty;
+                    } else {
+                        $products[$lastProductKey]['qty'] = $qty;
+                    }
+                }
+                continue;
+            }
+
+            if (preg_match('/^(sub\s*total|subtotal|grand\s*total|total\s*amount|payment|remarks?|note|thank you)\b/i', $line)) {
+                break;
+            }
+
+            if (!preg_match('/\bcandy\b/i', $line)) {
+                continue;
+            }
+
+            $productName = sorImpSanitizeExtractedName($line);
+            $productName = preg_replace('/[+]+$/', '', (string) $productName);
+            $productName = preg_replace('/\s+/', ' ', (string) $productName);
+            $productName = trim((string) $productName);
+            if ($productName === '') continue;
+
+            $productKey = sorImpLookup($productName);
+            if ($productKey === '') continue;
+
+            if (!isset($products[$productKey])) {
+                $products[$productKey] = array(
+                    'name' => $productName,
+                    'qty' => 0,
+                );
+            }
+            $lastProductKey = $productKey;
+        }
+
+        if ($packageText === '' || count($products) === 0) {
+            return array();
+        }
+
+        $productRows = array();
+        foreach ($products as $product) {
+            if ((int) $product['qty'] <= 0) continue;
+            $productRows[] = array(
+                'name' => (string) $product['name'],
+                'qty' => (int) $product['qty'],
+            );
+        }
+        if (count($productRows) === 0) {
+            return array();
+        }
+
+        return array(array(
+            'index' => 1,
+            'package_text' => sorImpSanitizeExtractedName($packageText),
+            'products' => $productRows,
+            'row_qty' => 1,
+            'line_total_price' => (float) $lineTotal,
+            'has_section_marker' => true,
+        ));
     }
 }
 
@@ -941,7 +1172,9 @@ if (!function_exists('sorImpNormalizePackageLabelText')) {
             $text = preg_replace('/rose[a-z]{2,}/iu', (string) $resolvedProductName, (string) $text);
             $text = preg_replace('/\b' . preg_quote((string) $resolvedProductName, '/') . '\s+' . preg_quote((string) $resolvedProductName, '/') . '\b/iu', (string) $resolvedProductName, (string) $text);
         }
-        $text = preg_replace('/\s+[A-Z]\d{1,4}\s*$/u', '', (string) $text);
+        if (!preg_match('/\bmix\s*&\s*match\b/i', (string) $text)) {
+            $text = preg_replace('/\s+[A-Z]\d{1,4}\s*$/u', '', (string) $text);
+        }
         $text = preg_replace('/\s+/', ' ', (string) $text);
         return trim((string) $text);
     }
@@ -1216,7 +1449,11 @@ if (!function_exists('sorImpParsePdfToRows')) {
         $warnings = array_merge($warnings, $ocrWarnings);
 
         if ($text === '') {
-            return array('rows' => array(), 'warnings' => array_merge($warnings, array('Unable to extract any text from ' . $pdfFile['name'] . '.')), 'ocr_text' => '');
+            return array(
+                'rows' => array(),
+                'warnings' => array_merge($warnings, array('Unable to extract any text from ' . $pdfFile['name'] . '.')),
+                'ocr_text' => '',
+            );
         }
         $invoiceNo = sorImpFindInvoiceNo($text, $pdfFile['name']);
         $invoiceDate = sorImpFindInvoiceDate($text);
@@ -1338,6 +1575,23 @@ if (!function_exists('sorImpParsePdfToRows')) {
 
         if ($currentItem !== null) {
             $lineItems[] = $currentItem;
+        }
+        $usedMixMatchInvoiceParser = false;
+        if (preg_match('/\bmix\s*&\s*match\b/i', (string) $text) && preg_match('/\bcandy\b/i', (string) $text)) {
+            $mixMatchItems = sorImpParseMixMatchCandyInvoiceItems($text);
+            if (count($mixMatchItems) > 0) {
+                $lineItems = $mixMatchItems;
+                $usedMixMatchInvoiceParser = true;
+            }
+        }
+        if (
+            !$usedMixMatchInvoiceParser &&
+            (count($lineItems) === 0 || preg_match('/\bchoose\s+any\b/i', (string) $text) || preg_match('/\bfree\s+item\b/i', (string) $text))
+        ) {
+            $chooseAnyItems = sorImpParseChooseAnyInvoiceItems($text);
+            if (count($chooseAnyItems) > 0) {
+                $lineItems = $chooseAnyItems;
+            }
         }
         $hasUsableLineItem = false;
         foreach ($lineItems as $li) {
@@ -1594,7 +1848,10 @@ if (!function_exists('sorImpParsePdfToRows')) {
             );
         }
 
-        return array('rows' => $rows, 'warnings' => $warnings);
+        return array(
+            'rows' => $rows,
+            'warnings' => $warnings,
+        );
     }
 }
 
