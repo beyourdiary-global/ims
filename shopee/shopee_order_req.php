@@ -115,9 +115,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
 
 if (post('updateStatusBtn')) {
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
-    $newStatus = post('updateStatusBtn'); // Will receive 'SP', 'OC', or 'C'
+    $newStatus = post('updateStatusBtn'); // Will receive 'SP', 'WAERD', 'OC', or 'C'
 
-    if (in_array($newStatus, ['SP', 'OC', 'C'])) {
+    if (in_array($newStatus, ['SP', 'WAERD', 'OC', 'C'])) {
         try {
             // 1. Get old data before update
             $getOldQuery = "SELECT order_status FROM " . $tblName . " WHERE id = " . intval($dataID);
@@ -139,7 +139,9 @@ if (post('updateStatusBtn')) {
 
                 $statusLabel = ($newStatus === 'SP')
                     ? "Processing"
-                    : (($newStatus === 'OC') ? "Order Received" : "Completed");
+                    : (($newStatus === 'WAERD')
+                        ? "Waiting Assign Estimate Received Date"
+                        : (($newStatus === 'OC') ? "Order Received" : "Completed"));
 
                 $log = [
                     'log_act'      => 'edit',
@@ -1413,16 +1415,26 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                         if (isset($row['order_status'])) {
                             // Clean the status string for matching
                             $statusKey = preg_replace('/[^a-z]/', '', strtolower(trim((string) $row['order_status'])));
+                            $estimatedReceivedDate = trim((string) (isset($row['estimated_received_date']) ? $row['estimated_received_date'] : ''));
                             
                             $isPendingToPack = ($statusKey === 'p' || $statusKey === 'pendingto' || $statusKey === 'pendingtopack');
                             $isProcessing = ($statusKey === 'sp' || $statusKey === 'processing');
+                            $isEstimatedAssigned = ($statusKey === 'aed' || $statusKey === 'assignedestimateddate');
 
                             // If status is 'P', show "UPDATE TO PROCESSING" and pass 'SP'
                             if ($isPendingToPack) {
                                 echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" id="updateStatusBtn" value="SP" formnovalidate>UPDATE TO PROCESSING</button>';
                             } 
-                            // If status is 'SP', show "UPDATE TO ORDER RECEIVED" and pass 'OC'
+                            // If status is 'SP' and date not assigned yet, show "UPDATE TO WAITING ASSIGN ESTIMATE RECEIVED DATE".
                             else if ($isProcessing) {
+                                if ($estimatedReceivedDate !== '') {
+                                    echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" id="updateStatusBtn" value="OC" formnovalidate>UPDATE TO ORDER RECEIVED</button>';
+                                } else {
+                                    echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" id="updateStatusBtn" value="WAERD" formnovalidate>UPDATE TO WAITING ASSIGN ESTIMATE RECEIVED DATE</button>';
+                                }
+                            }
+                            // If status is 'AED', show "UPDATE TO ORDER RECEIVED" and pass 'OC'
+                            else if ($isEstimatedAssigned) {
                                 echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" id="updateStatusBtn" value="OC" formnovalidate>UPDATE TO ORDER RECEIVED</button>';
                             }
                         }

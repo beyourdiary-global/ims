@@ -8,6 +8,51 @@ include_once '../checkCurrentPagePin.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);
+$canAssignEstimatedReceivedDate = isActionAllowed('Edit', $pinAccess);
+$estimatedDateToday = new DateTimeImmutable('today');
+$estimatedDateMin = $estimatedDateToday->modify('+1 day')->format('Y-m-d');
+$estimatedDateMax = $estimatedDateToday->modify('+10 days')->format('Y-m-d');
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceivedDateBtn')) {
+    if (!$canAssignEstimatedReceivedDate) {
+        echo "<script>alert('Security Error: You do not have permission to assign Estimate Received Dates.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+        exit;
+    }
+
+    $assignOrderId = postSpaceFilter('estimated_received_order_id');
+    $assignDate = postSpaceFilter('estimated_received_date');
+    $assignmentResult = assignEstimatedReceivedDate($finance_connect, FB_ORDER_REQ, $assignOrderId, $assignDate, USER_ID);
+
+    if ($assignmentResult['success']) {
+        $safeAssignedDate = isset($assignmentResult['date']) ? $assignmentResult['date'] : '';
+        $oldStatus = isset($assignmentResult['old_status']) ? (string) $assignmentResult['old_status'] : '';
+        $newStatus = isset($assignmentResult['new_status']) ? (string) $assignmentResult['new_status'] : '';
+        $changeSummary = 'estimated_received_date: ' . $safeAssignedDate;
+        if ($oldStatus !== '' && $newStatus !== '' && $oldStatus !== $newStatus) {
+            $changeSummary = 'order_status: ' . $oldStatus . ' -> ' . $newStatus . ', ' . $changeSummary;
+        }
+
+        $auditData = array(
+            'log_act' => 'edit',
+            'page' => $pageTitle,
+            'query_rec' => 'estimated_received_date=' . $safeAssignedDate,
+            'query_table' => FB_ORDER_REQ,
+            'oldval' => $oldStatus !== '' ? ('order_status: ' . $oldStatus) : '',
+            'changes' => $changeSummary,
+            'uid' => USER_ID,
+            'act_msg' => USER_NAME . " assigned the Estimate Received Date <b>" . $safeAssignedDate . "</b> for Facebook order [ <b>ID = " . (int) $assignOrderId . "</b> ].",
+            'cdate' => $cdate,
+            'ctime' => $ctime,
+            'cby' => USER_ID,
+            'connect' => $connect
+        );
+        audit_log($auditData);
+    }
+
+    echo "<script>alert('" . addslashes($assignmentResult['message']) . "'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+    exit;
+}
+
 $_SESSION['act'] = '';
 $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
@@ -31,11 +76,75 @@ function fbReqFetchAssoc($rst)
 
 <head>
     <link rel="stylesheet" href="../css/main.css">
+    <style>
+        .estimated-date-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 2000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.45);
+            padding: 16px;
+        }
+
+        .estimated-date-modal.is-open {
+            display: flex;
+        }
+
+        .estimated-date-modal__dialog {
+            width: 100%;
+            max-width: 420px;
+            border-radius: 12px;
+            background: #fff;
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+            padding: 20px;
+        }
+
+        .estimated-date-modal__close-btn,
+        .estimated-date-modal__action-btn {
+            text-transform: none !important;
+        }
+    </style>
 </head>
 
 <script>
+    function openEstimatedReceivedDateModal(orderId, orderCode, minDate, maxDate) {
+        const modal = document.getElementById('estimatedReceivedDateModal');
+        const title = document.getElementById('estimatedReceivedDateTitle');
+        const orderIdInput = document.getElementById('estimated_received_order_id');
+        const dateInput = document.getElementById('estimated_received_date');
+
+        if (!modal || !orderIdInput || !dateInput) {
+            return;
+        }
+
+        title.textContent = orderCode ? 'Assign Estimate Received Date for ' + orderCode : 'Assign Estimate Received Date';
+        orderIdInput.value = orderId;
+        dateInput.value = '';
+        dateInput.min = minDate;
+        dateInput.max = maxDate;
+        modal.classList.add('is-open');
+    }
+
+    function closeEstimatedReceivedDateModal() {
+        const modal = document.getElementById('estimatedReceivedDateModal');
+        if (modal) {
+            modal.classList.remove('is-open');
+        }
+    }
+
     $(document).ready(() => {
         createSortingTable('fb_order_req_table');
+
+        $(document).on('click', '.btn-assign-estimated-date', function () {
+            openEstimatedReceivedDateModal(
+                $(this).data('orderId'),
+                $(this).data('orderCode'),
+                $(this).data('minDate'),
+                $(this).data('maxDate')
+            );
+        });
     });
 </script>
 
@@ -85,6 +194,7 @@ function fbReqFetchAssoc($rst)
                             <th scope="col">S/N</th>
                             <th scope="col" id="action_col">Action</th>
                             <th scope="col">Order Status</th>
+                            <th scope="col">Estimate Received Date</th>
                             <th scope="col">Name</th>
                             <th scope="col">Facebook Link</th>
                             <th scope="col">Contact</th>
@@ -164,21 +274,20 @@ function fbReqFetchAssoc($rst)
                                         href="<?= htmlspecialchars($urbanismAction['url'], ENT_QUOTES, 'UTF-8') ?>"
                                         title="<?= htmlspecialchars($urbanismAction['title'], ENT_QUOTES, 'UTF-8') ?>"
                                         <?= $urbanismAction['disabled'] ? 'onclick="return false;" aria-disabled="true"' : '' ?>><i class="<?= $urbanismAction['icon_class'] ?>"></i></a>
+                                    <?php if (shouldShowEstimatedReceivedDateButton($row) && $canAssignEstimatedReceivedDate) { ?>
+                                        <button
+                                            type="button"
+                                            class="btn btn-sm btn-warning btn-assign-estimated-date"
+                                            data-order-id="<?= (int) $row['id'] ?>"
+                                            data-order-code="<?= htmlspecialchars('FB Order #' . (int) $row['id'], ENT_QUOTES, 'UTF-8') ?>"
+                                            data-min-date="<?= $estimatedDateMin ?>"
+                                            data-max-date="<?= $estimatedDateMax ?>"
+                                            title="Assign Estimate Received Date"><i class="fa-solid fa-calendar-days"></i></button>
+                                    <?php } ?>
                                     </div>
                                     </td>
-                                <td>
-                                    <?php
-                                         $status = $row['order_status'];
-                                         if ($status == 'P') {
-                                             $status = 'Processing';
-                                         }else  if ($status == 'SP') {
-                                             $status = 'Shipped';
-                                         }else  if ($status == 'WP') {
-                                             $status = 'Waiting Packing';
-                                         }
-                                        echo $status;
-                                        ?>
-                                </td>
+                                <td><?= getMarketplaceRequestStatusLabel(isset($row['order_status']) ? $row['order_status'] : '') ?></td>
+                                <td><?= isset($row['estimated_received_date']) && !empty($row['estimated_received_date']) ? $row['estimated_received_date'] : '' ?></td>
                                 <td scope="row">
                                     <?= $row['name'] ?? '' ?>
                                 </td>
@@ -239,6 +348,7 @@ function fbReqFetchAssoc($rst)
                             <th scope="col">S/N</th>
                             <th scope="col" id="action_col">Action</th>
                             <th scope="col">Order Status</th>
+                            <th scope="col">Estimate Received Date</th>
                             <th scope="col">Name</th>
                             <th scope="col">Facebook Link</th>
                             <th scope="col">Contact</th>
@@ -262,6 +372,29 @@ function fbReqFetchAssoc($rst)
             <?php } ?>
         </div>
 
+    </div>
+
+    <div class="estimated-date-modal" id="estimatedReceivedDateModal" aria-hidden="true">
+        <div class="estimated-date-modal__dialog">
+            <div class="d-flex justify-content-between align-items-start mb-3">
+                <h4 class="mb-0" id="estimatedReceivedDateTitle">Assign Estimate Received Date</h4>
+                <button type="button" class="btn btn-light estimated-date-modal__close-btn" onclick="closeEstimatedReceivedDateModal()" aria-label="Close">
+                    <i class="fa-solid fa-xmark"></i>
+                </button>
+            </div>
+            <form method="post">
+                <input type="hidden" name="estimated_received_order_id" id="estimated_received_order_id" value="">
+                <div class="mb-3">
+                    <label class="form-label" for="estimated_received_date">Estimate Received Date</label>
+                    <input type="date" class="form-control" name="estimated_received_date" id="estimated_received_date" min="<?= $estimatedDateMin ?>" max="<?= $estimatedDateMax ?>" required>
+                    <small class="text-muted">Choose a date from <?= $estimatedDateMin ?> until <?= $estimatedDateMax ?>.</small>
+                </div>
+                <div class="d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-light estimated-date-modal__action-btn" onclick="closeEstimatedReceivedDateModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary estimated-date-modal__action-btn" name="assignEstimatedReceivedDateBtn" value="1">Save</button>
+                </div>
+            </form>
+        </div>
     </div>
 
 </body>

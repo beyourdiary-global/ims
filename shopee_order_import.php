@@ -1,4 +1,8 @@
 <?php
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
+header('Expires: 0');
+
 $currentPagePin = 0;
 
 $parentPageTitle = "Shopee Order Request";
@@ -484,6 +488,9 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
     
     $orderStatusVal = postSpaceFilter('order_status_val');
     if ($orderStatusVal === '') $orderStatusVal = 'P';
+    if (normalizeOrderStatusKey($orderStatusVal) === 'oc') {
+        $orderStatusVal = 'WAERD';
+    }
     
     $previewData = [
         'order_id' => postSpaceFilter('order_id'),
@@ -1771,6 +1778,7 @@ function getShopeeOrderStatusInfoByKeyword($keyword)
         'intransit',
         'outfordelivery',
         'parcelpickedup',
+        'senderispreparingtoshipyourparcel',
     );
     if (in_array($normalizedKeyword, $statusSPKeywords, true)) {
         return [
@@ -1828,6 +1836,7 @@ function detectShopeeOrderStatusFromText($text, $allowLooseMatch = false)
             'outfordelivery',
             'shipped',
             'parcelpickedup',
+            'senderispreparingtoshipyourparcel',
         );
         foreach ($spCompactPhrases as $phrase) {
             if (strpos($compact, $phrase) !== false) {
@@ -1864,6 +1873,8 @@ function detectShopeeOrderStatusFromText($text, $allowLooseMatch = false)
 function detectShopeeOrderStatusFromHtml($xpath, $cleanText)
 {
     $statusNodeQueries = [
+        "//*[@data-testid='odp-logistics-history']//*[contains(@class,'status')]",
+        "//*[contains(@class,'status-log')]//*[contains(@class,'status')]",
         "//*[contains(@class,'order-status') and (contains(@class,'active') or contains(@class,'current'))]",
         "//*[contains(@class,'status') and (contains(@class,'active') or contains(@class,'current'))]",
         "//*[contains(@class,'timeline-item') and contains(@class,'active')]//*[contains(@class,'title')]",
@@ -1879,10 +1890,25 @@ function detectShopeeOrderStatusFromHtml($xpath, $cleanText)
 
         foreach ($nodes as $node) {
             $statusText = normalizeImportText($node->textContent);
-            if ($statusText !== '' && preg_match('/\b(To\s*Ship|To\s*Receive|Completed|Delivered|Order\s*Received)\b/i', $statusText)) {
-                return detectShopeeOrderStatusFromText($statusText, true);
+            if ($statusText === '') {
+                continue;
+            }
+
+            $statusInfo = detectShopeeOrderStatusFromText($statusText, true);
+            $statusTextCompact = strtolower(preg_replace('/[^a-z]+/i', '', $statusText));
+            if (
+                $statusInfo['code'] !== 'P'
+                || preg_match('/\b(To\s*Ship|Pending\s*To\s*Pack)\b/i', $statusText)
+                || strpos($statusTextCompact, 'senderispreparingtoshipyourparcel') !== false
+            ) {
+                return $statusInfo;
             }
         }
+    }
+
+    $bodyText = getNodeText($xpath, '//body');
+    if ($bodyText !== '') {
+        return detectShopeeOrderStatusFromText($bodyText, false);
     }
 
     return detectShopeeOrderStatusFromText($cleanText, false);
@@ -2855,7 +2881,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                     <div class="card mb-4 shadow-sm">
                         <div class="card-body">
                             <h5 class="card-title mb-3">Step 1: Upload Shopee Order HTML/PDF</h5>
-                            <form method="post" enctype="multipart/form-data">
+                            <form method="post" enctype="multipart/form-data" autocomplete="off">
                                 <div class="row g-3 align-items-end">
                                     <div class="col-12 col-md-8">
                                         <label class="form-label" for="import_file">Shopee Order Details HTML/PDF File</label>
@@ -2875,7 +2901,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                         <div class="card mb-4 shadow-sm">
                             <div class="card-body">
                                 <h5 class="card-title mb-3">Step 2: Preview And Edit Before Insert</h5>
-                                <form method="post">
+                                <form method="post" autocomplete="off" data-shopee-import-preview="1">
                                     <div class="row mb-3">
                                         <div class="col-12 col-md-4">
                                             <label class="form-label" for="order_id">Order ID<span class="requireRed">*</span></label>
@@ -3133,10 +3159,35 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
         var action = 'I'; // Fake action to satisfy the JS script's logic
         <?php include "js/shopee_order_req.js"; ?>
     <?php } ?>
+
+    (function syncShopeeImportPreviewForm() {
+        var previewForm = document.querySelector('form[data-shopee-import-preview="1"]');
+        if (!previewForm) return;
+
+        previewForm.querySelectorAll('input').forEach(function (input) {
+            input.setAttribute('autocomplete', 'off');
+            if (input.type === 'file') return;
+
+            var serverValue = input.getAttribute('value');
+            if (serverValue !== null) {
+                input.value = serverValue;
+            }
+        });
+
+        previewForm.querySelectorAll('select').forEach(function (select) {
+            select.setAttribute('autocomplete', 'off');
+
+            var selectedOption = select.querySelector('option[selected]');
+            if (selectedOption) {
+                select.value = selectedOption.value;
+                return;
+            }
+
+            if (select.options.length > 0) {
+                select.selectedIndex = 0;
+            }
+        });
+    })();
 </script>
 
 </html>
-
-
-
-

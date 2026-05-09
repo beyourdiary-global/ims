@@ -31,136 +31,135 @@ if (!$conn->select_db($db_fin)) {
     die('Unable to select database `' . $db_fin . '`: ' . $conn->error);
 }
 
-// // ==========================================
-// // HELPER FUNCTIONS (FIXED)
-// // ==========================================
+// ==========================================
+// HELPER FUNCTIONS (FIXED)
+// ==========================================
 
-// function columnExists($conn, $dbName, $tableName, $columnName)
-// {
-//     $safeDb = $conn->real_escape_string($dbName);
-//     $safeTable = $conn->real_escape_string($tableName);
-//     $safeColumn = $conn->real_escape_string($columnName);
-//     $sql = "SELECT 1 FROM information_schema.columns WHERE table_schema='$safeDb' AND table_name='$safeTable' AND column_name='$safeColumn' LIMIT 1";
-//     $rst = $conn->query($sql);
-//     return ($rst && $rst->num_rows > 0);
-// }
+function columnExists($conn, $dbName, $tableName, $columnName)
+{
+    $safeDb = $conn->real_escape_string($dbName);
+    $safeTable = $conn->real_escape_string($tableName);
+    $safeColumn = $conn->real_escape_string($columnName);
+    $sql = "SELECT 1 FROM information_schema.columns WHERE table_schema='$safeDb' AND table_name='$safeTable' AND column_name='$safeColumn' LIMIT 1";
+    $rst = $conn->query($sql);
+    return ($rst && $rst->num_rows > 0);
+}
 
-// function addColumnIfMissing($conn, $dbName, $tableName, $columnName, $alterSql)
-// {
-//     if (!columnExists($conn, $dbName, $tableName, $columnName)) {
-//         if ($conn->query($alterSql)) {
-//             echo "<p style='color:blue;'>Added column `$columnName` to `$tableName`.</p>";
-//         } else {
-//             echo "<p style='color:red;'>Failed adding `$columnName` to `$tableName`: " . $conn->error . "</p>";
-//         }
-//     } else {
-//         echo "<p style='color:green;'>Verified column `$columnName` already exists in `$tableName`.</p>";
-//     }
-// }
+function addColumnIfMissing($conn, $dbName, $tableName, $columnName, $alterSql)
+{
+    if (!columnExists($conn, $dbName, $tableName, $columnName)) {
+        if ($conn->query($alterSql)) {
+            echo "<p style='color:blue;'>Added column `$columnName` to `$tableName`.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed adding `$columnName` to `$tableName`: " . $conn->error . "</p>";
+        }
+    } else {
+        echo "<p style='color:green;'>Verified column `$columnName` already exists in `$tableName`.</p>";
+    }
+}
 
-// function dropColumnIfExists($conn, $dbName, $tableName, $columnName, $alterSql)
-// {
-//     if (columnExists($conn, $dbName, $tableName, $columnName)) {
-//         if ($conn->query($alterSql)) {
-//             echo "<p style='color:blue;'>Dropped column `$columnName` from `$tableName`.</p>";
-//         } else {
-//             echo "<p style='color:red;'>Failed dropping `$columnName` from `$tableName`: " . $conn->error . "</p>";
-//         }
-//     } else {
-//         echo "<p style='color:green;'>Verified column `$columnName` is already removed from `$tableName`.</p>";
-//     }
-// }
+function dropColumnIfExists($conn, $dbName, $tableName, $columnName, $alterSql)
+{
+    if (columnExists($conn, $dbName, $tableName, $columnName)) {
+        if ($conn->query($alterSql)) {
+            echo "<p style='color:blue;'>Dropped column `$columnName` from `$tableName`.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed dropping `$columnName` from `$tableName`: " . $conn->error . "</p>";
+        }
+    } else {
+        echo "<p style='color:green;'>Verified column `$columnName` is already removed from `$tableName`.</p>";
+    }
+}
 
-// function alterColumnToVarcharIfInt($conn, $dbName, $tableName, $columnName, $varcharLen = 255)
-// {
-//     $safeDb = $conn->real_escape_string($dbName);
-//     $safeTable = $conn->real_escape_string($tableName);
-//     $safeColumn = $conn->real_escape_string($columnName);
-    
-//     // Explicitly select DATA_TYPE
-//     $sql = "SELECT DATA_TYPE FROM information_schema.columns WHERE table_schema='$safeDb' AND table_name='$safeTable' AND column_name='$safeColumn' LIMIT 1";
-//     $rst = $conn->query($sql);
+function alterColumnToVarcharIfInt($conn, $dbName, $tableName, $columnName, $varcharLen = 255)
+{
+    $safeDb = $conn->real_escape_string($dbName);
+    $safeTable = $conn->real_escape_string($tableName);
+    $safeColumn = $conn->real_escape_string($columnName);
 
-//     if (!$rst || $rst->num_rows === 0) {
-//         echo "<p style='color:orange;'>Column `$columnName` not found in `$tableName` to alter.</p>";
-//         return;
-//     }
+    $sql = "SELECT DATA_TYPE FROM information_schema.columns WHERE table_schema='$safeDb' AND table_name='$safeTable' AND column_name='$safeColumn' LIMIT 1";
+    $rst = $conn->query($sql);
 
-//     $row = $rst->fetch_assoc();
-//     if ($row) {
-//         $row = array_change_key_case($row, CASE_LOWER);
-//     }
-    
-//     if (isset($row['data_type'])) {
-//         $dataType = strtolower((string) $row['data_type']);
-//         if (strpos($dataType, 'int') !== false) {
-//             $alterSql = "ALTER TABLE `$tableName` MODIFY COLUMN `$columnName` VARCHAR(" . (int) $varcharLen . ") NULL";
-//             if ($conn->query($alterSql)) {
-//                 echo "<p style='color:blue;'>Updated `$tableName`.`$columnName` to VARCHAR(" . (int) $varcharLen . ").</p>";
-//             } else {
-//                 echo "<p style='color:red;'>Failed updating `$tableName`.`$columnName`: " . $conn->error . "</p>";
-//             }
-//         } else {
-//             echo "<p style='color:green;'>Verified `$tableName`.`$columnName` is already non-integer ($dataType).</p>";
-//         }
-//     }
-// }
+    if (!$rst || $rst->num_rows === 0) {
+        echo "<p style='color:orange;'>Column `$columnName` not found in `$tableName` to alter.</p>";
+        return;
+    }
 
-// function alterColumnToTextIfVarchar($conn, $dbName, $tableName, $columnName)
-// {
-//     $safeDb = $conn->real_escape_string($dbName);
-//     $safeTable = $conn->real_escape_string($tableName);
-//     $safeColumn = $conn->real_escape_string($columnName);
-//     $sql = "SELECT DATA_TYPE FROM information_schema.columns WHERE table_schema='$safeDb' AND table_name='$safeTable' AND column_name='$safeColumn' LIMIT 1";
-//     $rst = $conn->query($sql);
+    $row = $rst->fetch_assoc();
+    if ($row) {
+        $row = array_change_key_case($row, CASE_LOWER);
+    }
 
-//     if (!$rst || $rst->num_rows === 0) {
-//         echo "<p style='color:orange;'>Column `$columnName` not found in `$tableName` to alter.</p>";
-//         return;
-//     }
+    if (isset($row['data_type'])) {
+        $dataType = strtolower((string) $row['data_type']);
+        if (strpos($dataType, 'int') !== false) {
+            $alterSql = "ALTER TABLE `$tableName` MODIFY COLUMN `$columnName` VARCHAR(" . (int) $varcharLen . ") NULL";
+            if ($conn->query($alterSql)) {
+                echo "<p style='color:blue;'>Updated `$tableName`.`$columnName` to VARCHAR(" . (int) $varcharLen . ").</p>";
+            } else {
+                echo "<p style='color:red;'>Failed updating `$tableName`.`$columnName`: " . $conn->error . "</p>";
+            }
+        } else {
+            echo "<p style='color:green;'>Verified `$tableName`.`$columnName` is already non-integer ($dataType).</p>";
+        }
+    }
+}
 
-//     $row = $rst->fetch_assoc();
-//     if ($row) {
-//         $row = array_change_key_case($row, CASE_LOWER);
-//     }
+function alterColumnToTextIfVarchar($conn, $dbName, $tableName, $columnName)
+{
+    $safeDb = $conn->real_escape_string($dbName);
+    $safeTable = $conn->real_escape_string($tableName);
+    $safeColumn = $conn->real_escape_string($columnName);
+    $sql = "SELECT DATA_TYPE FROM information_schema.columns WHERE table_schema='$safeDb' AND table_name='$safeTable' AND column_name='$safeColumn' LIMIT 1";
+    $rst = $conn->query($sql);
 
-//     if (isset($row['data_type'])) {
-//         $dataType = strtolower((string) $row['data_type']);
-//         if ($dataType === 'varchar') {
-//             $alterSql = "ALTER TABLE `$tableName` MODIFY COLUMN `$columnName` TEXT NULL";
-//             if ($conn->query($alterSql)) {
-//                 echo "<p style='color:blue;'>Updated `$tableName`.`$columnName` to TEXT.</p>";
-//             } else {
-//                 echo "<p style='color:red;'>Failed updating `$tableName`.`$columnName` to TEXT: " . $conn->error . "</p>";
-//             }
-//         } else {
-//             echo "<p style='color:green;'>Verified `$tableName`.`$columnName` is already non-varchar ($dataType).</p>";
-//         }
-//     }
-// }
+    if (!$rst || $rst->num_rows === 0) {
+        echo "<p style='color:orange;'>Column `$columnName` not found in `$tableName` to alter.</p>";
+        return;
+    }
 
-// function indexExists($conn, $dbName, $tableName, $indexName)
-// {
-//     $safeDb = $conn->real_escape_string($dbName);
-//     $safeTable = $conn->real_escape_string($tableName);
-//     $safeIndex = $conn->real_escape_string($indexName);
-//     $sql = "SELECT 1 FROM information_schema.statistics WHERE table_schema='$safeDb' AND table_name='$safeTable' AND index_name='$safeIndex' LIMIT 1";
-//     $rst = $conn->query($sql);
-//     return ($rst && $rst->num_rows > 0);
-// }
+    $row = $rst->fetch_assoc();
+    if ($row) {
+        $row = array_change_key_case($row, CASE_LOWER);
+    }
 
-// function dropIndexIfExists($conn, $dbName, $tableName, $indexName, $alterSql)
-// {
-//     if (indexExists($conn, $dbName, $tableName, $indexName)) {
-//         if ($conn->query($alterSql)) {
-//             echo "<p style='color:blue;'>Dropped index `$indexName` from `$tableName`.</p>";
-//         } else {
-//             echo "<p style='color:red;'>Failed dropping index `$indexName` from `$tableName`: " . $conn->error . "</p>";
-//         }
-//     } else {
-//         echo "<p style='color:green;'>Verified index `$indexName` is already removed from `$tableName`.</p>";
-//     }
-// }
+    if (isset($row['data_type'])) {
+        $dataType = strtolower((string) $row['data_type']);
+        if ($dataType === 'varchar') {
+            $alterSql = "ALTER TABLE `$tableName` MODIFY COLUMN `$columnName` TEXT NULL";
+            if ($conn->query($alterSql)) {
+                echo "<p style='color:blue;'>Updated `$tableName`.`$columnName` to TEXT.</p>";
+            } else {
+                echo "<p style='color:red;'>Failed updating `$tableName`.`$columnName` to TEXT: " . $conn->error . "</p>";
+            }
+        } else {
+            echo "<p style='color:green;'>Verified `$tableName`.`$columnName` is already non-varchar ($dataType).</p>";
+        }
+    }
+}
+
+function indexExists($conn, $dbName, $tableName, $indexName)
+{
+    $safeDb = $conn->real_escape_string($dbName);
+    $safeTable = $conn->real_escape_string($tableName);
+    $safeIndex = $conn->real_escape_string($indexName);
+    $sql = "SELECT 1 FROM information_schema.statistics WHERE table_schema='$safeDb' AND table_name='$safeTable' AND index_name='$safeIndex' LIMIT 1";
+    $rst = $conn->query($sql);
+    return ($rst && $rst->num_rows > 0);
+}
+
+function dropIndexIfExists($conn, $dbName, $tableName, $indexName, $alterSql)
+{
+    if (indexExists($conn, $dbName, $tableName, $indexName)) {
+        if ($conn->query($alterSql)) {
+            echo "<p style='color:blue;'>Dropped index `$indexName` from `$tableName`.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed dropping index `$indexName` from `$tableName`: " . $conn->error . "</p>";
+        }
+    } else {
+        echo "<p style='color:green;'>Verified index `$indexName` is already removed from `$tableName`.</p>";
+    }
+}
 
 // function normalizeShopeePins($pinStr)
 // {
@@ -367,6 +366,33 @@ if (!$conn->select_db($db_fin)) {
 // // Ensure Shopee Order Request supports storing multiple package/brand IDs as CSV.
 // alterColumnToVarcharIfInt($conn, $db_fin, 'shopee_sg_order_request', 'package', 255);
 // alterColumnToVarcharIfInt($conn, $db_fin, 'shopee_sg_order_request', 'brand', 255);
+if ($conn->select_db($db_cms)) {
+    addColumnIfMissing($conn, $db_cms, 'lazada_order_request', 'estimated_received_date', "ALTER TABLE `lazada_order_request` ADD COLUMN `estimated_received_date` DATE DEFAULT NULL AFTER `remark`");
+    addColumnIfMissing($conn, $db_cms, 'lazada_order_request', 'estimated_received_date_assigned_by', "ALTER TABLE `lazada_order_request` ADD COLUMN `estimated_received_date_assigned_by` VARCHAR(30) DEFAULT NULL AFTER `estimated_received_date`");
+    addColumnIfMissing($conn, $db_cms, 'lazada_order_request', 'estimated_received_date_assigned_date', "ALTER TABLE `lazada_order_request` ADD COLUMN `estimated_received_date_assigned_date` DATE DEFAULT NULL AFTER `estimated_received_date_assigned_by`");
+    addColumnIfMissing($conn, $db_cms, 'lazada_order_request', 'estimated_received_date_assigned_time', "ALTER TABLE `lazada_order_request` ADD COLUMN `estimated_received_date_assigned_time` TIME DEFAULT NULL AFTER `estimated_received_date_assigned_date`");
+} else {
+    echo "<p style='color:red;'>Unable to select CMS database `" . $db_cms . "` for Lazada Estimate Received Date columns.</p>";
+}
+
+if ($conn->select_db($db_fin)) {
+    addColumnIfMissing($conn, $db_fin, 'facebook_order_request', 'estimated_received_date', "ALTER TABLE `facebook_order_request` ADD COLUMN `estimated_received_date` DATE DEFAULT NULL AFTER `remark`");
+    addColumnIfMissing($conn, $db_fin, 'facebook_order_request', 'estimated_received_date_assigned_by', "ALTER TABLE `facebook_order_request` ADD COLUMN `estimated_received_date_assigned_by` VARCHAR(30) DEFAULT NULL AFTER `estimated_received_date`");
+    addColumnIfMissing($conn, $db_fin, 'facebook_order_request', 'estimated_received_date_assigned_date', "ALTER TABLE `facebook_order_request` ADD COLUMN `estimated_received_date_assigned_date` DATE DEFAULT NULL AFTER `estimated_received_date_assigned_by`");
+    addColumnIfMissing($conn, $db_fin, 'facebook_order_request', 'estimated_received_date_assigned_time', "ALTER TABLE `facebook_order_request` ADD COLUMN `estimated_received_date_assigned_time` TIME DEFAULT NULL AFTER `estimated_received_date_assigned_date`");
+
+    addColumnIfMissing($conn, $db_fin, 'website_order_request', 'estimated_received_date', "ALTER TABLE `website_order_request` ADD COLUMN `estimated_received_date` DATE DEFAULT NULL AFTER `remark`");
+    addColumnIfMissing($conn, $db_fin, 'website_order_request', 'estimated_received_date_assigned_by', "ALTER TABLE `website_order_request` ADD COLUMN `estimated_received_date_assigned_by` VARCHAR(30) DEFAULT NULL AFTER `estimated_received_date`");
+    addColumnIfMissing($conn, $db_fin, 'website_order_request', 'estimated_received_date_assigned_date', "ALTER TABLE `website_order_request` ADD COLUMN `estimated_received_date_assigned_date` DATE DEFAULT NULL AFTER `estimated_received_date_assigned_by`");
+    addColumnIfMissing($conn, $db_fin, 'website_order_request', 'estimated_received_date_assigned_time', "ALTER TABLE `website_order_request` ADD COLUMN `estimated_received_date_assigned_time` TIME DEFAULT NULL AFTER `estimated_received_date_assigned_date`");
+} else {
+    echo "<p style='color:red;'>Unable to select Finance database `" . $db_fin . "` for Estimate Received Date columns.</p>";
+}
+
+addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'estimated_received_date', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `estimated_received_date` DATE DEFAULT NULL AFTER `remark`");
+addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'estimated_received_date_assigned_by', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `estimated_received_date_assigned_by` VARCHAR(30) DEFAULT NULL AFTER `estimated_received_date`");
+addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'estimated_received_date_assigned_date', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `estimated_received_date_assigned_date` DATE DEFAULT NULL AFTER `estimated_received_date_assigned_by`");
+addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'estimated_received_date_assigned_time', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `estimated_received_date_assigned_time` TIME DEFAULT NULL AFTER `estimated_received_date_assigned_date`");
 // addColumnIfMissing($conn, $db_fin, 'shopee_customer_info', 'contact_no', "ALTER TABLE `shopee_customer_info` ADD COLUMN `contact_no` VARCHAR(30) DEFAULT NULL AFTER `series`");
 // addColumnIfMissing($conn, $db_fin, 'shopee_ads_topup_transaction', 'attachment', "ALTER TABLE `shopee_ads_topup_transaction` ADD COLUMN `attachment` VARCHAR(255) DEFAULT NULL AFTER `pay_meth`");
 
@@ -1257,6 +1283,23 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Failed creating `" . MESSAGE_SHORTCUTS . "`: " . $conn->error . "</p>";
     }
 
+    // Ensure only the shortcuts_message column uses utf8mb4_unicode_ci.
+    if (columnExists($conn, $db_cms, MESSAGE_SHORTCUTS, 'shortcuts_message')) {
+        $alterShortcutMessageColumnSql = "ALTER TABLE `" . MESSAGE_SHORTCUTS . "`
+            MODIFY COLUMN `shortcuts_message` MEDIUMTEXT
+            CHARACTER SET utf8mb4
+            COLLATE utf8mb4_unicode_ci
+            DEFAULT NULL";
+
+        if ($conn->query($alterShortcutMessageColumnSql)) {
+            echo "<p style='color:green;'>Verified `" . MESSAGE_SHORTCUTS . "`.`shortcuts_message` collation is utf8mb4_unicode_ci.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed altering `" . MESSAGE_SHORTCUTS . "`.`shortcuts_message` collation: " . $conn->error . "</p>";
+        }
+    } else {
+        echo "<p style='color:orange;'>Column `" . MESSAGE_SHORTCUTS . "`.`shortcuts_message` not found. Skipped collation update.</p>";
+    }
+
     $messageShortcutsTableName = $conn->real_escape_string(MESSAGE_SHORTCUTS);
     $messageShortcutsSchemaName = $conn->real_escape_string($db_cms);
     $messageShortcutsCollationCheckSql = "SELECT TABLE_COLLATION
@@ -1954,6 +1997,28 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Failed removing pin 26 (Create Project): " . $conn->error . "</p>";
     }
 
+    $createLabelSql = "CREATE TABLE IF NOT EXISTS `" . LABEL . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `name` VARCHAR(120) NOT NULL,
+        `parent_label` INT DEFAULT NULL,
+        `remark` TEXT DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_label_parent` (`parent_label`),
+        KEY `idx_label_name_status` (`name`, `status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createLabelSql)) {
+        echo "<p style='color:green;'>Verified table `" . LABEL . "` for product labels.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . LABEL . "`: " . $conn->error . "</p>";
+    }
+
     $taskPinGroupSql = "INSERT INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
         (136, 'Board', '1,2,3,4', 'Task Board Management', '1', CURDATE(), CURTIME(), 'A'),
         (137, 'Summary', '1', 'Task Summary Management', '1', CURDATE(), CURTIME(), 'A'),
@@ -1963,16 +2028,17 @@ if ($conn->select_db($db_cms)) {
         (141, 'Project User Access', '1,2,3,4', 'Project task user access management', '1', CURDATE(), CURTIME(), 'A'),
         (142, 'Customer Level', '1,2,3,4', 'Customer level management', '1', CURDATE(), CURTIME(), 'A'),
         (143, 'Customer Repeat', '1,2,3,4', 'Customer repeat management', '1', CURDATE(), CURTIME(), 'A'),
-        (144, 'Message Shortcuts', '1,2,3,4', 'Message shortcuts management', '1', CURDATE(), CURTIME(), 'A')
+        (144, 'Message Shortcuts', '1,2,3,4', 'Message shortcuts management', '1', CURDATE(), CURTIME(), 'A'),
+        (145, 'Label', '1,2,3,4', 'Product label management', '1', CURDATE(), CURTIME(), 'A')
         ON DUPLICATE KEY UPDATE
             `name` = VALUES(`name`),
             `pins` = VALUES(`pins`),
             `remark` = VALUES(`remark`),
             `status` = 'A'";
     if ($conn->query($taskPinGroupSql)) {
-        echo "<p style='color:green;'>Verified pin groups 136-144 for task and customer settings management.</p>";
+        echo "<p style='color:green;'>Verified pin groups 136-145 for task, customer, and product label management.</p>";
     } else {
-        echo "<p style='color:red;'>Failed creating task/customer setting pin groups 136-144: " . $conn->error . "</p>";
+        echo "<p style='color:red;'>Failed creating pin groups 136-145: " . $conn->error . "</p>";
     }
 
     foreach (array(1, 2, 3) as $groupId) {
@@ -1996,6 +2062,7 @@ if ($conn->select_db($db_cms)) {
             $updatedPins = addAccessToPinBlock($updatedPins, 141, array(1, 2, 3, 4));
             $updatedPins = addAccessToPinBlock($updatedPins, 142, array(1, 2, 3, 4));
             $updatedPins = addAccessToPinBlock($updatedPins, 143, array(1, 2, 3, 4));
+            $updatedPins = addAccessToPinBlock($updatedPins, 145, array(1, 2, 3, 4));
         }
 
         if ($updatedPins !== $currentPins) {

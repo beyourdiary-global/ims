@@ -49,11 +49,55 @@ foreach ($shopeePinGroups as $pinGroupId) {
     }
 }
 $accessActionKey = array_values(array_unique(array_map('intval', $accessActionKey)));
+$canVerifyAction = in_array(14, $accessActionKey, true);
+$canAssignEstimatedReceivedDate = in_array(2, $accessActionKey, true) || $canVerifyAction;
+$estimatedDateToday = new DateTimeImmutable('today');
+$estimatedDateMin = $estimatedDateToday->modify('+1 day')->format('Y-m-d');
+$estimatedDateMax = $estimatedDateToday->modify('+10 days')->format('Y-m-d');
 $num = $default_currency_id = 1; 
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceivedDateBtn')) {
+    if (!$canAssignEstimatedReceivedDate) {
+        echo "<script>alert('Security Error: You do not have permission to assign Estimate Received Dates.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+        exit;
+    }
+
+    $assignOrderId = postSpaceFilter('estimated_received_order_id');
+    $assignDate = postSpaceFilter('estimated_received_date');
+    $assignmentResult = assignEstimatedReceivedDate($finance_connect, SHOPEE_SG_ORDER_REQ, $assignOrderId, $assignDate, USER_ID);
+
+    if ($assignmentResult['success']) {
+        $safeAssignedDate = isset($assignmentResult['date']) ? $assignmentResult['date'] : '';
+        $oldStatus = isset($assignmentResult['old_status']) ? (string) $assignmentResult['old_status'] : '';
+        $newStatus = isset($assignmentResult['new_status']) ? (string) $assignmentResult['new_status'] : '';
+        $changeSummary = 'estimated_received_date: ' . $safeAssignedDate;
+        if ($oldStatus !== '' && $newStatus !== '' && $oldStatus !== $newStatus) {
+            $changeSummary = 'order_status: ' . $oldStatus . ' -> ' . $newStatus . ', ' . $changeSummary;
+        }
+        $auditData = array(
+            'log_act' => 'edit',
+            'page' => $pageTitle,
+            'query_rec' => 'estimated_received_date=' . $safeAssignedDate,
+            'query_table' => SHOPEE_SG_ORDER_REQ,
+            'oldval' => $oldStatus !== '' ? ('order_status: ' . $oldStatus) : '',
+            'changes' => $changeSummary,
+            'uid' => USER_ID,
+            'act_msg' => USER_NAME . " assigned the Estimate Received Date <b>" . $safeAssignedDate . "</b> for Shopee order [ <b>ID = " . (int) $assignOrderId . "</b> ].",
+            'cdate' => $cdate,
+            'ctime' => $ctime,
+            'cby' => USER_ID,
+            'connect' => $connect
+        );
+        audit_log($auditData);
+    }
+
+    echo "<script>alert('" . addslashes($assignmentResult['message']) . "'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+    exit;
+}
 
 if (isset($_GET['verify_id'])) {
     // SECURITY FIX: Explicitly check if the user has the Verify action permission (14)
-    if (!in_array(14, $accessActionKey)) {
+    if (!$canVerifyAction) {
         echo "<script>alert('Security Error: You do not have permission to verify orders.'); location.replace('shopee_verify.php');</script>";
         exit;
     }
@@ -63,8 +107,8 @@ if (isset($_GET['verify_id'])) {
     $checkSql = "SELECT order_status FROM " . SHOPEE_SG_ORDER_REQ . " WHERE id = $orderId";
     $checkResult = mysqli_query($finance_connect, $checkSql);
     if ($checkResult && $row = mysqli_fetch_assoc($checkResult)) {
-        if ($row['order_status'] === 'OC') {
-            $updateSql = "UPDATE " . SHOPEE_SG_ORDER_REQ . " SET order_status = 'C', update_by = '" . USER_ID . "', update_date = curdate(), update_time = curtime() WHERE id = $orderId";
+        if (normalizeOrderStatusKey($row['order_status']) === 'oc') {
+            $updateSql = "UPDATE " . SHOPEE_SG_ORDER_REQ . " SET order_status = 'V', update_by = '" . USER_ID . "', update_date = curdate(), update_time = curtime() WHERE id = $orderId";
             $updateResult = mysqli_query($finance_connect, $updateSql);
             if ($updateResult) {
                 $auditData = array(
@@ -73,9 +117,9 @@ if (isset($_GET['verify_id'])) {
                     'query_rec'   => $orderId,
                     'query_table' => SHOPEE_SG_ORDER_REQ,
                     'oldval'      => 'order_status: OC',
-                    'changes'     => 'order_status: C',
+                    'changes'     => 'order_status: V',
                     'uid'         => USER_ID,
-                    'act_msg'     => "Verified order #$orderId (status changed from OC to C)",
+                    'act_msg'     => "Verified order #$orderId (status changed from OC to V)",
                     'cdate'       => date('Y-m-d'),
                     'ctime'       => date('H:i:s'),
                     'cby'         => USER_NAME,
@@ -141,8 +185,63 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
 <head>
     <link rel="stylesheet" href="../css/main.css">
     <link rel="stylesheet" href="../css/shopeeOrderRequest.css">
+    <style>
+        .estimated-date-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 2000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.45);
+            padding: 16px;
+        }
+
+        .estimated-date-modal.is-open {
+            display: flex;
+        }
+
+        .estimated-date-modal__dialog {
+            width: 100%;
+            max-width: 420px;
+            border-radius: 12px;
+            background: #fff;
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+            padding: 20px;
+        }
+
+        .estimated-date-modal__close-btn,
+        .estimated-date-modal__action-btn {
+            text-transform: none !important;
+        }
+    </style>
 </head>
 <script>
+    function openEstimatedReceivedDateModal(orderId, orderCode, minDate, maxDate) {
+        const modal = document.getElementById('estimatedReceivedDateModal');
+        const title = document.getElementById('estimatedReceivedDateTitle');
+        const orderIdInput = document.getElementById('estimated_received_order_id');
+        const dateInput = document.getElementById('estimated_received_date');
+
+        if (!modal || !orderIdInput || !dateInput) {
+            return;
+        }
+
+        title.textContent = orderCode ? 'Assign Estimate Received Date for ' + orderCode : 'Assign Estimate Received Date';
+        orderIdInput.value = orderId;
+        dateInput.value = '';
+        dateInput.min = minDate;
+        dateInput.max = maxDate;
+        modal.classList.add('is-open');
+    }
+
+    function closeEstimatedReceivedDateModal() {
+        const modal = document.getElementById('estimatedReceivedDateModal');
+        if (modal) {
+            modal.classList.remove('is-open');
+        }
+    }
+
   function toggleFilters(sectionId) {
         const section = document.getElementById(sectionId);
         section.style.display = (section.style.display === 'none') ? 'flex' : 'none';
@@ -165,6 +264,15 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
     window.onload = autoToggleSections;
     $(document).ready(() => {
         createSortingTable('shopee_order_req_table');
+
+        $(document).on('click', '.btn-assign-estimated-date', function () {
+            openEstimatedReceivedDateModal(
+                $(this).data('orderId'),
+                $(this).data('orderCode'),
+                $(this).data('minDate'),
+                $(this).data('maxDate')
+            );
+        });
     });
 </script>
 <body>
@@ -369,6 +477,7 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                             <th scope="col" width="60px">S/N</th>
                             <th scope="col" id="action_col" width="100px">Action</th>
                             <th scope="col">Order Status</th>
+                            <th scope="col">Estimate Received Date</th>
                             <th scope="col">Shopee Account</th>
                             <th scope="col">Currency</th>
                             <th scope="col">Order ID</th>
@@ -520,11 +629,22 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                                 <?php renderViewEditButtonByPin("1", $redirect_page, $row, $accessActionKey); ?>
                                 <?php renderViewEditButtonByPin("2", $redirect_page, $row, $accessActionKey, $act_2); ?>
                                 <?php renderDeleteButtonByPin($accessActionKey, $row['id'], $row['orderID'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?> 
-                                <?php if($row['order_status'] == 'OC' && in_array(14, $accessActionKey)){ ?>
+                                <?php if (shouldShowEstimatedReceivedDateButton($row) && $canAssignEstimatedReceivedDate) { ?>
+                                 <button
+                                     type="button"
+                                     class="btn btn-sm btn-warning btn-assign-estimated-date"
+                                     data-order-id="<?= (int) $row['id'] ?>"
+                                     data-order-code="<?= htmlspecialchars((string) ($row['orderID'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                     data-min-date="<?= $estimatedDateMin ?>"
+                                     data-max-date="<?= $estimatedDateMax ?>"
+                                     title="Assign Estimate Received Date"><i class="fa-solid fa-calendar-days"></i></button>
+                                <?php } ?>
+                                <?php if(normalizeOrderStatusKey($row['order_status']) === 'oc' && $canVerifyAction){ ?>
                                  <a href="?verify_id=<?= $row['id'] ?>" class="btn btn-sm btn-success btn-verified" onclick="return confirm('Mark this order as verified?')">Verified</a>
                                 <?php } ?>
                                 </td>
                                 <td scope="row"><?= getOrderStatusLabel($row['order_status']) ?></td>
+                                <td scope="row"><?= !empty($row['estimated_received_date']) ? $row['estimated_received_date'] : '' ?></td>
                                 <td scope="row"><?= $acc['name'] ?? '' ?></td>
                                 <td scope="row"><?= $curr['unit'] ?? '' ?></td>
                                 <td scope="row"><?= $row['orderID'] ?? '' ?></td>
@@ -562,6 +682,7 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                             <th scope="col" width="60px">S/N</th>
                             <th scope="col" id="action_col" width="100px">Action</th>
                             <th scope="col">Order Status</th>
+                            <th scope="col">Estimate Received Date</th>
                             <th scope="col">Shopee Account</th>
                             <th scope="col">Currency</th>
                             <th scope="col">Order ID</th>
@@ -590,6 +711,27 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                 </table>
                 </div>
             <?php } ?>
+        </div>
+    </div>
+    <div id="estimatedReceivedDateModal" class="estimated-date-modal" onclick="if (event.target === this) closeEstimatedReceivedDateModal();">
+        <div class="estimated-date-modal__dialog">
+            <form method="post" action="">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <h5 class="mb-0" id="estimatedReceivedDateTitle">Assign Estimate Received Date</h5>
+                    <button type="button" class="btn btn-sm btn-light px-2 estimated-date-modal__close-btn" onclick="closeEstimatedReceivedDateModal()" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <input type="hidden" name="assignEstimatedReceivedDateBtn" value="1">
+                <input type="hidden" name="estimated_received_order_id" id="estimated_received_order_id" value="">
+                <div class="mb-3">
+                    <label class="form-label" for="estimated_received_date">Estimate Received Date</label>
+                    <input type="date" class="form-control" name="estimated_received_date" id="estimated_received_date" min="<?= $estimatedDateMin ?>" max="<?= $estimatedDateMax ?>" required>
+                    <small class="text-muted">Choose a date from <?= $estimatedDateMin ?> until <?= $estimatedDateMax ?>.</small>
+                </div>
+                <div class="d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-outline-secondary estimated-date-modal__action-btn" onclick="closeEstimatedReceivedDateModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary estimated-date-modal__action-btn">Save</button>
+                </div>
+            </form>
         </div>
     </div>
 </body>

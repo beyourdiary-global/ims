@@ -1457,23 +1457,223 @@ if (!function_exists('getUrbanismMemberActionData')) {
     }
 }
 
+if (!function_exists('normalizeOrderStatusKey')) {
+    function normalizeOrderStatusKey($code)
+    {
+        return preg_replace('/[^a-z]/', '', strtolower(trim((string) $code)));
+    }
+}
+
 function getOrderStatusLabel($code) {
-	$normalized = strtolower(trim((string) $code));
-	$normalizedKey = preg_replace('/[^a-z]/', '', $normalized);
+	$normalized = trim((string) $code);
+	$normalizedKey = normalizeOrderStatusKey($normalized);
+	$statusLookupKey = strtoupper($normalizedKey);
 	if ($normalizedKey === 'p' || $normalizedKey === 'pendingto' || $normalizedKey === 'pendingtopack') {
 		return 'Pending To Pack';
 	}
 
-    $statuses = [
-		'P'  => 'Pending To Pack',
+    $statusLabelsByKey = [
+        'P' => 'Pending To Pack',
         'SP' => 'SHIP PROCESSING (Warehouse)',
         'WP' => 'Waiting Packing',
         'OC' => 'Order Received (admin checking)',
-        'V'  => 'Verified (Aster checking)',
-        'C'  => 'Completed',
+        'V' => 'Verified (Aster checking)',
+        'C' => 'Completed',
+        'WAERD' => 'Waiting Assign Estimate Received Date',
+        'AED' => 'Assigned Estimate Date',
     ];
 
-    return $statuses[$code] ?? $code; // fallback to code if not found
+    return $statusLabelsByKey[$statusLookupKey] ?? $code; // fallback to code if not found
+}
+
+if (!function_exists('getMarketplaceRequestStatusLabel')) {
+    function getMarketplaceRequestStatusLabel($code)
+    {
+        $normalizedKey = normalizeOrderStatusKey($code);
+
+        if ($normalizedKey === 'p' || $normalizedKey === 'pendingto' || $normalizedKey === 'pendingtopack') {
+            return 'Processing';
+        }
+
+        if ($normalizedKey === 'sp') {
+            return 'Shipped';
+        }
+
+        if ($normalizedKey === 'wp') {
+            return 'Waiting Packing';
+        }
+
+        if ($normalizedKey === 'waerd' || $normalizedKey === 'aed') {
+            return getOrderStatusLabel($code);
+        }
+
+        return trim((string) $code);
+    }
+}
+
+if (!function_exists('validateEstimatedReceivedDate')) {
+    function validateEstimatedReceivedDate($date)
+    {
+        $date = trim((string) $date);
+        $today = new DateTimeImmutable('today');
+        $minDate = $today->modify('+1 day');
+        $maxDate = $today->modify('+10 days');
+
+        $result = array(
+            'valid' => false,
+            'message' => '',
+            'normalized_date' => '',
+            'min_date' => $minDate->format('Y-m-d'),
+            'max_date' => $maxDate->format('Y-m-d'),
+        );
+
+        if ($date === '') {
+            $result['message'] = 'Estimate Received Date is required.';
+            return $result;
+        }
+
+        $parsed = DateTimeImmutable::createFromFormat('Y-m-d', $date);
+        $errors = DateTimeImmutable::getLastErrors();
+        $hasParseErrors = is_array($errors) && (($errors['warning_count'] ?? 0) > 0 || ($errors['error_count'] ?? 0) > 0);
+        if (!($parsed instanceof DateTimeImmutable) || $hasParseErrors || $parsed->format('Y-m-d') !== $date) {
+            $result['message'] = 'Estimate Received Date is invalid.';
+            return $result;
+        }
+
+        if ($parsed < $minDate || $parsed > $maxDate) {
+            $result['message'] = 'Estimate Received Date must be between ' . $result['min_date'] . ' and ' . $result['max_date'] . '.';
+            return $result;
+        }
+
+        $result['valid'] = true;
+        $result['normalized_date'] = $parsed->format('Y-m-d');
+        return $result;
+    }
+}
+
+if (!function_exists('shouldShowEstimatedReceivedDateButton')) {
+    function shouldShowEstimatedReceivedDateButton($row)
+    {
+        if (!is_array($row)) {
+            return false;
+        }
+
+        $statusKey = normalizeOrderStatusKey(isset($row['order_status']) ? $row['order_status'] : '');
+        $estimatedReceivedDate = trim((string) (isset($row['estimated_received_date']) ? $row['estimated_received_date'] : ''));
+
+        $assignableStatuses = array('p', 'pendingto', 'pendingtopack', 'sp', 'processing', 'waerd');
+        return in_array($statusKey, $assignableStatuses, true) && $estimatedReceivedDate === '';
+    }
+}
+
+if (!function_exists('assignEstimatedReceivedDate')) {
+    function assignEstimatedReceivedDate($connect, $tableName, $orderId, $date, $currentUserId)
+    {
+        $validation = validateEstimatedReceivedDate($date);
+        if (!$validation['valid']) {
+            return array(
+                'success' => false,
+                'message' => $validation['message'],
+            );
+        }
+
+        $orderId = (int) $orderId;
+        if ($orderId <= 0) {
+            return array(
+                'success' => false,
+                'message' => 'Invalid order ID.',
+            );
+        }
+
+        $tableName = trim((string) $tableName);
+        if ($tableName === '' || !preg_match('/^[A-Za-z0-9_]+$/', $tableName)) {
+            return array(
+                'success' => false,
+                'message' => 'Invalid table name.',
+            );
+        }
+
+        $selectSql = "SELECT id, order_status, estimated_received_date FROM `" . $tableName . "` WHERE id = ? LIMIT 1";
+        $selectStmt = mysqli_prepare($connect, $selectSql);
+        if (!$selectStmt) {
+            return array(
+                'success' => false,
+                'message' => 'Unable to prepare order lookup.',
+            );
+        }
+
+        mysqli_stmt_bind_param($selectStmt, 'i', $orderId);
+        mysqli_stmt_execute($selectStmt);
+        $selectResult = mysqli_stmt_get_result($selectStmt);
+        $row = $selectResult ? mysqli_fetch_assoc($selectResult) : null;
+        mysqli_stmt_close($selectStmt);
+
+        if (!$row) {
+            return array(
+                'success' => false,
+                'message' => 'Order not found.',
+            );
+        }
+
+        if (!shouldShowEstimatedReceivedDateButton($row)) {
+            return array(
+                'success' => false,
+                'message' => 'Estimate Received Date has already been assigned or this order is not waiting for assignment.',
+            );
+        }
+
+        $normalizedDate = $validation['normalized_date'];
+        $assignedBy = substr((string) $currentUserId, 0, 30);
+        $currentStatus = isset($row['order_status']) ? (string) $row['order_status'] : '';
+        $currentStatusKey = normalizeOrderStatusKey($currentStatus);
+        $newStatus = $currentStatus;
+
+        if ($currentStatusKey === 'waerd') {
+            $newStatus = 'AED';
+        } else if ($currentStatusKey === 'p' || $currentStatusKey === 'pendingto' || $currentStatusKey === 'pendingtopack') {
+            $newStatus = 'P';
+        } else if ($currentStatusKey === 'sp' || $currentStatusKey === 'processing') {
+            $newStatus = 'SP';
+        }
+
+        $updateSql = "UPDATE `" . $tableName . "` 
+            SET estimated_received_date = ?, 
+                estimated_received_date_assigned_by = ?, 
+                estimated_received_date_assigned_date = CURDATE(), 
+                estimated_received_date_assigned_time = CURTIME(), 
+                order_status = ?, 
+                update_by = ?, 
+                update_date = CURDATE(), 
+                update_time = CURTIME() 
+            WHERE id = ? AND estimated_received_date IS NULL AND order_status = ?";
+        $updateStmt = mysqli_prepare($connect, $updateSql);
+        if (!$updateStmt) {
+            return array(
+                'success' => false,
+                'message' => 'Unable to prepare Estimate Received Date update.',
+            );
+        }
+
+        mysqli_stmt_bind_param($updateStmt, 'ssssis', $normalizedDate, $assignedBy, $newStatus, $assignedBy, $orderId, $currentStatus);
+        mysqli_stmt_execute($updateStmt);
+        $affectedRows = mysqli_stmt_affected_rows($updateStmt);
+        mysqli_stmt_close($updateStmt);
+
+        if ($affectedRows < 1) {
+            return array(
+                'success' => false,
+                'message' => 'Unable to assign Estimate Received Date. Please refresh and try again.',
+            );
+        }
+
+        return array(
+            'success' => true,
+            'message' => 'Estimate Received Date assigned successfully.',
+            'date' => $normalizedDate,
+            'old_status' => $currentStatus,
+            'new_status' => $newStatus,
+        );
+    }
 }
 
 if (!function_exists('sorGenerateRequestNo')) {
