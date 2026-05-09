@@ -1236,7 +1236,7 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Failed creating `" . CUS_REPEAT . "`: " . $conn->error . "</p>";
     }
 
-    $createMessageShortcutsTableSql = "CREATE TABLE IF NOT EXISTS `" . MESSAGE_SHORTCUTS . "` (
+    $createMessageShortcutsTableSql = "CREATE TABLE IF NOT EXISTS `" . MESSAGE_SHORTCUTS . "` ( 
         `id` INT NOT NULL AUTO_INCREMENT,
         `shortcuts_tag` VARCHAR(120) NOT NULL,
         `shortcuts_message` MEDIUMTEXT DEFAULT NULL,
@@ -1249,12 +1249,43 @@ if ($conn->select_db($db_cms)) {
         `status` CHAR(1) NOT NULL DEFAULT 'A',
         PRIMARY KEY (`id`),
         KEY `idx_message_shortcuts_tag_status` (`shortcuts_tag`, `status`)
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
 
     if ($conn->query($createMessageShortcutsTableSql)) {
         echo "<p style='color:green;'>Verified table `" . MESSAGE_SHORTCUTS . "` is ready.</p>";
     } else {
         echo "<p style='color:red;'>Failed creating `" . MESSAGE_SHORTCUTS . "`: " . $conn->error . "</p>";
+    }
+
+    $messageShortcutsTableName = $conn->real_escape_string(MESSAGE_SHORTCUTS);
+    $messageShortcutsSchemaName = $conn->real_escape_string($db_cms);
+    $messageShortcutsCollationCheckSql = "SELECT TABLE_COLLATION
+        FROM information_schema.TABLES
+        WHERE TABLE_SCHEMA = '" . $messageShortcutsSchemaName . "'
+          AND TABLE_NAME = '" . $messageShortcutsTableName . "'
+        LIMIT 1";
+
+    $messageShortcutsCollationResult = $conn->query($messageShortcutsCollationCheckSql);
+
+    if ($messageShortcutsCollationResult) {
+        $messageShortcutsCollationRow = $messageShortcutsCollationResult->fetch_assoc();
+
+        if ($messageShortcutsCollationRow && $messageShortcutsCollationRow['TABLE_COLLATION'] !== 'utf8mb4_unicode_ci') {
+            $alterMessageShortcutsCollationSql = "ALTER TABLE `" . MESSAGE_SHORTCUTS . "`
+                CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
+
+            if ($conn->query($alterMessageShortcutsCollationSql)) {
+                echo "<p style='color:green;'>Verified table `" . MESSAGE_SHORTCUTS . "` collation is utf8mb4_unicode_ci.</p>";
+            } else {
+                echo "<p style='color:red;'>Failed altering `" . MESSAGE_SHORTCUTS . "` collation: " . $conn->error . "</p>";
+            }
+        } elseif ($messageShortcutsCollationRow) {
+            echo "<p style='color:green;'>Verified table `" . MESSAGE_SHORTCUTS . "` collation is utf8mb4_unicode_ci.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed verifying `" . MESSAGE_SHORTCUTS . "` collation: table metadata not found.</p>";
+        }
+    } else {
+        echo "<p style='color:red;'>Failed checking `" . MESSAGE_SHORTCUTS . "` collation: " . $conn->error . "</p>";
     }
 
     if ($conn->query($createTaskProjectSql)) {
