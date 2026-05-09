@@ -215,6 +215,23 @@ function deleteDir($dirPath)
 }
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);
+$canAssignEstimatedReceivedDate = isActionAllowed('Edit', $pinAccess);
+$estimatedDateToday = new DateTimeImmutable('today');
+$estimatedDateMin = $estimatedDateToday->modify('+1 day')->format('Y-m-d');
+$estimatedDateMax = $estimatedDateToday->modify('+10 days')->format('Y-m-d');
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceivedDateBtn')) {
+    if (!$canAssignEstimatedReceivedDate) {
+        echo "<script>alert('Security Error: You do not have permission to assign Estimate Received Dates.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+        exit;
+    }
+
+    $assignOrderId = postSpaceFilter('estimated_received_order_id');
+    $assignDate = postSpaceFilter('estimated_received_date');
+    $assignmentResult = assignEstimatedReceivedDate($connect, LAZADA_ORDER_REQ, $assignOrderId, $assignDate, USER_ID);
+    echo "<script>alert('" . addslashes($assignmentResult['message']) . "'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+    exit;
+}
 $_SESSION['act'] = '';
 $_SESSION['viewChk'] = '';
 $_SESSION['searchChk'] = '';
@@ -236,8 +253,35 @@ $result = getData('*', '', '', LAZADA_ORDER_REQ, $connect);
 </head>
 
 <script>
+    function openEstimatedReceivedDateModal(orderId, orderCode, minDate, maxDate) {
+        const modal = document.getElementById('estimatedReceivedDateModal');
+        const title = document.getElementById('estimatedReceivedDateTitle');
+        const orderIdInput = document.getElementById('estimated_received_order_id');
+        const dateInput = document.getElementById('estimated_received_date');
+        if (!modal || !orderIdInput || !dateInput) return;
+        title.textContent = orderCode ? 'Assign Estimate Received Date for ' + orderCode : 'Assign Estimate Received Date';
+        orderIdInput.value = orderId;
+        dateInput.value = '';
+        dateInput.min = minDate;
+        dateInput.max = maxDate;
+        modal.classList.add('is-open');
+    }
+
+    function closeEstimatedReceivedDateModal() {
+        const modal = document.getElementById('estimatedReceivedDateModal');
+        if (modal) modal.classList.remove('is-open');
+    }
+
     $(document).ready(() => {
         createSortingTable('lazada_order_req');
+        $(document).on('click', '.btn-assign-estimated-date', function () {
+            openEstimatedReceivedDateModal(
+                $(this).data('orderId'),
+                $(this).data('orderCode'),
+                $(this).data('minDate'),
+                $(this).data('maxDate')
+            );
+        });
     });
 </script>
 
@@ -250,6 +294,28 @@ $result = getData('*', '', '', LAZADA_ORDER_REQ, $connect);
     .btn-container {
         white-space: nowrap;
     }
+
+    .estimated-date-modal {
+        position: fixed;
+        inset: 0;
+        z-index: 2000;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0, 0, 0, 0.45);
+        padding: 16px;
+    }
+    .estimated-date-modal.is-open { display: flex; }
+    .estimated-date-modal__dialog {
+        width: 100%;
+        max-width: 420px;
+        border-radius: 12px;
+        background: #fff;
+        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+        padding: 20px;
+    }
+    .estimated-date-modal__close-btn,
+    .estimated-date-modal__action-btn { text-transform: none !important; }
 </style>
 
 <body>
@@ -300,6 +366,7 @@ $result = getData('*', '', '', LAZADA_ORDER_REQ, $connect);
                     <th scope="col">S/N</th>
                     <th scope="col" id="action_col">Action</th>
                     <th scope="col">Order Status</th>
+                    <th scope="col">Estimate Received Date</th>
                     <th scope="col">Lazada Account</th>
                     <th scope="col">Currency Unit</th>
                     <th scope="col">Country</th>
@@ -371,20 +438,17 @@ $result = getData('*', '', '', LAZADA_ORDER_REQ, $connect);
                         <?php if (isActionAllowed("Delete", $pinAccess)) : ?>
                         <a class="btn btn-danger" onclick="confirmationDialog('<?= $row['id'] ?>',['<?= $row['curr_unit'] ?>','<?= $row['country'] ?>'],'<?php echo $pageTitle ?>','<?= $redirect_page ?>','<?= $deleteRedirectPage ?>','D')"><i class="fas fa-trash-alt"></i></a>
                         <?php endif; ?>
+                        <?php if (shouldShowEstimatedReceivedDateButton($row) && $canAssignEstimatedReceivedDate) { ?>
+                            <button type="button" class="btn btn-warning btn-assign-estimated-date"
+                                data-order-id="<?= (int) $row['id'] ?>"
+                                data-order-code="<?= htmlspecialchars((string) (isset($row['oder_number']) ? $row['oder_number'] : ('Lazada Order #' . (int) $row['id'])), ENT_QUOTES, 'UTF-8') ?>"
+                                data-min-date="<?= $estimatedDateMin ?>"
+                                data-max-date="<?= $estimatedDateMax ?>"
+                                title="Assign Estimate Received Date"><i class="fa-solid fa-calendar-days"></i></button>
+                        <?php } ?>
                         </td>
-                        <td>
-                        <?php
-                            $status = $row['order_status'];
-                            if ($status == 'P') {
-                                $status = 'Processing';
-                            }else  if ($status == 'SP') {
-                                $status = 'Shipped';
-                            }else  if ($status == 'WP') {
-                                $status = 'Waiting Packing';
-                            }
-                            echo $status;
-                            ?>
-                        </td>
+                        <td><?= getMarketplaceRequestStatusLabel(isset($row['order_status']) ? $row['order_status'] : '') ?></td>
+                        <td scope="row"><?= !empty($row['estimated_received_date']) ? $row['estimated_received_date'] : '' ?></td>
                         <td scope="row"><?= isset($lazada_acc['name']) ? $lazada_acc['name'] : ''  ?></td>
                         <td scope="row"><?= $row['curr_unit'] ?></td>
                         <td scope="row"><?= $row['country'] ?></td>
@@ -420,6 +484,7 @@ $result = getData('*', '', '', LAZADA_ORDER_REQ, $connect);
                     <th scope="col">S/N</th>
                     <th scope="col" id="action_col">Action</th>
                     <th scope="col">Order Status</th>
+                    <th scope="col">Estimate Received Date</th>
                     <th scope="col">Lazada Account</th>
                     <th scope="col">Currency Unit</th>
                     <th scope="col">Country</th>
@@ -450,6 +515,29 @@ $result = getData('*', '', '', LAZADA_ORDER_REQ, $connect);
 </div>
 
 
+</div>
+
+<div class="estimated-date-modal" id="estimatedReceivedDateModal" aria-hidden="true">
+    <div class="estimated-date-modal__dialog">
+        <div class="d-flex justify-content-between align-items-start mb-3">
+            <h4 class="mb-0" id="estimatedReceivedDateTitle">Assign Estimate Received Date</h4>
+            <button type="button" class="btn btn-light estimated-date-modal__close-btn" onclick="closeEstimatedReceivedDateModal()" aria-label="Close">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+        <form method="post">
+            <input type="hidden" name="estimated_received_order_id" id="estimated_received_order_id" value="">
+            <div class="mb-3">
+                <label class="form-label" for="estimated_received_date">Estimate Received Date</label>
+                <input type="date" class="form-control" name="estimated_received_date" id="estimated_received_date" min="<?= $estimatedDateMin ?>" max="<?= $estimatedDateMax ?>" required>
+                <small class="text-muted">Choose a date from <?= $estimatedDateMin ?> until <?= $estimatedDateMax ?>.</small>
+            </div>
+            <div class="d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-light estimated-date-modal__action-btn" onclick="closeEstimatedReceivedDateModal()">Cancel</button>
+                <button type="submit" class="btn btn-primary estimated-date-modal__action-btn" name="assignEstimatedReceivedDateBtn" value="1">Save</button>
+            </div>
+        </form>
+    </div>
 </div>
 
 </body>

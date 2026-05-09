@@ -1,11 +1,13 @@
 <?php
 $currentPagePin = 0;
 $pageTitle = 'Stock Order Request Info';
+$disablePinGroupPageTitleSync = true;
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+
+$pageTitle = 'Stock Order Request Info';
 
 $pinAccess = checkPin($connect, 'Stock Order Request');
 if (!is_array($pinAccess) || count($pinAccess) === 0 || !isActionAllowed('View', $pinAccess)) {
@@ -522,8 +524,6 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
             <div class="d-flex flex-column mb-3">
                 <div class="row">
                     <p>
-                        <a href="<?= $SITEURL ?>/dashboard.php">Dashboard</a>
-                        <i class="fa-solid fa-chevron-right fa-xs"></i>
                         <a href="<?= $redirectPage ?>">Stock Order Request</a>
                         <i class="fa-solid fa-chevron-right fa-xs"></i>
                         <?= $pageTitle ?>
@@ -582,6 +582,7 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
 </div>
 
 <script>
+    document.title = <?= json_encode($pageTitle, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     checkCurrentPage('Stock Order Request', '');
     dropdownMenuDispFix();
     setButtonColor();

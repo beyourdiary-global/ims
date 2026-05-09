@@ -760,6 +760,17 @@ body.task-global-sidebar-open #dispTable {
   box-sizing: border-box;
 }
 
+.input-group.autocomplete {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.input-group.autocomplete .searchResult,
+.input-group.autocomplete .clear {
+  flex: 0 0 100%;
+  width: 100%;
+}
+
 .autocomplete .searchResult li {
   background: #f2f3f4;
   padding: 4px;

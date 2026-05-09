@@ -325,9 +325,10 @@ $menuList = array(
             array('Product Status', 'mdi mdi-package-variant-closed', $SITEURL . '/prod_status_table.php', '15'),
             array('Brand', 'mdi mdi-label-outline', $SITEURL . '/brand_table.php', '9'),
             array('Category', 'mdi mdi-label-outline', $SITEURL . '/product_category_table.php', '56'),
+            array('Label', 'mdi mdi-label-outline', $SITEURL . '/label_table.php', '145'),
             array('Brand Series', 'mdi mdi-label-outline', $SITEURL . '/brand_series_table.php', '74'),
         ),
-        'pin' => array('20', '21', '15', '9', '56', '74')
+        'pin' => array('20', '21', '15', '9', '56', '145', '74')
     ),
     array(
         'Expense',
