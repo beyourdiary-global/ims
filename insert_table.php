@@ -1257,13 +1257,35 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Failed creating `" . MESSAGE_SHORTCUTS . "`: " . $conn->error . "</p>";
     }
 
-    $alterMessageShortcutsCollationSql = "ALTER TABLE `" . MESSAGE_SHORTCUTS . "`
-        CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
+    $messageShortcutsTableName = $conn->real_escape_string(MESSAGE_SHORTCUTS);
+    $messageShortcutsSchemaName = $conn->real_escape_string($db_cms);
+    $messageShortcutsCollationCheckSql = "SELECT TABLE_COLLATION
+        FROM information_schema.TABLES
+        WHERE TABLE_SCHEMA = '" . $messageShortcutsSchemaName . "'
+          AND TABLE_NAME = '" . $messageShortcutsTableName . "'
+        LIMIT 1";
 
-    if ($conn->query($alterMessageShortcutsCollationSql)) {
-        echo "<p style='color:green;'>Verified table `" . MESSAGE_SHORTCUTS . "` collation is utf8mb4_unicode_ci.</p>";
+    $messageShortcutsCollationResult = $conn->query($messageShortcutsCollationCheckSql);
+
+    if ($messageShortcutsCollationResult) {
+        $messageShortcutsCollationRow = $messageShortcutsCollationResult->fetch_assoc();
+
+        if ($messageShortcutsCollationRow && $messageShortcutsCollationRow['TABLE_COLLATION'] !== 'utf8mb4_unicode_ci') {
+            $alterMessageShortcutsCollationSql = "ALTER TABLE `" . MESSAGE_SHORTCUTS . "`
+                CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
+
+            if ($conn->query($alterMessageShortcutsCollationSql)) {
+                echo "<p style='color:green;'>Verified table `" . MESSAGE_SHORTCUTS . "` collation is utf8mb4_unicode_ci.</p>";
+            } else {
+                echo "<p style='color:red;'>Failed altering `" . MESSAGE_SHORTCUTS . "` collation: " . $conn->error . "</p>";
+            }
+        } elseif ($messageShortcutsCollationRow) {
+            echo "<p style='color:green;'>Verified table `" . MESSAGE_SHORTCUTS . "` collation is utf8mb4_unicode_ci.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed verifying `" . MESSAGE_SHORTCUTS . "` collation: table metadata not found.</p>";
+        }
     } else {
-        echo "<p style='color:red;'>Failed altering `" . MESSAGE_SHORTCUTS . "` collation: " . $conn->error . "</p>";
+        echo "<p style='color:red;'>Failed checking `" . MESSAGE_SHORTCUTS . "` collation: " . $conn->error . "</p>";
     }
 
     if ($conn->query($createTaskProjectSql)) {
