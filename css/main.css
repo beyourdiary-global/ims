@@ -754,7 +754,7 @@ body.task-global-sidebar-open #dispTable {
 /* search */
 .clear {
   clear: both;
-  margin-top: 20px;
+  margin-top: 0;
 }
 
 .autocomplete {
@@ -765,14 +765,15 @@ body.task-global-sidebar-open #dispTable {
   list-style: none;
   padding: 0px;
   width: 100%;
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  margin: 0;
+  position: relative;
+  top: auto;
+  left: auto;
+  margin: 4px 0 0;
   background: white;
   border: 1px solid #000000;
   border-radius: 4px;
   z-index: 99;
+  box-sizing: border-box;
 }
 
 .autocomplete .searchResult li {
