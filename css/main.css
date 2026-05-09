@@ -755,6 +755,7 @@ body.task-global-sidebar-open #dispTable {
 .clear {
   clear: both;
   margin-top: 0;
+  margin-top: 0;
 }
 
 .autocomplete {
@@ -769,22 +770,15 @@ body.task-global-sidebar-open #dispTable {
   top: auto;
   left: auto;
   margin: 4px 0 0;
+  position: relative;
+  top: auto;
+  left: auto;
+  margin: 4px 0 0;
   background: white;
   border: 1px solid #000000;
   border-radius: 4px;
   z-index: 99;
   box-sizing: border-box;
-}
-
-.input-group.autocomplete {
-  flex-wrap: wrap;
-  align-items: flex-start;
-}
-
-.input-group.autocomplete .searchResult,
-.input-group.autocomplete .clear {
-  flex: 0 0 100%;
-  width: 100%;
 }
 
 .autocomplete .searchResult li {
