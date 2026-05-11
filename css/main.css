@@ -256,6 +256,22 @@ input {
     color: inherit !important;
   }
 
+    .topNav.navbar-expand-md .navbar-toggler .dropdown {
+    width: 100%;
+    height: 100%;
+  }
+
+  .topNav.navbar-expand-md .navbar-toggler .dropdown > .nav-link {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    margin: 0;
+    color: inherit;
+  }
+  
   .topNav.navbar-expand-md #navbarSupportedContent {
     display: none !important;
   }
