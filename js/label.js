@@ -42,6 +42,19 @@
     }
   }
 
+  function clearCommonRequiredAlert(input) {
+    if (!input || !input.parentNode) {
+      return;
+    }
+
+    var alerts = input.parentNode.querySelectorAll('span[role="alert"]');
+    alerts.forEach(function (alert) {
+      if (alert && alert.parentNode) {
+        alert.parentNode.removeChild(alert);
+      }
+    });
+  }
+
   function validateForm() {
     var form = document.getElementById("form");
     if (!form) {
@@ -64,6 +77,9 @@
       setError("labelNameError", "");
       setError("parentLabelError", "");
       setError("labelRemarkError", "");
+      clearCommonRequiredAlert(nameInput);
+      clearCommonRequiredAlert(parentTextInput);
+      clearCommonRequiredAlert(remarkInput);
 
       if (!nameInput || nameInput.value.trim() === "") {
         setError("labelNameError", "Label Name is required!");

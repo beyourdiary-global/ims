@@ -265,5 +265,8 @@ define('LAZADA_ORDER_REQ', 'lazada_order_request');
 $connect = @mysqli_connect(dbhost, dbuser, dbpwd, dbname);
 $finance_connect = @mysqli_connect(dbhost, dbuser, dbpwd, dbFinance);
 
+if ($connect) {
+    mysqli_set_charset($connect, 'utf8mb4');
+}
 //define session
 ?>

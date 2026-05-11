@@ -807,6 +807,8 @@ body.task-global-sidebar-open #dispTable {
   display: flex;
   align-items: stretch;
   gap: 8px;
+  position: relative;
+  overflow: visible;
 }
 
 .sor-pkg-row > .sor-pkg-input,
@@ -821,6 +823,21 @@ body.task-global-sidebar-open #dispTable {
 .sor-brand-row > .sor-remove-row-btn {
   flex: 0 0 auto;
   border-radius: 0 !important;
+}
+
+.sor-pkg-row > .searchResult,
+.sor-brand-row > .searchResult {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  margin: 0;
+  z-index: 1200;
+}
+
+.sor-pkg-row > .searchResult li,
+.sor-brand-row > .searchResult li {
+  white-space: normal;
+  word-break: break-word;
 }
 
 .readonlyInput {
