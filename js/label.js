@@ -42,6 +42,16 @@
     }
   }
 
+  function detachCommonActionButtonValidation() {
+    var actionBtn = document.getElementById("actionBtn");
+    if (!actionBtn || actionBtn.disabled) {
+      return;
+    }
+
+    var cleanActionBtn = actionBtn.cloneNode(true);
+    actionBtn.parentNode.replaceChild(cleanActionBtn, actionBtn);
+  }
+
   function clearCommonRequiredAlert(input) {
     if (!input || !input.parentNode) {
       return;
@@ -113,11 +123,13 @@
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", function () {
       initPageState();
+      detachCommonActionButtonValidation();
       bindParentLabelAutocomplete();
       validateForm();
     });
   } else {
     initPageState();
+    detachCommonActionButtonValidation();
     bindParentLabelAutocomplete();
     validateForm();
   }

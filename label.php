@@ -325,7 +325,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 
                     <div class="form-group mb-3">
                         <label class="form-label form_lbl" for="label_name">Label Name<span class="requireRed">*</span></label>
-                        <input class="form-control" type="text" name="label_name" id="label_name" value="<?= htmlspecialchars($labelNameValue, ENT_QUOTES, 'UTF-8') ?>" <?php if ($act == '') echo 'readonly' ?> required data-skip-common-required="1" autocomplete="off">
+                        <input class="form-control" type="text" name="label_name" id="label_name" value="<?= htmlspecialchars($labelNameValue, ENT_QUOTES, 'UTF-8') ?>" <?php if ($act == '') echo 'readonly' ?> required autocomplete="off">
                         <div id="err_msg">
                             <span class="mt-n1" id="labelNameError"><?php if (isset($name_err)) echo $name_err; ?></span>
                         </div>
@@ -337,7 +337,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                             <input class="form-control" type="text" value="Current label will be used as parent for the first record" readonly>
                         <?php else : ?>
                             <div class="autocomplete">
-                                <input class="form-control" type="text" name="parent_label_name" id="parent_label_name" value="<?= htmlspecialchars($selectedParentLabelName, ENT_QUOTES, 'UTF-8') ?>" <?php if ($act == '') echo 'readonly' ?> autocomplete="off" required data-skip-common-required="1">
+                                <input class="form-control" type="text" name="parent_label_name" id="parent_label_name" value="<?= htmlspecialchars($selectedParentLabelName, ENT_QUOTES, 'UTF-8') ?>" <?php if ($act == '') echo 'readonly' ?> autocomplete="off" required>
                                 <input type="hidden" name="parent_label" id="parent_label" value="<?= htmlspecialchars($selectedParentLabelId, ENT_QUOTES, 'UTF-8') ?>">
                             </div>
                         <?php endif; ?>
@@ -348,7 +348,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 
                     <div class="form-group mb-3">
                         <label class="form-label form_lbl" for="label_remark">Remark<span class="requireRed">*</span></label>
-                        <textarea class="form-control" name="label_remark" id="label_remark" rows="3" <?php if ($act == '') echo 'readonly' ?> required data-skip-common-required="1"><?= htmlspecialchars($labelRemarkValue, ENT_QUOTES, 'UTF-8') ?></textarea>
+                        <textarea class="form-control" name="label_remark" id="label_remark" rows="3" <?php if ($act == '') echo 'readonly' ?> required><?= htmlspecialchars($labelRemarkValue, ENT_QUOTES, 'UTF-8') ?></textarea>
                         <div id="err_msg">
                             <span class="mt-n1" id="labelRemarkError"><?php if (isset($remark_err)) echo $remark_err; ?></span>
                         </div>
