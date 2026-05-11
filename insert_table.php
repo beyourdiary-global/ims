@@ -385,14 +385,14 @@ if ($conn->select_db($db_fin)) {
     addColumnIfMissing($conn, $db_fin, 'website_order_request', 'estimated_received_date_assigned_by', "ALTER TABLE `website_order_request` ADD COLUMN `estimated_received_date_assigned_by` VARCHAR(30) DEFAULT NULL AFTER `estimated_received_date`");
     addColumnIfMissing($conn, $db_fin, 'website_order_request', 'estimated_received_date_assigned_date', "ALTER TABLE `website_order_request` ADD COLUMN `estimated_received_date_assigned_date` DATE DEFAULT NULL AFTER `estimated_received_date_assigned_by`");
     addColumnIfMissing($conn, $db_fin, 'website_order_request', 'estimated_received_date_assigned_time', "ALTER TABLE `website_order_request` ADD COLUMN `estimated_received_date_assigned_time` TIME DEFAULT NULL AFTER `estimated_received_date_assigned_date`");
+
+    addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'estimated_received_date', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `estimated_received_date` DATE DEFAULT NULL AFTER `remark`");
+    addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'estimated_received_date_assigned_by', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `estimated_received_date_assigned_by` VARCHAR(30) DEFAULT NULL AFTER `estimated_received_date`");
+    addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'estimated_received_date_assigned_date', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `estimated_received_date_assigned_date` DATE DEFAULT NULL AFTER `estimated_received_date_assigned_by`");
+    addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'estimated_received_date_assigned_time', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `estimated_received_date_assigned_time` TIME DEFAULT NULL AFTER `estimated_received_date_assigned_date`");
 } else {
     echo "<p style='color:red;'>Unable to select Finance database `" . $db_fin . "` for Estimate Received Date columns.</p>";
 }
-
-addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'estimated_received_date', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `estimated_received_date` DATE DEFAULT NULL AFTER `remark`");
-addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'estimated_received_date_assigned_by', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `estimated_received_date_assigned_by` VARCHAR(30) DEFAULT NULL AFTER `estimated_received_date`");
-addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'estimated_received_date_assigned_date', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `estimated_received_date_assigned_date` DATE DEFAULT NULL AFTER `estimated_received_date_assigned_by`");
-addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'estimated_received_date_assigned_time', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `estimated_received_date_assigned_time` TIME DEFAULT NULL AFTER `estimated_received_date_assigned_date`");
 // addColumnIfMissing($conn, $db_fin, 'shopee_customer_info', 'contact_no', "ALTER TABLE `shopee_customer_info` ADD COLUMN `contact_no` VARCHAR(30) DEFAULT NULL AFTER `series`");
 // addColumnIfMissing($conn, $db_fin, 'shopee_ads_topup_transaction', 'attachment', "ALTER TABLE `shopee_ads_topup_transaction` ADD COLUMN `attachment` VARCHAR(255) DEFAULT NULL AFTER `pay_meth`");
 
