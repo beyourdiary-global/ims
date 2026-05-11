@@ -1561,7 +1561,17 @@ if (!function_exists('shouldShowEstimatedReceivedDateButton')) {
         $statusKey = normalizeOrderStatusKey(isset($row['order_status']) ? $row['order_status'] : '');
         $estimatedReceivedDate = trim((string) (isset($row['estimated_received_date']) ? $row['estimated_received_date'] : ''));
 
-        $assignableStatuses = array('p', 'pendingto', 'pendingtopack', 'sp', 'processing', 'waerd');
+        $assignableStatuses = array(
+            'p',
+            'pendingto',
+            'pendingtopack',
+            'sp',
+            'processing',
+            'waerd',
+            'waitingassignestimatereceiveddate',
+            'aed',
+            'assignedestimateddate'
+        );
         return in_array($statusKey, $assignableStatuses, true) && $estimatedReceivedDate === '';
     }
 }
@@ -1628,7 +1638,12 @@ if (!function_exists('assignEstimatedReceivedDate')) {
         $currentStatusKey = normalizeOrderStatusKey($currentStatus);
         $newStatus = $currentStatus;
 
-        if ($currentStatusKey === 'waerd') {
+        if (
+            $currentStatusKey === 'waerd'
+            || $currentStatusKey === 'waitingassignestimatereceiveddate'
+            || $currentStatusKey === 'aed'
+            || $currentStatusKey === 'assignedestimateddate'
+        ) {
             $newStatus = 'AED';
         } else if ($currentStatusKey === 'p' || $currentStatusKey === 'pendingto' || $currentStatusKey === 'pendingtopack') {
             $newStatus = 'P';

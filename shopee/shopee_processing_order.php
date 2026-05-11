@@ -63,6 +63,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceiv
 
         if ($assignmentResult['success']) {
             $safeAssignedDate = isset($assignmentResult['date']) ? $assignmentResult['date'] : '';
+            $safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
             $oldStatus = isset($assignmentResult['old_status']) ? (string) $assignmentResult['old_status'] : '';
             $newStatus = isset($assignmentResult['new_status']) ? (string) $assignmentResult['new_status'] : '';
             $changeSummary = 'estimated_received_date: ' . $safeAssignedDate;
@@ -77,7 +78,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceiv
                 'oldval' => $oldStatus !== '' ? ('order_status: ' . $oldStatus) : '',
                 'changes' => $changeSummary,
                 'uid' => USER_ID,
-                'act_msg' => USER_NAME . " assigned the Estimate Received Date <b>" . $safeAssignedDate . "</b> for Shopee order [ <b>ID = " . (int) $assignOrderId . "</b> ].",
+                'act_msg' => $safeUserName . " assigned the Estimate Received Date <b>" . $safeAssignedDate . "</b> for Shopee order [ <b>ID = " . (int) $assignOrderId . "</b> ].",
                 'cdate' => $cdate,
                 'ctime' => $ctime,
                 'cby' => USER_ID,
