@@ -268,5 +268,9 @@ $finance_connect = @mysqli_connect(dbhost, dbuser, dbpwd, dbFinance);
 if ($connect) {
     mysqli_set_charset($connect, 'utf8mb4');
 }
+
+if ($finance_connect) {
+    mysqli_set_charset($finance_connect, 'utf8mb4');
+}
 //define session
 ?>
