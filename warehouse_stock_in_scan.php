@@ -2,6 +2,200 @@
 include_once 'init.php';
 include_once ROOT . '/include/common.php';
 
+$submittedOmsToken = isset($_POST['scan_token']) ? trim((string) $_POST['scan_token']) : '';
+$omsToken = $submittedOmsToken !== '' ? $submittedOmsToken : (isset($_GET['t']) ? trim((string) $_GET['t']) : '');
+if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
+    $safeOmsToken = mysqli_real_escape_string($finance_connect, $omsToken);
+    $omsTokenSql = "SELECT * FROM `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` WHERE token = '" . $safeOmsToken . "' AND token_type = 'stock_out' AND status = 'A' ORDER BY id DESC LIMIT 1";
+    $omsTokenRst = mysqli_query($finance_connect, $omsTokenSql);
+    if ($omsTokenRst && mysqli_num_rows($omsTokenRst) > 0) {
+        $omsTokenRow = mysqli_fetch_assoc($omsTokenRst);
+        $omsOrderRow = shopeeOmsLoadOrder($finance_connect, isset($omsTokenRow['order_id']) ? (int) $omsTokenRow['order_id'] : 0);
+        $omsClientIp = shopeeOmsGetClientIp();
+        $omsCountryCode = '';
+        if ($omsClientIp !== '') {
+            if (shopeeOmsIsPrivateOrReservedIp($omsClientIp)) {
+                $omsCountryCode = 'PRIVATE';
+            } else {
+                $omsCountryCode = shopeeOmsLookupCountryCode($omsClientIp);
+            }
+        }
+        shopeeOmsAuditLog('security_pass', 'Location policy passed.', array(
+            'order_id' => (int) (isset($omsTokenRow['order_id']) ? $omsTokenRow['order_id'] : 0),
+            'ip' => ($omsClientIp === '' ? 'Unknown' : $omsClientIp),
+            'country' => ($omsCountryCode === '' ? 'Unknown' : $omsCountryCode),
+        ));
+        $omsScanSubmit = (strtolower((string) $_SERVER['REQUEST_METHOD']) === 'post' && isset($_POST['actionBtn']) && (string) $_POST['actionBtn'] === 'submitOmsStockOut');
+        $omsStatusTitle = 'Warehouse Stock-out Ready';
+        $omsStatusClass = 'warning';
+        $omsMessage = 'Review the order details below, then submit the warehouse stock-out scan to move this order to Shipped.';
+
+        if ($omsScanSubmit) {
+            $omsScanResult = shopeeOmsProcessWarehouseScanByToken(
+                $connect,
+                $finance_connect,
+                $omsToken,
+                defined('USER_ID') && USER_ID !== '' ? USER_ID : 'QR_PUBLIC',
+                defined('USER_GROUP') ? (int) USER_GROUP : 0,
+                'Warehouse Stock-out Scan'
+            );
+            $omsStatusClass = !empty($omsScanResult['success']) ? 'success' : 'danger';
+            $omsStatusTitle = !empty($omsScanResult['success']) ? 'Warehouse Stock-out Completed' : 'Warehouse Stock-out Failed';
+            $omsMessage = isset($omsScanResult['message']) ? (string) $omsScanResult['message'] : 'Unable to process warehouse stock-out scan.';
+            if (!empty($omsScanResult['success'])) {
+                shopeeOmsAuditLog('submit_success', $omsMessage, array(
+                    'order_id' => (int) (isset($omsTokenRow['order_id']) ? $omsTokenRow['order_id'] : 0),
+                    'order_code' => (string) (isset($omsOrderRow['orderID']) ? $omsOrderRow['orderID'] : ''),
+                    'status' => 'shipped',
+                ));
+            } else {
+                shopeeOmsAuditLog('submit_failed', $omsMessage, array(
+                    'order_id' => (int) (isset($omsTokenRow['order_id']) ? $omsTokenRow['order_id'] : 0),
+                    'order_code' => (string) (isset($omsOrderRow['orderID']) ? $omsOrderRow['orderID'] : ''),
+                ));
+            }
+            $omsOrderRow = shopeeOmsLoadOrder($finance_connect, isset($omsTokenRow['order_id']) ? (int) $omsTokenRow['order_id'] : 0);
+            $omsTokenRst = mysqli_query($finance_connect, $omsTokenSql);
+            if ($omsTokenRst && mysqli_num_rows($omsTokenRst) > 0) {
+                $omsTokenRow = mysqli_fetch_assoc($omsTokenRst);
+            }
+        } else if (!empty($omsTokenRow['used_at'])) {
+            $omsStatusTitle = 'Warehouse Stock-out Already Completed';
+            $omsStatusClass = 'success';
+            $omsMessage = 'This warehouse stock-out link has already been used.';
+        }
+
+        $omsSummary = !empty($omsOrderRow) ? shopeeOmsBuildOrderProductSummary($connect, $omsOrderRow) : array();
+        $omsAirbillAttachmentUrl = '';
+        $omsAirbillAttachmentName = '';
+        $omsAirbillAttachmentExt = '';
+        if (!empty($omsOrderRow['airbill_attachment'])) {
+            $storedAttachment = trim(str_replace('\\', '/', (string) $omsOrderRow['airbill_attachment']), '/');
+            $omsAirbillAttachmentName = basename($storedAttachment);
+            $omsAirbillAttachmentExt = strtolower((string) pathinfo($omsAirbillAttachmentName, PATHINFO_EXTENSION));
+            if (strpos($storedAttachment, 'attachment/') === 0) {
+                $omsAirbillAttachmentUrl = rtrim((string) $SITEURL, '/') . '/' . $storedAttachment;
+            } else {
+                $imgServerBase = defined('img_server') ? (string) constant('img_server') : '/images_server/';
+                $omsAirbillAttachmentUrl = rtrim((string) $SITEURL, '/') . '/' . trim($imgServerBase, '/\\') . '/shopee_airbill_attachment/' . rawurlencode($omsAirbillAttachmentName);
+            }
+        }
+        ?>
+        <!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title><?= htmlspecialchars($omsStatusTitle) ?></title>
+            <link href="<?= $SITEURL ?>/header/fontawesome-free-6.0.0-web/css/all.min.css" rel="stylesheet">
+            <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
+            <style>
+                body { font-family: "Segoe UI", Tahoma, Arial, sans-serif; margin: 0; background: linear-gradient(135deg, #f4f8fb 0%, #eaf2f9 100%); color: #1f2d3d; }
+                .container { max-width: 900px; margin: 32px auto; background: #fff; border-radius: 14px; box-shadow: 0 14px 40px rgba(22, 56, 89, 0.12); padding: 24px; }
+                .title { margin: 0 0 8px 0; font-size: 28px; }
+                .subtitle { margin: 0 0 16px 0; color: #5f7185; }
+                .alert { border-radius: 10px; padding: 14px 16px; margin-bottom: 18px; border: 1px solid transparent; }
+                .alert-success { background: #edf9f0; border-color: #b8e0c1; color: #1a6b2f; }
+                .alert-warning { background: #fff8e9; border-color: #f5d28b; color: #7a5600; }
+                .alert-danger { background: #ffeef0; border-color: #f3bdc5; color: #8a2230; }
+                .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; margin-bottom: 18px; }
+                .card { border: 1px solid #e2ebf3; border-radius: 10px; padding: 12px; background: #fbfdff; }
+                .card h4 { margin: 0 0 10px 0; font-size: 16px; }
+                .k { color: #5f7185; }
+                .v { font-weight: 600; }
+                .attachment-wrap { margin-top: 18px; }
+                .attachment-preview-card { border: 1px solid #e2ebf3; border-radius: 10px; padding: 14px; background: #fbfdff; }
+                .attachment-preview-media { margin-top: 12px; }
+                .attachment-preview-media img { max-width: 100%; max-height: 360px; border: 1px solid #d8e3ee; border-radius: 8px; background: #fff; display: block; }
+                .attachment-preview-media iframe { width: 100%; height: 420px; border: 1px solid #d8e3ee; border-radius: 8px; background: #fff; }
+                .attachment-link { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; text-decoration: none; }
+                table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+                th, td { border: 1px solid #d8e3ee; padding: 8px; text-align: left; }
+                th { background: #f3f8fd; }
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <h1 class="title"><?= htmlspecialchars($omsStatusTitle) ?></h1>
+                <p class="subtitle">Shopee OMS Warehouse Stock-out Scan</p>
+                <div class="alert alert-<?= htmlspecialchars($omsStatusClass) ?>"><?= htmlspecialchars($omsMessage) ?></div>
+
+                <?php if (!empty($omsOrderRow)) { ?>
+                    <div class="grid">
+                        <div class="card">
+                            <h4>Order Details</h4>
+                            <div><span class="k">Order ID:</span> <span class="v"><?= htmlspecialchars((string) (isset($omsOrderRow['orderID']) ? $omsOrderRow['orderID'] : '')) ?></span></div>
+                            <div><span class="k">Customer:</span> <span class="v"><?= htmlspecialchars((string) (isset($omsOrderRow['customer_name']) && trim((string) $omsOrderRow['customer_name']) !== '' ? $omsOrderRow['customer_name'] : (isset($omsOrderRow['buyer']) ? $omsOrderRow['buyer'] : '-'))) ?></span></div>
+                            <div><span class="k">Address:</span> <span class="v"><?= nl2br(htmlspecialchars((string) (isset($omsOrderRow['customer_address']) ? $omsOrderRow['customer_address'] : '-'))) ?></span></div>
+                            <div><span class="k">Airbill:</span> <span class="v"><?= htmlspecialchars((string) (isset($omsOrderRow['airbill_no']) && trim((string) $omsOrderRow['airbill_no']) !== '' ? $omsOrderRow['airbill_no'] : '-')) ?></span></div>
+                            <div><span class="k">Airbill Attachment:</span> <span class="v"><?= htmlspecialchars($omsAirbillAttachmentName !== '' ? $omsAirbillAttachmentName : '-') ?></span></div>
+                            <div><span class="k">Current Status:</span> <span class="v"><?= htmlspecialchars(shopeeOmsGetStatusLabel(isset($omsOrderRow['order_status']) ? $omsOrderRow['order_status'] : '')) ?></span></div>
+                        </div>
+                        <div class="card">
+                            <h4>Warehouse Package</h4>
+                            <div><span class="k">Package:</span> <span class="v"><?= htmlspecialchars(!empty($omsSummary['bundle_name']) ? $omsSummary['bundle_name'] : '-') ?></span></div>
+                            <div><span class="k">Products:</span> <span class="v"><?= htmlspecialchars(!empty($omsSummary['product_lines']) ? implode(', ', $omsSummary['product_lines']) : '-') ?></span></div>
+                        </div>
+                    </div>
+
+                    <?php if ($omsAirbillAttachmentUrl !== '') { ?>
+                        <div class="attachment-wrap">
+                            <div class="attachment-preview-card">
+                                <h4>Airbill Attachment</h4>
+                                <a class="attachment-link" href="<?= htmlspecialchars($omsAirbillAttachmentUrl) ?>" target="_blank" rel="noopener noreferrer" download="<?= htmlspecialchars($omsAirbillAttachmentName) ?>">
+                                    <i class="fa-solid fa-download"></i>
+                                    <span>Download Attachment</span>
+                                </a>
+                                <div class="attachment-preview-media">
+                                    <?php if (in_array($omsAirbillAttachmentExt, array('png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'), true)) { ?>
+                                        <img src="<?= htmlspecialchars($omsAirbillAttachmentUrl) ?>" alt="Airbill Attachment Preview">
+                                    <?php } else if ($omsAirbillAttachmentExt === 'pdf') { ?>
+                                        <iframe src="<?= htmlspecialchars($omsAirbillAttachmentUrl) ?>" title="Airbill Attachment Preview"></iframe>
+                                    <?php } else { ?>
+                                        <div class="k">Preview is not available for this file type. Use the download link above.</div>
+                                    <?php } ?>
+                                </div>
+                            </div>
+                        </div>
+                    <?php } ?>
+
+                    <?php if (!empty($omsSummary['product_lines'])) { ?>
+                        <h3>Product Details</h3>
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th width="60">#</th>
+                                    <th>Product</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($omsSummary['product_lines'] as $idx => $productLine) { ?>
+                                    <tr>
+                                        <td><?= (int) ($idx + 1) ?></td>
+                                        <td><?= htmlspecialchars((string) $productLine) ?></td>
+                                    </tr>
+                                <?php } ?>
+                            </tbody>
+                        </table>
+                    <?php } ?>
+
+                    <?php if (empty($omsTokenRow['used_at'])) { ?>
+                        <form method="post" style="margin-top: 20px;">
+                            <input type="hidden" name="scan_token" value="<?= htmlspecialchars($omsToken) ?>">
+                            <button type="submit" name="actionBtn" value="submitOmsStockOut" style="padding:10px 16px;border:0;border-radius:8px;background:#1f6fd5;color:#fff;font-weight:600;">Submit Warehouse Stock-out</button>
+                        </form>
+                    <?php } ?>
+                <?php } else { ?>
+                    <div class="alert alert-danger">Order linked to this warehouse stock-out token could not be found.</div>
+                <?php } ?>
+            </div>
+        </body>
+        </html>
+        <?php
+        exit;
+    }
+}
+
 $stockInOrderTable = 'stock_in_order';
 $stockInItemTable = 'stock_in_order_item';
 

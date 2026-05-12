@@ -9,6 +9,10 @@ function toggleNewBuyer() {
 
 var price_curr_chk = 0;
 
+$("#sor_airbill_attachment").on("change", function () {
+  previewImage(this, "sor_airbill_attachment_preview");
+});
+
 function getFirstFilledValue(selector) {
   var firstValue = "";
   $(selector).each(function () {

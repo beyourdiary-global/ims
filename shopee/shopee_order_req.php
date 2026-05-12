@@ -22,6 +22,13 @@ if (in_array('130', GlobalPin)) {
 }
 $redirectLink = ("<script>location.replace('$redirect_page');</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
+$sorStatusOptions = function_exists('shopeeOmsGetEditableStatusOptions') ? shopeeOmsGetEditableStatusOptions() : array('P' => 'To Ship', 'TP' => 'To Pack', 'SP' => 'Shipped', 'WAERD' => 'Waiting Assign Estimate Received Date');
+$sorAirbillAttachmentPath = img_server . 'shopee_airbill_attachment/';
+$sorAirbillAttachmentUrl = rtrim((string) $SITEURL, '/') . '/' . trim((string) $sorAirbillAttachmentPath, '/\\') . '/';
+$sorAirbillAttachmentFsPath = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . trim((string) $sorAirbillAttachmentPath, '/\\') . DIRECTORY_SEPARATOR;
+if (!file_exists($sorAirbillAttachmentFsPath)) {
+    mkdir($sorAirbillAttachmentFsPath, 0777, true);
+}
 
 // to display data to input
 if ($dataID) { //edit/remove/view
@@ -114,65 +121,64 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
 }
 
 if (post('updateStatusBtn')) {
-    $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
-    $newStatus = post('updateStatusBtn'); // Will receive 'SP', 'WAERD', 'OC', or 'C'
+    $newStatus = post('updateStatusBtn');
+    $transitionResult = shopeeOmsExecuteTransition($connect, $finance_connect, (int) $dataID, $newStatus, array(
+        'actor_user_id' => USER_ID,
+        'actor_user_group_id' => USER_GROUP,
+        'source_page' => $pageTitle,
+        'remark' => '',
+    ));
 
-    if (in_array($newStatus, ['SP', 'WAERD', 'OC', 'C'])) {
-        try {
-            // 1. Get old data before update
-            $getOldQuery = "SELECT order_status FROM " . $tblName . " WHERE id = " . intval($dataID);
-            $oldResult = mysqli_query($finance_connect, $getOldQuery);
-            $oldRow = mysqli_fetch_assoc($oldResult);
-
-            $oldStatus = $oldRow['order_status'];
-
-            // 2. Perform update
-            $queryStatusUpdate = "UPDATE " . $tblName . " SET order_status='$newStatus', update_by='" . USER_ID . "', update_date=curdate(), update_time=curtime() WHERE id = " . intval($dataID);
-            $returnData = mysqli_query($finance_connect, $queryStatusUpdate);
-
-            // 3. Only log if update was successful
-            if ($returnData) {
-                // Prepare audit log details
-                array_push($datafield, 'order_status');
-                array_push($oldvalarr, $oldStatus);
-                array_push($chgvalarr, $newStatus);
-
-                $statusLabel = ($newStatus === 'SP')
-                    ? "Processing"
-                    : (($newStatus === 'WAERD')
-                        ? "Waiting Assign Estimate Received Date"
-                        : (($newStatus === 'OC') ? "Order Received" : "Completed"));
-
-                $log = [
-                    'log_act'      => 'edit',
-                    'cdate'        => $cdate,
-                    'ctime'        => $ctime,
-                    'uid'          => USER_ID,
-                    'cby'          => USER_ID,
-                    'query_rec'    => $queryStatusUpdate,
-                    'query_table'  => $tblName,
-                    'page'         => $pageTitle,
-                    'connect'      => $connect,
-                    'oldval'       => implodeWithComma($oldvalarr),
-                    'changes'      => implodeWithComma($chgvalarr),
-                    'act_msg'      => actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, 'edit', '')
-                ];
-
-                audit_log($log);
-
-                echo '<script>
-                    alert("Order status updated to ' . $statusLabel . '.");
-                    window.location.replace("' . $redirect_page . '");
-                </script>';
-                exit; // Stop executing the rest of the page so it redirects cleanly
-            } else {
-                throw new Exception("Failed to update order status.");
-            }
-        } catch (Exception $e) {
-            $errorMsg = $e->getMessage();
-            echo '<script>alert("Error: ' . addslashes($errorMsg) . '");</script>';
-        }
+    if (!empty($transitionResult['success'])) {
+        $oldStatus = isset($transitionResult['old_status']) ? (string) $transitionResult['old_status'] : '';
+        $newStatusCode = isset($transitionResult['new_status']) ? (string) $transitionResult['new_status'] : '';
+        $queryStatusUpdate = "OMS transition " . $oldStatus . " -> " . $newStatusCode;
+        $log = [
+            'log_act'      => 'edit',
+            'cdate'        => $cdate,
+            'ctime'        => $ctime,
+            'uid'          => USER_ID,
+            'cby'          => USER_ID,
+            'query_rec'    => $queryStatusUpdate,
+            'query_table'  => $tblName,
+            'page'         => $pageTitle,
+            'connect'      => $connect,
+            'oldval'       => 'order_status: ' . $oldStatus,
+            'changes'      => 'order_status: ' . $newStatusCode,
+            'act_msg'      => USER_NAME . " updated Shopee order #" . (int) $dataID . " from " . htmlspecialchars($oldStatus, ENT_QUOTES, 'UTF-8') . " to " . htmlspecialchars($newStatusCode, ENT_QUOTES, 'UTF-8') . ".",
+        ];
+        audit_log($log);
+        echo '<script>alert("' . addslashes($transitionResult['message']) . '"); window.location.replace("' . $redirect_page . '");</script>';
+        exit;
     }
+
+    echo '<script>alert("' . addslashes(isset($transitionResult['message']) ? $transitionResult['message'] : 'Unable to update order status.') . '");</script>';
+}
+
+if (post('returnActionBtn')) {
+    $returnType = postSpaceFilter('return_type');
+    $returnRemark = postSpaceFilter('return_remark');
+    $returnResult = shopeeOmsHandleReturn($connect, $finance_connect, (int) $dataID, $returnType, $returnRemark, USER_ID, USER_GROUP, $pageTitle);
+    if (!empty($returnResult['success'])) {
+        $log = [
+            'log_act' => 'edit',
+            'cdate' => $cdate,
+            'ctime' => $ctime,
+            'uid' => USER_ID,
+            'cby' => USER_ID,
+            'query_rec' => 'OMS return ' . $returnType,
+            'query_table' => $tblName,
+            'page' => $pageTitle,
+            'connect' => $connect,
+            'changes' => 'return_type: ' . $returnType,
+            'act_msg' => USER_NAME . " marked Shopee order #" . (int) $dataID . " as returned (" . htmlspecialchars($returnType, ENT_QUOTES, 'UTF-8') . ").",
+        ];
+        audit_log($log);
+        echo '<script>alert("' . addslashes($returnResult['message']) . '"); window.location.replace("' . $redirect_page . '");</script>';
+        exit;
+    }
+
+    echo '<script>alert("' . addslashes(isset($returnResult['message']) ? $returnResult['message'] : 'Unable to save return action.') . '");</script>';
 }
 
 if (post('actionBtn')) {
@@ -245,12 +251,62 @@ if (post('actionBtn')) {
     $sor_fees = postSpaceFilter('sor_fees');
     $sor_final = postSpaceFilter('sor_final');
     $sor_remark = postSpaceFilter('sor_remark');
+    $sor_order_status = shopeeOmsNormalizeStatusCode(postSpaceFilter('sor_order_status'));
+    if ($sor_order_status === '') {
+        $sor_order_status = isset($row['order_status']) ? shopeeOmsNormalizeStatusCode($row['order_status']) : 'P';
+    }
+    $sor_update_airbill = strtolower(trim((string) postSpaceFilter('sor_update_airbill')));
+    if ($sor_update_airbill === '') {
+        $sor_update_airbill = 'yes';
+    }
+    $sor_airbill = postSpaceFilter('sor_airbill');
+    $sor_customer_name = postSpaceFilter('sor_customer_name');
+    $sor_customer_address = postSpaceFilter('sor_customer_address');
+    $sor_airbill_attachment = null;
+    if (isset($_FILES["sor_airbill_attachment"]) && $_FILES["sor_airbill_attachment"]["size"] != 0) {
+        $sor_airbill_attachment = $_FILES["sor_airbill_attachment"]["name"];
+    } elseif (isset($_POST['sor_airbill_attachment_value'])) {
+        $sor_airbill_attachment = $_POST['sor_airbill_attachment_value'];
+    }
+    $packageQtySnapshot = shopeeOmsBuildPackageQtySnapshotFromInputs(
+        isset($_POST['sor_pkg_hidden']) ? $_POST['sor_pkg_hidden'] : array(),
+        isset($_POST['sor_pkg']) ? $_POST['sor_pkg'] : array(),
+        $connect
+    );
+    $packageQtySnapshotJson = !empty($packageQtySnapshot) ? json_encode($packageQtySnapshot) : '';
 
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
     switch ($action) {
         case 'addRecord':
         case 'updRecord':
+            if (isset($_FILES["sor_airbill_attachment"]) && $_FILES["sor_airbill_attachment"]["size"] != 0) {
+                $sorAirbillFileName = $_FILES["sor_airbill_attachment"]["name"];
+                $sorAirbillTmpName = $_FILES["sor_airbill_attachment"]["tmp_name"];
+                $sorAirbillExt = strtolower((string) pathinfo($sorAirbillFileName, PATHINFO_EXTENSION));
+
+                if (in_array($sorAirbillExt, $allowed_ext)) {
+                    $attachmentSeed = trim((string) $sor_order) !== '' ? trim((string) $sor_order) : ('shopee_airbill_' . date('Ymd_His'));
+                    $attachmentSeed = preg_replace('/[^A-Za-z0-9_-]+/', '_', $attachmentSeed);
+                    $newAirbillAttachmentName = $attachmentSeed . '_' . date('Ymd_His') . '.' . $sorAirbillExt;
+                    $dedupeCounter = 1;
+                    while (file_exists($sorAirbillAttachmentFsPath . $newAirbillAttachmentName)) {
+                        $newAirbillAttachmentName = $attachmentSeed . '_' . date('Ymd_His') . '_' . $dedupeCounter . '.' . $sorAirbillExt;
+                        $dedupeCounter++;
+                    }
+
+                    if (move_uploaded_file($sorAirbillTmpName, $sorAirbillAttachmentFsPath . $newAirbillAttachmentName)) {
+                        $sor_airbill_attachment = $newAirbillAttachmentName;
+                    } else {
+                        $airbill_attachment_err = "Failed to upload the airbill attachment.";
+                        $error = 1;
+                    }
+                } else {
+                    $airbill_attachment_err = "Only allow PNG, JPG, JPEG, SVG or PDF file";
+                    $error = 1;
+                }
+            }
+
             if (!$sor_acc) {
                 $acc_err = "Shopee Account cannot be empty.";
                 $error = 1;
@@ -295,6 +351,17 @@ if (post('actionBtn')) {
                 $price_err = "Product Price cannot be empty.";
                 $error = 1;
             }
+
+            $effectiveAirbill = $sor_airbill;
+            if ($action === 'updRecord' && $sor_update_airbill !== 'yes') {
+                $effectiveAirbill = isset($row['airbill_no']) ? (string) $row['airbill_no'] : '';
+            }
+            $statusValidation = shopeeOmsValidateInitialStatusAndAirbill($sor_order_status, $effectiveAirbill);
+            if (!$statusValidation['valid']) {
+                $airbill_err = $statusValidation['message'];
+                $error = 1;
+            }
+
             if (isset($error)) {
                 break;
             }
@@ -394,10 +461,74 @@ if (post('actionBtn')) {
                         array_push($newvalarr, $sor_remark);
                         array_push($datafield, 'remark');
                     }
+                    if ($sor_order_status) {
+                        array_push($newvalarr, $sor_order_status);
+                        array_push($datafield, 'order_status');
+                    }
+                    if ($effectiveAirbill !== '') {
+                        array_push($newvalarr, $effectiveAirbill);
+                        array_push($datafield, 'airbill_no');
+                    }
+                    if ($sor_customer_name !== '') {
+                        array_push($newvalarr, $sor_customer_name);
+                        array_push($datafield, 'customer_name');
+                    }
+                    if ($sor_customer_address !== '') {
+                        array_push($newvalarr, $sor_customer_address);
+                        array_push($datafield, 'customer_address');
+                    }
 
-                    $query = "INSERT INTO " . $tblName . " (shopee_acc,currency,orderID,date,time,package,brand,buyer,buyer_pay_meth,pic,price,voucher,act_shipping_fee,service_fee,trans_fee,ams_fee,fees,final_amt,remark,create_by,create_date,create_time) VALUES ('$sor_acc','$sor_curr','$sor_order','$sor_date','$sor_time','$sor_pkg','$sor_brand','$sor_user','$sor_pay','$sor_pic','$sor_price','$sor_voucher','$sor_shipping','$sor_serv','$sor_trans','$sor_ams','$sor_fees','$sor_final','$sor_remark','" . USER_ID . "',curdate(),curtime())";
-                    // Execute the query
+                    $safeSorAcc = mysqli_real_escape_string($finance_connect, $sor_acc);
+                    $safeSorCurr = mysqli_real_escape_string($finance_connect, $sor_curr);
+                    $safeSorOrder = mysqli_real_escape_string($finance_connect, $sor_order);
+                    $safeSorDate = mysqli_real_escape_string($finance_connect, $sor_date);
+                    $safeSorTime = mysqli_real_escape_string($finance_connect, $sor_time);
+                    $safeSorPkg = mysqli_real_escape_string($finance_connect, $sor_pkg);
+                    $safePackageQtySnapshotJson = mysqli_real_escape_string($finance_connect, $packageQtySnapshotJson);
+                    $safeSorBrand = mysqli_real_escape_string($finance_connect, $sor_brand);
+                    $safeSorUser = mysqli_real_escape_string($finance_connect, $sor_user);
+                    $safeSorPay = mysqli_real_escape_string($finance_connect, $sor_pay);
+                    $safeSorPic = mysqli_real_escape_string($finance_connect, $sor_pic);
+                    $safeSorPrice = mysqli_real_escape_string($finance_connect, $sor_price);
+                    $safeSorVoucher = mysqli_real_escape_string($finance_connect, $sor_voucher);
+                    $safeSorShipping = mysqli_real_escape_string($finance_connect, $sor_shipping);
+                    $safeSorServ = mysqli_real_escape_string($finance_connect, $sor_serv);
+                    $safeSorTrans = mysqli_real_escape_string($finance_connect, $sor_trans);
+                    $safeSorAms = mysqli_real_escape_string($finance_connect, $sor_ams);
+                    $safeSorFees = mysqli_real_escape_string($finance_connect, $sor_fees);
+                    $safeSorFinal = mysqli_real_escape_string($finance_connect, $sor_final);
+                    $safeSorRemark = mysqli_real_escape_string($finance_connect, $sor_remark);
+                    $safeSorStatus = mysqli_real_escape_string($finance_connect, $sor_order_status);
+                    $safeAirbill = mysqli_real_escape_string($finance_connect, $effectiveAirbill);
+                    $safeAirbillAttachment = mysqli_real_escape_string($finance_connect, $sor_airbill_attachment);
+                    $safeCustomerName = mysqli_real_escape_string($finance_connect, $sor_customer_name);
+                    $safeCustomerAddress = mysqli_real_escape_string($finance_connect, $sor_customer_address);
+
+                    $query = "INSERT INTO " . $tblName . " (shopee_acc,currency,orderID,date,time,package,package_qty_json,brand,buyer,buyer_pay_meth,pic,customer_name,customer_address,price,voucher,act_shipping_fee,service_fee,trans_fee,ams_fee,fees,final_amt,airbill_no,airbill_attachment,remark,order_status,latest_transition_at,create_by,create_date,create_time) VALUES ('$safeSorAcc','$safeSorCurr','$safeSorOrder','$safeSorDate','$safeSorTime','$safeSorPkg','$safePackageQtySnapshotJson','$safeSorBrand','$safeSorUser','$safeSorPay','$safeSorPic','$safeCustomerName','$safeCustomerAddress','$safeSorPrice','$safeSorVoucher','$safeSorShipping','$safeSorServ','$safeSorTrans','$safeSorAms','$safeSorFees','$safeSorFinal','$safeAirbill','$safeAirbillAttachment','$safeSorRemark','$safeSorStatus',NOW(),'" . USER_ID . "',curdate(),curtime())";
                     $returnData = mysqli_query($finance_connect, $query);
+                    if ($returnData) {
+                        $dataID = (int) mysqli_insert_id($finance_connect);
+                        shopeeOmsLogTransition($finance_connect, array(
+                            'order_id' => $dataID,
+                            'order_code' => $sor_order,
+                            'from_status' => '',
+                            'to_status' => $sor_order_status,
+                            'transition_action' => 'manual_add',
+                            'user_id' => USER_ID,
+                            'user_group_id' => USER_GROUP,
+                            'remark' => 'Manual add with initial status.',
+                            'source_page' => $pageTitle,
+                        ));
+
+                        if ($sor_order_status === 'TP') {
+                            $freshOrderRow = shopeeOmsLoadOrder($finance_connect, $dataID);
+                            $tokenResult = shopeeOmsCreateWarehouseToken($connect, $finance_connect, $freshOrderRow, USER_ID);
+                            if (!empty($tokenResult['success']) && !empty($tokenResult['token_row']) && !empty($tokenResult['notification'])) {
+                                shopeeOmsSendWarehouseNotification($connect, $finance_connect, $tokenResult['token_row'], $tokenResult['notification']);
+                                mysqli_query($finance_connect, "UPDATE `" . $tblName . "` SET `step_a_sent_at` = NOW() WHERE id = " . $dataID . " LIMIT 1");
+                            }
+                        }
+                    }
                     $_SESSION['tempValConfirmBox'] = true;
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
@@ -408,6 +539,11 @@ if (post('actionBtn')) {
                     // take old value
                     $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $finance_connect);
                     $row = $rst->fetch_assoc();
+
+                    if ($sor_update_airbill !== 'yes') {
+                        $sor_airbill = isset($row['airbill_no']) ? (string) $row['airbill_no'] : '';
+                        $sor_airbill_attachment = isset($row['airbill_attachment']) ? (string) $row['airbill_attachment'] : '';
+                    }
 
                     // check value
                     if ($row['shopee_acc'] != $sor_acc) {
@@ -523,6 +659,36 @@ if (post('actionBtn')) {
                         array_push($datafield, 'remark');
                     }
 
+                    if ((string) (isset($row['package_qty_json']) ? $row['package_qty_json'] : '') !== (string) $packageQtySnapshotJson) {
+                        array_push($oldvalarr, trim((string) (isset($row['package_qty_json']) ? $row['package_qty_json'] : '')) !== '' ? 'Package snapshot updated' : 'Empty Value');
+                        array_push($chgvalarr, trim((string) $packageQtySnapshotJson) !== '' ? 'Package snapshot updated' : 'Empty Value');
+                        array_push($datafield, 'package_qty_json');
+                    }
+
+                    if ((string) (isset($row['airbill_no']) ? $row['airbill_no'] : '') !== (string) $sor_airbill) {
+                        array_push($oldvalarr, trim((string) (isset($row['airbill_no']) ? $row['airbill_no'] : '')) !== '' ? $row['airbill_no'] : 'Empty Value');
+                        array_push($chgvalarr, trim((string) $sor_airbill) !== '' ? $sor_airbill : 'Empty Value');
+                        array_push($datafield, 'airbill_no');
+                    }
+
+                    if ((string) (isset($row['airbill_attachment']) ? $row['airbill_attachment'] : '') !== (string) $sor_airbill_attachment) {
+                        array_push($oldvalarr, trim((string) (isset($row['airbill_attachment']) ? $row['airbill_attachment'] : '')) !== '' ? $row['airbill_attachment'] : 'Empty Value');
+                        array_push($chgvalarr, trim((string) $sor_airbill_attachment) !== '' ? $sor_airbill_attachment : 'Empty Value');
+                        array_push($datafield, 'airbill_attachment');
+                    }
+
+                    if ((string) (isset($row['customer_name']) ? $row['customer_name'] : '') !== (string) $sor_customer_name) {
+                        array_push($oldvalarr, trim((string) (isset($row['customer_name']) ? $row['customer_name'] : '')) !== '' ? $row['customer_name'] : 'Empty Value');
+                        array_push($chgvalarr, trim((string) $sor_customer_name) !== '' ? $sor_customer_name : 'Empty Value');
+                        array_push($datafield, 'customer_name');
+                    }
+
+                    if ((string) (isset($row['customer_address']) ? $row['customer_address'] : '') !== (string) $sor_customer_address) {
+                        array_push($oldvalarr, trim((string) (isset($row['customer_address']) ? $row['customer_address'] : '')) !== '' ? $row['customer_address'] : 'Empty Value');
+                        array_push($chgvalarr, trim((string) $sor_customer_address) !== '' ? $sor_customer_address : 'Empty Value');
+                        array_push($datafield, 'customer_address');
+                    }
+
                     // convert into string
                     $oldval = implode(",", $oldvalarr);
                     $chgval = implode(",", $chgvalarr);
@@ -536,10 +702,13 @@ if (post('actionBtn')) {
                         $query .= "date = '$sor_date', ";
                         $query .= "time = '$sor_time', ";
                         $query .= "package = '$sor_pkg', ";
+                        $query .= "package_qty_json = '" . mysqli_real_escape_string($finance_connect, $packageQtySnapshotJson) . "', ";
                         $query .= "brand = '$sor_brand', ";
                         $query .= "buyer = '$sor_user', ";
                         $query .= "buyer_pay_meth = '$sor_pay', ";
                         $query .= "pic = '$sor_pic', ";
+                        $query .= "customer_name = '" . mysqli_real_escape_string($finance_connect, $sor_customer_name) . "', ";
+                        $query .= "customer_address = '" . mysqli_real_escape_string($finance_connect, $sor_customer_address) . "', ";
                         $query .= "price = '$sor_price', ";
                         $query .= "voucher = '$sor_voucher', ";
                         $query .= "act_shipping_fee = '$sor_shipping', ";
@@ -548,6 +717,8 @@ if (post('actionBtn')) {
                         $query .= "ams_fee = '$sor_ams', ";
                         $query .= "fees = '$sor_fees', ";
                         $query .= "final_amt = '$sor_final', ";
+                        $query .= "airbill_no = '" . mysqli_real_escape_string($finance_connect, $sor_airbill) . "', ";
+                        $query .= "airbill_attachment = '" . mysqli_real_escape_string($finance_connect, $sor_airbill_attachment) . "', ";
                         $query .= "remark = '$sor_remark', ";
                         $query .= "update_by = '" . USER_ID . "', ";
                         $query .= "update_date = curdate(), ";
@@ -555,6 +726,27 @@ if (post('actionBtn')) {
                         $query .= "WHERE id = '$dataID'"; // Specify your condition here
 
                         $returnData = mysqli_query($finance_connect, $query);
+                        if ($returnData) {
+                            $newValuesForHistory = array(
+                                'orderID' => $sor_order,
+                                'customer_name' => $sor_customer_name,
+                                'customer_address' => $sor_customer_address,
+                                'package' => $sor_pkg,
+                                'package_qty_json' => $packageQtySnapshotJson,
+                                'brand' => $sor_brand,
+                                'buyer' => $sor_user,
+                                'buyer_pay_meth' => $sor_pay,
+                                'price' => $sor_price,
+                                'airbill_no' => $sor_airbill,
+                                'airbill_attachment' => $sor_airbill_attachment,
+                                'remark' => $sor_remark,
+                                'estimated_received_date' => isset($row['estimated_received_date']) ? $row['estimated_received_date'] : '',
+                                'delay_remark' => isset($row['delay_remark']) ? $row['delay_remark'] : '',
+                                'order_status' => isset($row['order_status']) ? $row['order_status'] : '',
+                            );
+                            $orderChanges = shopeeOmsDetectOrderChanges($connect, $row, $newValuesForHistory);
+                            shopeeOmsLogOrderEditHistory($finance_connect, (int) $dataID, $sor_order, $orderChanges, USER_ID, USER_GROUP, $pageTitle);
+                        }
 
                     } else {
                         $act = 'NC';
@@ -676,6 +868,13 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
     $redirect_page,
     $pageTitle
 );
+
+$transitionHistoryRows = array();
+$editHistoryRows = array();
+if (isset($row['id']) && (int) $row['id'] > 0) {
+    $transitionHistoryRows = shopeeOmsFetchTransitionHistory($finance_connect, (int) $row['id']);
+    $editHistoryRows = shopeeOmsFetchEditHistory($finance_connect, (int) $row['id']);
+}
 ?>
 
 <!DOCTYPE html>
@@ -683,7 +882,98 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
 
 <head>
     <link rel="stylesheet" href="../css/main.css">
+    <style>
+        .shopee-airbill-row {
+            align-items: flex-start;
+        }
 
+        .shopee-airbill-toggle-col {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .shopee-airbill-toggle-field {
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 10px;
+            margin-top: 0;
+            padding: 0;
+        }
+
+        .shopee-airbill-toggle-label {
+            margin: 0;
+        }
+
+        @media (max-width: 767px) {
+            .shopee-airbill-toggle-col {
+                margin-top: 0;
+            }
+        }
+
+        .shopee-airbill-toggle {
+            position: relative;
+            width: 54px;
+            height: 28px;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .shopee-airbill-toggle input[type="checkbox"] {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .shopee-airbill-toggle-slider {
+            position: relative;
+            display: inline-block;
+            width: 54px;
+            height: 28px;
+            border-radius: 999px;
+            background: #31343a;
+            transition: all 0.18s ease;
+        }
+
+        .shopee-airbill-toggle-slider::before {
+            content: "";
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 22px;
+            height: 22px;
+            border-radius: 999px;
+            background: #ffffff;
+            transition: all 0.18s ease;
+        }
+
+        .shopee-airbill-toggle-slider::after {
+            content: "\f00d";
+            font-family: "Font Awesome 6 Free";
+            font-weight: 900;
+            color: #ffffff;
+            font-size: 0.62rem;
+            position: absolute;
+            right: 10px;
+            top: 8px;
+            transition: all 0.18s ease;
+        }
+
+        .shopee-airbill-toggle input:checked + .shopee-airbill-toggle-slider {
+            background: #6f922f;
+        }
+
+        .shopee-airbill-toggle input:checked + .shopee-airbill-toggle-slider::before {
+            left: 29px;
+        }
+
+        .shopee-airbill-toggle input:checked + .shopee-airbill-toggle-slider::after {
+            content: "\f00c";
+            right: 32px;
+        }
+    </style>
 </head>
 
 <body>
@@ -985,6 +1275,152 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                                     <span class="mt-n1"><?php echo $brand_err; ?></span>
                                 </div>
                             <?php } ?>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="row shopee-airbill-row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label form_lbl" for="sor_order_status">Initial Order Status<span class="requireRed">*</span></label>
+                            <?php
+                            $currentOrderStatusValue = isset($sor_order_status) && trim((string) $sor_order_status) !== ''
+                                ? $sor_order_status
+                                : (isset($row['order_status']) ? shopeeOmsNormalizeStatusCode($row['order_status']) : 'P');
+                            ?>
+                            <?php if ($act === 'I') { ?>
+                                <select class="form-select" id="sor_order_status" name="sor_order_status">
+                                    <?php foreach ($sorStatusOptions as $statusCode => $statusLabel) { ?>
+                                        <option value="<?= htmlspecialchars($statusCode) ?>" <?= $currentOrderStatusValue === $statusCode ? 'selected' : '' ?>><?= htmlspecialchars($statusLabel) ?></option>
+                                    <?php } ?>
+                                </select>
+                            <?php } else { ?>
+                                <input class="form-control" type="text" value="<?= htmlspecialchars(shopeeOmsGetStatusLabel($currentOrderStatusValue)) ?>" readonly>
+                                <input type="hidden" id="sor_order_status" name="sor_order_status" value="<?= htmlspecialchars($currentOrderStatusValue) ?>">
+                            <?php } ?>
+                        </div>
+                        <div class="col-md-2 mb-3 shopee-airbill-toggle-col">
+                            <?php
+                            $hasSavedAirbillData = false;
+                            if (isset($row['airbill_no']) && trim((string) $row['airbill_no']) !== '') {
+                                $hasSavedAirbillData = true;
+                            }
+                            if (isset($row['airbill_attachment']) && trim((string) $row['airbill_attachment']) !== '') {
+                                $hasSavedAirbillData = true;
+                            }
+                            $updateAirbillValue = isset($sor_update_airbill) && trim((string) $sor_update_airbill) !== ''
+                                ? strtolower(trim((string) $sor_update_airbill))
+                                : (
+                                    isset($row['update_airbill']) && trim((string) $row['update_airbill']) !== ''
+                                        ? strtolower(trim((string) $row['update_airbill']))
+                                        : ($hasSavedAirbillData ? 'yes' : ($act === 'I' ? 'yes' : 'no'))
+                                );
+                            if ($updateAirbillValue !== 'yes' && $hasSavedAirbillData) {
+                                $updateAirbillValue = 'yes';
+                            } else if ($updateAirbillValue !== 'yes') {
+                                $updateAirbillValue = 'no';
+                            }
+                            ?>
+                            <input type="hidden" id="sor_update_airbill" name="sor_update_airbill" value="<?= htmlspecialchars($updateAirbillValue) ?>">
+                            <label class="form-label form_lbl shopee-airbill-toggle-label" for="sor_update_airbill_toggle">Update Airbill?</label>
+                            <div class="shopee-airbill-toggle-field">
+                                <label class="shopee-airbill-toggle mb-0" for="sor_update_airbill_toggle">
+                                    <input type="checkbox" id="sor_update_airbill_toggle" <?= $updateAirbillValue === 'yes' ? 'checked' : '' ?> <?= $act == '' ? 'disabled' : '' ?>>
+                                    <span class="shopee-airbill-toggle-slider"></span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label form_lbl" for="sor_airbill">Airbill No</label>
+                            <input class="form-control" type="text" name="sor_airbill" id="sor_airbill" value="<?php
+                                if (isset($sor_airbill)) {
+                                    echo htmlspecialchars($sor_airbill);
+                                } else if (isset($row['airbill_no'])) {
+                                    echo htmlspecialchars($row['airbill_no']);
+                                }
+                            ?>" <?= $act == '' ? 'disabled' : '' ?>>
+                            <?php if (isset($airbill_err)) { ?>
+                                <div id="err_msg">
+                                    <span class="mt-n1"><?php echo $airbill_err; ?></span>
+                                </div>
+                            <?php } ?>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label form_lbl" for="sor_customer_name">Customer Name</label>
+                            <input class="form-control" type="text" name="sor_customer_name" id="sor_customer_name" value="<?php
+                                if (isset($sor_customer_name)) {
+                                    echo htmlspecialchars($sor_customer_name);
+                                } else if (isset($row['customer_name'])) {
+                                    echo htmlspecialchars($row['customer_name']);
+                                }
+                            ?>" <?= $act == '' ? 'disabled' : '' ?>>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label form_lbl" for="sor_airbill_attachment">Airbill Attachment</label>
+                            <input class="form-control" type="file" name="sor_airbill_attachment" id="sor_airbill_attachment" <?= $act == '' ? 'disabled' : '' ?>>
+                            <?php if (isset($row['airbill_attachment']) && $row['airbill_attachment']) { ?>
+                                <div id="err_msg">
+                                    <span class="mt-n1">
+                                        <?php echo "Current Attachment: " . htmlspecialchars($row['airbill_attachment']); ?>
+                                    </span>
+                                </div>
+                            <?php } ?>
+                            <?php if (isset($airbill_attachment_err)) { ?>
+                                <div id="err_msg">
+                                    <span class="mt-n1"><?php echo $airbill_attachment_err; ?></span>
+                                </div>
+                            <?php } ?>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <div class="d-flex justify-content-center justify-content-md-end px-4">
+                                <?php
+                                $sorAirbillAttachmentSrc = '';
+                                if (isset($dataExisted) && isset($row['airbill_attachment']) && !isset($sor_airbill_attachment)) {
+                                    if ($row['airbill_attachment'] == '' || $row['airbill_attachment'] == NULL) {
+                                        $sorAirbillAttachmentSrc = '';
+                                    } else {
+                                        $storedAttachment = trim(str_replace('\\', '/', (string) $row['airbill_attachment']), '/');
+                                        if (strpos($storedAttachment, 'attachment/') === 0) {
+                                            $sorAirbillAttachmentSrc = rtrim((string) $SITEURL, '/') . '/' . $storedAttachment;
+                                        } else {
+                                            $sorAirbillAttachmentSrc = $sorAirbillAttachmentUrl . basename($storedAttachment);
+                                        }
+                                    }
+                                } else if (isset($sor_airbill_attachment)) {
+                                    $storedAttachment = trim(str_replace('\\', '/', (string) $sor_airbill_attachment), '/');
+                                    if ($storedAttachment !== '') {
+                                        if (strpos($storedAttachment, 'attachment/') === 0) {
+                                            $sorAirbillAttachmentSrc = rtrim((string) $SITEURL, '/') . '/' . $storedAttachment;
+                                        } else {
+                                            $sorAirbillAttachmentSrc = $sorAirbillAttachmentUrl . basename($storedAttachment);
+                                        }
+                                    }
+                                }
+                                ?>
+                                <img id="sor_airbill_attachment_preview" name="sor_airbill_attachment_preview" src="<?php echo $sorAirbillAttachmentSrc; ?>" class="img-thumbnail" alt="Airbill Attachment Preview">
+                                <input type="hidden" name="sor_airbill_attachment_value" id="sor_airbill_attachment_value" value="<?php if (isset($row['airbill_attachment'])) echo htmlspecialchars($row['airbill_attachment']); ?>">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label form_lbl" for="sor_customer_address">Customer Address</label>
+                            <textarea class="form-control" name="sor_customer_address" id="sor_customer_address" rows="2" <?= $act == '' ? 'disabled' : '' ?>><?php
+                                if (isset($sor_customer_address)) {
+                                    echo htmlspecialchars($sor_customer_address);
+                                } else if (isset($row['customer_address'])) {
+                                    echo htmlspecialchars($row['customer_address']);
+                                }
+                            ?></textarea>
                         </div>
                     </div>
                 </div>
@@ -1410,32 +1846,124 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                     </div>
                 </div>
                 <?php }} ?>
+                <?php if ($act !== 'I' && (!empty($transitionHistoryRows) || !empty($editHistoryRows))) { ?>
+                <div class="form-group mb-4">
+                    <div class="row">
+                        <div class="col-12 mb-3">
+                            <h3>Status Transition History</h3>
+                            <?php if (!empty($transitionHistoryRows)) { ?>
+                                <div class="table-responsive">
+                                    <table class="table table-striped table-bordered">
+                                        <thead>
+                                            <tr>
+                                                <th>Date Time</th>
+                                                <th>Transition</th>
+                                                <th>Action By</th>
+                                                <th>Remark</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($transitionHistoryRows as $historyRow) { ?>
+                                                <?php
+                                                $historyUserDisplayName = commonResolveUserDisplayName(
+                                                    $connect,
+                                                    isset($historyRow['user_id']) ? (string) $historyRow['user_id'] : 'SYSTEM'
+                                                );
+                                                if (trim((string) $historyUserDisplayName) === '') {
+                                                    $historyUserDisplayName = 'SYSTEM';
+                                                }
+                                                ?>
+                                                <tr>
+                                                    <td><?= htmlspecialchars((string) (isset($historyRow['transition_at']) ? $historyRow['transition_at'] : '')) ?></td>
+                                                    <td><?= htmlspecialchars(shopeeOmsGetStatusLabel(isset($historyRow['from_status']) ? $historyRow['from_status'] : '')) ?> -> <?= htmlspecialchars(shopeeOmsGetStatusLabel(isset($historyRow['to_status']) ? $historyRow['to_status'] : '')) ?></td>
+                                                    <td>
+                                                        <div class="d-flex align-items-center gap-2">
+                                                            <span><?= htmlspecialchars((string) $historyUserDisplayName) ?></span>
+                                                            <?= shopeeOmsRenderUserGroupBadge($connect, isset($historyRow['user_group_id']) ? (int) $historyRow['user_group_id'] : 0) ?>
+                                                        </div>
+                                                    </td>
+                                                    <td><?= nl2br(htmlspecialchars((string) (isset($historyRow['remark']) ? $historyRow['remark'] : ''))) ?></td>
+                                                </tr>
+                                            <?php } ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            <?php } else { ?>
+                                <div class="alert alert-light border">No transition history found.</div>
+                            <?php } ?>
+                        </div>
+                        <div class="col-12">
+                            <h3>Modified Order History</h3>
+                            <?php if (!empty($editHistoryRows)) { ?>
+                                <div class="table-responsive">
+                                    <table class="table table-striped table-bordered">
+                                        <thead>
+                                            <tr>
+                                                <th>Date Time</th>
+                                                <th>Field</th>
+                                                <th>Updated By</th>
+                                                <th>Change</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($editHistoryRows as $historyRow) { ?>
+                                                <?php
+                                                $editHistoryUserDisplayName = commonResolveUserDisplayName(
+                                                    $connect,
+                                                    isset($historyRow['user_id']) ? (string) $historyRow['user_id'] : 'SYSTEM'
+                                                );
+                                                if (trim((string) $editHistoryUserDisplayName) === '') {
+                                                    $editHistoryUserDisplayName = 'SYSTEM';
+                                                }
+                                                ?>
+                                                <tr>
+                                                    <td><?= htmlspecialchars((string) (isset($historyRow['change_at']) ? $historyRow['change_at'] : '')) ?></td>
+                                                    <td><?= htmlspecialchars((string) (isset($historyRow['field_label']) && trim((string) $historyRow['field_label']) !== '' ? $historyRow['field_label'] : $historyRow['field_name'])) ?></td>
+                                                    <td>
+                                                        <div class="d-flex align-items-center gap-2">
+                                                            <span><?= htmlspecialchars((string) $editHistoryUserDisplayName) ?></span>
+                                                            <?= shopeeOmsRenderUserGroupBadge($connect, isset($historyRow['user_group_id']) ? (int) $historyRow['user_group_id'] : 0) ?>
+                                                        </div>
+                                                    </td>
+                                                    <td>
+                                                        <div style="text-decoration: line-through; color: #9b1c1c;"><?= nl2br(htmlspecialchars((string) (isset($historyRow['old_value']) ? $historyRow['old_value'] : ''))) ?></div>
+                                                        <div style="color: #198754; font-weight: 600;"><?= nl2br(htmlspecialchars((string) (isset($historyRow['new_value']) ? $historyRow['new_value'] : ''))) ?></div>
+                                                    </td>
+                                                </tr>
+                                            <?php } ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            <?php } else { ?>
+                                <div class="alert alert-light border">No modified order history found.</div>
+                            <?php } ?>
+                        </div>
+                    </div>
+                </div>
+                <?php } ?>
                     <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
                         <?php
                         if (isset($row['order_status'])) {
-                            // Clean the status string for matching
-                            $statusKey = preg_replace('/[^a-z]/', '', strtolower(trim((string) $row['order_status'])));
-                            $estimatedReceivedDate = trim((string) (isset($row['estimated_received_date']) ? $row['estimated_received_date'] : ''));
-                            
-                            $isPendingToPack = ($statusKey === 'p' || $statusKey === 'pendingto' || $statusKey === 'pendingtopack');
-                            $isProcessing = ($statusKey === 'sp' || $statusKey === 'processing');
-                            $isEstimatedAssigned = ($statusKey === 'aed' || $statusKey === 'assignedestimateddate');
+                            $statusCode = shopeeOmsNormalizeStatusCode($row['order_status']);
+                            $canMoveToPack = shopeeOmsHasTransitionPermission($connect, $statusCode, 'TP', USER_GROUP, $row, USER_ID);
+                            $canConfirmReceive = shopeeOmsHasTransitionPermission($connect, $statusCode, 'PR', USER_GROUP, $row, USER_ID);
+                            $canVerify = shopeeOmsHasTransitionPermission($connect, $statusCode, 'V', USER_GROUP, $row, USER_ID);
+                            $canComplete = shopeeOmsHasTransitionPermission($connect, $statusCode, 'C', USER_GROUP, $row, USER_ID);
+                            $canReturn = shopeeOmsHasTransitionPermission($connect, $statusCode, 'CR', USER_GROUP, $row, USER_ID);
 
-                            // If status is 'P', show "UPDATE TO PROCESSING" and pass 'SP'
-                            if ($isPendingToPack) {
-                                echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" id="updateStatusBtn" value="SP" formnovalidate>UPDATE TO PROCESSING</button>';
-                            } 
-                            // If status is 'SP' and date not assigned yet, show "UPDATE TO WAITING ASSIGN ESTIMATE RECEIVED DATE".
-                            else if ($isProcessing) {
-                                if ($estimatedReceivedDate !== '') {
-                                    echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" id="updateStatusBtn" value="OC" formnovalidate>UPDATE TO ORDER RECEIVED</button>';
-                                } else {
-                                    echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" id="updateStatusBtn" value="WAERD" formnovalidate>UPDATE TO WAITING ASSIGN ESTIMATE RECEIVED DATE</button>';
-                                }
+                            if ($statusCode === 'P' && $canMoveToPack) {
+                                echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" value="TP" formnovalidate>MOVE TO TO PACK</button>';
+                            } else if ($statusCode === 'WR' && $canConfirmReceive) {
+                                echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" value="PR" formnovalidate>CONFIRM PARCEL RECEIVED</button>';
+                            } else if ($statusCode === 'WAFC' && $canVerify) {
+                                echo '<button class="btn btn-lg btn-rounded btn-success mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" value="V" formnovalidate>MOVE TO VERIFY</button>';
+                            } else if ($statusCode === 'V' && $canComplete) {
+                                echo '<button class="btn btn-lg btn-rounded btn-success mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" value="C" formnovalidate>FINALIZE COMPLETE</button>';
                             }
-                            // If status is 'AED', show "UPDATE TO ORDER RECEIVED" and pass 'OC'
-                            else if ($isEstimatedAssigned) {
-                                echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" id="updateStatusBtn" value="OC" formnovalidate>UPDATE TO ORDER RECEIVED</button>';
+
+                            if ($statusCode === 'R' && $canReturn) {
+                                echo '<button type="button" class="btn btn-lg btn-rounded btn-warning mx-2 mb-2 p-2" onclick="submitReturnAction(\'restock\')">RETURN RESTOCK</button>';
+                                echo '<button type="button" class="btn btn-lg btn-rounded btn-danger mx-2 mb-2 p-2" onclick="submitReturnAction(\'damaged\')">RETURN DAMAGED</button>';
                             }
                         }
                         
@@ -1448,6 +1976,8 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                             break;
                     }
                     ?>
+                    <input type="hidden" name="return_type" id="return_type" value="">
+                    <input type="hidden" name="return_remark" id="return_remark" value="">
                     <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn" id="actionBtn"
                         value="back">Back</button>
                 </div>
@@ -1469,7 +1999,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
     }
     ?>
     <script>
-    $(document).ready(function() {
+$(document).ready(function() {
     $('#myForm').on('submit', function(event) {
         event.preventDefault(); // Prevent the form from submitting the traditional way
 
@@ -1488,6 +2018,52 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
         });
     });
 });
+
+        function toggleAirbillFields() {
+            var updateAirbill = document.getElementById('sor_update_airbill');
+            var updateAirbillToggle = document.getElementById('sor_update_airbill_toggle');
+            var airbillNo = document.getElementById('sor_airbill');
+            var airbillAttachment = document.getElementById('sor_airbill_attachment');
+            if (!updateAirbill || !updateAirbillToggle || !airbillNo || !airbillAttachment) {
+                return;
+            }
+
+            updateAirbill.value = updateAirbillToggle.checked ? 'yes' : 'no';
+            var enabled = updateAirbillToggle.checked;
+            airbillNo.disabled = !enabled && "<?= $act ?>" !== '';
+            airbillAttachment.disabled = !enabled && "<?= $act ?>" !== '';
+        }
+
+        function submitReturnAction(returnType) {
+            var form = document.getElementById('FORForm');
+            var returnTypeField = document.getElementById('return_type');
+            var returnRemarkField = document.getElementById('return_remark');
+            if (!form || !returnTypeField || !returnRemarkField) {
+                return;
+            }
+
+            var remark = window.prompt('Return remark (' + returnType + '):', '');
+            if (remark === null) {
+                return;
+            }
+
+            returnTypeField.value = returnType;
+            returnRemarkField.value = remark;
+            var actionInput = document.createElement('input');
+            actionInput.type = 'hidden';
+            actionInput.name = 'returnActionBtn';
+            actionInput.value = '1';
+            form.appendChild(actionInput);
+            form.submit();
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            toggleAirbillFields();
+            var updateAirbillToggle = document.getElementById('sor_update_airbill_toggle');
+            if (updateAirbillToggle) {
+                updateAirbillToggle.addEventListener('change', toggleAirbillFields);
+            }
+        });
 
 
         var page = "<?= $pageTitle ?>";

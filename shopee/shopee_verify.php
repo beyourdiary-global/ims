@@ -5,6 +5,7 @@ $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $processingPageName = getPinGroupNameById($connect, 128);
@@ -135,6 +136,20 @@ if (isset($_GET['verify_id'])) {
     }
 
     echo "<script>alert('" . addslashes($verifyMessageText) . "'); location.replace('shopee_verify.php');</script>";
+    exit;
+}
+
+if (isset($_GET['return_id'])) {
+    $orderId = intval($_GET['return_id']);
+    $returnResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'R', array(
+        'actor_user_id' => USER_ID,
+        'actor_user_group_id' => USER_GROUP,
+        'source_page' => $pageTitle,
+        'remark' => 'Marked as Return from verify order list.',
+        'action' => 'mark_return',
+        'skip_permission' => true,
+    ));
+    echo "<script>alert('" . addslashes(isset($returnResult['message']) ? $returnResult['message'] : 'Unable to mark order as Return.') . "'); location.replace('shopee_verify.php');</script>";
     exit;
 }
 
@@ -474,6 +489,7 @@ $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_con
                             <th scope="col" width="60px">S/N</th>
                             <th scope="col" id="action_col" width="100px">Action</th>
                             <th scope="col">Order Status</th>
+                            <th scope="col">Estimate Received Date</th>
                             <th scope="col">Shopee Account</th>
                             <th scope="col">Currency</th>
                             <th scope="col">Order ID</th>
@@ -619,8 +635,17 @@ $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_con
                                 <?php if(normalizeOrderStatusKey($row['order_status']) === 'oc' && $canVerifyAction){ ?>
                                  <a href="?verify_id=<?= $row['id'] ?>" class="btn btn-sm btn-success btn-verified" onclick="return confirm('Mark this order as verified?')">Verified</a>
                                 <?php } ?>
+                                <?php
+                                $statusCode = shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '');
+                                ?>
+                                <?php if (in_array($statusCode, array('SP', 'WAERD', 'WR', 'PR', 'WAFC', 'V', 'C'), true)) { ?>
+                                 <a href="?return_id=<?= $row['id'] ?>" class="btn btn-sm btn-rounded btn-warning" onclick="return confirm('Mark this order as Return?')" title="Mark as Return">
+                                     <i class="fa-solid fa-rotate-left"></i>
+                                 </a>
+                                <?php } ?>
                                 </td>
                                 <td scope="row"><?= getOrderStatusLabel($row['order_status']) ?></td>
+                                <td scope="row"><?= $row['estimated_received_date'] ?? '' ?></td>
                                 <td scope="row"><?= $acc['name'] ?? '' ?></td>
                                 <td scope="row"><?= $curr['unit'] ?? '' ?></td>
                                 <td scope="row"><?= $row['orderID'] ?? '' ?></td>
@@ -658,6 +683,7 @@ $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_con
                             <th scope="col" width="60px">S/N</th>
                             <th scope="col" id="action_col" width="100px">Action</th>
                             <th scope="col">Order Status</th>
+                            <th scope="col">Estimate Received Date</th>
                             <th scope="col">Shopee Account</th>
                             <th scope="col">Currency</th>
                             <th scope="col">Order ID</th>

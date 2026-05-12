@@ -1465,46 +1465,18 @@ if (!function_exists('normalizeOrderStatusKey')) {
 }
 
 function getOrderStatusLabel($code) {
-	$normalized = trim((string) $code);
-	$normalizedKey = normalizeOrderStatusKey($normalized);
-	$statusLookupKey = strtoupper($normalizedKey);
-	if ($normalizedKey === 'p' || $normalizedKey === 'pendingto' || $normalizedKey === 'pendingtopack') {
-		return 'Pending To Pack';
-	}
+    if (function_exists('shopeeOmsGetStatusLabel')) {
+        return shopeeOmsGetStatusLabel($code);
+    }
 
-    $statusLabelsByKey = [
-        'P' => 'Pending To Pack',
-        'SP' => 'SHIP PROCESSING (Warehouse)',
-        'WP' => 'Waiting Packing',
-        'OC' => 'Order Received (admin checking)',
-        'V' => 'Verified (Aster checking)',
-        'C' => 'Completed',
-        'WAERD' => 'Waiting Assign Estimate Received Date',
-        'AED' => 'Assigned Estimate Date',
-    ];
-
-    return $statusLabelsByKey[$statusLookupKey] ?? $code; // fallback to code if not found
+    return trim((string) $code);
 }
 
 if (!function_exists('getMarketplaceRequestStatusLabel')) {
     function getMarketplaceRequestStatusLabel($code)
     {
-        $normalizedKey = normalizeOrderStatusKey($code);
-
-        if ($normalizedKey === 'p' || $normalizedKey === 'pendingto' || $normalizedKey === 'pendingtopack') {
-            return 'Processing';
-        }
-
-        if ($normalizedKey === 'sp') {
-            return 'Shipped';
-        }
-
-        if ($normalizedKey === 'wp') {
-            return 'Waiting Packing';
-        }
-
-        if ($normalizedKey === 'waerd' || $normalizedKey === 'aed') {
-            return getOrderStatusLabel($code);
+        if (function_exists('shopeeOmsGetMarketplaceStatusLabel')) {
+            return shopeeOmsGetMarketplaceStatusLabel($code);
         }
 
         return trim((string) $code);
@@ -1554,30 +1526,1383 @@ if (!function_exists('validateEstimatedReceivedDate')) {
 if (!function_exists('shouldShowEstimatedReceivedDateButton')) {
     function shouldShowEstimatedReceivedDateButton($row)
     {
-        if (!is_array($row)) {
-            return false;
-        }
-
-        $statusKey = normalizeOrderStatusKey(isset($row['order_status']) ? $row['order_status'] : '');
-        $estimatedReceivedDate = trim((string) (isset($row['estimated_received_date']) ? $row['estimated_received_date'] : ''));
-
-        $assignableStatuses = array(
-            'p',
-            'pendingto',
-            'pendingtopack',
-            'sp',
-            'processing',
-            'waerd',
-            'waitingassignestimatereceiveddate',
-            'aed',
-            'assignedestimateddate'
-        );
-        return in_array($statusKey, $assignableStatuses, true) && $estimatedReceivedDate === '';
+        return function_exists('shopeeOmsShouldShowEstimatedReceivedDateButton')
+            ? shopeeOmsShouldShowEstimatedReceivedDateButton($row)
+            : false;
     }
 }
 
 if (!function_exists('assignEstimatedReceivedDate')) {
     function assignEstimatedReceivedDate($connect, $tableName, $orderId, $date, $currentUserId)
+    {
+        return function_exists('shopeeOmsAssignEstimatedReceivedDate')
+            ? shopeeOmsAssignEstimatedReceivedDate($connect, $tableName, $orderId, $date, $currentUserId)
+            : array(
+                'success' => false,
+                'message' => 'OMS date assignment helper is unavailable.',
+            );
+    }
+}
+
+if (!function_exists('shopeeOmsStatusDefinitions')) {
+    function shopeeOmsStatusDefinitions()
+    {
+        return array(
+            'P' => array(
+                'label' => 'To Ship',
+                'aliases' => array('p', 'pendingto', 'pendingtopack', 'toship'),
+            ),
+            'TP' => array(
+                'label' => 'To Pack',
+                'aliases' => array('tp', 'topack', 'waitingpacking', 'wp'),
+            ),
+            'SP' => array(
+                'label' => 'Shipped',
+                'aliases' => array('sp', 'processing', 'shipprocessingwarehouse', 'shipped'),
+            ),
+            'WAERD' => array(
+                'label' => 'Waiting Assign Estimate Received Date',
+                'aliases' => array('waerd', 'waitingassignestimatereceiveddate'),
+            ),
+            'WR' => array(
+                'label' => 'Waiting Receive',
+                'aliases' => array('wr', 'waitingreceive', 'aed', 'assignedestimateddate'),
+            ),
+            'PR' => array(
+                'label' => 'Parcel Received',
+                'aliases' => array('pr', 'parcelreceived'),
+            ),
+            'WAFC' => array(
+                'label' => 'Waiting Admin Final Check',
+                'aliases' => array('wafc', 'waitingadminfinalcheck', 'oc', 'orderreceivedadminchecking', 'orderreceived'),
+            ),
+            'V' => array(
+                'label' => 'Verify',
+                'aliases' => array('v', 'verify', 'verified', 'verifiedasterchecking'),
+            ),
+            'C' => array(
+                'label' => 'Complete',
+                'aliases' => array('c', 'complete', 'completed'),
+            ),
+            'R' => array(
+                'label' => 'Return',
+                'aliases' => array('r', 'return'),
+            ),
+            'CR' => array(
+                'label' => 'Closed-Returned',
+                'aliases' => array('cr', 'closedreturned'),
+            ),
+        );
+    }
+}
+
+if (!function_exists('shopeeOmsNormalizeStatusCode')) {
+    function shopeeOmsNormalizeStatusCode($status)
+    {
+        $status = trim((string) $status);
+        if ($status === '') {
+            return '';
+        }
+
+        $definitions = shopeeOmsStatusDefinitions();
+        $upperStatus = strtoupper($status);
+        if (isset($definitions[$upperStatus])) {
+            return $upperStatus;
+        }
+
+        $normalizedKey = normalizeOrderStatusKey($status);
+        foreach ($definitions as $code => $definition) {
+            if ($normalizedKey === normalizeOrderStatusKey($code)) {
+                return $code;
+            }
+
+            $aliases = isset($definition['aliases']) && is_array($definition['aliases']) ? $definition['aliases'] : array();
+            foreach ($aliases as $alias) {
+                if ($normalizedKey === normalizeOrderStatusKey($alias)) {
+                    return $code;
+                }
+            }
+        }
+
+        return $status;
+    }
+}
+
+if (!function_exists('shopeeOmsGetStatusLabel')) {
+    function shopeeOmsGetStatusLabel($status)
+    {
+        $statusCode = shopeeOmsNormalizeStatusCode($status);
+        $definitions = shopeeOmsStatusDefinitions();
+        if (isset($definitions[$statusCode]['label'])) {
+            return (string) $definitions[$statusCode]['label'];
+        }
+
+        return trim((string) $status);
+    }
+}
+
+if (!function_exists('shopeeOmsGetMarketplaceStatusLabel')) {
+    function shopeeOmsGetMarketplaceStatusLabel($status)
+    {
+        $statusCode = shopeeOmsNormalizeStatusCode($status);
+        if ($statusCode === 'P' || $statusCode === 'TP') {
+            return 'Processing';
+        }
+
+        return shopeeOmsGetStatusLabel($statusCode);
+    }
+}
+
+if (!function_exists('shopeeOmsGetEditableStatusOptions')) {
+    function shopeeOmsGetEditableStatusOptions()
+    {
+        $definitions = shopeeOmsStatusDefinitions();
+        $editableKeys = array('P', 'TP', 'SP', 'WAERD', 'WR', 'PR', 'WAFC', 'V', 'C', 'R', 'CR');
+        $options = array();
+        foreach ($editableKeys as $statusCode) {
+            if (isset($definitions[$statusCode])) {
+                $options[$statusCode] = (string) $definitions[$statusCode]['label'];
+            }
+        }
+
+        return $options;
+    }
+}
+
+if (!function_exists('shopeeOmsGetImportDefaultStatus')) {
+    function shopeeOmsGetImportDefaultStatus($detectedStatus)
+    {
+        $statusCode = shopeeOmsNormalizeStatusCode($detectedStatus);
+        $normalizedKey = normalizeOrderStatusKey($detectedStatus);
+
+        if (in_array($normalizedKey, array('completed', 'delivered', 'orderreceived'), true)) {
+            return 'WAERD';
+        }
+
+        if ($statusCode === 'WAFC') {
+            return 'WAERD';
+        }
+
+        return $statusCode !== '' ? $statusCode : 'P';
+    }
+}
+
+if (!function_exists('shopeeOmsValidateInitialStatusAndAirbill')) {
+    function shopeeOmsValidateInitialStatusAndAirbill($status, $airbillNo)
+    {
+        $statusCode = shopeeOmsNormalizeStatusCode($status);
+        $airbillNo = trim((string) $airbillNo);
+
+        if ($statusCode === 'TP' && $airbillNo === '') {
+            return array(
+                'valid' => false,
+                'message' => 'Airbill is required when Order Status is To Pack.',
+            );
+        }
+
+        return array(
+            'valid' => true,
+            'message' => '',
+        );
+    }
+}
+
+if (!function_exists('shopeeOmsTransitionDefinitions')) {
+    function shopeeOmsTransitionDefinitions()
+    {
+        return array(
+            'P' => array(
+                'TP' => array('action' => 'move_to_pack', 'requires_permission' => true, 'auto' => false),
+            ),
+            'TP' => array(
+                'SP' => array('action' => 'warehouse_scan', 'requires_permission' => true, 'auto' => false),
+            ),
+            'SP' => array(
+                'WAERD' => array('action' => 'auto_post_ship', 'requires_permission' => false, 'auto' => true),
+                'R' => array('action' => 'mark_return', 'requires_permission' => true, 'auto' => false),
+            ),
+            'WAERD' => array(
+                'WR' => array('action' => 'assign_estimated_received_date', 'requires_permission' => true, 'auto' => false),
+                'R' => array('action' => 'mark_return', 'requires_permission' => true, 'auto' => false),
+            ),
+            'WR' => array(
+                'PR' => array('action' => 'confirm_parcel_received', 'requires_permission' => true, 'auto' => false),
+                'R' => array('action' => 'mark_return', 'requires_permission' => true, 'auto' => false),
+            ),
+            'PR' => array(
+                'WAFC' => array('action' => 'auto_14_day_final_check', 'requires_permission' => false, 'auto' => true),
+                'R' => array('action' => 'mark_return', 'requires_permission' => true, 'auto' => false),
+            ),
+            'WAFC' => array(
+                'V' => array('action' => 'admin_audit', 'requires_permission' => true, 'auto' => false),
+                'R' => array('action' => 'mark_return', 'requires_permission' => true, 'auto' => false),
+            ),
+            'V' => array(
+                'C' => array('action' => 'finalize_complete', 'requires_permission' => true, 'auto' => false),
+                'R' => array('action' => 'mark_return', 'requires_permission' => true, 'auto' => false),
+            ),
+            'C' => array(
+                'R' => array('action' => 'mark_return', 'requires_permission' => true, 'auto' => false),
+            ),
+            'R' => array(
+                'CR' => array('action' => 'return_restock', 'requires_permission' => true, 'auto' => false),
+            ),
+        );
+    }
+}
+
+if (!function_exists('shopeeOmsBuildTransitionKey')) {
+    function shopeeOmsBuildTransitionKey($fromStatus, $toStatus)
+    {
+        return shopeeOmsNormalizeStatusCode($fromStatus) . '__' . shopeeOmsNormalizeStatusCode($toStatus);
+    }
+}
+
+if (!function_exists('shopeeOmsGetConfigurableTransitions')) {
+    function shopeeOmsGetConfigurableTransitions()
+    {
+        $transitions = array();
+        foreach (shopeeOmsTransitionDefinitions() as $fromStatus => $targetRows) {
+            foreach ($targetRows as $toStatus => $transitionInfo) {
+                if (empty($transitionInfo['requires_permission'])) {
+                    continue;
+                }
+
+                $transitions[] = array(
+                    'key' => shopeeOmsBuildTransitionKey($fromStatus, $toStatus),
+                    'from_status' => $fromStatus,
+                    'to_status' => $toStatus,
+                    'from_label' => shopeeOmsGetStatusLabel($fromStatus),
+                    'to_label' => shopeeOmsGetStatusLabel($toStatus),
+                    'action' => isset($transitionInfo['action']) ? (string) $transitionInfo['action'] : '',
+                );
+            }
+        }
+
+        return $transitions;
+    }
+}
+
+if (!function_exists('shopeeOmsShouldShowEstimatedReceivedDateButton')) {
+    function shopeeOmsShouldShowEstimatedReceivedDateButton($row)
+    {
+        if (!is_array($row)) {
+            return false;
+        }
+
+        $statusCode = shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '');
+        $estimatedReceivedDate = trim((string) (isset($row['estimated_received_date']) ? $row['estimated_received_date'] : ''));
+        return in_array($statusCode, array('WAERD', 'WR'), true) && $estimatedReceivedDate === '';
+    }
+}
+
+if (!function_exists('shopeeOmsGetSetting')) {
+    function shopeeOmsGetSetting($connect, $settingKey, $defaultValue = '')
+    {
+        if (!($connect instanceof mysqli) || !defined('ORDER_FLOW_SETTING')) {
+            return $defaultValue;
+        }
+
+        $settingKey = trim((string) $settingKey);
+        if ($settingKey === '') {
+            return $defaultValue;
+        }
+
+        $safeSettingKey = mysqli_real_escape_string($connect, $settingKey);
+        $sql = "SELECT setting_value FROM `" . ORDER_FLOW_SETTING . "` WHERE setting_key = '" . $safeSettingKey . "' AND status = 'A' ORDER BY id DESC LIMIT 1";
+        $result = mysqli_query($connect, $sql);
+        if ($result && mysqli_num_rows($result) > 0) {
+            $row = mysqli_fetch_assoc($result);
+            return isset($row['setting_value']) ? (string) $row['setting_value'] : $defaultValue;
+        }
+
+        return $defaultValue;
+    }
+}
+
+if (!function_exists('shopeeOmsSetSetting')) {
+    function shopeeOmsSetSetting($connect, $settingKey, $settingValue, $remark = '', $userId = '')
+    {
+        if (!($connect instanceof mysqli) || !defined('ORDER_FLOW_SETTING')) {
+            return false;
+        }
+
+        $settingKey = trim((string) $settingKey);
+        if ($settingKey === '') {
+            return false;
+        }
+
+        $safeKey = mysqli_real_escape_string($connect, $settingKey);
+        $safeValue = mysqli_real_escape_string($connect, (string) $settingValue);
+        $safeRemark = mysqli_real_escape_string($connect, (string) $remark);
+        $safeUserId = mysqli_real_escape_string($connect, trim((string) $userId) !== '' ? trim((string) $userId) : '1');
+        $sql = "INSERT INTO `" . ORDER_FLOW_SETTING . "` (`setting_key`, `setting_value`, `remark`, `create_by`, `create_date`, `create_time`, `status`)
+            VALUES ('" . $safeKey . "', '" . $safeValue . "', '" . $safeRemark . "', '" . $safeUserId . "', CURDATE(), CURTIME(), 'A')
+            ON DUPLICATE KEY UPDATE `setting_value` = VALUES(`setting_value`), `remark` = VALUES(`remark`), `status` = 'A', `update_by` = '" . $safeUserId . "', `update_date` = CURDATE(), `update_time` = CURTIME()";
+
+        return (bool) mysqli_query($connect, $sql);
+    }
+}
+
+if (!function_exists('shopeeOmsGetAssignmentScope')) {
+    function shopeeOmsGetAssignmentScope($connect)
+    {
+        $scope = strtolower(trim((string) shopeeOmsGetSetting($connect, 'shopee_oms_assignment_scope', 'global')));
+        return $scope === 'individual' ? 'individual' : 'global';
+    }
+}
+
+if (!function_exists('shopeeOmsOrderBelongsToCurrentUser')) {
+    function shopeeOmsOrderBelongsToCurrentUser($orderRow, $currentUserId)
+    {
+        if (!is_array($orderRow)) {
+            return false;
+        }
+
+        return trim((string) (isset($orderRow['create_by']) ? $orderRow['create_by'] : '')) === trim((string) $currentUserId);
+    }
+}
+
+if (!function_exists('shopeeOmsPassesAssignmentScope')) {
+    function shopeeOmsPassesAssignmentScope($connect, $orderRow, $currentUserId, $currentUserGroupId)
+    {
+        if ((int) $currentUserGroupId === 1) {
+            return true;
+        }
+
+        $scope = shopeeOmsGetAssignmentScope($connect);
+        if ($scope !== 'individual') {
+            return true;
+        }
+
+        return shopeeOmsOrderBelongsToCurrentUser($orderRow, $currentUserId);
+    }
+}
+
+if (!function_exists('shopeeOmsHasTransitionPermission')) {
+    function shopeeOmsHasTransitionPermission($connect, $fromStatus, $toStatus, $currentUserGroupId, $orderRow = array(), $currentUserId = '')
+    {
+        $fromStatus = shopeeOmsNormalizeStatusCode($fromStatus);
+        $toStatus = shopeeOmsNormalizeStatusCode($toStatus);
+        $currentUserGroupId = (int) $currentUserGroupId;
+
+        if ($currentUserGroupId === 1) {
+            return true;
+        }
+
+        if (!shopeeOmsPassesAssignmentScope($connect, $orderRow, $currentUserId, $currentUserGroupId)) {
+            return false;
+        }
+
+        if (!($connect instanceof mysqli)) {
+            return false;
+        }
+
+        $safeFromStatus = mysqli_real_escape_string($connect, $fromStatus);
+        $safeToStatus = mysqli_real_escape_string($connect, $toStatus);
+        $sql = "SELECT can_move FROM `" . ORDER_FLOW_TRANSITION_PERMISSION . "`
+            WHERE module_key = 'shopee_oms'
+              AND from_status = '" . $safeFromStatus . "'
+              AND to_status = '" . $safeToStatus . "'
+              AND user_group_id = " . $currentUserGroupId . "
+              AND status = 'A'
+            ORDER BY id DESC
+            LIMIT 1";
+        $result = mysqli_query($connect, $sql);
+        if ($result && mysqli_num_rows($result) > 0) {
+            $row = mysqli_fetch_assoc($result);
+            return !empty($row['can_move']);
+        }
+
+        return false;
+    }
+}
+
+if (!function_exists('shopeeOmsLoadOrder')) {
+    function shopeeOmsLoadOrder($connect, $orderId)
+    {
+        $orderId = (int) $orderId;
+        if ($orderId <= 0 || !($connect instanceof mysqli)) {
+            return array();
+        }
+
+        $sql = "SELECT * FROM `" . SHOPEE_SG_ORDER_REQ . "` WHERE id = " . $orderId . " LIMIT 1";
+        $result = mysqli_query($connect, $sql);
+        if ($result && mysqli_num_rows($result) > 0) {
+            return (array) mysqli_fetch_assoc($result);
+        }
+
+        return array();
+    }
+}
+
+if (!function_exists('shopeeOmsLoadOrderByCode')) {
+    function shopeeOmsLoadOrderByCode($connect, $orderCode)
+    {
+        $orderCode = trim((string) $orderCode);
+        if ($orderCode === '' || !($connect instanceof mysqli)) {
+            return array();
+        }
+
+        $safeOrderCode = mysqli_real_escape_string($connect, $orderCode);
+        $sql = "SELECT * FROM `" . SHOPEE_SG_ORDER_REQ . "` WHERE orderID = '" . $safeOrderCode . "' LIMIT 1";
+        $result = mysqli_query($connect, $sql);
+        if ($result && mysqli_num_rows($result) > 0) {
+            return (array) mysqli_fetch_assoc($result);
+        }
+
+        return array();
+    }
+}
+
+if (!function_exists('shopeeOmsNormalizePackageQtySnapshot')) {
+    function shopeeOmsNormalizePackageQtySnapshot($rows)
+    {
+        $normalizedRows = array();
+        $grouped = array();
+        if (!is_array($rows)) {
+            $rows = array();
+        }
+
+        foreach ($rows as $row) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $packageId = isset($row['package_id']) ? (int) $row['package_id'] : 0;
+            $packageName = trim((string) (isset($row['package_name']) ? $row['package_name'] : ''));
+            $qty = isset($row['qty']) ? (int) $row['qty'] : 0;
+            if ($qty <= 0) {
+                $qty = 1;
+            }
+
+            if ($packageId <= 0 && $packageName === '') {
+                continue;
+            }
+
+            $groupKey = $packageId > 0 ? ('id_' . $packageId) : ('name_' . strtolower($packageName));
+            if (!isset($grouped[$groupKey])) {
+                $grouped[$groupKey] = array(
+                    'package_id' => $packageId,
+                    'package_name' => $packageName,
+                    'qty' => 0,
+                );
+            }
+            if ($grouped[$groupKey]['package_name'] === '' && $packageName !== '') {
+                $grouped[$groupKey]['package_name'] = $packageName;
+            }
+            $grouped[$groupKey]['qty'] += $qty;
+        }
+
+        foreach ($grouped as $row) {
+            $normalizedRows[] = $row;
+        }
+
+        return $normalizedRows;
+    }
+}
+
+if (!function_exists('shopeeOmsDecodePackageQtySnapshot')) {
+    function shopeeOmsDecodePackageQtySnapshot($rawSnapshot)
+    {
+        $rawSnapshot = trim((string) $rawSnapshot);
+        if ($rawSnapshot === '') {
+            return array();
+        }
+
+        $decoded = json_decode($rawSnapshot, true);
+        if (!is_array($decoded)) {
+            return array();
+        }
+
+        return shopeeOmsNormalizePackageQtySnapshot($decoded);
+    }
+}
+
+if (!function_exists('shopeeOmsBuildPackageQtySnapshotFromInputs')) {
+    function shopeeOmsBuildPackageQtySnapshotFromInputs($hiddenIds, $nameInputs, $connect)
+    {
+        if (!is_array($hiddenIds)) {
+            $hiddenIds = explode(',', (string) $hiddenIds);
+        }
+        if (!is_array($nameInputs)) {
+            $nameInputs = explode(',', (string) $nameInputs);
+        }
+
+        $rows = array();
+        $rowCount = max(count($hiddenIds), count($nameInputs));
+        for ($i = 0; $i < $rowCount; $i++) {
+            $packageId = isset($hiddenIds[$i]) && ctype_digit((string) $hiddenIds[$i]) ? (int) $hiddenIds[$i] : 0;
+            $packageName = trim((string) (isset($nameInputs[$i]) ? $nameInputs[$i] : ''));
+
+            if ($packageId <= 0 && $packageName !== '' && ($connect instanceof mysqli)) {
+                $safePackageName = mysqli_real_escape_string($connect, $packageName);
+                $result = getData('id, name', "name = '" . $safePackageName . "'", 'LIMIT 1', PKG, $connect);
+                if ($result && $result->num_rows > 0) {
+                    $packageRow = $result->fetch_assoc();
+                    $packageId = isset($packageRow['id']) ? (int) $packageRow['id'] : 0;
+                    if ($packageName === '' && isset($packageRow['name'])) {
+                        $packageName = (string) $packageRow['name'];
+                    }
+                }
+            }
+
+            if ($packageId <= 0 && $packageName === '') {
+                continue;
+            }
+
+            $rows[] = array(
+                'package_id' => $packageId,
+                'package_name' => $packageName,
+                'qty' => 1,
+            );
+        }
+
+        return shopeeOmsNormalizePackageQtySnapshot($rows);
+    }
+}
+
+if (!function_exists('shopeeOmsGetPackageNameMap')) {
+    function shopeeOmsGetPackageNameMap($connect, $packageIds)
+    {
+        $nameMap = array();
+        if (!($connect instanceof mysqli) || !is_array($packageIds) || empty($packageIds)) {
+            return $nameMap;
+        }
+
+        $safeIds = array();
+        foreach ($packageIds as $packageId) {
+            $packageId = (int) $packageId;
+            if ($packageId > 0) {
+                $safeIds[$packageId] = $packageId;
+            }
+        }
+
+        if (empty($safeIds)) {
+            return $nameMap;
+        }
+
+        $idList = implode(',', $safeIds);
+        $result = mysqli_query($connect, "SELECT id, name FROM `" . PKG . "` WHERE id IN (" . $idList . ")");
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $rowId = isset($row['id']) ? (int) $row['id'] : 0;
+                if ($rowId > 0) {
+                    $nameMap[$rowId] = isset($row['name']) ? (string) $row['name'] : '';
+                }
+            }
+        }
+
+        return $nameMap;
+    }
+}
+
+if (!function_exists('shopeeOmsResolveOrderPackageRows')) {
+    function shopeeOmsResolveOrderPackageRows($connect, $orderRow)
+    {
+        if (!is_array($orderRow)) {
+            return array();
+        }
+
+        $snapshotRows = shopeeOmsDecodePackageQtySnapshot(isset($orderRow['package_qty_json']) ? $orderRow['package_qty_json'] : '');
+        if (!empty($snapshotRows)) {
+            $packageIds = array();
+            foreach ($snapshotRows as $snapshotRow) {
+                if (!empty($snapshotRow['package_id'])) {
+                    $packageIds[] = (int) $snapshotRow['package_id'];
+                }
+            }
+            $packageNameMap = shopeeOmsGetPackageNameMap($connect, $packageIds);
+            foreach ($snapshotRows as $idx => $snapshotRow) {
+                if (empty($snapshotRows[$idx]['package_name']) && !empty($snapshotRow['package_id']) && isset($packageNameMap[(int) $snapshotRow['package_id']])) {
+                    $snapshotRows[$idx]['package_name'] = $packageNameMap[(int) $snapshotRow['package_id']];
+                }
+            }
+
+            return $snapshotRows;
+        }
+
+        $rows = array();
+        $packageIds = array_filter(array_map('trim', explode(',', (string) (isset($orderRow['package']) ? $orderRow['package'] : ''))), 'strlen');
+        $packageNameMap = shopeeOmsGetPackageNameMap($connect, $packageIds);
+        foreach ($packageIds as $packageIdRaw) {
+            $packageId = (int) $packageIdRaw;
+            if ($packageId <= 0) {
+                continue;
+            }
+
+            $rows[] = array(
+                'package_id' => $packageId,
+                'package_name' => isset($packageNameMap[$packageId]) ? $packageNameMap[$packageId] : ('Package #' . $packageId),
+                'qty' => 1,
+            );
+        }
+
+        return shopeeOmsNormalizePackageQtySnapshot($rows);
+    }
+}
+
+if (!function_exists('shopeeOmsBuildOrderProductSummary')) {
+    function shopeeOmsBuildOrderProductSummary($connect, $orderRow)
+    {
+        $packageRows = shopeeOmsResolveOrderPackageRows($connect, $orderRow);
+        $packageSummary = array();
+        $productQtyMap = array();
+        $packageIds = array();
+        foreach ($packageRows as $packageRow) {
+            $packageId = isset($packageRow['package_id']) ? (int) $packageRow['package_id'] : 0;
+            $packageName = trim((string) (isset($packageRow['package_name']) ? $packageRow['package_name'] : ''));
+            $qty = isset($packageRow['qty']) ? (int) $packageRow['qty'] : 1;
+            if ($qty <= 0) {
+                $qty = 1;
+            }
+
+            if ($packageName !== '') {
+                $packageSummary[] = $packageName . ' x' . $qty;
+            }
+            if ($packageId > 0) {
+                $packageIds[$packageId] = $packageId;
+            }
+        }
+
+        $packageProductMap = array();
+        if (!empty($packageIds) && ($connect instanceof mysqli)) {
+            $result = mysqli_query($connect, "SELECT id, name, product FROM `" . PKG . "` WHERE id IN (" . implode(',', $packageIds) . ")");
+            if ($result) {
+                while ($row = mysqli_fetch_assoc($result)) {
+                    $packageId = isset($row['id']) ? (int) $row['id'] : 0;
+                    if ($packageId > 0) {
+                        $packageProductMap[$packageId] = array(
+                            'name' => isset($row['name']) ? (string) $row['name'] : '',
+                            'product' => isset($row['product']) ? (string) $row['product'] : '',
+                        );
+                    }
+                }
+            }
+        }
+
+        foreach ($packageRows as $packageRow) {
+            $packageId = isset($packageRow['package_id']) ? (int) $packageRow['package_id'] : 0;
+            $qty = isset($packageRow['qty']) ? (int) $packageRow['qty'] : 1;
+            if ($qty <= 0) {
+                $qty = 1;
+            }
+            if ($packageId <= 0 || !isset($packageProductMap[$packageId])) {
+                continue;
+            }
+
+            $productIds = array_filter(array_map('trim', explode(',', (string) $packageProductMap[$packageId]['product'])), 'strlen');
+            foreach ($productIds as $productIdRaw) {
+                $productId = (int) $productIdRaw;
+                if ($productId <= 0) {
+                    continue;
+                }
+                if (!isset($productQtyMap[$productId])) {
+                    $productQtyMap[$productId] = 0;
+                }
+                $productQtyMap[$productId] += $qty;
+            }
+        }
+
+        $productNameMap = array();
+        if (!empty($productQtyMap) && ($connect instanceof mysqli)) {
+            $result = mysqli_query($connect, "SELECT id, name FROM `" . PROD . "` WHERE id IN (" . implode(',', array_keys($productQtyMap)) . ")");
+            if ($result) {
+                while ($row = mysqli_fetch_assoc($result)) {
+                    $productId = isset($row['id']) ? (int) $row['id'] : 0;
+                    if ($productId > 0) {
+                        $productNameMap[$productId] = isset($row['name']) ? (string) $row['name'] : '';
+                    }
+                }
+            }
+        }
+
+        $productSummary = array();
+        foreach ($productQtyMap as $productId => $qty) {
+            $productSummary[] = (isset($productNameMap[$productId]) ? $productNameMap[$productId] : ('Product #' . $productId)) . ' x' . (int) $qty;
+        }
+
+        return array(
+            'package_rows' => $packageRows,
+            'package_summary' => implode(', ', $packageSummary),
+            'package_lines' => $packageSummary,
+            'product_lines' => $productSummary,
+            'product_qty_map' => $productQtyMap,
+            'bundle_name' => implode(', ', $packageSummary),
+        );
+    }
+}
+
+if (!function_exists('shopeeOmsGetWarehouseId')) {
+    function shopeeOmsGetWarehouseId($connect)
+    {
+        return (int) shopeeOmsGetSetting($connect, 'shopee_oms_default_warehouse_id', '0');
+    }
+}
+
+if (!function_exists('shopeeOmsTelegramRequest')) {
+    function shopeeOmsTelegramRequest($url, $payload, &$errorMessage = '', &$httpCode = 0)
+    {
+        $errorMessage = '';
+        $httpCode = 0;
+        $postData = is_array($payload) ? http_build_query($payload) : (string) $payload;
+        $context = stream_context_create(array(
+            'http' => array(
+                'method' => 'POST',
+                'header' => "Content-Type: application/x-www-form-urlencoded\r\n",
+                'content' => $postData,
+                'timeout' => 20,
+                'ignore_errors' => true,
+            ),
+            'ssl' => array(
+                'verify_peer' => false,
+                'verify_peer_name' => false,
+            ),
+        ));
+
+        $response = @file_get_contents($url, false, $context);
+        if ($response === false) {
+            $errorMessage = 'Unable to reach Telegram API.';
+            return false;
+        }
+
+        if (isset($http_response_header) && is_array($http_response_header)) {
+            foreach ($http_response_header as $headerLine) {
+                if (preg_match('/^HTTP\/[\d.]+\s+(\d+)/', $headerLine, $matches)) {
+                    $httpCode = (int) $matches[1];
+                    break;
+                }
+            }
+        }
+
+        return $response;
+    }
+}
+
+if (!function_exists('shopeeOmsTelegramMultipartRequest')) {
+    function shopeeOmsTelegramMultipartRequest($url, $payload, &$errorMessage = '', &$httpCode = 0)
+    {
+        $errorMessage = '';
+        $httpCode = 0;
+
+        if (!function_exists('curl_init')) {
+            $errorMessage = 'cURL is not available for Telegram file upload.';
+            return false;
+        }
+
+        $ch = curl_init($url);
+        if ($ch === false) {
+            $errorMessage = 'Unable to initialize Telegram upload request.';
+            return false;
+        }
+
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+        curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, array('Expect:'));
+
+        $response = curl_exec($ch);
+        if ($response === false) {
+            $errorMessage = (string) curl_error($ch);
+            curl_close($ch);
+            return false;
+        }
+
+        $httpCode = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        return $response;
+    }
+}
+
+if (!function_exists('shopeeOmsFindPreferredTokenSetting')) {
+    function shopeeOmsFindPreferredTokenSetting($connect)
+    {
+        if (!($connect instanceof mysqli)) {
+            return array();
+        }
+
+        $sql = "SELECT * FROM `" . TOKEN_SETT . "` WHERE status = 'A' ORDER BY
+            CASE
+                WHEN LOWER(IFNULL(name, '')) LIKE '%warehouse%' OR LOWER(IFNULL(name, '')) LIKE '%stock%' THEN 0
+                WHEN LOWER(IFNULL(remark, '')) LIKE '%warehouse%' OR LOWER(IFNULL(remark, '')) LIKE '%stock%' THEN 1
+                ELSE 2
+            END,
+            id DESC
+            LIMIT 1";
+        $result = mysqli_query($connect, $sql);
+        if ($result && mysqli_num_rows($result) > 0) {
+            return (array) mysqli_fetch_assoc($result);
+        }
+
+        return array();
+    }
+}
+
+if (!function_exists('shopeeOmsResolveChatIdFromTokenRow')) {
+    function shopeeOmsResolveChatIdFromTokenRow($tokenRow)
+    {
+        if (!is_array($tokenRow)) {
+            return '';
+        }
+
+        $chatId = trim((string) (isset($tokenRow['chat_id']) ? $tokenRow['chat_id'] : ''));
+        if ($chatId !== '') {
+            return $chatId;
+        }
+
+        $remark = trim((string) (isset($tokenRow['remark']) ? $tokenRow['remark'] : ''));
+        if ($remark !== '' && preg_match('/(?:chat[_\s-]*id|chat|channel)\s*[:=]\s*(@[a-z0-9_]{4,}|-?\d{5,})/i', $remark, $matches)) {
+            return trim((string) $matches[1]);
+        }
+
+        return '';
+    }
+}
+
+if (!function_exists('shopeeOmsBuildWarehouseMessage')) {
+    function shopeeOmsBuildWarehouseMessage($orderRow, $tokenValue, $connect)
+    {
+        $summary = shopeeOmsBuildOrderProductSummary($connect, $orderRow);
+        $customerName = trim((string) (isset($orderRow['customer_name']) && trim((string) $orderRow['customer_name']) !== '' ? $orderRow['customer_name'] : (isset($orderRow['buyer']) ? $orderRow['buyer'] : '')));
+        $customerAddress = trim((string) (isset($orderRow['customer_address']) ? $orderRow['customer_address'] : ''));
+        $link = rtrim((string) SITEURL, '/') . '/warehouse_stock_in_scan.php?t=' . rawurlencode((string) $tokenValue);
+        $airbillText = trim((string) (isset($orderRow['airbill_no']) ? $orderRow['airbill_no'] : ''));
+        $airbillAttachment = trim((string) (isset($orderRow['airbill_attachment']) ? $orderRow['airbill_attachment'] : ''));
+
+        $lines = array();
+        $lines[] = 'Shopee OID: ' . trim((string) (isset($orderRow['orderID']) ? $orderRow['orderID'] : ''));
+        $lines[] = 'Customer: ' . ($customerName !== '' ? $customerName : '-') . ' | ' . ($customerAddress !== '' ? $customerAddress : '-');
+        $lines[] = 'Package: ' . (!empty($summary['bundle_name']) ? $summary['bundle_name'] : '-');
+        $lines[] = 'Product Details: ' . (!empty($summary['product_lines']) ? implode(', ', $summary['product_lines']) : '-');
+        if ($airbillText !== '') {
+            $lines[] = 'Airbill: ' . $airbillText;
+        }
+        if ($airbillAttachment !== '') {
+            $lines[] = 'Airbill Attachment: ' . basename($airbillAttachment);
+        }
+        $lines[] = 'Warehouse Stock-out Link: ' . $link;
+
+        return array(
+            'link' => $link,
+            'text' => implode("\n", $lines),
+            'package_summary' => isset($summary['package_summary']) ? $summary['package_summary'] : '',
+            'product_summary' => !empty($summary['product_lines']) ? implode(', ', $summary['product_lines']) : '',
+            'bundle_name' => isset($summary['bundle_name']) ? $summary['bundle_name'] : '',
+            'airbill_attachment' => $airbillAttachment,
+        );
+    }
+}
+
+if (!function_exists('shopeeOmsResolveAirbillAttachmentFsPath')) {
+    function shopeeOmsResolveAirbillAttachmentFsPath($attachmentValue)
+    {
+        $attachmentValue = trim(str_replace('\\', '/', (string) $attachmentValue), '/');
+        if ($attachmentValue === '') {
+            return '';
+        }
+
+        $rootDir = defined('ROOT') ? rtrim((string) ROOT, '/\\') : '';
+        if ($rootDir === '') {
+            return '';
+        }
+
+        if (strpos($attachmentValue, 'attachment/') === 0) {
+            return $rootDir . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $attachmentValue);
+        }
+
+        $relativeDir = trim((string) (defined('img_server') ? img_server : '/images_server/'), '/\\') . '/shopee_airbill_attachment/';
+        return $rootDir . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativeDir . basename($attachmentValue));
+    }
+}
+
+if (!function_exists('shopeeOmsGetClientIp')) {
+    function shopeeOmsGetClientIp()
+    {
+        $candidates = array();
+        $headerKeys = array(
+            'HTTP_CF_CONNECTING_IP',
+            'HTTP_X_FORWARDED_FOR',
+            'HTTP_X_REAL_IP',
+            'HTTP_CLIENT_IP',
+            'REMOTE_ADDR',
+        );
+
+        foreach ($headerKeys as $key) {
+            if (!isset($_SERVER[$key])) {
+                continue;
+            }
+            $raw = trim((string) $_SERVER[$key]);
+            if ($raw === '') {
+                continue;
+            }
+
+            $parts = explode(',', $raw);
+            foreach ($parts as $part) {
+                $ip = trim((string) $part);
+                if ($ip !== '') {
+                    $candidates[] = $ip;
+                }
+            }
+        }
+
+        $firstValid = '';
+        foreach ($candidates as $candidate) {
+            if (!filter_var($candidate, FILTER_VALIDATE_IP)) {
+                continue;
+            }
+            if ($firstValid === '') {
+                $firstValid = $candidate;
+            }
+            if (!shopeeOmsIsPrivateOrReservedIp($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return $firstValid;
+    }
+}
+
+if (!function_exists('shopeeOmsIsPrivateOrReservedIp')) {
+    function shopeeOmsIsPrivateOrReservedIp($ip)
+    {
+        if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+            return false;
+        }
+        return filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false;
+    }
+}
+
+if (!function_exists('shopeeOmsLookupCountryCode')) {
+    function shopeeOmsLookupCountryCode($ip)
+    {
+        if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+            return '';
+        }
+
+        if (shopeeOmsIsPrivateOrReservedIp($ip)) {
+            return '';
+        }
+
+        static $cache = array();
+        if (array_key_exists($ip, $cache)) {
+            return $cache[$ip];
+        }
+
+        $code = '';
+        if (function_exists('geoip_country_code_by_name')) {
+            $geoipCode = @geoip_country_code_by_name($ip);
+            if (is_string($geoipCode)) {
+                $geoipCode = strtoupper(trim((string) $geoipCode));
+                if (preg_match('/^[A-Z]{2}$/', $geoipCode)) {
+                    $code = $geoipCode;
+                }
+            }
+        }
+
+        if ($code === '') {
+            $url = 'https://ipapi.co/' . rawurlencode($ip) . '/country/';
+            $context = stream_context_create(array(
+                'http' => array(
+                    'method' => 'GET',
+                    'timeout' => 3,
+                    'ignore_errors' => true,
+                ),
+                'ssl' => array(
+                    'verify_peer' => true,
+                    'verify_peer_name' => true,
+                ),
+            ));
+
+            $resp = @file_get_contents($url, false, $context);
+            if ($resp !== false) {
+                $respCode = strtoupper(trim((string) $resp));
+                if (preg_match('/^[A-Z]{2}$/', $respCode)) {
+                    $code = $respCode;
+                }
+            }
+        }
+
+        $cache[$ip] = $code;
+        return $code;
+    }
+}
+
+if (!function_exists('shopeeOmsAuditLog')) {
+    function shopeeOmsAuditLog($event, $message, $context = array())
+    {
+        global $connect, $cdate, $ctime;
+
+        $safeEvent = trim((string) $event);
+        $safeMessage = trim((string) $message);
+        if ($safeEvent === '') {
+            $safeEvent = 'scan';
+        }
+        if ($safeMessage === '') {
+            $safeMessage = 'No message.';
+        }
+
+        $ctxText = '';
+        if (is_array($context) && count($context) > 0) {
+            $pairs = array();
+            foreach ($context as $k => $v) {
+                $pairs[] = (string) $k . '=' . (is_array($v) ? implode(',', $v) : (string) $v);
+            }
+            $ctxText = ' [' . implode('; ', $pairs) . ']';
+        }
+
+        $auditConn = null;
+        if (isset($connect) && ($connect instanceof mysqli)) {
+            $auditConn = $connect;
+        } else {
+            $auditConn = @mysqli_connect(dbhost, dbuser, dbpwd, dbname);
+        }
+        if (!($auditConn instanceof mysqli)) {
+            return;
+        }
+
+        $auditMessage = $safeEvent . ': ' . $safeMessage . $ctxText;
+        $userId = (defined('USER_ID') && USER_ID !== '' ? USER_ID : 'QR_PUBLIC');
+        $logDate = !empty($cdate) ? $cdate : date('Y-m-d');
+        $logTime = !empty($ctime) ? $ctime : date('H:i:s');
+        $screenType = 'Shopee Order QR Scan';
+        $logAction = 9;
+
+        try {
+            $sql = "INSERT INTO " . AUDIT_LOG . " (log_action, screen_type, user_id, action_message, create_date, create_time, create_by) VALUES (?, ?, ?, ?, ?, ?, ?)";
+            $stmt = mysqli_prepare($auditConn, $sql);
+            if (!$stmt) {
+                return;
+            }
+            mysqli_stmt_bind_param($stmt, 'issssss', $logAction, $screenType, $userId, $auditMessage, $logDate, $logTime, $userId);
+            mysqli_stmt_execute($stmt);
+            mysqli_stmt_close($stmt);
+        } catch (Throwable $th) {
+            return;
+        }
+    }
+}
+
+if (!function_exists('shopeeOmsCreateWarehouseToken')) {
+    function shopeeOmsCreateWarehouseToken($cmsConnect, $financeConnect, $orderRow, $actorUserId = '')
+    {
+        if (!is_array($orderRow) || !($financeConnect instanceof mysqli)) {
+            return array(
+                'success' => false,
+                'message' => 'Order data is unavailable for Step A package generation.',
+            );
+        }
+
+        $orderId = isset($orderRow['id']) ? (int) $orderRow['id'] : 0;
+        if ($orderId <= 0) {
+            return array(
+                'success' => false,
+                'message' => 'Invalid order ID for Step A package generation.',
+            );
+        }
+
+        $safeOrderId = (int) $orderId;
+        $existingSql = "SELECT * FROM `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` WHERE order_id = " . $safeOrderId . " AND token_type = 'stock_out' AND status = 'A' ORDER BY id DESC LIMIT 1";
+        $existingResult = mysqli_query($financeConnect, $existingSql);
+        if ($existingResult && mysqli_num_rows($existingResult) > 0) {
+            $existingRow = mysqli_fetch_assoc($existingResult);
+            $messageInfo = shopeeOmsBuildWarehouseMessage($orderRow, isset($existingRow['token']) ? $existingRow['token'] : '', $cmsConnect);
+            return array(
+                'success' => true,
+                'message' => 'Warehouse token already exists.',
+                'token_row' => $existingRow,
+                'notification' => $messageInfo,
+            );
+        }
+
+        try {
+            $tokenValue = function_exists('random_bytes')
+                ? bin2hex(random_bytes(24))
+                : md5(uniqid((string) $orderId, true) . microtime(true));
+        } catch (Exception $exception) {
+            $tokenValue = md5(uniqid((string) $orderId, true) . microtime(true));
+        }
+
+        $messageInfo = shopeeOmsBuildWarehouseMessage($orderRow, $tokenValue, $cmsConnect);
+        $actorUserId = trim((string) $actorUserId) !== '' ? trim((string) $actorUserId) : 'SYSTEM';
+        $safeOrderCode = mysqli_real_escape_string($financeConnect, (string) (isset($orderRow['orderID']) ? $orderRow['orderID'] : ''));
+        $safeToken = mysqli_real_escape_string($financeConnect, $tokenValue);
+        $safeCustomerName = mysqli_real_escape_string($financeConnect, (string) (isset($orderRow['customer_name']) ? $orderRow['customer_name'] : ''));
+        $safeCustomerAddress = mysqli_real_escape_string($financeConnect, (string) (isset($orderRow['customer_address']) ? $orderRow['customer_address'] : ''));
+        $safePackageSummary = mysqli_real_escape_string($financeConnect, (string) $messageInfo['package_summary']);
+        $safeProductSummary = mysqli_real_escape_string($financeConnect, (string) $messageInfo['product_summary']);
+        $safeAirbillAttachment = mysqli_real_escape_string($financeConnect, (string) (isset($orderRow['airbill_attachment']) ? $orderRow['airbill_attachment'] : ''));
+        $safePayload = mysqli_real_escape_string($financeConnect, (string) $messageInfo['text']);
+        $safeActor = mysqli_real_escape_string($financeConnect, $actorUserId);
+        $insertSql = "INSERT INTO `" . ORDER_WAREHOUSE_SCAN_TOKEN . "`
+            (`order_id`, `order_code`, `token`, `token_type`, `customer_name`, `customer_address`, `package_summary`, `product_summary`, `airbill_attachment`, `payload_text`, `create_by`, `create_date`, `create_time`, `status`)
+            VALUES
+            (" . $safeOrderId . ", '" . $safeOrderCode . "', '" . $safeToken . "', 'stock_out', '" . $safeCustomerName . "', '" . $safeCustomerAddress . "', '" . $safePackageSummary . "', '" . $safeProductSummary . "', '" . $safeAirbillAttachment . "', '" . $safePayload . "', '" . $safeActor . "', CURDATE(), CURTIME(), 'A')";
+
+        if (!mysqli_query($financeConnect, $insertSql)) {
+            return array(
+                'success' => false,
+                'message' => 'Unable to save warehouse token.',
+            );
+        }
+
+        return array(
+            'success' => true,
+            'message' => 'Warehouse token generated successfully.',
+            'token_row' => array(
+                'id' => mysqli_insert_id($financeConnect),
+                'order_id' => $orderId,
+                'order_code' => isset($orderRow['orderID']) ? $orderRow['orderID'] : '',
+                'token' => $tokenValue,
+            ),
+            'notification' => $messageInfo,
+        );
+    }
+}
+
+if (!function_exists('shopeeOmsSendWarehouseNotification')) {
+    function shopeeOmsSendWarehouseNotification($cmsConnect, $financeConnect, $tokenRow, $notificationInfo)
+    {
+        if (!is_array($tokenRow) || !isset($tokenRow['id']) || !is_array($notificationInfo)) {
+            return array(
+                'success' => false,
+                'sent' => false,
+                'message' => 'Warehouse notification payload is unavailable.',
+            );
+        }
+
+        $tokenSetting = shopeeOmsFindPreferredTokenSetting($cmsConnect);
+        if (empty($tokenSetting)) {
+            return array(
+                'success' => true,
+                'sent' => false,
+                'message' => 'Warehouse package generated. Telegram token setting is not configured.',
+            );
+        }
+
+        $botToken = trim((string) (isset($tokenSetting['bot_token']) ? $tokenSetting['bot_token'] : ''));
+        $chatId = shopeeOmsResolveChatIdFromTokenRow($tokenSetting);
+        if ($botToken === '' || $chatId === '') {
+            return array(
+                'success' => true,
+                'sent' => false,
+                'message' => 'Warehouse package generated. Telegram Bot Token or Chat ID is missing.',
+            );
+        }
+
+        $errorMessage = '';
+        $httpCode = 0;
+        $attachmentValue = isset($notificationInfo['airbill_attachment']) ? (string) $notificationInfo['airbill_attachment'] : '';
+        $attachmentFsPath = shopeeOmsResolveAirbillAttachmentFsPath($attachmentValue);
+        $response = false;
+
+        if ($attachmentFsPath !== '' && file_exists($attachmentFsPath) && is_readable($attachmentFsPath)) {
+            $apiUrl = 'https://api.telegram.org/bot' . $botToken . '/sendDocument';
+            $payload = array(
+                'chat_id' => $chatId,
+                'caption' => (string) (isset($notificationInfo['text']) ? $notificationInfo['text'] : ''),
+                'document' => new CURLFile($attachmentFsPath, mime_content_type($attachmentFsPath) ?: 'application/octet-stream', basename($attachmentFsPath)),
+            );
+            $response = shopeeOmsTelegramMultipartRequest($apiUrl, $payload, $errorMessage, $httpCode);
+        } else {
+            $apiUrl = 'https://api.telegram.org/bot' . $botToken . '/sendMessage';
+            $payload = array(
+                'chat_id' => $chatId,
+                'text' => (string) (isset($notificationInfo['text']) ? $notificationInfo['text'] : ''),
+                'disable_web_page_preview' => false,
+            );
+            $response = shopeeOmsTelegramRequest($apiUrl, $payload, $errorMessage, $httpCode);
+        }
+
+        $decoded = json_decode((string) $response, true);
+        $isSent = (is_array($decoded) && !empty($decoded['ok']));
+        $resultMessage = $isSent ? 'Telegram warehouse notification sent successfully.' : (($errorMessage !== '' ? $errorMessage : 'Telegram warehouse notification was not sent.') . ($httpCode > 0 ? (' HTTP ' . $httpCode . '.') : ''));
+
+        if ($financeConnect instanceof mysqli) {
+            $safeResultMessage = mysqli_real_escape_string($financeConnect, $resultMessage);
+            mysqli_query($financeConnect, "UPDATE `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` SET `sent_result` = '" . $safeResultMessage . "', `update_by` = 'SYSTEM', `update_date` = CURDATE(), `update_time` = CURTIME() WHERE id = " . (int) $tokenRow['id'] . " LIMIT 1");
+        }
+
+        return array(
+            'success' => true,
+            'sent' => $isSent,
+            'message' => $resultMessage,
+        );
+    }
+}
+
+if (!function_exists('shopeeOmsLogTransition')) {
+    function shopeeOmsLogTransition($connect, $data)
+    {
+        if (!($connect instanceof mysqli) || !is_array($data)) {
+            return false;
+        }
+
+        $orderId = isset($data['order_id']) ? (int) $data['order_id'] : 0;
+        if ($orderId <= 0) {
+            return false;
+        }
+
+        $safeOrderCode = mysqli_real_escape_string($connect, (string) (isset($data['order_code']) ? $data['order_code'] : ''));
+        $safeFromStatus = mysqli_real_escape_string($connect, (string) (isset($data['from_status']) ? $data['from_status'] : ''));
+        $safeToStatus = mysqli_real_escape_string($connect, (string) (isset($data['to_status']) ? $data['to_status'] : ''));
+        $safeAction = mysqli_real_escape_string($connect, (string) (isset($data['transition_action']) ? $data['transition_action'] : ''));
+        $safeUserId = mysqli_real_escape_string($connect, trim((string) (isset($data['user_id']) ? $data['user_id'] : '')) !== '' ? trim((string) $data['user_id']) : 'SYSTEM');
+        $userGroupId = isset($data['user_group_id']) ? (int) $data['user_group_id'] : 0;
+        $safeRemark = mysqli_real_escape_string($connect, (string) (isset($data['remark']) ? $data['remark'] : ''));
+        $safeSourcePage = mysqli_real_escape_string($connect, (string) (isset($data['source_page']) ? $data['source_page'] : ''));
+        $safeRelatedRef = mysqli_real_escape_string($connect, (string) (isset($data['related_token_scan_id']) ? $data['related_token_scan_id'] : ''));
+
+        $sql = "INSERT INTO `" . ORDER_STATUS_TRANSITION_LOG . "`
+            (`order_id`, `order_code`, `from_status`, `to_status`, `transition_action`, `user_id`, `user_group_id`, `remark`, `source_page`, `related_token_scan_id`, `transition_at`, `create_date`, `create_time`, `status`)
+            VALUES
+            (" . $orderId . ", '" . $safeOrderCode . "', '" . $safeFromStatus . "', '" . $safeToStatus . "', '" . $safeAction . "', '" . $safeUserId . "', " . $userGroupId . ", '" . $safeRemark . "', '" . $safeSourcePage . "', '" . $safeRelatedRef . "', NOW(), CURDATE(), CURTIME(), 'A')";
+
+        return (bool) mysqli_query($connect, $sql);
+    }
+}
+
+if (!function_exists('shopeeOmsExecuteTransition')) {
+    function shopeeOmsExecuteTransition($cmsConnect, $financeConnect, $orderId, $targetStatus, $options = array())
+    {
+        $orderId = (int) $orderId;
+        $targetStatus = shopeeOmsNormalizeStatusCode($targetStatus);
+        $options = is_array($options) ? $options : array();
+        $actorUserId = trim((string) (isset($options['actor_user_id']) ? $options['actor_user_id'] : (defined('USER_ID') ? USER_ID : 'SYSTEM')));
+        if ($actorUserId === '') {
+            $actorUserId = 'SYSTEM';
+        }
+        $actorUserGroupId = isset($options['actor_user_group_id']) ? (int) $options['actor_user_group_id'] : (defined('USER_GROUP') ? (int) USER_GROUP : 0);
+        $sourcePage = trim((string) (isset($options['source_page']) ? $options['source_page'] : 'Shopee OMS'));
+        $remark = trim((string) (isset($options['remark']) ? $options['remark'] : ''));
+        $actionName = trim((string) (isset($options['action']) ? $options['action'] : ''));
+        $relatedRef = trim((string) (isset($options['related_token_scan_id']) ? $options['related_token_scan_id'] : ''));
+        $skipPermission = !empty($options['skip_permission']);
+        $fieldUpdates = isset($options['field_updates']) && is_array($options['field_updates']) ? $options['field_updates'] : array();
+        $allowAutoFollowUp = !isset($options['allow_auto_follow_up']) || !empty($options['allow_auto_follow_up']);
+
+        if ($orderId <= 0) {
+            return array('success' => false, 'message' => 'Invalid order ID.');
+        }
+
+        if ($targetStatus === '') {
+            return array('success' => false, 'message' => 'Invalid target status.');
+        }
+
+        $orderRow = shopeeOmsLoadOrder($financeConnect, $orderId);
+        if (empty($orderRow)) {
+            return array('success' => false, 'message' => 'Order not found.');
+        }
+
+        $fromStatus = shopeeOmsNormalizeStatusCode(isset($orderRow['order_status']) ? $orderRow['order_status'] : '');
+        if ($fromStatus === $targetStatus) {
+            return array('success' => false, 'message' => 'Order is already in ' . shopeeOmsGetStatusLabel($targetStatus) . ' status.');
+        }
+
+        $transitionDefinitions = shopeeOmsTransitionDefinitions();
+        $transitionInfo = isset($transitionDefinitions[$fromStatus][$targetStatus]) ? $transitionDefinitions[$fromStatus][$targetStatus] : array();
+        if (empty($transitionInfo)) {
+            return array('success' => false, 'message' => 'Transition ' . shopeeOmsGetStatusLabel($fromStatus) . ' -> ' . shopeeOmsGetStatusLabel($targetStatus) . ' is not allowed.');
+        }
+
+        if ($actionName === '') {
+            $actionName = isset($transitionInfo['action']) ? (string) $transitionInfo['action'] : 'status_transition';
+        }
+
+        if (!$skipPermission && !shopeeOmsHasTransitionPermission($cmsConnect, $fromStatus, $targetStatus, $actorUserGroupId, $orderRow, $actorUserId)) {
+            return array('success' => false, 'message' => 'You are not allowed to perform this status transition.');
+        }
+
+        $effectiveAirbill = isset($fieldUpdates['airbill_no']) ? (string) $fieldUpdates['airbill_no'] : (isset($orderRow['airbill_no']) ? $orderRow['airbill_no'] : '');
+        $airbillValidation = shopeeOmsValidateInitialStatusAndAirbill($targetStatus, $effectiveAirbill);
+        if (!$airbillValidation['valid']) {
+            return array('success' => false, 'message' => $airbillValidation['message']);
+        }
+
+        $safeActorUserId = mysqli_real_escape_string($financeConnect, $actorUserId);
+        $assignments = array(
+            "order_status = '" . mysqli_real_escape_string($financeConnect, $targetStatus) . "'",
+            "update_by = '" . $safeActorUserId . "'",
+            "update_date = CURDATE()",
+            "update_time = CURTIME()",
+            "latest_transition_at = NOW()"
+        );
+        foreach ($fieldUpdates as $fieldName => $fieldValue) {
+            if (!preg_match('/^[A-Za-z0-9_]+$/', (string) $fieldName)) {
+                continue;
+            }
+
+            if ($fieldValue === null) {
+                $assignments[] = "`" . $fieldName . "` = NULL";
+            } else if (is_int($fieldValue) || is_float($fieldValue)) {
+                $assignments[] = "`" . $fieldName . "` = " . $fieldValue;
+            } else {
+                $assignments[] = "`" . $fieldName . "` = '" . mysqli_real_escape_string($financeConnect, (string) $fieldValue) . "'";
+            }
+        }
+
+        $updateSql = "UPDATE `" . SHOPEE_SG_ORDER_REQ . "` SET " . implode(', ', $assignments) . " WHERE id = " . $orderId . " LIMIT 1";
+        if (!mysqli_query($financeConnect, $updateSql)) {
+            return array('success' => false, 'message' => 'Unable to update order status.');
+        }
+
+        shopeeOmsLogTransition($financeConnect, array(
+            'order_id' => $orderId,
+            'order_code' => isset($orderRow['orderID']) ? $orderRow['orderID'] : '',
+            'from_status' => $fromStatus,
+            'to_status' => $targetStatus,
+            'transition_action' => $actionName,
+            'user_id' => $actorUserId,
+            'user_group_id' => $actorUserGroupId,
+            'remark' => $remark,
+            'source_page' => $sourcePage,
+            'related_token_scan_id' => $relatedRef,
+        ));
+
+        $stepAResult = array();
+        if ($targetStatus === 'TP') {
+            $freshOrderRow = shopeeOmsLoadOrder($financeConnect, $orderId);
+            $tokenResult = shopeeOmsCreateWarehouseToken($cmsConnect, $financeConnect, $freshOrderRow, $actorUserId);
+            if (!empty($tokenResult['success']) && !empty($tokenResult['token_row']) && !empty($tokenResult['notification'])) {
+                $notifyResult = shopeeOmsSendWarehouseNotification($cmsConnect, $financeConnect, $tokenResult['token_row'], $tokenResult['notification']);
+                mysqli_query($financeConnect, "UPDATE `" . SHOPEE_SG_ORDER_REQ . "` SET `step_a_sent_at` = NOW() WHERE id = " . $orderId . " LIMIT 1");
+                $stepAResult = array(
+                    'token_result' => $tokenResult,
+                    'notify_result' => $notifyResult,
+                );
+            }
+        }
+
+        $autoTransitionResult = array();
+        if ($allowAutoFollowUp && $targetStatus === 'SP') {
+            $autoTransitionResult = shopeeOmsExecuteTransition($cmsConnect, $financeConnect, $orderId, 'WAERD', array(
+                'actor_user_id' => $actorUserId,
+                'actor_user_group_id' => $actorUserGroupId,
+                'source_page' => $sourcePage,
+                'remark' => 'Auto move after warehouse scan.',
+                'action' => 'auto_post_ship',
+                'skip_permission' => true,
+                'allow_auto_follow_up' => false,
+                'related_token_scan_id' => $relatedRef,
+            ));
+        }
+
+        return array(
+            'success' => true,
+            'message' => 'Order status updated to ' . shopeeOmsGetStatusLabel($targetStatus) . '.',
+            'old_status' => $fromStatus,
+            'new_status' => $targetStatus,
+            'step_a_result' => $stepAResult,
+            'auto_transition' => $autoTransitionResult,
+        );
+    }
+}
+
+if (!function_exists('shopeeOmsAssignEstimatedReceivedDate')) {
+    function shopeeOmsAssignEstimatedReceivedDate($connect, $tableName, $orderId, $date, $currentUserId)
     {
         $validation = validateEstimatedReceivedDate($date);
         if (!$validation['valid']) {
@@ -1587,106 +2912,726 @@ if (!function_exists('assignEstimatedReceivedDate')) {
             );
         }
 
-        $orderId = (int) $orderId;
-        if ($orderId <= 0) {
-            return array(
-                'success' => false,
-                'message' => 'Invalid order ID.',
-            );
-        }
-
         $tableName = trim((string) $tableName);
-        if ($tableName === '' || !preg_match('/^[A-Za-z0-9_]+$/', $tableName)) {
+        if ($tableName !== SHOPEE_SG_ORDER_REQ) {
             return array(
                 'success' => false,
-                'message' => 'Invalid table name.',
+                'message' => 'Estimated date assignment is only supported for Shopee OMS orders.',
             );
         }
 
-        $selectSql = "SELECT id, order_status, estimated_received_date FROM `" . $tableName . "` WHERE id = ? LIMIT 1";
-        $selectStmt = mysqli_prepare($connect, $selectSql);
-        if (!$selectStmt) {
+        global $finance_connect;
+        $financeDb = $connect instanceof mysqli ? $connect : $finance_connect;
+        if (!($financeDb instanceof mysqli)) {
             return array(
                 'success' => false,
-                'message' => 'Unable to prepare order lookup.',
+                'message' => 'Unable to connect to Shopee OMS order table.',
             );
         }
 
-        mysqli_stmt_bind_param($selectStmt, 'i', $orderId);
-        mysqli_stmt_execute($selectStmt);
-        $selectResult = mysqli_stmt_get_result($selectStmt);
-        $row = $selectResult ? mysqli_fetch_assoc($selectResult) : null;
-        mysqli_stmt_close($selectStmt);
-
-        if (!$row) {
+        $orderRow = shopeeOmsLoadOrder($financeDb, $orderId);
+        if (empty($orderRow)) {
             return array(
                 'success' => false,
                 'message' => 'Order not found.',
             );
         }
 
-        if (!shouldShowEstimatedReceivedDateButton($row)) {
+        $currentStatus = shopeeOmsNormalizeStatusCode(isset($orderRow['order_status']) ? $orderRow['order_status'] : '');
+        if (!in_array($currentStatus, array('WAERD', 'WR'), true)) {
             return array(
                 'success' => false,
-                'message' => 'Estimate Received Date has already been assigned or this order is not waiting for assignment.',
+                'message' => 'This order is not in a status that allows Estimated Received Date updates.',
             );
         }
 
-        $normalizedDate = $validation['normalized_date'];
-        $assignedBy = substr((string) $currentUserId, 0, 30);
-        $currentStatus = isset($row['order_status']) ? (string) $row['order_status'] : '';
-        $currentStatusKey = normalizeOrderStatusKey($currentStatus);
-        $newStatus = $currentStatus;
+        $safeCurrentUserId = substr(trim((string) $currentUserId), 0, 30);
+        $fieldUpdates = array(
+            'estimated_received_date' => $validation['normalized_date'],
+            'estimated_received_date_assigned_by' => $safeCurrentUserId,
+            'estimated_received_date_assigned_date' => date('Y-m-d'),
+            'estimated_received_date_assigned_time' => date('H:i:s'),
+        );
 
-        if (
-            $currentStatusKey === 'waerd'
-            || $currentStatusKey === 'waitingassignestimatereceiveddate'
-            || $currentStatusKey === 'aed'
-            || $currentStatusKey === 'assignedestimateddate'
-        ) {
-            $newStatus = 'AED';
-        } else if ($currentStatusKey === 'p' || $currentStatusKey === 'pendingto' || $currentStatusKey === 'pendingtopack') {
-            $newStatus = 'P';
-        } else if ($currentStatusKey === 'sp' || $currentStatusKey === 'processing') {
-            $newStatus = 'SP';
+        if ($currentStatus === 'WAERD') {
+            $result = shopeeOmsExecuteTransition($GLOBALS['connect'], $financeDb, $orderId, 'WR', array(
+                'actor_user_id' => $safeCurrentUserId,
+                'actor_user_group_id' => defined('USER_GROUP') ? (int) USER_GROUP : 0,
+                'source_page' => 'Arrival Management',
+                'remark' => 'Estimated Received Date assigned: ' . $validation['normalized_date'],
+                'action' => 'assign_estimated_received_date',
+                'field_updates' => $fieldUpdates,
+                'allow_auto_follow_up' => false,
+            ));
+            if (!empty($result['success'])) {
+                $result['date'] = $validation['normalized_date'];
+            }
+            return $result;
         }
 
-        $updateSql = "UPDATE `" . $tableName . "` 
-            SET estimated_received_date = ?, 
-                estimated_received_date_assigned_by = ?, 
-                estimated_received_date_assigned_date = CURDATE(), 
-                estimated_received_date_assigned_time = CURTIME(), 
-                order_status = ?, 
-                update_by = ?, 
-                update_date = CURDATE(), 
-                update_time = CURTIME() 
-            WHERE id = ? AND estimated_received_date IS NULL AND order_status = ?";
-        $updateStmt = mysqli_prepare($connect, $updateSql);
-        if (!$updateStmt) {
+        $safeDate = mysqli_real_escape_string($financeDb, $validation['normalized_date']);
+        $safeUser = mysqli_real_escape_string($financeDb, $safeCurrentUserId);
+        $updateSql = "UPDATE `" . SHOPEE_SG_ORDER_REQ . "`
+            SET `estimated_received_date` = '" . $safeDate . "',
+                `estimated_received_date_assigned_by` = '" . $safeUser . "',
+                `estimated_received_date_assigned_date` = CURDATE(),
+                `estimated_received_date_assigned_time` = CURTIME(),
+                `update_by` = '" . $safeUser . "',
+                `update_date` = CURDATE(),
+                `update_time` = CURTIME()
+            WHERE id = " . (int) $orderId . "
+            LIMIT 1";
+        if (!mysqli_query($financeDb, $updateSql)) {
             return array(
                 'success' => false,
-                'message' => 'Unable to prepare Estimate Received Date update.',
-            );
-        }
-
-        mysqli_stmt_bind_param($updateStmt, 'ssssis', $normalizedDate, $assignedBy, $newStatus, $assignedBy, $orderId, $currentStatus);
-        mysqli_stmt_execute($updateStmt);
-        $affectedRows = mysqli_stmt_affected_rows($updateStmt);
-        mysqli_stmt_close($updateStmt);
-
-        if ($affectedRows < 1) {
-            return array(
-                'success' => false,
-                'message' => 'Unable to assign Estimate Received Date. Please refresh and try again.',
+                'message' => 'Unable to update Estimated Received Date.',
             );
         }
 
         return array(
             'success' => true,
-            'message' => 'Estimate Received Date assigned successfully.',
-            'date' => $normalizedDate,
+            'message' => 'Estimate Received Date updated successfully.',
+            'date' => $validation['normalized_date'],
             'old_status' => $currentStatus,
-            'new_status' => $newStatus,
+            'new_status' => $currentStatus,
+        );
+    }
+}
+
+if (!function_exists('shopeeOmsResolveIdCsvToNames')) {
+    function shopeeOmsResolveIdCsvToNames($connect, $tableName, $csvValue)
+    {
+        $csvValue = trim((string) $csvValue);
+        if ($csvValue === '' || !($connect instanceof mysqli)) {
+            return '';
+        }
+
+        $idMap = array();
+        foreach (explode(',', $csvValue) as $idRaw) {
+            $idValue = (int) trim((string) $idRaw);
+            if ($idValue > 0) {
+                $idMap[$idValue] = $idValue;
+            }
+        }
+        if (empty($idMap)) {
+            return $csvValue;
+        }
+
+        $result = mysqli_query($connect, "SELECT id, name FROM `" . $tableName . "` WHERE id IN (" . implode(',', $idMap) . ")");
+        $nameMap = array();
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $rowId = isset($row['id']) ? (int) $row['id'] : 0;
+                if ($rowId > 0) {
+                    $nameMap[$rowId] = isset($row['name']) ? (string) $row['name'] : '';
+                }
+            }
+        }
+
+        $names = array();
+        foreach ($idMap as $idValue) {
+            $names[] = isset($nameMap[$idValue]) && trim((string) $nameMap[$idValue]) !== '' ? $nameMap[$idValue] : ('#' . $idValue);
+        }
+
+        return implode(', ', $names);
+    }
+}
+
+if (!function_exists('shopeeOmsGetImportantEditableFields')) {
+    function shopeeOmsGetImportantEditableFields()
+    {
+        return array(
+            'orderID' => 'Order ID',
+            'customer_name' => 'Customer Name',
+            'customer_phone' => 'Customer Phone',
+            'customer_address' => 'Customer Address',
+            'package' => 'Package',
+            'package_qty_json' => 'Package Details',
+            'brand' => 'Brand',
+            'buyer' => 'Buyer Username',
+            'buyer_pay_meth' => 'Buyer Payment Method',
+            'price' => 'Product Price',
+            'airbill_no' => 'Airbill',
+            'airbill_attachment' => 'Airbill Attachment',
+            'remark' => 'Remark',
+            'estimated_received_date' => 'Estimated Received Date',
+            'delay_remark' => 'Delay Remark',
+            'order_status' => 'Order Status',
+        );
+    }
+}
+
+if (!function_exists('shopeeOmsBuildOrderFieldDisplayValue')) {
+    function shopeeOmsBuildOrderFieldDisplayValue($connect, $fieldName, $fieldValue)
+    {
+        $fieldValue = is_scalar($fieldValue) || $fieldValue === null ? (string) $fieldValue : json_encode($fieldValue);
+        $fieldValue = trim((string) $fieldValue);
+        if ($fieldValue === '') {
+            return '';
+        }
+
+        if ($fieldName === 'order_status') {
+            return shopeeOmsGetStatusLabel($fieldValue);
+        }
+
+        if ($fieldName === 'package') {
+            return shopeeOmsResolveIdCsvToNames($connect, PKG, $fieldValue);
+        }
+
+        if ($fieldName === 'brand') {
+            return shopeeOmsResolveIdCsvToNames($connect, BRAND, $fieldValue);
+        }
+
+        if ($fieldName === 'package_qty_json') {
+            $rows = shopeeOmsDecodePackageQtySnapshot($fieldValue);
+            $parts = array();
+            foreach ($rows as $row) {
+                $packageName = trim((string) (isset($row['package_name']) ? $row['package_name'] : ''));
+                if ($packageName === '' && !empty($row['package_id'])) {
+                    $packageName = shopeeOmsResolveIdCsvToNames($connect, PKG, (string) $row['package_id']);
+                }
+                $qty = isset($row['qty']) ? (int) $row['qty'] : 1;
+                $parts[] = ($packageName !== '' ? $packageName : ('Package #' . (int) $row['package_id'])) . ' x' . $qty;
+            }
+            return implode(', ', $parts);
+        }
+
+        return $fieldValue;
+    }
+}
+
+if (!function_exists('shopeeOmsDetectOrderChanges')) {
+    function shopeeOmsDetectOrderChanges($connect, $oldRow, $newValues)
+    {
+        $changes = array();
+        $importantFields = shopeeOmsGetImportantEditableFields();
+        foreach ($importantFields as $fieldName => $fieldLabel) {
+            $oldValueRaw = isset($oldRow[$fieldName]) ? $oldRow[$fieldName] : '';
+            $newValueRaw = isset($newValues[$fieldName]) ? $newValues[$fieldName] : $oldValueRaw;
+
+            if ((string) $oldValueRaw === (string) $newValueRaw) {
+                continue;
+            }
+
+            $changes[] = array(
+                'field_name' => $fieldName,
+                'field_label' => $fieldLabel,
+                'old_value' => shopeeOmsBuildOrderFieldDisplayValue($connect, $fieldName, $oldValueRaw),
+                'new_value' => shopeeOmsBuildOrderFieldDisplayValue($connect, $fieldName, $newValueRaw),
+            );
+        }
+
+        return $changes;
+    }
+}
+
+if (!function_exists('shopeeOmsLogOrderEditHistory')) {
+    function shopeeOmsLogOrderEditHistory($financeConnect, $orderId, $orderCode, $changes, $userId, $userGroupId, $sourcePage = 'Shopee Order Request')
+    {
+        if (!($financeConnect instanceof mysqli) || empty($changes) || !is_array($changes)) {
+            return false;
+        }
+
+        $safeUserId = mysqli_real_escape_string($financeConnect, trim((string) $userId) !== '' ? trim((string) $userId) : 'SYSTEM');
+        $safeOrderCode = mysqli_real_escape_string($financeConnect, (string) $orderCode);
+        $safeSourcePage = mysqli_real_escape_string($financeConnect, (string) $sourcePage);
+        foreach ($changes as $changeRow) {
+            $safeFieldName = mysqli_real_escape_string($financeConnect, (string) (isset($changeRow['field_name']) ? $changeRow['field_name'] : ''));
+            $safeFieldLabel = mysqli_real_escape_string($financeConnect, (string) (isset($changeRow['field_label']) ? $changeRow['field_label'] : ''));
+            $safeOldValue = mysqli_real_escape_string($financeConnect, (string) (isset($changeRow['old_value']) ? $changeRow['old_value'] : ''));
+            $safeNewValue = mysqli_real_escape_string($financeConnect, (string) (isset($changeRow['new_value']) ? $changeRow['new_value'] : ''));
+            $sql = "INSERT INTO `" . ORDER_EDIT_HISTORY . "`
+                (`order_id`, `order_code`, `field_name`, `field_label`, `old_value`, `new_value`, `user_id`, `user_group_id`, `source_page`, `change_at`, `create_date`, `create_time`, `status`)
+                VALUES
+                (" . (int) $orderId . ", '" . $safeOrderCode . "', '" . $safeFieldName . "', '" . $safeFieldLabel . "', '" . $safeOldValue . "', '" . $safeNewValue . "', '" . $safeUserId . "', " . (int) $userGroupId . ", '" . $safeSourcePage . "', NOW(), CURDATE(), CURTIME(), 'A')";
+            mysqli_query($financeConnect, $sql);
+        }
+
+        return true;
+    }
+}
+
+if (!function_exists('shopeeOmsFetchEditHistory')) {
+    function shopeeOmsFetchEditHistory($financeConnect, $orderId)
+    {
+        $rows = array();
+        if (!($financeConnect instanceof mysqli) || (int) $orderId <= 0) {
+            return $rows;
+        }
+
+        $sql = "SELECT * FROM `" . ORDER_EDIT_HISTORY . "` WHERE order_id = " . (int) $orderId . " AND status = 'A' ORDER BY change_at DESC, id DESC";
+        $result = mysqli_query($financeConnect, $sql);
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $rows[] = $row;
+            }
+        }
+
+        return $rows;
+    }
+}
+
+if (!function_exists('shopeeOmsFetchTransitionHistory')) {
+    function shopeeOmsFetchTransitionHistory($financeConnect, $orderId)
+    {
+        $rows = array();
+        if (!($financeConnect instanceof mysqli) || (int) $orderId <= 0) {
+            return $rows;
+        }
+
+        $sql = "SELECT * FROM `" . ORDER_STATUS_TRANSITION_LOG . "` WHERE order_id = " . (int) $orderId . " AND status = 'A' ORDER BY transition_at DESC, id DESC";
+        $result = mysqli_query($financeConnect, $sql);
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $rows[] = $row;
+            }
+        }
+
+        return $rows;
+    }
+}
+
+if (!function_exists('shopeeOmsGetUserGroupMeta')) {
+    function shopeeOmsGetUserGroupMeta($connect, $userGroupId)
+    {
+        $userGroupId = (int) $userGroupId;
+        if ($userGroupId <= 0 || !($connect instanceof mysqli)) {
+            return array(
+                'name' => 'User Group',
+                'badge_color' => '#6c757d',
+                'badge_icon_class' => 'fa-solid fa-user-group',
+            );
+        }
+
+        $result = getData('id, name, badge_color, badge_icon_class', "id = '" . $userGroupId . "'", 'LIMIT 1', USR_GRP, $connect);
+        if ($result && $result->num_rows > 0) {
+            $row = $result->fetch_assoc();
+            return array(
+                'name' => isset($row['name']) ? (string) $row['name'] : 'User Group',
+                'badge_color' => isset($row['badge_color']) && trim((string) $row['badge_color']) !== '' ? (string) $row['badge_color'] : '#6c757d',
+                'badge_icon_class' => isset($row['badge_icon_class']) && trim((string) $row['badge_icon_class']) !== '' ? (string) $row['badge_icon_class'] : 'fa-solid fa-user-group',
+            );
+        }
+
+        return array(
+            'name' => 'User Group',
+            'badge_color' => '#6c757d',
+            'badge_icon_class' => 'fa-solid fa-user-group',
+        );
+    }
+}
+
+if (!function_exists('shopeeOmsRenderUserGroupBadge')) {
+    function shopeeOmsRenderUserGroupBadge($connect, $userGroupId)
+    {
+        $groupMeta = shopeeOmsGetUserGroupMeta($connect, $userGroupId);
+        $safeColor = htmlspecialchars((string) $groupMeta['badge_color'], ENT_QUOTES, 'UTF-8');
+        $safeName = htmlspecialchars((string) $groupMeta['name'], ENT_QUOTES, 'UTF-8');
+        $safeIcon = htmlspecialchars((string) $groupMeta['badge_icon_class'], ENT_QUOTES, 'UTF-8');
+
+        return '<span class="d-inline-flex align-items-center gap-1 px-2 py-1 rounded-pill text-white" style="background-color:' . $safeColor . ';font-size:12px;"><i class="' . $safeIcon . '"></i><span>' . $safeName . '</span></span>';
+    }
+}
+
+if (!function_exists('shopeeOmsGetDailyFlowReport')) {
+    function shopeeOmsGetDailyFlowReport($financeConnect, $dateFrom, $dateTo, $fromStatus = '', $toStatus = '', $orderCode = '')
+    {
+        $summary = array();
+        $details = array();
+        if (!($financeConnect instanceof mysqli)) {
+            return array('summary' => $summary, 'details' => $details);
+        }
+
+        $dateFrom = trim((string) $dateFrom);
+        $dateTo = trim((string) $dateTo);
+        if ($dateFrom === '') {
+            $dateFrom = date('Y-m-d');
+        }
+        if ($dateTo === '') {
+            $dateTo = date('Y-m-d');
+        }
+
+        $conditions = array();
+        $conditions[] = "status = 'A'";
+        $conditions[] = "DATE(transition_at) >= '" . mysqli_real_escape_string($financeConnect, $dateFrom) . "'";
+        $conditions[] = "DATE(transition_at) <= '" . mysqli_real_escape_string($financeConnect, $dateTo) . "'";
+        if (trim((string) $fromStatus) !== '') {
+            $conditions[] = "from_status = '" . mysqli_real_escape_string($financeConnect, shopeeOmsNormalizeStatusCode($fromStatus)) . "'";
+        }
+        if (trim((string) $toStatus) !== '') {
+            $conditions[] = "to_status = '" . mysqli_real_escape_string($financeConnect, shopeeOmsNormalizeStatusCode($toStatus)) . "'";
+        }
+        if (trim((string) $orderCode) !== '') {
+            $safeOrderCode = mysqli_real_escape_string($financeConnect, trim((string) $orderCode));
+            $conditions[] = "order_code LIKE '%" . $safeOrderCode . "%'";
+        }
+
+        $whereSql = implode(' AND ', $conditions);
+        $summarySql = "SELECT from_status, to_status, COUNT(*) AS total_count, MAX(transition_at) AS last_transition_time
+            FROM `" . ORDER_STATUS_TRANSITION_LOG . "`
+            WHERE " . $whereSql . "
+            GROUP BY from_status, to_status
+            ORDER BY total_count DESC, from_status ASC, to_status ASC";
+        $summaryResult = mysqli_query($financeConnect, $summarySql);
+        if ($summaryResult) {
+            while ($row = mysqli_fetch_assoc($summaryResult)) {
+                $transitionKey = shopeeOmsBuildTransitionKey(isset($row['from_status']) ? $row['from_status'] : '', isset($row['to_status']) ? $row['to_status'] : '');
+                $summary[] = array(
+                    'transition_key' => $transitionKey,
+                    'from_status' => isset($row['from_status']) ? (string) $row['from_status'] : '',
+                    'to_status' => isset($row['to_status']) ? (string) $row['to_status'] : '',
+                    'from_label' => shopeeOmsGetStatusLabel(isset($row['from_status']) ? $row['from_status'] : ''),
+                    'to_label' => shopeeOmsGetStatusLabel(isset($row['to_status']) ? $row['to_status'] : ''),
+                    'total_count' => isset($row['total_count']) ? (int) $row['total_count'] : 0,
+                    'last_transition_time' => isset($row['last_transition_time']) ? (string) $row['last_transition_time'] : '',
+                );
+            }
+        }
+
+        $detailSql = "SELECT id, order_id, order_code, from_status, to_status, transition_action, user_id, user_group_id, transition_at, remark
+            FROM `" . ORDER_STATUS_TRANSITION_LOG . "`
+            WHERE " . $whereSql . "
+            ORDER BY transition_at DESC, id DESC";
+        $detailResult = mysqli_query($financeConnect, $detailSql);
+        if ($detailResult) {
+            while ($row = mysqli_fetch_assoc($detailResult)) {
+                $transitionKey = shopeeOmsBuildTransitionKey(isset($row['from_status']) ? $row['from_status'] : '', isset($row['to_status']) ? $row['to_status'] : '');
+                if (!isset($details[$transitionKey])) {
+                    $details[$transitionKey] = array();
+                }
+                $details[$transitionKey][] = $row;
+            }
+        }
+
+        return array(
+            'summary' => $summary,
+            'details' => $details,
+        );
+    }
+}
+
+if (!function_exists('shopeeOmsRunFourteenDayAutoMove')) {
+    function shopeeOmsRunFourteenDayAutoMove($cmsConnect, $financeConnect)
+    {
+        if (!($financeConnect instanceof mysqli)) {
+            return 0;
+        }
+
+        $movedCount = 0;
+        $sql = "SELECT id FROM `" . SHOPEE_SG_ORDER_REQ . "`
+            WHERE status = 'A'
+              AND order_status IN ('PR', 'Parcel Received')
+              AND COALESCE(latest_transition_at, CONCAT(update_date, ' ', update_time), CONCAT(create_date, ' ', create_time)) <= DATE_SUB(NOW(), INTERVAL 14 DAY)";
+        $result = mysqli_query($financeConnect, $sql);
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $transitionResult = shopeeOmsExecuteTransition($cmsConnect, $financeConnect, (int) $row['id'], 'WAFC', array(
+                    'actor_user_id' => 'SYSTEM',
+                    'actor_user_group_id' => 1,
+                    'source_page' => 'OMS Housekeeping',
+                    'remark' => 'Auto move after 14 days in Parcel Received.',
+                    'action' => 'auto_14_day_final_check',
+                    'skip_permission' => true,
+                    'allow_auto_follow_up' => false,
+                ));
+                if (!empty($transitionResult['success'])) {
+                    $movedCount++;
+                }
+            }
+        }
+
+        return $movedCount;
+    }
+}
+
+if (!function_exists('shopeeOmsDeductInventoryForOrder')) {
+    function shopeeOmsDeductInventoryForOrder($cmsConnect, $financeConnect, $orderRow, $actorUserId = 'SYSTEM', $scanReference = '')
+    {
+        if (!($cmsConnect instanceof mysqli) || !($financeConnect instanceof mysqli) || !is_array($orderRow)) {
+            return array('success' => false, 'message' => 'Unable to connect to warehouse inventory.');
+        }
+
+        $productSummary = shopeeOmsBuildOrderProductSummary($cmsConnect, $orderRow);
+        $productQtyMap = isset($productSummary['product_qty_map']) && is_array($productSummary['product_qty_map']) ? $productSummary['product_qty_map'] : array();
+        if (empty($productQtyMap)) {
+            return array('success' => false, 'message' => 'No product item found for this order package.');
+        }
+
+        $warehouseId = shopeeOmsGetWarehouseId($cmsConnect);
+        $orderCode = trim((string) (isset($orderRow['orderID']) ? $orderRow['orderID'] : ''));
+        if ($orderCode === '') {
+            $orderCode = 'OMS-' . (int) (isset($orderRow['id']) ? $orderRow['id'] : 0);
+        }
+
+        mysqli_begin_transaction($financeConnect);
+        try {
+            $updatedItemIds = array();
+            foreach ($productQtyMap as $productId => $qty) {
+                $productId = (int) $productId;
+                $qty = (int) $qty;
+                if ($productId <= 0 || $qty <= 0) {
+                    continue;
+                }
+
+                $selectSql = "SELECT i.id, i.product_quantity, i.stock_in_order_id
+                    FROM `stock_in_order_item` i
+                    INNER JOIN `stock_in_order` o ON o.id = i.stock_in_order_id
+                    WHERE i.status = 'A'
+                      AND o.status = 'A'
+                      AND i.product_id = " . $productId . "
+                      AND i.product_quantity > 0";
+                if ($warehouseId > 0) {
+                    $selectSql .= " AND o.warehouse_id = " . $warehouseId;
+                }
+                $selectSql .= " ORDER BY o.stock_in_date ASC, o.id ASC, i.id ASC";
+
+                $selectResult = mysqli_query($financeConnect, $selectSql);
+                $stockRows = array();
+                $availableQty = 0;
+                if ($selectResult) {
+                    while ($row = mysqli_fetch_assoc($selectResult)) {
+                        $itemId = isset($row['id']) ? (int) $row['id'] : 0;
+                        $itemQty = isset($row['product_quantity']) ? (int) $row['product_quantity'] : 0;
+                        if ($itemId > 0 && $itemQty > 0) {
+                            $stockRows[] = array(
+                                'id' => $itemId,
+                                'qty' => $itemQty,
+                            );
+                            $availableQty += $itemQty;
+                        }
+                    }
+                }
+
+                if ($availableQty < $qty) {
+                    throw new Exception('Not enough warehouse stock for product #' . $productId . '.');
+                }
+
+                $safeActor = mysqli_real_escape_string($financeConnect, $actorUserId);
+                $remainingQty = $qty;
+                foreach ($stockRows as $stockRow) {
+                    if ($remainingQty <= 0) {
+                        break;
+                    }
+
+                    $itemId = (int) $stockRow['id'];
+                    $currentQty = (int) $stockRow['qty'];
+                    $deductQty = min($remainingQty, $currentQty);
+                    $newQty = $currentQty - $deductQty;
+
+                    $updateSql = "UPDATE `stock_in_order_item`
+                        SET `product_quantity` = " . $newQty . ",
+                            `update_by` = '" . $safeActor . "',
+                            `update_date` = CURDATE(),
+                            `update_time` = CURTIME()
+                        WHERE id = " . $itemId . "
+                          AND status = 'A'
+                        LIMIT 1";
+                    if (!mysqli_query($financeConnect, $updateSql)) {
+                        throw new Exception('Failed to deduct warehouse stock.');
+                    }
+
+                    $updatedItemIds[] = $itemId;
+                    $remainingQty -= $deductQty;
+                }
+            }
+
+            mysqli_commit($financeConnect);
+            return array(
+                'success' => true,
+                'message' => 'Warehouse inventory deducted successfully.',
+                'item_ids' => $updatedItemIds,
+                'product_qty_map' => $productQtyMap,
+            );
+        } catch (Exception $exception) {
+            mysqli_rollback($financeConnect);
+            return array(
+                'success' => false,
+                'message' => $exception->getMessage(),
+            );
+        }
+    }
+}
+
+if (!function_exists('shopeeOmsRestockInventoryForOrder')) {
+    function shopeeOmsRestockInventoryForOrder($cmsConnect, $financeConnect, $orderRow, $actorUserId = 'SYSTEM')
+    {
+        if (!($cmsConnect instanceof mysqli) || !($financeConnect instanceof mysqli) || !is_array($orderRow)) {
+            return array('success' => false, 'message' => 'Unable to connect to warehouse inventory.');
+        }
+
+        $productSummary = shopeeOmsBuildOrderProductSummary($cmsConnect, $orderRow);
+        $productQtyMap = isset($productSummary['product_qty_map']) && is_array($productSummary['product_qty_map']) ? $productSummary['product_qty_map'] : array();
+        if (empty($productQtyMap)) {
+            return array('success' => false, 'message' => 'No product item found for this order package.');
+        }
+
+        $orderCode = trim((string) (isset($orderRow['orderID']) ? $orderRow['orderID'] : ''));
+        if ($orderCode === '') {
+            $orderCode = 'OMS-' . (int) (isset($orderRow['id']) ? $orderRow['id'] : 0);
+        }
+
+        $warehouseId = shopeeOmsGetWarehouseId($cmsConnect);
+        $safeActor = mysqli_real_escape_string($financeConnect, trim((string) $actorUserId) !== '' ? trim((string) $actorUserId) : 'SYSTEM');
+        $restockOrderNumber = mysqli_real_escape_string($financeConnect, 'OMS-RETURN-' . $orderCode . '-' . date('YmdHis'));
+
+        mysqli_begin_transaction($financeConnect);
+        try {
+            $insertOrderSql = "INSERT INTO `stock_in_order`
+                (`warehouse_id`, `order_number`, `stock_in_date`, `attachment`, `create_by`, `create_date`, `create_time`, `status`)
+                VALUES
+                (" . (int) $warehouseId . ", '" . $restockOrderNumber . "', CURDATE(), '', '" . $safeActor . "', CURDATE(), CURTIME(), 'A')";
+            if (!mysqli_query($financeConnect, $insertOrderSql)) {
+                throw new Exception('Unable to restock warehouse inventory.');
+            }
+
+            $stockInOrderId = (int) mysqli_insert_id($financeConnect);
+            foreach ($productQtyMap as $productId => $qty) {
+                $productId = (int) $productId;
+                $qty = (int) $qty;
+                if ($productId <= 0 || $qty <= 0) {
+                    continue;
+                }
+
+                $insertItemSql = "INSERT INTO `stock_in_order_item`
+                    (`stock_in_order_id`, `product_id`, `package_id`, `product_quantity`, `create_by`, `create_date`, `create_time`, `status`)
+                    VALUES
+                    (" . $stockInOrderId . ", " . $productId . ", 0, " . $qty . ", '" . $safeActor . "', CURDATE(), CURTIME(), 'A')";
+                if (!mysqli_query($financeConnect, $insertItemSql)) {
+                    throw new Exception('Unable to restock warehouse inventory.');
+                }
+            }
+
+            mysqli_commit($financeConnect);
+            return array(
+                'success' => true,
+                'message' => 'Warehouse inventory restocked successfully.',
+                'stock_in_order_id' => $stockInOrderId,
+                'product_qty_map' => $productQtyMap,
+            );
+        } catch (Exception $exception) {
+            mysqli_rollback($financeConnect);
+            return array('success' => false, 'message' => $exception->getMessage());
+        }
+    }
+}
+
+if (!function_exists('shopeeOmsProcessWarehouseScanByToken')) {
+    function shopeeOmsProcessWarehouseScanByToken($cmsConnect, $financeConnect, $tokenValue, $actorUserId = 'QR_PUBLIC', $actorUserGroupId = 0, $sourcePage = 'Warehouse Stock-out Scan')
+    {
+        $tokenValue = trim((string) $tokenValue);
+        if ($tokenValue === '' || !($financeConnect instanceof mysqli)) {
+            return array('success' => false, 'message' => 'Invalid warehouse scan token.');
+        }
+
+        $safeToken = mysqli_real_escape_string($financeConnect, $tokenValue);
+        $sql = "SELECT * FROM `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` WHERE token = '" . $safeToken . "' AND token_type = 'stock_out' AND status = 'A' ORDER BY id DESC LIMIT 1";
+        $result = mysqli_query($financeConnect, $sql);
+        if (!$result || mysqli_num_rows($result) === 0) {
+            return array('success' => false, 'message' => 'Warehouse scan token was not found.');
+        }
+
+        $tokenRow = mysqli_fetch_assoc($result);
+        if (isset($tokenRow['used_at']) && trim((string) $tokenRow['used_at']) !== '') {
+            return array('success' => false, 'message' => 'This warehouse stock-out scan link has already been used.');
+        }
+
+        $orderRow = shopeeOmsLoadOrder($financeConnect, isset($tokenRow['order_id']) ? (int) $tokenRow['order_id'] : 0);
+        if (empty($orderRow)) {
+            return array('success' => false, 'message' => 'Order linked to this scan token was not found.');
+        }
+
+        if (shopeeOmsNormalizeStatusCode(isset($orderRow['order_status']) ? $orderRow['order_status'] : '') !== 'TP') {
+            return array('success' => false, 'message' => 'This order is no longer waiting for warehouse stock-out.');
+        }
+
+        if ((int) $actorUserGroupId > 0 && !shopeeOmsHasTransitionPermission($cmsConnect, isset($orderRow['order_status']) ? $orderRow['order_status'] : '', 'SP', $actorUserGroupId, $orderRow, $actorUserId)) {
+            return array('success' => false, 'message' => 'You do not have permission to perform this warehouse stock-out scan.');
+        }
+
+        $deductResult = shopeeOmsDeductInventoryForOrder($cmsConnect, $financeConnect, $orderRow, $actorUserId, $tokenValue);
+        if (empty($deductResult['success'])) {
+            return $deductResult;
+        }
+
+        $safeActor = mysqli_real_escape_string($financeConnect, trim((string) $actorUserId) !== '' ? trim((string) $actorUserId) : 'QR_PUBLIC');
+        mysqli_query($financeConnect, "UPDATE `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` SET `used_at` = NOW(), `used_by` = '" . $safeActor . "', `used_source` = '" . mysqli_real_escape_string($financeConnect, $sourcePage) . "', `update_by` = '" . $safeActor . "', `update_date` = CURDATE(), `update_time` = CURTIME() WHERE id = " . (int) $tokenRow['id'] . " LIMIT 1");
+
+        return shopeeOmsExecuteTransition($cmsConnect, $financeConnect, (int) $orderRow['id'], 'SP', array(
+            'actor_user_id' => $actorUserId,
+            'actor_user_group_id' => (int) $actorUserGroupId,
+            'source_page' => $sourcePage,
+            'remark' => 'Warehouse stock-out QR scan completed.',
+            'action' => 'warehouse_scan',
+            'skip_permission' => ((int) $actorUserGroupId <= 0),
+            'field_updates' => array(
+                'warehouse_scan_at' => date('Y-m-d H:i:s'),
+                'warehouse_scan_by' => $actorUserId,
+                'warehouse_scan_ref' => $tokenValue,
+            ),
+            'related_token_scan_id' => $tokenValue,
+        ));
+    }
+}
+
+if (!function_exists('shopeeOmsHandleReturn')) {
+    function shopeeOmsHandleReturn($cmsConnect, $financeConnect, $orderId, $returnType, $remark, $actorUserId, $actorUserGroupId, $sourcePage = 'Shopee Order Request')
+    {
+        $returnType = strtolower(trim((string) $returnType));
+        if (!in_array($returnType, array('restock', 'damaged'), true)) {
+            return array('success' => false, 'message' => 'Invalid return type.');
+        }
+
+        $orderRow = shopeeOmsLoadOrder($financeConnect, $orderId);
+        if (empty($orderRow)) {
+            return array('success' => false, 'message' => 'Order not found.');
+        }
+
+        $currentStatus = shopeeOmsNormalizeStatusCode(isset($orderRow['order_status']) ? $orderRow['order_status'] : '');
+        if ($currentStatus !== 'R') {
+            return array('success' => false, 'message' => 'Please mark the order as Return before choosing Restock or Damaged.');
+        }
+
+        if (!shopeeOmsHasTransitionPermission($cmsConnect, $currentStatus, 'CR', $actorUserGroupId, $orderRow, $actorUserId)) {
+            return array('success' => false, 'message' => 'You are not allowed to close this order as returned.');
+        }
+
+        $inventoryEffect = 'inventory_loss';
+        if ($returnType === 'restock') {
+            $restockResult = shopeeOmsRestockInventoryForOrder($cmsConnect, $financeConnect, $orderRow, $actorUserId);
+            if (empty($restockResult['success'])) {
+                return $restockResult;
+            }
+            $inventoryEffect = 'inventory_restock';
+        }
+
+        $transitionResult = shopeeOmsExecuteTransition($cmsConnect, $financeConnect, $orderId, 'CR', array(
+            'actor_user_id' => $actorUserId,
+            'actor_user_group_id' => $actorUserGroupId,
+            'source_page' => $sourcePage,
+            'remark' => trim((string) $remark),
+            'action' => $returnType === 'restock' ? 'return_restock' : 'return_damaged',
+            'allow_auto_follow_up' => false,
+        ));
+        if (empty($transitionResult['success'])) {
+            return $transitionResult;
+        }
+
+        $safeOrderCode = mysqli_real_escape_string($financeConnect, (string) (isset($orderRow['orderID']) ? $orderRow['orderID'] : ''));
+        $safeStatusBefore = mysqli_real_escape_string($financeConnect, $currentStatus);
+        $safeRemark = mysqli_real_escape_string($financeConnect, trim((string) $remark));
+        $safeUserId = mysqli_real_escape_string($financeConnect, trim((string) $actorUserId) !== '' ? trim((string) $actorUserId) : 'SYSTEM');
+        $safeSourcePage = mysqli_real_escape_string($financeConnect, (string) $sourcePage);
+        $safeReturnType = mysqli_real_escape_string($financeConnect, $returnType);
+        $safeInventoryEffect = mysqli_real_escape_string($financeConnect, $inventoryEffect);
+        mysqli_query($financeConnect, "INSERT INTO `" . ORDER_RETURN_LOG . "`
+            (`order_id`, `order_code`, `status_before`, `status_after`, `return_type`, `inventory_effect`, `remark`, `user_id`, `user_group_id`, `source_page`, `action_at`, `create_date`, `create_time`, `status`)
+            VALUES
+            (" . (int) $orderId . ", '" . $safeOrderCode . "', '" . $safeStatusBefore . "', 'CR', '" . $safeReturnType . "', '" . $safeInventoryEffect . "', '" . $safeRemark . "', '" . $safeUserId . "', " . (int) $actorUserGroupId . ", '" . $safeSourcePage . "', NOW(), CURDATE(), CURTIME(), 'A')");
+
+        return array(
+            'success' => true,
+            'message' => 'Return action saved successfully.',
+            'inventory_effect' => $inventoryEffect,
         );
     }
 }
