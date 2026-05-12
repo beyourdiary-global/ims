@@ -115,7 +115,7 @@ if ($orderRst) {
                         <th>Customer</th>
                         <th>Package</th>
                         <th>Airbill No</th>
-                        <th>Step A Link</th>
+                        <th>Link</th>
                         <th>Status</th>
                     </tr>
                 </thead>
