@@ -27,14 +27,14 @@ if (post('scanOrderBtn')) {
         $scanToken = trim((string) urldecode($matches[1]));
     } else {
         $safeScanValue = mysqli_real_escape_string($finance_connect, $scanValue);
-        $tokenRst = mysqli_query($finance_connect, "SELECT token FROM `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` WHERE token = '" . $safeScanValue . "' AND status = 'A' ORDER BY id DESC LIMIT 1");
+        $tokenRst = mysqli_query($finance_connect, "SELECT token FROM `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` WHERE token = '" . $safeScanValue . "' AND status = 'A' AND token_type = 'stock_out' ORDER BY id DESC LIMIT 1");
         if ($tokenRst && mysqli_num_rows($tokenRst) > 0) {
             $tokenRow = mysqli_fetch_assoc($tokenRst);
             $scanToken = isset($tokenRow['token']) ? (string) $tokenRow['token'] : '';
         } else {
             $orderRow = shopeeOmsLoadOrderByCode($finance_connect, $scanValue);
             if (!empty($orderRow)) {
-                $existingTokenRst = mysqli_query($finance_connect, "SELECT token FROM `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` WHERE order_id = " . (int) $orderRow['id'] . " AND status = 'A' ORDER BY id DESC LIMIT 1");
+                $existingTokenRst = mysqli_query($finance_connect, "SELECT token FROM `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` WHERE order_id = " . (int) $orderRow['id'] . " AND status = 'A' AND token_type = 'stock_out' ORDER BY id DESC LIMIT 1");
                 if ($existingTokenRst && mysqli_num_rows($existingTokenRst) > 0) {
                     $existingTokenRow = mysqli_fetch_assoc($existingTokenRst);
                     $scanToken = isset($existingTokenRow['token']) ? (string) $existingTokenRow['token'] : '';
