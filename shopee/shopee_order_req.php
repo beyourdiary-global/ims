@@ -11,7 +11,7 @@ $tblName = SHOPEE_SG_ORDER_REQ;
 $dataID = input('id');
 $act = input('act');
 $pageAction = getPageAction($act);
-$allowed_ext = array("png", "jpg", "jpeg", "svg", "pdf");
+$allowed_ext = array("png", "jpg", "jpeg", "pdf");
 
 // Redirect directly to role page to avoid extra router history entries.
 $redirect_page = $SITEURL . '/shopee/shopee_processing_order.php';
@@ -280,7 +280,7 @@ if (post('actionBtn')) {
     switch ($action) {
         case 'addRecord':
         case 'updRecord':
-            if (isset($_FILES["sor_airbill_attachment"]) && $_FILES["sor_airbill_attachment"]["size"] != 0) {
+            if ($sor_update_airbill === 'yes' && isset($_FILES["sor_airbill_attachment"]) && $_FILES["sor_airbill_attachment"]["size"] != 0) {
                 $sorAirbillFileName = $_FILES["sor_airbill_attachment"]["name"];
                 $sorAirbillTmpName = $_FILES["sor_airbill_attachment"]["tmp_name"];
                 $sorAirbillExt = strtolower((string) pathinfo($sorAirbillFileName, PATHINFO_EXTENSION));
@@ -302,7 +302,7 @@ if (post('actionBtn')) {
                         $error = 1;
                     }
                 } else {
-                    $airbill_attachment_err = "Only allow PNG, JPG, JPEG, SVG or PDF file";
+                    $airbill_attachment_err = "Only allow PNG, JPG, JPEG or PDF file";
                     $error = 1;
                 }
             }
@@ -2030,8 +2030,9 @@ $(document).ready(function() {
 
             updateAirbill.value = updateAirbillToggle.checked ? 'yes' : 'no';
             var enabled = updateAirbillToggle.checked;
-            airbillNo.disabled = !enabled && "<?= $act ?>" !== '';
-            airbillAttachment.disabled = !enabled && "<?= $act ?>" !== '';
+            var readOnlyMode = "<?= $act ?>" === '';
+            airbillNo.disabled = readOnlyMode || !enabled;
+            airbillAttachment.disabled = readOnlyMode || !enabled;
         }
 
         function submitReturnAction(returnType) {

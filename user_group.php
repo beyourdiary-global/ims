@@ -210,8 +210,10 @@ if (post('actionBtn')) {
                         array_push($datafield, 'badge_icon_class');
                     }
 
-                    $query = "INSERT INTO " . $tblName . "(name,badge_color,badge_icon_class,pins,remark,create_by,create_date,create_time) VALUES ('$currentDataName','$badgeColor','$badgeIconClass','$permission_grp','$dataRemark','" . USER_ID . "',curdate(),curtime())";
-                    $returnData = mysqli_query($connect, $query);
+                    $query = "INSERT INTO " . $tblName . "(name,badge_color,badge_icon_class,pins,remark,create_by,create_date,create_time) VALUES (?,?,?,?,?,?,curdate(),curtime())";
+                    $stmt = mysqli_prepare($connect, $query);
+                    mysqli_stmt_bind_param($stmt, "ssssss", $currentDataName, $badgeColor, $badgeIconClass, $permission_grp, $dataRemark, USER_ID);
+                    $returnData = mysqli_stmt_execute($stmt);
                     $dataID = $connect->insert_id;
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
@@ -332,8 +334,13 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if ($oldvalarr && $chgvalarr) {
-                        $query = "UPDATE " . $tblName . " SET name ='$currentDataName', badge_color ='$badgeColor', badge_icon_class ='$badgeIconClass', pins = '$permission_grp', remark ='$dataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
-                        $returnData = mysqli_query($connect, $query);
+                        $effectiveBadgeColor = $badgeColor !== '' ? $badgeColor : (isset($row['badge_color']) ? (string) $row['badge_color'] : '');
+                        $effectiveBadgeIconClass = $badgeIconClass !== '' ? $badgeIconClass : (isset($row['badge_icon_class']) ? (string) $row['badge_icon_class'] : '');
+
+                        $query = "UPDATE " . $tblName . " SET name = ?, badge_color = ?, badge_icon_class = ?, pins = ?, remark = ?, update_date = curdate(), update_time = curtime(), update_by = ? WHERE id = ?";
+                        $stmt = mysqli_prepare($connect, $query);
+                        mysqli_stmt_bind_param($stmt, "ssssssi", $currentDataName, $effectiveBadgeColor, $effectiveBadgeIconClass, $permission_grp, $dataRemark, USER_ID, $dataID);
+                        $returnData = mysqli_stmt_execute($stmt);
                     } else {
                         $act = 'NC';
                     }

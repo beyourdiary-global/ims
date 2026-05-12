@@ -17,8 +17,6 @@ if (!$canViewPage) {
     exit;
 }
 
-shopeeOmsRunFourteenDayAutoMove($connect, $finance_connect);
-
 $statusMessage = '';
 $statusClass = 'success';
 $dateFrom = trim((string) input('date_from'));

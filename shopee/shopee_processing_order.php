@@ -33,6 +33,10 @@ $_SESSION['act'] = '';
 $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
 // Build numeric action keys from the latest user-group pins in database.
 $accessActionKey = array();
 $shopeePinGroups = array(128, 129, 130);
@@ -132,17 +136,36 @@ if (isset($_GET['verify_id'])) {
     }
 }
 
-if (isset($_GET['return_id'])) {
-    $orderId = intval($_GET['return_id']);
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['return_id'])) {
+    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    $returnRedirectMonth = isset($_POST['return_redirect_month']) ? (string) $_POST['return_redirect_month'] : '';
+    $returnRedirectStatus = isset($_POST['return_redirect_status']) ? (string) $_POST['return_redirect_status'] : '';
+    $redirectUrl = 'shopee_processing_order.php';
+    $redirectQuery = array();
+    if ($returnRedirectMonth !== '') {
+        $redirectQuery['month'] = $returnRedirectMonth;
+    }
+    if ($returnRedirectStatus !== '') {
+        $redirectQuery['status'] = $returnRedirectStatus;
+    }
+    if (!empty($redirectQuery)) {
+        $redirectUrl .= '?' . http_build_query($redirectQuery);
+    }
+
+    if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
+        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($redirectUrl) . "');</script>";
+        exit;
+    }
+
+    $orderId = intval($_POST['return_id']);
     $returnResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'R', array(
         'actor_user_id' => USER_ID,
         'actor_user_group_id' => USER_GROUP,
         'source_page' => $pageTitle,
         'remark' => 'Marked as Return from processing order list.',
         'action' => 'mark_return',
-        'skip_permission' => true,
     ));
-    echo "<script>alert('" . addslashes(isset($returnResult['message']) ? $returnResult['message'] : 'Unable to mark order as Return.') . "'); location.replace('shopee_processing_order.php');</script>";
+    echo "<script>alert('" . addslashes(isset($returnResult['message']) ? $returnResult['message'] : 'Unable to mark order as Return.') . "'); location.replace('" . addslashes($redirectUrl) . "');</script>";
     exit;
 }
 
@@ -636,9 +659,15 @@ $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_con
                                 $statusCode = shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '');
                                 ?>
                                 <?php if (in_array($statusCode, array('SP', 'WAERD', 'WR', 'PR', 'WAFC', 'V', 'C'), true)) { ?>
-                                 <a href="?return_id=<?= $row['id'] ?>&month=<?= urlencode($monthFilter) ?>&status=<?= urlencode($statusFilter) ?>" class="btn btn-sm btn-rounded btn-warning" onclick="return confirm('Mark this order as Return?')" title="Mark as Return">
-                                     <i class="fa-solid fa-rotate-left"></i>
-                                 </a>
+                                 <form method="post" class="d-inline" onsubmit="return confirm('Mark this order as Return?')">
+                                     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
+                                     <input type="hidden" name="return_id" value="<?= (int) $row['id'] ?>">
+                                     <input type="hidden" name="return_redirect_month" value="<?= htmlspecialchars((string) $monthFilter, ENT_QUOTES, 'UTF-8') ?>">
+                                     <input type="hidden" name="return_redirect_status" value="<?= htmlspecialchars((string) $statusFilter, ENT_QUOTES, 'UTF-8') ?>">
+                                     <button type="submit" class="btn btn-sm btn-rounded btn-warning" title="Mark as Return">
+                                         <i class="fa-solid fa-rotate-left"></i>
+                                     </button>
+                                 </form>
                                 <?php } ?>
                                 </td>
                                 <td scope="row"><?= getOrderStatusLabel($row['order_status']) ?></td>

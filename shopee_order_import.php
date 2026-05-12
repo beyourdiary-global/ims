@@ -86,7 +86,7 @@ $importErrors = [];
 $importWarnings = [];
 $previewData = [];
 $orderIdFieldError = '';
-$allowedAttachmentExt = array("png", "jpg", "jpeg", "svg", "pdf");
+$allowedAttachmentExt = array("png", "jpg", "jpeg", "pdf");
 $sorAirbillAttachmentPath = img_server . 'shopee_airbill_attachment/';
 $sorAirbillAttachmentUrl = rtrim((string) $SITEURL, '/') . '/' . trim((string) $sorAirbillAttachmentPath, '/\\') . '/';
 $sorAirbillAttachmentFsPath = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . trim((string) $sorAirbillAttachmentPath, '/\\') . DIRECTORY_SEPARATOR;
@@ -597,7 +597,7 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
     );
     $previewData['package_qty_json'] = !empty($packageQtySnapshot) ? json_encode($packageQtySnapshot) : '';
 
-    if (isset($_FILES["airbill_attachment"]) && $_FILES["airbill_attachment"]["size"] != 0) {
+    if ($previewData['update_airbill'] === 'yes' && isset($_FILES["airbill_attachment"]) && $_FILES["airbill_attachment"]["size"] != 0) {
         $airbillFileName = $_FILES["airbill_attachment"]["name"];
         $airbillTmpName = $_FILES["airbill_attachment"]["tmp_name"];
         $airbillExt = strtolower((string) pathinfo($airbillFileName, PATHINFO_EXTENSION));
@@ -618,7 +618,7 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
                 $importErrors[] = 'Failed to upload the airbill attachment.';
             }
         } else {
-            $importErrors[] = 'Only allow PNG, JPG, JPEG, SVG or PDF file for airbill attachment.';
+            $importErrors[] = 'Only allow PNG, JPG, JPEG or PDF file for airbill attachment.';
         }
     }
 

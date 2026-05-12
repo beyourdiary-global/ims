@@ -57,6 +57,7 @@ $orderLink = $tokenValue !== ''
     : '';
 
 $qrImageUrl = '';
+$qrUnavailableMessage = '';
 if ($orderLink !== '') {
     $qrRelativeDir = 'temp/shopee_order_request/';
     $qrFsDir = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $qrRelativeDir);
@@ -72,7 +73,7 @@ if ($orderLink !== '') {
     if (file_exists($qrFsPath)) {
         $qrImageUrl = rtrim((string) $SITEURL, '/') . '/' . trim($qrRelativeDir, '/\\') . '/' . $qrFileName;
     } else {
-        $qrImageUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=' . rawurlencode($orderLink);
+        $qrUnavailableMessage = 'QR image could not be generated locally on this server.';
     }
 }
 
@@ -178,7 +179,7 @@ if ($airbillAttachment !== '') {
                                     <a class="btn btn-sm btn-rounded btn-primary" href="<?= htmlspecialchars($qrImageUrl, ENT_QUOTES, 'UTF-8') ?>" download="shopee-order-qr-<?= (int) $requestId ?>.png">Download QR</a>
                                 </div>
                             <?php } else { ?>
-                                <div class="alert alert-warning mb-0">QR image is not available for this order yet.</div>
+                                <div class="alert alert-warning mb-0"><?= htmlspecialchars($qrUnavailableMessage !== '' ? $qrUnavailableMessage : 'QR image is not available for this order yet.', ENT_QUOTES, 'UTF-8') ?></div>
                             <?php } ?>
                         </div>
                         <div class="col-md-8">

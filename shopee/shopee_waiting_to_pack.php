@@ -71,6 +71,28 @@ if ($orderRst) {
         $orderRows[] = $row;
     }
 }
+
+$orderTokenMap = array();
+if (!empty($orderRows)) {
+    $orderIds = array();
+    foreach ($orderRows as $orderRow) {
+        $orderIds[] = (int) (isset($orderRow['id']) ? $orderRow['id'] : 0);
+    }
+    $orderIds = array_values(array_unique(array_filter($orderIds)));
+
+    if (!empty($orderIds)) {
+        $tokenSql = "SELECT order_id, token FROM `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` WHERE status = 'A' AND token_type = 'stock_out' AND order_id IN (" . implode(',', $orderIds) . ") ORDER BY order_id ASC, id DESC";
+        $tokenRst = mysqli_query($finance_connect, $tokenSql);
+        if ($tokenRst) {
+            while ($tokenRow = mysqli_fetch_assoc($tokenRst)) {
+                $tokenOrderId = (int) (isset($tokenRow['order_id']) ? $tokenRow['order_id'] : 0);
+                if ($tokenOrderId > 0 && !isset($orderTokenMap[$tokenOrderId])) {
+                    $orderTokenMap[$tokenOrderId] = isset($tokenRow['token']) ? (string) $tokenRow['token'] : '';
+                }
+            }
+        }
+    }
+}
 ?>
 <!DOCTYPE html>
 <html>
@@ -129,12 +151,7 @@ if ($orderRst) {
                             }
                             $packageSummary = shopeeOmsBuildOrderProductSummary($connect, $row);
                             $tokenLink = '';
-                            $tokenValue = '';
-                            $tokenRst = mysqli_query($finance_connect, "SELECT token FROM `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` WHERE order_id = " . (int) $row['id'] . " AND status = 'A' ORDER BY id DESC LIMIT 1");
-                            if ($tokenRst && mysqli_num_rows($tokenRst) > 0) {
-                                $tokenRow = mysqli_fetch_assoc($tokenRst);
-                                $tokenValue = isset($tokenRow['token']) ? (string) $tokenRow['token'] : '';
-                            }
+                            $tokenValue = isset($orderTokenMap[(int) $row['id']]) ? (string) $orderTokenMap[(int) $row['id']] : '';
                             if ($tokenValue !== '') {
                                 $tokenLink = $SITEURL . '/warehouse_stock_in_scan.php?t=' . urlencode($tokenValue);
                             }
