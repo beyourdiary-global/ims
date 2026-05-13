@@ -495,7 +495,7 @@ input {
   top: 92px;
   left: 0;
   bottom: 0;
-  width: 220px;
+  width: var(--task-global-sidebar-width, 220px);
   background-color: #34444c;
   color: #aeb7c2;
   transform: translateX(-100%);
@@ -541,7 +541,7 @@ body.task-global-sidebar-open .menuBar > .container-fluid {
 
 body.task-global-sidebar-open .menuBar > .container-fluid > .nav.nav-tabs {
   transform: none;
-  padding-left: 220px;
+  padding-left: var(--task-global-sidebar-width, 220px);
   transition: padding-left 0.25s ease;
 }
 
@@ -554,7 +554,7 @@ body.task-global-sidebar-open
 }
 
 body.task-global-sidebar-open #dispTable {
-  padding-left: 220px;
+  padding-left: var(--task-global-sidebar-width, 220px);
   transition: padding-left 0.25s ease;
 }
 
