@@ -203,7 +203,8 @@ if ($getYearlyGoalTargetByYear != false && $getYearlyGoalTargetByYear->num_rows 
 </head>
 
 <body>
-    <div class="container-xxl">
+    <div id="dispTable" class="mt-3">
+        <div class="container-xxl">
         <?php
         function generateSalesData($label, $income, $goal) {
             return [
@@ -357,8 +358,8 @@ if ($getYearlyGoalTargetByYear != false && $getYearlyGoalTargetByYear->num_rows 
         }
         ?>
 
+        </div>
     </div>
-    </>
 
     <script>
         <?php include "./js/dashboard.js" ?>
