@@ -31,9 +31,41 @@
     var $attachmentPreviewContent = $("#url_attachment_preview_content");
     var currentPage = 1;
     var currentPageSize = parseInt($pageSize.val() || "10", 10) || 10;
+    var formFieldIds = [
+      "url_record_id",
+      "url_existing_attachment",
+      "url_content",
+      "url_attachment",
+    ];
+    var filterFieldIds = [
+      "url_keyword",
+      "url_filter_date",
+      "url_filter_user",
+      "url_filter_attachment",
+    ];
 
     if (!$form.length || !$alert.length || !$list.length || !$loading.length) {
       return;
+    }
+
+    function clearStoredFieldValues(fieldIds) {
+      if (
+        !fieldIds ||
+        !fieldIds.length ||
+        typeof window.localStorage === "undefined"
+      ) {
+        return;
+      }
+
+      try {
+        for (var i = 0; i < fieldIds.length; i++) {
+          if (fieldIds[i]) {
+            window.localStorage.removeItem(fieldIds[i]);
+          }
+        }
+      } catch (err) {
+        // Ignore storage access issues and continue with in-memory reset only.
+      }
     }
 
     function showAlert(type, text) {
@@ -155,6 +187,15 @@
       $existingAttachment.val("");
       $submitBtn.text("Save Record");
       $cancelEditBtn.hide();
+      clearStoredFieldValues(formFieldIds);
+    }
+
+    function resetFilters() {
+      $("#url_keyword").val("");
+      $("#url_filter_date").val("");
+      $("#url_filter_user").val("");
+      $("#url_filter_attachment").val("");
+      clearStoredFieldValues(filterFieldIds);
     }
 
     function collectFilters() {
@@ -441,10 +482,7 @@
     });
 
     $("#url_reset_filter_btn").on("click", function () {
-      $("#url_keyword").val("");
-      $("#url_filter_date").val("");
-      $("#url_filter_user").val("");
-      $("#url_filter_attachment").val("");
+      resetFilters();
       currentPage = 1;
       loadList();
     });
@@ -530,6 +568,9 @@
       }
     });
 
+    clearStoredFieldValues(formFieldIds.concat(filterFieldIds));
+    resetForm();
+    resetFilters();
     loadList();
   });
 })();
