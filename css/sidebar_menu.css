@@ -105,6 +105,7 @@ body.task-global-sidebar-resizing {
    LAYOUT SHIFT WHEN SIDEBAR OPEN
 ========================= */
 
+body.task-global-sidebar-open .container-xxl,
 body.task-global-sidebar-open .task-page-wrap,
 body.task-global-sidebar-open .page-load-cover,
 body.task-global-sidebar-open #dispTable,
@@ -647,6 +648,7 @@ body.task-global-sidebar-open .task-top-menu-trigger .task-top-menu-icon {
     display: none !important;
   }
 
+  body.task-global-sidebar-open .container-xxl,
   body.task-global-sidebar-open .task-page-wrap,
   body.task-global-sidebar-open .page-load-cover,
   body.task-global-sidebar-open #dispTable,
@@ -721,6 +723,7 @@ body.task-global-sidebar-open .task-top-menu-trigger .task-top-menu-icon {
     padding-left: var(--task-global-sidebar-width) !important;
   }
 
+  body.task-global-sidebar-open .container-xxl,
   body.task-global-sidebar-open .task-page-wrap,
   body.task-global-sidebar-open .page-load-cover,
   body.task-global-sidebar-open #dispTable,
