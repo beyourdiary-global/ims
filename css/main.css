@@ -765,26 +765,15 @@ body.task-global-sidebar-open #dispTable {
   list-style: none;
   padding: 0px;
   width: 100%;
-  position: relative;
-  top: auto;
-  left: auto;
-  margin: 4px 0 0;
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  margin: 0;
   background: white;
   border: 1px solid #000000;
   border-radius: 4px;
   z-index: 99;
   box-sizing: border-box;
-}
-
-.input-group.autocomplete {
-  flex-wrap: wrap;
-  align-items: flex-start;
-}
-
-.input-group.autocomplete .searchResult,
-.input-group.autocomplete .clear {
-  flex: 0 0 100%;
-  width: 100%;
 }
 
 .autocomplete .searchResult li {
@@ -813,6 +802,8 @@ body.task-global-sidebar-open #dispTable {
   display: flex;
   align-items: stretch;
   gap: 8px;
+  position: relative;
+  overflow: visible;
 }
 
 .sor-pkg-row > .sor-pkg-input,
@@ -827,6 +818,21 @@ body.task-global-sidebar-open #dispTable {
 .sor-brand-row > .sor-remove-row-btn {
   flex: 0 0 auto;
   border-radius: 0 !important;
+}
+
+.sor-pkg-row > .searchResult,
+.sor-brand-row > .searchResult {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  margin: 0;
+  z-index: 1200;
+}
+
+.sor-pkg-row > .searchResult li,
+.sor-brand-row > .searchResult li {
+  white-space: normal;
+  word-break: break-word;
 }
 
 .readonlyInput {

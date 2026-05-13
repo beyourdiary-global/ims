@@ -152,6 +152,8 @@ if (post('actionBtn')) {
         case 'updData':
 
             $currentDataName = postSpaceFilter('currentDataName');
+            $badgeColor = postSpaceFilter('badgeColor');
+            $badgeIconClass = postSpaceFilter('badgeIconClass');
             $dataRemark = postSpaceFilter('currentDataRemark');
 
             $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
@@ -198,8 +200,20 @@ if (post('actionBtn')) {
                         array_push($datafield, 'remark');
                     }
 
-                    $query = "INSERT INTO " . $tblName . "(name,pins,remark,create_by,create_date,create_time) VALUES ('$currentDataName','$permission_grp','$dataRemark','" . USER_ID . "',curdate(),curtime())";
-                    $returnData = mysqli_query($connect, $query);
+                    if ($badgeColor) {
+                        array_push($newvalarr, $badgeColor);
+                        array_push($datafield, 'badge_color');
+                    }
+
+                    if ($badgeIconClass) {
+                        array_push($newvalarr, $badgeIconClass);
+                        array_push($datafield, 'badge_icon_class');
+                    }
+
+                    $query = "INSERT INTO " . $tblName . "(name,badge_color,badge_icon_class,pins,remark,create_by,create_date,create_time) VALUES (?,?,?,?,?,?,curdate(),curtime())";
+                    $stmt = mysqli_prepare($connect, $query);
+                    mysqli_stmt_bind_param($stmt, "ssssss", $currentDataName, $badgeColor, $badgeIconClass, $permission_grp, $dataRemark, USER_ID);
+                    $returnData = mysqli_stmt_execute($stmt);
                     $dataID = $connect->insert_id;
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
@@ -305,11 +319,28 @@ if (post('actionBtn')) {
                         array_push($datafield, 'remark');
                     }
 
+                    if ((string) (isset($row['badge_color']) ? $row['badge_color'] : '') != $badgeColor) {
+                        array_push($oldvalarr, (isset($row['badge_color']) && $row['badge_color'] !== '') ? $row['badge_color'] : 'Empty Value');
+                        array_push($chgvalarr, $badgeColor !== '' ? $badgeColor : 'Empty Value');
+                        array_push($datafield, 'badge_color');
+                    }
+
+                    if ((string) (isset($row['badge_icon_class']) ? $row['badge_icon_class'] : '') != $badgeIconClass) {
+                        array_push($oldvalarr, (isset($row['badge_icon_class']) && $row['badge_icon_class'] !== '') ? $row['badge_icon_class'] : 'Empty Value');
+                        array_push($chgvalarr, $badgeIconClass !== '' ? $badgeIconClass : 'Empty Value');
+                        array_push($datafield, 'badge_icon_class');
+                    }
+
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if ($oldvalarr && $chgvalarr) {
-                        $query = "UPDATE " . $tblName . " SET name ='$currentDataName',pins = '$permission_grp', remark ='$dataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
-                        $returnData = mysqli_query($connect, $query);
+                        $effectiveBadgeColor = $badgeColor !== '' ? $badgeColor : (isset($row['badge_color']) ? (string) $row['badge_color'] : '');
+                        $effectiveBadgeIconClass = $badgeIconClass !== '' ? $badgeIconClass : (isset($row['badge_icon_class']) ? (string) $row['badge_icon_class'] : '');
+
+                        $query = "UPDATE " . $tblName . " SET name = ?, badge_color = ?, badge_icon_class = ?, pins = ?, remark = ?, update_date = curdate(), update_time = curtime(), update_by = ? WHERE id = ?";
+                        $stmt = mysqli_prepare($connect, $query);
+                        mysqli_stmt_bind_param($stmt, "ssssssi", $currentDataName, $effectiveBadgeColor, $effectiveBadgeIconClass, $permission_grp, $dataRemark, USER_ID, $dataID);
+                        $returnData = mysqli_stmt_execute($stmt);
                     } else {
                         $act = 'NC';
                     }
@@ -362,6 +393,85 @@ if (isset($_SESSION['tempValConfirmBox'])) {
     echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
 }
 
+$defaultBadgeIconClass = 'fa-solid fa-user-group';
+$selectedBadgeIconClass = $defaultBadgeIconClass;
+if (isset($_POST['badgeIconClass'])) {
+    $selectedBadgeIconClass = trim((string) $_POST['badgeIconClass']);
+} else if (isset($row['badge_icon_class']) && trim((string) $row['badge_icon_class']) !== '') {
+    $selectedBadgeIconClass = trim((string) $row['badge_icon_class']);
+}
+if ($selectedBadgeIconClass === '') {
+    $selectedBadgeIconClass = $defaultBadgeIconClass;
+}
+
+$fontAwesomeIconOptions = array();
+$fontAwesomeSpriteFiles = array(
+    'fa-solid' => __DIR__ . '/header/fontawesome-free-6.0.0-web/sprites/solid.svg',
+    'fa-regular' => __DIR__ . '/header/fontawesome-free-6.0.0-web/sprites/regular.svg',
+    'fa-brands' => __DIR__ . '/header/fontawesome-free-6.0.0-web/sprites/brands.svg',
+);
+$seenIconOptionValues = array();
+
+foreach ($fontAwesomeSpriteFiles as $iconStyle => $spriteFilePath) {
+    if (!is_file($spriteFilePath) || !is_readable($spriteFilePath)) {
+        continue;
+    }
+
+    $spriteMarkup = file_get_contents($spriteFilePath);
+    if ($spriteMarkup === false) {
+        continue;
+    }
+
+    if (!preg_match_all('/<symbol[^>]*id="([^"]+)"/i', $spriteMarkup, $matches)) {
+        continue;
+    }
+
+    foreach ($matches[1] as $iconNameRaw) {
+        $iconName = strtolower(trim((string) $iconNameRaw));
+        if ($iconName === '') {
+            continue;
+        }
+
+        $iconValue = $iconStyle . ' fa-' . $iconName;
+        if (isset($seenIconOptionValues[$iconValue])) {
+            continue;
+        }
+
+        $seenIconOptionValues[$iconValue] = true;
+        $fontAwesomeIconOptions[] = array(
+            'value' => $iconValue,
+            'label' => $iconName,
+            'style' => $iconStyle,
+        );
+    }
+}
+
+usort($fontAwesomeIconOptions, function ($left, $right) {
+    return strnatcasecmp((string) $left['label'], (string) $right['label']);
+});
+
+$selectedBadgeIconExists = false;
+foreach ($fontAwesomeIconOptions as $iconOption) {
+    if ((string) $iconOption['value'] === $selectedBadgeIconClass) {
+        $selectedBadgeIconExists = true;
+        break;
+    }
+}
+
+if (!$selectedBadgeIconExists) {
+    $selectedBadgeIconLabel = preg_replace('/^fa-(solid|regular|brands)\s+fa-/i', '', $selectedBadgeIconClass);
+    $selectedBadgeIconLabel = trim((string) $selectedBadgeIconLabel);
+    if ($selectedBadgeIconLabel === '') {
+        $selectedBadgeIconLabel = 'custom-icon';
+    }
+
+    array_unshift($fontAwesomeIconOptions, array(
+        'value' => $selectedBadgeIconClass,
+        'label' => $selectedBadgeIconLabel,
+        'style' => (stripos($selectedBadgeIconClass, 'fa-brands') !== false) ? 'fa-brands' : 'fa-solid',
+    ));
+}
+
 ?>
 
 <!DOCTYPE html>
@@ -391,6 +501,109 @@ if (isset($_SESSION['tempValConfirmBox'])) {
             max-width: 360px;
             width: 100%;
             margin-left: auto;
+        }
+
+        .search-field-input {
+            padding-right: 35px;
+            font-size: 14px;
+            font-weight: 400;
+        }
+
+        .search-field-clear-btn {
+            position: absolute;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            z-index: 10;
+            color: #999;
+            border: none;
+            background: transparent;
+            display: none;
+        }
+
+        .badge-color-input {
+            width: 100% !important;
+            min-width: 0;
+            height: 48px;
+        }
+
+        .badge-icon-picker {
+            position: relative;
+        }
+
+        .badge-icon-search-wrap {
+            position: relative;
+        }
+
+        .badge-icon-dropdown {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+            z-index: 99;
+            display: none;
+            max-height: 280px;
+            overflow-y: auto;
+            border: 1px solid #000000;
+            border-radius: 4px;
+            background: #fff;
+            box-sizing: border-box;
+            padding: 0;
+        }
+
+        .badge-icon-dropdown.show {
+            display: block;
+        }
+
+        .badge-icon-option {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            width: 100%;
+            padding: 4px;
+            border: none;
+            background: #f2f3f4;
+            text-align: left;
+            font-size: 14px;
+            font-weight: 400;
+            color: #000000;
+            margin-bottom: 1px;
+        }
+
+        .badge-icon-option:nth-child(even) {
+            background: #e5e7e9;
+            color: #000000;
+        }
+
+        .badge-icon-option:hover,
+        .badge-icon-option.active {
+            background: #cacfd2;
+        }
+
+        .badge-icon-option i {
+            width: 20px;
+            text-align: center;
+            color: #344767;
+        }
+
+        .badge-icon-option-label {
+            flex: 1 1 auto;
+        }
+
+        .badge-icon-option-class {
+            color: inherit;
+            font-size: 12px;
+        }
+
+        .badge-icon-empty {
+            padding: 4px;
+            background: #f2f3f4;
+            color: #000000;
+            font-size: 14px;
+        }
+
+        .badge-icon-preview {
+            display: none;
         }
 
         .permission-grid {
@@ -512,6 +725,53 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                         </div>
                     </div>
 
+                    <div class="row">
+                        <div class="col-12 col-md-4 mb-3">
+                            <label class="form-label" for="badgeColor">Badge Color</label>
+                            <input class="form-control form-control-color badge-color-input" type="color" name="badgeColor" id="badgeColor" value="<?php
+                                if (isset($_POST['badgeColor'])) {
+                                    echo htmlspecialchars($_POST['badgeColor']);
+                                } else if (isset($row['badge_color']) && trim((string) $row['badge_color']) !== '') {
+                                    echo htmlspecialchars($row['badge_color']);
+                                } else {
+                                    echo '#6c757d';
+                                }
+                            ?>" <?php if ($act == '') echo 'disabled' ?>>
+                        </div>
+                        <div class="col-12 col-md-8 mb-3">
+                            <label class="form-label" for="badgeIconClass">Badge Icon Class</label>
+                            <div class="badge-icon-picker">
+                                <input type="hidden" name="badgeIconClass" id="badgeIconClass" value="<?= htmlspecialchars($selectedBadgeIconClass, ENT_QUOTES, 'UTF-8') ?>">
+                                <div class="badge-icon-search-wrap">
+                                    <input class="form-control search-field-input" type="text" id="badgeIconSearch" value="<?= htmlspecialchars($selectedBadgeIconClass, ENT_QUOTES, 'UTF-8') ?>" placeholder="Search Font Awesome icon..." autocomplete="off" <?php if ($act == '') echo 'readonly' ?>>
+                                    <button class="btn shadow-none search-field-clear-btn" type="button" id="clearBadgeIconSearchBtn" title="Clear icon search" <?php if ($act == '') echo 'disabled' ?>>
+                                        <i class="fas fa-times"></i>
+                                    </button>
+                                </div>
+                                <div class="badge-icon-dropdown" id="badgeIconDropdown">
+                                    <?php foreach ($fontAwesomeIconOptions as $iconOption) { ?>
+                                        <button
+                                            class="badge-icon-option"
+                                            type="button"
+                                            data-icon-value="<?= htmlspecialchars($iconOption['value'], ENT_QUOTES, 'UTF-8') ?>"
+                                            data-icon-label="<?= htmlspecialchars(strtolower((string) $iconOption['label']), ENT_QUOTES, 'UTF-8') ?>"
+                                            data-icon-class="<?= htmlspecialchars(strtolower((string) $iconOption['value']), ENT_QUOTES, 'UTF-8') ?>"
+                                        >
+                                            <i class="<?= htmlspecialchars($iconOption['value'], ENT_QUOTES, 'UTF-8') ?>"></i>
+                                            <span class="badge-icon-option-label"><?= htmlspecialchars($iconOption['label'], ENT_QUOTES, 'UTF-8') ?></span>
+                                            <span class="badge-icon-option-class"><?= htmlspecialchars($iconOption['value'], ENT_QUOTES, 'UTF-8') ?></span>
+                                        </button>
+                                    <?php } ?>
+                                    <div class="badge-icon-empty" id="badgeIconEmptyState" style="display: none;">No matching Font Awesome icons found.</div>
+                                </div>
+                                <div class="badge-icon-preview" id="badgeIconPreview">
+                                    <i class="<?= htmlspecialchars($selectedBadgeIconClass, ENT_QUOTES, 'UTF-8') ?>"></i>
+                                    <span id="badgeIconPreviewText"><?= htmlspecialchars($selectedBadgeIconClass, ENT_QUOTES, 'UTF-8') ?></span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="form-group mb-3">
                         <label class="form-label" id="permission_table_lbl" for="permissionSearch">Permissions</label>
                         <div class="permission-toolbar">
@@ -520,8 +780,8 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                 <button class="btn btn-sm btn-outline-primary" type="button" id="tickAllPinsBtn" <?php if ($act == '') echo 'disabled'; ?>>Tick All Pins</button>
                             </div>
                             <div class="permission-search position-relative">
-                                <input class="form-control" type="text" id="permissionSearch" placeholder="Search page permissions..." autocomplete="off" style="padding-right: 35px;">
-                                <button class="btn shadow-none" type="button" id="clearSearchBtn" title="Clear Search" style="position: absolute; right: 0; top: 0; bottom: 0; z-index: 10; color: #999; border: none; background: transparent; display: none;">
+                                <input class="form-control search-field-input" type="text" id="permissionSearch" placeholder="Search page permissions..." autocomplete="off">
+                                <button class="btn shadow-none search-field-clear-btn" type="button" id="clearSearchBtn" title="Clear Search">
                                     <i class="fas fa-times"></i>
                                 </button>
                             </div>
@@ -661,6 +921,126 @@ if (isset($_SESSION['tempValConfirmBox'])) {
             checkbox.addEventListener('change', refreshTickAllButtonState);
         });
         refreshTickAllButtonState();
+
+        var badgeIconInput = document.getElementById('badgeIconClass');
+        var badgeIconSearch = document.getElementById('badgeIconSearch');
+        var badgeIconDropdown = document.getElementById('badgeIconDropdown');
+        var badgeIconOptions = badgeIconDropdown ? badgeIconDropdown.querySelectorAll('.badge-icon-option') : [];
+        var badgeIconEmptyState = document.getElementById('badgeIconEmptyState');
+        var badgeIconPreview = document.getElementById('badgeIconPreview');
+        var badgeIconPreviewText = document.getElementById('badgeIconPreviewText');
+        var clearBadgeIconSearchBtn = document.getElementById('clearBadgeIconSearchBtn');
+        var badgeIconReadonly = badgeIconSearch ? badgeIconSearch.hasAttribute('readonly') : true;
+
+        function updateBadgeIconPreview(iconClass) {
+            if (!badgeIconPreview || !badgeIconPreviewText) return;
+            var previewIcon = badgeIconPreview.querySelector('i');
+            if (previewIcon) {
+                previewIcon.className = iconClass || '';
+            }
+            badgeIconPreviewText.textContent = iconClass || '';
+        }
+
+        function showBadgeIconDropdown() {
+            if (!badgeIconDropdown || badgeIconReadonly) return;
+            badgeIconDropdown.classList.add('show');
+        }
+
+        function hideBadgeIconDropdown() {
+            if (!badgeIconDropdown) return;
+            badgeIconDropdown.classList.remove('show');
+        }
+
+        function toggleBadgeIconClearButton() {
+            if (!clearBadgeIconSearchBtn || badgeIconReadonly) return;
+            clearBadgeIconSearchBtn.style.display = String(badgeIconSearch.value || '').trim() !== '' ? '' : 'none';
+        }
+
+        function setActiveBadgeIconOption(selectedButton) {
+            if (!badgeIconOptions) return;
+            badgeIconOptions.forEach(function (optionButton) {
+                optionButton.classList.toggle('active', optionButton === selectedButton);
+            });
+        }
+
+        function filterBadgeIconOptions() {
+            if (!badgeIconSearch || !badgeIconDropdown) return;
+
+            var keyword = String(badgeIconSearch.value || '').toLowerCase().trim();
+            var visibleCount = 0;
+
+            badgeIconOptions.forEach(function (optionButton) {
+                var label = String(optionButton.getAttribute('data-icon-label') || '');
+                var iconClass = String(optionButton.getAttribute('data-icon-class') || '');
+                var matched = keyword === '' || label.indexOf(keyword) !== -1 || iconClass.indexOf(keyword) !== -1;
+                optionButton.style.display = matched ? '' : 'none';
+                if (matched) {
+                    visibleCount++;
+                }
+            });
+
+            if (badgeIconEmptyState) {
+                badgeIconEmptyState.style.display = visibleCount === 0 ? '' : 'none';
+            }
+
+            toggleBadgeIconClearButton();
+        }
+
+        function selectBadgeIcon(iconClass, optionButton) {
+            if (!badgeIconInput || !badgeIconSearch) return;
+            badgeIconInput.value = iconClass;
+            badgeIconSearch.value = iconClass;
+            updateBadgeIconPreview(iconClass);
+            setActiveBadgeIconOption(optionButton || null);
+            filterBadgeIconOptions();
+            hideBadgeIconDropdown();
+        }
+
+        if (badgeIconSearch && badgeIconDropdown) {
+            badgeIconSearch.addEventListener('focus', function () {
+                filterBadgeIconOptions();
+                showBadgeIconDropdown();
+            });
+
+            badgeIconSearch.addEventListener('input', function () {
+                if (badgeIconReadonly) return;
+                showBadgeIconDropdown();
+                filterBadgeIconOptions();
+            });
+
+            badgeIconOptions.forEach(function (optionButton) {
+                optionButton.addEventListener('click', function () {
+                    selectBadgeIcon(String(optionButton.getAttribute('data-icon-value') || ''), optionButton);
+                });
+            });
+
+            if (clearBadgeIconSearchBtn) {
+                clearBadgeIconSearchBtn.addEventListener('click', function () {
+                    if (badgeIconReadonly) return;
+                    badgeIconSearch.value = '';
+                    filterBadgeIconOptions();
+                    showBadgeIconDropdown();
+                    badgeIconSearch.focus();
+                });
+            }
+
+            document.addEventListener('click', function (event) {
+                var picker = document.querySelector('.badge-icon-picker');
+                if (picker && !picker.contains(event.target)) {
+                    hideBadgeIconDropdown();
+                }
+            });
+
+            var selectedOption = null;
+            badgeIconOptions.forEach(function (optionButton) {
+                if (String(optionButton.getAttribute('data-icon-value') || '') === String(badgeIconInput.value || '')) {
+                    selectedOption = optionButton;
+                }
+            });
+            setActiveBadgeIconOption(selectedOption);
+            updateBadgeIconPreview(String(badgeIconInput.value || ''));
+            filterBadgeIconOptions();
+        }
 
         var permissionSearch = document.getElementById('permissionSearch');
         if (permissionSearch) {

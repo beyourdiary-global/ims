@@ -5,6 +5,7 @@ $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $processingPageName = getPinGroupNameById($connect, 128);
@@ -31,6 +32,10 @@ if (!is_array($pinAccess) || count($pinAccess) === 0) {
 $_SESSION['act'] = '';
 $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
+
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
 
 // Build numeric action keys from the latest user-group pins in database.
 $accessActionKey = array();
@@ -129,6 +134,39 @@ if (isset($_GET['verify_id'])) {
         $verifyMessage = "Error: Order #$orderId not found.";
     }
     }
+}
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['return_id'])) {
+    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    $returnRedirectMonth = isset($_POST['return_redirect_month']) ? (string) $_POST['return_redirect_month'] : '';
+    $returnRedirectStatus = isset($_POST['return_redirect_status']) ? (string) $_POST['return_redirect_status'] : '';
+    $redirectUrl = 'shopee_processing_order.php';
+    $redirectQuery = array();
+    if ($returnRedirectMonth !== '') {
+        $redirectQuery['month'] = $returnRedirectMonth;
+    }
+    if ($returnRedirectStatus !== '') {
+        $redirectQuery['status'] = $returnRedirectStatus;
+    }
+    if (!empty($redirectQuery)) {
+        $redirectUrl .= '?' . http_build_query($redirectQuery);
+    }
+
+    if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
+        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($redirectUrl) . "');</script>";
+        exit;
+    }
+
+    $orderId = intval($_POST['return_id']);
+    $returnResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'R', array(
+        'actor_user_id' => USER_ID,
+        'actor_user_group_id' => USER_GROUP,
+        'source_page' => $pageTitle,
+        'remark' => 'Marked as Return from processing order list.',
+        'action' => 'mark_return',
+    ));
+    echo "<script>alert('" . addslashes(isset($returnResult['message']) ? $returnResult['message'] : 'Unable to mark order as Return.') . "'); location.replace('" . addslashes($redirectUrl) . "');</script>";
+    exit;
 }
 
 $monthFilter = isset($_GET['month']) && $_GET['month'] !== '' ? ($_GET['month'] !=='All'?$_GET['month']:"") : date('Y-m');
@@ -471,6 +509,7 @@ $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_con
                             <th scope="col" width="60px">S/N</th>
                             <th scope="col" id="action_col" width="100px">Action</th>
                             <th scope="col">Order Status</th>
+                            <th scope="col">Estimate Received Date</th>
                             <th scope="col">Shopee Account</th>
                             <th scope="col">Currency</th>
                             <th scope="col">Order ID</th>
@@ -616,8 +655,23 @@ $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_con
                                 <?php if(normalizeOrderStatusKey($row['order_status']) === 'oc' && $canVerifyAction){ ?>
                                  <a href="?verify_id=<?= $row['id'] ?>&month=<?= urlencode($monthFilter) ?>&status=<?= urlencode($statusFilter) ?>" class="btn btn-sm btn-success btn-verified" onclick="return confirm('Mark this order as verified?')">Verified</a>
                                 <?php } ?>
+                                <?php
+                                $statusCode = shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '');
+                                ?>
+                                <?php if (in_array($statusCode, array('SP', 'WAERD', 'WR', 'PR', 'WAFC', 'V', 'C'), true)) { ?>
+                                 <form method="post" class="d-inline" onsubmit="return confirm('Mark this order as Return?')">
+                                     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
+                                     <input type="hidden" name="return_id" value="<?= (int) $row['id'] ?>">
+                                     <input type="hidden" name="return_redirect_month" value="<?= htmlspecialchars((string) $monthFilter, ENT_QUOTES, 'UTF-8') ?>">
+                                     <input type="hidden" name="return_redirect_status" value="<?= htmlspecialchars((string) $statusFilter, ENT_QUOTES, 'UTF-8') ?>">
+                                     <button type="submit" class="btn btn-sm btn-rounded btn-warning" title="Mark as Return">
+                                         <i class="fa-solid fa-rotate-left"></i>
+                                     </button>
+                                 </form>
+                                <?php } ?>
                                 </td>
                                 <td scope="row"><?= getOrderStatusLabel($row['order_status']) ?></td>
+                                <td scope="row"><?= $row['estimated_received_date'] ?? '' ?></td>
                                 <td scope="row"><?= $acc['name'] ?? '' ?></td>
                                 <td scope="row"><?= $curr['unit'] ?? '' ?></td>
                                 <td scope="row"><?= $row['orderID'] ?? '' ?></td>
@@ -655,6 +709,7 @@ $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_con
                             <th scope="col" width="60px">S/N</th>
                             <th scope="col" id="action_col" width="100px">Action</th>
                             <th scope="col">Order Status</th>
+                            <th scope="col">Estimate Received Date</th>
                             <th scope="col">Shopee Account</th>
                             <th scope="col">Currency</th>
                             <th scope="col">Order ID</th>

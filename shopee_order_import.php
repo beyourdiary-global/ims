@@ -86,6 +86,13 @@ $importErrors = [];
 $importWarnings = [];
 $previewData = [];
 $orderIdFieldError = '';
+$allowedAttachmentExt = array("png", "jpg", "jpeg", "pdf");
+$sorAirbillAttachmentPath = img_server . 'shopee_airbill_attachment/';
+$sorAirbillAttachmentUrl = rtrim((string) $SITEURL, '/') . '/' . trim((string) $sorAirbillAttachmentPath, '/\\') . '/';
+$sorAirbillAttachmentFsPath = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . trim((string) $sorAirbillAttachmentPath, '/\\') . DIRECTORY_SEPARATOR;
+if (!file_exists($sorAirbillAttachmentFsPath)) {
+    mkdir($sorAirbillAttachmentFsPath, 0777, true);
+}
 
 $shopeeAccounts = getImportOptionList(SHOPEE_ACC, 'name', $finance_connect);
 $currencyUnits = getImportOptionList(CUR_UNIT, 'unit', $connect);
@@ -361,14 +368,24 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
 
             // Detect order status with strict mapping:
             // To Ship -> P, To Receive -> SP, Completed -> OC.
+            $pdfStatusSourceText = $pdfSourceText !== '' ? $pdfSourceText : $cleanText;
             $statusInfo = $xpath instanceof DOMXPath
                 ? detectShopeeOrderStatusFromHtml($xpath, $cleanText)
-                : detectShopeeOrderStatusFromText($cleanText, true);
+                : (($extension === 'pdf')
+                    ? detectShopeeOrderStatusFromPdfText($pdfStatusSourceText)
+                    : detectShopeeOrderStatusFromText($cleanText, true));
 
             $detectedOrderStatus = $statusInfo['code'];
             $detectedOrderStatusLabel = $statusInfo['label'];
 
-            if ($extension === 'pdf' && isset($pdfMoney) && !empty($pdfMoney['delivered_hint'])) {
+            if (
+                $extension === 'pdf'
+                && isset($pdfMoney)
+                && !empty($pdfMoney['delivered_hint'])
+                && $detectedOrderStatus === 'P'
+                && !pdfTextHasPendingShipmentSignals($pdfStatusSourceText)
+                && !pdfTextHasProcessingShipmentSignals($pdfStatusSourceText)
+            ) {
                 $detectedOrderStatus = 'OC';
                 $detectedOrderStatusLabel = 'Order Received (admin checking)';
             }
@@ -404,13 +421,14 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
             $fees = number_format(((float) $serviceFee + (float) $transactionFee + (float) $amsFee + (float) $saverProgramFee), 2, '.', '');
             $finalAmt = number_format(((float) $product_price - (float) $voucher - (float) $actShippingFee - (float) $fees), 2, '.', '');
 
+            $mappedInitialStatus = shopeeOmsGetImportDefaultStatus($detectedOrderStatus);
             $previewData = [
                 'order_id' => $order_id,
                 'sku' => $sku,
                 'package_id' => $pkg_id,
                 'product_price' => $product_price !== '' ? $product_price : '0.00',
-                'order_status' => $detectedOrderStatusLabel,
-                'order_status_val' => $detectedOrderStatus,
+                'order_status' => shopeeOmsGetStatusLabel($mappedInitialStatus),
+                'order_status_val' => $mappedInitialStatus,
                 'missing_sku' => $missing_sku,
                 'shopee_acc' => $shopeeAccId,
                 'source_shopee_acc' => $detectedShopName,
@@ -431,6 +449,11 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
                 'fees' => $fees,
                 'final_amt' => $finalAmt,
                 'remark' => $order_id !== '' ? ('Imported from Shopee Order ' . $sourceTypeLabel . ' (' . $order_id . ')') : ('Imported from Shopee Order ' . $sourceTypeLabel),
+                'update_airbill' => 'yes',
+                'airbill_no' => '',
+                'airbill_attachment' => '',
+                'customer_name' => $buyerUsername,
+                'customer_address' => '',
             ];
 
             if ($currencyId === '') {
@@ -486,11 +509,19 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
         BRAND
     );
     
-    $orderStatusVal = postSpaceFilter('order_status_val');
+    $orderStatusVal = shopeeOmsNormalizeStatusCode(postSpaceFilter('order_status_val'));
     if ($orderStatusVal === '') $orderStatusVal = 'P';
-    if (normalizeOrderStatusKey($orderStatusVal) === 'oc') {
-        $orderStatusVal = 'WAERD';
+    $updateAirbill = strtolower(trim((string) postSpaceFilter('update_airbill')));
+    if ($updateAirbill === '') $updateAirbill = 'yes';
+    $airbillNo = postSpaceFilter('airbill_no');
+    $airbillAttachment = null;
+    if (isset($_FILES["airbill_attachment"]) && $_FILES["airbill_attachment"]["size"] != 0) {
+        $airbillAttachment = $_FILES["airbill_attachment"]["name"];
+    } elseif (isset($_POST['airbill_attachment_value'])) {
+        $airbillAttachment = $_POST['airbill_attachment_value'];
     }
+    $customerName = postSpaceFilter('customer_name');
+    $customerAddress = postSpaceFilter('customer_address');
     
     $previewData = [
         'order_id' => postSpaceFilter('order_id'),
@@ -515,6 +546,11 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
         'fees' => postSpaceFilter('fees'),
         'final_amt' => postSpaceFilter('final_amt'),
         'remark' => postSpaceFilter('remark'),
+        'update_airbill' => $updateAirbill,
+        'airbill_no' => $airbillNo,
+        'airbill_attachment' => $airbillAttachment,
+        'customer_name' => $customerName,
+        'customer_address' => $customerAddress,
     ];
 
     if ($previewData['order_id'] === '') $importErrors[] = 'Order ID is required.';
@@ -522,6 +558,12 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
     if ($previewData['currency'] === '') $importErrors[] = 'Currency is required.';
     if ($previewData['brand'] === '') $importErrors[] = 'Brand is required.';
     if ($previewData['pic'] === '') $importErrors[] = 'Person In Charge is required.';
+    if ($previewData['update_airbill'] === 'no') {
+        $previewData['airbill_no'] = '';
+        $previewData['airbill_attachment'] = '';
+    }
+    $statusValidation = shopeeOmsValidateInitialStatusAndAirbill($previewData['order_status_val'], $previewData['airbill_no']);
+    if (!$statusValidation['valid']) $importErrors[] = $statusValidation['message'];
 
     if ($previewData['order_id'] !== '' && isShopeeOrderIdDuplicated($previewData['order_id'], $finance_connect)) {
         $orderIdFieldError = 'Duplicate Order ID found in Shopee Order Request records.';
@@ -548,6 +590,37 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
     // Server-side recomputation to prevent tampering
     $calculatedFinalAmt = (float) $previewData['product_price'] - (float) $previewData['voucher'] - (float) $previewData['act_shipping_fee'] - (float) $previewData['fees'];
     $previewData['final_amt'] = number_format($calculatedFinalAmt, 2, '.', '');
+    $packageQtySnapshot = shopeeOmsBuildPackageQtySnapshotFromInputs(
+        isset($_POST['sor_pkg_hidden']) ? $_POST['sor_pkg_hidden'] : array(),
+        isset($_POST['sor_pkg']) ? $_POST['sor_pkg'] : array(),
+        $connect
+    );
+    $previewData['package_qty_json'] = !empty($packageQtySnapshot) ? json_encode($packageQtySnapshot) : '';
+
+    if ($previewData['update_airbill'] === 'yes' && isset($_FILES["airbill_attachment"]) && $_FILES["airbill_attachment"]["size"] != 0) {
+        $airbillFileName = $_FILES["airbill_attachment"]["name"];
+        $airbillTmpName = $_FILES["airbill_attachment"]["tmp_name"];
+        $airbillExt = strtolower((string) pathinfo($airbillFileName, PATHINFO_EXTENSION));
+
+        if (in_array($airbillExt, $allowedAttachmentExt)) {
+            $attachmentSeed = trim((string) $previewData['order_id']) !== '' ? trim((string) $previewData['order_id']) : ('shopee_import_airbill_' . date('Ymd_His'));
+            $attachmentSeed = preg_replace('/[^A-Za-z0-9_-]+/', '_', $attachmentSeed);
+            $newAttachmentName = $attachmentSeed . '_' . date('Ymd_His') . '.' . $airbillExt;
+            $dedupeCounter = 1;
+            while (file_exists($sorAirbillAttachmentFsPath . $newAttachmentName)) {
+                $newAttachmentName = $attachmentSeed . '_' . date('Ymd_His') . '_' . $dedupeCounter . '.' . $airbillExt;
+                $dedupeCounter++;
+            }
+
+            if (move_uploaded_file($airbillTmpName, $sorAirbillAttachmentFsPath . $newAttachmentName)) {
+                $previewData['airbill_attachment'] = $newAttachmentName;
+            } else {
+                $importErrors[] = 'Failed to upload the airbill attachment.';
+            }
+        } else {
+            $importErrors[] = 'Only allow PNG, JPG, JPEG or PDF file for airbill attachment.';
+        }
+    }
 
     if (empty($importErrors) && $orderIdFieldError === '') {
         $orderId = mysqli_real_escape_string($finance_connect, $previewData['order_id']);
@@ -568,15 +641,41 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
         $fees = mysqli_real_escape_string($finance_connect, $previewData['fees']);
         $finalAmt = mysqli_real_escape_string($finance_connect, $previewData['final_amt']);
         $remark = mysqli_real_escape_string($finance_connect, $previewData['remark']);
+        $packageQtyJson = mysqli_real_escape_string($finance_connect, isset($previewData['package_qty_json']) ? $previewData['package_qty_json'] : '');
+        $airbillNoSafe = mysqli_real_escape_string($finance_connect, isset($previewData['airbill_no']) ? $previewData['airbill_no'] : '');
+        $airbillAttachmentSafe = mysqli_real_escape_string($finance_connect, isset($previewData['airbill_attachment']) ? $previewData['airbill_attachment'] : '');
+        $customerNameSafe = mysqli_real_escape_string($finance_connect, isset($previewData['customer_name']) ? $previewData['customer_name'] : '');
+        $customerAddressSafe = mysqli_real_escape_string($finance_connect, isset($previewData['customer_address']) ? $previewData['customer_address'] : '');
         
         $query = "INSERT INTO " . SHOPEE_SG_ORDER_REQ . " 
-            (orderID, package, price, voucher, act_shipping_fee, service_fee, trans_fee, ams_fee, fees, final_amt, order_status, shopee_acc, currency, brand, buyer, buyer_pay_meth, pic, remark, date, time, create_by, create_date, create_time) 
-            VALUES ('$orderId', '$pkgId', '$price', '$voucher', '$actShippingFee', '$serviceFee', '$transFee', '$amsFee', '$fees', '$finalAmt', '$status', '$acc', '$curr', '$brand', '$buyer', '$payMeth', '$pic', '$remark', curdate(), curtime(), '" . USER_ID . "', curdate(), curtime())";
+            (orderID, package, package_qty_json, price, voucher, act_shipping_fee, service_fee, trans_fee, ams_fee, fees, final_amt, order_status, shopee_acc, currency, brand, buyer, buyer_pay_meth, pic, customer_name, customer_address, airbill_no, airbill_attachment, remark, latest_transition_at, date, time, create_by, create_date, create_time) 
+            VALUES ('$orderId', '$pkgId', '$packageQtyJson', '$price', '$voucher', '$actShippingFee', '$serviceFee', '$transFee', '$amsFee', '$fees', '$finalAmt', '$status', '$acc', '$curr', '$brand', '$buyer', '$payMeth', '$pic', '$customerNameSafe', '$customerAddressSafe', '$airbillNoSafe', '$airbillAttachmentSafe', '$remark', NOW(), curdate(), curtime(), '" . USER_ID . "', curdate(), curtime())";
         
         $returnData = mysqli_query($finance_connect, $query);
 
         if ($returnData) {
             $dataID = mysqli_insert_id($finance_connect);
+            shopeeOmsLogTransition($finance_connect, array(
+                'order_id' => (int) $dataID,
+                'order_code' => $previewData['order_id'],
+                'from_status' => '',
+                'to_status' => $previewData['order_status'],
+                'transition_action' => 'pdf_import',
+                'user_id' => USER_ID,
+                'user_group_id' => USER_GROUP,
+                'remark' => 'Imported from Shopee Order Preview.',
+                'source_page' => $pageTitle,
+            ));
+
+            if (shopeeOmsNormalizeStatusCode($previewData['order_status']) === 'TP') {
+                $freshOrderRow = shopeeOmsLoadOrder($finance_connect, (int) $dataID);
+                $tokenResult = shopeeOmsCreateWarehouseToken($connect, $finance_connect, $freshOrderRow, USER_ID);
+                if (!empty($tokenResult['success']) && !empty($tokenResult['token_row']) && !empty($tokenResult['notification'])) {
+                    shopeeOmsSendWarehouseNotification($connect, $finance_connect, $tokenResult['token_row'], $tokenResult['notification']);
+                    mysqli_query($finance_connect, "UPDATE `" . SHOPEE_SG_ORDER_REQ . "` SET `step_a_sent_at` = NOW() WHERE id = " . (int) $dataID . " LIMIT 1");
+                }
+            }
+
             $log = [
                 'log_act' => 'Import',
                 'cdate' => $cdate,
@@ -1806,6 +1905,121 @@ function getShopeeOrderStatusInfoByKeyword($keyword)
     ];
 }
 
+function textContainsAnyCompactPhrase($compactText, $phrases)
+{
+    $compactText = strtolower((string) $compactText);
+    if ($compactText === '') {
+        return false;
+    }
+
+    foreach ((array) $phrases as $phrase) {
+        $phrase = strtolower((string) $phrase);
+        if ($phrase !== '' && strpos($compactText, $phrase) !== false) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function pdfTextHasPendingShipmentSignals($text)
+{
+    $compact = strtolower(preg_replace('/[^a-z]+/i', '', normalizeImportText($text)));
+    if ($compact === '') {
+        return false;
+    }
+
+    return textContainsAnyCompactPhrase($compact, array(
+        'toship',
+        'pendingtopack',
+        'pendingtoship',
+        'neworder',
+        'waitingtoship',
+        'waitingforcouriertoconfirmshipment',
+        'successfullyarrangedshipment',
+        'pleaseproceedtoshipouttheparcel',
+        'pleaseproceedtoshipoutparcel',
+        'readytoship',
+    ));
+}
+
+function pdfTextHasProcessingShipmentSignals($text)
+{
+    $compact = strtolower(preg_replace('/[^a-z]+/i', '', normalizeImportText($text)));
+    if ($compact === '') {
+        return false;
+    }
+
+    return textContainsAnyCompactPhrase($compact, array(
+        'toreceive',
+        'shipprocessingwarehouse',
+        'shipprocessing',
+        'intransit',
+        'outfordelivery',
+        'shipped',
+        'parcelpickedup',
+        'senderispreparingtoshipyourparcel',
+    ));
+}
+
+function pdfTextHasCompletedShipmentSignals($text)
+{
+    $compact = strtolower(preg_replace('/[^a-z]+/i', '', normalizeImportText($text)));
+    if ($compact === '') {
+        return false;
+    }
+
+    return textContainsAnyCompactPhrase($compact, array(
+        'parcelhasbeendelivered',
+        'deliveredtobuyer',
+        'successfullydelivered',
+        'completed',
+    ));
+}
+
+function pdfTextHasGenericReceivedSignals($text)
+{
+    $compact = strtolower(preg_replace('/[^a-z]+/i', '', normalizeImportText($text)));
+    if ($compact === '') {
+        return false;
+    }
+
+    return textContainsAnyCompactPhrase($compact, array(
+        'orderreceived',
+        'received',
+    ));
+}
+
+function detectShopeeOrderStatusFromPdfText($text)
+{
+    $normalizedText = normalizeImportText($text);
+    if ($normalizedText === '') {
+        return getShopeeOrderStatusInfoByKeyword('to ship');
+    }
+
+    if (pdfTextHasPendingShipmentSignals($normalizedText)) {
+        return getShopeeOrderStatusInfoByKeyword('to ship');
+    }
+
+    if (pdfTextHasProcessingShipmentSignals($normalizedText)) {
+        return getShopeeOrderStatusInfoByKeyword('to receive');
+    }
+
+    if (pdfTextHasCompletedShipmentSignals($normalizedText)) {
+        return getShopeeOrderStatusInfoByKeyword('completed');
+    }
+
+    if (
+        pdfTextHasGenericReceivedSignals($normalizedText)
+        && !pdfTextHasPendingShipmentSignals($normalizedText)
+        && !pdfTextHasProcessingShipmentSignals($normalizedText)
+    ) {
+        return getShopeeOrderStatusInfoByKeyword('completed');
+    }
+
+    return detectShopeeOrderStatusFromText($normalizedText, true);
+}
+
 function detectShopeeOrderStatusFromText($text, $allowLooseMatch = false)
 {
     $normalizedText = normalizeImportText($text);
@@ -1851,6 +2065,10 @@ function detectShopeeOrderStatusFromText($text, $allowLooseMatch = false)
             'neworder',
             'waitingtoship',
             'waitingforcouriertoconfirmshipment',
+            'successfullyarrangedshipment',
+            'pleaseproceedtoshipouttheparcel',
+            'pleaseproceedtoshipoutparcel',
+            'readytoship',
         );
         foreach ($pCompactPhrases as $phrase) {
             if (strpos($compact, $phrase) !== false) {
@@ -2438,7 +2656,8 @@ function extractShopeePdfMonetaryValues($text)
         'saver_program_fee' => $saverProgramFee,
         'delivered_hint' => (
             textContainsLoosePhrase($text, 'parcel has been delivered to buyer') ||
-            textContainsLoosePhrase($text, 'order received')
+            textContainsLoosePhrase($text, 'delivered to buyer') ||
+            textContainsLoosePhrase($text, 'successfully delivered')
         ),
     );
 }
@@ -2901,7 +3120,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                         <div class="card mb-4 shadow-sm">
                             <div class="card-body">
                                 <h5 class="card-title mb-3">Step 2: Preview And Edit Before Insert</h5>
-                                <form method="post" autocomplete="off" data-shopee-import-preview="1">
+                                <form method="post" enctype="multipart/form-data" autocomplete="off" data-shopee-import-preview="1">
                                     <div class="row mb-3">
                                         <div class="col-12 col-md-4">
                                             <label class="form-label" for="order_id">Order ID<span class="requireRed">*</span></label>
@@ -3125,9 +3344,64 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                             <input class="form-control" type="text" id="remark" name="remark" value="<?= htmlspecialchars(isset($previewData['remark']) ? $previewData['remark'] : '') ?>">
                                         </div>
                                         <div class="col-12 col-md-4">
-                                            <label class="form-label">Order Status</label>
-                                            <input class="form-control text-primary fw-bold" type="text" value="<?= htmlspecialchars(getOrderStatusLabel(isset($previewData['order_status_val']) ? $previewData['order_status_val'] : 'P')) ?>" readonly>
-                                            <input type="hidden" name="order_status_val" value="<?= htmlspecialchars($previewData['order_status_val']) ?>">
+                                            <label class="form-label" for="order_status_val">Initial Order Status</label>
+                                            <select class="form-select" id="order_status_val" name="order_status_val">
+                                                <?php foreach (shopeeOmsGetEditableStatusOptions() as $statusCode => $statusLabel) { ?>
+                                                    <option value="<?= htmlspecialchars($statusCode) ?>" <?= ((isset($previewData['order_status_val']) ? $previewData['order_status_val'] : 'P') === $statusCode) ? 'selected' : '' ?>><?= htmlspecialchars($statusLabel) ?></option>
+                                                <?php } ?>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div class="row mb-3">
+                                        <div class="col-12 col-md-3">
+                                            <label class="form-label" for="update_airbill">Update Airbill?</label>
+                                            <select class="form-select" id="update_airbill" name="update_airbill">
+                                                <option value="yes" <?= (isset($previewData['update_airbill']) ? $previewData['update_airbill'] : 'yes') === 'yes' ? 'selected' : '' ?>>Yes</option>
+                                                <option value="no" <?= (isset($previewData['update_airbill']) ? $previewData['update_airbill'] : 'yes') === 'no' ? 'selected' : '' ?>>No</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-12 col-md-3">
+                                            <label class="form-label" for="airbill_no">Airbill No</label>
+                                            <input class="form-control" type="text" id="airbill_no" name="airbill_no" value="<?= htmlspecialchars(isset($previewData['airbill_no']) ? $previewData['airbill_no'] : '') ?>">
+                                        </div>
+                                        <div class="col-12 col-md-6">
+                                            <label class="form-label" for="airbill_attachment">Airbill Attachment</label>
+                                            <input class="form-control" type="file" id="airbill_attachment" name="airbill_attachment">
+                                            <?php if (!empty($previewData['airbill_attachment'])) { ?>
+                                                <small class="text-danger d-block mt-1">Current Attachment: <?= htmlspecialchars($previewData['airbill_attachment']) ?></small>
+                                            <?php } ?>
+                                            <input type="hidden" id="airbill_attachment_value" name="airbill_attachment_value" value="<?= htmlspecialchars(isset($previewData['airbill_attachment']) ? $previewData['airbill_attachment'] : '') ?>">
+                                        </div>
+                                    </div>
+
+                                    <div class="row mb-3">
+                                        <div class="col-12 col-md-6">
+                                            <label class="form-label" for="customer_name">Customer Name</label>
+                                            <input class="form-control" type="text" id="customer_name" name="customer_name" value="<?= htmlspecialchars(isset($previewData['customer_name']) ? $previewData['customer_name'] : '') ?>">
+                                        </div>
+                                        <div class="col-12 col-md-6">
+                                            <?php
+                                            $previewAttachmentSrc = '';
+                                            if (!empty($previewData['airbill_attachment'])) {
+                                                $storedAttachment = trim(str_replace('\\', '/', (string) $previewData['airbill_attachment']), '/');
+                                                if (strpos($storedAttachment, 'attachment/') === 0) {
+                                                    $previewAttachmentSrc = rtrim((string) $SITEURL, '/') . '/' . $storedAttachment;
+                                                } else {
+                                                    $previewAttachmentSrc = $sorAirbillAttachmentUrl . basename($storedAttachment);
+                                                }
+                                            }
+                                            ?>
+                                            <div class="d-flex justify-content-center justify-content-md-end px-4">
+                                                <img id="airbill_attachment_preview" src="<?= htmlspecialchars($previewAttachmentSrc) ?>" class="img-thumbnail" alt="Airbill Attachment Preview">
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div class="row mb-3">
+                                        <div class="col-12 col-md-6">
+                                            <label class="form-label" for="customer_address">Customer Address</label>
+                                            <textarea class="form-control" id="customer_address" name="customer_address" rows="2"><?= htmlspecialchars(isset($previewData['customer_address']) ? $previewData['customer_address'] : '') ?></textarea>
                                         </div>
                                     </div>
 
@@ -3137,7 +3411,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                                 <i class="fa-solid fa-triangle-exclamation"></i> Package was not matched automatically. Please select the correct package manually before inserting.
                                             </div>
                                         <?php } ?>
-                                        <button class="btn btn-lg btn-rounded btn-primary px-4" type="submit" name="actionBtn" value="insertShopeeOrderReq">
+                                        <button class="btn btn-primary px-4" type="submit" name="actionBtn" value="insertShopeeOrderReq">
                                             <i class="fa-solid fa-database"></i> Insert
                                         </button>
                                     </div>
@@ -3187,6 +3461,32 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                 select.selectedIndex = 0;
             }
         });
+
+        function toggleAirbillFields() {
+            var updateAirbill = previewForm.querySelector('#update_airbill');
+            var airbillNo = previewForm.querySelector('#airbill_no');
+            var airbillAttachment = previewForm.querySelector('#airbill_attachment');
+            if (!updateAirbill || !airbillNo || !airbillAttachment) return;
+
+            var enabled = updateAirbill.value !== 'no';
+            airbillNo.disabled = !enabled;
+            airbillAttachment.disabled = !enabled;
+        }
+
+        toggleAirbillFields();
+        var updateAirbill = previewForm.querySelector('#update_airbill');
+        if (updateAirbill) {
+            updateAirbill.addEventListener('change', toggleAirbillFields);
+        }
+
+        var airbillAttachmentInput = previewForm.querySelector('#airbill_attachment');
+        if (airbillAttachmentInput) {
+            airbillAttachmentInput.addEventListener('change', function () {
+                if (typeof previewImage === 'function') {
+                    previewImage(this, 'airbill_attachment_preview');
+                }
+            });
+        }
     })();
 </script>
 

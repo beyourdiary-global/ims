@@ -317,11 +317,17 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                         <h2><?php echo $pageActionTitle ?></h2>
                     </div>
 
+                    <?php if (isset($err) && $err !== '') : ?>
+                        <div class="alert alert-danger" role="alert">
+                            <?= htmlspecialchars($err, ENT_QUOTES, 'UTF-8') ?>
+                        </div>
+                    <?php endif; ?>
+
                     <div class="form-group mb-3">
                         <label class="form-label form_lbl" for="label_name">Label Name<span class="requireRed">*</span></label>
                         <input class="form-control" type="text" name="label_name" id="label_name" value="<?= htmlspecialchars($labelNameValue, ENT_QUOTES, 'UTF-8') ?>" <?php if ($act == '') echo 'readonly' ?> required autocomplete="off">
                         <div id="err_msg">
-                            <span class="mt-n1" id="labelNameError"><?php if (isset($name_err)) echo $name_err; else if (isset($err)) echo $err; ?></span>
+                            <span class="mt-n1" id="labelNameError"><?php if (isset($name_err)) echo $name_err; ?></span>
                         </div>
                     </div>
 
