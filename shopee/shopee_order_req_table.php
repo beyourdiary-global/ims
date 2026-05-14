@@ -44,6 +44,8 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
+shopeeOmsEnsureRealtimePostponedSync($connect, $finance_connect);
+
 // Build numeric action keys from login session pin access.
 $accessActionKey = array();
 $shopeePinGroups = array(128, 129, 130);
@@ -658,7 +660,7 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                                 <?php if ($statusCode === 'V' && $canCompleteThisOrder) { ?>
                                  <a href="?complete_id=<?= $row['id'] ?>" class="btn btn-sm btn-dark btn-verified" onclick="return confirm('Mark this order as complete?')">Complete</a>
                                 <?php } ?>
-                                <?php if (in_array($statusCode, array('SP', 'WAERD', 'WR', 'PR', 'WAFC', 'V', 'C'), true)) { ?>
+                                <?php if (in_array($statusCode, array('SP', 'WAERD', 'WR', 'PD', 'PR', 'WAFC', 'V', 'C'), true)) { ?>
                                  <form method="post" class="d-inline" onsubmit="return confirm('Mark this order as Return?')">
                                      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
                                      <input type="hidden" name="return_id" value="<?= (int) $row['id'] ?>">

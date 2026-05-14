@@ -37,6 +37,8 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
+shopeeOmsEnsureRealtimePostponedSync($connect, $finance_connect);
+
 // Build numeric action keys from the latest user-group pins in database.
 $accessActionKey = array();
 $shopeePinGroups = array(128, 129, 130);
@@ -177,8 +179,8 @@ $accFilter = isset($_GET['acc']) ? $_GET['acc'] : '';
 
 $whereConditions = [];
 
-// Show both legacy processing states and the new estimated-date assignment states.
-$whereConditions[] = "order_status IN ('Processing', 'Order Received', 'Waiting Assign Estimate Received Date', 'Assigned Estimate Date', 'P', 'SP', 'OC', 'WAERD', 'AED')";
+// Show processing-related states, including mixed legacy-label and code forms.
+$whereConditions[] = "order_status IN ('Processing', 'To Pack', 'Order Received', 'Waiting Receive', 'Postponed', 'Parcel Received', 'Waiting Assign Estimate Received Date', 'Assigned Estimate Date', 'P', 'TP', 'SP', 'OC', 'WR', 'PD', 'PR', 'WAERD', 'AED')";
 
 if (!empty($monthFilter)) { $whereConditions[] = "DATE_FORMAT(date, '%Y-%m') = '" . mysqli_real_escape_string($finance_connect, $monthFilter) . "'"; }
 if (!empty($statusFilter)) { $whereConditions[] = "order_status = '" . mysqli_real_escape_string($finance_connect, $statusFilter) . "'"; }
@@ -658,7 +660,12 @@ $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_con
                                 <?php
                                 $statusCode = shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '');
                                 ?>
-                                <?php if (in_array($statusCode, array('SP', 'WAERD', 'WR', 'PR', 'WAFC', 'V', 'C'), true)) { ?>
+                                <?php if ($statusCode === 'TP') { ?>
+                                 <a class="btn btn-sm btn-rounded btn-primary" href="<?= $SITEURL . '/shopee/shopee_order_request_info.php?id=' . (int) $row['id'] ?>" title="Open QR Info">
+                                     <i class="fa-solid fa-qrcode"></i>
+                                 </a>
+                                <?php } ?>
+                                <?php if (in_array($statusCode, array('SP', 'WAERD', 'WR', 'PD', 'PR', 'WAFC', 'V', 'C'), true)) { ?>
                                  <form method="post" class="d-inline" onsubmit="return confirm('Mark this order as Return?')">
                                      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
                                      <input type="hidden" name="return_id" value="<?= (int) $row['id'] ?>">

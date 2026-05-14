@@ -1,5 +1,6 @@
 <?php
 $isFinance = 1;
+$pageTitle = 'Shopee Flow Setting';
 include_once '../include/connection.php';
 include_once '../include/common.php';
 
@@ -29,6 +30,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['flow_action']) && $_P
             $userGroups[] = $row;
         }
     }
+    $userGroupNameMap = array();
+    foreach ($userGroups as $userGroup) {
+        $userGroupId = isset($userGroup['id']) ? (int) $userGroup['id'] : 0;
+        if ($userGroupId > 0) {
+            $userGroupNameMap[$userGroupId] = isset($userGroup['name']) ? (string) $userGroup['name'] : ('User Group #' . $userGroupId);
+        }
+    }
+
+    $warehouseNameMap = array();
+    $warehouseRst = getData('id, name', '', '', WHSE, $connect);
+    if ($warehouseRst) {
+        while ($row = $warehouseRst->fetch_assoc()) {
+            $warehouseId = isset($row['id']) ? (int) $row['id'] : 0;
+            if ($warehouseId > 0) {
+                $warehouseNameMap[$warehouseId] = isset($row['name']) ? (string) $row['name'] : ('Warehouse #' . $warehouseId);
+            }
+        }
+    }
+
+    $userNameMap = array();
+    $userRst = getData('id, name', '', '', USR_USER, $connect);
+    if ($userRst) {
+        while ($row = $userRst->fetch_assoc()) {
+            $userId = isset($row['id']) ? (int) $row['id'] : 0;
+            if ($userId > 0) {
+                $userNameMap[$userId] = isset($row['name']) ? (string) $row['name'] : ('User #' . $userId);
+            }
+        }
+    }
 
     $assignmentScope = strtolower(trim((string) postSpaceFilter('assignment_scope')));
     if (!in_array($assignmentScope, array('individual', 'global'), true)) {
@@ -38,11 +68,67 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['flow_action']) && $_P
     $defaultWarehouseId = (int) postSpaceFilter('default_warehouse_id');
     $mainSupervisorUserId = (int) postSpaceFilter('daily_report_main_supervisor_user_id');
     $secondSupervisorUserId = (int) postSpaceFilter('daily_report_second_supervisor_user_id');
+    $oldAssignmentScope = shopeeOmsGetAssignmentScope($connect);
+    $oldDefaultWarehouseId = (int) shopeeOmsGetSetting($connect, 'shopee_oms_default_warehouse_id', '0');
+    $oldMainSupervisorUserId = (int) shopeeOmsGetSetting($connect, 'shopee_oms_daily_report_main_supervisor_user_id', '0');
+    $oldSecondSupervisorUserId = (int) shopeeOmsGetSetting($connect, 'shopee_oms_daily_report_second_supervisor_user_id', '0');
+
+    $existingPermissionMap = array();
+    $permSql = "SELECT p.from_status, p.to_status, p.user_group_id, p.can_move
+        FROM `" . ORDER_FLOW_TRANSITION_PERMISSION . "` p
+        INNER JOIN (
+            SELECT from_status, to_status, user_group_id, MAX(id) AS latest_id
+            FROM `" . ORDER_FLOW_TRANSITION_PERMISSION . "`
+            WHERE module_key = 'shopee_oms' AND status = 'A'
+            GROUP BY from_status, to_status, user_group_id
+        ) latest
+            ON latest.latest_id = p.id";
+    $permRst = mysqli_query($connect, $permSql);
+    if ($permRst) {
+        while ($row = mysqli_fetch_assoc($permRst)) {
+            $transitionKey = shopeeOmsBuildTransitionKey(
+                isset($row['from_status']) ? (string) $row['from_status'] : '',
+                isset($row['to_status']) ? (string) $row['to_status'] : ''
+            );
+            $userGroupId = isset($row['user_group_id']) ? (int) $row['user_group_id'] : 0;
+            if ($transitionKey !== '' && $userGroupId > 0) {
+                $existingPermissionMap[$transitionKey][$userGroupId] = !empty($row['can_move']);
+            }
+        }
+    }
+
+    $settingFieldLabels = array();
+    $settingOldVals = array();
+    $settingNewVals = array();
+    $permissionFieldLabels = array();
+    $permissionOldVals = array();
+    $permissionNewVals = array();
 
     shopeeOmsSetSetting($connect, 'shopee_oms_assignment_scope', $assignmentScope, 'OMS assignment scope.', USER_ID);
     shopeeOmsSetSetting($connect, 'shopee_oms_default_warehouse_id', (string) $defaultWarehouseId, 'Default warehouse id for OMS stock-out.', USER_ID);
     shopeeOmsSetSetting($connect, 'shopee_oms_daily_report_main_supervisor_user_id', (string) $mainSupervisorUserId, 'OMS daily report main supervisor user id.', USER_ID);
     shopeeOmsSetSetting($connect, 'shopee_oms_daily_report_second_supervisor_user_id', (string) $secondSupervisorUserId, 'OMS daily report second supervisor user id.', USER_ID);
+
+    if ($oldAssignmentScope !== $assignmentScope) {
+        $settingFieldLabels[] = 'Assignment Scope';
+        $settingOldVals[] = $oldAssignmentScope;
+        $settingNewVals[] = $assignmentScope;
+    }
+    if ($oldDefaultWarehouseId !== $defaultWarehouseId) {
+        $settingFieldLabels[] = 'Default Warehouse';
+        $settingOldVals[] = isset($warehouseNameMap[$oldDefaultWarehouseId]) ? $warehouseNameMap[$oldDefaultWarehouseId] : (string) $oldDefaultWarehouseId;
+        $settingNewVals[] = isset($warehouseNameMap[$defaultWarehouseId]) ? $warehouseNameMap[$defaultWarehouseId] : (string) $defaultWarehouseId;
+    }
+    if ($oldMainSupervisorUserId !== $mainSupervisorUserId) {
+        $settingFieldLabels[] = 'Main Report Supervisor';
+        $settingOldVals[] = isset($userNameMap[$oldMainSupervisorUserId]) ? $userNameMap[$oldMainSupervisorUserId] : (string) $oldMainSupervisorUserId;
+        $settingNewVals[] = isset($userNameMap[$mainSupervisorUserId]) ? $userNameMap[$mainSupervisorUserId] : (string) $mainSupervisorUserId;
+    }
+    if ($oldSecondSupervisorUserId !== $secondSupervisorUserId) {
+        $settingFieldLabels[] = 'Second Report Supervisor';
+        $settingOldVals[] = isset($userNameMap[$oldSecondSupervisorUserId]) ? $userNameMap[$oldSecondSupervisorUserId] : (string) $oldSecondSupervisorUserId;
+        $settingNewVals[] = isset($userNameMap[$secondSupervisorUserId]) ? $userNameMap[$secondSupervisorUserId] : (string) $secondSupervisorUserId;
+    }
 
     foreach ($transitionRows as $transitionRow) {
         $transitionKey = isset($transitionRow['key']) ? (string) $transitionRow['key'] : '';
@@ -62,6 +148,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['flow_action']) && $_P
             $safeToStatus = mysqli_real_escape_string($connect, $toStatus);
             $safeActionName = mysqli_real_escape_string($connect, $actionName);
             $safeUserId = mysqli_real_escape_string($connect, USER_ID);
+            $oldCanMove = !empty($existingPermissionMap[$transitionKey][$userGroupId]) ? 1 : 0;
 
             $sql = "INSERT INTO `" . ORDER_FLOW_TRANSITION_PERMISSION . "`
                 (`module_key`, `transition_key`, `from_status`, `to_status`, `user_group_id`, `can_move`, `remark`, `create_by`, `create_date`, `create_time`, `status`)
@@ -69,7 +156,52 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['flow_action']) && $_P
                 ('shopee_oms', '" . $safeTransitionKey . "', '" . $safeFromStatus . "', '" . $safeToStatus . "', " . $userGroupId . ", " . $isAllowed . ", '" . $safeActionName . "', '" . $safeUserId . "', CURDATE(), CURTIME(), 'A')
                 ON DUPLICATE KEY UPDATE `can_move` = VALUES(`can_move`), `remark` = VALUES(`remark`), `status` = 'A', `update_by` = '" . $safeUserId . "', `update_date` = CURDATE(), `update_time` = CURTIME()";
             mysqli_query($connect, $sql);
+
+            if ($oldCanMove !== $isAllowed) {
+                $permissionFieldLabels[] = (isset($transitionRow['from_label']) ? (string) $transitionRow['from_label'] : $fromStatus)
+                    . ' -> '
+                    . (isset($transitionRow['to_label']) ? (string) $transitionRow['to_label'] : $toStatus)
+                    . ' [' . (isset($userGroupNameMap[$userGroupId]) ? $userGroupNameMap[$userGroupId] : ('User Group #' . $userGroupId)) . ']';
+                $permissionOldVals[] = $oldCanMove ? 'Allowed' : 'Blocked';
+                $permissionNewVals[] = $isAllowed ? 'Allowed' : 'Blocked';
+            }
         }
+    }
+
+    if (!empty($settingFieldLabels)) {
+        $settingLog = array(
+            'log_act' => 'Edit',
+            'cdate' => $cdate,
+            'ctime' => $ctime,
+            'uid' => USER_ID,
+            'cby' => USER_ID,
+            'query_rec' => 'Shopee OMS setting update',
+            'query_table' => ORDER_FLOW_SETTING,
+            'page' => $pageTitle,
+            'connect' => $connect,
+            'oldval' => implodeWithComma($settingOldVals),
+            'changes' => implodeWithComma($settingNewVals),
+        );
+        $settingLog['act_msg'] = actMsgLog('1', $settingFieldLabels, '', $settingOldVals, $settingNewVals, ORDER_FLOW_SETTING, 'Edit', '');
+        audit_log($settingLog);
+    }
+
+    if (!empty($permissionFieldLabels)) {
+        $permissionLog = array(
+            'log_act' => 'Edit',
+            'cdate' => $cdate,
+            'ctime' => $ctime,
+            'uid' => USER_ID,
+            'cby' => USER_ID,
+            'query_rec' => 'Shopee OMS transition permission update',
+            'query_table' => ORDER_FLOW_TRANSITION_PERMISSION,
+            'page' => $pageTitle,
+            'connect' => $connect,
+            'oldval' => implodeWithComma($permissionOldVals),
+            'changes' => implodeWithComma($permissionNewVals),
+        );
+        $permissionLog['act_msg'] = actMsgLog('1', $permissionFieldLabels, '', $permissionOldVals, $permissionNewVals, ORDER_FLOW_TRANSITION_PERMISSION, 'Edit', '');
+        audit_log($permissionLog);
     }
 
     header('Content-Type: application/json');
@@ -93,6 +225,21 @@ if (!isActionAllowed('View', checkPinByGroupId($connect, 149))) {
 if ((int) USER_GROUP !== 1) {
     echo '<script>alert("Only Super Admin can access Shopee Flow Setting."); location.replace("../dashboard.php");</script>';
     exit;
+}
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
+    $safeAuditUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
+    $safeAuditPageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
+    $log = array(
+        'log_act' => 'View',
+        'cdate' => $cdate,
+        'ctime' => $ctime,
+        'uid' => USER_ID,
+        'cby' => USER_ID,
+        'act_msg' => $safeAuditUserName . " viewed the page <b>" . $safeAuditPageTitle . "</b>.",
+        'page' => $pageTitle,
+        'connect' => $connect,
+    );
+    audit_log($log);
 }
 
 $transitionRows = shopeeOmsGetConfigurableTransitions();
@@ -144,6 +291,27 @@ if ($permRst) {
         );
         $userGroupId = isset($row['user_group_id']) ? (int) $row['user_group_id'] : 0;
         $permissionMap[$transitionKey][$userGroupId] = !empty($row['can_move']);
+    }
+}
+
+foreach ($transitionRows as $transitionRow) {
+    $transitionKey = isset($transitionRow['key']) ? (string) $transitionRow['key'] : '';
+    if ($transitionKey === '') {
+        continue;
+    }
+
+    $fallbackKey = shopeeOmsResolveTransitionPermissionFallbackKey($transitionKey);
+    if ($fallbackKey === '') {
+        continue;
+    }
+
+    foreach ($userGroups as $userGroup) {
+        $userGroupId = isset($userGroup['id']) ? (int) $userGroup['id'] : 0;
+        if ($userGroupId <= 0 || isset($permissionMap[$transitionKey][$userGroupId]) || !isset($permissionMap[$fallbackKey][$userGroupId])) {
+            continue;
+        }
+
+        $permissionMap[$transitionKey][$userGroupId] = !empty($permissionMap[$fallbackKey][$userGroupId]);
     }
 }
 

@@ -25,10 +25,19 @@ $clearLocalStorage = '<script>localStorage.clear();</script>';
 $sorStatusOptions = function_exists('shopeeOmsGetEditableStatusOptions') ? shopeeOmsGetEditableStatusOptions() : array('P' => 'To Ship', 'TP' => 'To Pack', 'SP' => 'Shipped', 'WAERD' => 'Waiting Assign Estimate Received Date');
 $sorAirbillAttachmentPath = img_server . 'shopee_airbill_attachment/';
 $sorAirbillAttachmentUrl = rtrim((string) $SITEURL, '/') . '/' . trim((string) $sorAirbillAttachmentPath, '/\\') . '/';
-$sorAirbillAttachmentFsPath = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . trim((string) $sorAirbillAttachmentPath, '/\\') . DIRECTORY_SEPARATOR;
-if (!file_exists($sorAirbillAttachmentFsPath)) {
-    mkdir($sorAirbillAttachmentFsPath, 0777, true);
-}
+$sorLocalTelegramFailureMessage = '';
+$sorBuildLocalTelegramFailureMessage = function ($notifyResult) use ($siteOrlocalMode) {
+    if (!isset($siteOrlocalMode) || $siteOrlocalMode || !is_array($notifyResult) || !empty($notifyResult['sent'])) {
+        return '';
+    }
+
+    $reason = trim((string) (isset($notifyResult['message']) ? $notifyResult['message'] : ''));
+    if ($reason === '') {
+        $reason = 'Unknown Telegram send failure.';
+    }
+
+    return "Localhost debug: Step A Telegram message failed to send.\nReason: " . $reason;
+};
 
 // to display data to input
 if ($dataID) { //edit/remove/view
@@ -52,24 +61,32 @@ if (!($dataID) && !($act)) {
     </script>';
 }
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
-    $scr_username = $_POST['scr_username']; 
-    $scr_pic = $_POST['scr_pic_hidden'];
-    $scr_country = $_POST['scr_country_hidden'];
-    $scr_brand = $_POST['scr_brand_hidden'];
-    $scr_series = $_POST['scr_series_hidden'];
+    $scr_username = trim((string) $_POST['scr_username']); 
+    $scr_pic = trim((string) $_POST['scr_pic_hidden']);
+    $scr_country = trim((string) $_POST['scr_country_hidden']);
+    $scr_brand = trim((string) $_POST['scr_brand_hidden']);
+    $scr_series = trim((string) $_POST['scr_series_hidden']);
     $duplicate_check_query = "SELECT * FROM shopee_customer_info WHERE buyer_username = '$scr_username'";
     $duplicate_result = mysqli_query($finance_connect, $duplicate_check_query);
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
+    $newCustomerRequiredFields = array(
+        'Shopee Buyer Username' => $scr_username,
+        'Sales Person In Charge' => $scr_pic,
+        'Country' => $scr_country,
+        'Brand' => $scr_brand,
+        'Series' => $scr_series,
+    );
 
-    if( $scr_username != ''){
+    if (!in_array('', $newCustomerRequiredFields, true)) {
         if (mysqli_num_rows($duplicate_result) > 0) {
             echo "<script>alert('Error: Duplicate Customer ID found!');</script>";
         } else {
            $insert_query = "INSERT INTO ".SHOPEE_CUST_INFO." (buyer_username, pic, country, brand, series,create_by,create_date,create_time) 
                              VALUES ('$scr_username', '$scr_pic', '$scr_country', '$scr_brand', '$scr_series','" . USER_ID . "',curdate(),curtime())";
-    
-    
+            $insertCustomerId = 0;
+
             if (mysqli_query($finance_connect, $insert_query)) {
+                $insertCustomerId = (int) mysqli_insert_id($finance_connect);
                 echo "<script>alert('New record created successfully');</script>";
                 generateDBData(SHOPEE_CUST_INFO, $finance_connect);
             } else {
@@ -101,22 +118,24 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
 
              if (isset($insert_query)) {
                 $log = [
-                    'log_act' => $pageAction,
+                    'log_act' => 'add',
                     'cdate' => $cdate,
                     'ctime' => $ctime,
                     'uid' => USER_ID,
                     'cby' => USER_ID,
                     'query_rec' => $insert_query,
-                    'query_table' => $tblName,
+                    'query_table' => SHOPEE_CUST_INFO,
                     'page' => $pageTitle,
                     'connect' => $connect,
                 ];
                 $log['newval'] = implodeWithComma($newvalarr);
-                $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                $log['act_msg'] = actMsgLog($insertCustomerId, $datafield, $newvalarr, '', '', SHOPEE_CUST_INFO, 'add', ($insertCustomerId > 0 ? '' : 'Failed to create Shopee customer record.'));
                 
                 audit_log($log);
              }
         }
+    } else {
+        echo "<script>alert('Please fill in all required fields for the new customer record.');</script>";
     }
 }
 
@@ -130,6 +149,16 @@ if (post('updateStatusBtn')) {
     ));
 
     if (!empty($transitionResult['success'])) {
+        if (isset($transitionResult['new_status']) && (string) $transitionResult['new_status'] === 'TP') {
+            $notifyResult = isset($transitionResult['step_a_result']['notify_result']) && is_array($transitionResult['step_a_result']['notify_result'])
+                ? $transitionResult['step_a_result']['notify_result']
+                : array();
+            $localTelegramFailureMessage = $sorBuildLocalTelegramFailureMessage($notifyResult);
+            if ($localTelegramFailureMessage !== '') {
+                $transitionResult['message'] .= "\n\n" . $localTelegramFailureMessage;
+            }
+        }
+
         $oldStatus = isset($transitionResult['old_status']) ? (string) $transitionResult['old_status'] : '';
         $newStatusCode = isset($transitionResult['new_status']) ? (string) $transitionResult['new_status'] : '';
         $queryStatusUpdate = "OMS transition " . $oldStatus . " -> " . $newStatusCode;
@@ -281,29 +310,33 @@ if (post('actionBtn')) {
         case 'addRecord':
         case 'updRecord':
             if ($sor_update_airbill === 'yes' && isset($_FILES["sor_airbill_attachment"]) && $_FILES["sor_airbill_attachment"]["size"] != 0) {
-                $sorAirbillFileName = $_FILES["sor_airbill_attachment"]["name"];
-                $sorAirbillTmpName = $_FILES["sor_airbill_attachment"]["tmp_name"];
-                $sorAirbillExt = strtolower((string) pathinfo($sorAirbillFileName, PATHINFO_EXTENSION));
-
-                if (in_array($sorAirbillExt, $allowed_ext)) {
-                    $attachmentSeed = trim((string) $sor_order) !== '' ? trim((string) $sor_order) : ('shopee_airbill_' . date('Ymd_His'));
-                    $attachmentSeed = preg_replace('/[^A-Za-z0-9_-]+/', '_', $attachmentSeed);
-                    $newAirbillAttachmentName = $attachmentSeed . '_' . date('Ymd_His') . '.' . $sorAirbillExt;
-                    $dedupeCounter = 1;
-                    while (file_exists($sorAirbillAttachmentFsPath . $newAirbillAttachmentName)) {
-                        $newAirbillAttachmentName = $attachmentSeed . '_' . date('Ymd_His') . '_' . $dedupeCounter . '.' . $sorAirbillExt;
-                        $dedupeCounter++;
-                    }
-
-                    if (move_uploaded_file($sorAirbillTmpName, $sorAirbillAttachmentFsPath . $newAirbillAttachmentName)) {
-                        $sor_airbill_attachment = $newAirbillAttachmentName;
-                    } else {
-                        $airbill_attachment_err = "Failed to upload the airbill attachment.";
-                        $error = 1;
-                    }
+                $uploadResult = shopeeOmsStoreAirbillAttachmentUpload(
+                    $_FILES["sor_airbill_attachment"],
+                    $connect,
+                    $sor_brand,
+                    $sor_pkg,
+                    'shopee_order_request',
+                    $allowed_ext
+                );
+                if (!empty($uploadResult['success'])) {
+                    $sor_airbill_attachment = isset($uploadResult['path']) ? (string) $uploadResult['path'] : '';
                 } else {
-                    $airbill_attachment_err = "Only allow PNG, JPG, JPEG or PDF file";
+                    $airbill_attachment_err = isset($uploadResult['message']) ? (string) $uploadResult['message'] : "Failed to upload the airbill attachment.";
                     $error = 1;
+                }
+            }
+
+            if ($sor_update_airbill !== 'yes') {
+                if ($action === 'updRecord') {
+                    $sor_airbill = isset($row['airbill_no']) ? (string) $row['airbill_no'] : '';
+                    $sor_airbill_attachment = isset($row['airbill_attachment']) ? (string) $row['airbill_attachment'] : '';
+                    $sor_customer_name = isset($row['customer_name']) ? (string) $row['customer_name'] : '';
+                    $sor_customer_address = isset($row['customer_address']) ? (string) $row['customer_address'] : '';
+                } else {
+                    $sor_airbill = '';
+                    $sor_airbill_attachment = '';
+                    $sor_customer_name = '';
+                    $sor_customer_address = '';
                 }
             }
 
@@ -361,12 +394,37 @@ if (post('actionBtn')) {
                 $airbill_err = $statusValidation['message'];
                 $error = 1;
             }
+            if ($sor_update_airbill === 'yes') {
+                if (trim((string) $sor_airbill) === '') {
+                    $airbill_err = "Airbill No cannot be empty when Update Airbill is enabled.";
+                    $error = 1;
+                }
+                if (trim((string) $sor_customer_name) === '') {
+                    $customer_name_err = "Customer Name cannot be empty when Update Airbill is enabled.";
+                    $error = 1;
+                }
+                if (trim((string) $sor_customer_address) === '') {
+                    $customer_address_err = "Customer Address cannot be empty when Update Airbill is enabled.";
+                    $error = 1;
+                }
+                if (trim((string) $sor_airbill_attachment) === '') {
+                    $airbill_attachment_err = "Airbill Attachment cannot be empty when Update Airbill is enabled.";
+                    $error = 1;
+                }
+            }
 
             if (isset($error)) {
                 break;
             }
             if ($action == 'addRecord') {
                 try {
+                    $requiresInitialShippedAutoMove = ($sor_order_status === 'SP');
+                    $startedFinanceTransaction = false;
+                    if ($requiresInitialShippedAutoMove) {
+                        mysqli_begin_transaction($finance_connect);
+                        $startedFinanceTransaction = true;
+                    }
+
                     //check values
                     if ($sor_acc) {
                         array_push($newvalarr, $sor_acc);
@@ -506,6 +564,10 @@ if (post('actionBtn')) {
 
                     $query = "INSERT INTO " . $tblName . " (shopee_acc,currency,orderID,date,time,package,package_qty_json,brand,buyer,buyer_pay_meth,pic,customer_name,customer_address,price,voucher,act_shipping_fee,service_fee,trans_fee,ams_fee,fees,final_amt,airbill_no,airbill_attachment,remark,order_status,latest_transition_at,create_by,create_date,create_time) VALUES ('$safeSorAcc','$safeSorCurr','$safeSorOrder','$safeSorDate','$safeSorTime','$safeSorPkg','$safePackageQtySnapshotJson','$safeSorBrand','$safeSorUser','$safeSorPay','$safeSorPic','$safeCustomerName','$safeCustomerAddress','$safeSorPrice','$safeSorVoucher','$safeSorShipping','$safeSorServ','$safeSorTrans','$safeSorAms','$safeSorFees','$safeSorFinal','$safeAirbill','$safeAirbillAttachment','$safeSorRemark','$safeSorStatus',NOW(),'" . USER_ID . "',curdate(),curtime())";
                     $returnData = mysqli_query($finance_connect, $query);
+                    if (!$returnData) {
+                        throw new Exception('Database Error: ' . mysqli_error($finance_connect));
+                    }
+
                     if ($returnData) {
                         $dataID = (int) mysqli_insert_id($finance_connect);
                         shopeeOmsLogTransition($finance_connect, array(
@@ -524,13 +586,29 @@ if (post('actionBtn')) {
                             $freshOrderRow = shopeeOmsLoadOrder($finance_connect, $dataID);
                             $tokenResult = shopeeOmsCreateWarehouseToken($connect, $finance_connect, $freshOrderRow, USER_ID);
                             if (!empty($tokenResult['success']) && !empty($tokenResult['token_row']) && !empty($tokenResult['notification'])) {
-                                shopeeOmsSendWarehouseNotification($connect, $finance_connect, $tokenResult['token_row'], $tokenResult['notification']);
-                                mysqli_query($finance_connect, "UPDATE `" . $tblName . "` SET `step_a_sent_at` = NOW() WHERE id = " . $dataID . " LIMIT 1");
+                                $notifyResult = shopeeOmsSendWarehouseNotification($connect, $finance_connect, $tokenResult['token_row'], $tokenResult['notification']);
+                                $sorLocalTelegramFailureMessage = $sorBuildLocalTelegramFailureMessage($notifyResult);
+                                if (!empty($notifyResult['sent'])) {
+                                    mysqli_query($finance_connect, "UPDATE `" . $tblName . "` SET `step_a_sent_at` = NOW() WHERE id = " . $dataID . " LIMIT 1");
+                                }
                             }
+                        } else if ($requiresInitialShippedAutoMove) {
+                            $initialShippedResult = shopeeOmsFinalizeInitialShippedOrder($connect, $finance_connect, $dataID, USER_ID, USER_GROUP, $pageTitle);
+                            if (empty($initialShippedResult['success'])) {
+                                throw new Exception(isset($initialShippedResult['message']) ? $initialShippedResult['message'] : 'Unable to process initial Shipped status.');
+                            }
+                        }
+
+                        if ($startedFinanceTransaction) {
+                            mysqli_commit($finance_connect);
+                            $startedFinanceTransaction = false;
                         }
                     }
                     $_SESSION['tempValConfirmBox'] = true;
                 } catch (Exception $e) {
+                    if (isset($startedFinanceTransaction) && $startedFinanceTransaction) {
+                        mysqli_rollback($finance_connect);
+                    }
                     $errorMsg = $e->getMessage();
                     $act = "F";
                 }
@@ -973,6 +1051,17 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
             content: "\f00c";
             right: 32px;
         }
+
+        .shopee-inline-error {
+            display: block;
+            margin-top: 6px;
+            color: #dc3545;
+            font-size: 0.875rem;
+        }
+
+        .shopee-inline-invalid {
+            border-color: #dc3545 !important;
+        }
     </style>
 </head>
 
@@ -1357,6 +1446,11 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                                     echo htmlspecialchars($row['customer_name']);
                                 }
                             ?>" <?= $act == '' ? 'disabled' : '' ?>>
+                            <?php if (isset($customer_name_err)) { ?>
+                                <div id="err_msg">
+                                    <span class="mt-n1"><?php echo $customer_name_err; ?></span>
+                                </div>
+                            <?php } ?>
                         </div>
                     </div>
                 </div>
@@ -1421,6 +1515,11 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                                     echo htmlspecialchars($row['customer_address']);
                                 }
                             ?></textarea>
+                            <?php if (isset($customer_address_err)) { ?>
+                                <div id="err_msg">
+                                    <span class="mt-n1"><?php echo $customer_address_err; ?></span>
+                                </div>
+                            <?php } ?>
                         </div>
                     </div>
                 </div>
@@ -1497,38 +1596,38 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                 <div class="col-md-4 mb-3">
                     <button type="button" onclick="toggleNewBuyer()">Create New Customer ID</button>
                 </div>
-                <form id="myForm" method="POST">
+                <form id="myForm" method="POST" novalidate>
                 <div id="new_customer_section" style="display: none;">
 
                 <div class="row">
                     <div class="col-md-4 mb-3 autocomplete">
                         <label class="form-label form_lbl" for="scr_username">Shopee Buyer Username<span class="requireRed">*</span></label>
-                        <input class="form-control" type="text" id="scr_username" name="scr_username">
+                        <input class="form-control" type="text" id="scr_username" name="scr_username" required>
                     </div>
 
                     <div class="col-md-4 mb-3 autocomplete">
                         <label class="form-label form_lbl" for="scr_pic">Sales Person In Charge<span class="requireRed">*</span></label>
-                        <input class="form-control" type="text" id="scr_pic" name="scr_pic">                        
+                        <input class="form-control" type="text" id="scr_pic" name="scr_pic" required>                        
                         <input class="form-control" type="hidden" id="scr_pic_hidden" name="scr_pic_hidden">
 
                     </div>
 
                     <div class="col-md-4 mb-3 autocomplete">
                         <label class="form-label form_lbl" for="scr_country">Country<span class="requireRed">*</span></label>
-                        <input class="form-control" type="text" id="scr_country" name="scr_country">
+                        <input class="form-control" type="text" id="scr_country" name="scr_country" required>
                         <input class="form-control" type="hidden" id="scr_country_hidden" name="scr_country_hidden">
                     </div>
                     <div class="col-md-4 mb-3 autocomplete">
                         <label class="form-label form_lbl" for="scr_brand">Brand<span class="requireRed">*</span></label>
-                        <input class="form-control" type="text" id="scr_brand" name="scr_brand"> <input class="form-control" type="hidden" id="scr_brand_hidden" name="scr_brand_hidden">
+                        <input class="form-control" type="text" id="scr_brand" name="scr_brand" required> <input class="form-control" type="hidden" id="scr_brand_hidden" name="scr_brand_hidden">
                     </div>
 
                     <div class="col-md-4 mb-3 autocomplete">
                         <label class="form-label form_lbl" for="scr_series">Series<span class="requireRed">*</span></label>
-                        <input class="form-control" type="text" id="scr_series" name="scr_series"><input class="form-control" type="hidden" id="scr_series_hidden" name="scr_series_hidden">
+                        <input class="form-control" type="text" id="scr_series" name="scr_series" required><input class="form-control" type="hidden" id="scr_series_hidden" name="scr_series_hidden">
                     </div>
                 </div>
-                <input type="submit" name="submit" value="Submit">
+                <button type="button" name="submit" id="new_customer_submit_btn">Submit</button>
                     </form>
                 </div>
                 <?php }?>
@@ -1995,6 +2094,9 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
     if (isset($_SESSION['tempValConfirmBox'])) {
         unset($_SESSION['tempValConfirmBox']);
         echo $clearLocalStorage;
+        if ($sorLocalTelegramFailureMessage !== '') {
+            echo '<script>alert("' . addslashes($sorLocalTelegramFailureMessage) . '");</script>';
+        }
         echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
     }
     ?>
@@ -2024,7 +2126,10 @@ $(document).ready(function() {
             var updateAirbillToggle = document.getElementById('sor_update_airbill_toggle');
             var airbillNo = document.getElementById('sor_airbill');
             var airbillAttachment = document.getElementById('sor_airbill_attachment');
-            if (!updateAirbill || !updateAirbillToggle || !airbillNo || !airbillAttachment) {
+            var customerName = document.getElementById('sor_customer_name');
+            var customerAddress = document.getElementById('sor_customer_address');
+            var existingAttachment = document.getElementById('sor_airbill_attachment_value');
+            if (!updateAirbill || !updateAirbillToggle || !airbillNo || !airbillAttachment || !customerName || !customerAddress) {
                 return;
             }
 
@@ -2033,6 +2138,12 @@ $(document).ready(function() {
             var readOnlyMode = "<?= $act ?>" === '';
             airbillNo.disabled = readOnlyMode || !enabled;
             airbillAttachment.disabled = readOnlyMode || !enabled;
+            customerName.disabled = readOnlyMode || !enabled;
+            customerAddress.disabled = readOnlyMode || !enabled;
+            airbillNo.required = enabled;
+            customerName.required = enabled;
+            customerAddress.required = enabled;
+            airbillAttachment.required = enabled && (!existingAttachment || existingAttachment.value.trim() === '');
         }
 
         function submitReturnAction(returnType) {
@@ -2063,6 +2174,89 @@ $(document).ready(function() {
             var updateAirbillToggle = document.getElementById('sor_update_airbill_toggle');
             if (updateAirbillToggle) {
                 updateAirbillToggle.addEventListener('change', toggleAirbillFields);
+            }
+
+            var newCustomerForm = document.getElementById('myForm');
+            if (newCustomerForm) {
+                var outerOrderForm = document.getElementById('FORForm');
+                var newCustomerSubmitBtn = document.getElementById('new_customer_submit_btn');
+                var newCustomerFields = newCustomerForm.querySelectorAll('input[required]');
+
+                function clearNewCustomerInlineError(field) {
+                    if (!field) return;
+                    field.classList.remove('shopee-inline-invalid');
+                    var wrapper = field.parentElement;
+                    if (!wrapper) return;
+                    wrapper.querySelectorAll('.shopee-inline-error').forEach(function (node) {
+                        node.remove();
+                    });
+                }
+
+                function showNewCustomerInlineError(field, message) {
+                    if (!field) return;
+                    clearNewCustomerInlineError(field);
+                    field.classList.add('shopee-inline-invalid');
+                    var errorNode = document.createElement('small');
+                    errorNode.className = 'shopee-inline-error';
+                    errorNode.textContent = message;
+                    field.parentElement.appendChild(errorNode);
+                }
+
+                function validateNewCustomerForm() {
+                    var firstInvalidField = null;
+                    newCustomerFields.forEach(function (field) {
+                        clearNewCustomerInlineError(field);
+                        if (field.disabled) {
+                            return;
+                        }
+
+                        if (field.value.trim() === '') {
+                            showNewCustomerInlineError(field, 'This field is required.');
+                            if (!firstInvalidField) {
+                                firstInvalidField = field;
+                            }
+                        }
+                    });
+
+                    if (firstInvalidField) {
+                        firstInvalidField.focus();
+                        return false;
+                    }
+
+                    return true;
+                }
+
+                newCustomerFields.forEach(function (field) {
+                    field.addEventListener('input', function () {
+                        if (field.value.trim() !== '') {
+                            clearNewCustomerInlineError(field);
+                        }
+                    });
+                });
+
+                function submitNewCustomerForm() {
+                    if (!validateNewCustomerForm()) {
+                        return;
+                    }
+                    if (!outerOrderForm) {
+                        return;
+                    }
+                    var existingSubmitMarker = outerOrderForm.querySelector('input[data-new-customer-submit="1"]');
+                    if (existingSubmitMarker) {
+                        existingSubmitMarker.remove();
+                    }
+                    var submitMarker = document.createElement('input');
+                    submitMarker.type = 'hidden';
+                    submitMarker.name = 'submit';
+                    submitMarker.value = 'Submit';
+                    submitMarker.setAttribute('data-new-customer-submit', '1');
+                    outerOrderForm.appendChild(submitMarker);
+                    outerOrderForm.submit();
+                }
+
+                if (newCustomerSubmitBtn) {
+                    newCustomerSubmitBtn.addEventListener('click', submitNewCustomerForm);
+                }
             }
         });
 

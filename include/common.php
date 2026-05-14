@@ -1568,6 +1568,10 @@ if (!function_exists('shopeeOmsStatusDefinitions')) {
                 'label' => 'Waiting Receive',
                 'aliases' => array('wr', 'waitingreceive', 'aed', 'assignedestimateddate'),
             ),
+            'PD' => array(
+                'label' => 'Postponed',
+                'aliases' => array('pd', 'postponed', 'delay', 'delayed'),
+            ),
             'PR' => array(
                 'label' => 'Parcel Received',
                 'aliases' => array('pr', 'parcelreceived'),
@@ -1657,7 +1661,7 @@ if (!function_exists('shopeeOmsGetEditableStatusOptions')) {
     function shopeeOmsGetEditableStatusOptions()
     {
         $definitions = shopeeOmsStatusDefinitions();
-        $editableKeys = array('P', 'TP', 'SP', 'WAERD', 'WR', 'PR', 'WAFC', 'V', 'C', 'R', 'CR');
+        $editableKeys = array('P', 'TP', 'SP', 'WAERD', 'WR', 'PD', 'PR', 'WAFC', 'V', 'C', 'R', 'CR');
         $options = array();
         foreach ($editableKeys as $statusCode) {
             if (isset($definitions[$statusCode])) {
@@ -1726,6 +1730,11 @@ if (!function_exists('shopeeOmsTransitionDefinitions')) {
                 'R' => array('action' => 'mark_return', 'requires_permission' => true, 'auto' => false),
             ),
             'WR' => array(
+                'PD' => array('action' => 'postpone_order', 'requires_permission' => true, 'auto' => false),
+                'PR' => array('action' => 'confirm_parcel_received', 'requires_permission' => true, 'auto' => false),
+                'R' => array('action' => 'mark_return', 'requires_permission' => true, 'auto' => false),
+            ),
+            'PD' => array(
                 'PR' => array('action' => 'confirm_parcel_received', 'requires_permission' => true, 'auto' => false),
                 'R' => array('action' => 'mark_return', 'requires_permission' => true, 'auto' => false),
             ),
@@ -1780,6 +1789,25 @@ if (!function_exists('shopeeOmsGetConfigurableTransitions')) {
         }
 
         return $transitions;
+    }
+}
+
+if (!function_exists('shopeeOmsGetTransitionPermissionFallbackMap')) {
+    function shopeeOmsGetTransitionPermissionFallbackMap()
+    {
+        return array(
+            shopeeOmsBuildTransitionKey('WR', 'PD') => shopeeOmsBuildTransitionKey('WR', 'PR'),
+            shopeeOmsBuildTransitionKey('PD', 'PR') => shopeeOmsBuildTransitionKey('WR', 'PR'),
+            shopeeOmsBuildTransitionKey('PD', 'R') => shopeeOmsBuildTransitionKey('WR', 'R'),
+        );
+    }
+}
+
+if (!function_exists('shopeeOmsResolveTransitionPermissionFallbackKey')) {
+    function shopeeOmsResolveTransitionPermissionFallbackKey($transitionKey)
+    {
+        $fallbackMap = shopeeOmsGetTransitionPermissionFallbackMap();
+        return isset($fallbackMap[$transitionKey]) ? (string) $fallbackMap[$transitionKey] : '';
     }
 }
 
@@ -1898,20 +1926,37 @@ if (!function_exists('shopeeOmsHasTransitionPermission')) {
             return false;
         }
 
-        $safeFromStatus = mysqli_real_escape_string($connect, $fromStatus);
-        $safeToStatus = mysqli_real_escape_string($connect, $toStatus);
-        $sql = "SELECT can_move FROM `" . ORDER_FLOW_TRANSITION_PERMISSION . "`
-            WHERE module_key = 'shopee_oms'
-              AND from_status = '" . $safeFromStatus . "'
-              AND to_status = '" . $safeToStatus . "'
-              AND user_group_id = " . $currentUserGroupId . "
-              AND status = 'A'
-            ORDER BY id DESC
-            LIMIT 1";
-        $result = mysqli_query($connect, $sql);
-        if ($result && mysqli_num_rows($result) > 0) {
-            $row = mysqli_fetch_assoc($result);
-            return !empty($row['can_move']);
+        $candidatePairs = array(array($fromStatus, $toStatus));
+        $fallbackKey = shopeeOmsResolveTransitionPermissionFallbackKey(shopeeOmsBuildTransitionKey($fromStatus, $toStatus));
+        if ($fallbackKey !== '') {
+            $fallbackParts = explode('__', $fallbackKey, 2);
+            if (count($fallbackParts) === 2) {
+                $candidatePairs[] = array($fallbackParts[0], $fallbackParts[1]);
+            }
+        }
+
+        foreach ($candidatePairs as $candidatePair) {
+            $candidateFrom = isset($candidatePair[0]) ? (string) $candidatePair[0] : '';
+            $candidateTo = isset($candidatePair[1]) ? (string) $candidatePair[1] : '';
+            if ($candidateFrom === '' || $candidateTo === '') {
+                continue;
+            }
+
+            $safeFromStatus = mysqli_real_escape_string($connect, $candidateFrom);
+            $safeToStatus = mysqli_real_escape_string($connect, $candidateTo);
+            $sql = "SELECT can_move FROM `" . ORDER_FLOW_TRANSITION_PERMISSION . "`
+                WHERE module_key = 'shopee_oms'
+                  AND from_status = '" . $safeFromStatus . "'
+                  AND to_status = '" . $safeToStatus . "'
+                  AND user_group_id = " . $currentUserGroupId . "
+                  AND status = 'A'
+                ORDER BY id DESC
+                LIMIT 1";
+            $result = mysqli_query($connect, $sql);
+            if ($result && mysqli_num_rows($result) > 0) {
+                $row = mysqli_fetch_assoc($result);
+                return !empty($row['can_move']);
+            }
         }
 
         return false;
@@ -2318,6 +2363,57 @@ if (!function_exists('shopeeOmsTelegramMultipartRequest')) {
     }
 }
 
+if (!function_exists('shopeeOmsTelegramDescribeResponse')) {
+    function shopeeOmsTelegramDescribeResponse($response, $defaultMessage = '')
+    {
+        $decoded = json_decode((string) $response, true);
+        if (is_array($decoded) && isset($decoded['description']) && trim((string) $decoded['description']) !== '') {
+            return trim((string) $decoded['description']);
+        }
+
+        return $defaultMessage;
+    }
+}
+
+if (!function_exists('shopeeOmsDetectFileMimeType')) {
+    function shopeeOmsDetectFileMimeType($filePath)
+    {
+        $filePath = (string) $filePath;
+        if ($filePath === '') {
+            return 'application/octet-stream';
+        }
+
+        if (function_exists('finfo_open')) {
+            $finfo = @finfo_open(FILEINFO_MIME_TYPE);
+            if ($finfo) {
+                $detected = @finfo_file($finfo, $filePath);
+                @finfo_close($finfo);
+                if (is_string($detected) && trim($detected) !== '') {
+                    return trim($detected);
+                }
+            }
+        }
+
+        if (function_exists('mime_content_type')) {
+            $detected = @mime_content_type($filePath);
+            if (is_string($detected) && trim($detected) !== '') {
+                return trim($detected);
+            }
+        }
+
+        $ext = strtolower((string) pathinfo($filePath, PATHINFO_EXTENSION));
+        $mimeMap = array(
+            'pdf' => 'application/pdf',
+            'png' => 'image/png',
+            'jpg' => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'webp' => 'image/webp',
+        );
+
+        return isset($mimeMap[$ext]) ? $mimeMap[$ext] : 'application/octet-stream';
+    }
+}
+
 if (!function_exists('shopeeOmsFindPreferredTokenSetting')) {
     function shopeeOmsFindPreferredTokenSetting($connect)
     {
@@ -2397,6 +2493,191 @@ if (!function_exists('shopeeOmsBuildWarehouseMessage')) {
     }
 }
 
+if (!function_exists('shopeeOmsNormalizeAttachmentRelativePath')) {
+    function shopeeOmsNormalizeAttachmentRelativePath($path)
+    {
+        $path = trim((string) $path);
+        if ($path === '') {
+            return '';
+        }
+
+        $path = str_replace('\\', '/', $path);
+        $path = preg_replace('#^https?://[^/]+/#i', '', $path);
+        $path = preg_replace('#^/?images_server/#i', '', $path);
+        $path = ltrim((string) $path, '/');
+
+        if (stripos($path, 'attachment/') !== 0) {
+            $pos = stripos($path, 'attachment/');
+            if ($pos !== false) {
+                $path = substr($path, $pos);
+            }
+        }
+
+        if (strpos($path, 'attachment/') !== 0) {
+            return '';
+        }
+
+        return $path;
+    }
+}
+
+if (!function_exists('shopeeOmsExtractPositiveIds')) {
+    function shopeeOmsExtractPositiveIds($rawValue)
+    {
+        $values = is_array($rawValue) ? $rawValue : explode(',', (string) $rawValue);
+        $ids = array();
+        foreach ($values as $value) {
+            $value = trim((string) $value);
+            if ($value !== '' && ctype_digit($value)) {
+                $intValue = (int) $value;
+                if ($intValue > 0) {
+                    $ids[] = $intValue;
+                }
+            }
+        }
+
+        return array_values(array_unique($ids));
+    }
+}
+
+if (!function_exists('shopeeOmsSanitizeSqlAccountFolderName')) {
+    function shopeeOmsSanitizeSqlAccountFolderName($name)
+    {
+        $folder = strtolower(preg_replace('/[^a-zA-Z0-9_-]/', '_', (string) $name));
+        $folder = trim((string) $folder, '_');
+        return $folder !== '' ? $folder : 'sqlaccount';
+    }
+}
+
+if (!function_exists('shopeeOmsResolveSqlAccountFolderFromBrandIds')) {
+    function shopeeOmsResolveSqlAccountFolderFromBrandIds($connect, $brandIds)
+    {
+        if (!($connect instanceof mysqli)) {
+            return 'sqlaccount';
+        }
+
+        $brandIds = shopeeOmsExtractPositiveIds($brandIds);
+        if (empty($brandIds)) {
+            return 'sqlaccount';
+        }
+
+        $brandIdList = implode(',', array_map('intval', $brandIds));
+        $sql = "SELECT s.name AS sql_account_name
+                FROM `" . BRAND . "` b
+                LEFT JOIN `" . COMPANY . "` c ON c.id = b.company
+                LEFT JOIN `" . SQL_ACC . "` s ON s.id = c.sql_account_id
+                WHERE b.id IN (" . $brandIdList . ") AND b.status = 'A'
+                ORDER BY FIELD(b.id, " . $brandIdList . ")
+                LIMIT 1";
+        $result = mysqli_query($connect, $sql);
+        if ($result && ($row = mysqli_fetch_assoc($result))) {
+            return shopeeOmsSanitizeSqlAccountFolderName(isset($row['sql_account_name']) ? $row['sql_account_name'] : '');
+        }
+
+        return 'sqlaccount';
+    }
+}
+
+if (!function_exists('shopeeOmsResolveSqlAccountFolderFromOrderData')) {
+    function shopeeOmsResolveSqlAccountFolderFromOrderData($connect, $brandIds, $packageIds = array())
+    {
+        $folder = shopeeOmsResolveSqlAccountFolderFromBrandIds($connect, $brandIds);
+        if ($folder !== 'sqlaccount') {
+            return $folder;
+        }
+
+        if (!($connect instanceof mysqli)) {
+            return 'sqlaccount';
+        }
+
+        $packageIds = shopeeOmsExtractPositiveIds($packageIds);
+        if (empty($packageIds)) {
+            return 'sqlaccount';
+        }
+
+        $packageIdList = implode(',', array_map('intval', $packageIds));
+        $sql = "SELECT brand FROM `" . PKG . "` WHERE id IN (" . $packageIdList . ") ORDER BY FIELD(id, " . $packageIdList . ")";
+        $result = mysqli_query($connect, $sql);
+        if ($result) {
+            $packageBrandIds = array();
+            while ($row = mysqli_fetch_assoc($result)) {
+                $packageBrandIds = array_merge($packageBrandIds, shopeeOmsExtractPositiveIds(isset($row['brand']) ? $row['brand'] : ''));
+            }
+            if (!empty($packageBrandIds)) {
+                return shopeeOmsResolveSqlAccountFolderFromBrandIds($connect, $packageBrandIds);
+            }
+        }
+
+        return 'sqlaccount';
+    }
+}
+
+if (!function_exists('shopeeOmsBuildAirbillAttachmentRelativeDir')) {
+    function shopeeOmsBuildAirbillAttachmentRelativeDir($connect, $brandIds, $packageIds = array(), $pageName = 'shopee_order_request')
+    {
+        $safePage = preg_replace('/[^a-zA-Z0-9_-]/', '_', (string) $pageName);
+        if ($safePage === '') {
+            $safePage = 'shopee_order_request';
+        }
+
+        $sqlAccountFolder = shopeeOmsResolveSqlAccountFolderFromOrderData($connect, $brandIds, $packageIds);
+        return 'attachment/' . $sqlAccountFolder . '/' . substr((string) comYMD, 0, 4) . '/' . substr((string) comYMD, 4, 2) . '/' . $safePage . '/';
+    }
+}
+
+if (!function_exists('shopeeOmsStoreAirbillAttachmentUpload')) {
+    function shopeeOmsStoreAirbillAttachmentUpload($fileInfo, $connect, $brandIds, $packageIds = array(), $pageName = 'shopee_order_request', $allowedExt = array('png', 'jpg', 'jpeg', 'pdf'))
+    {
+        if (!is_array($fileInfo) || !isset($fileInfo['tmp_name']) || !isset($fileInfo['name'])) {
+            return array('success' => false, 'path' => '', 'message' => 'No file uploaded.');
+        }
+
+        $uploadError = isset($fileInfo['error']) ? (int) $fileInfo['error'] : UPLOAD_ERR_OK;
+        if ($uploadError !== UPLOAD_ERR_OK) {
+            return array('success' => false, 'path' => '', 'message' => 'Failed to upload the airbill attachment.');
+        }
+
+        $originalName = basename((string) $fileInfo['name']);
+        $ext = strtolower((string) pathinfo($originalName, PATHINFO_EXTENSION));
+        if (!in_array($ext, $allowedExt, true)) {
+            return array('success' => false, 'path' => '', 'message' => 'Only allow PNG, JPG, JPEG or PDF file');
+        }
+
+        $relativeDir = shopeeOmsBuildAirbillAttachmentRelativeDir($connect, $brandIds, $packageIds, $pageName);
+        $targetFsDir = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relativeDir);
+        if (!is_dir($targetFsDir)) {
+            @mkdir($targetFsDir, 0777, true);
+        }
+        if (!is_dir($targetFsDir)) {
+            return array('success' => false, 'path' => '', 'message' => 'Failed to create airbill attachment directory.');
+        }
+
+        $baseName = (string) pathinfo($originalName, PATHINFO_FILENAME);
+        $safeBase = preg_replace('/[^a-zA-Z0-9_-]/', '_', $baseName);
+        $safeBase = trim((string) $safeBase, '_');
+        if ($safeBase === '') {
+            $safeBase = 'airbill_attachment';
+        }
+
+        $targetName = $safeBase . ($ext !== '' ? '.' . $ext : '');
+        $targetFile = $targetFsDir . $targetName;
+        if (is_file($targetFile)) {
+            $targetName = $safeBase . '_' . date('Ymd_His') . '_' . mt_rand(1000, 9999) . ($ext !== '' ? '.' . $ext : '');
+            $targetFile = $targetFsDir . $targetName;
+        }
+
+        if (!move_uploaded_file((string) $fileInfo['tmp_name'], $targetFile)) {
+            return array('success' => false, 'path' => '', 'message' => 'Failed to upload the airbill attachment.');
+        }
+
+        return array(
+            'success' => true,
+            'path' => shopeeOmsNormalizeAttachmentRelativePath($relativeDir . $targetName),
+            'message' => '',
+        );
+    }
+}
+
 if (!function_exists('shopeeOmsResolveAirbillAttachmentFsPath')) {
     function shopeeOmsResolveAirbillAttachmentFsPath($attachmentValue)
     {
@@ -2410,8 +2691,9 @@ if (!function_exists('shopeeOmsResolveAirbillAttachmentFsPath')) {
             return '';
         }
 
-        if (strpos($attachmentValue, 'attachment/') === 0) {
-            return $rootDir . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $attachmentValue);
+        $normalizedAttachmentPath = shopeeOmsNormalizeAttachmentRelativePath($attachmentValue);
+        if ($normalizedAttachmentPath !== '') {
+            return $rootDir . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $normalizedAttachmentPath);
         }
 
         $relativeDir = trim((string) (defined('img_server') ? img_server : '/images_server/'), '/\\') . '/shopee_airbill_attachment/';
@@ -2697,28 +2979,96 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
         $httpCode = 0;
         $attachmentValue = isset($notificationInfo['airbill_attachment']) ? (string) $notificationInfo['airbill_attachment'] : '';
         $attachmentFsPath = shopeeOmsResolveAirbillAttachmentFsPath($attachmentValue);
+        $hasReadableAttachment = ($attachmentFsPath !== '' && file_exists($attachmentFsPath) && is_readable($attachmentFsPath));
+        $messageText = (string) (isset($notificationInfo['text']) ? $notificationInfo['text'] : '');
         $response = false;
+        $finalResponse = false;
+        $documentSent = false;
+        $messageSent = false;
 
-        if ($attachmentFsPath !== '' && file_exists($attachmentFsPath) && is_readable($attachmentFsPath)) {
+        if ($hasReadableAttachment) {
             $apiUrl = 'https://api.telegram.org/bot' . $botToken . '/sendDocument';
+            $documentCaption = trim((string) basename($attachmentFsPath));
+            if ($documentCaption !== '') {
+                $documentCaption = 'Airbill Attachment: ' . $documentCaption;
+            }
             $payload = array(
                 'chat_id' => $chatId,
-                'caption' => (string) (isset($notificationInfo['text']) ? $notificationInfo['text'] : ''),
-                'document' => new CURLFile($attachmentFsPath, mime_content_type($attachmentFsPath) ?: 'application/octet-stream', basename($attachmentFsPath)),
+                'caption' => $documentCaption,
+                'document' => new CURLFile($attachmentFsPath, shopeeOmsDetectFileMimeType($attachmentFsPath), basename($attachmentFsPath)),
             );
             $response = shopeeOmsTelegramMultipartRequest($apiUrl, $payload, $errorMessage, $httpCode);
+            $documentDecoded = json_decode((string) $response, true);
+            $documentSent = (is_array($documentDecoded) && !empty($documentDecoded['ok']));
+
+            if ($documentSent && $messageText !== '') {
+                $messageUrl = 'https://api.telegram.org/bot' . $botToken . '/sendMessage';
+                $messagePayload = array(
+                    'chat_id' => $chatId,
+                    'text' => $messageText,
+                    'disable_web_page_preview' => false,
+                );
+                $messageError = '';
+                $messageHttpCode = 0;
+                $messageResponse = shopeeOmsTelegramRequest($messageUrl, $messagePayload, $messageError, $messageHttpCode);
+                $messageDecoded = json_decode((string) $messageResponse, true);
+                $messageSent = (is_array($messageDecoded) && !empty($messageDecoded['ok']));
+
+                if (!$messageSent) {
+                    $errorMessage = shopeeOmsTelegramDescribeResponse($messageResponse, $messageError !== '' ? $messageError : 'Telegram warehouse summary message was not sent.');
+                    $httpCode = $messageHttpCode > 0 ? $messageHttpCode : $httpCode;
+                    $finalResponse = $messageResponse;
+                } else {
+                    $finalResponse = $messageResponse;
+                }
+            } else {
+                if (!$documentSent) {
+                    $errorMessage = shopeeOmsTelegramDescribeResponse($response, $errorMessage !== '' ? $errorMessage : 'Telegram warehouse attachment upload was not sent.');
+                }
+                $messageSent = ($messageText === '');
+                $finalResponse = $response;
+            }
+
+            if (!$documentSent && $messageText !== '') {
+                $fallbackUrl = 'https://api.telegram.org/bot' . $botToken . '/sendMessage';
+                $fallbackPayload = array(
+                    'chat_id' => $chatId,
+                    'text' => $messageText,
+                    'disable_web_page_preview' => false,
+                );
+                $fallbackError = '';
+                $fallbackHttpCode = 0;
+                $fallbackResponse = shopeeOmsTelegramRequest($fallbackUrl, $fallbackPayload, $fallbackError, $fallbackHttpCode);
+                $fallbackDecoded = json_decode((string) $fallbackResponse, true);
+                if (is_array($fallbackDecoded) && !empty($fallbackDecoded['ok'])) {
+                    $finalResponse = $fallbackResponse;
+                } else if ($fallbackError !== '' || $fallbackHttpCode > 0) {
+                    $errorMessage .= ($errorMessage !== '' ? ' ' : '') . shopeeOmsTelegramDescribeResponse($fallbackResponse, $fallbackError !== '' ? $fallbackError : 'Telegram fallback summary message was not sent.');
+                    if ($fallbackHttpCode > 0) {
+                        $httpCode = $fallbackHttpCode;
+                    }
+                    $finalResponse = $fallbackResponse;
+                }
+            }
         } else {
             $apiUrl = 'https://api.telegram.org/bot' . $botToken . '/sendMessage';
             $payload = array(
                 'chat_id' => $chatId,
-                'text' => (string) (isset($notificationInfo['text']) ? $notificationInfo['text'] : ''),
+                'text' => $messageText,
                 'disable_web_page_preview' => false,
             );
             $response = shopeeOmsTelegramRequest($apiUrl, $payload, $errorMessage, $httpCode);
+            $messageDecoded = json_decode((string) $response, true);
+            $messageSent = (is_array($messageDecoded) && !empty($messageDecoded['ok']));
+            if (!$messageSent) {
+                $errorMessage = shopeeOmsTelegramDescribeResponse($response, $errorMessage !== '' ? $errorMessage : 'Telegram warehouse notification was not sent.');
+            }
+            $finalResponse = $response;
         }
 
-        $decoded = json_decode((string) $response, true);
-        $isSent = (is_array($decoded) && !empty($decoded['ok']));
+        $isSent = $hasReadableAttachment
+            ? ($documentSent && $messageSent)
+            : $messageSent;
         $resultMessage = $isSent ? 'Telegram warehouse notification sent successfully.' : (($errorMessage !== '' ? $errorMessage : 'Telegram warehouse notification was not sent.') . ($httpCode > 0 ? (' HTTP ' . $httpCode . '.') : ''));
 
         if ($financeConnect instanceof mysqli) {
@@ -2868,7 +3218,9 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
             $tokenResult = shopeeOmsCreateWarehouseToken($cmsConnect, $financeConnect, $freshOrderRow, $actorUserId);
             if (!empty($tokenResult['success']) && !empty($tokenResult['token_row']) && !empty($tokenResult['notification'])) {
                 $notifyResult = shopeeOmsSendWarehouseNotification($cmsConnect, $financeConnect, $tokenResult['token_row'], $tokenResult['notification']);
-                mysqli_query($financeConnect, "UPDATE `" . SHOPEE_SG_ORDER_REQ . "` SET `step_a_sent_at` = NOW() WHERE id = " . $orderId . " LIMIT 1");
+                if (!empty($notifyResult['sent'])) {
+                    mysqli_query($financeConnect, "UPDATE `" . SHOPEE_SG_ORDER_REQ . "` SET `step_a_sent_at` = NOW() WHERE id = " . $orderId . " LIMIT 1");
+                }
                 $stepAResult = array(
                     'token_result' => $tokenResult,
                     'notify_result' => $notifyResult,
@@ -3310,6 +3662,70 @@ if (!function_exists('shopeeOmsGetDailyFlowReport')) {
     }
 }
 
+if (!function_exists('shopeeOmsRunOverduePostponedAutoMove')) {
+    function shopeeOmsRunOverduePostponedAutoMove($cmsConnect, $financeConnect)
+    {
+        if (!($financeConnect instanceof mysqli)) {
+            return 0;
+        }
+
+        $movedCount = 0;
+        $todayYmd = date('Y-m-d');
+        $sql = "SELECT id, delay_remark, estimated_received_date
+            FROM `" . SHOPEE_SG_ORDER_REQ . "`
+            WHERE status = 'A'
+              AND order_status IN ('WR', 'AED', 'Waiting Receive', 'Assigned Estimate Date')";
+        $result = mysqli_query($financeConnect, $sql);
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $estimatedReceivedDate = trim((string) (isset($row['estimated_received_date']) ? $row['estimated_received_date'] : ''));
+                if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $estimatedReceivedDate)) {
+                    continue;
+                }
+                if ($estimatedReceivedDate >= $todayYmd) {
+                    continue;
+                }
+
+                $delayRemark = trim((string) (isset($row['delay_remark']) ? $row['delay_remark'] : ''));
+                if ($delayRemark === '') {
+                    $delayRemark = 'Auto postponed: estimated received date passed without Confirm Received action.';
+                }
+
+                $transitionResult = shopeeOmsExecuteTransition($cmsConnect, $financeConnect, (int) $row['id'], 'PD', array(
+                    'actor_user_id' => 'SYSTEM',
+                    'actor_user_group_id' => 1,
+                    'source_page' => 'OMS Housekeeping',
+                    'remark' => 'Auto move after estimate received date passed without Confirm Received.',
+                    'action' => 'auto_postpone_overdue',
+                    'skip_permission' => true,
+                    'allow_auto_follow_up' => false,
+                    'field_updates' => array(
+                        'delay_remark' => $delayRemark,
+                    ),
+                ));
+                if (!empty($transitionResult['success'])) {
+                    $movedCount++;
+                }
+            }
+        }
+
+        return $movedCount;
+    }
+}
+
+if (!function_exists('shopeeOmsEnsureRealtimePostponedSync')) {
+    function shopeeOmsEnsureRealtimePostponedSync($cmsConnect, $financeConnect)
+    {
+        static $hasRun = false;
+        if ($hasRun) {
+            return 0;
+        }
+
+        $hasRun = true;
+        return shopeeOmsRunOverduePostponedAutoMove($cmsConnect, $financeConnect);
+    }
+}
+
 if (!function_exists('shopeeOmsRunFourteenDayAutoMove')) {
     function shopeeOmsRunFourteenDayAutoMove($cmsConnect, $financeConnect)
     {
@@ -3449,6 +3865,51 @@ if (!function_exists('shopeeOmsDeductInventoryForOrder')) {
                 'message' => $exception->getMessage(),
             );
         }
+    }
+}
+
+if (!function_exists('shopeeOmsFinalizeInitialShippedOrder')) {
+    function shopeeOmsFinalizeInitialShippedOrder($cmsConnect, $financeConnect, $orderId, $actorUserId = 'SYSTEM', $actorUserGroupId = 0, $sourcePage = 'Shopee OMS')
+    {
+        $orderId = (int) $orderId;
+        if (!($cmsConnect instanceof mysqli) || !($financeConnect instanceof mysqli) || $orderId <= 0) {
+            return array('success' => false, 'message' => 'Unable to process initial Shipped status.');
+        }
+
+        $orderRow = shopeeOmsLoadOrder($financeConnect, $orderId);
+        if (empty($orderRow)) {
+            return array('success' => false, 'message' => 'Order not found.');
+        }
+
+        $currentStatus = shopeeOmsNormalizeStatusCode(isset($orderRow['order_status']) ? $orderRow['order_status'] : '');
+        if ($currentStatus !== 'SP') {
+            return array('success' => false, 'message' => 'Initial shipped handling only supports Shipped orders.');
+        }
+
+        $deductResult = shopeeOmsDeductInventoryForOrder($cmsConnect, $financeConnect, $orderRow, $actorUserId, 'initial_shipped_status');
+        if (empty($deductResult['success'])) {
+            return $deductResult;
+        }
+
+        $transitionResult = shopeeOmsExecuteTransition($cmsConnect, $financeConnect, $orderId, 'WAERD', array(
+            'actor_user_id' => $actorUserId,
+            'actor_user_group_id' => (int) $actorUserGroupId,
+            'source_page' => $sourcePage,
+            'remark' => 'Auto move after initial Shipped status.',
+            'action' => 'auto_post_ship',
+            'skip_permission' => true,
+            'allow_auto_follow_up' => false,
+        ));
+        if (empty($transitionResult['success'])) {
+            return $transitionResult;
+        }
+
+        return array(
+            'success' => true,
+            'message' => 'Warehouse inventory deducted and order moved to ' . shopeeOmsGetStatusLabel('WAERD') . '.',
+            'deduct_result' => $deductResult,
+            'transition_result' => $transitionResult,
+        );
     }
 }
 
