@@ -26,8 +26,9 @@ $sorStatusOptions = function_exists('shopeeOmsGetEditableStatusOptions') ? shope
 $sorAirbillAttachmentPath = img_server . 'shopee_airbill_attachment/';
 $sorAirbillAttachmentUrl = rtrim((string) $SITEURL, '/') . '/' . trim((string) $sorAirbillAttachmentPath, '/\\') . '/';
 $sorLocalTelegramFailureMessage = '';
-$sorBuildLocalTelegramFailureMessage = function ($notifyResult) use ($siteOrlocalMode) {
-    if (!isset($siteOrlocalMode) || $siteOrlocalMode || !is_array($notifyResult) || !empty($notifyResult['sent'])) {
+$sorIsLiveSite = isset($siteOrlocalMode) ? (bool) $siteOrlocalMode : true;
+$sorBuildLocalTelegramFailureMessage = function ($notifyResult) use ($sorIsLiveSite) {
+    if ($sorIsLiveSite || !is_array($notifyResult) || !empty($notifyResult['sent'])) {
         return '';
     }
 
@@ -36,7 +37,7 @@ $sorBuildLocalTelegramFailureMessage = function ($notifyResult) use ($siteOrloca
         $reason = 'Unknown Telegram send failure.';
     }
 
-    return "Localhost debug: Step A Telegram message failed to send.\nReason: " . $reason;
+    return "Telegram message failed to send.\nReason: " . $reason;
 };
 
 // to display data to input
