@@ -252,6 +252,19 @@ if (post('actionBtn')) {
         $resolved = array_values(array_unique($resolved));
         return implode(',', $resolved);
     };
+    $normalizeAmount = function ($value) {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return '';
+        }
+
+        $numericValue = (float) $value;
+        if (abs($numericValue) < 0.00001) {
+            $numericValue = 0.0;
+        }
+
+        return number_format($numericValue, 2, '.', '');
+    };
 
     $sor_acc = postSpaceFilter('sor_acc');
     $sor_curr = postSpaceFilter('sor_curr_hidden');
@@ -278,8 +291,29 @@ if (post('actionBtn')) {
     $sor_serv = postSpaceFilter('sor_serv');
     $sor_trans = postSpaceFilter('sor_trans');
     $sor_ams = postSpaceFilter('sor_ams');
-    $sor_fees = postSpaceFilter('sor_fees');
-    $sor_final = postSpaceFilter('sor_final');
+    $postedSorFees = postSpaceFilter('sor_fees');
+    $postedSorFinal = postSpaceFilter('sor_final');
+    $sor_price = $normalizeAmount($sor_price);
+    $sor_voucher = $normalizeAmount($sor_voucher);
+    $sor_shipping = $normalizeAmount($sor_shipping);
+    $sor_serv = $normalizeAmount($sor_serv);
+    $sor_trans = $normalizeAmount($sor_trans);
+    $sor_ams = $normalizeAmount($sor_ams);
+    $computedSorFees = (float) ($sor_serv === '' ? 0 : $sor_serv)
+        + (float) ($sor_trans === '' ? 0 : $sor_trans)
+        + (float) ($sor_ams === '' ? 0 : $sor_ams);
+    $normalizedPostedSorFees = $normalizeAmount($postedSorFees);
+    $sor_fees = $normalizedPostedSorFees === ''
+        ? number_format($computedSorFees, 2, '.', '')
+        : $normalizedPostedSorFees;
+    $computedSorFinal = (float) ($sor_price === '' ? 0 : $sor_price)
+        - (float) ($sor_voucher === '' ? 0 : $sor_voucher)
+        - (float) ($sor_shipping === '' ? 0 : $sor_shipping)
+        - $computedSorFees;
+    $normalizedPostedSorFinal = $normalizeAmount($postedSorFinal);
+    $sor_final = $normalizedPostedSorFinal === ''
+        ? number_format($computedSorFinal, 2, '.', '')
+        : $normalizedPostedSorFinal;
     $sor_remark = postSpaceFilter('sor_remark');
     $sor_order_status = shopeeOmsNormalizeStatusCode(postSpaceFilter('sor_order_status'));
     if ($sor_order_status === '') {
@@ -1420,7 +1454,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                             </div>
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label class="form-label form_lbl" for="sor_airbill">Airbill No</label>
+                            <label class="form-label form_lbl" for="sor_airbill">Airbill No<span class="requireRed">*</span></label>
                             <input class="form-control" type="text" name="sor_airbill" id="sor_airbill" value="<?php
                                 if (isset($sor_airbill)) {
                                     echo htmlspecialchars($sor_airbill);
@@ -1439,7 +1473,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                 <div class="form-group">
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label class="form-label form_lbl" for="sor_customer_name">Customer Name</label>
+                            <label class="form-label form_lbl" for="sor_customer_name">Customer Name<span class="requireRed">*</span></label>
                             <input class="form-control" type="text" name="sor_customer_name" id="sor_customer_name" value="<?php
                                 if (isset($sor_customer_name)) {
                                     echo htmlspecialchars($sor_customer_name);
@@ -1458,7 +1492,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                 <div class="form-group">
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label class="form-label form_lbl" for="sor_airbill_attachment">Airbill Attachment</label>
+                            <label class="form-label form_lbl" for="sor_airbill_attachment">Airbill Attachment<span class="requireRed">*</span></label>
                             <input class="form-control" type="file" name="sor_airbill_attachment" id="sor_airbill_attachment" <?= $act == '' ? 'disabled' : '' ?>>
                             <?php if (isset($row['airbill_attachment']) && $row['airbill_attachment']) { ?>
                                 <div id="err_msg">
@@ -1508,8 +1542,8 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                 <div class="form-group">
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label class="form-label form_lbl" for="sor_customer_address">Customer Address</label>
-                            <textarea class="form-control" name="sor_customer_address" id="sor_customer_address" rows="2" <?= $act == '' ? 'disabled' : '' ?>><?php
+                            <label class="form-label form_lbl" for="sor_customer_address">Customer Address<span class="requireRed">*</span></label>
+                            <textarea class="form-control" name="sor_customer_address" id="sor_customer_address" rows="2" <?= $act == '' ? 'disabled' : '' ?> <?= isset($updateAirbillValue) && $updateAirbillValue === 'yes' ? 'required' : '' ?>><?php
                                 if (isset($sor_customer_address)) {
                                     echo htmlspecialchars($sor_customer_address);
                                 } else if (isset($row['customer_address'])) {

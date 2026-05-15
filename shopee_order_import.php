@@ -3502,11 +3502,11 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                             </div>
                                         </div>
                                         <div class="col-12 col-md-3">
-                                            <label class="form-label" for="airbill_no">Airbill No</label>
+                                            <label class="form-label" for="airbill_no">Airbill No<span class="requireRed">*</span></label>
                                             <input class="form-control" type="text" id="airbill_no" name="airbill_no" value="<?= htmlspecialchars(isset($previewData['airbill_no']) ? $previewData['airbill_no'] : '') ?>">
                                         </div>
                                         <div class="col-12 col-md-6">
-                                            <label class="form-label" for="airbill_attachment">Airbill Attachment</label>
+                                            <label class="form-label" for="airbill_attachment">Airbill Attachment<span class="requireRed">*</span></label>
                                             <input class="form-control" type="file" id="airbill_attachment" name="airbill_attachment">
                                             <?php if (!empty($previewData['airbill_attachment'])) { ?>
                                                 <small class="text-danger d-block mt-1">Current Attachment: <?= htmlspecialchars($previewData['airbill_attachment']) ?></small>
@@ -3517,7 +3517,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
 
                                     <div class="row mb-3">
                                         <div class="col-12 col-md-6">
-                                            <label class="form-label" for="customer_name">Customer Name</label>
+                                            <label class="form-label" for="customer_name">Customer Name<span class="requireRed">*</span></label>
                                             <input class="form-control" type="text" id="customer_name" name="customer_name" value="<?= htmlspecialchars(isset($previewData['customer_name']) ? $previewData['customer_name'] : '') ?>">
                                         </div>
                                         <div class="col-12 col-md-6">
@@ -3540,7 +3540,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
 
                                     <div class="row mb-3">
                                         <div class="col-12 col-md-6">
-                                            <label class="form-label" for="customer_address">Customer Address</label>
+                                            <label class="form-label" for="customer_address">Customer Address<span class="requireRed">*</span></label>
                                             <textarea class="form-control" id="customer_address" name="customer_address" rows="2"><?= htmlspecialchars(isset($previewData['customer_address']) ? $previewData['customer_address'] : '') ?></textarea>
                                         </div>
                                     </div>
