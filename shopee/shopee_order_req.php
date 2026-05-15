@@ -2095,7 +2095,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
         unset($_SESSION['tempValConfirmBox']);
         echo $clearLocalStorage;
         if ($sorLocalTelegramFailureMessage !== '') {
-            echo '<script>alert("' . addslashes($sorLocalTelegramFailureMessage) . '");</script>';
+            echo '<script>alert(' . json_encode($sorLocalTelegramFailureMessage) . ');</script>';
         }
         echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
     }
