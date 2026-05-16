@@ -62,11 +62,35 @@ if (!($dataID) && !($act)) {
     </script>';
 }
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
-    $scr_username = trim((string) $_POST['scr_username']); 
-    $scr_pic = trim((string) $_POST['scr_pic_hidden']);
-    $scr_country = trim((string) $_POST['scr_country_hidden']);
-    $scr_brand = trim((string) $_POST['scr_brand_hidden']);
-    $scr_series = trim((string) $_POST['scr_series_hidden']);
+    $scr_username = trim((string) $_POST['scr_username']);
+    $scr_pic_name = trim((string) $_POST['scr_pic']);
+    $scr_country_name = trim((string) $_POST['scr_country']);
+    $scr_brand_name = trim((string) $_POST['scr_brand']);
+    $scr_series_name = trim((string) $_POST['scr_series']);
+    $scr_resolve_lookup_id = function ($rawId, $displayValue, $tableName, $columnName) use ($connect) {
+        $rawId = trim((string) $rawId);
+        if ($rawId !== '' && ctype_digit($rawId) && (int) $rawId > 0) {
+            return $rawId;
+        }
+
+        $displayValue = trim((string) $displayValue);
+        if ($displayValue === '') {
+            return '';
+        }
+
+        $safeDisplayValue = mysqli_real_escape_string($connect, $displayValue);
+        $lookupRst = getData('id', $columnName . " = '$safeDisplayValue'", 'LIMIT 1', $tableName, $connect);
+        if ($lookupRst && $lookupRst->num_rows > 0) {
+            $lookupRow = $lookupRst->fetch_assoc();
+            return isset($lookupRow['id']) ? trim((string) $lookupRow['id']) : '';
+        }
+
+        return '';
+    };
+    $scr_pic = $scr_resolve_lookup_id(isset($_POST['scr_pic_hidden']) ? $_POST['scr_pic_hidden'] : '', $scr_pic_name, USR_USER, 'name');
+    $scr_country = $scr_resolve_lookup_id(isset($_POST['scr_country_hidden']) ? $_POST['scr_country_hidden'] : '', $scr_country_name, COUNTRIES, 'nicename');
+    $scr_brand = $scr_resolve_lookup_id(isset($_POST['scr_brand_hidden']) ? $_POST['scr_brand_hidden'] : '', $scr_brand_name, BRAND, 'name');
+    $scr_series = $scr_resolve_lookup_id(isset($_POST['scr_series_hidden']) ? $_POST['scr_series_hidden'] : '', $scr_series_name, BRD_SERIES, 'name');
     $duplicate_check_query = "SELECT * FROM shopee_customer_info WHERE buyer_username = '$scr_username'";
     $duplicate_result = mysqli_query($finance_connect, $duplicate_check_query);
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
@@ -1097,6 +1121,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
         .shopee-inline-invalid {
             border-color: #dc3545 !important;
         }
+
     </style>
 </head>
 
@@ -1631,39 +1656,39 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                 <div class="col-md-4 mb-3">
                     <button type="button" onclick="toggleNewBuyer()">Create New Customer ID</button>
                 </div>
-                <form id="myForm" method="POST" novalidate>
+                <div id="myForm" novalidate>
                 <div id="new_customer_section" style="display: none;">
 
                 <div class="row">
                     <div class="col-md-4 mb-3 autocomplete">
                         <label class="form-label form_lbl" for="scr_username">Shopee Buyer Username<span class="requireRed">*</span></label>
-                        <input class="form-control" type="text" id="scr_username" name="scr_username" required>
+                        <input class="form-control" type="text" id="scr_username" name="scr_username" data-new-customer-required="1">
                     </div>
 
                     <div class="col-md-4 mb-3 autocomplete">
                         <label class="form-label form_lbl" for="scr_pic">Sales Person In Charge<span class="requireRed">*</span></label>
-                        <input class="form-control" type="text" id="scr_pic" name="scr_pic" required>                        
+                        <input class="form-control" type="text" id="scr_pic" name="scr_pic" data-new-customer-required="1">                        
                         <input class="form-control" type="hidden" id="scr_pic_hidden" name="scr_pic_hidden">
 
                     </div>
 
                     <div class="col-md-4 mb-3 autocomplete">
                         <label class="form-label form_lbl" for="scr_country">Country<span class="requireRed">*</span></label>
-                        <input class="form-control" type="text" id="scr_country" name="scr_country" required>
+                        <input class="form-control" type="text" id="scr_country" name="scr_country" data-new-customer-required="1">
                         <input class="form-control" type="hidden" id="scr_country_hidden" name="scr_country_hidden">
                     </div>
                     <div class="col-md-4 mb-3 autocomplete">
                         <label class="form-label form_lbl" for="scr_brand">Brand<span class="requireRed">*</span></label>
-                        <input class="form-control" type="text" id="scr_brand" name="scr_brand" required> <input class="form-control" type="hidden" id="scr_brand_hidden" name="scr_brand_hidden">
+                        <input class="form-control" type="text" id="scr_brand" name="scr_brand" data-new-customer-required="1"> <input class="form-control" type="hidden" id="scr_brand_hidden" name="scr_brand_hidden">
                     </div>
 
                     <div class="col-md-4 mb-3 autocomplete">
                         <label class="form-label form_lbl" for="scr_series">Series<span class="requireRed">*</span></label>
-                        <input class="form-control" type="text" id="scr_series" name="scr_series" required><input class="form-control" type="hidden" id="scr_series_hidden" name="scr_series_hidden">
+                        <input class="form-control" type="text" id="scr_series" name="scr_series" data-new-customer-required="1"><input class="form-control" type="hidden" id="scr_series_hidden" name="scr_series_hidden">
                     </div>
                 </div>
-                <button type="button" name="submit" id="new_customer_submit_btn">Submit</button>
-                    </form>
+                <button type="button" id="new_customer_submit_btn">Submit</button>
+                    </div>
                 </div>
                 <?php }?>
                 <div class="form-group">
@@ -2136,26 +2161,6 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
     }
     ?>
     <script>
-$(document).ready(function() {
-    $('#myForm').on('submit', function(event) {
-        event.preventDefault(); // Prevent the form from submitting the traditional way
-
-        var formData = $(this).serialize(); // Serialize the form data
-
-        $.ajax({
-            url: 'shopee_order_req.php', // The URL to your PHP script
-            type: 'post',
-            data: formData,
-            success: function(response) {
-                var responseObject = JSON.parse(response);
-            },
-            error: function(xhr, status, error) {
-                $('#responseMessage').html('<p>An error occurred: ' + error + '</p>');
-            }
-        });
-    });
-});
-
         function toggleAirbillFields() {
             var updateAirbill = document.getElementById('sor_update_airbill');
             var updateAirbillToggle = document.getElementById('sor_update_airbill_toggle');
@@ -2211,11 +2216,17 @@ $(document).ready(function() {
                 updateAirbillToggle.addEventListener('change', toggleAirbillFields);
             }
 
-            var newCustomerForm = document.getElementById('myForm');
-            if (newCustomerForm) {
-                var outerOrderForm = document.getElementById('FORForm');
-                var newCustomerSubmitBtn = document.getElementById('new_customer_submit_btn');
-                var newCustomerFields = newCustomerForm.querySelectorAll('input[required]');
+                var newCustomerForm = document.getElementById('myForm');
+                if (newCustomerForm) {
+                    var outerOrderForm = document.getElementById('FORForm');
+                    var newCustomerSubmitBtn = document.getElementById('new_customer_submit_btn');
+                    var newCustomerFields = newCustomerForm.querySelectorAll('[data-new-customer-required="1"]');
+                    var newCustomerLookupFields = [
+                        { textId: 'scr_pic', hiddenId: 'scr_pic_hidden', label: 'Sales Person In Charge' },
+                        { textId: 'scr_country', hiddenId: 'scr_country_hidden', label: 'Country' },
+                        { textId: 'scr_brand', hiddenId: 'scr_brand_hidden', label: 'Brand' },
+                        { textId: 'scr_series', hiddenId: 'scr_series_hidden', label: 'Series' }
+                    ];
 
                 function clearNewCustomerInlineError(field) {
                     if (!field) return;
@@ -2253,6 +2264,21 @@ $(document).ready(function() {
                         }
                     });
 
+                    newCustomerLookupFields.forEach(function (config) {
+                        var textField = document.getElementById(config.textId);
+                        var hiddenField = document.getElementById(config.hiddenId);
+                        if (!textField || !hiddenField || textField.disabled) {
+                            return;
+                        }
+
+                        if (textField.value.trim() !== '' && hiddenField.value.trim() === '') {
+                            showNewCustomerInlineError(textField, config.label + ' must be selected from the suggestion list.');
+                            if (!firstInvalidField) {
+                                firstInvalidField = textField;
+                            }
+                        }
+                    });
+
                     if (firstInvalidField) {
                         firstInvalidField.focus();
                         return false;
@@ -2266,6 +2292,18 @@ $(document).ready(function() {
                         if (field.value.trim() !== '') {
                             clearNewCustomerInlineError(field);
                         }
+                    });
+                });
+
+                newCustomerLookupFields.forEach(function (config) {
+                    var textField = document.getElementById(config.textId);
+                    var hiddenField = document.getElementById(config.hiddenId);
+                    if (!textField || !hiddenField) {
+                        return;
+                    }
+
+                    textField.addEventListener('input', function () {
+                        hiddenField.value = '';
                     });
                 });
 
@@ -2286,7 +2324,7 @@ $(document).ready(function() {
                     submitMarker.value = 'Submit';
                     submitMarker.setAttribute('data-new-customer-submit', '1');
                     outerOrderForm.appendChild(submitMarker);
-                    outerOrderForm.submit();
+                    HTMLFormElement.prototype.submit.call(outerOrderForm);
                 }
 
                 if (newCustomerSubmitBtn) {
