@@ -276,7 +276,23 @@ if ($orderIdFilter !== '') {
 }
 if ($customerFilter !== '') {
     $safeCustomerFilter = mysqli_real_escape_string($finance_connect, $customerFilter);
-    $orderConditions[] = "(customer_name LIKE '%" . $safeCustomerFilter . "%' OR buyer LIKE '%" . $safeCustomerFilter . "%')";
+    $buyerSearchIds = array();
+    $buyerSearchSql = "SELECT id FROM `" . SHOPEE_CUST_INFO . "` WHERE buyer_username LIKE '%" . $safeCustomerFilter . "%'";
+    $buyerSearchRst = mysqli_query($finance_connect, $buyerSearchSql);
+    if ($buyerSearchRst) {
+        while ($buyerSearchRow = mysqli_fetch_assoc($buyerSearchRst)) {
+            $buyerSearchId = isset($buyerSearchRow['id']) ? (int) $buyerSearchRow['id'] : 0;
+            if ($buyerSearchId > 0) {
+                $buyerSearchIds[] = $buyerSearchId;
+            }
+        }
+    }
+
+    $buyerSearchConditions = array("buyer LIKE '%" . $safeCustomerFilter . "%'");
+    if (!empty($buyerSearchIds)) {
+        $buyerSearchConditions[] = "buyer IN (" . implode(',', $buyerSearchIds) . ")";
+    }
+    $orderConditions[] = '(' . implode(' OR ', $buyerSearchConditions) . ')';
 }
 $orderSql = "SELECT * FROM `" . SHOPEE_SG_ORDER_REQ . "` WHERE " . implode(' AND ', $orderConditions) . " ORDER BY CASE WHEN order_status IN ('WAERD', 'Waiting Assign Estimate Received Date') THEN 1 WHEN order_status IN ('WR', 'AED', 'Waiting Receive', 'Assigned Estimate Date') THEN 2 WHEN order_status IN ('PD', 'Postponed') THEN 3 ELSE 4 END, estimated_received_date ASC, date DESC, time DESC, id DESC";
 $orderRst = mysqli_query($finance_connect, $orderSql);
@@ -492,8 +508,8 @@ if ($orderRst) {
                             <input class="form-control" type="text" id="order_id" name="order_id" value="<?= htmlspecialchars($orderIdFilter) ?>" placeholder="Search Order ID (optional)" autocomplete="off">
                         </div>
                         <div>
-                            <label class="form-label" for="customer">Customer</label>
-                            <input class="form-control" type="text" id="customer" name="customer" value="<?= htmlspecialchars($customerFilter) ?>" placeholder="Search Customer (optional)" autocomplete="off">
+                            <label class="form-label" for="customer">Shopee Buyer Username</label>
+                            <input class="form-control" type="text" id="customer" name="customer" value="<?= htmlspecialchars($customerFilter) ?>" placeholder="Search Shopee Buyer Username (optional)" autocomplete="off">
                         </div>
                     </div>
                     <div class="shopee-arrival-filter-actions">
@@ -527,7 +543,7 @@ if ($orderRst) {
                                 <th width="60">S/N</th>
                                 <th>Order ID</th>
                                 <th>Action</th>
-                                <th>Customer</th>
+                                <th>Shopee Buyer Username</th>
                                 <th>Current Status</th>
                                 <th>Shipped Date</th>
                                 <th>Estimated Received Date</th>
@@ -542,16 +558,13 @@ if ($orderRst) {
                                     $statusCode = shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '');
                                     $canAssign = shopeeOmsPassesAssignmentScope($connect, $row, USER_ID, USER_GROUP) && ($statusCode === 'WAERD' ? shopeeOmsHasTransitionPermission($connect, $statusCode, 'WR', USER_GROUP, $row, USER_ID) : true);
                                     $canConfirm = shopeeOmsHasTransitionPermission($connect, $statusCode, 'PR', USER_GROUP, $row, USER_ID);
-                                    $customerName = trim((string) (isset($row['customer_name']) ? $row['customer_name'] : ''));
-                                    if ($customerName === '') {
-                                        $customerName = trim((string) (isset($row['buyer']) ? $row['buyer'] : ''));
-                                        if ($customerName !== '' && ctype_digit($customerName)) {
-                                            $buyerRst = getData('buyer_username', "id='" . (int) $customerName . "'", 'LIMIT 1', SHOPEE_CUST_INFO, $finance_connect);
-                                            if ($buyerRst && $buyerRst->num_rows > 0) {
-                                                $buyerRow = $buyerRst->fetch_assoc();
-                                                if (isset($buyerRow['buyer_username']) && trim((string) $buyerRow['buyer_username']) !== '') {
-                                                    $customerName = trim((string) $buyerRow['buyer_username']);
-                                                }
+                                    $customerName = trim((string) (isset($row['buyer']) ? $row['buyer'] : ''));
+                                    if ($customerName !== '' && ctype_digit($customerName)) {
+                                        $buyerRst = getData('buyer_username', "id='" . (int) $customerName . "'", 'LIMIT 1', SHOPEE_CUST_INFO, $finance_connect);
+                                        if ($buyerRst && $buyerRst->num_rows > 0) {
+                                            $buyerRow = $buyerRst->fetch_assoc();
+                                            if (isset($buyerRow['buyer_username']) && trim((string) $buyerRow['buyer_username']) !== '') {
+                                                $customerName = trim((string) $buyerRow['buyer_username']);
                                             }
                                         }
                                     }
@@ -723,30 +736,33 @@ if ($orderRst) {
         showArrivalStatusPopup(<?= json_encode($statusMessage) ?>);
         <?php } ?>
 
-        var arrivalRowCount = $('#arrival_management_table tbody tr').length;
-        var arrivalManagementTable = new DataTable('#arrival_management_table', {
-            paging: arrivalRowCount > 10,
-            info: arrivalRowCount > 10,
-            searching: false,
-            ordering: true,
-            lengthChange: arrivalRowCount > 10,
-            pageLength: 10,
-            lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],
-            autoWidth: false,
-            order: [],
-            columnDefs: [
-                { orderable: false, searchable: false, targets: [0, 1, 3, 8] }
-            ]
-        });
-        datatableAlignment('arrival_management_table');
-
-        arrivalManagementTable.on('draw', function () {
-            var pageInfo = arrivalManagementTable.page.info();
-            arrivalManagementTable.column(1, { page: 'current' }).nodes().each(function (cell, index) {
-                cell.innerHTML = pageInfo.start + index + 1;
+        var arrivalRowCount = <?= !empty($orderRows) ? count($orderRows) : 0 ?>;
+        var arrivalManagementTable = null;
+        if (arrivalRowCount > 0) {
+            arrivalManagementTable = new DataTable('#arrival_management_table', {
+                paging: arrivalRowCount > 10,
+                info: arrivalRowCount > 10,
+                searching: false,
+                ordering: true,
+                lengthChange: arrivalRowCount > 10,
+                pageLength: 10,
+                lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],
+                autoWidth: false,
+                order: [],
+                columnDefs: [
+                    { orderable: false, searchable: false, targets: [0, 1, 3, 8] }
+                ]
             });
-        });
-        arrivalManagementTable.draw(false);
+            datatableAlignment('arrival_management_table');
+
+            arrivalManagementTable.on('draw', function () {
+                var pageInfo = arrivalManagementTable.page.info();
+                arrivalManagementTable.column(1, { page: 'current' }).nodes().each(function (cell, index) {
+                    cell.innerHTML = pageInfo.start + index + 1;
+                });
+            });
+            arrivalManagementTable.draw(false);
+        }
 
         var checkAll = document.getElementById('check_all_orders');
         if (checkAll) {

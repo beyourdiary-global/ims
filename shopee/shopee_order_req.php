@@ -348,7 +348,6 @@ if (post('actionBtn')) {
         $sor_update_airbill = 'yes';
     }
     $sor_airbill = postSpaceFilter('sor_airbill');
-    $sor_customer_name = postSpaceFilter('sor_customer_name');
     $sor_customer_address = postSpaceFilter('sor_customer_address');
     $sor_airbill_attachment = null;
     if (isset($_FILES["sor_airbill_attachment"]) && $_FILES["sor_airbill_attachment"]["size"] != 0) {
@@ -389,12 +388,10 @@ if (post('actionBtn')) {
                 if ($action === 'updRecord') {
                     $sor_airbill = isset($row['airbill_no']) ? (string) $row['airbill_no'] : '';
                     $sor_airbill_attachment = isset($row['airbill_attachment']) ? (string) $row['airbill_attachment'] : '';
-                    $sor_customer_name = isset($row['customer_name']) ? (string) $row['customer_name'] : '';
                     $sor_customer_address = isset($row['customer_address']) ? (string) $row['customer_address'] : '';
                 } else {
                     $sor_airbill = '';
                     $sor_airbill_attachment = '';
-                    $sor_customer_name = '';
                     $sor_customer_address = '';
                 }
             }
@@ -456,10 +453,6 @@ if (post('actionBtn')) {
             if ($sor_update_airbill === 'yes') {
                 if (trim((string) $sor_airbill) === '') {
                     $airbill_err = "Airbill No cannot be empty when Update Airbill is enabled.";
-                    $error = 1;
-                }
-                if (trim((string) $sor_customer_name) === '') {
-                    $customer_name_err = "Customer Name cannot be empty when Update Airbill is enabled.";
                     $error = 1;
                 }
                 if (trim((string) $sor_customer_address) === '') {
@@ -586,10 +579,6 @@ if (post('actionBtn')) {
                         array_push($newvalarr, $effectiveAirbill);
                         array_push($datafield, 'airbill_no');
                     }
-                    if ($sor_customer_name !== '') {
-                        array_push($newvalarr, $sor_customer_name);
-                        array_push($datafield, 'customer_name');
-                    }
                     if ($sor_customer_address !== '') {
                         array_push($newvalarr, $sor_customer_address);
                         array_push($datafield, 'customer_address');
@@ -618,10 +607,9 @@ if (post('actionBtn')) {
                     $safeSorStatus = mysqli_real_escape_string($finance_connect, $sor_order_status);
                     $safeAirbill = mysqli_real_escape_string($finance_connect, $effectiveAirbill);
                     $safeAirbillAttachment = mysqli_real_escape_string($finance_connect, $sor_airbill_attachment);
-                    $safeCustomerName = mysqli_real_escape_string($finance_connect, $sor_customer_name);
                     $safeCustomerAddress = mysqli_real_escape_string($finance_connect, $sor_customer_address);
 
-                    $query = "INSERT INTO " . $tblName . " (shopee_acc,currency,orderID,date,time,package,package_qty_json,brand,buyer,buyer_pay_meth,pic,customer_name,customer_address,price,voucher,act_shipping_fee,service_fee,trans_fee,ams_fee,fees,final_amt,airbill_no,airbill_attachment,remark,order_status,latest_transition_at,create_by,create_date,create_time) VALUES ('$safeSorAcc','$safeSorCurr','$safeSorOrder','$safeSorDate','$safeSorTime','$safeSorPkg','$safePackageQtySnapshotJson','$safeSorBrand','$safeSorUser','$safeSorPay','$safeSorPic','$safeCustomerName','$safeCustomerAddress','$safeSorPrice','$safeSorVoucher','$safeSorShipping','$safeSorServ','$safeSorTrans','$safeSorAms','$safeSorFees','$safeSorFinal','$safeAirbill','$safeAirbillAttachment','$safeSorRemark','$safeSorStatus',NOW(),'" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . " (shopee_acc,currency,orderID,date,time,package,package_qty_json,brand,buyer,buyer_pay_meth,pic,customer_address,price,voucher,act_shipping_fee,service_fee,trans_fee,ams_fee,fees,final_amt,airbill_no,airbill_attachment,remark,order_status,latest_transition_at,create_by,create_date,create_time) VALUES ('$safeSorAcc','$safeSorCurr','$safeSorOrder','$safeSorDate','$safeSorTime','$safeSorPkg','$safePackageQtySnapshotJson','$safeSorBrand','$safeSorUser','$safeSorPay','$safeSorPic','$safeCustomerAddress','$safeSorPrice','$safeSorVoucher','$safeSorShipping','$safeSorServ','$safeSorTrans','$safeSorAms','$safeSorFees','$safeSorFinal','$safeAirbill','$safeAirbillAttachment','$safeSorRemark','$safeSorStatus',NOW(),'" . USER_ID . "',curdate(),curtime())";
                     $returnData = mysqli_query($finance_connect, $query);
                     if (!$returnData) {
                         throw new Exception('Database Error: ' . mysqli_error($finance_connect));
@@ -814,12 +802,6 @@ if (post('actionBtn')) {
                         array_push($datafield, 'airbill_attachment');
                     }
 
-                    if ((string) (isset($row['customer_name']) ? $row['customer_name'] : '') !== (string) $sor_customer_name) {
-                        array_push($oldvalarr, trim((string) (isset($row['customer_name']) ? $row['customer_name'] : '')) !== '' ? $row['customer_name'] : 'Empty Value');
-                        array_push($chgvalarr, trim((string) $sor_customer_name) !== '' ? $sor_customer_name : 'Empty Value');
-                        array_push($datafield, 'customer_name');
-                    }
-
                     if ((string) (isset($row['customer_address']) ? $row['customer_address'] : '') !== (string) $sor_customer_address) {
                         array_push($oldvalarr, trim((string) (isset($row['customer_address']) ? $row['customer_address'] : '')) !== '' ? $row['customer_address'] : 'Empty Value');
                         array_push($chgvalarr, trim((string) $sor_customer_address) !== '' ? $sor_customer_address : 'Empty Value');
@@ -844,7 +826,6 @@ if (post('actionBtn')) {
                         $query .= "buyer = '$sor_user', ";
                         $query .= "buyer_pay_meth = '$sor_pay', ";
                         $query .= "pic = '$sor_pic', ";
-                        $query .= "customer_name = '" . mysqli_real_escape_string($finance_connect, $sor_customer_name) . "', ";
                         $query .= "customer_address = '" . mysqli_real_escape_string($finance_connect, $sor_customer_address) . "', ";
                         $query .= "price = '$sor_price', ";
                         $query .= "voucher = '$sor_voucher', ";
@@ -866,7 +847,6 @@ if (post('actionBtn')) {
                         if ($returnData) {
                             $newValuesForHistory = array(
                                 'orderID' => $sor_order,
-                                'customer_name' => $sor_customer_name,
                                 'customer_address' => $sor_customer_address,
                                 'package' => $sor_pkg,
                                 'package_qty_json' => $packageQtySnapshotJson,
@@ -1490,25 +1470,6 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                             <?php if (isset($airbill_err)) { ?>
                                 <div id="err_msg">
                                     <span class="mt-n1"><?php echo $airbill_err; ?></span>
-                                </div>
-                            <?php } ?>
-                        </div>
-                    </div>
-                </div>
-                <div class="form-group">
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label form_lbl" for="sor_customer_name">Customer Name<span class="requireRed">*</span></label>
-                            <input class="form-control" type="text" name="sor_customer_name" id="sor_customer_name" value="<?php
-                                if (isset($sor_customer_name)) {
-                                    echo htmlspecialchars($sor_customer_name);
-                                } else if (isset($row['customer_name'])) {
-                                    echo htmlspecialchars($row['customer_name']);
-                                }
-                            ?>" <?= $act == '' ? 'disabled' : '' ?>>
-                            <?php if (isset($customer_name_err)) { ?>
-                                <div id="err_msg">
-                                    <span class="mt-n1"><?php echo $customer_name_err; ?></span>
                                 </div>
                             <?php } ?>
                         </div>
@@ -2166,10 +2127,9 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
             var updateAirbillToggle = document.getElementById('sor_update_airbill_toggle');
             var airbillNo = document.getElementById('sor_airbill');
             var airbillAttachment = document.getElementById('sor_airbill_attachment');
-            var customerName = document.getElementById('sor_customer_name');
             var customerAddress = document.getElementById('sor_customer_address');
             var existingAttachment = document.getElementById('sor_airbill_attachment_value');
-            if (!updateAirbill || !updateAirbillToggle || !airbillNo || !airbillAttachment || !customerName || !customerAddress) {
+            if (!updateAirbill || !updateAirbillToggle || !airbillNo || !airbillAttachment || !customerAddress) {
                 return;
             }
 
@@ -2178,10 +2138,8 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
             var readOnlyMode = "<?= $act ?>" === '';
             airbillNo.disabled = readOnlyMode || !enabled;
             airbillAttachment.disabled = readOnlyMode || !enabled;
-            customerName.disabled = readOnlyMode || !enabled;
             customerAddress.disabled = readOnlyMode || !enabled;
             airbillNo.required = enabled;
-            customerName.required = enabled;
             customerAddress.required = enabled;
             airbillAttachment.required = enabled && (!existingAttachment || existingAttachment.value.trim() === '');
         }
