@@ -452,7 +452,6 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
                 'update_airbill' => 'yes',
                 'airbill_no' => '',
                 'airbill_attachment' => '',
-                'customer_name' => '',
                 'customer_address' => '',
             ];
 
@@ -523,7 +522,6 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
     $buyerInput = postSpaceFilter('buyer');
     $buyerHidden = postSpaceFilter('buyer_hidden');
     $resolvedBuyerId = trim((string) $buyerHidden) !== '' ? $buyerHidden : resolveImportOptionId($buyerInput, $shopeeBuyers);
-    $customerName = postSpaceFilter('customer_name');
     $customerAddress = postSpaceFilter('customer_address');
     
     $previewData = [
@@ -553,7 +551,6 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
         'update_airbill' => $updateAirbill,
         'airbill_no' => $airbillNo,
         'airbill_attachment' => $airbillAttachment,
-        'customer_name' => $customerName,
         'customer_address' => $customerAddress,
     ];
 
@@ -565,14 +562,12 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
     if ($previewData['update_airbill'] === 'no') {
         $previewData['airbill_no'] = '';
         $previewData['airbill_attachment'] = '';
-        $previewData['customer_name'] = '';
         $previewData['customer_address'] = '';
     }
     $statusValidation = shopeeOmsValidateInitialStatusAndAirbill($previewData['order_status_val'], $previewData['airbill_no']);
     if (!$statusValidation['valid']) $importErrors[] = $statusValidation['message'];
     if ($previewData['update_airbill'] === 'yes') {
         if (trim((string) $previewData['airbill_no']) === '') $importErrors[] = 'Airbill No is required when Update Airbill is enabled.';
-        if (trim((string) $previewData['customer_name']) === '') $importErrors[] = 'Customer Name is required when Update Airbill is enabled.';
         if (trim((string) $previewData['customer_address']) === '') $importErrors[] = 'Customer Address is required when Update Airbill is enabled.';
         if (trim((string) $previewData['airbill_attachment']) === '') $importErrors[] = 'Airbill Attachment is required when Update Airbill is enabled.';
     }
@@ -647,12 +642,11 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
         $packageQtyJson = mysqli_real_escape_string($finance_connect, isset($previewData['package_qty_json']) ? $previewData['package_qty_json'] : '');
         $airbillNoSafe = mysqli_real_escape_string($finance_connect, isset($previewData['airbill_no']) ? $previewData['airbill_no'] : '');
         $airbillAttachmentSafe = mysqli_real_escape_string($finance_connect, isset($previewData['airbill_attachment']) ? $previewData['airbill_attachment'] : '');
-        $customerNameSafe = mysqli_real_escape_string($finance_connect, isset($previewData['customer_name']) ? $previewData['customer_name'] : '');
         $customerAddressSafe = mysqli_real_escape_string($finance_connect, isset($previewData['customer_address']) ? $previewData['customer_address'] : '');
         
         $query = "INSERT INTO " . SHOPEE_SG_ORDER_REQ . " 
-            (orderID, package, package_qty_json, price, voucher, act_shipping_fee, service_fee, trans_fee, ams_fee, fees, final_amt, order_status, shopee_acc, currency, brand, buyer, buyer_pay_meth, pic, customer_name, customer_address, airbill_no, airbill_attachment, remark, latest_transition_at, date, time, create_by, create_date, create_time) 
-            VALUES ('$orderId', '$pkgId', '$packageQtyJson', '$price', '$voucher', '$actShippingFee', '$serviceFee', '$transFee', '$amsFee', '$fees', '$finalAmt', '$status', '$acc', '$curr', '$brand', '$buyer', '$payMeth', '$pic', '$customerNameSafe', '$customerAddressSafe', '$airbillNoSafe', '$airbillAttachmentSafe', '$remark', NOW(), curdate(), curtime(), '" . USER_ID . "', curdate(), curtime())";
+            (orderID, package, package_qty_json, price, voucher, act_shipping_fee, service_fee, trans_fee, ams_fee, fees, final_amt, order_status, shopee_acc, currency, brand, buyer, buyer_pay_meth, pic, customer_address, airbill_no, airbill_attachment, remark, latest_transition_at, date, time, create_by, create_date, create_time) 
+            VALUES ('$orderId', '$pkgId', '$packageQtyJson', '$price', '$voucher', '$actShippingFee', '$serviceFee', '$transFee', '$amsFee', '$fees', '$finalAmt', '$status', '$acc', '$curr', '$brand', '$buyer', '$payMeth', '$pic', '$customerAddressSafe', '$airbillNoSafe', '$airbillAttachmentSafe', '$remark', NOW(), curdate(), curtime(), '" . USER_ID . "', curdate(), curtime())";
 
         $requiresInitialShippedAutoMove = (shopeeOmsNormalizeStatusCode($previewData['order_status']) === 'SP');
         $startedFinanceTransaction = false;
@@ -3516,11 +3510,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                     </div>
 
                                     <div class="row mb-3">
-                                        <div class="col-12 col-md-6">
-                                            <label class="form-label" for="customer_name">Customer Name<span class="requireRed">*</span></label>
-                                            <input class="form-control" type="text" id="customer_name" name="customer_name" value="<?= htmlspecialchars(isset($previewData['customer_name']) ? $previewData['customer_name'] : '') ?>">
-                                        </div>
-                                        <div class="col-12 col-md-6">
+                                        <div class="col-12 col-md-6 offset-md-6">
                                             <?php
                                             $previewAttachmentSrc = '';
                                             if (!empty($previewData['airbill_attachment'])) {
@@ -3728,22 +3718,19 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
             var updateAirbillToggle = previewForm.querySelector('#update_airbill_toggle');
             var airbillNo = previewForm.querySelector('#airbill_no');
             var airbillAttachment = previewForm.querySelector('#airbill_attachment');
-            var customerName = previewForm.querySelector('#customer_name');
             var customerAddress = previewForm.querySelector('#customer_address');
             var existingAttachment = previewForm.querySelector('#airbill_attachment_value');
-            if (!updateAirbill || !updateAirbillToggle || !airbillNo || !airbillAttachment || !customerName || !customerAddress) return;
+            if (!updateAirbill || !updateAirbillToggle || !airbillNo || !airbillAttachment || !customerAddress) return;
 
             updateAirbill.value = updateAirbillToggle.checked ? 'yes' : 'no';
             var enabled = updateAirbillToggle.checked;
             airbillNo.disabled = !enabled;
             airbillAttachment.disabled = !enabled;
-            customerName.disabled = !enabled;
             customerAddress.disabled = !enabled;
             airbillNo.required = enabled;
-            customerName.required = enabled;
             customerAddress.required = enabled;
             airbillAttachment.required = enabled && (!existingAttachment || existingAttachment.value.trim() === '');
-            [airbillNo, airbillAttachment, customerName, customerAddress].forEach(clearInlineError);
+            [airbillNo, airbillAttachment, customerAddress].forEach(clearInlineError);
         }
 
         toggleAirbillFields();

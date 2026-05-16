@@ -146,7 +146,7 @@ if (!empty($orderRows)) {
                     <tr>
                         <th width="60">S/N</th>
                         <th>Order ID</th>
-                        <th>Customer</th>
+                        <th>Shopee Buyer Username</th>
                         <th>Package</th>
                         <th>Airbill No</th>
                         <th>Link</th>
@@ -158,9 +158,15 @@ if (!empty($orderRows)) {
                         <?php $rowNumber = 1; ?>
                         <?php foreach ($orderRows as $row) { ?>
                             <?php
-                            $customerName = trim((string) (isset($row['customer_name']) ? $row['customer_name'] : ''));
-                            if ($customerName === '') {
-                                $customerName = trim((string) (isset($row['buyer']) ? $row['buyer'] : '-'));
+                            $customerName = trim((string) (isset($row['buyer']) ? $row['buyer'] : '-'));
+                            if ($customerName !== '' && ctype_digit($customerName)) {
+                                $buyerRst = getData('buyer_username', "id='" . (int) $customerName . "'", 'LIMIT 1', SHOPEE_CUST_INFO, $finance_connect);
+                                if ($buyerRst && $buyerRst->num_rows > 0) {
+                                    $buyerRow = $buyerRst->fetch_assoc();
+                                    if (isset($buyerRow['buyer_username']) && trim((string) $buyerRow['buyer_username']) !== '') {
+                                        $customerName = trim((string) $buyerRow['buyer_username']);
+                                    }
+                                }
                             }
                             $packageSummary = shopeeOmsBuildOrderProductSummary($connect, $row);
                             $tokenLink = '';

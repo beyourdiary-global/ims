@@ -765,10 +765,6 @@ $("#sor_airbill").on("input", function () {
   $(".sor-airbill-err").remove();
 });
 
-$("#sor_customer_name").on("input", function () {
-  $(".sor-customer-name-err").remove();
-});
-
 $("#sor_customer_address").on("input", function () {
   $(".sor-customer-address-err").remove();
 });

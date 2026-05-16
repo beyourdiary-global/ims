@@ -80,9 +80,15 @@ if ($orderLink !== '') {
 }
 
 $summary = shopeeOmsBuildOrderProductSummary($connect, $requestRow);
-$customerName = trim((string) (isset($requestRow['customer_name']) ? $requestRow['customer_name'] : ''));
-if ($customerName === '') {
-    $customerName = trim((string) (isset($requestRow['buyer']) ? $requestRow['buyer'] : ''));
+$customerName = trim((string) (isset($requestRow['buyer']) ? $requestRow['buyer'] : ''));
+if ($customerName !== '' && ctype_digit($customerName)) {
+    $buyerRst = getData('buyer_username', "id='" . (int) $customerName . "'", 'LIMIT 1', SHOPEE_CUST_INFO, $finance_connect);
+    if ($buyerRst && $buyerRst->num_rows > 0) {
+        $buyerRow = $buyerRst->fetch_assoc();
+        if (isset($buyerRow['buyer_username']) && trim((string) $buyerRow['buyer_username']) !== '') {
+            $customerName = trim((string) $buyerRow['buyer_username']);
+        }
+    }
 }
 $customerAddress = trim((string) (isset($requestRow['customer_address']) ? $requestRow['customer_address'] : ''));
 $airbillNo = trim((string) (isset($requestRow['airbill_no']) ? $requestRow['airbill_no'] : ''));
@@ -190,7 +196,7 @@ if ($airbillAttachment !== '') {
                                 <input class="form-control" type="text" readonly value="<?= htmlspecialchars((string) (isset($requestRow['orderID']) ? $requestRow['orderID'] : ''), ENT_QUOTES, 'UTF-8') ?>">
                             </div>
                             <div class="mb-3">
-                                <label class="form-label form_lbl">Customer</label>
+                                <label class="form-label form_lbl">Shopee Buyer Username</label>
                                 <input class="form-control" type="text" readonly value="<?= htmlspecialchars($customerName, ENT_QUOTES, 'UTF-8') ?>">
                             </div>
                             <div class="mb-3">

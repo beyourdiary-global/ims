@@ -2493,6 +2493,84 @@ if (!function_exists('shopeeOmsSendTelegramAttachment')) {
     }
 }
 
+if (!function_exists('shopeeOmsSendTelegramAttachmentByUrl')) {
+    function shopeeOmsSendTelegramAttachmentByUrl($botToken, $chatId, $attachmentUrl, $attachmentName = '', &$errorMessage = '', &$httpCode = 0)
+    {
+        $errorMessage = '';
+        $httpCode = 0;
+
+        $attachmentUrl = trim((string) $attachmentUrl);
+        if ($attachmentUrl === '') {
+            $errorMessage = 'Telegram attachment URL is empty.';
+            return array(
+                'success' => false,
+                'method' => '',
+                'response' => false,
+            );
+        }
+
+        $attachmentName = trim((string) $attachmentName);
+        if ($attachmentName === '') {
+            $attachmentName = basename(parse_url($attachmentUrl, PHP_URL_PATH));
+        }
+
+        $captionText = $attachmentName !== '' ? 'Airbill Attachment: ' . $attachmentName : '';
+        $ext = strtolower((string) pathinfo($attachmentName, PATHINFO_EXTENSION));
+        $sendStrategies = array();
+        if (in_array($ext, array('png', 'jpg', 'jpeg', 'webp'), true)) {
+            $sendStrategies[] = array(
+                'endpoint' => 'sendPhoto',
+                'field' => 'photo',
+                'label' => 'photo-url',
+            );
+        }
+        $sendStrategies[] = array(
+            'endpoint' => 'sendDocument',
+            'field' => 'document',
+            'label' => 'document-url',
+        );
+
+        $attemptErrors = array();
+        foreach ($sendStrategies as $strategy) {
+            $apiUrl = 'https://api.telegram.org/bot' . $botToken . '/' . $strategy['endpoint'];
+            $payload = array(
+                'chat_id' => $chatId,
+                'caption' => $captionText,
+                $strategy['field'] => $attachmentUrl,
+            );
+            if ($strategy['endpoint'] === 'sendDocument') {
+                $payload['disable_content_type_detection'] = false;
+            }
+
+            $attemptError = '';
+            $attemptHttpCode = 0;
+            $attemptResponse = shopeeOmsTelegramRequest($apiUrl, $payload, $attemptError, $attemptHttpCode);
+            $attemptDecoded = json_decode((string) $attemptResponse, true);
+            if (is_array($attemptDecoded) && !empty($attemptDecoded['ok'])) {
+                $httpCode = $attemptHttpCode;
+                return array(
+                    'success' => true,
+                    'method' => $strategy['label'],
+                    'response' => $attemptResponse,
+                );
+            }
+
+            $attemptDescription = shopeeOmsTelegramDescribeResponse($attemptResponse, $attemptError !== '' ? $attemptError : 'Telegram ' . $strategy['label'] . ' upload failed.');
+            $attemptErrors[] = ucfirst($strategy['label']) . ' upload failed: ' . $attemptDescription . ($attemptHttpCode > 0 ? (' HTTP ' . $attemptHttpCode . '.') : '');
+            if ($attemptHttpCode > 0) {
+                $httpCode = $attemptHttpCode;
+            }
+        }
+
+        $errorMessage = implode(' ', $attemptErrors);
+        return array(
+            'success' => false,
+            'method' => '',
+            'response' => false,
+        );
+    }
+}
+
 if (!function_exists('shopeeOmsTelegramDescribeResponse')) {
     function shopeeOmsTelegramDescribeResponse($response, $defaultMessage = '')
     {
@@ -2590,18 +2668,29 @@ if (!function_exists('shopeeOmsResolveChatIdFromTokenRow')) {
 }
 
 if (!function_exists('shopeeOmsBuildWarehouseMessage')) {
-    function shopeeOmsBuildWarehouseMessage($orderRow, $tokenValue, $connect)
+    function shopeeOmsBuildWarehouseMessage($orderRow, $tokenValue, $connect, $buyerConnect = null)
     {
         $summary = shopeeOmsBuildOrderProductSummary($connect, $orderRow);
-        $customerName = trim((string) (isset($orderRow['customer_name']) && trim((string) $orderRow['customer_name']) !== '' ? $orderRow['customer_name'] : (isset($orderRow['buyer']) ? $orderRow['buyer'] : '')));
-        $customerAddress = trim((string) (isset($orderRow['customer_address']) ? $orderRow['customer_address'] : ''));
+        if (!($buyerConnect instanceof mysqli)) {
+            $buyerConnect = $connect;
+        }
+        $customerName = trim((string) (isset($orderRow['buyer']) ? $orderRow['buyer'] : ''));
+        if ($customerName !== '' && ctype_digit($customerName)) {
+            $buyerRst = getData('buyer_username', "id='" . (int) $customerName . "'", 'LIMIT 1', SHOPEE_CUST_INFO, $buyerConnect);
+            if ($buyerRst && $buyerRst->num_rows > 0) {
+                $buyerRow = $buyerRst->fetch_assoc();
+                if (isset($buyerRow['buyer_username']) && trim((string) $buyerRow['buyer_username']) !== '') {
+                    $customerName = trim((string) $buyerRow['buyer_username']);
+                }
+            }
+        }
         $link = rtrim((string) SITEURL, '/') . '/warehouse_stock_in_scan.php?t=' . rawurlencode((string) $tokenValue);
         $airbillText = trim((string) (isset($orderRow['airbill_no']) ? $orderRow['airbill_no'] : ''));
         $airbillAttachment = trim((string) (isset($orderRow['airbill_attachment']) ? $orderRow['airbill_attachment'] : ''));
 
         $lines = array();
         $lines[] = 'Shopee OID: ' . trim((string) (isset($orderRow['orderID']) ? $orderRow['orderID'] : ''));
-        $lines[] = 'Customer: ' . ($customerName !== '' ? $customerName : '-') . ' | ' . ($customerAddress !== '' ? $customerAddress : '-');
+        $lines[] = 'Shopee Buyer Username: ' . ($customerName !== '' ? $customerName : '-');
         $lines[] = 'Package: ' . (!empty($summary['bundle_name']) ? $summary['bundle_name'] : '-');
         $lines[] = 'Product Details: ' . (!empty($summary['product_lines']) ? implode(', ', $summary['product_lines']) : '-');
         if ($airbillText !== '') {
@@ -2615,6 +2704,7 @@ if (!function_exists('shopeeOmsBuildWarehouseMessage')) {
         return array(
             'link' => $link,
             'text' => implode("\n", $lines),
+            'buyer_username' => $customerName,
             'package_summary' => isset($summary['package_summary']) ? $summary['package_summary'] : '',
             'product_summary' => !empty($summary['product_lines']) ? implode(', ', $summary['product_lines']) : '',
             'bundle_name' => isset($summary['bundle_name']) ? $summary['bundle_name'] : '',
@@ -2831,6 +2921,22 @@ if (!function_exists('shopeeOmsResolveAirbillAttachmentFsPath')) {
     }
 }
 
+if (!function_exists('shopeeOmsBuildAirbillAttachmentUrl')) {
+    function shopeeOmsBuildAirbillAttachmentUrl($attachmentValue)
+    {
+        $attachmentValue = trim(str_replace('\\', '/', (string) $attachmentValue), '/');
+        if ($attachmentValue === '' || !defined('SITEURL')) {
+            return '';
+        }
+
+        if (strpos($attachmentValue, 'attachment/') === 0) {
+            return rtrim((string) SITEURL, '/') . '/' . $attachmentValue;
+        }
+
+        return '';
+    }
+}
+
 if (!function_exists('shopeeOmsGetClientIp')) {
     function shopeeOmsGetClientIp()
     {
@@ -3021,7 +3127,7 @@ if (!function_exists('shopeeOmsCreateWarehouseToken')) {
         $existingResult = mysqli_query($financeConnect, $existingSql);
         if ($existingResult && mysqli_num_rows($existingResult) > 0) {
             $existingRow = mysqli_fetch_assoc($existingResult);
-            $messageInfo = shopeeOmsBuildWarehouseMessage($orderRow, isset($existingRow['token']) ? $existingRow['token'] : '', $cmsConnect);
+            $messageInfo = shopeeOmsBuildWarehouseMessage($orderRow, isset($existingRow['token']) ? $existingRow['token'] : '', $cmsConnect, $financeConnect);
             return array(
                 'success' => true,
                 'message' => 'Warehouse token already exists.',
@@ -3038,11 +3144,11 @@ if (!function_exists('shopeeOmsCreateWarehouseToken')) {
             $tokenValue = md5(uniqid((string) $orderId, true) . microtime(true));
         }
 
-        $messageInfo = shopeeOmsBuildWarehouseMessage($orderRow, $tokenValue, $cmsConnect);
+        $messageInfo = shopeeOmsBuildWarehouseMessage($orderRow, $tokenValue, $cmsConnect, $financeConnect);
         $actorUserId = trim((string) $actorUserId) !== '' ? trim((string) $actorUserId) : 'SYSTEM';
         $safeOrderCode = mysqli_real_escape_string($financeConnect, (string) (isset($orderRow['orderID']) ? $orderRow['orderID'] : ''));
         $safeToken = mysqli_real_escape_string($financeConnect, $tokenValue);
-        $safeCustomerName = mysqli_real_escape_string($financeConnect, (string) (isset($orderRow['customer_name']) ? $orderRow['customer_name'] : ''));
+        $safeCustomerName = mysqli_real_escape_string($financeConnect, (string) (isset($messageInfo['buyer_username']) ? $messageInfo['buyer_username'] : ''));
         $safeCustomerAddress = mysqli_real_escape_string($financeConnect, (string) (isset($orderRow['customer_address']) ? $orderRow['customer_address'] : ''));
         $safePackageSummary = mysqli_real_escape_string($financeConnect, (string) $messageInfo['package_summary']);
         $safeProductSummary = mysqli_real_escape_string($financeConnect, (string) $messageInfo['product_summary']);
@@ -3109,8 +3215,13 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
         $httpCode = 0;
         $attachmentValue = isset($notificationInfo['airbill_attachment']) ? (string) $notificationInfo['airbill_attachment'] : '';
         $attachmentFsPath = shopeeOmsResolveAirbillAttachmentFsPath($attachmentValue);
+        $attachmentUrl = shopeeOmsBuildAirbillAttachmentUrl($attachmentValue);
         $hasReadableAttachment = ($attachmentFsPath !== '' && file_exists($attachmentFsPath) && is_readable($attachmentFsPath));
         $messageText = (string) (isset($notificationInfo['text']) ? $notificationInfo['text'] : '');
+        $fallbackMessageText = $messageText;
+        if ($attachmentUrl !== '') {
+            $fallbackMessageText .= ($fallbackMessageText !== '' ? "\n" : '') . "Airbill Attachment Link:\n" . $attachmentUrl;
+        }
         $response = false;
         $finalResponse = false;
         $documentSent = false;
@@ -3120,6 +3231,22 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
             $uploadResult = shopeeOmsSendTelegramAttachment($botToken, $chatId, $attachmentFsPath, $errorMessage, $httpCode);
             $documentSent = !empty($uploadResult['success']);
             $response = isset($uploadResult['response']) ? $uploadResult['response'] : false;
+
+            if (!$documentSent && $attachmentUrl !== '') {
+                $urlUploadError = '';
+                $urlUploadHttpCode = 0;
+                $urlUploadResult = shopeeOmsSendTelegramAttachmentByUrl($botToken, $chatId, $attachmentUrl, basename($attachmentFsPath), $urlUploadError, $urlUploadHttpCode);
+                if (!empty($urlUploadResult['success'])) {
+                    $documentSent = true;
+                    $response = isset($urlUploadResult['response']) ? $urlUploadResult['response'] : $response;
+                    $httpCode = $urlUploadHttpCode > 0 ? $urlUploadHttpCode : $httpCode;
+                } else if ($urlUploadError !== '') {
+                    $errorMessage .= ($errorMessage !== '' ? ' ' : '') . $urlUploadError;
+                    if ($urlUploadHttpCode > 0) {
+                        $httpCode = $urlUploadHttpCode;
+                    }
+                }
+            }
 
             if ($documentSent && $messageText !== '') {
                 $messageUrl = 'https://api.telegram.org/bot' . $botToken . '/sendMessage';
@@ -3153,7 +3280,7 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
                 $fallbackUrl = 'https://api.telegram.org/bot' . $botToken . '/sendMessage';
                 $fallbackPayload = array(
                     'chat_id' => $chatId,
-                    'text' => $messageText,
+                    'text' => $fallbackMessageText,
                     'disable_web_page_preview' => false,
                 );
                 $fallbackError = '';
@@ -3171,19 +3298,55 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
                 }
             }
         } else {
-            $apiUrl = 'https://api.telegram.org/bot' . $botToken . '/sendMessage';
-            $payload = array(
-                'chat_id' => $chatId,
-                'text' => $messageText,
-                'disable_web_page_preview' => false,
-            );
-            $response = shopeeOmsTelegramRequest($apiUrl, $payload, $errorMessage, $httpCode);
-            $messageDecoded = json_decode((string) $response, true);
-            $messageSent = (is_array($messageDecoded) && !empty($messageDecoded['ok']));
-            if (!$messageSent) {
-                $errorMessage = shopeeOmsTelegramDescribeResponse($response, $errorMessage !== '' ? $errorMessage : 'Telegram warehouse notification was not sent.');
+            if ($attachmentUrl !== '') {
+                $urlUploadError = '';
+                $urlUploadHttpCode = 0;
+                $urlUploadResult = shopeeOmsSendTelegramAttachmentByUrl($botToken, $chatId, $attachmentUrl, basename($attachmentValue), $urlUploadError, $urlUploadHttpCode);
+                $documentSent = !empty($urlUploadResult['success']);
+                $response = isset($urlUploadResult['response']) ? $urlUploadResult['response'] : false;
+                if ($urlUploadError !== '') {
+                    $errorMessage = $urlUploadError;
+                    if ($urlUploadHttpCode > 0) {
+                        $httpCode = $urlUploadHttpCode;
+                    }
+                }
             }
-            $finalResponse = $response;
+
+            if ($documentSent && $messageText !== '') {
+                $messageUrl = 'https://api.telegram.org/bot' . $botToken . '/sendMessage';
+                $messagePayload = array(
+                    'chat_id' => $chatId,
+                    'text' => $messageText,
+                    'disable_web_page_preview' => false,
+                );
+                $messageError = '';
+                $messageHttpCode = 0;
+                $messageResponse = shopeeOmsTelegramRequest($messageUrl, $messagePayload, $messageError, $messageHttpCode);
+                $messageDecoded = json_decode((string) $messageResponse, true);
+                $messageSent = (is_array($messageDecoded) && !empty($messageDecoded['ok']));
+
+                if (!$messageSent) {
+                    $errorMessage = shopeeOmsTelegramDescribeResponse($messageResponse, $messageError !== '' ? $messageError : 'Telegram warehouse summary message was not sent.');
+                    $httpCode = $messageHttpCode > 0 ? $messageHttpCode : $httpCode;
+                    $finalResponse = $messageResponse;
+                } else {
+                    $finalResponse = $messageResponse;
+                }
+            } else {
+                $apiUrl = 'https://api.telegram.org/bot' . $botToken . '/sendMessage';
+                $payload = array(
+                    'chat_id' => $chatId,
+                    'text' => $fallbackMessageText,
+                    'disable_web_page_preview' => false,
+                );
+                $response = shopeeOmsTelegramRequest($apiUrl, $payload, $errorMessage, $httpCode);
+                $messageDecoded = json_decode((string) $response, true);
+                $messageSent = (is_array($messageDecoded) && !empty($messageDecoded['ok']));
+                if (!$messageSent) {
+                    $errorMessage = shopeeOmsTelegramDescribeResponse($response, $errorMessage !== '' ? $errorMessage : 'Telegram warehouse notification was not sent.');
+                }
+                $finalResponse = $response;
+            }
         }
 
         $isSent = $hasReadableAttachment
@@ -3514,7 +3677,7 @@ if (!function_exists('shopeeOmsGetImportantEditableFields')) {
     {
         return array(
             'orderID' => 'Order ID',
-            'customer_name' => 'Customer Name',
+            'customer_name' => 'Shopee Buyer Username',
             'customer_phone' => 'Customer Phone',
             'customer_address' => 'Customer Address',
             'package' => 'Package',
