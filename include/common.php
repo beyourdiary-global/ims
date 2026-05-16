@@ -2344,10 +2344,25 @@ if (!function_exists('shopeeOmsTelegramMultipartRequest')) {
         curl_setopt($ch, CURLOPT_POST, true);
         curl_setopt($ch, CURLOPT_POSTFIELDS, $payload);
         curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, 15);
         curl_setopt($ch, CURLOPT_TIMEOUT, 30);
+        curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
         curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
         curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, false);
         curl_setopt($ch, CURLOPT_HTTPHEADER, array('Expect:'));
+        curl_setopt($ch, CURLOPT_USERAGENT, 'BeYourDiary-IMS-TelegramUpload/1.0');
+        if (defined('CURLOPT_SAFE_UPLOAD')) {
+            $usesLegacyUploadSyntax = false;
+            if (is_array($payload)) {
+                foreach ($payload as $payloadValue) {
+                    if (is_string($payloadValue) && strpos($payloadValue, '@') === 0) {
+                        $usesLegacyUploadSyntax = true;
+                        break;
+                    }
+                }
+            }
+            curl_setopt($ch, CURLOPT_SAFE_UPLOAD, !$usesLegacyUploadSyntax);
+        }
 
         $response = curl_exec($ch);
         if ($response === false) {
@@ -2360,6 +2375,121 @@ if (!function_exists('shopeeOmsTelegramMultipartRequest')) {
         curl_close($ch);
 
         return $response;
+    }
+}
+
+if (!function_exists('shopeeOmsBuildTelegramUploadValue')) {
+    function shopeeOmsBuildTelegramUploadValue($filePath, $mimeType, $fileName)
+    {
+        $filePath = (string) $filePath;
+        $mimeType = trim((string) $mimeType);
+        $fileName = trim((string) $fileName);
+
+        if ($filePath === '' || !is_file($filePath)) {
+            return null;
+        }
+
+        if ($mimeType === '') {
+            $mimeType = 'application/octet-stream';
+        }
+        if ($fileName === '') {
+            $fileName = basename($filePath);
+        }
+
+        if (function_exists('curl_file_create')) {
+            return curl_file_create($filePath, $mimeType, $fileName);
+        }
+
+        if (class_exists('CURLFile')) {
+            return new CURLFile($filePath, $mimeType, $fileName);
+        }
+
+        return '@' . $filePath . ';filename=' . $fileName . ';type=' . $mimeType;
+    }
+}
+
+if (!function_exists('shopeeOmsSendTelegramAttachment')) {
+    function shopeeOmsSendTelegramAttachment($botToken, $chatId, $attachmentFsPath, &$errorMessage = '', &$httpCode = 0)
+    {
+        $errorMessage = '';
+        $httpCode = 0;
+
+        $attachmentFsPath = trim((string) $attachmentFsPath);
+        if ($attachmentFsPath === '' || !is_file($attachmentFsPath) || !is_readable($attachmentFsPath)) {
+            $errorMessage = 'Telegram attachment file is not readable.';
+            return array(
+                'success' => false,
+                'method' => '',
+                'response' => false,
+            );
+        }
+
+        $mimeType = shopeeOmsDetectFileMimeType($attachmentFsPath);
+        $fileName = basename($attachmentFsPath);
+        $captionText = trim((string) $fileName);
+        if ($captionText !== '') {
+            $captionText = 'Airbill Attachment: ' . $captionText;
+        }
+
+        $ext = strtolower((string) pathinfo($attachmentFsPath, PATHINFO_EXTENSION));
+        $uploadStrategies = array();
+        if (in_array($ext, array('png', 'jpg', 'jpeg', 'webp'), true) || strpos($mimeType, 'image/') === 0) {
+            $uploadStrategies[] = array(
+                'endpoint' => 'sendPhoto',
+                'field' => 'photo',
+                'label' => 'photo',
+            );
+        }
+        $uploadStrategies[] = array(
+            'endpoint' => 'sendDocument',
+            'field' => 'document',
+            'label' => 'document',
+        );
+
+        $attemptErrors = array();
+        foreach ($uploadStrategies as $strategy) {
+            $uploadValue = shopeeOmsBuildTelegramUploadValue($attachmentFsPath, $mimeType, $fileName);
+            if ($uploadValue === null) {
+                $attemptErrors[] = 'Unable to build Telegram upload payload for ' . $strategy['label'] . '.';
+                continue;
+            }
+
+            $apiUrl = 'https://api.telegram.org/bot' . $botToken . '/' . $strategy['endpoint'];
+            $payload = array(
+                'chat_id' => $chatId,
+                'caption' => $captionText,
+                $strategy['field'] => $uploadValue,
+            );
+            if ($strategy['endpoint'] === 'sendDocument') {
+                $payload['disable_content_type_detection'] = false;
+            }
+
+            $attemptError = '';
+            $attemptHttpCode = 0;
+            $attemptResponse = shopeeOmsTelegramMultipartRequest($apiUrl, $payload, $attemptError, $attemptHttpCode);
+            $attemptDecoded = json_decode((string) $attemptResponse, true);
+            if (is_array($attemptDecoded) && !empty($attemptDecoded['ok'])) {
+                $httpCode = $attemptHttpCode;
+                return array(
+                    'success' => true,
+                    'method' => $strategy['label'],
+                    'response' => $attemptResponse,
+                );
+            }
+
+            $attemptDescription = shopeeOmsTelegramDescribeResponse($attemptResponse, $attemptError !== '' ? $attemptError : 'Telegram ' . $strategy['label'] . ' upload failed.');
+            $attemptErrors[] = ucfirst($strategy['label']) . ' upload failed: ' . $attemptDescription . ($attemptHttpCode > 0 ? (' HTTP ' . $attemptHttpCode . '.') : '');
+            if ($attemptHttpCode > 0) {
+                $httpCode = $attemptHttpCode;
+            }
+        }
+
+        $errorMessage = implode(' ', $attemptErrors);
+        return array(
+            'success' => false,
+            'method' => '',
+            'response' => false,
+        );
     }
 }
 
@@ -2987,19 +3117,9 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
         $messageSent = false;
 
         if ($hasReadableAttachment) {
-            $apiUrl = 'https://api.telegram.org/bot' . $botToken . '/sendDocument';
-            $documentCaption = trim((string) basename($attachmentFsPath));
-            if ($documentCaption !== '') {
-                $documentCaption = 'Airbill Attachment: ' . $documentCaption;
-            }
-            $payload = array(
-                'chat_id' => $chatId,
-                'caption' => $documentCaption,
-                'document' => new CURLFile($attachmentFsPath, shopeeOmsDetectFileMimeType($attachmentFsPath), basename($attachmentFsPath)),
-            );
-            $response = shopeeOmsTelegramMultipartRequest($apiUrl, $payload, $errorMessage, $httpCode);
-            $documentDecoded = json_decode((string) $response, true);
-            $documentSent = (is_array($documentDecoded) && !empty($documentDecoded['ok']));
+            $uploadResult = shopeeOmsSendTelegramAttachment($botToken, $chatId, $attachmentFsPath, $errorMessage, $httpCode);
+            $documentSent = !empty($uploadResult['success']);
+            $response = isset($uploadResult['response']) ? $uploadResult['response'] : false;
 
             if ($documentSent && $messageText !== '') {
                 $messageUrl = 'https://api.telegram.org/bot' . $botToken . '/sendMessage';
