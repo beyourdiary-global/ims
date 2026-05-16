@@ -37,6 +37,8 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
+shopeeOmsEnsureRealtimePostponedSync($connect, $finance_connect);
+
 // Build numeric action keys from the latest user-group pins in database.
 $accessActionKey = array();
 $shopeePinGroups = array(128, 129, 130);
@@ -170,8 +172,8 @@ $accFilter = isset($_GET['acc']) ? $_GET['acc'] : '';
 
 $whereConditions = [];
 
-// Show orders waiting for estimated date assignment, ready for verification, or already verified.
-$whereConditions[] = "order_status IN ('Waiting Assign Estimate Received Date', 'Assigned Estimate Date', 'Order Received', 'Verified', 'WAERD', 'AED', 'OC', 'V')";
+// Show verify-stage orders, but keep WAERD out of the verify list.
+$whereConditions[] = "order_status IN ('Assigned Estimate Date', 'Order Received', 'Verified', 'AED', 'OC', 'V')";
 
 if (!empty($monthFilter)) { $whereConditions[] = "DATE_FORMAT(date, '%Y-%m') = '" . mysqli_real_escape_string($finance_connect, $monthFilter) . "'"; }
 if (!empty($statusFilter)) { $whereConditions[] = "order_status = '" . mysqli_real_escape_string($finance_connect, $statusFilter) . "'"; }

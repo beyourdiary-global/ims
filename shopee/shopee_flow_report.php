@@ -14,6 +14,21 @@ if (!$canViewPage) {
     echo '<script>alert("You do not have permission to view Shopee Daily Flow Report."); location.replace("../dashboard.php");</script>';
     exit;
 }
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
+    $safeAuditUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
+    $safeAuditPageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
+    $log = array(
+        'log_act' => 'View',
+        'cdate' => $cdate,
+        'ctime' => $ctime,
+        'uid' => USER_ID,
+        'cby' => USER_ID,
+        'act_msg' => $safeAuditUserName . " viewed the page <b>" . $safeAuditPageTitle . "</b>.",
+        'page' => $pageTitle,
+        'connect' => $connect,
+    );
+    audit_log($log);
+}
 
 $defaultDateFrom = date('Y-m-d', strtotime('-1 day'));
 $defaultDateTo = date('Y-m-d');
@@ -237,7 +252,7 @@ $statusOptions = shopeeOmsGetEditableStatusOptions();
             <div class="shopee-flow-report-card">
                 <h4 class="mb-3">Transition Summary</h4>
                 <div class="table-responsive">
-                    <table class="table table-bordered shopee-flow-report-table">
+                    <table class="table table-striped table-bordered shopee-flow-report-table">
                         <thead>
                             <tr>
                                 <th>From Status</th>
@@ -292,9 +307,10 @@ $statusOptions = shopeeOmsGetEditableStatusOptions();
                                 </summary>
                                 <div class="shopee-flow-report-accordion-body">
                                     <div class="table-responsive">
-                                        <table class="table table-bordered shopee-flow-report-table">
+                                        <table class="table table-striped table-bordered shopee-flow-report-table shopee-flow-report-detail-table">
                                             <thead>
                                                 <tr>
+                                                    <th width="60">S/N</th>
                                                     <th>Order ID</th>
                                                     <th>Transition Time</th>
                                                     <th>User</th>
@@ -303,6 +319,7 @@ $statusOptions = shopeeOmsGetEditableStatusOptions();
                                             </thead>
                                             <tbody>
                                                 <?php if (!empty($transitionDetails)) { ?>
+                                                    <?php $rowNumber = 1; ?>
                                                     <?php foreach ($transitionDetails as $detailRow) { ?>
                                                         <?php
                                                         $userDisplayName = commonResolveUserDisplayName(
@@ -314,6 +331,7 @@ $statusOptions = shopeeOmsGetEditableStatusOptions();
                                                         }
                                                         ?>
                                                         <tr>
+                                                            <td><?= $rowNumber++ ?></td>
                                                             <td><a class="shopee-flow-report-order-link" href="<?= $SITEURL ?>/shopee/shopee_order_req.php?id=<?= (int) $detailRow['order_id'] ?>"><?= htmlspecialchars((string) $detailRow['order_code']) ?></a></td>
                                                             <td><?= htmlspecialchars((string) (isset($detailRow['transition_at']) ? $detailRow['transition_at'] : '')) ?></td>
                                                             <td>
@@ -327,7 +345,7 @@ $statusOptions = shopeeOmsGetEditableStatusOptions();
                                                     <?php } ?>
                                                 <?php } else { ?>
                                                     <tr>
-                                                        <td colspan="4" class="text-center">No order detail found for this transition.</td>
+                                                        <td colspan="5" class="text-center">No order detail found for this transition.</td>
                                                     </tr>
                                                 <?php } ?>
                                             </tbody>
@@ -345,6 +363,37 @@ $statusOptions = shopeeOmsGetEditableStatusOptions();
         </div>
     </div>
     <script>
+        document.querySelectorAll('.shopee-flow-report-detail-table').forEach(function (tableElement, index) {
+            if (!tableElement.id) {
+                tableElement.id = 'shopee_flow_report_detail_table_' + index;
+            }
+
+            var detailRowCount = tableElement.querySelectorAll('tbody tr').length;
+            var detailTable = new DataTable('#' + tableElement.id, {
+                paging: detailRowCount > 10,
+                info: detailRowCount > 10,
+                searching: false,
+                ordering: true,
+                lengthChange: detailRowCount > 10,
+                pageLength: 10,
+                lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],
+                autoWidth: false,
+                order: [],
+                columnDefs: [
+                    { orderable: false, searchable: false, targets: [0] }
+                ]
+            });
+            datatableAlignment(tableElement.id);
+
+            detailTable.on('draw', function () {
+                var pageInfo = detailTable.page.info();
+                detailTable.column(0, { page: 'current' }).nodes().each(function (cell, drawIndex) {
+                    cell.innerHTML = pageInfo.start + drawIndex + 1;
+                });
+            });
+            detailTable.draw(false);
+        });
+
         document.querySelectorAll('[data-transition-target]').forEach(function (link) {
             link.addEventListener('click', function () {
                 var transitionKey = link.getAttribute('data-transition-target');
@@ -355,7 +404,24 @@ $statusOptions = shopeeOmsGetEditableStatusOptions();
 
                 target.open = true;
                 window.setTimeout(function () {
+                    $(target).find('.shopee-flow-report-detail-table').each(function () {
+                        $(this).DataTable().columns.adjust().draw(false);
+                    });
                     target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }, 50);
+            });
+        });
+
+        document.querySelectorAll('.shopee-flow-report-accordion-item').forEach(function (detailElement) {
+            detailElement.addEventListener('toggle', function () {
+                if (!detailElement.open) {
+                    return;
+                }
+
+                window.setTimeout(function () {
+                    $(detailElement).find('.shopee-flow-report-detail-table').each(function () {
+                        $(this).DataTable().columns.adjust().draw(false);
+                    });
                 }, 50);
             });
         });

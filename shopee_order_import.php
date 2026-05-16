@@ -78,6 +78,10 @@ $allowedActions = ['parseShopeeOrderReq', 'insertShopeeOrderReq'];
 if ($action !== '' && !in_array($action, $allowedActions, true)) {
     $action = '';
 }
+if (isset($_POST['cancelImportBtn']) || $action === 'cancelImport') {
+    echo '<script>location.href = "' . $SITEURL . '/shopee_order_import.php";</script>';
+    exit;
+}
 if ($action !== '' && !isActionAllowed('Import', $pinAccess)) {
     echo '<script>alert("You do not have permission to import.");location.href = "' . $SITEURL . '/dashboard.php";</script>';
     exit;
@@ -89,10 +93,6 @@ $orderIdFieldError = '';
 $allowedAttachmentExt = array("png", "jpg", "jpeg", "pdf");
 $sorAirbillAttachmentPath = img_server . 'shopee_airbill_attachment/';
 $sorAirbillAttachmentUrl = rtrim((string) $SITEURL, '/') . '/' . trim((string) $sorAirbillAttachmentPath, '/\\') . '/';
-$sorAirbillAttachmentFsPath = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . trim((string) $sorAirbillAttachmentPath, '/\\') . DIRECTORY_SEPARATOR;
-if (!file_exists($sorAirbillAttachmentFsPath)) {
-    mkdir($sorAirbillAttachmentFsPath, 0777, true);
-}
 
 $shopeeAccounts = getImportOptionList(SHOPEE_ACC, 'name', $finance_connect);
 $currencyUnits = getImportOptionList(CUR_UNIT, 'unit', $connect);
@@ -452,7 +452,7 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
                 'update_airbill' => 'yes',
                 'airbill_no' => '',
                 'airbill_attachment' => '',
-                'customer_name' => $buyerUsername,
+                'customer_name' => '',
                 'customer_address' => '',
             ];
 
@@ -520,6 +520,9 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
     } elseif (isset($_POST['airbill_attachment_value'])) {
         $airbillAttachment = $_POST['airbill_attachment_value'];
     }
+    $buyerInput = postSpaceFilter('buyer');
+    $buyerHidden = postSpaceFilter('buyer_hidden');
+    $resolvedBuyerId = trim((string) $buyerHidden) !== '' ? $buyerHidden : resolveImportOptionId($buyerInput, $shopeeBuyers);
     $customerName = postSpaceFilter('customer_name');
     $customerAddress = postSpaceFilter('customer_address');
     
@@ -534,7 +537,8 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
         'shopee_acc' => postSpaceFilter('shopee_acc'),
         'currency' => postSpaceFilter('currency'),
         'brand' => $brandIdsStr,
-        'buyer' => postSpaceFilter('buyer'),
+        'buyer' => $resolvedBuyerId,
+        'buyer_name' => $buyerInput,
         'buyer_pay_meth' => postSpaceFilter('buyer_pay_meth'),
         'pic' => postSpaceFilter('pic'),
         'voucher' => postSpaceFilter('voucher'),
@@ -561,9 +565,17 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
     if ($previewData['update_airbill'] === 'no') {
         $previewData['airbill_no'] = '';
         $previewData['airbill_attachment'] = '';
+        $previewData['customer_name'] = '';
+        $previewData['customer_address'] = '';
     }
     $statusValidation = shopeeOmsValidateInitialStatusAndAirbill($previewData['order_status_val'], $previewData['airbill_no']);
     if (!$statusValidation['valid']) $importErrors[] = $statusValidation['message'];
+    if ($previewData['update_airbill'] === 'yes') {
+        if (trim((string) $previewData['airbill_no']) === '') $importErrors[] = 'Airbill No is required when Update Airbill is enabled.';
+        if (trim((string) $previewData['customer_name']) === '') $importErrors[] = 'Customer Name is required when Update Airbill is enabled.';
+        if (trim((string) $previewData['customer_address']) === '') $importErrors[] = 'Customer Address is required when Update Airbill is enabled.';
+        if (trim((string) $previewData['airbill_attachment']) === '') $importErrors[] = 'Airbill Attachment is required when Update Airbill is enabled.';
+    }
 
     if ($previewData['order_id'] !== '' && isShopeeOrderIdDuplicated($previewData['order_id'], $finance_connect)) {
         $orderIdFieldError = 'Duplicate Order ID found in Shopee Order Request records.';
@@ -598,27 +610,18 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
     $previewData['package_qty_json'] = !empty($packageQtySnapshot) ? json_encode($packageQtySnapshot) : '';
 
     if ($previewData['update_airbill'] === 'yes' && isset($_FILES["airbill_attachment"]) && $_FILES["airbill_attachment"]["size"] != 0) {
-        $airbillFileName = $_FILES["airbill_attachment"]["name"];
-        $airbillTmpName = $_FILES["airbill_attachment"]["tmp_name"];
-        $airbillExt = strtolower((string) pathinfo($airbillFileName, PATHINFO_EXTENSION));
-
-        if (in_array($airbillExt, $allowedAttachmentExt)) {
-            $attachmentSeed = trim((string) $previewData['order_id']) !== '' ? trim((string) $previewData['order_id']) : ('shopee_import_airbill_' . date('Ymd_His'));
-            $attachmentSeed = preg_replace('/[^A-Za-z0-9_-]+/', '_', $attachmentSeed);
-            $newAttachmentName = $attachmentSeed . '_' . date('Ymd_His') . '.' . $airbillExt;
-            $dedupeCounter = 1;
-            while (file_exists($sorAirbillAttachmentFsPath . $newAttachmentName)) {
-                $newAttachmentName = $attachmentSeed . '_' . date('Ymd_His') . '_' . $dedupeCounter . '.' . $airbillExt;
-                $dedupeCounter++;
-            }
-
-            if (move_uploaded_file($airbillTmpName, $sorAirbillAttachmentFsPath . $newAttachmentName)) {
-                $previewData['airbill_attachment'] = $newAttachmentName;
-            } else {
-                $importErrors[] = 'Failed to upload the airbill attachment.';
-            }
+        $uploadResult = shopeeOmsStoreAirbillAttachmentUpload(
+            $_FILES["airbill_attachment"],
+            $connect,
+            isset($previewData['brand']) ? $previewData['brand'] : '',
+            isset($previewData['package_id']) ? $previewData['package_id'] : '',
+            'shopee_order_request',
+            $allowedAttachmentExt
+        );
+        if (!empty($uploadResult['success'])) {
+            $previewData['airbill_attachment'] = isset($uploadResult['path']) ? (string) $uploadResult['path'] : '';
         } else {
-            $importErrors[] = 'Only allow PNG, JPG, JPEG or PDF file for airbill attachment.';
+            $importErrors[] = isset($uploadResult['message']) ? (string) $uploadResult['message'] : 'Failed to upload the airbill attachment.';
         }
     }
 
@@ -650,10 +653,21 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
         $query = "INSERT INTO " . SHOPEE_SG_ORDER_REQ . " 
             (orderID, package, package_qty_json, price, voucher, act_shipping_fee, service_fee, trans_fee, ams_fee, fees, final_amt, order_status, shopee_acc, currency, brand, buyer, buyer_pay_meth, pic, customer_name, customer_address, airbill_no, airbill_attachment, remark, latest_transition_at, date, time, create_by, create_date, create_time) 
             VALUES ('$orderId', '$pkgId', '$packageQtyJson', '$price', '$voucher', '$actShippingFee', '$serviceFee', '$transFee', '$amsFee', '$fees', '$finalAmt', '$status', '$acc', '$curr', '$brand', '$buyer', '$payMeth', '$pic', '$customerNameSafe', '$customerAddressSafe', '$airbillNoSafe', '$airbillAttachmentSafe', '$remark', NOW(), curdate(), curtime(), '" . USER_ID . "', curdate(), curtime())";
-        
-        $returnData = mysqli_query($finance_connect, $query);
 
-        if ($returnData) {
+        $requiresInitialShippedAutoMove = (shopeeOmsNormalizeStatusCode($previewData['order_status']) === 'SP');
+        $startedFinanceTransaction = false;
+
+        try {
+            if ($requiresInitialShippedAutoMove) {
+                mysqli_begin_transaction($finance_connect);
+                $startedFinanceTransaction = true;
+            }
+
+            $returnData = mysqli_query($finance_connect, $query);
+            if (!$returnData) {
+                throw new Exception('Database Error: ' . mysqli_error($finance_connect));
+            }
+
             $dataID = mysqli_insert_id($finance_connect);
             shopeeOmsLogTransition($finance_connect, array(
                 'order_id' => (int) $dataID,
@@ -674,6 +688,16 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
                     shopeeOmsSendWarehouseNotification($connect, $finance_connect, $tokenResult['token_row'], $tokenResult['notification']);
                     mysqli_query($finance_connect, "UPDATE `" . SHOPEE_SG_ORDER_REQ . "` SET `step_a_sent_at` = NOW() WHERE id = " . (int) $dataID . " LIMIT 1");
                 }
+            } else if ($requiresInitialShippedAutoMove) {
+                $initialShippedResult = shopeeOmsFinalizeInitialShippedOrder($connect, $finance_connect, (int) $dataID, USER_ID, USER_GROUP, $pageTitle);
+                if (empty($initialShippedResult['success'])) {
+                    throw new Exception(isset($initialShippedResult['message']) ? $initialShippedResult['message'] : 'Unable to process initial Shipped status.');
+                }
+            }
+
+            if ($startedFinanceTransaction) {
+                mysqli_commit($finance_connect);
+                $startedFinanceTransaction = false;
             }
 
             $log = [
@@ -693,8 +717,11 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
 
             echo '<script>alert("Shopee Order Request imported successfully.");window.location.replace("' . $shopeeOrderRedirectPage . '");</script>';
             exit;
-        } else {
-            $importErrors[] = 'Database Error: ' . mysqli_error($finance_connect);
+        } catch (Exception $exception) {
+            if ($startedFinanceTransaction) {
+                mysqli_rollback($finance_connect);
+            }
+            $importErrors[] = $exception->getMessage();
         }
     }
 }
@@ -3062,6 +3089,109 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
 <head>
     <title><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></title>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
+    <style>
+        .shopee-airbill-row {
+            align-items: flex-start;
+        }
+
+        .shopee-airbill-toggle-col {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .shopee-airbill-toggle-field {
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 10px;
+            margin-top: 0;
+            padding: 0;
+        }
+
+        .shopee-airbill-toggle-label {
+            margin: 0;
+        }
+
+        @media (max-width: 767px) {
+            .shopee-airbill-toggle-col {
+                margin-top: 0;
+            }
+        }
+
+        .shopee-airbill-toggle {
+            position: relative;
+            width: 54px;
+            height: 28px;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .shopee-airbill-toggle input[type="checkbox"] {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .shopee-airbill-toggle-slider {
+            position: relative;
+            display: inline-block;
+            width: 54px;
+            height: 28px;
+            border-radius: 999px;
+            background: #31343a;
+            transition: all 0.18s ease;
+        }
+
+        .shopee-airbill-toggle-slider::before {
+            content: "";
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 22px;
+            height: 22px;
+            border-radius: 999px;
+            background: #ffffff;
+            transition: all 0.18s ease;
+        }
+
+        .shopee-airbill-toggle-slider::after {
+            content: "\f00d";
+            font-family: "Font Awesome 6 Free";
+            font-weight: 900;
+            color: #ffffff;
+            font-size: 0.62rem;
+            position: absolute;
+            right: 10px;
+            top: 8px;
+            transition: all 0.18s ease;
+        }
+
+        .shopee-airbill-toggle input:checked + .shopee-airbill-toggle-slider {
+            background: #6f922f;
+        }
+
+        .shopee-airbill-toggle input:checked + .shopee-airbill-toggle-slider::before {
+            left: 29px;
+        }
+
+        .shopee-airbill-toggle input:checked + .shopee-airbill-toggle-slider::after {
+            content: "\f00c";
+            right: 32px;
+        }
+
+        .shopee-inline-error {
+            display: block;
+            margin-top: 6px;
+            color: #dc3545;
+            font-size: 0.875rem;
+        }
+
+        .shopee-inline-invalid {
+            border-color: #dc3545 !important;
+        }
+    </style>
 </head>
 
 <body>
@@ -3120,7 +3250,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                         <div class="card mb-4 shadow-sm">
                             <div class="card-body">
                                 <h5 class="card-title mb-3">Step 2: Preview And Edit Before Insert</h5>
-                                <form method="post" enctype="multipart/form-data" autocomplete="off" data-shopee-import-preview="1">
+                                <form method="post" enctype="multipart/form-data" autocomplete="off" data-shopee-import-preview="1" novalidate>
                                     <div class="row mb-3">
                                         <div class="col-12 col-md-4">
                                             <label class="form-label" for="order_id">Order ID<span class="requireRed">*</span></label>
@@ -3258,12 +3388,18 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                     <div class="row mb-3">
                                         <div class="col-12 col-md-4">
                                             <label class="form-label" for="buyer">Shopee Buyer Username</label>
-                                            <select class="form-select" id="buyer" name="buyer">
-                                                <option value="">Select Buyer (Optional)</option>
-                                                <?php foreach ($shopeeBuyers as $id => $name) { ?>
-                                                    <option value="<?= htmlspecialchars($id) ?>" <?= isset($previewData['buyer']) && $previewData['buyer'] == $id ? 'selected' : '' ?>><?= htmlspecialchars($name) ?></option>
-                                                <?php } ?>
-                                            </select>
+                                            <?php
+                                            $buyerDisplayValue = '';
+                                            if (isset($previewData['buyer_name']) && trim((string) $previewData['buyer_name']) !== '') {
+                                                $buyerDisplayValue = trim((string) $previewData['buyer_name']);
+                                            } else if (isset($previewData['buyer']) && (string) $previewData['buyer'] !== '' && isset($shopeeBuyers[(int) $previewData['buyer']])) {
+                                                $buyerDisplayValue = (string) $shopeeBuyers[(int) $previewData['buyer']];
+                                            }
+                                            ?>
+                                            <div class="autocomplete">
+                                                <input class="form-control" type="text" id="buyer" name="buyer" value="<?= htmlspecialchars($buyerDisplayValue) ?>" autocomplete="off">
+                                                <input type="hidden" id="buyer_hidden" name="buyer_hidden" value="<?= htmlspecialchars(isset($previewData['buyer']) ? (string) $previewData['buyer'] : '') ?>">
+                                            </div>
                                             <?php if (!empty($previewData['source_buyer_username'])) { ?>
                                                 <small class="text-muted">Detected: <?= htmlspecialchars($previewData['source_buyer_username']) ?></small>
                                             <?php } ?>
@@ -3353,20 +3489,24 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                         </div>
                                     </div>
 
-                                    <div class="row mb-3">
-                                        <div class="col-12 col-md-3">
-                                            <label class="form-label" for="update_airbill">Update Airbill?</label>
-                                            <select class="form-select" id="update_airbill" name="update_airbill">
-                                                <option value="yes" <?= (isset($previewData['update_airbill']) ? $previewData['update_airbill'] : 'yes') === 'yes' ? 'selected' : '' ?>>Yes</option>
-                                                <option value="no" <?= (isset($previewData['update_airbill']) ? $previewData['update_airbill'] : 'yes') === 'no' ? 'selected' : '' ?>>No</option>
-                                            </select>
+                                    <div class="row mb-3 shopee-airbill-row">
+                                        <div class="col-12 col-md-2 shopee-airbill-toggle-col">
+                                            <?php $previewUpdateAirbillValue = (isset($previewData['update_airbill']) ? $previewData['update_airbill'] : 'yes') === 'yes' ? 'yes' : 'no'; ?>
+                                            <input type="hidden" id="update_airbill" name="update_airbill" value="<?= htmlspecialchars($previewUpdateAirbillValue) ?>">
+                                            <label class="form-label shopee-airbill-toggle-label" for="update_airbill_toggle">Update Airbill?</label>
+                                            <div class="shopee-airbill-toggle-field">
+                                                <label class="shopee-airbill-toggle mb-0" for="update_airbill_toggle">
+                                                    <input type="checkbox" id="update_airbill_toggle" <?= $previewUpdateAirbillValue === 'yes' ? 'checked' : '' ?>>
+                                                    <span class="shopee-airbill-toggle-slider"></span>
+                                                </label>
+                                            </div>
                                         </div>
                                         <div class="col-12 col-md-3">
-                                            <label class="form-label" for="airbill_no">Airbill No</label>
+                                            <label class="form-label" for="airbill_no">Airbill No<span class="requireRed">*</span></label>
                                             <input class="form-control" type="text" id="airbill_no" name="airbill_no" value="<?= htmlspecialchars(isset($previewData['airbill_no']) ? $previewData['airbill_no'] : '') ?>">
                                         </div>
                                         <div class="col-12 col-md-6">
-                                            <label class="form-label" for="airbill_attachment">Airbill Attachment</label>
+                                            <label class="form-label" for="airbill_attachment">Airbill Attachment<span class="requireRed">*</span></label>
                                             <input class="form-control" type="file" id="airbill_attachment" name="airbill_attachment">
                                             <?php if (!empty($previewData['airbill_attachment'])) { ?>
                                                 <small class="text-danger d-block mt-1">Current Attachment: <?= htmlspecialchars($previewData['airbill_attachment']) ?></small>
@@ -3377,7 +3517,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
 
                                     <div class="row mb-3">
                                         <div class="col-12 col-md-6">
-                                            <label class="form-label" for="customer_name">Customer Name</label>
+                                            <label class="form-label" for="customer_name">Customer Name<span class="requireRed">*</span></label>
                                             <input class="form-control" type="text" id="customer_name" name="customer_name" value="<?= htmlspecialchars(isset($previewData['customer_name']) ? $previewData['customer_name'] : '') ?>">
                                         </div>
                                         <div class="col-12 col-md-6">
@@ -3400,20 +3540,25 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
 
                                     <div class="row mb-3">
                                         <div class="col-12 col-md-6">
-                                            <label class="form-label" for="customer_address">Customer Address</label>
+                                            <label class="form-label" for="customer_address">Customer Address<span class="requireRed">*</span></label>
                                             <textarea class="form-control" id="customer_address" name="customer_address" rows="2"><?= htmlspecialchars(isset($previewData['customer_address']) ? $previewData['customer_address'] : '') ?></textarea>
                                         </div>
                                     </div>
 
-                                    <div class="d-flex justify-content-center gap-2 flex-wrap mt-4">
+                                    <div class="d-flex justify-content-center flex-wrap mt-4">
                                         <?php if ($previewData['missing_sku']) { ?>
-                                            <div class="alert alert-warning mb-0">
+                                            <div class="alert alert-warning mb-3 w-100" style="max-width: 975px;">
                                                 <i class="fa-solid fa-triangle-exclamation"></i> Package was not matched automatically. Please select the correct package manually before inserting.
                                             </div>
                                         <?php } ?>
-                                        <button class="btn btn-primary px-4" type="submit" name="actionBtn" value="insertShopeeOrderReq">
-                                            <i class="fa-solid fa-database"></i> Insert
-                                        </button>
+                                        <div class="d-flex justify-content-center gap-2 flex-wrap w-100">
+                                            <button class="btn btn-lg btn-rounded btn-primary px-4" type="submit" name="actionBtn" value="insertShopeeOrderReq">
+                                                <i class="fa-solid fa-database"></i> INSERT
+                                            </button>
+                                            <button class="btn btn-lg btn-rounded btn-secondary px-4" type="button" onclick="window.location.href='<?= $SITEURL ?>/shopee_order_import.php'">
+                                                CANCEL
+                                            </button>
+                                        </div>
                                     </div>
                                 </form>
                             </div>
@@ -3426,6 +3571,20 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
 </body>
 
 <script>
+    (function resetShopeeImportStoredValues() {
+        try {
+            localStorage.setItem('page', 'invalid');
+            localStorage.setItem('action', '');
+            document.querySelectorAll('input[id], textarea[id], select[id]').forEach(function (field) {
+                if (field.id) {
+                    localStorage.removeItem(field.id);
+                }
+            });
+        } catch (error) {
+            // Ignore storage access issues and continue rendering the page.
+        }
+    })();
+
     document.title = <?= json_encode($pageTitle, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     preloader(0, '');
     setButtonColor();
@@ -3437,6 +3596,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
     (function syncShopeeImportPreviewForm() {
         var previewForm = document.querySelector('form[data-shopee-import-preview="1"]');
         if (!previewForm) return;
+        var shopeeBuyerOptions = <?= json_encode($shopeeBuyers, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 
         previewForm.querySelectorAll('input').forEach(function (input) {
             input.setAttribute('autocomplete', 'off');
@@ -3462,31 +3622,193 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
             }
         });
 
+        function getInlineErrorMessage(field) {
+            if (!field) return 'This field is required.';
+            var customMessage = field.getAttribute('data-required-message');
+            if (customMessage) return customMessage;
+
+            var fieldId = field.id;
+            if (fieldId) {
+                var label = previewForm.querySelector('label[for="' + fieldId + '"]');
+                if (label) {
+                    var labelText = (label.textContent || '').replace(/\*/g, '').trim();
+                    if (labelText !== '') {
+                        return labelText + ' is required.';
+                    }
+                }
+            }
+
+            return 'This field is required.';
+        }
+
+        function normalizeLookup(value) {
+            return String(value || '')
+                .toLowerCase()
+                .replace(/[^a-z0-9]+/g, '');
+        }
+
+        function syncBuyerHiddenField() {
+            var buyerInput = previewForm.querySelector('#buyer');
+            var buyerHidden = previewForm.querySelector('#buyer_hidden');
+            if (!buyerInput || !buyerHidden) return;
+
+            var normalizedInput = normalizeLookup(buyerInput.value);
+            buyerHidden.value = '';
+            if (normalizedInput === '') {
+                return;
+            }
+
+            Object.keys(shopeeBuyerOptions).some(function (id) {
+                if (normalizeLookup(shopeeBuyerOptions[id]) === normalizedInput) {
+                    buyerHidden.value = id;
+                    buyerInput.value = shopeeBuyerOptions[id];
+                    return true;
+                }
+                return false;
+            });
+        }
+
+        function clearInlineError(field) {
+            if (!field) return;
+            field.classList.remove('shopee-inline-invalid');
+            var next = field.nextElementSibling;
+            if (next && next.classList.contains('shopee-inline-error')) {
+                next.remove();
+            }
+        }
+
+        function showInlineError(field, message) {
+            if (!field) return;
+            clearInlineError(field);
+            field.classList.add('shopee-inline-invalid');
+            var errorNode = document.createElement('small');
+            errorNode.className = 'shopee-inline-error';
+            errorNode.textContent = message;
+            field.insertAdjacentElement('afterend', errorNode);
+        }
+
+        function validatePreviewForm() {
+            var firstInvalidField = null;
+            var requiredFields = previewForm.querySelectorAll('input[required], select[required], textarea[required]');
+            requiredFields.forEach(function (field) {
+                clearInlineError(field);
+                if (field.disabled) {
+                    return;
+                }
+
+                var isEmpty = false;
+                if (field.type === 'file') {
+                    var existingAttachment = previewForm.querySelector('#airbill_attachment_value');
+                    var hasExistingAttachment = !!(existingAttachment && existingAttachment.value.trim() !== '');
+                    isEmpty = field.files.length === 0 && !hasExistingAttachment;
+                } else if (field.type === 'checkbox' || field.type === 'radio') {
+                    isEmpty = !field.checked;
+                } else {
+                    isEmpty = field.value.trim() === '';
+                }
+
+                if (isEmpty) {
+                    showInlineError(field, getInlineErrorMessage(field));
+                    if (!firstInvalidField) {
+                        firstInvalidField = field;
+                    }
+                }
+            });
+
+            if (firstInvalidField) {
+                firstInvalidField.focus();
+                return false;
+            }
+
+            return true;
+        }
+
         function toggleAirbillFields() {
             var updateAirbill = previewForm.querySelector('#update_airbill');
+            var updateAirbillToggle = previewForm.querySelector('#update_airbill_toggle');
             var airbillNo = previewForm.querySelector('#airbill_no');
             var airbillAttachment = previewForm.querySelector('#airbill_attachment');
-            if (!updateAirbill || !airbillNo || !airbillAttachment) return;
+            var customerName = previewForm.querySelector('#customer_name');
+            var customerAddress = previewForm.querySelector('#customer_address');
+            var existingAttachment = previewForm.querySelector('#airbill_attachment_value');
+            if (!updateAirbill || !updateAirbillToggle || !airbillNo || !airbillAttachment || !customerName || !customerAddress) return;
 
-            var enabled = updateAirbill.value !== 'no';
+            updateAirbill.value = updateAirbillToggle.checked ? 'yes' : 'no';
+            var enabled = updateAirbillToggle.checked;
             airbillNo.disabled = !enabled;
             airbillAttachment.disabled = !enabled;
+            customerName.disabled = !enabled;
+            customerAddress.disabled = !enabled;
+            airbillNo.required = enabled;
+            customerName.required = enabled;
+            customerAddress.required = enabled;
+            airbillAttachment.required = enabled && (!existingAttachment || existingAttachment.value.trim() === '');
+            [airbillNo, airbillAttachment, customerName, customerAddress].forEach(clearInlineError);
         }
 
         toggleAirbillFields();
-        var updateAirbill = previewForm.querySelector('#update_airbill');
-        if (updateAirbill) {
-            updateAirbill.addEventListener('change', toggleAirbillFields);
+        var updateAirbillToggle = previewForm.querySelector('#update_airbill_toggle');
+        if (updateAirbillToggle) {
+            updateAirbillToggle.addEventListener('change', toggleAirbillFields);
+        }
+
+        var buyerInput = previewForm.querySelector('#buyer');
+        if (buyerInput) {
+            buyerInput.addEventListener('keyup', function () {
+                var param = {
+                    search: buyerInput.value,
+                    searchType: 'buyer_username',
+                    elementID: 'buyer',
+                    hiddenElementID: 'buyer_hidden',
+                    dbTable: '<?= SHOPEE_CUST_INFO ?>',
+                };
+                if (typeof searchInput === 'function') {
+                    searchInput(param, '<?= $SITEURL ?>');
+                }
+                syncBuyerHiddenField();
+            });
+            buyerInput.addEventListener('change', syncBuyerHiddenField);
+            buyerInput.addEventListener('blur', syncBuyerHiddenField);
+            syncBuyerHiddenField();
         }
 
         var airbillAttachmentInput = previewForm.querySelector('#airbill_attachment');
         if (airbillAttachmentInput) {
             airbillAttachmentInput.addEventListener('change', function () {
+                clearInlineError(this);
                 if (typeof previewImage === 'function') {
                     previewImage(this, 'airbill_attachment_preview');
                 }
             });
         }
+
+        previewForm.querySelectorAll('input, select, textarea').forEach(function (field) {
+            var eventName = field.tagName === 'SELECT' || field.type === 'file' ? 'change' : 'input';
+            field.addEventListener(eventName, function () {
+                if (field.disabled) {
+                    clearInlineError(field);
+                    return;
+                }
+
+                if (field.type === 'file') {
+                    var existingAttachment = previewForm.querySelector('#airbill_attachment_value');
+                    if (field.files.length > 0 || (existingAttachment && existingAttachment.value.trim() !== '')) {
+                        clearInlineError(field);
+                    }
+                    return;
+                }
+
+                if (field.value.trim() !== '') {
+                    clearInlineError(field);
+                }
+            });
+        });
+
+        previewForm.addEventListener('submit', function (event) {
+            if (!validatePreviewForm()) {
+                event.preventDefault();
+            }
+        });
     })();
 </script>
 

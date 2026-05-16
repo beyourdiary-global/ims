@@ -10,6 +10,7 @@ function toggleNewBuyer() {
 var price_curr_chk = 0;
 
 $("#sor_airbill_attachment").on("change", function () {
+  $(".sor-airbill-attachment-err").remove();
   previewImage(this, "sor_airbill_attachment_preview");
 });
 
@@ -760,11 +761,23 @@ $("#sor_user").on("input", function () {
   $(".sor-user-err").remove();
 });
 
+$("#sor_airbill").on("input", function () {
+  $(".sor-airbill-err").remove();
+});
+
+$("#sor_customer_name").on("input", function () {
+  $(".sor-customer-name-err").remove();
+});
+
+$("#sor_customer_address").on("input", function () {
+  $(".sor-customer-address-err").remove();
+});
+
 $("#sor_final").on("input", function () {
   $(".sor-final-err").remove();
 });
 
-$(".submitBtn").on("click", () => {
+$(".submitBtn[name='actionBtn']").off("click.sorValidate").on("click.sorValidate", function (e) {
   $(".error-message").remove();
   var acc_chk = 0;
   var curr_chk = 0;
@@ -778,6 +791,7 @@ $(".submitBtn").on("click", () => {
   var pic_chk = 0;
   var price_chk = 0;
   var final_chk = 0;
+  var customer_address_chk = 1;
 
   if (
     $("#sor_acc").val() === "" ||
@@ -942,6 +956,26 @@ $(".submitBtn").on("click", () => {
     final_chk = 1;
   }
 
+  var updateAirbillEnabled =
+    $("#sor_update_airbill").val() === "yes" &&
+    !$("#sor_airbill").prop("disabled");
+
+  if (updateAirbillEnabled) {
+    if (
+      $("#sor_customer_address").val() === "" ||
+      $("#sor_customer_address").val() === null ||
+      $("#sor_customer_address").val() === undefined
+    ) {
+      customer_address_chk = 0;
+      $("#sor_customer_address").after(
+        '<span class="error-message sor-customer-address-err">Customer Address is required!</span>',
+      );
+    } else {
+      $(".sor-customer-address-err").remove();
+      customer_address_chk = 1;
+    }
+  }
+
   if (
     acc_chk == 1 &&
     curr_chk == 1 &&
@@ -954,8 +988,12 @@ $(".submitBtn").on("click", () => {
     pay_chk == 1 &&
     pic_chk == 1 &&
     price_chk == 1 &&
-    final_chk == 1
-  )
-    $(this).closest("form").submit();
-  else return false;
+    final_chk == 1 &&
+    customer_address_chk == 1
+  ) {
+    return true;
+  } else {
+    e.preventDefault();
+    return false;
+  }
 });

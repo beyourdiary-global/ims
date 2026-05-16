@@ -1,6 +1,17 @@
 <?php
+// Expected cPanel cron:
+// 0 8 * * * /usr/local/bin/php -q /home/USERNAME/public_html/ims/cron_shopee_flow_daily_email.php
+
 include_once 'init.php';
 include_once ROOT . '/include/common.php';
+
+if (date('H') !== '08') {
+    header('Content-Type: text/plain; charset=utf-8');
+    echo "Shopee OMS daily email report skipped.\n";
+    echo "Current server time: " . date('Y-m-d H:i:s') . "\n";
+    echo "This script only sends during the 08:00 AM hour.\n";
+    exit;
+}
 
 shopeeOmsRunFourteenDayAutoMove($connect, $finance_connect);
 

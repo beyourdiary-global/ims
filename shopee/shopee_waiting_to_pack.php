@@ -16,6 +16,21 @@ if (!$canViewPage) {
     echo '<script>alert("You do not have permission to view Shopee Waiting To Pack."); location.replace("../dashboard.php");</script>';
     exit;
 }
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
+    $safeAuditUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
+    $safeAuditPageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
+    $log = array(
+        'log_act' => 'View',
+        'cdate' => $cdate,
+        'ctime' => $ctime,
+        'uid' => USER_ID,
+        'cby' => USER_ID,
+        'act_msg' => $safeAuditUserName . " viewed the page <b>" . $safeAuditPageTitle . "</b>.",
+        'page' => $pageTitle,
+        'connect' => $connect,
+    );
+    audit_log($log);
+}
 
 $statusMessage = '';
 $statusClass = 'success';
@@ -109,10 +124,6 @@ if (!empty($orderRows)) {
             </div>
         </div>
 
-        <?php if ($statusMessage !== '') { ?>
-            <div class="alert alert-<?= htmlspecialchars($statusClass) ?>"><?= htmlspecialchars($statusMessage) ?></div>
-        <?php } ?>
-
         <div class="card p-3 mb-4">
             <form method="post" class="row g-3 align-items-end" id="waitingToPackScanForm">
                 <div class="col-12 col-md-9">
@@ -130,9 +141,10 @@ if (!empty($orderRows)) {
         </div>
 
         <div class="table-responsive">
-            <table class="table table-striped table-bordered">
+            <table class="table table-striped table-bordered" id="waiting_to_pack_table">
                 <thead>
                     <tr>
+                        <th width="60">S/N</th>
                         <th>Order ID</th>
                         <th>Customer</th>
                         <th>Package</th>
@@ -143,6 +155,7 @@ if (!empty($orderRows)) {
                 </thead>
                 <tbody>
                     <?php if (!empty($orderRows)) { ?>
+                        <?php $rowNumber = 1; ?>
                         <?php foreach ($orderRows as $row) { ?>
                             <?php
                             $customerName = trim((string) (isset($row['customer_name']) ? $row['customer_name'] : ''));
@@ -157,6 +170,7 @@ if (!empty($orderRows)) {
                             }
                             ?>
                             <tr>
+                                <td><?= $rowNumber++ ?></td>
                                 <td><a href="<?= $SITEURL ?>/shopee/shopee_order_req.php?id=<?= (int) $row['id'] ?>"><?= htmlspecialchars((string) $row['orderID']) ?></a></td>
                                 <td><?= htmlspecialchars($customerName !== '' ? $customerName : '-') ?></td>
                                 <td><?= htmlspecialchars(!empty($packageSummary['bundle_name']) ? $packageSummary['bundle_name'] : '-') ?></td>
@@ -173,7 +187,7 @@ if (!empty($orderRows)) {
                         <?php } ?>
                     <?php } else { ?>
                         <tr>
-                            <td colspan="6" class="text-center">No To Pack orders found.</td>
+                            <td colspan="7" class="text-center">No To Pack orders found.</td>
                         </tr>
                     <?php } ?>
                 </tbody>
@@ -183,7 +197,72 @@ if (!empty($orderRows)) {
     </div>
     <script src="<?= $SITEURL ?>/header/js/jsQR.js"></script>
     <script>
+        function showWaitingToPackStatusPopup(message) {
+            const modelResult = document.createElement('div');
+            modelResult.id = 'waiting-to-pack-status-modal';
+            modelResult.className = 'modal fade';
+            modelResult.innerHTML = `
+                <div class="modal-dialog modal-dialog-centered" style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
+                    <div class="modal-content">
+                        <div class="modal-body fs-6 mt-3">
+                            <p style="text-align:center; font-weight:bold; font-size:25px;">${message}</p>
+                        </div>
+                        <div class="modal-footer d-flex justify-content-center mt-n3" style="border-top:0px">
+                            <button id="waitingToPackContinueBtn" type="button" class="btn"
+                                style="border:1px solid #FF9B44; background-color:#FFFFFF; color:#FF9B44; box-shadow:0 0 !important; border-radius:24px; text-transform:none;">Continue</button>
+                        </div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modelResult);
+
+            const popup = new bootstrap.Modal(modelResult, {
+                keyboard: false,
+                backdrop: 'static',
+            });
+            popup.show();
+
+            modelResult.addEventListener('click', function (event) {
+                if (event.target && event.target.id === 'waitingToPackContinueBtn') {
+                    popup.hide();
+                }
+            });
+
+            modelResult.addEventListener('hidden.bs.modal', function () {
+                modelResult.remove();
+            });
+        }
+
         (function () {
+            <?php if ($statusMessage !== '') { ?>
+            showWaitingToPackStatusPopup(<?= json_encode($statusMessage) ?>);
+            <?php } ?>
+
+            var waitingToPackRowCount = $('#waiting_to_pack_table tbody tr').length;
+            var waitingToPackTable = new DataTable('#waiting_to_pack_table', {
+                paging: waitingToPackRowCount > 10,
+                info: waitingToPackRowCount > 10,
+                searching: false,
+                ordering: true,
+                lengthChange: waitingToPackRowCount > 10,
+                pageLength: 10,
+                lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],
+                autoWidth: false,
+                order: [],
+                columnDefs: [
+                    { orderable: false, searchable: false, targets: [0, 5] }
+                ]
+            });
+            datatableAlignment('waiting_to_pack_table');
+
+            waitingToPackTable.on('draw', function () {
+                var pageInfo = waitingToPackTable.page.info();
+                waitingToPackTable.column(0, { page: 'current' }).nodes().each(function (cell, index) {
+                    cell.innerHTML = pageInfo.start + index + 1;
+                });
+            });
+            waitingToPackTable.draw(false);
+
             var form = document.getElementById('waitingToPackScanForm');
             var scanValueInput = document.getElementById('scan_value');
             var qrFileInput = document.getElementById('scan_qr_image');
@@ -263,7 +342,7 @@ if (!empty($orderRows)) {
                         form.submit();
                     }
                 } catch (error) {
-                    alert(error && error.message ? error.message : 'Unable to scan the uploaded QR image.');
+                    showWaitingToPackStatusPopup(error && error.message ? error.message : 'Unable to scan the uploaded QR image.');
                 }
             });
         })();

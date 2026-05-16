@@ -23,6 +23,8 @@ if (!$canViewPage) {
     exit;
 }
 
+shopeeOmsEnsureRealtimePostponedSync($connect, $finance_connect);
+
 $requestId = (int) (!empty(input('id')) ? input('id') : post('id'));
 $redirectPage = $SITEURL . '/shopee/shopee_order_req_table.php';
 
