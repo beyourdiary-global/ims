@@ -390,7 +390,12 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                     In the JSON response, find <code>message</code> -&gt; <code>chat</code> -&gt; <code>id</code>.<br>
                                     <img class="token-help-media mt-2" src="<?= $SITEURL ?>/images_server/token_setting_guide/chat_id_step2.png" alt="Telegram getUpdates response with chat id">
                                 </li>
-                                <li>Copy that numeric value (example: <code>1064420282</code>) and paste it into Chat ID.</li>
+                                <li>
+                                    For a group chat, add your bot into the Telegram group first, then check the same <code>message</code> -&gt; <code>chat</code> -&gt; <code>id</code> value.
+                                    Group chat IDs are usually negative numbers.<br>
+                                    <img class="token-help-media mt-2" src="<?= $SITEURL ?>/images_server/token_setting_guide/chat_id_step3.png" alt="Telegram group chat id example from getUpdates response">
+                                </li>
+                                <li>Copy that numeric value (example: <code>1064420282</code> or group chat <code>-5185979975</code>) and paste it into Chat ID.</li>
                             </ol>
                             <p class="mb-0">Reference: <a href="https://core.telegram.org/bots/api#getupdates" target="_blank" rel="noopener noreferrer">Telegram Bot API - getUpdates</a></p>
                         </div>
