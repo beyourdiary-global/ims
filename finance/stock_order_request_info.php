@@ -302,16 +302,32 @@ function sorInfoResolveChatIdFromTokenRow($tokenRow)
     return '';
 }
 
-function sorInfoFindPreferredTokenRow($connect, $tokenTable)
+function sorInfoFindPreferredTokenRow($connect, $tokenTable, $pageName = 'Stock Order Request')
 {
-    // Prefer rows clearly intended for Stock In Telegram flow, then fallback to latest active token.
-    $sql = "SELECT * FROM `" . $tokenTable . "` WHERE status='A' ORDER BY "
-        . "CASE "
-        . "WHEN LOWER(name) LIKE '%stock in%' OR LOWER(name) LIKE '%stockin%' OR LOWER(name) LIKE '%stock-order%' OR LOWER(name) LIKE '%stock order%' OR LOWER(name) LIKE '%warehouse%' THEN 0 "
-        . "WHEN LOWER(COALESCE(remark, '')) LIKE '%stock in%' OR LOWER(COALESCE(remark, '')) LIKE '%stockin%' OR LOWER(COALESCE(remark, '')) LIKE '%stock-order%' OR LOWER(COALESCE(remark, '')) LIKE '%stock order%' OR LOWER(COALESCE(remark, '')) LIKE '%warehouse%' THEN 1 "
-        . "ELSE 2 END, id DESC LIMIT 1";
+    if (!($connect instanceof mysqli)) {
+        return null;
+    }
 
-    $rst = mysqli_query($connect, $sql);
+    if (function_exists('shopeeOmsFindPreferredTokenSetting')) {
+        $tokenRow = shopeeOmsFindPreferredTokenSetting($connect, $pageName);
+        if (!empty($tokenRow)) {
+            return $tokenRow;
+        }
+        return null;
+    }
+
+    $pageName = trim((string) $pageName);
+    if ($pageName === '') {
+        return null;
+    }
+
+    $pageColCheck = @mysqli_query($connect, "SHOW COLUMNS FROM `" . $tokenTable . "` LIKE 'page_used'");
+    if (!$pageColCheck || mysqli_num_rows($pageColCheck) === 0) {
+        return null;
+    }
+
+    $safePageName = mysqli_real_escape_string($connect, $pageName);
+    $rst = mysqli_query($connect, "SELECT * FROM `" . $tokenTable . "` WHERE status='A' AND page_used='" . $safePageName . "' ORDER BY id DESC LIMIT 1");
     if ($rst && mysqli_num_rows($rst) > 0) {
         return mysqli_fetch_assoc($rst);
     }
@@ -380,10 +396,10 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
         @mysqli_query($connect, "ALTER TABLE `" . $tokenTable . "` ADD COLUMN `chat_id` VARCHAR(100) DEFAULT '' AFTER `bot_token`");
     }
 
-    $tokenRow = sorInfoFindPreferredTokenRow($connect, $tokenTable);
+    $tokenRow = sorInfoFindPreferredTokenRow($connect, $tokenTable, 'Stock Order Request');
 
     if (!$tokenRow) {
-        $telegramErr = 'Token Setting not found. Please create Token Setting first.';
+        $telegramErr = 'Token not set yet, please set Stock Order Request Token.';
     } else {
         $botToken = trim((string) (isset($tokenRow['bot_token']) ? $tokenRow['bot_token'] : ''));
 

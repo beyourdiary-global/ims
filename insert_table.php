@@ -545,26 +545,29 @@ if ($conn->select_db($db_fin)) {
 //         echo "<p style='color:red;'>Error creating `purchase_order`: " . $conn->error . "</p>";
 //     }
 
-//     $createTokenSettingTableSql = "CREATE TABLE IF NOT EXISTS `token_setting` (
-//     `id` INT AUTO_INCREMENT PRIMARY KEY,
-//     `name` VARCHAR(255) NOT NULL,
-//     `bot_token` VARCHAR(255) NOT NULL,
-//     `chat_id` VARCHAR(100) DEFAULT '',
-//     `remark` TEXT DEFAULT NULL,
-//     `create_by` VARCHAR(30) DEFAULT NULL,
-//     `create_date` DATE DEFAULT NULL,
-//     `create_time` TIME DEFAULT NULL,
-//     `update_by` VARCHAR(30) DEFAULT NULL,
-//     `update_date` DATE DEFAULT NULL,
-//     `update_time` TIME DEFAULT NULL,
-//     `status` CHAR(1) NOT NULL DEFAULT 'A'
-// ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    $safeCmsDb = str_replace('`', '``', $db_cms);
 
-//     if ($conn->query($createTokenSettingTableSql)) {
-//         echo "<p style='color:blue;'>Table `token_setting` is ready.</p>";
-//     } else {
-//         echo "<p style='color:red;'>Error creating `token_setting`: " . $conn->error . "</p>";
-//     }
+    $createTokenSettingTableSql = "CREATE TABLE IF NOT EXISTS `" . $safeCmsDb . "`.`token_setting` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `name` VARCHAR(255) NOT NULL,
+    `page_used` VARCHAR(100) NOT NULL,
+    `bot_token` VARCHAR(255) NOT NULL,
+    `chat_id` VARCHAR(100) DEFAULT '',
+    `remark` TEXT DEFAULT NULL,
+    `create_by` VARCHAR(30) DEFAULT NULL,
+    `create_date` DATE DEFAULT NULL,
+    `create_time` TIME DEFAULT NULL,
+    `update_by` VARCHAR(30) DEFAULT NULL,
+    `update_date` DATE DEFAULT NULL,
+    `update_time` TIME DEFAULT NULL,
+    `status` CHAR(1) NOT NULL DEFAULT 'A'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createTokenSettingTableSql)) {
+        echo "<p style='color:blue;'>Table `token_setting` is ready.</p>";
+    } else {
+        echo "<p style='color:red;'>Error creating `token_setting`: " . $conn->error . "</p>";
+    }
 
 //     $createUserRecordLogTableSql = "CREATE TABLE IF NOT EXISTS `user_record_log` (
 //     `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -585,7 +588,8 @@ if ($conn->select_db($db_fin)) {
 //         echo "<p style='color:red;'>Error creating `user_record_log`: " . $conn->error . "</p>";
 //     }
 
-//     addColumnIfMissing($conn, $db_cms, 'token_setting', 'chat_id', "ALTER TABLE `token_setting` ADD COLUMN `chat_id` VARCHAR(100) DEFAULT '' AFTER `bot_token`");
+    addColumnIfMissing($conn, $db_cms, 'token_setting', 'chat_id', "ALTER TABLE `" . $safeCmsDb . "`.`token_setting` ADD COLUMN `chat_id` VARCHAR(100) DEFAULT '' AFTER `bot_token`");
+    addColumnIfMissing($conn, $db_cms, 'token_setting', 'page_used', "ALTER TABLE `" . $safeCmsDb . "`.`token_setting` ADD COLUMN `page_used` VARCHAR(100) NOT NULL DEFAULT '' AFTER `name`");
 
 //     addColumnIfMissing($conn, $db_cms, 'user', 'main_report_supervisor', "ALTER TABLE `user` ADD COLUMN `main_report_supervisor` INT DEFAULT NULL AFTER `access_id`");
 //     addColumnIfMissing($conn, $db_cms, 'user', 'second_report_supervisor', "ALTER TABLE `user` ADD COLUMN `second_report_supervisor` INT DEFAULT NULL AFTER `main_report_supervisor`");

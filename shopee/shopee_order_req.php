@@ -633,7 +633,7 @@ if (post('actionBtn')) {
                             $freshOrderRow = shopeeOmsLoadOrder($finance_connect, $dataID);
                             $tokenResult = shopeeOmsCreateWarehouseToken($connect, $finance_connect, $freshOrderRow, USER_ID);
                             if (!empty($tokenResult['success']) && !empty($tokenResult['token_row']) && !empty($tokenResult['notification'])) {
-                                $notifyResult = shopeeOmsSendWarehouseNotification($connect, $finance_connect, $tokenResult['token_row'], $tokenResult['notification']);
+                                $notifyResult = shopeeOmsSendWarehouseNotification($connect, $finance_connect, $tokenResult['token_row'], $tokenResult['notification'], $pageTitle);
                                 $sorLocalTelegramFailureMessage = $sorBuildLocalTelegramFailureMessage($notifyResult);
                                 if (!empty($notifyResult['sent'])) {
                                     mysqli_query($finance_connect, "UPDATE `" . $tblName . "` SET `step_a_sent_at` = NOW() WHERE id = " . $dataID . " LIMIT 1");
@@ -999,6 +999,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
 
 <head>
     <link rel="stylesheet" href="../css/main.css">
+    <script src="../finance/header/js/pdf.min.js"></script>
     <style>
         .shopee-airbill-row {
             align-items: flex-start;
@@ -1100,6 +1101,17 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
 
         .shopee-inline-invalid {
             border-color: #dc3545 !important;
+        }
+
+        .shopee-airbill-extract-status {
+            display: block;
+            margin-top: 6px;
+            font-size: 0.875rem;
+            color: #6c757d;
+        }
+
+        .shopee-airbill-extract-status.is-error {
+            color: #dc3545;
         }
 
     </style>
@@ -1480,6 +1492,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                         <div class="col-md-6 mb-3">
                             <label class="form-label form_lbl" for="sor_airbill_attachment">Airbill Attachment<span class="requireRed">*</span></label>
                             <input class="form-control" type="file" name="sor_airbill_attachment" id="sor_airbill_attachment" <?= $act == '' ? 'disabled' : '' ?>>
+                            <small id="sor_airbill_extract_status" class="shopee-airbill-extract-status"></small>
                             <?php if (isset($row['airbill_attachment']) && $row['airbill_attachment']) { ?>
                                 <div id="err_msg">
                                     <span class="mt-n1">
@@ -2167,8 +2180,20 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
             form.submit();
         }
 
+        <?= shopeeOmsRenderAirbillPdfAutofillScript() ?>
+
         document.addEventListener('DOMContentLoaded', function () {
             toggleAirbillFields();
+            if (window.shopeeOmsAirbillPdfAutofill) {
+                window.shopeeOmsAirbillPdfAutofill.bind({
+                    fileInputSelector: '#sor_airbill_attachment',
+                    airbillNoSelector: '#sor_airbill',
+                    customerAddressSelector: '#sor_customer_address',
+                    statusSelector: '#sor_airbill_extract_status',
+                    workerSrc: '../finance/header/js/pdf.worker.min.js',
+                    errorClass: 'is-error'
+                });
+            }
             var updateAirbillToggle = document.getElementById('sor_update_airbill_toggle');
             if (updateAirbillToggle) {
                 updateAirbillToggle.addEventListener('change', toggleAirbillFields);

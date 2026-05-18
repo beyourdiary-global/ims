@@ -96,6 +96,7 @@ if (!$result) {
                             <th scope="col" width="60px">S/N</th>
                             <th scope="col" id="action_col" width="130px">Action</th>
                             <th scope="col">Name</th>
+                            <th scope="col">Page Used</th>
                         </tr>
                     </thead>
 
@@ -112,6 +113,7 @@ if (!$result) {
                                         <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], '', $pageTitle, $redirect_page, $deleteRedirectPage); ?>
                                     </td>
                                     <td scope="row"><?= htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?= htmlspecialchars((string) (isset($row['page_used']) ? $row['page_used'] : ''), ENT_QUOTES, 'UTF-8') ?></td>
                                 </tr>
                             <?php }
                             } ?>
@@ -124,6 +126,7 @@ if (!$result) {
                             <th scope="col" width="60px">S/N</th>
                             <th scope="col" id="action_col" width="130px">Action</th>
                             <th scope="col">Name</th>
+                            <th scope="col">Page Used</th>
                         </tr>
                     </tfoot>
                 </table>

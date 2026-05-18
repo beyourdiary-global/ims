@@ -97,10 +97,11 @@ $currentStatus = shopeeOmsGetStatusLabel(isset($requestRow['order_status']) ? $r
 $airbillAttachmentUrl = '';
 $airbillAttachmentExt = '';
 if ($airbillAttachment !== '') {
-    $imgServerBase = defined('img_server') ? (string) constant('img_server') : '/images_server/';
-    $imgServerBase = '/' . trim($imgServerBase, '/');
-    $attachmentFileName = basename(str_replace('\\', '/', $airbillAttachment));
-    $airbillAttachmentUrl = rtrim((string) $SITEURL, '/') . $imgServerBase . '/shopee_airbill_attachment/' . rawurlencode($attachmentFileName);
+    $storedAttachment = trim(str_replace('\\', '/', (string) $airbillAttachment), '/');
+    $attachmentFileName = basename($storedAttachment);
+    if (strpos($storedAttachment, 'attachment/') === 0) {
+        $airbillAttachmentUrl = rtrim((string) $SITEURL, '/') . '/' . $storedAttachment;
+    }
     $airbillAttachmentExt = strtolower(pathinfo($attachmentFileName, PATHINFO_EXTENSION));
 }
 ?>

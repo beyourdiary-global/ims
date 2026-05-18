@@ -90,9 +90,23 @@ $importErrors = [];
 $importWarnings = [];
 $previewData = [];
 $orderIdFieldError = '';
+$importLocalTelegramFailureMessage = '';
 $allowedAttachmentExt = array("png", "jpg", "jpeg", "pdf");
 $sorAirbillAttachmentPath = img_server . 'shopee_airbill_attachment/';
 $sorAirbillAttachmentUrl = rtrim((string) $SITEURL, '/') . '/' . trim((string) $sorAirbillAttachmentPath, '/\\') . '/';
+$importIsLiveSite = isset($siteOrlocalMode) ? (bool) $siteOrlocalMode : true;
+$importBuildLocalTelegramFailureMessage = function ($notifyResult) use ($importIsLiveSite) {
+    if ($importIsLiveSite || !is_array($notifyResult) || !empty($notifyResult['sent'])) {
+        return '';
+    }
+
+    $reason = trim((string) (isset($notifyResult['message']) ? $notifyResult['message'] : ''));
+    if ($reason === '') {
+        $reason = 'Unknown Telegram send failure.';
+    }
+
+    return "Telegram message failed to send.\nReason: " . $reason;
+};
 
 $shopeeAccounts = getImportOptionList(SHOPEE_ACC, 'name', $finance_connect);
 $currencyUnits = getImportOptionList(CUR_UNIT, 'unit', $connect);
@@ -679,8 +693,11 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
                 $freshOrderRow = shopeeOmsLoadOrder($finance_connect, (int) $dataID);
                 $tokenResult = shopeeOmsCreateWarehouseToken($connect, $finance_connect, $freshOrderRow, USER_ID);
                 if (!empty($tokenResult['success']) && !empty($tokenResult['token_row']) && !empty($tokenResult['notification'])) {
-                    shopeeOmsSendWarehouseNotification($connect, $finance_connect, $tokenResult['token_row'], $tokenResult['notification']);
-                    mysqli_query($finance_connect, "UPDATE `" . SHOPEE_SG_ORDER_REQ . "` SET `step_a_sent_at` = NOW() WHERE id = " . (int) $dataID . " LIMIT 1");
+                    $notifyResult = shopeeOmsSendWarehouseNotification($connect, $finance_connect, $tokenResult['token_row'], $tokenResult['notification'], $parentPageTitle);
+                    $importLocalTelegramFailureMessage = $importBuildLocalTelegramFailureMessage($notifyResult);
+                    if (!empty($notifyResult['sent'])) {
+                        mysqli_query($finance_connect, "UPDATE `" . SHOPEE_SG_ORDER_REQ . "` SET `step_a_sent_at` = NOW() WHERE id = " . (int) $dataID . " LIMIT 1");
+                    }
                 }
             } else if ($requiresInitialShippedAutoMove) {
                 $initialShippedResult = shopeeOmsFinalizeInitialShippedOrder($connect, $finance_connect, (int) $dataID, USER_ID, USER_GROUP, $pageTitle);
@@ -709,7 +726,11 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
             ];
             audit_log($log);
 
-            echo '<script>alert("Shopee Order Request imported successfully.");window.location.replace("' . $shopeeOrderRedirectPage . '");</script>';
+            $importSuccessMessage = "Shopee Order Request imported successfully.";
+            if ($importLocalTelegramFailureMessage !== '') {
+                $importSuccessMessage .= "\n\n" . $importLocalTelegramFailureMessage;
+            }
+            echo '<script>alert(' . json_encode($importSuccessMessage) . ');window.location.replace("' . $shopeeOrderRedirectPage . '");</script>';
             exit;
         } catch (Exception $exception) {
             if ($startedFinanceTransaction) {
@@ -3083,6 +3104,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
 <head>
     <title><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></title>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
+    <script src="finance/header/js/pdf.min.js"></script>
     <style>
         .shopee-airbill-row {
             align-items: flex-start;
@@ -3502,6 +3524,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                         <div class="col-12 col-md-6">
                                             <label class="form-label" for="airbill_attachment">Airbill Attachment<span class="requireRed">*</span></label>
                                             <input class="form-control" type="file" id="airbill_attachment" name="airbill_attachment">
+                                            <small id="airbill_extract_status" class="d-block mt-1 text-muted"></small>
                                             <?php if (!empty($previewData['airbill_attachment'])) { ?>
                                                 <small class="text-danger d-block mt-1">Current Attachment: <?= htmlspecialchars($previewData['airbill_attachment']) ?></small>
                                             <?php } ?>
@@ -3733,7 +3756,20 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
             [airbillNo, airbillAttachment, customerAddress].forEach(clearInlineError);
         }
 
+        <?= shopeeOmsRenderAirbillPdfAutofillScript() ?>
+
         toggleAirbillFields();
+        if (window.shopeeOmsAirbillPdfAutofill) {
+            window.shopeeOmsAirbillPdfAutofill.bind({
+                fileInputSelector: '#airbill_attachment',
+                airbillNoSelector: '#airbill_no',
+                customerAddressSelector: '#customer_address',
+                statusSelector: '#airbill_extract_status',
+                workerSrc: 'finance/header/js/pdf.worker.min.js',
+                errorClass: 'text-danger',
+                normalClass: 'text-muted'
+            });
+        }
         var updateAirbillToggle = previewForm.querySelector('#update_airbill_toggle');
         if (updateAirbillToggle) {
             updateAirbillToggle.addEventListener('change', toggleAirbillFields);

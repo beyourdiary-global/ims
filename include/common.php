@@ -2623,9 +2623,20 @@ if (!function_exists('shopeeOmsDetectFileMimeType')) {
 }
 
 if (!function_exists('shopeeOmsFindPreferredTokenSetting')) {
-    function shopeeOmsFindPreferredTokenSetting($connect)
+    function shopeeOmsFindPreferredTokenSetting($connect, $pageName = '')
     {
         if (!($connect instanceof mysqli)) {
+            return array();
+        }
+
+        $pageName = trim((string) $pageName);
+        if ($pageName !== '' && function_exists('shopeeOmsIsTokenSettingPageFieldAvailable') && shopeeOmsIsTokenSettingPageFieldAvailable($connect)) {
+            $safePageName = mysqli_real_escape_string($connect, $pageName);
+            $result = mysqli_query($connect, "SELECT * FROM `" . TOKEN_SETT . "` WHERE status = 'A' AND page_used = '" . $safePageName . "' ORDER BY id DESC LIMIT 1");
+            if ($result && mysqli_num_rows($result) > 0) {
+                return (array) mysqli_fetch_assoc($result);
+            }
+
             return array();
         }
 
@@ -2643,6 +2654,36 @@ if (!function_exists('shopeeOmsFindPreferredTokenSetting')) {
         }
 
         return array();
+    }
+}
+
+if (!function_exists('shopeeOmsGetTokenSettingPageOptions')) {
+    function shopeeOmsGetTokenSettingPageOptions()
+    {
+        return array(
+            'Shopee Order Request' => 'Shopee Order Request',
+            'Stock Order Request' => 'Stock Order Request',
+        );
+    }
+}
+
+if (!function_exists('shopeeOmsIsTokenSettingPageFieldAvailable')) {
+    function shopeeOmsIsTokenSettingPageFieldAvailable($connect)
+    {
+        static $availabilityMap = array();
+
+        if (!($connect instanceof mysqli)) {
+            return false;
+        }
+
+        $cacheKey = spl_object_hash($connect);
+        if (array_key_exists($cacheKey, $availabilityMap)) {
+            return $availabilityMap[$cacheKey];
+        }
+
+        $result = @mysqli_query($connect, "SHOW COLUMNS FROM `" . TOKEN_SETT . "` LIKE 'page_used'");
+        $availabilityMap[$cacheKey] = ($result && mysqli_num_rows($result) > 0);
+        return $availabilityMap[$cacheKey];
     }
 }
 
@@ -2937,6 +2978,290 @@ if (!function_exists('shopeeOmsBuildAirbillAttachmentUrl')) {
     }
 }
 
+if (!function_exists('shopeeOmsRenderAirbillPdfAutofillScript')) {
+    function shopeeOmsRenderAirbillPdfAutofillScript()
+    {
+        return <<<'JS'
+if (!window.shopeeOmsAirbillPdfAutofill) {
+    window.shopeeOmsAirbillPdfAutofill = (function () {
+        function getPdfTextItemX(item) {
+            return item && item.transform ? Number(item.transform[4]) || 0 : 0;
+        }
+
+        function getPdfTextItemY(item) {
+            return item && item.transform ? Number(item.transform[5]) || 0 : 0;
+        }
+
+        function normalizePdfTextItem(item) {
+            return String(item && item.str ? item.str : '').trim();
+        }
+
+        function sortPdfItemsForReading(items) {
+            return items.slice().sort(function (a, b) {
+                var yDiff = getPdfTextItemY(b) - getPdfTextItemY(a);
+                if (Math.abs(yDiff) > 2) {
+                    return yDiff;
+                }
+                return getPdfTextItemX(a) - getPdfTextItemX(b);
+            });
+        }
+
+        function groupPdfItemsIntoLines(items) {
+            var sortedItems = sortPdfItemsForReading(items);
+            var lines = [];
+
+            sortedItems.forEach(function (item) {
+                var text = normalizePdfTextItem(item);
+                if (text === '') {
+                    return;
+                }
+
+                var itemY = getPdfTextItemY(item);
+                var currentLine = lines.length > 0 ? lines[lines.length - 1] : null;
+                if (!currentLine || Math.abs(currentLine.y - itemY) > 2) {
+                    currentLine = {
+                        y: itemY,
+                        items: []
+                    };
+                    lines.push(currentLine);
+                }
+
+                currentLine.items.push(item);
+            });
+
+            return lines.map(function (line) {
+                return line.items
+                    .slice()
+                    .sort(function (a, b) {
+                        return getPdfTextItemX(a) - getPdfTextItemX(b);
+                    })
+                    .map(function (item) {
+                        return normalizePdfTextItem(item);
+                    })
+                    .filter(function (text) {
+                        return text !== '';
+                    })
+                    .join(' ')
+                    .replace(/\s+,/g, ',')
+                    .trim();
+            }).filter(function (line) {
+                return line !== '';
+            });
+        }
+
+        function isLikelyAirbillCode(text) {
+            var normalized = String(text || '').replace(/\s+/g, '').toUpperCase();
+            if (normalized.length < 10) {
+                return false;
+            }
+            if (!/[A-Z]/.test(normalized) || !/\d/.test(normalized)) {
+                return false;
+            }
+
+            return /^(?:GDSP|MY)[A-Z0-9]{8,}$/.test(normalized) || /^[A-Z0-9]{10,}$/.test(normalized);
+        }
+
+        function extractAirbillCodeFromPdfItems(items, pageHeight) {
+            var candidates = items
+                .map(function (item) {
+                    return {
+                        text: normalizePdfTextItem(item).replace(/\s+/g, '').toUpperCase(),
+                        x: getPdfTextItemX(item),
+                        y: getPdfTextItemY(item)
+                    };
+                })
+                .filter(function (item) {
+                    return item.y >= (pageHeight * 0.65) && isLikelyAirbillCode(item.text);
+                })
+                .sort(function (a, b) {
+                    if (Math.abs(b.y - a.y) > 2) {
+                        return b.y - a.y;
+                    }
+                    return a.x - b.x;
+                });
+
+            return candidates.length > 0 ? candidates[0].text : '';
+        }
+
+        function extractRecipientAddressFromPdfItems(items, pageWidth) {
+            var addressLabels = items
+                .filter(function (item) {
+                    return normalizePdfTextItem(item) === 'Address:' && getPdfTextItemX(item) <= (pageWidth * 0.2);
+                })
+                .sort(function (a, b) {
+                    return getPdfTextItemY(b) - getPdfTextItemY(a);
+                });
+
+            if (addressLabels.length === 0) {
+                return '';
+            }
+
+            var recipientAddressLabel = addressLabels[addressLabels.length - 1];
+            var recipientPostcodeLabel = items
+                .filter(function (item) {
+                    return normalizePdfTextItem(item) === 'Postcode:' &&
+                        getPdfTextItemX(item) <= (pageWidth * 0.2) &&
+                        getPdfTextItemY(item) < getPdfTextItemY(recipientAddressLabel) - 10;
+                })
+                .sort(function (a, b) {
+                    return getPdfTextItemY(b) - getPdfTextItemY(a);
+                })[0] || null;
+
+            var minX = getPdfTextItemX(recipientAddressLabel) + Number(recipientAddressLabel.width || 0) - 1;
+            var minY = recipientPostcodeLabel ? getPdfTextItemY(recipientPostcodeLabel) + 8 : getPdfTextItemY(recipientAddressLabel) - 60;
+            var maxY = getPdfTextItemY(recipientAddressLabel) + 1;
+            var maxX = pageWidth * 0.62;
+            var addressItems = items.filter(function (item) {
+                var text = normalizePdfTextItem(item);
+                if (text === '' || text === 'Address:' || text === 'Phone:' || text === 'Name:' || text === 'Postcode:') {
+                    return false;
+                }
+
+                var itemX = getPdfTextItemX(item);
+                var itemY = getPdfTextItemY(item);
+                return itemX >= minX && itemX <= maxX && itemY <= maxY && itemY >= minY;
+            });
+
+            return groupPdfItemsIntoLines(addressItems).join('\n').trim();
+        }
+
+        function extractShopeeAirbillDataFromPdfItems(items, pageWidth, pageHeight) {
+            return {
+                airbillNo: extractAirbillCodeFromPdfItems(items, pageHeight),
+                customerAddress: extractRecipientAddressFromPdfItems(items, pageWidth)
+            };
+        }
+
+        function dispatchInputEvent(element) {
+            if (!element) {
+                return;
+            }
+
+            try {
+                element.dispatchEvent(new Event('input', { bubbles: true }));
+                element.dispatchEvent(new Event('change', { bubbles: true }));
+            } catch (error) {
+            }
+        }
+
+        function bind(config) {
+            config = config || {};
+            var fileInput = document.querySelector(config.fileInputSelector || '');
+            var airbillNo = document.querySelector(config.airbillNoSelector || '');
+            var customerAddress = document.querySelector(config.customerAddressSelector || '');
+            var statusNode = document.querySelector(config.statusSelector || '');
+            if (!fileInput || !airbillNo || !customerAddress || !statusNode) {
+                return false;
+            }
+
+            function setStatus(message, isError) {
+                statusNode.textContent = message;
+                if (config.errorClass) {
+                    statusNode.classList.toggle(config.errorClass, !!isError);
+                }
+                if (config.normalClass) {
+                    statusNode.classList.toggle(config.normalClass, !isError);
+                }
+            }
+
+            if (typeof pdfjsLib === 'undefined') {
+                setStatus('PDF extraction library failed to load on this page.', true);
+                return false;
+            }
+
+            if (config.workerSrc) {
+                pdfjsLib.GlobalWorkerOptions.workerSrc = config.workerSrc;
+            }
+
+            if (fileInput.dataset.airbillPdfAutofillBound === '1') {
+                return true;
+            }
+
+            function readFileAsArrayBuffer(file) {
+                return new Promise(function (resolve, reject) {
+                    var reader = new FileReader();
+                    reader.onload = function (event) {
+                        resolve(event.target.result);
+                    };
+                    reader.onerror = reject;
+                    reader.readAsArrayBuffer(file);
+                });
+            }
+
+            function loadPdfPageTextItems(file) {
+                return readFileAsArrayBuffer(file).then(function (buffer) {
+                    return pdfjsLib.getDocument({
+                        data: new Uint8Array(buffer)
+                    }).promise;
+                }).then(function (pdfDoc) {
+                    return pdfDoc.getPage(1).then(function (page) {
+                        var viewport = page.getViewport({ scale: 1 });
+                        return page.getTextContent().then(function (textContent) {
+                            return {
+                                items: (textContent.items || []).filter(function (item) {
+                                    return normalizePdfTextItem(item) !== '';
+                                }),
+                                pageWidth: Number(viewport.width) || 0,
+                                pageHeight: Number(viewport.height) || 0
+                            };
+                        });
+                    });
+                });
+            }
+
+            fileInput.addEventListener('change', function () {
+                setStatus('', false);
+                if (!this.files || !this.files[0]) {
+                    return;
+                }
+
+                var selectedFile = this.files[0];
+                if (!/\.pdf$/i.test(String(selectedFile.name || ''))) {
+                    return;
+                }
+
+                setStatus('Extracting airbill number and address from PDF...', false);
+
+                loadPdfPageTextItems(selectedFile).then(function (pdfData) {
+                    var extractedData = extractShopeeAirbillDataFromPdfItems(
+                        pdfData.items,
+                        pdfData.pageWidth,
+                        pdfData.pageHeight
+                    );
+
+                    if (extractedData.airbillNo !== '') {
+                        airbillNo.value = extractedData.airbillNo;
+                        dispatchInputEvent(airbillNo);
+                    }
+                    if (extractedData.customerAddress !== '') {
+                        customerAddress.value = extractedData.customerAddress;
+                        dispatchInputEvent(customerAddress);
+                    }
+
+                    if (extractedData.airbillNo !== '' || extractedData.customerAddress !== '') {
+                        setStatus('Airbill PDF extracted successfully.', false);
+                    } else {
+                        setStatus('Unable to detect the airbill number or address from this PDF. Please fill them manually.', true);
+                    }
+                }).catch(function () {
+                    setStatus('Unable to read this PDF. Please fill the airbill number and address manually.', true);
+                });
+            });
+
+            fileInput.dataset.airbillPdfAutofillBound = '1';
+            return true;
+        }
+
+        return {
+            bind: bind,
+            extractShopeeAirbillDataFromPdfItems: extractShopeeAirbillDataFromPdfItems
+        };
+    })();
+}
+JS;
+    }
+}
+
 if (!function_exists('shopeeOmsGetClientIp')) {
     function shopeeOmsGetClientIp()
     {
@@ -3182,7 +3507,7 @@ if (!function_exists('shopeeOmsCreateWarehouseToken')) {
 }
 
 if (!function_exists('shopeeOmsSendWarehouseNotification')) {
-    function shopeeOmsSendWarehouseNotification($cmsConnect, $financeConnect, $tokenRow, $notificationInfo)
+    function shopeeOmsSendWarehouseNotification($cmsConnect, $financeConnect, $tokenRow, $notificationInfo, $sourcePage = '')
     {
         if (!is_array($tokenRow) || !isset($tokenRow['id']) || !is_array($notificationInfo)) {
             return array(
@@ -3192,12 +3517,17 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
             );
         }
 
-        $tokenSetting = shopeeOmsFindPreferredTokenSetting($cmsConnect);
+        $sourcePage = trim((string) (
+            $sourcePage !== ''
+                ? $sourcePage
+                : (isset($notificationInfo['source_page']) ? $notificationInfo['source_page'] : '')
+        ));
+        $tokenSetting = shopeeOmsFindPreferredTokenSetting($cmsConnect, $sourcePage);
         if (empty($tokenSetting)) {
             return array(
                 'success' => true,
                 'sent' => false,
-                'message' => 'Warehouse package generated. Telegram token setting is not configured.',
+                'message' => 'Token not set yet, please set Shopee Order Request token.',
             );
         }
 
@@ -3500,7 +3830,7 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
             $freshOrderRow = shopeeOmsLoadOrder($financeConnect, $orderId);
             $tokenResult = shopeeOmsCreateWarehouseToken($cmsConnect, $financeConnect, $freshOrderRow, $actorUserId);
             if (!empty($tokenResult['success']) && !empty($tokenResult['token_row']) && !empty($tokenResult['notification'])) {
-                $notifyResult = shopeeOmsSendWarehouseNotification($cmsConnect, $financeConnect, $tokenResult['token_row'], $tokenResult['notification']);
+                $notifyResult = shopeeOmsSendWarehouseNotification($cmsConnect, $financeConnect, $tokenResult['token_row'], $tokenResult['notification'], $sourcePage);
                 if (!empty($notifyResult['sent'])) {
                     mysqli_query($financeConnect, "UPDATE `" . SHOPEE_SG_ORDER_REQ . "` SET `step_a_sent_at` = NOW() WHERE id = " . $orderId . " LIMIT 1");
                 }
