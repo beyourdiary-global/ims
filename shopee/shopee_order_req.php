@@ -2098,7 +2098,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                     ?>
                     <input type="hidden" name="return_type" id="return_type" value="">
                     <input type="hidden" name="return_remark" id="return_remark" value="">
-                    <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn" id="actionBtn"
+                    <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn" id="actionBtn" formnovalidate
                         value="back">Back</button>
                 </div>
             </form>
