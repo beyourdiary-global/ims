@@ -12,17 +12,18 @@ if (!function_exists('shopeeOmsSendMail')) {
         $subject = (string) $subject;
         $message = (string) $message;
 
-        $fromEmail = trim((string) $fromEmail);
-        if (!filter_var($fromEmail, FILTER_VALIDATE_EMAIL)) {
-            return false;
-        }
-
         $host = (string) parse_url(SITEURL, PHP_URL_HOST);
         $baseHost = preg_replace('/^www\./i', '', $host);
+        $fallbackSender = 'noreply@' . ($baseHost !== '' ? $baseHost : 'beyourdiary.com');
+
+        $fromEmail = trim((string) $fromEmail);
+        if (!filter_var($fromEmail, FILTER_VALIDATE_EMAIL)) {
+            $fromEmail = $fallbackSender;
+        }
 
         $headers = array();
         $headers[] = 'MIME-Version: 1.0';
-        $headers[] = 'Content-type: text/plain; charset=utf-8';
+        $headers[] = 'Content-type: text/html; charset=utf-8';
         $headers[] = 'From: BeYourDiary <' . $fromEmail . '>';
         $headers[] = 'Reply-To: ' . $fromEmail;
         $headers[] = 'Return-Path: ' . $fromEmail;
@@ -31,7 +32,12 @@ if (!function_exists('shopeeOmsSendMail')) {
         $headers[] = 'X-Mailer: PHP/' . phpversion();
 
         $headerStr = implode("\r\n", $headers);
-        return @mail($toEmail, $subject, $message, $headerStr, '-f' . $fromEmail);
+        $sent = @mail($toEmail, $subject, $message, $headerStr);
+        if (!$sent) {
+            $sent = @mail($toEmail, $subject, $message, $headerStr, '-f' . $fromEmail);
+        }
+
+        return $sent;
     }
 }
 
@@ -73,6 +79,9 @@ if (!empty($recipientUserIds)) {
         }
     }
 }
+if (!empty($recipientEmails)) {
+    $recipientEmails = array_values(array_unique($recipientEmails));
+}
 
 $systemMailFrom = '';
 $projectSettings = getData('*', "id = '1'", '', PROJ, $connect);
@@ -94,11 +103,33 @@ if (!empty($summaryRows)) {
     $summaryLines[] = 'No status transition recorded for the previous day.';
 }
 
-$message = "Shopee OMS Daily Flow Report\n";
-$message .= "Report Date: " . $dateFrom . "\n\n";
-$message .= "Transition Summary:\n";
-$message .= implode("\n", $summaryLines) . "\n\n";
-$message .= "Full Report: " . $reportUrl . "\n";
+$message = '
+    <html>
+        <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+        <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=3.0">
+        <head>
+            <title>' . htmlspecialchars($subject, ENT_QUOTES, 'UTF-8') . '</title>
+        </head>
+        <body style="margin:0;background-color:#FFF0E3;font-family:sans-serif;">
+            <div style="display:grid;gap:12px;min-width:350px;margin:20px auto;width:550px;">
+                <table style="border-spacing:0;width:100%;background-color:#FFFFFF;border-radius:18px;">
+                    <tr>
+                        <td style="padding:24px 28px;">
+                            <p style="font-size:22px;font-weight:bold;margin:0 0 18px;">Shopee OMS Daily Flow Report</p>
+                            <p style="font-size:14px;margin:0 0 12px;">Report Date: <b>' . htmlspecialchars($dateFrom, ENT_QUOTES, 'UTF-8') . '</b></p>
+                            <p style="font-size:14px;margin:0 0 12px;">Transition Summary:</p>
+                            <div style="font-size:13px;line-height:1.6;margin:0 0 18px;">' . nl2br(htmlspecialchars(implode("\n", $summaryLines), ENT_QUOTES, 'UTF-8')) . '</div>
+                            <p style="font-size:14px;margin:0;">
+                                <a href="' . htmlspecialchars($reportUrl, ENT_QUOTES, 'UTF-8') . '" style="color:#000000;">View Full Report</a>
+                            </p>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </body>
+    </html>
+';
 
 $sentCount = 0;
 if (!empty($recipientEmails)) {
