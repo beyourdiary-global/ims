@@ -2636,8 +2636,6 @@ if (!function_exists('shopeeOmsFindPreferredTokenSetting')) {
             if ($result && mysqli_num_rows($result) > 0) {
                 return (array) mysqli_fetch_assoc($result);
             }
-
-            return array();
         }
 
         $sql = "SELECT * FROM `" . TOKEN_SETT . "` WHERE status = 'A' ORDER BY
