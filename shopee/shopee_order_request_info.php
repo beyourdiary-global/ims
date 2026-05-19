@@ -97,10 +97,26 @@ $currentStatus = shopeeOmsGetStatusLabel(isset($requestRow['order_status']) ? $r
 $airbillAttachmentUrl = '';
 $airbillAttachmentExt = '';
 if ($airbillAttachment !== '') {
-    $imgServerBase = defined('img_server') ? (string) constant('img_server') : '/images_server/';
-    $imgServerBase = '/' . trim($imgServerBase, '/');
-    $attachmentFileName = basename(str_replace('\\', '/', $airbillAttachment));
-    $airbillAttachmentUrl = rtrim((string) $SITEURL, '/') . $imgServerBase . '/shopee_airbill_attachment/' . rawurlencode($attachmentFileName);
+    $storedAttachment = trim(str_replace('\\', '/', (string) $airbillAttachment), '/');
+    $attachmentFileName = basename($storedAttachment);
+    if (strpos($storedAttachment, 'attachment/') === 0) {
+        $airbillAttachmentUrl = rtrim((string) $SITEURL, '/') . '/' . $storedAttachment;
+    } else {
+        $imgServerBase = isset($img_server) ? trim((string) $img_server) : '';
+        if ($imgServerBase !== '') {
+            $legacyAttachmentPath = '';
+            $legacyAttachmentPos = strpos($storedAttachment, 'shopee_airbill_attachment/');
+            if ($legacyAttachmentPos !== false) {
+                $legacyAttachmentPath = substr($storedAttachment, $legacyAttachmentPos);
+            } elseif ($attachmentFileName !== '') {
+                $legacyAttachmentPath = 'shopee_airbill_attachment/' . $attachmentFileName;
+            }
+
+            if ($legacyAttachmentPath !== '') {
+                $airbillAttachmentUrl = rtrim($imgServerBase, '/') . '/' . ltrim($legacyAttachmentPath, '/');
+            }
+        }
+    }
     $airbillAttachmentExt = strtolower(pathinfo($attachmentFileName, PATHINFO_EXTENSION));
 }
 ?>
