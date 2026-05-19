@@ -632,10 +632,18 @@ $result = getData('*', '', '', SHOPEE_SG_ORDER_REQ, $finance_connect);
                             echo '<th class="hideColumn" scope="row">' . $ids . '</th>'; 
                             echo ' <th class="text-center"><input type="checkbox" class="export" value="' . $ids . '"></th>';
                             echo '<th scope="row">' . $counters++ . '</th>';
-                            echo '<td scope="row">' . $key . '</td>';
+                            if ($groupOption === 'buyer') {
+                                echo '<td scope="row">' . customerLabelRenderShopeeBuyerCell($connect, $finance_connect, $key, $key) . '</td>';
+                            } else {
+                                echo '<td scope="row">' . $key . '</td>';
+                            }
                             
                             if($key2 != $key && $key2 != null){
-                                echo '<td scope="row">' . $key2 . '</td>';
+                                if ($groupOption2 === 'buyer') {
+                                    echo '<td scope="row">' . customerLabelRenderShopeeBuyerCell($connect, $finance_connect, $key2, $key2) . '</td>';
+                                } else {
+                                    echo '<td scope="row">' . $key2 . '</td>';
+                                }
                             }else if ($groupOption2 != null && $key2 == null) {
                                 echo '<td scope="row"></td>';
                             }

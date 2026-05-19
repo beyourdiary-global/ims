@@ -18,6 +18,7 @@ $redirect_page = $SITEURL . '/cus_segmentation.php';
 $deleteRedirectPage = $SITEURL . '/cus_segmentation_table.php';
 
 $result = getData('*', '', '', $tblName, $connect);
+$amountCountMap = customerLabelGetLabelCountMap($connect, 'segmentation');
 ?>
 
 <!DOCTYPE html>
@@ -87,6 +88,7 @@ $result = getData('*', '', '', $tblName, $connect);
                                 <th scope="col" width="60px">S/N</th>
                                 <th scope="col" id="action_col" width="100px">Action</th>
                                 <th scope="col">Name</th>
+                                <th scope="col">Amount</th>
                                 <th scope="col">Color Segmentation</th>
                                 <th scope="col">Box From</th>
                                 <th scope="col">Box Until</th>
@@ -110,6 +112,17 @@ $result = getData('*', '', '', $tblName, $connect);
                                             <?php renderDeleteButton($pinAccess, $row['id'], $row['colorCode'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
                                         </td>
                                         <td scope="row"><?= $row['name'] ?></td>
+                                        <td scope="row">
+                                            <?php
+                                            $amountCount = isset($amountCountMap[(int) $row['id']]) ? (int) $amountCountMap[(int) $row['id']] : 0;
+                                            $breakdownUrl = customerLabelBuildBreakdownUrl('segmentation', (int) $row['id']);
+                                            if ($breakdownUrl !== '') {
+                                                echo '<a href="' . htmlspecialchars($breakdownUrl, ENT_QUOTES, 'UTF-8') . '">' . $amountCount . '</a>';
+                                            } else {
+                                                echo $amountCount;
+                                            }
+                                            ?>
+                                        </td>
                                         <td scope="row"><?php if (isset($row['colorCode'])) { ?><input type="color"
                                                     value="<?= $row['colorCode'] ?>" disabled><?php } ?></td>
                                         <td scope="row"><?php if (isset($row['boxFrom']))
@@ -133,6 +146,7 @@ $result = getData('*', '', '', $tblName, $connect);
                                 <th scope="col" width="60px">S/N</th>
                                 <th scope="col" id="action_col" width="100px">Action</th>
                                 <th scope="col">Name</th>
+                                <th scope="col">Amount</th>
                                 <th scope="col">Color Segmentation</th>
                                 <th scope="col">Box From</th>
                                 <th scope="col">Box Until</th>

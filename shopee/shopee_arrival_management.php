@@ -301,6 +301,9 @@ if ($orderRst) {
         $orderRows[] = $row;
     }
 }
+$shopeeBuyerMetaMap = customerLabelGetShopeeCustomerMetaMap($connect, $finance_connect, array_map(function ($row) {
+    return isset($row['buyer']) ? $row['buyer'] : '';
+}, $orderRows));
 ?>
 <!DOCTYPE html>
 <html>
@@ -558,19 +561,6 @@ if ($orderRst) {
                                     $statusCode = shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '');
                                     $canAssign = shopeeOmsPassesAssignmentScope($connect, $row, USER_ID, USER_GROUP) && ($statusCode === 'WAERD' ? shopeeOmsHasTransitionPermission($connect, $statusCode, 'WR', USER_GROUP, $row, USER_ID) : true);
                                     $canConfirm = shopeeOmsHasTransitionPermission($connect, $statusCode, 'PR', USER_GROUP, $row, USER_ID);
-                                    $customerName = trim((string) (isset($row['buyer']) ? $row['buyer'] : ''));
-                                    if ($customerName !== '' && ctype_digit($customerName)) {
-                                        $buyerRst = getData('buyer_username', "id='" . (int) $customerName . "'", 'LIMIT 1', SHOPEE_CUST_INFO, $finance_connect);
-                                        if ($buyerRst && $buyerRst->num_rows > 0) {
-                                            $buyerRow = $buyerRst->fetch_assoc();
-                                            if (isset($buyerRow['buyer_username']) && trim((string) $buyerRow['buyer_username']) !== '') {
-                                                $customerName = trim((string) $buyerRow['buyer_username']);
-                                            }
-                                        }
-                                    }
-                                    if ($customerName === '') {
-                                        $customerName = '-';
-                                    }
                                     $shippedDate = trim((string) (isset($row['date']) ? $row['date'] : ''));
                                     $shippedTime = trim((string) (isset($row['time']) ? $row['time'] : ''));
                                     $shippedDisplay = $shippedDate !== '' ? $shippedDate . ($shippedTime !== '' ? ' ' . $shippedTime : '') : '-';
@@ -606,7 +596,7 @@ if ($orderRst) {
                                                 <span class="shopee-arrival-empty-action">No direct action</span>
                                             <?php } ?>
                                         </td>
-                                        <td><?= htmlspecialchars($customerName !== '' ? $customerName : '-') ?></td>
+                                        <td><?= customerLabelRenderShopeeBuyerCell($connect, $finance_connect, isset($row['buyer']) ? $row['buyer'] : '', '', $shopeeBuyerMetaMap) ?></td>
                                         <td><span class="shopee-arrival-status-badge <?= $statusBadgeClass ?>"><?= $statusBadgeLabel ?></span></td>
                                         <td><?= htmlspecialchars($shippedDisplay) ?></td>
                                         <td class="shopee-arrival-estimated-cell">

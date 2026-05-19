@@ -90,6 +90,17 @@ if ($customerName !== '' && ctype_digit($customerName)) {
         }
     }
 }
+$shopeeBuyerMetaMap = customerLabelGetShopeeCustomerMetaMap($connect, $finance_connect, array(
+    isset($requestRow['buyer']) ? $requestRow['buyer'] : '',
+    $customerName,
+));
+$customerNameDisplayHtml = customerLabelRenderShopeeBuyerCell(
+    $connect,
+    $finance_connect,
+    isset($requestRow['buyer']) ? $requestRow['buyer'] : '',
+    $customerName,
+    $shopeeBuyerMetaMap
+);
 $customerAddress = trim((string) (isset($requestRow['customer_address']) ? $requestRow['customer_address'] : ''));
 $airbillNo = trim((string) (isset($requestRow['airbill_no']) ? $requestRow['airbill_no'] : ''));
 $airbillAttachment = trim((string) (isset($requestRow['airbill_attachment']) ? $requestRow['airbill_attachment'] : ''));
@@ -213,7 +224,7 @@ if ($airbillAttachment !== '') {
                             </div>
                             <div class="mb-3">
                                 <label class="form-label form_lbl">Shopee Buyer Username</label>
-                                <input class="form-control" type="text" readonly value="<?= htmlspecialchars($customerName, ENT_QUOTES, 'UTF-8') ?>">
+                                <div class="form-control d-flex align-items-center flex-nowrap gap-2" style="min-height:42px;"><?= $customerNameDisplayHtml ?></div>
                             </div>
                             <div class="mb-3">
                                 <label class="form-label form_lbl">Address</label>

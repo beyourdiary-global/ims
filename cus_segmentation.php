@@ -151,12 +151,12 @@ if (post('actionBtn')) {
                         array_push($datafield, 'colorCode');
                     }
 
-                    if ($row['box_from'] != $currentDataboxFrom) {
+                    if ($row['boxFrom'] != $currentDataboxFrom) {
                         array_push($oldvalarr, $row['boxFrom']);
                         array_push($chgvalarr, $currentDataboxFrom);
                     }
 
-                    if ($row['box_until'] != $currentDataboxUntil) {
+                    if ($row['boxUntil'] != $currentDataboxUntil) {
                         array_push($oldvalarr, $row['boxUntil']);
                         array_push($chgvalarr, $currentDataboxUntil);
                     }

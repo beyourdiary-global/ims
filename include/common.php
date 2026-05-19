@@ -1483,6 +1483,1309 @@ if (!function_exists('getMarketplaceRequestStatusLabel')) {
     }
 }
 
+if (!function_exists('customerLabelNormalizeType')) {
+    function customerLabelNormalizeType($labelType)
+    {
+        $labelType = strtolower(trim((string) $labelType));
+        $allowed = array('segmentation', 'level', 'repeat');
+        return in_array($labelType, $allowed, true) ? $labelType : '';
+    }
+}
+
+if (!function_exists('customerLabelGetTypeConfig')) {
+    function customerLabelGetTypeConfig($labelType)
+    {
+        $typeConfigs = array(
+            'segmentation' => array(
+                'table' => CUR_SEGMENTATION,
+                'title' => 'Customer Segmentation',
+                'pin' => 29,
+            ),
+            'level' => array(
+                'table' => CUS_LEVEL,
+                'title' => 'Customer Level',
+                'pin' => 142,
+            ),
+            'repeat' => array(
+                'table' => CUS_REPEAT,
+                'title' => 'Customer Repeat',
+                'pin' => 143,
+            ),
+        );
+
+        $labelType = customerLabelNormalizeType($labelType);
+        return $labelType !== '' && isset($typeConfigs[$labelType]) ? $typeConfigs[$labelType] : array();
+    }
+}
+
+if (!function_exists('customerLabelGetPlatformConfigs')) {
+    function customerLabelGetPlatformConfigs()
+    {
+        return array(
+            'shopee' => array(
+                'label' => 'Shopee Customer Record',
+                'record_url' => '/shopee/shopee_cust_info_table.php',
+                'customer_table' => SHOPEE_CUST_INFO,
+                'customer_db' => 'finance',
+                'order_table' => SHOPEE_SG_ORDER_REQ,
+                'order_db' => 'finance',
+                'order_customer_field' => 'buyer',
+                'order_series_field' => '',
+                'customer_series_field' => 'series',
+                'order_package_field' => 'package',
+                'order_amount_field' => 'final_amt',
+                'order_currency_field' => 'currency',
+            ),
+            'lazada' => array(
+                'label' => 'Lazada Customer Record (Deals)',
+                'record_url' => '/lazada_cust_rcd_table.php',
+                'customer_table' => LAZADA_CUST_RCD,
+                'customer_db' => 'cms',
+                'order_table' => LAZADA_ORDER_REQ,
+                'order_db' => 'cms',
+                'order_customer_field' => 'cust_id',
+                'order_series_field' => 'series',
+                'customer_series_field' => 'series',
+                'order_package_field' => 'pkg',
+                'order_amount_field' => 'final_income',
+                'order_currency_field' => 'curr_unit',
+            ),
+            'facebook' => array(
+                'label' => 'Facebook Customer Record (Deals)',
+                'record_url' => '/fb_cust_deals_table.php',
+                'customer_table' => FB_CUST_DEALS,
+                'customer_db' => 'cms',
+                'order_table' => FB_ORDER_REQ,
+                'order_db' => 'finance',
+                'order_customer_field' => '',
+                'order_series_field' => 'series',
+                'customer_series_field' => 'series',
+                'order_package_field' => 'package',
+                'order_amount_field' => 'price',
+                'order_currency_field' => '',
+            ),
+            'website' => array(
+                'label' => 'Website Customer Record (Deals)',
+                'record_url' => '/website_customer_record_table.php',
+                'customer_table' => WEB_CUST_RCD,
+                'customer_db' => 'cms',
+                'order_table' => WEB_ORDER_REQ,
+                'order_db' => 'finance',
+                'order_customer_field' => 'cust_id',
+                'order_series_field' => 'series',
+                'customer_series_field' => 'series',
+                'order_package_field' => 'pkg',
+                'order_amount_field' => 'total',
+                'order_currency_field' => 'currency',
+            ),
+        );
+    }
+}
+
+if (!function_exists('customerLabelGetPlatformConfig')) {
+    function customerLabelGetPlatformConfig($platform)
+    {
+        $configs = customerLabelGetPlatformConfigs();
+        return isset($configs[$platform]) ? $configs[$platform] : array();
+    }
+}
+
+if (!function_exists('customerLabelGetPlatformLabel')) {
+    function customerLabelGetPlatformLabel($platform)
+    {
+        $config = customerLabelGetPlatformConfig($platform);
+        return isset($config['label']) ? (string) $config['label'] : ucfirst((string) $platform);
+    }
+}
+
+if (!function_exists('customerLabelGetPlatformRecordUrl')) {
+    function customerLabelGetPlatformRecordUrl($platform)
+    {
+        $config = customerLabelGetPlatformConfig($platform);
+        $baseUrl = defined('SITEURL') ? rtrim((string) SITEURL, '/') : '';
+        $path = isset($config['record_url']) ? (string) $config['record_url'] : '';
+        if ($baseUrl === '' || $path === '') {
+            return $path;
+        }
+
+        return $baseUrl . $path;
+    }
+}
+
+if (!function_exists('customerLabelSplitCsv')) {
+    function customerLabelSplitCsv($value)
+    {
+        $parts = array_filter(array_map('trim', explode(',', (string) $value)), 'strlen');
+        return array_values($parts);
+    }
+}
+
+if (!function_exists('customerLabelNormalizeLookupKey')) {
+    function customerLabelNormalizeLookupKey($value)
+    {
+        return strtolower(trim((string) $value));
+    }
+}
+
+if (!function_exists('customerLabelSafeFloat')) {
+    function customerLabelSafeFloat($value)
+    {
+        $value = str_replace(',', '', trim((string) $value));
+        return is_numeric($value) ? (float) $value : 0.0;
+    }
+}
+
+if (!function_exists('customerLabelResolveInt')) {
+    function customerLabelResolveInt($value)
+    {
+        $value = trim((string) $value);
+        return ctype_digit($value) ? (int) $value : 0;
+    }
+}
+
+if (!function_exists('customerLabelFetchRows')) {
+    function customerLabelFetchRows($conn, $sql)
+    {
+        $rows = array();
+        if (!($conn instanceof mysqli)) {
+            return $rows;
+        }
+
+        $result = mysqli_query($conn, $sql);
+        if (!$result) {
+            return $rows;
+        }
+
+        while ($row = mysqli_fetch_assoc($result)) {
+            $rows[] = $row;
+        }
+
+        mysqli_free_result($result);
+        return $rows;
+    }
+}
+
+if (!function_exists('customerLabelFetchActiveRows')) {
+    function customerLabelFetchActiveRows($conn, $tableName, $columns = '*', $extraWhere = '', $orderBy = 'ORDER BY id ASC')
+    {
+        if (!($conn instanceof mysqli) || $tableName === '' || !tableExists($tableName, $conn)) {
+            return array();
+        }
+
+        $where = "WHERE status = 'A'";
+        if ($extraWhere !== '') {
+            $where .= " AND " . $extraWhere;
+        }
+
+        $sql = "SELECT " . $columns . " FROM `" . $tableName . "` " . $where . " " . $orderBy;
+        return customerLabelFetchRows($conn, $sql);
+    }
+}
+
+if (!function_exists('customerLabelGetCurrencyRateLookup')) {
+    function customerLabelGetCurrencyRateLookup($connect)
+    {
+        $lookup = array();
+        if (!($connect instanceof mysqli) || !defined('CURRENCIES') || !tableExists(CURRENCIES, $connect)) {
+            return $lookup;
+        }
+
+        $rows = customerLabelFetchRows($connect, "SELECT `default_currency_unit`, `exchange_currency_unit`, `exchange_currency_rate` FROM `" . CURRENCIES . "` WHERE status = 'A'");
+        foreach ($rows as $row) {
+            $fromCurrency = customerLabelResolveInt(isset($row['default_currency_unit']) ? $row['default_currency_unit'] : '');
+            $toCurrency = customerLabelResolveInt(isset($row['exchange_currency_unit']) ? $row['exchange_currency_unit'] : '');
+            $rate = customerLabelSafeFloat(isset($row['exchange_currency_rate']) ? $row['exchange_currency_rate'] : 0);
+            if ($fromCurrency > 0 && $toCurrency > 0 && $rate > 0) {
+                if (!isset($lookup[$fromCurrency])) {
+                    $lookup[$fromCurrency] = array();
+                }
+                $lookup[$fromCurrency][$toCurrency] = $rate;
+            }
+        }
+
+        return $lookup;
+    }
+}
+
+if (!function_exists('customerLabelConvertAmount')) {
+    function customerLabelConvertAmount($amount, $fromCurrencyId, $toCurrencyId, $currencyRateLookup)
+    {
+        $amount = (float) $amount;
+        $fromCurrencyId = (int) $fromCurrencyId;
+        $toCurrencyId = (int) $toCurrencyId;
+
+        if ($amount == 0 || $fromCurrencyId <= 0 || $toCurrencyId <= 0 || $fromCurrencyId === $toCurrencyId) {
+            return $amount;
+        }
+
+        if (isset($currencyRateLookup[$fromCurrencyId][$toCurrencyId]) && $currencyRateLookup[$fromCurrencyId][$toCurrencyId] > 0) {
+            return $amount * (float) $currencyRateLookup[$fromCurrencyId][$toCurrencyId];
+        }
+
+        if (isset($currencyRateLookup[$toCurrencyId][$fromCurrencyId]) && $currencyRateLookup[$toCurrencyId][$fromCurrencyId] > 0) {
+            return $amount / (float) $currencyRateLookup[$toCurrencyId][$fromCurrencyId];
+        }
+
+        return $amount;
+    }
+}
+
+if (!function_exists('customerLabelSumAmountsForCurrency')) {
+    function customerLabelSumAmountsForCurrency($amountsByCurrency, $targetCurrencyId, $currencyRateLookup, $defaultCurrencyId = 1)
+    {
+        $targetCurrencyId = (int) $targetCurrencyId;
+        if ($targetCurrencyId <= 0) {
+            $targetCurrencyId = (int) $defaultCurrencyId;
+        }
+
+        $total = 0.0;
+        foreach ((array) $amountsByCurrency as $currencyId => $amount) {
+            $currencyId = (int) $currencyId;
+            $total += customerLabelConvertAmount((float) $amount, $currencyId, $targetCurrencyId, $currencyRateLookup);
+        }
+
+        return $total;
+    }
+}
+
+if (!function_exists('customerLabelGetSeriesLookup')) {
+    function customerLabelGetSeriesLookup($connect)
+    {
+        $lookup = array(
+            'by_id' => array(),
+            'by_name' => array(),
+            'brand_by_id' => array(),
+        );
+
+        if (!($connect instanceof mysqli) || !defined('BRD_SERIES') || !tableExists(BRD_SERIES, $connect)) {
+            return $lookup;
+        }
+
+        $rows = customerLabelFetchRows($connect, "SELECT `id`, `name`, `brand` FROM `" . BRD_SERIES . "` WHERE status = 'A'");
+        foreach ($rows as $row) {
+            $seriesId = (int) $row['id'];
+            $seriesName = isset($row['name']) ? trim((string) $row['name']) : '';
+            $brandId = customerLabelResolveInt(isset($row['brand']) ? $row['brand'] : 0);
+            if ($seriesId > 0) {
+                $lookup['by_id'][$seriesId] = $seriesName;
+                $lookup['brand_by_id'][$seriesId] = $brandId;
+            }
+            if ($seriesName !== '') {
+                $lookup['by_name'][customerLabelNormalizeLookupKey($seriesName)] = $seriesId;
+            }
+        }
+
+        return $lookup;
+    }
+}
+
+if (!function_exists('customerLabelResolveSeriesId')) {
+    function customerLabelResolveSeriesId($seriesValue, $seriesLookup)
+    {
+        $seriesId = customerLabelResolveInt($seriesValue);
+        if ($seriesId > 0 && isset($seriesLookup['by_id'][$seriesId])) {
+            return $seriesId;
+        }
+
+        $seriesKey = customerLabelNormalizeLookupKey($seriesValue);
+        if ($seriesKey !== '' && isset($seriesLookup['by_name'][$seriesKey])) {
+            return (int) $seriesLookup['by_name'][$seriesKey];
+        }
+
+        return 0;
+    }
+}
+
+if (!function_exists('customerLabelBuildPackageBoxCountMap')) {
+    function customerLabelBuildPackageBoxCountMap($connect, $packageIds)
+    {
+        $map = array();
+        $packageIds = array_values(array_unique(array_filter(array_map('intval', (array) $packageIds))));
+        if (!($connect instanceof mysqli) || empty($packageIds) || !defined('PKG') || !tableExists(PKG, $connect)) {
+            return $map;
+        }
+
+        $sql = "SELECT `id`, `product`, `brand` FROM `" . PKG . "` WHERE `status` = 'A' AND `id` IN (" . implode(',', $packageIds) . ")";
+        $rows = customerLabelFetchRows($connect, $sql);
+        foreach ($rows as $row) {
+            $packageId = (int) $row['id'];
+            $products = customerLabelSplitCsv(isset($row['product']) ? $row['product'] : '');
+            $map[$packageId] = array(
+                'box_count' => count($products),
+                'brand_id' => customerLabelResolveInt(isset($row['brand']) ? $row['brand'] : 0),
+            );
+        }
+
+        return $map;
+    }
+}
+
+if (!function_exists('customerLabelResolvePackageRows')) {
+    function customerLabelResolvePackageRows($connect, $platform, $orderRow)
+    {
+        if ($platform === 'shopee' && function_exists('shopeeOmsResolveOrderPackageRows')) {
+            return shopeeOmsResolveOrderPackageRows($connect, $orderRow);
+        }
+
+        $fieldName = $platform === 'facebook' ? 'package' : 'pkg';
+        $packageIds = customerLabelSplitCsv(isset($orderRow[$fieldName]) ? $orderRow[$fieldName] : '');
+        $rows = array();
+        foreach ($packageIds as $packageIdRaw) {
+            $packageId = (int) $packageIdRaw;
+            if ($packageId <= 0) {
+                continue;
+            }
+            $rows[] = array(
+                'package_id' => $packageId,
+                'qty' => 1,
+            );
+        }
+
+        return $rows;
+    }
+}
+
+if (!function_exists('customerLabelGetOrderBoxMetrics')) {
+    function customerLabelGetOrderBoxMetrics($connect, $platform, $orderRow, $packageBoxCountMap)
+    {
+        $metrics = array(
+            'total' => 0.0,
+            'by_brand' => array(),
+        );
+        $packageRows = customerLabelResolvePackageRows($connect, $platform, $orderRow);
+        foreach ($packageRows as $packageRow) {
+            $packageId = isset($packageRow['package_id']) ? (int) $packageRow['package_id'] : 0;
+            $qty = isset($packageRow['qty']) ? customerLabelSafeFloat($packageRow['qty']) : 1;
+            if ($qty <= 0) {
+                $qty = 1;
+            }
+
+            if ($packageId > 0 && isset($packageBoxCountMap[$packageId])) {
+                $packageInfo = (array) $packageBoxCountMap[$packageId];
+                $boxQuantity = (float) (isset($packageInfo['box_count']) ? $packageInfo['box_count'] : 0) * $qty;
+                $brandId = isset($packageInfo['brand_id']) ? (int) $packageInfo['brand_id'] : 0;
+                $metrics['total'] += $boxQuantity;
+
+                if ($brandId > 0) {
+                    if (!isset($metrics['by_brand'][$brandId])) {
+                        $metrics['by_brand'][$brandId] = 0.0;
+                    }
+                    $metrics['by_brand'][$brandId] += $boxQuantity;
+                }
+            }
+        }
+
+        return $metrics;
+    }
+}
+
+if (!function_exists('customerLabelGetOrderBoxQuantity')) {
+    function customerLabelGetOrderBoxQuantity($connect, $platform, $orderRow, $packageBoxCountMap)
+    {
+        $metrics = customerLabelGetOrderBoxMetrics($connect, $platform, $orderRow, $packageBoxCountMap);
+        return isset($metrics['total']) ? (float) $metrics['total'] : 0.0;
+    }
+}
+
+if (!function_exists('customerLabelBuildCustomerIndexes')) {
+    function customerLabelBuildCustomerIndexes($platform, $rows, $seriesLookup)
+    {
+        $indexes = array(
+            'rows_by_id' => array(),
+            'lookup' => array(),
+            'composite' => array(),
+        );
+
+        foreach ((array) $rows as $row) {
+            $customerId = isset($row['id']) ? (int) $row['id'] : 0;
+            if ($customerId <= 0) {
+                continue;
+            }
+
+            $row['_resolved_series_id'] = customerLabelResolveSeriesId(isset($row['series']) ? $row['series'] : '', $seriesLookup);
+            $indexes['rows_by_id'][$customerId] = $row;
+
+            if ($platform === 'shopee') {
+                $lookupValue = isset($row['buyer_username']) ? $row['buyer_username'] : '';
+                $lookupKey = customerLabelNormalizeLookupKey($lookupValue);
+                if ($lookupKey !== '') {
+                    $indexes['lookup'][$lookupKey] = $customerId;
+                }
+            } else if ($platform === 'lazada') {
+                $lookupValue = isset($row['lcr_id']) ? $row['lcr_id'] : '';
+                $lookupKey = customerLabelNormalizeLookupKey($lookupValue);
+                if ($lookupKey !== '') {
+                    $indexes['lookup'][$lookupKey] = $customerId;
+                }
+            } else if ($platform === 'website') {
+                $lookupValue = isset($row['cust_id']) ? $row['cust_id'] : '';
+                $lookupKey = customerLabelNormalizeLookupKey($lookupValue);
+                if ($lookupKey !== '') {
+                    $indexes['lookup'][$lookupKey] = $customerId;
+                }
+            } else if ($platform === 'facebook') {
+                $compositeKey = customerLabelNormalizeLookupKey(isset($row['name']) ? $row['name'] : '') . '|' . customerLabelNormalizeLookupKey(isset($row['fb_link']) ? $row['fb_link'] : '');
+                if ($compositeKey !== '|') {
+                    $indexes['composite'][$compositeKey] = $customerId;
+                }
+            }
+        }
+
+        return $indexes;
+    }
+}
+
+if (!function_exists('customerLabelResolveOrderCustomerId')) {
+    function customerLabelResolveOrderCustomerId($platform, $orderRow, $customerIndexes)
+    {
+        if ($platform === 'facebook') {
+            $compositeKey = customerLabelNormalizeLookupKey(isset($orderRow['name']) ? $orderRow['name'] : '') . '|' . customerLabelNormalizeLookupKey(isset($orderRow['fb_link']) ? $orderRow['fb_link'] : '');
+            return isset($customerIndexes['composite'][$compositeKey]) ? (int) $customerIndexes['composite'][$compositeKey] : 0;
+        }
+
+        $fieldMap = array(
+            'shopee' => 'buyer',
+            'lazada' => 'cust_id',
+            'website' => 'cust_id',
+        );
+
+        $fieldName = isset($fieldMap[$platform]) ? $fieldMap[$platform] : '';
+        $rawValue = $fieldName !== '' && isset($orderRow[$fieldName]) ? trim((string) $orderRow[$fieldName]) : '';
+        if ($rawValue === '') {
+            return 0;
+        }
+
+        $directId = ctype_digit($rawValue) ? (int) $rawValue : 0;
+        if ($directId > 0 && isset($customerIndexes['rows_by_id'][$directId])) {
+            return $directId;
+        }
+
+        if ($platform === 'shopee') {
+            return 0;
+        }
+
+        $lookupKey = customerLabelNormalizeLookupKey($rawValue);
+        return isset($customerIndexes['lookup'][$lookupKey]) ? (int) $customerIndexes['lookup'][$lookupKey] : 0;
+    }
+}
+
+if (!function_exists('customerLabelIsExcludedOrder')) {
+    function customerLabelIsExcludedOrder($orderRow)
+    {
+        $recordStatus = isset($orderRow['status']) ? strtoupper(trim((string) $orderRow['status'])) : 'A';
+        if ($recordStatus !== '' && $recordStatus !== 'A') {
+            return true;
+        }
+
+        $statusValue = isset($orderRow['order_status']) ? (string) $orderRow['order_status'] : '';
+        $normalizedCode = function_exists('shopeeOmsNormalizeStatusCode') ? shopeeOmsNormalizeStatusCode($statusValue) : trim((string) $statusValue);
+        if (in_array($normalizedCode, array('R', 'CR'), true)) {
+            return true;
+        }
+
+        $statusKey = normalizeOrderStatusKey($statusValue);
+        $displayKey = normalizeOrderStatusKey(getMarketplaceRequestStatusLabel($statusValue));
+        foreach (array($statusKey, $displayKey) as $key) {
+            if ($key === 'deleted' || $key === 'return' || $key === 'closedreturned') {
+                return true;
+            }
+            if (strpos($key, 'return') !== false || strpos($key, 'deleted') !== false) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
+
+if (!function_exists('customerLabelFetchRuleRows')) {
+    function customerLabelFetchRuleRows($connect, $labelType)
+    {
+        $typeConfig = customerLabelGetTypeConfig($labelType);
+        if (empty($typeConfig) || !isset($typeConfig['table'])) {
+            return array();
+        }
+
+        $rows = customerLabelFetchActiveRows($connect, $typeConfig['table']);
+        $seriesLookup = $labelType === 'segmentation' ? customerLabelGetSeriesLookup($connect) : array();
+        foreach ($rows as &$row) {
+            if ($labelType === 'segmentation') {
+                $seriesId = customerLabelResolveInt(isset($row['brandSeries']) ? $row['brandSeries'] : 0);
+                $row['_from'] = customerLabelSafeFloat(isset($row['boxFrom']) ? $row['boxFrom'] : 0);
+                $row['_until'] = customerLabelSafeFloat(isset($row['boxUntil']) ? $row['boxUntil'] : 0);
+                $row['_series_id'] = $seriesId;
+                $row['_brand_id'] = $seriesId > 0 && isset($seriesLookup['brand_by_id'][$seriesId]) ? (int) $seriesLookup['brand_by_id'][$seriesId] : 0;
+            } else if ($labelType === 'level') {
+                $row['_from'] = customerLabelSafeFloat(isset($row['purchaseAmountFrom']) ? $row['purchaseAmountFrom'] : 0);
+                $row['_until'] = customerLabelSafeFloat(isset($row['purchaseAmountUntil']) ? $row['purchaseAmountUntil'] : 0);
+                $row['_currency_id'] = customerLabelResolveInt(isset($row['currency']) ? $row['currency'] : 0);
+            } else if ($labelType === 'repeat') {
+                $row['_from'] = customerLabelSafeFloat(isset($row['orderFrequencyFrom']) ? $row['orderFrequencyFrom'] : 0);
+                $row['_until'] = customerLabelSafeFloat(isset($row['orderFrequencyUntil']) ? $row['orderFrequencyUntil'] : 0);
+            }
+        }
+        unset($row);
+
+        usort($rows, function ($left, $right) {
+            $leftUntil = isset($left['_until']) ? (float) $left['_until'] : 0;
+            $rightUntil = isset($right['_until']) ? (float) $right['_until'] : 0;
+            if ($leftUntil === $rightUntil) {
+                $leftFrom = isset($left['_from']) ? (float) $left['_from'] : 0;
+                $rightFrom = isset($right['_from']) ? (float) $right['_from'] : 0;
+                if ($leftFrom === $rightFrom) {
+                    return (int) $right['id'] <=> (int) $left['id'];
+                }
+                return $rightFrom <=> $leftFrom;
+            }
+            return $rightUntil <=> $leftUntil;
+        });
+
+        return $rows;
+    }
+}
+
+if (!function_exists('customerLabelFindMatchingRule')) {
+    function customerLabelFindMatchingRule($metric, $rules)
+    {
+        foreach ((array) $rules as $rule) {
+            $fromValue = isset($rule['_from']) ? (float) $rule['_from'] : 0;
+            $untilValue = isset($rule['_until']) ? (float) $rule['_until'] : 0;
+            if ($metric >= $fromValue && $metric <= $untilValue) {
+                return $rule;
+            }
+        }
+
+        return array();
+    }
+}
+
+if (!function_exists('customerLabelBuildPlatformMetrics')) {
+    function customerLabelBuildPlatformMetrics($connect, $financeConnect, $platform, $seriesLookup, $currencyRateLookup, $defaultCurrencyId = 1)
+    {
+        $platformConfig = customerLabelGetPlatformConfig($platform);
+        if (empty($platformConfig)) {
+            return array();
+        }
+
+        $customerConn = $platformConfig['customer_db'] === 'finance' ? $financeConnect : $connect;
+        $orderConn = $platformConfig['order_db'] === 'finance' ? $financeConnect : $connect;
+        if (!($customerConn instanceof mysqli) || !($orderConn instanceof mysqli)) {
+            return array();
+        }
+
+        $customerRows = customerLabelFetchActiveRows($customerConn, $platformConfig['customer_table']);
+        $customerIndexes = customerLabelBuildCustomerIndexes($platform, $customerRows, $seriesLookup);
+        if (empty($customerIndexes['rows_by_id'])) {
+            return array();
+        }
+
+        $orderRows = customerLabelFetchActiveRows($orderConn, $platformConfig['order_table']);
+        $allPackageIds = array();
+        foreach ($orderRows as $orderRow) {
+            foreach (customerLabelResolvePackageRows($connect, $platform, $orderRow) as $packageRow) {
+                $packageId = isset($packageRow['package_id']) ? (int) $packageRow['package_id'] : 0;
+                if ($packageId > 0) {
+                    $allPackageIds[] = $packageId;
+                }
+            }
+        }
+        $packageBoxCountMap = customerLabelBuildPackageBoxCountMap($connect, $allPackageIds);
+
+        $metrics = array();
+        foreach ($customerIndexes['rows_by_id'] as $customerId => $customerRow) {
+            $metrics[$customerId] = array(
+                'customer_id' => (int) $customerId,
+                'series_id' => isset($customerRow['_resolved_series_id']) ? (int) $customerRow['_resolved_series_id'] : 0,
+                'box_total' => 0.0,
+                'box_by_brand' => array(),
+                'order_count' => 0,
+                'amounts_by_currency' => array(),
+                'purchase_amount_default' => 0.0,
+            );
+        }
+
+        foreach ($orderRows as $orderRow) {
+            if (customerLabelIsExcludedOrder($orderRow)) {
+                continue;
+            }
+
+            $customerId = customerLabelResolveOrderCustomerId($platform, $orderRow, $customerIndexes);
+            if ($customerId <= 0 || !isset($metrics[$customerId])) {
+                continue;
+            }
+
+            $orderBoxMetrics = customerLabelGetOrderBoxMetrics($connect, $platform, $orderRow, $packageBoxCountMap);
+            $boxQuantity = isset($orderBoxMetrics['total']) ? (float) $orderBoxMetrics['total'] : 0.0;
+            $metrics[$customerId]['box_total'] += $boxQuantity;
+            foreach ((array) (isset($orderBoxMetrics['by_brand']) ? $orderBoxMetrics['by_brand'] : array()) as $brandId => $brandBoxQuantity) {
+                $brandId = (int) $brandId;
+                if ($brandId <= 0) {
+                    continue;
+                }
+                if (!isset($metrics[$customerId]['box_by_brand'][$brandId])) {
+                    $metrics[$customerId]['box_by_brand'][$brandId] = 0.0;
+                }
+                $metrics[$customerId]['box_by_brand'][$brandId] += (float) $brandBoxQuantity;
+            }
+
+            $metrics[$customerId]['order_count']++;
+
+            $amountField = isset($platformConfig['order_amount_field']) ? (string) $platformConfig['order_amount_field'] : '';
+            $amountValue = $amountField !== '' && isset($orderRow[$amountField]) ? customerLabelSafeFloat($orderRow[$amountField]) : 0.0;
+            $currencyField = isset($platformConfig['order_currency_field']) ? (string) $platformConfig['order_currency_field'] : '';
+            $currencyId = $currencyField !== '' && isset($orderRow[$currencyField]) ? customerLabelResolveInt($orderRow[$currencyField]) : 0;
+            if ($currencyId <= 0) {
+                $currencyId = (int) $defaultCurrencyId;
+            }
+
+            if (!isset($metrics[$customerId]['amounts_by_currency'][$currencyId])) {
+                $metrics[$customerId]['amounts_by_currency'][$currencyId] = 0.0;
+            }
+            $metrics[$customerId]['amounts_by_currency'][$currencyId] += $amountValue;
+        }
+
+        foreach ($metrics as &$metric) {
+            $metric['purchase_amount_default'] = customerLabelSumAmountsForCurrency(
+                isset($metric['amounts_by_currency']) ? $metric['amounts_by_currency'] : array(),
+                (int) $defaultCurrencyId,
+                $currencyRateLookup,
+                $defaultCurrencyId
+            );
+        }
+        unset($metric);
+
+        return $metrics;
+    }
+}
+
+if (!function_exists('customerLabelBuildAssignmentRows')) {
+    function customerLabelBuildAssignmentRows($connect, $financeConnect)
+    {
+        $defaultCurrencyId = 1;
+        $seriesLookup = customerLabelGetSeriesLookup($connect);
+        $currencyRateLookup = customerLabelGetCurrencyRateLookup($connect);
+        $segmentationRules = customerLabelFetchRuleRows($connect, 'segmentation');
+        $levelRules = customerLabelFetchRuleRows($connect, 'level');
+        $repeatRules = customerLabelFetchRuleRows($connect, 'repeat');
+
+        $assignmentRows = array();
+        $summary = array(
+            'processed_customers' => 0,
+            'assignments_created' => 0,
+            'platforms' => array(),
+        );
+
+        foreach (array_keys(customerLabelGetPlatformConfigs()) as $platform) {
+            $metricsByCustomer = customerLabelBuildPlatformMetrics($connect, $financeConnect, $platform, $seriesLookup, $currencyRateLookup, $defaultCurrencyId);
+            $summary['platforms'][$platform] = array(
+                'customers' => count($metricsByCustomer),
+                'assignments' => 0,
+            );
+
+            foreach ($metricsByCustomer as $customerId => $metric) {
+                $summary['processed_customers']++;
+
+                $segmentationMatch = array();
+                foreach ($segmentationRules as $rule) {
+                    $ruleBrandId = isset($rule['_brand_id']) ? (int) $rule['_brand_id'] : 0;
+                    $boxMetric = $ruleBrandId > 0
+                        ? (isset($metric['box_by_brand'][$ruleBrandId]) ? (float) $metric['box_by_brand'][$ruleBrandId] : 0.0)
+                        : (float) $metric['box_total'];
+
+                    if ($boxMetric >= (float) $rule['_from'] && $boxMetric <= (float) $rule['_until']) {
+                        $segmentationMatch = $rule;
+                        $segmentationMatch['_matched_box_quantity'] = $boxMetric;
+                        break;
+                    }
+                }
+
+                if (!empty($segmentationMatch)) {
+                    $assignmentRows[] = array(
+                        'label_type' => 'segmentation',
+                        'label_id' => (int) $segmentationMatch['id'],
+                        'platform' => $platform,
+                        'customer_id' => (int) $customerId,
+                        'purchase_amount' => (float) $metric['purchase_amount_default'],
+                        'box_quantity' => isset($segmentationMatch['_matched_box_quantity']) ? (float) $segmentationMatch['_matched_box_quantity'] : (float) $metric['box_total'],
+                        'order_count' => (int) $metric['order_count'],
+                    );
+                    $summary['assignments_created']++;
+                    $summary['platforms'][$platform]['assignments']++;
+                }
+
+                foreach ($levelRules as $rule) {
+                    $targetCurrencyId = isset($rule['_currency_id']) ? (int) $rule['_currency_id'] : $defaultCurrencyId;
+                    $purchaseAmount = customerLabelSumAmountsForCurrency(
+                        isset($metric['amounts_by_currency']) ? $metric['amounts_by_currency'] : array(),
+                        $targetCurrencyId,
+                        $currencyRateLookup,
+                        $defaultCurrencyId
+                    );
+                    if ($purchaseAmount >= (float) $rule['_from'] && $purchaseAmount <= (float) $rule['_until']) {
+                        $assignmentRows[] = array(
+                            'label_type' => 'level',
+                            'label_id' => (int) $rule['id'],
+                            'platform' => $platform,
+                            'customer_id' => (int) $customerId,
+                            'purchase_amount' => (float) $purchaseAmount,
+                            'box_quantity' => (float) $metric['box_total'],
+                            'order_count' => (int) $metric['order_count'],
+                        );
+                        $summary['assignments_created']++;
+                        $summary['platforms'][$platform]['assignments']++;
+                        break;
+                    }
+                }
+
+                $repeatMatch = customerLabelFindMatchingRule((float) $metric['order_count'], $repeatRules);
+                if (!empty($repeatMatch)) {
+                    $assignmentRows[] = array(
+                        'label_type' => 'repeat',
+                        'label_id' => (int) $repeatMatch['id'],
+                        'platform' => $platform,
+                        'customer_id' => (int) $customerId,
+                        'purchase_amount' => (float) $metric['purchase_amount_default'],
+                        'box_quantity' => (float) $metric['box_total'],
+                        'order_count' => (int) $metric['order_count'],
+                    );
+                    $summary['assignments_created']++;
+                    $summary['platforms'][$platform]['assignments']++;
+                }
+            }
+        }
+
+        return array(
+            'rows' => $assignmentRows,
+            'summary' => $summary,
+        );
+    }
+}
+
+if (!function_exists('customerLabelBuildAssignmentDataset')) {
+    function customerLabelBuildAssignmentDataset($connect, $financeConnect)
+    {
+        $platformCountsTemplate = array();
+        foreach (customerLabelGetPlatformConfigs() as $platform => $platformConfig) {
+            $platformCountsTemplate[$platform] = 0;
+        }
+
+        if (!($connect instanceof mysqli) || !($financeConnect instanceof mysqli)) {
+            return array(
+                'success' => false,
+                'message' => 'Customer label source connections are not available.',
+                'rows' => array(),
+                'summary' => array(),
+                'count_map' => array(
+                    'segmentation' => array(),
+                    'level' => array(),
+                    'repeat' => array(),
+                ),
+                'breakdown_map' => array(
+                    'segmentation' => array(),
+                    'level' => array(),
+                    'repeat' => array(),
+                ),
+                'filter_map' => array(),
+                'customer_label_id_map' => array(),
+            );
+        }
+
+        $buildResult = customerLabelBuildAssignmentRows($connect, $financeConnect);
+        $assignmentRows = isset($buildResult['rows']) ? $buildResult['rows'] : array();
+        $summary = isset($buildResult['summary']) ? $buildResult['summary'] : array();
+
+        $countMap = array(
+            'segmentation' => array(),
+            'level' => array(),
+            'repeat' => array(),
+        );
+        $breakdownMap = array(
+            'segmentation' => array(),
+            'level' => array(),
+            'repeat' => array(),
+        );
+        $filterMap = array();
+        $customerLabelIdMap = array();
+
+        foreach ($assignmentRows as $assignmentRow) {
+            $labelType = customerLabelNormalizeType(isset($assignmentRow['label_type']) ? $assignmentRow['label_type'] : '');
+            $labelId = isset($assignmentRow['label_id']) ? (int) $assignmentRow['label_id'] : 0;
+            $platform = isset($assignmentRow['platform']) ? trim((string) $assignmentRow['platform']) : '';
+            $customerId = isset($assignmentRow['customer_id']) ? (int) $assignmentRow['customer_id'] : 0;
+            if ($labelType === '' || $labelId <= 0 || $platform === '' || $customerId <= 0) {
+                continue;
+            }
+
+            if (!isset($countMap[$labelType][$labelId])) {
+                $countMap[$labelType][$labelId] = 0;
+            }
+            $countMap[$labelType][$labelId]++;
+
+            if (!isset($breakdownMap[$labelType][$labelId])) {
+                $breakdownMap[$labelType][$labelId] = $platformCountsTemplate;
+            }
+            if (!isset($breakdownMap[$labelType][$labelId][$platform])) {
+                $breakdownMap[$labelType][$labelId][$platform] = 0;
+            }
+            $breakdownMap[$labelType][$labelId][$platform]++;
+
+            if (!isset($filterMap[$platform])) {
+                $filterMap[$platform] = array();
+            }
+            if (!isset($filterMap[$platform][$labelType])) {
+                $filterMap[$platform][$labelType] = array();
+            }
+            if (!isset($filterMap[$platform][$labelType][$labelId])) {
+                $filterMap[$platform][$labelType][$labelId] = array();
+            }
+            $filterMap[$platform][$labelType][$labelId][$customerId] = true;
+
+            if (!isset($customerLabelIdMap[$platform])) {
+                $customerLabelIdMap[$platform] = array();
+            }
+            if (!isset($customerLabelIdMap[$platform][$customerId])) {
+                $customerLabelIdMap[$platform][$customerId] = array();
+            }
+            $customerLabelIdMap[$platform][$customerId][$labelType] = $labelId;
+        }
+
+        $summary['assignment_row_count'] = count($assignmentRows);
+        return array(
+            'success' => true,
+            'message' => 'Customer label dataset prepared.',
+            'rows' => $assignmentRows,
+            'summary' => $summary,
+            'count_map' => $countMap,
+            'breakdown_map' => $breakdownMap,
+            'filter_map' => $filterMap,
+            'customer_label_id_map' => $customerLabelIdMap,
+        );
+    }
+}
+
+if (!function_exists('customerLabelRefreshAssignments')) {
+    function customerLabelRefreshAssignments($connect, $financeConnect, $actorName = 'system')
+    {
+        return customerLabelBuildAssignmentDataset($connect, $financeConnect);
+    }
+}
+
+if (!function_exists('customerLabelEnsureRealtimeSync')) {
+    function customerLabelEnsureRealtimeSync($connect, $financeConnect = null)
+    {
+        static $hasSynced = false;
+        static $lastResult = null;
+
+        if ($hasSynced) {
+            return $lastResult;
+        }
+
+        if (!($financeConnect instanceof mysqli)) {
+            global $finance_connect;
+            if ($financeConnect === null && isset($finance_connect) && $finance_connect instanceof mysqli) {
+                $financeConnect = $finance_connect;
+            }
+        }
+
+        $hasSynced = true;
+        $lastResult = customerLabelRefreshAssignments($connect, $financeConnect, 'realtime_sync');
+        return $lastResult;
+    }
+}
+
+if (!function_exists('customerLabelGetLabelCountMap')) {
+    function customerLabelGetLabelCountMap($connect, $labelType)
+    {
+        $countMap = array();
+        $labelType = customerLabelNormalizeType($labelType);
+        if ($labelType === '' || !($connect instanceof mysqli)) {
+            return $countMap;
+        }
+
+        $dataset = customerLabelEnsureRealtimeSync($connect);
+        return isset($dataset['count_map'][$labelType]) ? (array) $dataset['count_map'][$labelType] : $countMap;
+    }
+}
+
+if (!function_exists('customerLabelGetBreakdownCounts')) {
+    function customerLabelGetBreakdownCounts($connect, $labelType, $labelId)
+    {
+        $counts = array();
+        foreach (customerLabelGetPlatformConfigs() as $platform => $config) {
+            $counts[$platform] = 0;
+        }
+
+        $labelType = customerLabelNormalizeType($labelType);
+        $labelId = (int) $labelId;
+        if ($labelType === '' || $labelId <= 0 || !($connect instanceof mysqli)) {
+            return $counts;
+        }
+
+        $dataset = customerLabelEnsureRealtimeSync($connect);
+        $breakdownMap = isset($dataset['breakdown_map'][$labelType][$labelId]) ? (array) $dataset['breakdown_map'][$labelType][$labelId] : array();
+        foreach ($breakdownMap as $platform => $totalCount) {
+            if (isset($counts[$platform])) {
+                $counts[$platform] = (int) $totalCount;
+            }
+        }
+
+        return $counts;
+    }
+}
+
+if (!function_exists('customerLabelGetLabelMetaMap')) {
+    function customerLabelGetLabelMetaMap($connect, $labelType, $labelIds)
+    {
+        $metaMap = array();
+        $typeConfig = customerLabelGetTypeConfig($labelType);
+        $labelIds = array_values(array_unique(array_filter(array_map('intval', (array) $labelIds))));
+        if (empty($typeConfig) || empty($labelIds) || !($connect instanceof mysqli) || !tableExists($typeConfig['table'], $connect)) {
+            return $metaMap;
+        }
+
+        $sql = "SELECT `id`, `name`, `colorCode` FROM `" . $typeConfig['table'] . "` WHERE `status` = 'A' AND `id` IN (" . implode(',', $labelIds) . ")";
+        $rows = customerLabelFetchRows($connect, $sql);
+        foreach ($rows as $row) {
+            $metaMap[(int) $row['id']] = array(
+                'id' => (int) $row['id'],
+                'name' => isset($row['name']) ? (string) $row['name'] : '',
+                'colorCode' => isset($row['colorCode']) ? (string) $row['colorCode'] : '',
+            );
+        }
+
+        return $metaMap;
+    }
+}
+
+if (!function_exists('customerLabelGetLabelMeta')) {
+    function customerLabelGetLabelMeta($connect, $labelType, $labelId)
+    {
+        $metaMap = customerLabelGetLabelMetaMap($connect, $labelType, array((int) $labelId));
+        return isset($metaMap[(int) $labelId]) ? $metaMap[(int) $labelId] : array();
+    }
+}
+
+if (!function_exists('customerLabelGetFilteredCustomerIds')) {
+    function customerLabelGetFilteredCustomerIds($connect, $platform, $labelType, $labelId)
+    {
+        $idMap = array();
+        $labelType = customerLabelNormalizeType($labelType);
+        $labelId = (int) $labelId;
+        if ($labelType === '' || $labelId <= 0 || !($connect instanceof mysqli)) {
+            return $idMap;
+        }
+
+        $dataset = customerLabelEnsureRealtimeSync($connect);
+        $platform = trim((string) $platform);
+        return isset($dataset['filter_map'][$platform][$labelType][$labelId]) ? (array) $dataset['filter_map'][$platform][$labelType][$labelId] : $idMap;
+    }
+}
+
+if (!function_exists('customerLabelGetCustomerLabelMap')) {
+    function customerLabelGetCustomerLabelMap($connect, $platform, $customerIds)
+    {
+        $labelMap = array();
+        $customerIds = array_values(array_unique(array_filter(array_map('intval', (array) $customerIds))));
+        if (empty($customerIds) || !($connect instanceof mysqli)) {
+            return $labelMap;
+        }
+
+        $dataset = customerLabelEnsureRealtimeSync($connect);
+        $platform = trim((string) $platform);
+        $platformLabelIdMap = isset($dataset['customer_label_id_map'][$platform]) ? (array) $dataset['customer_label_id_map'][$platform] : array();
+        $labelIdsByType = array(
+            'segmentation' => array(),
+            'level' => array(),
+            'repeat' => array(),
+        );
+        foreach ($customerIds as $customerId) {
+            $customerId = (int) $customerId;
+            if ($customerId <= 0 || !isset($platformLabelIdMap[$customerId])) {
+                continue;
+            }
+            foreach ((array) $platformLabelIdMap[$customerId] as $labelType => $labelId) {
+                $labelType = customerLabelNormalizeType($labelType);
+                $labelId = (int) $labelId;
+                if ($labelType !== '' && $labelId > 0) {
+                    $labelIdsByType[$labelType][$labelId] = $labelId;
+                }
+            }
+        }
+
+        $metaByType = array();
+        foreach ($labelIdsByType as $labelType => $labelIds) {
+            $metaByType[$labelType] = customerLabelGetLabelMetaMap($connect, $labelType, array_values($labelIds));
+        }
+
+        foreach ($customerIds as $customerId) {
+            $customerId = (int) $customerId;
+            if ($customerId <= 0 || !isset($platformLabelIdMap[$customerId])) {
+                continue;
+            }
+
+            foreach ((array) $platformLabelIdMap[$customerId] as $labelType => $labelId) {
+                $labelType = customerLabelNormalizeType($labelType);
+                $labelId = (int) $labelId;
+                if ($labelType === '' || !isset($metaByType[$labelType][$labelId])) {
+                    continue;
+                }
+
+                if (!isset($labelMap[$customerId])) {
+                    $labelMap[$customerId] = array();
+                }
+                $labelMap[$customerId][$labelType] = $metaByType[$labelType][$labelId];
+            }
+        }
+
+        return $labelMap;
+    }
+}
+
+if (!function_exists('customerLabelGetShopeeCustomerMetaMap')) {
+    function customerLabelGetShopeeCustomerMetaMap($connect, $financeConnect, $buyerValues)
+    {
+        $metaMap = array(
+            'by_id' => array(),
+            'by_username' => array(),
+        );
+        if (!($connect instanceof mysqli) || !($financeConnect instanceof mysqli)) {
+            return $metaMap;
+        }
+
+        $buyerValues = is_array($buyerValues) ? $buyerValues : array($buyerValues);
+        $buyerIds = array();
+        $buyerUsernames = array();
+
+        foreach ($buyerValues as $buyerValue) {
+            $buyerValue = trim((string) $buyerValue);
+            if ($buyerValue === '') {
+                continue;
+            }
+
+            if (ctype_digit($buyerValue)) {
+                $buyerId = (int) $buyerValue;
+                if ($buyerId > 0) {
+                    $buyerIds[$buyerId] = $buyerId;
+                }
+            } else {
+                $buyerUsernames[$buyerValue] = $buyerValue;
+            }
+        }
+
+        if (empty($buyerIds) && empty($buyerUsernames)) {
+            return $metaMap;
+        }
+
+        $whereParts = array();
+        if (!empty($buyerIds)) {
+            $whereParts[] = "`id` IN (" . implode(',', array_values($buyerIds)) . ")";
+        }
+        if (!empty($buyerUsernames)) {
+            $safeUsernames = array();
+            foreach ($buyerUsernames as $buyerUsername) {
+                $safeUsernames[] = "'" . mysqli_real_escape_string($financeConnect, $buyerUsername) . "'";
+            }
+            $whereParts[] = "`buyer_username` IN (" . implode(',', $safeUsernames) . ")";
+        }
+
+        $customerRows = customerLabelFetchRows(
+            $financeConnect,
+            "SELECT `id`, `buyer_username` FROM `" . SHOPEE_CUST_INFO . "` WHERE `status` = 'A' AND (" . implode(' OR ', $whereParts) . ")"
+        );
+
+        $customerIds = array();
+        foreach ($customerRows as $customerRow) {
+            $customerId = isset($customerRow['id']) ? (int) $customerRow['id'] : 0;
+            $buyerUsername = isset($customerRow['buyer_username']) ? trim((string) $customerRow['buyer_username']) : '';
+            if ($customerId <= 0) {
+                continue;
+            }
+
+            $metaMap['by_id'][$customerId] = array(
+                'id' => $customerId,
+                'buyer_username' => $buyerUsername,
+                'label_meta' => array(),
+            );
+            if ($buyerUsername !== '') {
+                $metaMap['by_username'][customerLabelNormalizeLookupKey($buyerUsername)] = $customerId;
+            }
+            $customerIds[] = $customerId;
+        }
+
+        $customerLabelMap = customerLabelGetCustomerLabelMap($connect, 'shopee', $customerIds);
+        foreach ($customerLabelMap as $customerId => $labelMeta) {
+            if (isset($metaMap['by_id'][$customerId])) {
+                $metaMap['by_id'][$customerId]['label_meta'] = $labelMeta;
+            }
+        }
+
+        return $metaMap;
+    }
+}
+
+if (!function_exists('customerLabelResolveShopeeCustomerMeta')) {
+    function customerLabelResolveShopeeCustomerMeta($connect, $financeConnect, $buyerValue, $fallbackDisplay = '', $shopeeCustomerMetaMap = null)
+    {
+        if (!is_array($shopeeCustomerMetaMap)) {
+            $lookupValues = array();
+            if (trim((string) $buyerValue) !== '') {
+                $lookupValues[] = $buyerValue;
+            }
+            if (trim((string) $fallbackDisplay) !== '' && trim((string) $fallbackDisplay) !== trim((string) $buyerValue)) {
+                $lookupValues[] = $fallbackDisplay;
+            }
+            $shopeeCustomerMetaMap = customerLabelGetShopeeCustomerMetaMap($connect, $financeConnect, $lookupValues);
+        }
+
+        $buyerValue = trim((string) $buyerValue);
+        $fallbackDisplay = trim((string) $fallbackDisplay);
+
+        if ($buyerValue !== '' && ctype_digit($buyerValue)) {
+            $buyerId = (int) $buyerValue;
+            if ($buyerId > 0 && isset($shopeeCustomerMetaMap['by_id'][$buyerId])) {
+                return (array) $shopeeCustomerMetaMap['by_id'][$buyerId];
+            }
+        }
+
+        $lookupDisplay = $fallbackDisplay !== '' ? $fallbackDisplay : $buyerValue;
+        $lookupKey = customerLabelNormalizeLookupKey($lookupDisplay);
+        if ($lookupKey !== '' && isset($shopeeCustomerMetaMap['by_username'][$lookupKey])) {
+            $buyerId = (int) $shopeeCustomerMetaMap['by_username'][$lookupKey];
+            if ($buyerId > 0 && isset($shopeeCustomerMetaMap['by_id'][$buyerId])) {
+                return (array) $shopeeCustomerMetaMap['by_id'][$buyerId];
+            }
+        }
+
+        return array();
+    }
+}
+
+if (!function_exists('customerLabelRenderShopeeBuyerCell')) {
+    function customerLabelRenderShopeeBuyerCell($connect, $financeConnect, $buyerValue, $fallbackDisplay = '', $shopeeCustomerMetaMap = null)
+    {
+        $buyerMeta = customerLabelResolveShopeeCustomerMeta($connect, $financeConnect, $buyerValue, $fallbackDisplay, $shopeeCustomerMetaMap);
+        if (!empty($buyerMeta)) {
+            $buyerName = isset($buyerMeta['buyer_username']) && trim((string) $buyerMeta['buyer_username']) !== ''
+                ? (string) $buyerMeta['buyer_username']
+                : (trim((string) $fallbackDisplay) !== '' ? (string) $fallbackDisplay : (string) $buyerValue);
+            return customerLabelRenderNameCell($buyerName, isset($buyerMeta['label_meta']) ? $buyerMeta['label_meta'] : array());
+        }
+
+        $buyerValue = trim((string) $buyerValue);
+        $fallbackDisplay = trim((string) $fallbackDisplay);
+        $displayValue = $fallbackDisplay !== '' ? $fallbackDisplay : ($buyerValue !== '' ? $buyerValue : '-');
+        return htmlspecialchars($displayValue, ENT_QUOTES, 'UTF-8');
+    }
+}
+
+if (!function_exists('customerLabelRenderBadge')) {
+    function customerLabelRenderBadge($labelMeta)
+    {
+        $labelName = isset($labelMeta['name']) ? trim((string) $labelMeta['name']) : '';
+        if ($labelName === '') {
+            return '';
+        }
+
+        $badgeColor = isset($labelMeta['colorCode']) && trim((string) $labelMeta['colorCode']) !== '' ? (string) $labelMeta['colorCode'] : '#6c757d';
+        return '<span class="d-inline-flex align-items-center ms-1 px-2 py-1 rounded-pill text-white" style="background-color:' .
+            htmlspecialchars($badgeColor, ENT_QUOTES, 'UTF-8') .
+            ';font-size:13px;line-height:1;">' .
+            htmlspecialchars($labelName, ENT_QUOTES, 'UTF-8') .
+            '</span>';
+    }
+}
+
+if (!function_exists('customerLabelRenderNameCell')) {
+    function customerLabelRenderNameCell($displayName, $customerLabelMeta)
+    {
+        $safeDisplayName = htmlspecialchars((string) $displayName, ENT_QUOTES, 'UTF-8');
+        $segmentationBadge = isset($customerLabelMeta['segmentation']) ? customerLabelRenderBadge($customerLabelMeta['segmentation']) : '';
+        return '<span class="d-inline-flex align-items-center flex-nowrap">' . $safeDisplayName . ($segmentationBadge !== '' ? ' ' . $segmentationBadge : '') . '</span>';
+    }
+}
+
+if (!function_exists('customerLabelRenderSummaryCell')) {
+    function customerLabelRenderSummaryCell($customerLabelMeta)
+    {
+        $parts = array();
+        if (isset($customerLabelMeta['level'])) {
+            $parts[] = customerLabelRenderBadge($customerLabelMeta['level']);
+        }
+        if (isset($customerLabelMeta['repeat'])) {
+            $parts[] = customerLabelRenderBadge($customerLabelMeta['repeat']);
+        }
+
+        return empty($parts) ? '' : implode(' ', $parts);
+    }
+}
+
+if (!function_exists('customerLabelPrepareCustomerRows')) {
+    function customerLabelPrepareCustomerRows($connect, $platform, $rows)
+    {
+        $rows = is_array($rows) ? $rows : array();
+        $labelType = customerLabelNormalizeType(input('label_type'));
+        $labelId = customerLabelResolveInt(input('label_id'));
+
+        if ($labelType !== '' && $labelId > 0) {
+            $allowedIds = customerLabelGetFilteredCustomerIds($connect, $platform, $labelType, $labelId);
+            if (empty($allowedIds)) {
+                $rows = array();
+            } else {
+                $rows = array_values(array_filter($rows, function ($row) use ($allowedIds) {
+                    $customerId = isset($row['id']) ? (int) $row['id'] : 0;
+                    return $customerId > 0 && isset($allowedIds[$customerId]);
+                }));
+            }
+        }
+
+        $customerIds = array();
+        foreach ($rows as $row) {
+            if (isset($row['id'])) {
+                $customerIds[] = (int) $row['id'];
+            }
+        }
+
+        return array(
+            'rows' => $rows,
+            'label_map' => customerLabelGetCustomerLabelMap($connect, $platform, $customerIds),
+            'active_filter_type' => $labelType,
+            'active_filter_id' => $labelId,
+        );
+    }
+}
+
+if (!function_exists('customerLabelBuildBreakdownUrl')) {
+    function customerLabelBuildBreakdownUrl($labelType, $labelId)
+    {
+        $labelType = customerLabelNormalizeType($labelType);
+        $labelId = (int) $labelId;
+        if ($labelType === '' || $labelId <= 0) {
+            return '';
+        }
+
+        $baseUrl = defined('SITEURL') ? rtrim((string) SITEURL, '/') : '';
+        if ($baseUrl === '') {
+            return '';
+        }
+
+        return $baseUrl . '/customer_label_breakdown.php?label_type=' . urlencode($labelType) . '&label_id=' . $labelId;
+    }
+}
+
+if (!function_exists('customerLabelBuildRecordFilterUrl')) {
+    function customerLabelBuildRecordFilterUrl($platform, $labelType, $labelId)
+    {
+        $labelType = customerLabelNormalizeType($labelType);
+        $labelId = (int) $labelId;
+        $recordUrl = customerLabelGetPlatformRecordUrl($platform);
+        if ($recordUrl === '' || $labelType === '' || $labelId <= 0) {
+            return '';
+        }
+
+        return $recordUrl . '?label_type=' . urlencode($labelType) . '&label_id=' . $labelId;
+    }
+}
+
 if (!function_exists('validateEstimatedReceivedDate')) {
     function validateEstimatedReceivedDate($date)
     {

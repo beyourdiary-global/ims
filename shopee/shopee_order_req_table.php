@@ -181,6 +181,15 @@ $whereSql = implode(" AND ", $whereConditions);
 $redirect_page = $SITEURL . '/shopee/shopee_order_req.php';
 $deleteRedirectPage = $SITEURL . '/shopee/shopee_order_req_table.php';
 $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_connect);
+$shopeeBuyerMetaMap = array();
+if ($result instanceof mysqli_result) {
+    $shopeeBuyerLookupValues = array();
+    while ($buyerLookupRow = $result->fetch_assoc()) {
+        $shopeeBuyerLookupValues[] = isset($buyerLookupRow['buyer']) ? $buyerLookupRow['buyer'] : '';
+    }
+    mysqli_data_seek($result, 0);
+    $shopeeBuyerMetaMap = customerLabelGetShopeeCustomerMetaMap($connect, $finance_connect, $shopeeBuyerLookupValues);
+}
 $hasRows = ($result && mysqli_num_rows($result) > 0);
 ?>
 
@@ -585,9 +594,6 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                                 $pkg['name'] = implode(', ', $pkgNames);
                             }
 
-                            $q4 = getData('buyer_username', "id='" . $row['buyer'] . "'", '', SHOPEE_CUST_INFO, $finance_connect);
-                            $buyer = $q4 ? $q4->fetch_assoc() : [];
-
                             $q6 = getData('*', "id='" . $row['buyer_pay_meth'] . "'", '', PAY_MTHD_SHOPEE, $finance_connect);
                             $pay = $q6 ? $q6->fetch_assoc() : [];
 
@@ -679,7 +685,7 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                                 <td scope="row"><?= $row['time'] ?? '' ?></td>
                                 <td scope="row"><?= $pkg['name'] ?? '' ?></td>
                                 <td scope="row"><?= $brand['name'] ?? '' ?></td>
-                                <td scope="row"><?= $buyer['buyer_username'] ?? '' ?></td>
+                                <td scope="row"><?= customerLabelRenderShopeeBuyerCell($connect, $finance_connect, isset($row['buyer']) ? $row['buyer'] : '', '', $shopeeBuyerMetaMap) ?></td>
                                 <td scope="row"><?= $pay['name'] ?? '' ?></td>
                                 <td scope="row"><?= $pic['name'] ?? '' ?></td>
                                 <td scope="row"><?= $row['price'] ?? '' ?></td>
