@@ -101,6 +101,21 @@ if ($airbillAttachment !== '') {
     $attachmentFileName = basename($storedAttachment);
     if (strpos($storedAttachment, 'attachment/') === 0) {
         $airbillAttachmentUrl = rtrim((string) $SITEURL, '/') . '/' . $storedAttachment;
+    } else {
+        $imgServerBase = isset($img_server) ? trim((string) $img_server) : '';
+        if ($imgServerBase !== '') {
+            $legacyAttachmentPath = '';
+            $legacyAttachmentPos = strpos($storedAttachment, 'shopee_airbill_attachment/');
+            if ($legacyAttachmentPos !== false) {
+                $legacyAttachmentPath = substr($storedAttachment, $legacyAttachmentPos);
+            } elseif ($attachmentFileName !== '') {
+                $legacyAttachmentPath = 'shopee_airbill_attachment/' . $attachmentFileName;
+            }
+
+            if ($legacyAttachmentPath !== '') {
+                $airbillAttachmentUrl = rtrim($imgServerBase, '/') . '/' . ltrim($legacyAttachmentPath, '/');
+            }
+        }
     }
     $airbillAttachmentExt = strtolower(pathinfo($attachmentFileName, PATHINFO_EXTENSION));
 }
