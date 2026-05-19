@@ -3522,10 +3522,13 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
         ));
         $tokenSetting = shopeeOmsFindPreferredTokenSetting($cmsConnect, $sourcePage);
         if (empty($tokenSetting)) {
+            $tokenNotSetMessage = $sourcePage !== ''
+                ? 'Token not set yet, please set the Telegram token for ' . $sourcePage . '.'
+                : 'Token not set yet, please set the Telegram token in Token Setting.';
             return array(
                 'success' => true,
                 'sent' => false,
-                'message' => 'Token not set yet, please set Shopee Order Request token.',
+                'message' => $tokenNotSetMessage,
             );
         }
 

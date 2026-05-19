@@ -115,15 +115,14 @@ if (post('actionBtn')) {
                 break;
             }
 
-            // Escape the input before checking for duplicates to prevent SQL injection
-            $safeCurrentDataName = mysqli_real_escape_string($connect, $currentDataName);
-            if (isDuplicateRecord('name', $safeCurrentDataName, $tblName, $connect, $dataID)) {
+            // Pass raw values here because isDuplicateRecord() escapes internally.
+            if (isDuplicateRecord('name', $currentDataName, $tblName, $connect, $dataID)) {
                 $err = 'Duplicate record found for Token Setting name.';
                 break;
             }
 
             $safePageUsed = mysqli_real_escape_string($connect, $pageUsed);
-            if (isDuplicateRecord('page_used', $safePageUsed, $tblName, $connect, $dataID)) {
+            if (isDuplicateRecord('page_used', $pageUsed, $tblName, $connect, $dataID)) {
                 $pageUsedErr = 'Duplicate record found for selected Page Used.';
                 break;
             }
