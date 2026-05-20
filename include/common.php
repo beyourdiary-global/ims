@@ -1960,10 +1960,6 @@ if (!function_exists('customerLabelResolveOrderCustomerId')) {
             return $directId;
         }
 
-        if ($platform === 'shopee') {
-            return 0;
-        }
-
         $lookupKey = customerLabelNormalizeLookupKey($rawValue);
         return isset($customerIndexes['lookup'][$lookupKey]) ? (int) $customerIndexes['lookup'][$lookupKey] : 0;
     }
