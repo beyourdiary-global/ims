@@ -399,13 +399,29 @@ $result = getData('*', '', '', SHOPEE_SG_ORDER_REQ, $finance_connect);
                     </thead>
                     <tbody>
                     <?php 
+                        $shopeeBuyerMetaMap = null;
+                        if ($groupOption === 'buyer' && $result instanceof mysqli_result) {
+                            $shopeeBuyerLookupValues = array();
+                            while ($buyerRow = $result->fetch_assoc()) {
+                                $buyerValue = isset($buyerRow['buyer']) ? trim((string) $buyerRow['buyer']) : '';
+                                if ($buyerValue !== '') {
+                                    $shopeeBuyerLookupValues[$buyerValue] = $buyerValue;
+                                }
+                            }
+                            mysqli_data_seek($result, 0);
+                            $shopeeBuyerMetaMap = customerLabelGetShopeeCustomerMetaMap(
+                                $connect,
+                                $finance_connect,
+                                array_values($shopeeBuyerLookupValues)
+                            );
+                        }
                         while ($row = $result->fetch_assoc()) {
                               echo "<tr onclick=\"window.location='$url'\" style=\"cursor:pointer;\">";
                               echo '<th class="hideColumn" scope="row">' . $ids . '</th>'; 
                               echo ' <th class="text-center"><input type="checkbox" class="export" value="' . $ids . '"></th>';
                               echo '<th scope="row">' . $counters++ . '</th>';
                               if ($groupOption === 'buyer') {
-                                  echo '<td scope="row">' . customerLabelRenderShopeeBuyerCell($connect, $finance_connect, $key, $key) . '</td>';
+                                  echo '<td scope="row">' . customerLabelRenderShopeeBuyerCell($connect, $finance_connect, $key, $key, $shopeeBuyerMetaMap) . '</td>';
                               } else {
                                   echo '<td scope="row">' . $key . '</td>';
                               }

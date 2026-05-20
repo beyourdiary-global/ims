@@ -504,6 +504,10 @@ $result = getData('*', '', '', SHOPEE_SG_ORDER_REQ, $finance_connect);
                               }
                           }
                           }
+                          $shopeeBuyerMetaMap = null;
+                          if ($groupOption === 'buyer') {
+                              $shopeeBuyerMetaMap = customerLabelGetShopeeCustomerMetaMap($connect, $finance_connect, array_keys($groupedRows));
+                          }
                           foreach ($groupedRows as $key => $groupedRow) {
                               if (isset($key)) {
                                   if($groupOption4 == 'daily') {
@@ -562,7 +566,7 @@ $result = getData('*', '', '', SHOPEE_SG_ORDER_REQ, $finance_connect);
                               echo ' <th class="text-center"><input type="checkbox" class="export" value="' . $ids . '"></th>';
                               echo '<th scope="row">' . $counters++ . '</th>';
                               if ($groupOption === 'buyer') {
-                                  echo '<td scope="row">' . customerLabelRenderShopeeBuyerCell($connect, $finance_connect, $key, $key) . '</td>';
+                                  echo '<td scope="row">' . customerLabelRenderShopeeBuyerCell($connect, $finance_connect, $key, $key, $shopeeBuyerMetaMap) . '</td>';
                               } else {
                                   echo '<td scope="row">' . $key . '</td>';
                               }

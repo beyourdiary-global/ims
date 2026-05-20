@@ -2359,10 +2359,87 @@ if (!function_exists('customerLabelBuildAssignmentDataset')) {
     }
 }
 
+if (!function_exists('customerLabelGetRealtimeSyncCacheTtl')) {
+    function customerLabelGetRealtimeSyncCacheTtl()
+    {
+        return 300;
+    }
+}
+
+if (!function_exists('customerLabelGetRealtimeSyncCachePath')) {
+    function customerLabelGetRealtimeSyncCachePath()
+    {
+        return dirname(__DIR__) . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'customer_label_assignment_dataset.json';
+    }
+}
+
+if (!function_exists('customerLabelReadRealtimeSyncCache')) {
+    function customerLabelReadRealtimeSyncCache()
+    {
+        $cachePath = customerLabelGetRealtimeSyncCachePath();
+        if ($cachePath === '' || !is_file($cachePath) || !is_readable($cachePath)) {
+            return null;
+        }
+
+        $cacheJson = @file_get_contents($cachePath);
+        if ($cacheJson === false || trim($cacheJson) === '') {
+            return null;
+        }
+
+        $cachePayload = json_decode($cacheJson, true);
+        if (!is_array($cachePayload)) {
+            return null;
+        }
+
+        $expiresAt = isset($cachePayload['expires_at']) ? (int) $cachePayload['expires_at'] : 0;
+        $dataset = isset($cachePayload['dataset']) && is_array($cachePayload['dataset']) ? $cachePayload['dataset'] : null;
+        if ($expiresAt <= time() || !is_array($dataset)) {
+            return null;
+        }
+
+        $dataset['cache_source'] = 'shared_ttl';
+        $dataset['cache_expires_at'] = $expiresAt;
+        return $dataset;
+    }
+}
+
+if (!function_exists('customerLabelWriteRealtimeSyncCache')) {
+    function customerLabelWriteRealtimeSyncCache($dataset)
+    {
+        if (!is_array($dataset) || empty($dataset['success'])) {
+            return false;
+        }
+
+        $cachePath = customerLabelGetRealtimeSyncCachePath();
+        $cacheDir = dirname($cachePath);
+        if ($cachePath === '' || (!is_dir($cacheDir) && !@mkdir($cacheDir, 0777, true) && !is_dir($cacheDir))) {
+            return false;
+        }
+
+        $ttl = customerLabelGetRealtimeSyncCacheTtl();
+        $payload = array(
+            'generated_at' => time(),
+            'expires_at' => time() + max(1, (int) $ttl),
+            'dataset' => $dataset,
+        );
+
+        $cacheJson = json_encode($payload);
+        if ($cacheJson === false) {
+            return false;
+        }
+
+        return @file_put_contents($cachePath, $cacheJson, LOCK_EX) !== false;
+    }
+}
+
 if (!function_exists('customerLabelRefreshAssignments')) {
     function customerLabelRefreshAssignments($connect, $financeConnect, $actorName = 'system')
     {
-        return customerLabelBuildAssignmentDataset($connect, $financeConnect);
+        $dataset = customerLabelBuildAssignmentDataset($connect, $financeConnect);
+        if (!empty($dataset['success'])) {
+            customerLabelWriteRealtimeSyncCache($dataset);
+        }
+        return $dataset;
     }
 }
 
@@ -2381,6 +2458,13 @@ if (!function_exists('customerLabelEnsureRealtimeSync')) {
             if ($financeConnect === null && isset($finance_connect) && $finance_connect instanceof mysqli) {
                 $financeConnect = $finance_connect;
             }
+        }
+
+        $cachedDataset = customerLabelReadRealtimeSyncCache();
+        if (is_array($cachedDataset)) {
+            $lastResult = $cachedDataset;
+            $hasSynced = true;
+            return $lastResult;
         }
 
         if (!($financeConnect instanceof mysqli)) {

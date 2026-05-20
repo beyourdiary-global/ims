@@ -91,7 +91,7 @@ $amountCountMap = customerLabelGetLabelCountMap($connect, 'level');
                                 <th scope="col" width="60px">S/N</th>
                                 <th scope="col" id="action_col" width="100px">Action</th>
                                 <th scope="col">Name</th>
-                                <th scope="col">Amount</th>
+                                <th scope="col">Customer Count</th>
                                 <th scope="col">Color Segmentation</th>
                                 <th scope="col">Purchase Amount From</th>
                                 <th scope="col">Purchase Amount Until</th>

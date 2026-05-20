@@ -581,6 +581,22 @@ $result = getData('*', '', '', SHOPEE_SG_ORDER_REQ, $finance_connect);
                               }
                           }                      
                           }
+                          $shopeeBuyerMetaMap = null;
+                          if ($groupOption === 'buyer' || $groupOption2 === 'buyer') {
+                              $shopeeBuyerLookupValues = array();
+                              foreach ($groupedRows as $buyerCombinedKey => $buyerGroupedRow) {
+                                  $buyerKeyParts = explode('_', $buyerCombinedKey);
+                                  $buyerKey = isset($buyerKeyParts[0]) ? $buyerKeyParts[0] : '';
+                                  $buyerKey2 = isset($buyerKeyParts[1]) ? $buyerKeyParts[1] : null;
+                                  if ($groupOption === 'buyer' && $buyerKey !== '') {
+                                      $shopeeBuyerLookupValues[$buyerKey] = $buyerKey;
+                                  }
+                                  if ($groupOption2 === 'buyer' && $buyerKey2 !== null && $buyerKey2 !== '') {
+                                      $shopeeBuyerLookupValues[$buyerKey2] = $buyerKey2;
+                                  }
+                              }
+                              $shopeeBuyerMetaMap = customerLabelGetShopeeCustomerMetaMap($connect, $finance_connect, array_values($shopeeBuyerLookupValues));
+                          }
                           foreach ($groupedRows as $combinedKey => $groupedRow) {
                             list($key, $key2) = explode('_', $combinedKey);
                             if (isset($key)) {
@@ -633,14 +649,14 @@ $result = getData('*', '', '', SHOPEE_SG_ORDER_REQ, $finance_connect);
                             echo ' <th class="text-center"><input type="checkbox" class="export" value="' . $ids . '"></th>';
                             echo '<th scope="row">' . $counters++ . '</th>';
                             if ($groupOption === 'buyer') {
-                                echo '<td scope="row">' . customerLabelRenderShopeeBuyerCell($connect, $finance_connect, $key, $key) . '</td>';
+                                echo '<td scope="row">' . customerLabelRenderShopeeBuyerCell($connect, $finance_connect, $key, $key, $shopeeBuyerMetaMap) . '</td>';
                             } else {
                                 echo '<td scope="row">' . $key . '</td>';
                             }
                             
                             if($key2 != $key && $key2 != null){
                                 if ($groupOption2 === 'buyer') {
-                                    echo '<td scope="row">' . customerLabelRenderShopeeBuyerCell($connect, $finance_connect, $key2, $key2) . '</td>';
+                                    echo '<td scope="row">' . customerLabelRenderShopeeBuyerCell($connect, $finance_connect, $key2, $key2, $shopeeBuyerMetaMap) . '</td>';
                                 } else {
                                     echo '<td scope="row">' . $key2 . '</td>';
                                 }
