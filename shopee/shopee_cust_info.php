@@ -86,6 +86,14 @@ if ($dataID) { //edit/remove/view
     }
 }
 
+$scrSegmentationBadgeHtml = '';
+if (isset($row['id']) && (int) $row['id'] > 0) {
+    $scrCustomerLabelMap = customerLabelGetCustomerLabelMap($connect, 'shopee', array((int) $row['id']));
+    if (isset($scrCustomerLabelMap[(int) $row['id']]['segmentation'])) {
+        $scrSegmentationBadgeHtml = customerLabelRenderBadge($scrCustomerLabelMap[(int) $row['id']]['segmentation']);
+    }
+}
+
 if (!($dataID) && !($act)) {
     echo '<script>
     alert("Invalid action.");
@@ -453,15 +461,20 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                             <div class="col-md-4 mb-3">
                                 <label class="form-label form_lbl" id="scr_username_lbl" for="scr_username">Shopee Buyer
                                     Username<span class="requireRed">*</span></label>
-                                <input class="form-control" type="text" name="scr_username" id="scr_username" value="<?php
-                                if (isset($dataExisted) && isset($row['buyer_username']) && !isset($scr_username)) {
-                                    echo $row['buyer_username'];
-                                } else if (isset($dataExisted) && isset($row['buyer_username']) && isset($scr_username)) {
-                                    echo $scr_username;
-                                } else {
-                                    echo '';
-                                } ?>" <?php if ($act == '')
-                                     echo 'disabled' ?>>
+                                <div class="d-flex align-items-center gap-2 flex-nowrap">
+                                    <input class="form-control" type="text" name="scr_username" id="scr_username" value="<?php
+                                    if (isset($dataExisted) && isset($row['buyer_username']) && !isset($scr_username)) {
+                                        echo $row['buyer_username'];
+                                    } else if (isset($dataExisted) && isset($row['buyer_username']) && isset($scr_username)) {
+                                        echo $scr_username;
+                                    } else {
+                                        echo '';
+                                    } ?>" <?php if ($act == '')
+                                         echo 'disabled' ?>>
+                                    <?php if ($scrSegmentationBadgeHtml !== '') { ?>
+                                        <div class="d-inline-flex align-items-center flex-nowrap"><?= $scrSegmentationBadgeHtml ?></div>
+                                    <?php } ?>
+                                </div>
 
                                 <?php if (isset($username_err)) { ?>
                                     <div id="err_msg">
@@ -623,13 +636,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                         $orderRows = array();
                         $sumFinalAmount = 0.00;
                         $buyerId = (int) $dataID;
-                        $buyerUsername = isset($row['buyer_username']) ? mysqli_real_escape_string($finance_connect, (string) $row['buyer_username']) : '';
-
-                        $orderWhere = "status='A' AND (buyer='" . $buyerId . "'";
-                        if ($buyerUsername !== '') {
-                            $orderWhere .= " OR buyer='" . $buyerUsername . "'";
-                        }
-                        $orderWhere .= ")";
+                        $orderWhere = "status='A' AND buyer='" . $buyerId . "'";
 
                         $orderSql = "SELECT * FROM " . SHOPEE_SG_ORDER_REQ . " WHERE " . $orderWhere . " ORDER BY date DESC, time DESC, id DESC";
                         $orderRst = mysqli_query($finance_connect, $orderSql);

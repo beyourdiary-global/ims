@@ -86,6 +86,9 @@ if ($orderRst) {
         $orderRows[] = $row;
     }
 }
+$shopeeBuyerMetaMap = customerLabelGetShopeeCustomerMetaMap($connect, $finance_connect, array_map(function ($row) {
+    return isset($row['buyer']) ? $row['buyer'] : '';
+}, $orderRows));
 
 $orderTokenMap = array();
 if (!empty($orderRows)) {
@@ -158,16 +161,6 @@ if (!empty($orderRows)) {
                         <?php $rowNumber = 1; ?>
                         <?php foreach ($orderRows as $row) { ?>
                             <?php
-                            $customerName = trim((string) (isset($row['buyer']) ? $row['buyer'] : '-'));
-                            if ($customerName !== '' && ctype_digit($customerName)) {
-                                $buyerRst = getData('buyer_username', "id='" . (int) $customerName . "'", 'LIMIT 1', SHOPEE_CUST_INFO, $finance_connect);
-                                if ($buyerRst && $buyerRst->num_rows > 0) {
-                                    $buyerRow = $buyerRst->fetch_assoc();
-                                    if (isset($buyerRow['buyer_username']) && trim((string) $buyerRow['buyer_username']) !== '') {
-                                        $customerName = trim((string) $buyerRow['buyer_username']);
-                                    }
-                                }
-                            }
                             $packageSummary = shopeeOmsBuildOrderProductSummary($connect, $row);
                             $tokenLink = '';
                             $tokenValue = isset($orderTokenMap[(int) $row['id']]) ? (string) $orderTokenMap[(int) $row['id']] : '';
@@ -178,7 +171,7 @@ if (!empty($orderRows)) {
                             <tr>
                                 <td><?= $rowNumber++ ?></td>
                                 <td><a href="<?= $SITEURL ?>/shopee/shopee_order_req.php?id=<?= (int) $row['id'] ?>"><?= htmlspecialchars((string) $row['orderID']) ?></a></td>
-                                <td><?= htmlspecialchars($customerName !== '' ? $customerName : '-') ?></td>
+                                <td><?= customerLabelRenderShopeeBuyerCell($connect, $finance_connect, isset($row['buyer']) ? $row['buyer'] : '', '', $shopeeBuyerMetaMap) ?></td>
                                 <td><?= htmlspecialchars(!empty($packageSummary['bundle_name']) ? $packageSummary['bundle_name'] : '-') ?></td>
                                 <td><?= htmlspecialchars((string) (isset($row['airbill_no']) && trim((string) $row['airbill_no']) !== '' ? $row['airbill_no'] : '-')) ?></td>
                                 <td>

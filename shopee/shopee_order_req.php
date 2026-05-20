@@ -55,6 +55,14 @@ if ($dataID) { //edit/remove/view
     }
 }
 
+$sorBuyerSegmentationBadgeHtml = '';
+if (isset($row['buyer']) && trim((string) $row['buyer']) !== '') {
+    $sorBuyerMeta = customerLabelResolveShopeeCustomerMeta($connect, $finance_connect, $row['buyer']);
+    if (isset($sorBuyerMeta['label_meta']['segmentation'])) {
+        $sorBuyerSegmentationBadgeHtml = customerLabelRenderBadge($sorBuyerMeta['label_meta']['segmentation']);
+    }
+}
+
 if (!($dataID) && !($act)) {
     echo '<script>
     alert("Invalid action.");
@@ -1578,9 +1586,14 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                                 }
                             }
                             ?>
-                            <input class="form-control" type="text" name="sor_user" id="sor_user" <?php if ($act == '')
-                                echo 'disabled' ?>
-                                    value="<?php echo !empty($echoVal) ? $buyerDisplayValue : '' ?>">
+                            <div class="d-flex align-items-center gap-2 flex-nowrap">
+                                <input class="form-control" type="text" name="sor_user" id="sor_user" <?php if ($act == '')
+                                    echo 'disabled' ?>
+                                        value="<?php echo !empty($echoVal) ? $buyerDisplayValue : '' ?>">
+                                <?php if ($sorBuyerSegmentationBadgeHtml !== '') { ?>
+                                    <div class="d-inline-flex align-items-center flex-nowrap"><?= $sorBuyerSegmentationBadgeHtml ?></div>
+                                <?php } ?>
+                            </div>
                             <input type="hidden" name="sor_user_hidden" id="sor_user_hidden"
                                 value="<?php echo (isset($row['buyer'])) ? $row['buyer'] : ''; ?>">
                             <?php if (isset($user_err)) { ?>
