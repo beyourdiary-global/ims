@@ -36,7 +36,18 @@ $_SESSION['delChk'] = '';
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
-
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && !isset($_GET['verify_id'])) {
+    audit_log(array(
+        'log_act' => 'view',
+        'page' => $pageTitle,
+        'uid' => USER_ID,
+        'act_msg' => USER_NAME . " viewed the " . $pageTitle . " page.",
+        'cdate' => $cdate,
+        'ctime' => $ctime,
+        'cby' => USER_ID,
+        'connect' => $connect
+    ));
+}
 shopeeOmsEnsureRealtimePostponedSync($connect, $finance_connect);
 
 // Build numeric action keys from the latest user-group pins in database.
@@ -136,6 +147,67 @@ if (isset($_GET['verify_id'])) {
         $verifyMessage = "Error: Order #$orderId not found.";
     }
     }
+}
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['force_wafc_id'])) {
+    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    $wafcRedirectMonth = isset($_POST['wafc_redirect_month']) ? (string) $_POST['wafc_redirect_month'] : '';
+    $wafcRedirectStatus = isset($_POST['wafc_redirect_status']) ? (string) $_POST['wafc_redirect_status'] : '';
+
+    $redirectUrl = 'shopee_processing_order.php';
+    $redirectQuery = array();
+
+    if ($wafcRedirectMonth !== '') {
+        $redirectQuery['month'] = $wafcRedirectMonth;
+    }
+
+    if ($wafcRedirectStatus !== '') {
+        $redirectQuery['status'] = $wafcRedirectStatus;
+    }
+
+    if (!empty($redirectQuery)) {
+        $redirectUrl .= '?' . http_build_query($redirectQuery);
+    }
+
+    if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
+        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($redirectUrl) . "');</script>";
+        exit;
+    }
+
+    $orderId = intval($_POST['force_wafc_id']);
+
+    $wafcResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'WAFC', array(
+        'actor_user_id' => USER_ID,
+        'actor_user_group_id' => USER_GROUP,
+        'source_page' => $pageTitle,
+        'remark' => 'Moved to Waiting Admin Final Check without waiting 14 days from processing order list.',
+        'action' => 'manual_force_wafc',
+        'skip_permission' => true,
+        'allow_auto_follow_up' => false,
+    ));
+
+    if (!empty($wafcResult['success'])) {
+        $oldStatus = isset($wafcResult['old_status']) ? (string) $wafcResult['old_status'] : 'PR';
+        $newStatus = isset($wafcResult['new_status']) ? (string) $wafcResult['new_status'] : 'WAFC';
+
+        audit_log(array(
+            'log_act' => 'edit',
+            'page' => $pageTitle,
+            'query_rec' => $orderId,
+            'query_table' => SHOPEE_SG_ORDER_REQ,
+            'oldval' => 'order_status: ' . $oldStatus,
+            'changes' => 'order_status: ' . $oldStatus . ' -> ' . $newStatus,
+            'uid' => USER_ID,
+            'act_msg' => USER_NAME . " Moved Shopee order [ <b>ID = " . $orderId . "</b> ] from <b>" . $oldStatus . "</b> to <b>" . $newStatus . "</b> without waiting 14 days.",
+            'cdate' => $cdate,
+            'ctime' => $ctime,
+            'cby' => USER_ID,
+            'connect' => $connect
+        ));
+    }
+
+    echo "<script>alert('" . addslashes(isset($wafcResult['message']) ? $wafcResult['message'] : 'Unable to move order to WAFC.') . "'); location.replace('" . addslashes($redirectUrl) . "');</script>";
+    exit;
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['return_id'])) {
@@ -670,6 +742,17 @@ if ($result instanceof mysqli_result) {
                                  <a class="btn btn-sm btn-rounded btn-primary" href="<?= $SITEURL . '/shopee/shopee_order_request_info.php?id=' . (int) $row['id'] ?>" title="Open QR Info">
                                      <i class="fa-solid fa-qrcode"></i>
                                  </a>
+                                <?php } ?>
+                                <?php if ($statusCode === 'PR') { ?>
+                                <form method="post" class="d-inline" onsubmit="return confirm('Move this order to Waiting Admin Final Check now without waiting 14 days?')">
+                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
+                                    <input type="hidden" name="force_wafc_id" value="<?= (int) $row['id'] ?>">
+                                    <input type="hidden" name="wafc_redirect_month" value="<?= htmlspecialchars((string) $monthFilter, ENT_QUOTES, 'UTF-8') ?>">
+                                    <input type="hidden" name="wafc_redirect_status" value="<?= htmlspecialchars((string) $statusFilter, ENT_QUOTES, 'UTF-8') ?>">
+                                    <button type="submit" class="btn btn-sm btn-rounded btn-info" title="Move to WAFC Now">
+                                        <i class="fas fa-forward"></i>
+                                    </button>
+                                </form>
                                 <?php } ?>
                                 <?php if (in_array($statusCode, array('SP', 'WAERD', 'WR', 'PD', 'PR', 'WAFC', 'V', 'C'), true)) { ?>
                                  <form method="post" class="d-inline" onsubmit="return confirm('Mark this order as Return?')">

@@ -126,7 +126,52 @@ if (isset($_GET['complete_id'])) {
     exit;
 }
 
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['force_wafc_id'])) {
+    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+
+    if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
+        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('shopee_order_req_table.php');</script>";
+        exit;
+    }
+
+    $orderId = intval($_POST['force_wafc_id']);
+
+    $wafcResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'WAFC', array(
+        'actor_user_id' => USER_ID,
+        'actor_user_group_id' => USER_GROUP,
+        'source_page' => $pageTitle,
+        'remark' => 'Moved to Waiting Admin Final Check without waiting 14 days.',
+        'action' => 'manual_force_wafc',
+        'skip_permission' => true,
+        'allow_auto_follow_up' => false,
+    ));
+
+    if (!empty($wafcResult['success'])) {
+        $oldStatus = isset($wafcResult['old_status']) ? (string) $wafcResult['old_status'] : 'PR';
+        $newStatus = isset($wafcResult['new_status']) ? (string) $wafcResult['new_status'] : 'WAFC';
+
+        audit_log(array(
+            'log_act' => 'edit',
+            'page' => $pageTitle,
+            'query_rec' => $orderId,
+            'query_table' => SHOPEE_SG_ORDER_REQ,
+            'oldval' => 'order_status: ' . $oldStatus,
+            'changes' => 'order_status: ' . $oldStatus . ' -> ' . $newStatus,
+            'uid' => USER_ID,
+            'act_msg' => USER_NAME . " Moved Shopee order [ <b>ID = " . $orderId . "</b> ] from <b>" . $oldStatus . "</b> to <b>" . $newStatus . "</b> without waiting 14 days.",
+            'cdate' => $cdate,
+            'ctime' => $ctime,
+            'cby' => USER_ID,
+            'connect' => $connect
+        ));
+    }
+
+    echo "<script>alert('" . addslashes(isset($wafcResult['message']) ? $wafcResult['message'] : 'Unable to move order to WAFC.') . "'); location.replace('shopee_order_req_table.php');</script>";
+    exit;
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['return_id'])) {
+
     $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
         echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('shopee_order_req_table.php');</script>";
@@ -667,6 +712,15 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                                  <a href="?complete_id=<?= $row['id'] ?>" class="btn btn-sm btn-dark btn-verified" onclick="return confirm('Mark this order as complete?')">Complete</a>
                                 <?php } ?>
                                 <?php if (in_array($statusCode, array('SP', 'WAERD', 'WR', 'PD', 'PR', 'WAFC', 'V', 'C'), true)) { ?>
+                                <?php if ($statusCode === 'PR') { ?>
+                                <form method="post" class="d-inline" onsubmit="return confirm('Move this order to Waiting Admin Final Check now without waiting 14 days?')">
+                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
+                                    <input type="hidden" name="force_wafc_id" value="<?= (int) $row['id'] ?>">
+                                    <button type="submit" class="btn btn-sm btn-rounded btn-info" title="Move to WAFC Now">
+                                        <i class="fas fa-forward"></i>
+                                    </button>
+                                </form>
+                                <?php } ?>
                                  <form method="post" class="d-inline" onsubmit="return confirm('Mark this order as Return?')">
                                      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
                                      <input type="hidden" name="return_id" value="<?= (int) $row['id'] ?>">

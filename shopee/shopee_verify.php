@@ -37,6 +37,18 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && !isset($_GET['verify_id'])) {
+    audit_log(array(
+        'log_act' => 'view',
+        'page' => $pageTitle,
+        'uid' => USER_ID,
+        'act_msg' => USER_NAME . " viewed the " . $pageTitle . " page.",
+        'cdate' => $cdate,
+        'ctime' => $ctime,
+        'cby' => USER_ID,
+        'connect' => $connect
+    ));
+}
 shopeeOmsEnsureRealtimePostponedSync($connect, $finance_connect);
 
 // Build numeric action keys from the latest user-group pins in database.
@@ -100,48 +112,64 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceiv
 }
 
 if (isset($_GET['verify_id'])) {
-    // SECURITY FIX: Explicitly check if the user has the Verify action permission (14)
     if (!$canVerifyAction) {
         echo "<script>alert('Security Error: You do not have permission to verify orders.'); location.replace('shopee_verify.php');</script>";
         exit;
     }
 
     $orderId = intval($_GET['verify_id']);
-    $verifyMessageText = '';
-    $checkSql = "SELECT order_status FROM " . SHOPEE_SG_ORDER_REQ . " WHERE id = $orderId";
+
+    $oldStatus = '';
+    $orderCode = '';
+
+    $checkSql = "SELECT order_status, orderID FROM " . SHOPEE_SG_ORDER_REQ . " WHERE id = $orderId LIMIT 1";
     $checkResult = mysqli_query($finance_connect, $checkSql);
-    if ($checkResult && $row = mysqli_fetch_assoc($checkResult)) {
-        if (normalizeOrderStatusKey($row['order_status']) === 'oc') {
-            $updateSql = "UPDATE " . SHOPEE_SG_ORDER_REQ . " SET order_status = 'V', update_by = '" . USER_ID . "', update_date = curdate(), update_time = curtime() WHERE id = $orderId";
-            $updateResult = mysqli_query($finance_connect, $updateSql);
-            if ($updateResult) {
-                $auditData = array(
-                    'log_act'     => 'edit',
-                    'page'        => 'Order Verification',
-                    'query_rec'   => $orderId,
-                    'query_table' => SHOPEE_SG_ORDER_REQ,
-                    'oldval'      => 'order_status: OC',
-                    'changes'     => 'order_status: V',
-                    'uid'         => USER_ID,
-                    'act_msg'     => "Verified order #$orderId (status changed from OC to V)",
-                    'cdate'       => date('Y-m-d'),
-                    'ctime'       => date('H:i:s'),
-                    'cby'         => USER_NAME,
-                    'connect'     => $connect
-                );
-                audit_log($auditData);
-                $verifyMessageText = "Order #$orderId has been successfully verified.";
-            } else {
-                $verifyMessageText = "Failed to update order #$orderId.";
-            }
-        } else {
-            $verifyMessageText = "Order #$orderId is not in OC status.";
-        }
-    } else {
-        $verifyMessageText = "Order #$orderId not found.";
+
+    if ($checkResult && $checkRow = mysqli_fetch_assoc($checkResult)) {
+        $oldStatus = isset($checkRow['order_status']) ? (string) $checkRow['order_status'] : '';
+        $orderCode = isset($checkRow['orderID']) ? (string) $checkRow['orderID'] : '';
     }
 
-    echo "<script>alert('" . addslashes($verifyMessageText) . "'); location.replace('shopee_verify.php');</script>";
+    $oldStatusCode = shopeeOmsNormalizeStatusCode($oldStatus);
+
+    if (!in_array($oldStatusCode, array('OC', 'WAFC'), true)) {
+        echo "<script>alert('Only OC or WAFC orders can be verified.'); location.replace('shopee_verify.php');</script>";
+        exit;
+    }
+
+    $verifyResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'V', array(
+        'actor_user_id' => USER_ID,
+        'actor_user_group_id' => USER_GROUP,
+        'source_page' => $pageTitle,
+        'remark' => 'Verified from verify order list.',
+        'action' => 'verify_order',
+        'skip_permission' => true,
+        'allow_auto_follow_up' => false,
+    ));
+
+    if (!empty($verifyResult['success'])) {
+        $newStatus = isset($verifyResult['new_status']) ? (string) $verifyResult['new_status'] : 'V';
+        $safeOrderCode = htmlspecialchars($orderCode, ENT_QUOTES, 'UTF-8');
+        $safeOldStatus = htmlspecialchars($oldStatusCode, ENT_QUOTES, 'UTF-8');
+        $safeNewStatus = htmlspecialchars($newStatus, ENT_QUOTES, 'UTF-8');
+
+        audit_log(array(
+            'log_act' => 'edit',
+            'page' => $pageTitle,
+            'query_rec' => $orderId,
+            'query_table' => SHOPEE_SG_ORDER_REQ,
+            'oldval' => 'order_status: ' . $oldStatusCode,
+            'changes' => 'order_status: ' . $oldStatusCode . ' -> ' . $newStatus,
+            'uid' => USER_ID,
+            'act_msg' => USER_NAME . " verified Shopee order [ <b>ID = " . $orderId . "</b> ]" . ($safeOrderCode !== '' ? " [ <b>Order ID = " . $safeOrderCode . "</b> ]" : "") . " from <b>" . $safeOldStatus . "</b> to <b>" . $safeNewStatus . "</b>.",
+            'cdate' => $cdate,
+            'ctime' => $ctime,
+            'cby' => USER_ID,
+            'connect' => $connect
+        ));
+    }
+
+    echo "<script>alert('" . addslashes(isset($verifyResult['message']) ? $verifyResult['message'] : 'Unable to verify order.') . "'); location.replace('shopee_verify.php');</script>";
     exit;
 }
 
@@ -173,7 +201,7 @@ $accFilter = isset($_GET['acc']) ? $_GET['acc'] : '';
 $whereConditions = [];
 
 // Show verify-stage orders, but keep WAERD out of the verify list.
-$whereConditions[] = "order_status IN ('Assigned Estimate Date', 'Order Received', 'Verified', 'AED', 'OC', 'V')";
+$whereConditions[] = "order_status IN ('Waiting Admin Final Check', 'Order Received', 'Verified', 'WAFC', 'OC', 'V')";
 
 if (!empty($monthFilter)) { $whereConditions[] = "DATE_FORMAT(date, '%Y-%m') = '" . mysqli_real_escape_string($finance_connect, $monthFilter) . "'"; }
 if (!empty($statusFilter)) { $whereConditions[] = "order_status = '" . mysqli_real_escape_string($finance_connect, $statusFilter) . "'"; }
@@ -649,12 +677,14 @@ if ($result instanceof mysqli_result) {
                                      data-max-date="<?= $estimatedDateMax ?>"
                                      title="Assign Estimate Received Date"><i class="fa-solid fa-calendar-days"></i></button>
                                 <?php } ?>
-                                <?php if(normalizeOrderStatusKey($row['order_status']) === 'oc' && $canVerifyAction){ ?>
-                                 <a href="?verify_id=<?= $row['id'] ?>" class="btn btn-sm btn-success btn-verified" onclick="return confirm('Mark this order as verified?')">Verified</a>
-                                <?php } ?>
                                 <?php
                                 $statusCode = shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '');
+                                $canVerifyThisOrder = shopeeOmsHasTransitionPermission($connect, $statusCode, 'V', USER_GROUP, $row, USER_ID);
                                 ?>
+
+                                <?php if (in_array($statusCode, array('OC', 'WAFC'), true) && $canVerifyAction && $canVerifyThisOrder) { ?>
+                                <a href="?verify_id=<?= $row['id'] ?>" class="btn btn-sm btn-success btn-verified" onclick="return confirm('Mark this order as verified?')">Verified</a>
+                                <?php } ?>
                                 <?php if (in_array($statusCode, array('SP', 'WAERD', 'WR', 'PR', 'WAFC', 'V', 'C'), true)) { ?>
                                  <form method="post" class="d-inline" onsubmit="return confirm('Mark this order as Return?')">
                                      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">

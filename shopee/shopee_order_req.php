@@ -55,13 +55,16 @@ if ($dataID) { //edit/remove/view
     }
 }
 
-$sorBuyerSegmentationBadgeHtml = '';
-if (isset($row['buyer']) && trim((string) $row['buyer']) !== '') {
-    $sorBuyerMeta = customerLabelResolveShopeeCustomerMeta($connect, $finance_connect, $row['buyer']);
-    if (isset($sorBuyerMeta['label_meta']['segmentation'])) {
-        $sorBuyerSegmentationBadgeHtml = customerLabelRenderBadge($sorBuyerMeta['label_meta']['segmentation']);
+$sorWarehouseRows = shopeeOmsLoadActiveWarehouses($connect);
+$sorWarehouseOptionMap = array();
+foreach ($sorWarehouseRows as $warehouseRow) {
+    $warehouseId = isset($warehouseRow['id']) ? (int) $warehouseRow['id'] : 0;
+    if ($warehouseId > 0) {
+        $sorWarehouseOptionMap[$warehouseId] = isset($warehouseRow['name']) ? (string) $warehouseRow['name'] : ('Warehouse #' . $warehouseId);
     }
 }
+$sorWarehouseNameMap = shopeeOmsLoadWarehouseNameMap($connect);
+$sorDefaultWarehouseId = shopeeOmsGetDefaultWarehouseId($connect, $sorWarehouseRows);
 
 if (!($dataID) && !($act)) {
     echo '<script>
@@ -351,6 +354,17 @@ if (post('actionBtn')) {
     if ($sor_order_status === '') {
         $sor_order_status = isset($row['order_status']) ? shopeeOmsNormalizeStatusCode($row['order_status']) : 'P';
     }
+    $sorCurrentEffectiveWarehouseId = isset($row) ? shopeeOmsResolveStockOutWarehouseId($connect, $row, $sorDefaultWarehouseId) : $sorDefaultWarehouseId;
+    $sor_stock_out_warehouse_id = shopeeOmsNormalizeWarehouseId(postSpaceFilter('sor_stock_out_warehouse_id'));
+    if ($sor_stock_out_warehouse_id <= 0) {
+        $sor_stock_out_warehouse_id = $sorDefaultWarehouseId;
+    }
+    $sorStockOutWarehouseEditable = $action === 'addRecord'
+        ? true
+        : shopeeOmsIsStockOutWarehouseEditable(isset($row['order_status']) ? $row['order_status'] : '');
+    if (!$sorStockOutWarehouseEditable && $action === 'updRecord') {
+        $sor_stock_out_warehouse_id = $sorCurrentEffectiveWarehouseId;
+    }
     $sor_update_airbill = strtolower(trim((string) postSpaceFilter('sor_update_airbill')));
     if ($sor_update_airbill === '') {
         $sor_update_airbill = 'yes';
@@ -448,6 +462,15 @@ if (post('actionBtn')) {
                 $price_err = "Product Price cannot be empty.";
                 $error = 1;
             }
+            if ($sorStockOutWarehouseEditable) {
+                if ($sor_stock_out_warehouse_id <= 0) {
+                    $stock_out_warehouse_err = "Stock Out Warehouse cannot be empty.";
+                    $error = 1;
+                } else if (!isset($sorWarehouseOptionMap[$sor_stock_out_warehouse_id])) {
+                    $stock_out_warehouse_err = "Please select a valid active Stock Out Warehouse.";
+                    $error = 1;
+                }
+            }
 
             $effectiveAirbill = $sor_airbill;
             if ($action === 'updRecord' && $sor_update_airbill !== 'yes') {
@@ -539,6 +562,10 @@ if (post('actionBtn')) {
                         array_push($newvalarr, $sor_price);
                         array_push($datafield, 'price');
                     }
+                    if ($sor_stock_out_warehouse_id > 0) {
+                        array_push($newvalarr, isset($sorWarehouseOptionMap[$sor_stock_out_warehouse_id]) ? $sorWarehouseOptionMap[$sor_stock_out_warehouse_id] : ('Warehouse #' . $sor_stock_out_warehouse_id));
+                        array_push($datafield, 'stock_out_warehouse_id');
+                    }
 
                     if ($sor_voucher) {
                         array_push($newvalarr, $sor_voucher);
@@ -613,11 +640,12 @@ if (post('actionBtn')) {
                     $safeSorFinal = mysqli_real_escape_string($finance_connect, $sor_final);
                     $safeSorRemark = mysqli_real_escape_string($finance_connect, $sor_remark);
                     $safeSorStatus = mysqli_real_escape_string($finance_connect, $sor_order_status);
+                    $safeStockOutWarehouseId = (int) $sor_stock_out_warehouse_id;
                     $safeAirbill = mysqli_real_escape_string($finance_connect, $effectiveAirbill);
                     $safeAirbillAttachment = mysqli_real_escape_string($finance_connect, $sor_airbill_attachment);
                     $safeCustomerAddress = mysqli_real_escape_string($finance_connect, $sor_customer_address);
 
-                    $query = "INSERT INTO " . $tblName . " (shopee_acc,currency,orderID,date,time,package,package_qty_json,brand,buyer,buyer_pay_meth,pic,customer_address,price,voucher,act_shipping_fee,service_fee,trans_fee,ams_fee,fees,final_amt,airbill_no,airbill_attachment,remark,order_status,latest_transition_at,create_by,create_date,create_time) VALUES ('$safeSorAcc','$safeSorCurr','$safeSorOrder','$safeSorDate','$safeSorTime','$safeSorPkg','$safePackageQtySnapshotJson','$safeSorBrand','$safeSorUser','$safeSorPay','$safeSorPic','$safeCustomerAddress','$safeSorPrice','$safeSorVoucher','$safeSorShipping','$safeSorServ','$safeSorTrans','$safeSorAms','$safeSorFees','$safeSorFinal','$safeAirbill','$safeAirbillAttachment','$safeSorRemark','$safeSorStatus',NOW(),'" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . " (shopee_acc,currency,orderID,date,time,package,package_qty_json,brand,buyer,buyer_pay_meth,pic,customer_address,price,voucher,act_shipping_fee,service_fee,trans_fee,ams_fee,fees,final_amt,airbill_no,airbill_attachment,stock_out_warehouse_id,remark,order_status,latest_transition_at,create_by,create_date,create_time) VALUES ('$safeSorAcc','$safeSorCurr','$safeSorOrder','$safeSorDate','$safeSorTime','$safeSorPkg','$safePackageQtySnapshotJson','$safeSorBrand','$safeSorUser','$safeSorPay','$safeSorPic','$safeCustomerAddress','$safeSorPrice','$safeSorVoucher','$safeSorShipping','$safeSorServ','$safeSorTrans','$safeSorAms','$safeSorFees','$safeSorFinal','$safeAirbill','$safeAirbillAttachment'," . $safeStockOutWarehouseId . ",'$safeSorRemark','$safeSorStatus',NOW(),'" . USER_ID . "',curdate(),curtime())";
                     $returnData = mysqli_query($finance_connect, $query);
                     if (!$returnData) {
                         throw new Exception('Database Error: ' . mysqli_error($finance_connect));
@@ -672,6 +700,10 @@ if (post('actionBtn')) {
                     // take old value
                     $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $finance_connect);
                     $row = $rst->fetch_assoc();
+                    $existingStoredStockOutWarehouseId = isset($row['stock_out_warehouse_id']) ? shopeeOmsNormalizeWarehouseId($row['stock_out_warehouse_id']) : 0;
+                    $existingEffectiveStockOutWarehouseId = shopeeOmsResolveStockOutWarehouseId($connect, $row, $sorDefaultWarehouseId);
+                    $updatedStoredStockOutWarehouseId = $existingStoredStockOutWarehouseId;
+                    $stockOutWarehouseSqlAssignment = '';
 
                     if ($sor_update_airbill !== 'yes') {
                         $sor_airbill = isset($row['airbill_no']) ? (string) $row['airbill_no'] : '';
@@ -815,6 +847,22 @@ if (post('actionBtn')) {
                         array_push($chgvalarr, trim((string) $sor_customer_address) !== '' ? $sor_customer_address : 'Empty Value');
                         array_push($datafield, 'customer_address');
                     }
+                    if ($sorStockOutWarehouseEditable) {
+                        if ($existingStoredStockOutWarehouseId > 0) {
+                            $updatedStoredStockOutWarehouseId = $sor_stock_out_warehouse_id;
+                        } else if ($sor_stock_out_warehouse_id > 0 && $sor_stock_out_warehouse_id !== $sorDefaultWarehouseId) {
+                            $updatedStoredStockOutWarehouseId = $sor_stock_out_warehouse_id;
+                        }
+
+                        if ($existingStoredStockOutWarehouseId !== $updatedStoredStockOutWarehouseId) {
+                            $oldWarehouseName = shopeeOmsResolveWarehouseNameById($connect, $existingEffectiveStockOutWarehouseId, $sorDefaultWarehouseId, $sorWarehouseNameMap);
+                            $newWarehouseName = shopeeOmsResolveWarehouseNameById($connect, $updatedStoredStockOutWarehouseId, $sorDefaultWarehouseId, $sorWarehouseNameMap);
+                            array_push($oldvalarr, $oldWarehouseName !== '' ? $oldWarehouseName : 'Empty Value');
+                            array_push($chgvalarr, $newWarehouseName !== '' ? $newWarehouseName : 'Empty Value');
+                            array_push($datafield, 'stock_out_warehouse_id');
+                            $stockOutWarehouseSqlAssignment = "stock_out_warehouse_id = " . ($updatedStoredStockOutWarehouseId > 0 ? $updatedStoredStockOutWarehouseId : 'NULL') . ", ";
+                        }
+                    }
 
                     // convert into string
                     $oldval = implode(",", $oldvalarr);
@@ -845,6 +893,7 @@ if (post('actionBtn')) {
                         $query .= "final_amt = '$sor_final', ";
                         $query .= "airbill_no = '" . mysqli_real_escape_string($finance_connect, $sor_airbill) . "', ";
                         $query .= "airbill_attachment = '" . mysqli_real_escape_string($finance_connect, $sor_airbill_attachment) . "', ";
+                        $query .= $stockOutWarehouseSqlAssignment;
                         $query .= "remark = '$sor_remark', ";
                         $query .= "update_by = '" . USER_ID . "', ";
                         $query .= "update_date = curdate(), ";
@@ -862,6 +911,7 @@ if (post('actionBtn')) {
                                 'buyer' => $sor_user,
                                 'buyer_pay_meth' => $sor_pay,
                                 'price' => $sor_price,
+                                'stock_out_warehouse_id' => $updatedStoredStockOutWarehouseId,
                                 'airbill_no' => $sor_airbill,
                                 'airbill_attachment' => $sor_airbill_attachment,
                                 'remark' => $sor_remark,
@@ -1429,7 +1479,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                 </div>
                 <div class="form-group">
                     <div class="row shopee-airbill-row">
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-3 mb-3">
                             <label class="form-label form_lbl" for="sor_order_status">Initial Order Status<span class="requireRed">*</span></label>
                             <?php
                             $currentOrderStatusValue = isset($sor_order_status) && trim((string) $sor_order_status) !== ''
@@ -1445,6 +1495,37 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                             <?php } else { ?>
                                 <input class="form-control" type="text" value="<?= htmlspecialchars(shopeeOmsGetStatusLabel($currentOrderStatusValue)) ?>" readonly>
                                 <input type="hidden" id="sor_order_status" name="sor_order_status" value="<?= htmlspecialchars($currentOrderStatusValue) ?>">
+                            <?php } ?>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label form_lbl" for="sor_stock_out_warehouse_id">Stock Out Warehouse<span class="requireRed">*</span></label>
+                            <?php
+                            $currentStockOutWarehouseId = isset($sor_stock_out_warehouse_id) && (int) $sor_stock_out_warehouse_id > 0
+                                ? (int) $sor_stock_out_warehouse_id
+                                : (isset($row) ? shopeeOmsResolveStockOutWarehouseId($connect, $row, $sorDefaultWarehouseId) : $sorDefaultWarehouseId);
+                            $isStockOutWarehouseEditableForForm = $act !== '' && ($act === 'I' || shopeeOmsIsStockOutWarehouseEditable(isset($row['order_status']) ? $row['order_status'] : ''));
+                            if ($isStockOutWarehouseEditableForForm && $currentStockOutWarehouseId > 0 && !isset($sorWarehouseOptionMap[$currentStockOutWarehouseId])) {
+                                $currentStockOutWarehouseId = $sorDefaultWarehouseId;
+                            }
+                            if ($currentStockOutWarehouseId <= 0 && !empty($sorWarehouseRows)) {
+                                $currentStockOutWarehouseId = (int) $sorWarehouseRows[0]['id'];
+                            }
+                            $currentStockOutWarehouseName = shopeeOmsResolveWarehouseNameById($connect, $currentStockOutWarehouseId, $sorDefaultWarehouseId, $sorWarehouseNameMap);
+                            ?>
+                            <?php if ($isStockOutWarehouseEditableForForm) { ?>
+                                <select class="form-select" id="sor_stock_out_warehouse_id" name="sor_stock_out_warehouse_id">
+                                    <?php foreach ($sorWarehouseRows as $warehouseRow) { ?>
+                                        <?php $warehouseId = isset($warehouseRow['id']) ? (int) $warehouseRow['id'] : 0; ?>
+                                        <option value="<?= $warehouseId ?>" <?= $currentStockOutWarehouseId === $warehouseId ? 'selected' : '' ?>><?= htmlspecialchars((string) $warehouseRow['name']) ?></option>
+                                    <?php } ?>
+                                </select>
+                            <?php } else { ?>
+                                <input class="form-control" type="text" readonly value="<?= htmlspecialchars($currentStockOutWarehouseName) ?>">
+                            <?php } ?>
+                            <?php if (isset($stock_out_warehouse_err)) { ?>
+                                <div id="err_msg">
+                                    <span class="mt-n1"><?php echo $stock_out_warehouse_err; ?></span>
+                                </div>
                             <?php } ?>
                         </div>
                         <div class="col-md-2 mb-3 shopee-airbill-toggle-col">
@@ -1478,7 +1559,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                                 </label>
                             </div>
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label class="form-label form_lbl" for="sor_airbill">Airbill No<span class="requireRed">*</span></label>
                             <input class="form-control" type="text" name="sor_airbill" id="sor_airbill" value="<?php
                                 if (isset($sor_airbill)) {
@@ -1590,9 +1671,6 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                                 <input class="form-control" type="text" name="sor_user" id="sor_user" <?php if ($act == '')
                                     echo 'disabled' ?>
                                         value="<?php echo !empty($echoVal) ? $buyerDisplayValue : '' ?>">
-                                <?php if ($sorBuyerSegmentationBadgeHtml !== '') { ?>
-                                    <div class="d-inline-flex align-items-center flex-nowrap"><?= $sorBuyerSegmentationBadgeHtml ?></div>
-                                <?php } ?>
                             </div>
                             <input type="hidden" name="sor_user_hidden" id="sor_user_hidden"
                                 value="<?php echo (isset($row['buyer'])) ? $row['buyer'] : ''; ?>">

@@ -53,7 +53,7 @@ shopeeOmsRunFourteenDayAutoMove($connect, $finance_connect);
 
 $dateFrom = date('Y-m-d', strtotime('-1 day'));
 $dateTo = $dateFrom;
-$reportData = shopeeOmsGetDailyFlowReport($finance_connect, $dateFrom, $dateTo);
+$reportData = shopeeOmsGetDailyFlowReport($connect, $finance_connect, $dateFrom, $dateTo);
 $summaryRows = isset($reportData['summary']) ? $reportData['summary'] : array();
 
 $mainSupervisorUserId = (int) shopeeOmsGetSetting($connect, 'shopee_oms_daily_report_main_supervisor_user_id', '0');

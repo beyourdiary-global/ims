@@ -2390,6 +2390,58 @@ function commonBuildMobileFloatingAddButton() {
 }
 
 function commonBuildMobileStickyFormActions() {
+  var preferredContainer = document.querySelector(".mobile-sticky-form-actions-target");
+  if (preferredContainer) {
+    preferredContainer.classList.add("mobile-sticky-form-actions");
+    document.body.classList.add("has-mobile-sticky-form-actions");
+
+    var preferredButtons = Array.prototype.slice
+      .call(
+        preferredContainer.querySelectorAll(
+          "button.submitBtn, button.cancel, button#actionBtn, button#backBtn, button[name='actionBtn'], button[name='updateStatusBtn'], a.submitBtn, a.cancel, a#actionBtn, a#backBtn",
+        ),
+      )
+      .filter(function (button) {
+        return !button.closest("td") && !button.closest(".mobile-floating-action-bar");
+      });
+
+    preferredButtons.sort(function (a, b) {
+      var aText = commonNormalizeButtonText(a.textContent || a.value || "").toLowerCase();
+      var bText = commonNormalizeButtonText(b.textContent || b.value || "").toLowerCase();
+
+      var aIsBack =
+        a.id === "backBtn" ||
+        a.classList.contains("backBtn") ||
+        a.classList.contains("cancel") ||
+        a.value === "back" ||
+        aText === "back";
+
+      var bIsBack =
+        b.id === "backBtn" ||
+        b.classList.contains("backBtn") ||
+        b.classList.contains("cancel") ||
+        b.value === "back" ||
+        bText === "back";
+
+      if (aIsBack && !bIsBack) {
+        return -1;
+      }
+
+      if (!aIsBack && bIsBack) {
+        return 1;
+      }
+
+      return 0;
+    });
+
+    for (var p = 0; p < preferredButtons.length; p++) {
+      preferredButtons[p].classList.add("mobile-sticky-form-button");
+      preferredContainer.appendChild(preferredButtons[p]);
+    }
+
+    return;
+  }
+
   var selector =
   "button.submitBtn, button.cancel, button#actionBtn, button#backBtn, button[name='actionBtn'], button[name='updateStatusBtn'], a.submitBtn, a.cancel, a#actionBtn, a#backBtn";
   var buttons = Array.prototype.slice.call(document.querySelectorAll(selector)).filter(function (

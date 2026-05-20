@@ -304,6 +304,8 @@ if ($orderRst) {
 $shopeeBuyerMetaMap = customerLabelGetShopeeCustomerMetaMap($connect, $finance_connect, array_map(function ($row) {
     return isset($row['buyer']) ? $row['buyer'] : '';
 }, $orderRows));
+$arrivalWarehouseNameMap = shopeeOmsLoadWarehouseNameMap($connect);
+$arrivalDefaultWarehouseId = shopeeOmsGetDefaultWarehouseId($connect);
 ?>
 <!DOCTYPE html>
 <html>
@@ -546,6 +548,7 @@ $shopeeBuyerMetaMap = customerLabelGetShopeeCustomerMetaMap($connect, $finance_c
                                 <th width="60">S/N</th>
                                 <th>Order ID</th>
                                 <th>Action</th>
+                                <th>Stock Out Warehouse</th>
                                 <th>Shopee Buyer Username</th>
                                 <th>Current Status</th>
                                 <th>Shipped Date</th>
@@ -571,6 +574,7 @@ $shopeeBuyerMetaMap = customerLabelGetShopeeCustomerMetaMap($connect, $finance_c
                                     $statusBadgeLabel = $statusCode === 'WAERD'
                                         ? 'Waiting Assign<br>Estimate Received Date'
                                         : ($statusCode === 'PD' ? 'Postponed' : 'Waiting Receive');
+                                    $stockOutWarehouseName = shopeeOmsResolveStockOutWarehouseName($connect, $row, $arrivalDefaultWarehouseId, $arrivalWarehouseNameMap);
                                     ?>
                                     <tr>
                                         <td>
@@ -592,10 +596,11 @@ $shopeeBuyerMetaMap = customerLabelGetShopeeCustomerMetaMap($connect, $finance_c
                                                     title="Assign Estimate Received Date"><i class="fa-solid fa-calendar-days"></i></button>
                                             <?php } else if (in_array($statusCode, array('WR', 'PD'), true) && $canConfirm) { ?>
                                                 <button class="btn btn-sm btn-success confirm-receive-btn" type="button" data-order-id="<?= (int) $row['id'] ?>">Confirm Received</button>
-                                            <?php } else { ?>
+                                                    <?php } else { ?>
                                                 <span class="shopee-arrival-empty-action">No direct action</span>
                                             <?php } ?>
                                         </td>
+                                        <td><?= htmlspecialchars($stockOutWarehouseName !== '' ? $stockOutWarehouseName : '-') ?></td>
                                         <td><?= customerLabelRenderShopeeBuyerCell($connect, $finance_connect, isset($row['buyer']) ? $row['buyer'] : '', '', $shopeeBuyerMetaMap) ?></td>
                                         <td><span class="shopee-arrival-status-badge <?= $statusBadgeClass ?>"><?= $statusBadgeLabel ?></span></td>
                                         <td><?= htmlspecialchars($shippedDisplay) ?></td>
@@ -618,7 +623,7 @@ $shopeeBuyerMetaMap = customerLabelGetShopeeCustomerMetaMap($connect, $finance_c
                                 <?php } ?>
                             <?php } else { ?>
                                 <tr>
-                                    <td colspan="9" class="text-center">No WAERD, Waiting Receive, or Postponed orders found.</td>
+                                    <td colspan="10" class="text-center">No WAERD, Waiting Receive, or Postponed orders found.</td>
                                 </tr>
                             <?php } ?>
                         </tbody>
@@ -740,7 +745,7 @@ $shopeeBuyerMetaMap = customerLabelGetShopeeCustomerMetaMap($connect, $finance_c
                 autoWidth: false,
                 order: [],
                 columnDefs: [
-                    { orderable: false, searchable: false, targets: [0, 1, 3, 8] }
+                    { orderable: false, searchable: false, targets: [0, 1, 3, 9] }
                 ]
             });
             datatableAlignment('arrival_management_table');

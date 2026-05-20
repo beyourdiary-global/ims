@@ -1,11 +1,15 @@
 <?php
+ob_start();
+
 $pageTitle = "Facebook Customer Record (Deals)";
 $currentPagePin = 75;
 $disablePinGroupPageTitleSync = true;
 
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
+include_once ROOT . '/include/customer_tag.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
+$pinAccess = checkCurrentPin($connect, $pageTitle);
 include_once ROOT . '/include/user_record_log.php';
 
 $tblName = FB_CUST_DEALS;
@@ -83,6 +87,20 @@ if ($dataID && isset($_GET['open_order_id'])) {
         }
     }
 }
+
+$facebookCustomerTagPlatform = 'facebook';
+$facebookCustomerTagCustomerId = (isset($row['id']) ? (int) $row['id'] : 0);
+$facebookCustomerTagDisplayName = isset($row['name']) ? trim((string) $row['name']) : '';
+$facebookCustomerTagDraftToken = customerTagResolveDraftToken($act);
+$facebookCustomerFreshAddPage = ($act === 'I' && strtoupper((string) $_SERVER['REQUEST_METHOD']) === 'GET' && !customerTagIsAjaxRequest());
+customerTagResetDraftOnFreshAddPage($facebookCustomerTagPlatform, $act, $facebookCustomerTagDraftToken);
+$facebookCustomerTagState = array();
+if ($facebookCustomerFreshAddPage) {
+    customerTagClearDraftTags($facebookCustomerTagPlatform, $facebookCustomerTagDraftToken);
+}
+$facebookCustomerTagState = customerTagHandlePost($connect, $facebookCustomerTagPlatform, $facebookCustomerTagCustomerId, $pageTitle, $facebookCustomerTagDisplayName, $facebookCustomerTagDraftToken);
+$facebookCustomerActiveTags = $facebookCustomerFreshAddPage ? array() : customerTagGetDisplayTags($connect, $facebookCustomerTagPlatform, $facebookCustomerTagCustomerId, $facebookCustomerTagDraftToken);
+$facebookCustomerDraftTagIds = customerTagExtractTagIds($facebookCustomerActiveTags);
 
 if (post('actionBtn')) {
     $action = post('actionBtn');
@@ -213,7 +231,15 @@ if (post('actionBtn')) {
                     $query = "INSERT INTO " . $tblName . "(name,fb_link,contact,sales_pic,country,brand,series,fb_page,channel,ship_rec_name,ship_rec_add,ship_rec_contact,remark,create_by,create_date,create_time) VALUES ('$fcb_name','$fcb_link','$fcb_ctc','$fcb_pic','$fcb_country','$fcb_brand','$fcb_series','$fcb_fbpage','$fcb_channel','$fcb_rec_name','$fcb_rec_add','$fcb_rec_ctc','$fcb_remark','" . USER_ID . "',curdate(),curtime())";
                     // Execute the query
                     $returnData = mysqli_query($connect, $query);
-                    $_SESSION['tempValConfirmBox'] = true;
+                    if ($returnData) {
+                        $dataID = $connect->insert_id;
+                        customerTagApplyDraftTagsToCustomer($connect, $facebookCustomerTagPlatform, $dataID, $pageTitle, $fcb_name, customerTagGetPostedDraftTagIds(), $facebookCustomerTagDraftToken);
+                        $_SESSION['tempValConfirmBox'] = true;
+                    } else {
+                        $errorMsg = mysqli_error($connect);
+                        $err1 = "Failed to add record: " . $errorMsg;
+                        $act = "F";
+                    }
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
                     $act = "F";
@@ -427,12 +453,18 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         <div id="formContainer" class="container d-flex justify-content-center">
             <div class="col-6 col-md-6 formWidthAdjust">
                 <form id="FORForm" method="post" action="" enctype="multipart/form-data">
+                    <input type="hidden" name="customerTagDraftIds" class="customer-tag-draft-input" data-platform="<?= htmlspecialchars($facebookCustomerTagPlatform, ENT_QUOTES, 'UTF-8') ?>" value="<?= htmlspecialchars(implode(',', $facebookCustomerDraftTagIds), ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="customerTagDraftToken" value="<?= htmlspecialchars($facebookCustomerTagDraftToken, ENT_QUOTES, 'UTF-8') ?>">
                     <div class="form-group mb-5">
-                        <h2>
-                            <?php
-                            echo displayPageAction($act, $pageTitle);
-                            ?>
-                        </h2>
+                        <?php $facebookCustomerPageActionTitle = displayPageAction($act, $pageTitle); ?>
+                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+                            <h2 class="mb-0 customer-tag-page-title" data-base-title="<?= htmlspecialchars($facebookCustomerPageActionTitle, ENT_QUOTES, 'UTF-8') ?>">
+                                <?php
+                                echo customerTagRenderTitle($facebookCustomerPageActionTitle, $facebookCustomerActiveTags);
+                                ?>
+                            </h2>
+                            <?php echo customerTagRenderManageButton($facebookCustomerTagPlatform, $facebookCustomerTagCustomerId, isActionAllowed('Edit', $pinAccess) && $act !== 'I'); ?>
+                        </div>
                     </div>
 
                     <div id="err_msg" class="mb-3">
@@ -926,7 +958,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                 }
                 ?>
 
-                <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
+                <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column mobile-sticky-form-actions-target">
                     <?php
                     switch ($act) {
                         case 'I':
@@ -955,6 +987,22 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         echo $clearLocalStorage;
         echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
     }
+    ?>
+    <?php
+    echo customerTagRenderManager(
+        $connect,
+        $facebookCustomerTagPlatform,
+        $facebookCustomerTagCustomerId,
+        $pageTitle,
+        $facebookCustomerTagDisplayName,
+        array(
+            'allow_manage' => isActionAllowed('Edit', $pinAccess) && $act !== 'I',
+            'ui_state' => $facebookCustomerTagState,
+            'active_tags' => $facebookCustomerActiveTags,
+            'reset_draft_on_load' => ($act === 'I' && strtoupper((string) $_SERVER['REQUEST_METHOD']) === 'GET'),
+            'draft_token' => $facebookCustomerTagDraftToken,
+        )
+    );
     ?>
     <script>
         var page = "<?= $pageTitle ?>";

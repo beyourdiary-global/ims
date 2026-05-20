@@ -8,6 +8,10 @@ body {
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
 }
 
+body.customer-tag-modal-open {
+  padding-right: 0 !important;
+}
+
 label,
 h3 {
   color: #000000 !important;
@@ -1582,5 +1586,157 @@ td.btn-container.mobile-action-open-left .mobile-action-menu {
     max-width: none !important;
     min-width: 0 !important;
     flex: 0 0 42px !important;
+  }
+}
+
+.customer-tag-title-wrap {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .75rem;
+}
+
+.customer-tag-title-badge-group {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+
+.customer-tag-title-badge,
+.customer-tag-modal-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: .4rem 1rem;
+  border: 1px solid #d3d9e3;
+  border-radius: 999px;
+  background-color: #f8f9fb;
+  color: #4e5f77;
+  font-size: 16px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.customer-tag-manage-sticky-wrap {
+  position: fixed;
+  right: 2rem;
+  top: 82%;
+  transform: translateY(-50%);
+  z-index: 1025;
+}
+
+.customer-tag-manage-btn {
+  font-size: 16px;
+  padding: .45rem 1rem;
+  white-space: nowrap;
+  box-shadow: 0 .35rem .75rem rgba(44, 93, 179, .22);
+  text-transform: none !important;
+}
+
+.customer-tag-primary-btn {
+  text-transform: none !important;
+}
+
+.customer-tag-form-btn {
+  box-shadow: 0 0 !important;
+  font-weight: bold;
+  font-size: 18px;
+  text-transform: none !important;
+}
+
+.customer-tag-manage-modal .modal-dialog {
+  max-width: 640px;
+}
+
+.customer-tag-manage-modal .modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.customer-tag-modal-badge-group {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .5rem;
+}
+
+.customer-tag-assigned-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .75rem;
+  padding: .75rem 0;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.customer-tag-assigned-item:last-child {
+  border-bottom: none;
+}
+
+.customer-tag-action-group {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+}
+
+.customer-tag-inline-form {
+  margin: 0;
+}
+
+.customer-tag-modal-section {
+  padding-bottom: .25rem;
+}
+
+.customer-tag-modal-section .form-control,
+.customer-tag-modal-section .form-select {
+  margin-bottom: .75rem;
+}
+
+.customer-tag-icon-btn {
+  width: 42px;
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.customer-tag-edit-panel {
+  padding: .75rem 0 0;
+}
+
+.customer-tag-edit-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin-bottom: .75rem;
+}
+
+.customer-tag-edit-btn-row {
+  display: inline-flex;
+  align-items: center;
+  gap: .5rem;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 767.98px) {
+  .customer-tag-manage-sticky-wrap {
+    right: 1rem;
+    top: auto;
+    bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+    transform: none;
+    z-index: 1060;
+  }
+
+  body.has-mobile-sticky-form-actions .customer-tag-manage-sticky-wrap {
+    bottom: calc(96px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .customer-tag-assigned-item {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .customer-tag-action-group {
+    justify-content: flex-start;
   }
 }

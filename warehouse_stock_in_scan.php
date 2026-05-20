@@ -66,6 +66,10 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
         }
 
         $omsSummary = !empty($omsOrderRow) ? shopeeOmsBuildOrderProductSummary($connect, $omsOrderRow) : array();
+        $omsDefaultWarehouseId = shopeeOmsGetDefaultWarehouseId($connect);
+        $omsStockOutWarehouseName = !empty($omsOrderRow)
+            ? shopeeOmsResolveStockOutWarehouseName($connect, $omsOrderRow, $omsDefaultWarehouseId)
+            : '';
         $omsAirbillAttachmentUrl = '';
         $omsAirbillAttachmentName = '';
         $omsAirbillAttachmentExt = '';
@@ -135,6 +139,7 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
                             <h4>Warehouse Package</h4>
                             <div><span class="k">Package:</span> <span class="v"><?= htmlspecialchars(!empty($omsSummary['bundle_name']) ? $omsSummary['bundle_name'] : '-') ?></span></div>
                             <div><span class="k">Products:</span> <span class="v"><?= htmlspecialchars(!empty($omsSummary['product_lines']) ? implode(', ', $omsSummary['product_lines']) : '-') ?></span></div>
+                            <div><span class="k">Stock Out Warehouse:</span> <span class="v"><?= htmlspecialchars($omsStockOutWarehouseName !== '' ? $omsStockOutWarehouseName : '-') ?></span></div>
                         </div>
                     </div>
 
