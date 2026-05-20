@@ -2387,8 +2387,16 @@ if (!function_exists('customerLabelEnsureRealtimeSync')) {
             }
         }
 
-        $hasSynced = true;
-        $lastResult = customerLabelRefreshAssignments($connect, $financeConnect, 'realtime_sync');
+        if (!($financeConnect instanceof mysqli)) {
+            return $lastResult;
+        }
+
+        $result = customerLabelRefreshAssignments($connect, $financeConnect, 'realtime_sync');
+        if (is_array($result)) {
+            $lastResult = $result;
+            $hasSynced = true;
+        }
+
         return $lastResult;
     }
 }
