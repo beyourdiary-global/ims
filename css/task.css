@@ -2416,6 +2416,15 @@ body.task-board-page .task-board-scroll {
   justify-content: center;
 }
 
+.task-due-date-btn {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 .task-work-type-toggle-icon,
 .task-work-type-option-icon {
   width: 16px;
@@ -2426,6 +2435,38 @@ body.task-board-page .task-board-scroll {
 
 .task-work-type-option-icon {
   margin-right: 0.35rem;
+}
+
+.task-due-date-btn i,
+.task-assignee-toggle i {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.task-due-date-btn i::before,
+.task-assignee-toggle i::before {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.task-create-item-btn .mdi-keyboard-return {
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
 }
 
 .task-create-item-btn {
