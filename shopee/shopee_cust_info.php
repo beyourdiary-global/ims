@@ -1,10 +1,13 @@
 <?php
+ob_start();
+
 $currentPagePin = 85;
 $pageTitle = "Shopee Customer Record";
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+include_once ROOT . '/include/customer_tag.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 include_once ROOT . '/include/user_record_log.php';
 
@@ -126,6 +129,20 @@ if ($dataID && isset($_GET['open_order_id'])) {
         exit;
     }
 }
+
+$shopeeCustomerTagPlatform = 'shopee';
+$shopeeCustomerTagCustomerId = (isset($row['id']) ? (int) $row['id'] : 0);
+$shopeeCustomerTagDisplayName = isset($row['buyer_username']) ? trim((string) $row['buyer_username']) : '';
+$shopeeCustomerTagDraftToken = customerTagResolveDraftToken($act);
+$shopeeCustomerFreshAddPage = ($act === 'I' && strtoupper((string) $_SERVER['REQUEST_METHOD']) === 'GET' && !customerTagIsAjaxRequest());
+customerTagResetDraftOnFreshAddPage($shopeeCustomerTagPlatform, $act, $shopeeCustomerTagDraftToken);
+$shopeeCustomerTagState = array();
+if ($shopeeCustomerFreshAddPage) {
+    customerTagClearDraftTags($shopeeCustomerTagPlatform, $shopeeCustomerTagDraftToken);
+}
+$shopeeCustomerTagState = customerTagHandlePost($connect, $shopeeCustomerTagPlatform, $shopeeCustomerTagCustomerId, $pageTitle, $shopeeCustomerTagDisplayName, $shopeeCustomerTagDraftToken);
+$shopeeCustomerActiveTags = $shopeeCustomerFreshAddPage ? array() : customerTagGetDisplayTags($connect, $shopeeCustomerTagPlatform, $shopeeCustomerTagCustomerId, $shopeeCustomerTagDraftToken);
+$shopeeCustomerDraftTagIds = customerTagExtractTagIds($shopeeCustomerActiveTags);
 
 //Delete Data
 if ($act == 'D') {
@@ -249,6 +266,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $returnData = mysqli_query($finance_connect, $query);
                     if ($returnData) {
                         $dataID = $finance_connect->insert_id;
+                        customerTagApplyDraftTagsToCustomer($connect, $shopeeCustomerTagPlatform, $dataID, $pageTitle, $scr_username, customerTagGetPostedDraftTagIds(), $shopeeCustomerTagDraftToken);
                         $_SESSION['tempValConfirmBox'] = true;
                     } else {
                         $errorMsg = mysqli_error($finance_connect);
@@ -441,12 +459,18 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         <div id="SCRformContainer" class="container d-flex justify-content-center">
             <div class="col-11 col-md-10 formWidthAdjust">
                 <form id="SCRForm" method="post" action="" enctype="multipart/form-data">
+                    <input type="hidden" name="customerTagDraftIds" class="customer-tag-draft-input" data-platform="<?= htmlspecialchars($shopeeCustomerTagPlatform, ENT_QUOTES, 'UTF-8') ?>" value="<?= htmlspecialchars(implode(',', $shopeeCustomerDraftTagIds), ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="customerTagDraftToken" value="<?= htmlspecialchars($shopeeCustomerTagDraftToken, ENT_QUOTES, 'UTF-8') ?>">
                     <div class="form-group mb-5">
-                        <h2>
-                            <?php
-                            echo displayPageAction($act, $pageTitle);
-                            ?>
-                        </h2>
+                        <?php $shopeeCustomerPageActionTitle = displayPageAction($act, $pageTitle); ?>
+                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+                            <h2 class="mb-0 customer-tag-page-title" data-base-title="<?= htmlspecialchars($shopeeCustomerPageActionTitle, ENT_QUOTES, 'UTF-8') ?>">
+                                <?php
+                                echo customerTagRenderTitle($shopeeCustomerPageActionTitle, $shopeeCustomerActiveTags);
+                                ?>
+                            </h2>
+                            <?php echo customerTagRenderManageButton($shopeeCustomerTagPlatform, $shopeeCustomerTagCustomerId, isActionAllowed('Edit', $pinAccess) && $act !== 'I'); ?>
+                        </div>
                     </div>
 
                     <div id="err_msg" class="mb-3">
@@ -820,6 +844,22 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         })();
     </script>
 
+    <?php
+    echo customerTagRenderManager(
+        $connect,
+        $shopeeCustomerTagPlatform,
+        $shopeeCustomerTagCustomerId,
+        $pageTitle,
+        $shopeeCustomerTagDisplayName,
+        array(
+            'allow_manage' => isActionAllowed('Edit', $pinAccess) && $act !== 'I',
+            'ui_state' => $shopeeCustomerTagState,
+            'active_tags' => $shopeeCustomerActiveTags,
+            'reset_draft_on_load' => ($act === 'I' && strtoupper((string) $_SERVER['REQUEST_METHOD']) === 'GET'),
+            'draft_token' => $shopeeCustomerTagDraftToken,
+        )
+    );
+    ?>
     <script>
         <?php include "../js/shopee_cust_info.js" ?>
 

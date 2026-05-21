@@ -179,6 +179,7 @@ define('TOKEN_SETT', 'token_setting');
 define('EMPINFO', 'employee_info');
 define('EMPPERSONALINFO', 'employee_personal_info');
 define('TAG', 'tag');
+define('CUS_TAG_ASSIGNMENT', 'customer_tag_assignment');
 define('LABEL', 'label');
 define('EMPLEAVE', 'employee_leave');
 define('CUS_INFO', 'customer_info');

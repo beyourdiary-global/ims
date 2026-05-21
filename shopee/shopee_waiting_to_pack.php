@@ -89,6 +89,8 @@ if ($orderRst) {
 $shopeeBuyerMetaMap = customerLabelGetShopeeCustomerMetaMap($connect, $finance_connect, array_map(function ($row) {
     return isset($row['buyer']) ? $row['buyer'] : '';
 }, $orderRows));
+$waitingToPackWarehouseNameMap = shopeeOmsLoadWarehouseNameMap($connect);
+$waitingToPackDefaultWarehouseId = shopeeOmsGetDefaultWarehouseId($connect);
 
 $orderTokenMap = array();
 if (!empty($orderRows)) {
@@ -149,6 +151,7 @@ if (!empty($orderRows)) {
                     <tr>
                         <th width="60">S/N</th>
                         <th>Order ID</th>
+                        <th>Stock Out Warehouse</th>
                         <th>Shopee Buyer Username</th>
                         <th>Package</th>
                         <th>Airbill No</th>
@@ -167,10 +170,12 @@ if (!empty($orderRows)) {
                             if ($tokenValue !== '') {
                                 $tokenLink = $SITEURL . '/warehouse_stock_in_scan.php?t=' . urlencode($tokenValue);
                             }
+                            $stockOutWarehouseName = shopeeOmsResolveStockOutWarehouseName($connect, $row, $waitingToPackDefaultWarehouseId, $waitingToPackWarehouseNameMap);
                             ?>
                             <tr>
                                 <td><?= $rowNumber++ ?></td>
                                 <td><a href="<?= $SITEURL ?>/shopee/shopee_order_req.php?id=<?= (int) $row['id'] ?>"><?= htmlspecialchars((string) $row['orderID']) ?></a></td>
+                                <td><?= htmlspecialchars($stockOutWarehouseName !== '' ? $stockOutWarehouseName : '-') ?></td>
                                 <td><?= customerLabelRenderShopeeBuyerCell($connect, $finance_connect, isset($row['buyer']) ? $row['buyer'] : '', '', $shopeeBuyerMetaMap) ?></td>
                                 <td><?= htmlspecialchars(!empty($packageSummary['bundle_name']) ? $packageSummary['bundle_name'] : '-') ?></td>
                                 <td><?= htmlspecialchars((string) (isset($row['airbill_no']) && trim((string) $row['airbill_no']) !== '' ? $row['airbill_no'] : '-')) ?></td>
@@ -186,7 +191,7 @@ if (!empty($orderRows)) {
                         <?php } ?>
                     <?php } else { ?>
                         <tr>
-                            <td colspan="7" class="text-center">No To Pack orders found.</td>
+                            <td colspan="8" class="text-center">No To Pack orders found.</td>
                         </tr>
                     <?php } ?>
                 </tbody>
@@ -249,7 +254,7 @@ if (!empty($orderRows)) {
                 autoWidth: false,
                 order: [],
                 columnDefs: [
-                    { orderable: false, searchable: false, targets: [0, 5] }
+                    { orderable: false, searchable: false, targets: [0, 6] }
                 ]
             });
             datatableAlignment('waiting_to_pack_table');

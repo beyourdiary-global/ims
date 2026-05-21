@@ -115,6 +115,18 @@ $shopeePayMethods = getImportOptionList(PAY_MTHD_SHOPEE, 'name', $finance_connec
 $brandOptions = getImportOptionList(BRAND, 'name', $connect);
 $pkgOptions = getImportOptionList(PKG, 'name', $connect);
 $shopeeBuyers = getImportOptionList(SHOPEE_CUST_INFO, 'buyer_username', $finance_connect);
+
+$sorWarehouseRows = shopeeOmsLoadActiveWarehouses($connect);
+$sorWarehouseOptionMap = array();
+
+foreach ($sorWarehouseRows as $warehouseRow) {
+    $warehouseId = isset($warehouseRow['id']) ? (int) $warehouseRow['id'] : 0;
+    if ($warehouseId > 0) {
+        $sorWarehouseOptionMap[$warehouseId] = isset($warehouseRow['name']) ? (string) $warehouseRow['name'] : ('Warehouse #' . $warehouseId);
+    }
+}
+
+$sorDefaultWarehouseId = shopeeOmsGetDefaultWarehouseId($connect, $sorWarehouseRows);
 $GLOBALS['sor_pdf_unicode_map'] = [];
 
 if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
@@ -443,6 +455,7 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
                 'product_price' => $product_price !== '' ? $product_price : '0.00',
                 'order_status' => shopeeOmsGetStatusLabel($mappedInitialStatus),
                 'order_status_val' => $mappedInitialStatus,
+                'stock_out_warehouse_id' => $sorDefaultWarehouseId,
                 'missing_sku' => $missing_sku,
                 'shopee_acc' => $shopeeAccId,
                 'source_shopee_acc' => $detectedShopName,
@@ -524,6 +537,10 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
     
     $orderStatusVal = shopeeOmsNormalizeStatusCode(postSpaceFilter('order_status_val'));
     if ($orderStatusVal === '') $orderStatusVal = 'P';
+    $stockOutWarehouseId = shopeeOmsNormalizeWarehouseId(postSpaceFilter('stock_out_warehouse_id'));
+    if ($stockOutWarehouseId <= 0) {
+        $stockOutWarehouseId = $sorDefaultWarehouseId;
+    }
     $updateAirbill = strtolower(trim((string) postSpaceFilter('update_airbill')));
     if ($updateAirbill === '') $updateAirbill = 'yes';
     $airbillNo = postSpaceFilter('airbill_no');
@@ -533,7 +550,7 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
     } elseif (isset($_POST['airbill_attachment_value'])) {
         $airbillAttachment = $_POST['airbill_attachment_value'];
     }
-    $buyerInput = postSpaceFilter('buyer');
+    $buyerInput = trim((string) postSpaceFilter('buyer'));
     $buyerHidden = postSpaceFilter('buyer_hidden');
     $resolvedBuyerId = trim((string) $buyerHidden) !== '' ? $buyerHidden : resolveImportOptionId($buyerInput, $shopeeBuyers);
     $customerAddress = postSpaceFilter('customer_address');
@@ -544,6 +561,7 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
         'product_price' => postSpaceFilter('product_price'),
         'order_status' => $orderStatusVal,
         'order_status_val' => $orderStatusVal,
+        'stock_out_warehouse_id' => $stockOutWarehouseId,
         'sku' => isset($_POST['sku']) ? $_POST['sku'] : '',
         'missing_sku' => empty($packageIdsStr),
         'shopee_acc' => postSpaceFilter('shopee_acc'),
@@ -573,6 +591,14 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
     if ($previewData['currency'] === '') $importErrors[] = 'Currency is required.';
     if ($previewData['brand'] === '') $importErrors[] = 'Brand is required.';
     if ($previewData['pic'] === '') $importErrors[] = 'Person In Charge is required.';
+    if (trim((string) $previewData['buyer_name']) === '') {
+        $importErrors[] = 'Shopee Buyer Username is required.';
+    }
+    if ((int) $previewData['stock_out_warehouse_id'] <= 0) {
+        $importErrors[] = 'Stock Out Warehouse cannot be empty.';
+    } else if (!isset($sorWarehouseOptionMap[(int) $previewData['stock_out_warehouse_id']])) {
+        $importErrors[] = 'Please select a valid active Stock Out Warehouse.';
+    }
     if ($previewData['update_airbill'] === 'no') {
         $previewData['airbill_no'] = '';
         $previewData['airbill_attachment'] = '';
@@ -608,6 +634,42 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
     $previewData['saver_program_fee'] = $previewData['saver_program_fee'] !== '' ? $previewData['saver_program_fee'] : '0.00';
     $previewData['fees'] = number_format(((float) $previewData['service_fee'] + (float) $previewData['trans_fee'] + (float) $previewData['ams_fee'] + (float) $previewData['saver_program_fee']), 2, '.', '');
     
+    if (empty($importErrors) && trim((string) $previewData['buyer_name']) !== '') {
+        if (trim((string) $previewData['buyer']) === '') {
+            $safeBuyerUsername = mysqli_real_escape_string($finance_connect, trim((string) $previewData['buyer_name']));
+            $safeBuyerLookup = mysqli_real_escape_string($finance_connect, strtolower(trim((string) $previewData['buyer_name'])));
+
+            $existingBuyerSql = "SELECT id FROM `" . SHOPEE_CUST_INFO . "` 
+                WHERE LOWER(TRIM(buyer_username)) = '$safeBuyerLookup' 
+                AND status = 'A' 
+                LIMIT 1";
+            $existingBuyerResult = mysqli_query($finance_connect, $existingBuyerSql);
+
+            if ($existingBuyerResult && mysqli_num_rows($existingBuyerResult) > 0) {
+                $existingBuyerRow = mysqli_fetch_assoc($existingBuyerResult);
+                $previewData['buyer'] = isset($existingBuyerRow['id']) ? (int) $existingBuyerRow['id'] : '';
+            } else {
+                $buyerPic = (int) $previewData['pic'];
+
+                $buyerBrand = 'NULL';
+                $brandParts = array_filter(array_map('trim', explode(',', (string) $previewData['brand'])));
+                if (!empty($brandParts) && ctype_digit((string) reset($brandParts))) {
+                    $buyerBrand = "'" . (int) reset($brandParts) . "'";
+                }
+
+                $insertBuyerSql = "INSERT INTO `" . SHOPEE_CUST_INFO . "` 
+                    (buyer_username, pic, brand, create_by, create_date, create_time, status)
+                    VALUES 
+                    ('$safeBuyerUsername', '$buyerPic', $buyerBrand, '" . USER_ID . "', curdate(), curtime(), 'A')";
+
+                if (mysqli_query($finance_connect, $insertBuyerSql)) {
+                    $previewData['buyer'] = mysqli_insert_id($finance_connect);
+                } else {
+                    $importErrors[] = 'Failed to auto create Shopee Buyer Username: ' . mysqli_error($finance_connect);
+                }
+            }
+        }
+    }
     // Server-side recomputation to prevent tampering
     $calculatedFinalAmt = (float) $previewData['product_price'] - (float) $previewData['voucher'] - (float) $previewData['act_shipping_fee'] - (float) $previewData['fees'];
     $previewData['final_amt'] = number_format($calculatedFinalAmt, 2, '.', '');
@@ -657,11 +719,12 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
         $airbillNoSafe = mysqli_real_escape_string($finance_connect, isset($previewData['airbill_no']) ? $previewData['airbill_no'] : '');
         $airbillAttachmentSafe = mysqli_real_escape_string($finance_connect, isset($previewData['airbill_attachment']) ? $previewData['airbill_attachment'] : '');
         $customerAddressSafe = mysqli_real_escape_string($finance_connect, isset($previewData['customer_address']) ? $previewData['customer_address'] : '');
-        
-        $query = "INSERT INTO " . SHOPEE_SG_ORDER_REQ . " 
-            (orderID, package, package_qty_json, price, voucher, act_shipping_fee, service_fee, trans_fee, ams_fee, fees, final_amt, order_status, shopee_acc, currency, brand, buyer, buyer_pay_meth, pic, customer_address, airbill_no, airbill_attachment, remark, latest_transition_at, date, time, create_by, create_date, create_time) 
-            VALUES ('$orderId', '$pkgId', '$packageQtyJson', '$price', '$voucher', '$actShippingFee', '$serviceFee', '$transFee', '$amsFee', '$fees', '$finalAmt', '$status', '$acc', '$curr', '$brand', '$buyer', '$payMeth', '$pic', '$customerAddressSafe', '$airbillNoSafe', '$airbillAttachmentSafe', '$remark', NOW(), curdate(), curtime(), '" . USER_ID . "', curdate(), curtime())";
+        $stockOutWarehouseIdSafe = (int) $previewData['stock_out_warehouse_id'];
 
+        $query = "INSERT INTO " . SHOPEE_SG_ORDER_REQ . " 
+        (orderID, package, package_qty_json, price, voucher, act_shipping_fee, service_fee, trans_fee, ams_fee, fees, final_amt, order_status, shopee_acc, currency, brand, buyer, buyer_pay_meth, pic, customer_address, airbill_no, airbill_attachment, stock_out_warehouse_id, remark, latest_transition_at, date, time, create_by, create_date, create_time) 
+        VALUES ('$orderId', '$pkgId', '$packageQtyJson', '$price', '$voucher', '$actShippingFee', '$serviceFee', '$transFee', '$amsFee', '$fees', '$finalAmt', '$status', '$acc', '$curr', '$brand', '$buyer', '$payMeth', '$pic', '$customerAddressSafe', '$airbillNoSafe', '$airbillAttachmentSafe', '$stockOutWarehouseIdSafe', '$remark', NOW(), curdate(), curtime(), '" . USER_ID . "', curdate(), curtime())";
+        
         $requiresInitialShippedAutoMove = (shopeeOmsNormalizeStatusCode($previewData['order_status']) === 'SP');
         $startedFinanceTransaction = false;
 
@@ -3403,7 +3466,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
 
                                     <div class="row mb-3">
                                         <div class="col-12 col-md-4">
-                                            <label class="form-label" for="buyer">Shopee Buyer Username</label>
+                                            <label class="form-label" for="buyer">Shopee Buyer Username<span class="requireRed">*</span></label>
                                             <?php
                                             $buyerDisplayValue = '';
                                             if (isset($previewData['buyer_name']) && trim((string) $previewData['buyer_name']) !== '') {
@@ -3413,7 +3476,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                             }
                                             ?>
                                             <div class="autocomplete">
-                                                <input class="form-control" type="text" id="buyer" name="buyer" value="<?= htmlspecialchars($buyerDisplayValue) ?>" autocomplete="off">
+                                                <input class="form-control" type="text" id="buyer" name="buyer" value="<?= htmlspecialchars($buyerDisplayValue) ?>" autocomplete="off" required data-required-message="Shopee Buyer Username is required.">
                                                 <input type="hidden" id="buyer_hidden" name="buyer_hidden" value="<?= htmlspecialchars(isset($previewData['buyer']) ? (string) $previewData['buyer'] : '') ?>">
                                             </div>
                                             <?php if (!empty($previewData['source_buyer_username'])) { ?>
@@ -3491,15 +3554,33 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                     </div>
 
                                     <div class="row mb-3">
-                                        <div class="col-12 col-md-8">
+                                        <div class="col-12 col-md-6">
                                             <label class="form-label" for="remark">Remark</label>
                                             <input class="form-control" type="text" id="remark" name="remark" value="<?= htmlspecialchars(isset($previewData['remark']) ? $previewData['remark'] : '') ?>">
                                         </div>
-                                        <div class="col-12 col-md-4">
+
+                                        <div class="col-12 col-md-3">
                                             <label class="form-label" for="order_status_val">Initial Order Status</label>
                                             <select class="form-select" id="order_status_val" name="order_status_val">
                                                 <?php foreach (shopeeOmsGetEditableStatusOptions() as $statusCode => $statusLabel) { ?>
                                                     <option value="<?= htmlspecialchars($statusCode) ?>" <?= ((isset($previewData['order_status_val']) ? $previewData['order_status_val'] : 'P') === $statusCode) ? 'selected' : '' ?>><?= htmlspecialchars($statusLabel) ?></option>
+                                                <?php } ?>
+                                            </select>
+                                        </div>
+
+                                        <div class="col-12 col-md-3">
+                                            <label class="form-label" for="stock_out_warehouse_id">Stock Out Warehouse<span class="requireRed">*</span></label>
+                                            <?php
+                                            $currentStockOutWarehouseId = isset($previewData['stock_out_warehouse_id']) && (int) $previewData['stock_out_warehouse_id'] > 0
+                                                ? (int) $previewData['stock_out_warehouse_id']
+                                                : (int) $sorDefaultWarehouseId;
+                                            ?>
+                                            <select class="form-select" id="stock_out_warehouse_id" name="stock_out_warehouse_id" required>
+                                                <?php foreach ($sorWarehouseRows as $warehouseRow) { ?>
+                                                    <?php $warehouseId = isset($warehouseRow['id']) ? (int) $warehouseRow['id'] : 0; ?>
+                                                    <option value="<?= $warehouseId ?>" <?= $currentStockOutWarehouseId === $warehouseId ? 'selected' : '' ?>>
+                                                        <?= htmlspecialchars((string) $warehouseRow['name']) ?>
+                                                    </option>
                                                 <?php } ?>
                                             </select>
                                         </div>
@@ -3775,25 +3856,82 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
             updateAirbillToggle.addEventListener('change', toggleAirbillFields);
         }
 
+        function clearBuyerAutocompleteBox() {
         var buyerInput = previewForm.querySelector('#buyer');
-        if (buyerInput) {
-            buyerInput.addEventListener('keyup', function () {
-                var param = {
-                    search: buyerInput.value,
-                    searchType: 'buyer_username',
-                    elementID: 'buyer',
-                    hiddenElementID: 'buyer_hidden',
-                    dbTable: '<?= SHOPEE_CUST_INFO ?>',
-                };
-                if (typeof searchInput === 'function') {
-                    searchInput(param, '<?= $SITEURL ?>');
-                }
-                syncBuyerHiddenField();
-            });
-            buyerInput.addEventListener('change', syncBuyerHiddenField);
-            buyerInput.addEventListener('blur', syncBuyerHiddenField);
+        if (!buyerInput) return;
+
+        var autocompleteBox = buyerInput.closest('.autocomplete');
+        if (!autocompleteBox) return;
+
+        Array.prototype.slice.call(autocompleteBox.children).forEach(function (child) {
+            if (child === buyerInput || child.id === 'buyer' || child.id === 'buyer_hidden') {
+                return;
+            }
+
+            child.remove();
+        });
+    }
+
+    var buyerInput = previewForm.querySelector('#buyer');
+    if (buyerInput) {
+        buyerInput.addEventListener('keyup', function () {
+            var buyerHidden = previewForm.querySelector('#buyer_hidden');
+
+            var param = {
+                search: buyerInput.value,
+                searchType: 'buyer_username',
+                elementID: 'buyer',
+                hiddenElementID: 'buyer_hidden',
+                dbTable: '<?= SHOPEE_CUST_INFO ?>',
+            };
+
+            if (typeof searchInput === 'function') {
+                searchInput(param, '<?= $SITEURL ?>');
+
+                setTimeout(function () {
+                    syncBuyerHiddenField();
+
+                    if (!buyerHidden || buyerHidden.value.trim() === '') {
+                        clearBuyerAutocompleteBox();
+                    }
+                }, 80);
+
+                setTimeout(function () {
+                    syncBuyerHiddenField();
+
+                    if (!buyerHidden || buyerHidden.value.trim() === '') {
+                        clearBuyerAutocompleteBox();
+                    }
+                }, 200);
+            }
+
             syncBuyerHiddenField();
-        }
+        });
+
+        buyerInput.addEventListener('input', function () {
+            var buyerHidden = previewForm.querySelector('#buyer_hidden');
+
+            setTimeout(function () {
+                syncBuyerHiddenField();
+
+                if (!buyerHidden || buyerHidden.value.trim() === '') {
+                    clearBuyerAutocompleteBox();
+                }
+            }, 100);
+        });
+
+        buyerInput.addEventListener('change', function () {
+            syncBuyerHiddenField();
+            clearBuyerAutocompleteBox();
+        });
+
+        buyerInput.addEventListener('blur', function () {
+            syncBuyerHiddenField();
+            setTimeout(clearBuyerAutocompleteBox, 80);
+        });
+
+        syncBuyerHiddenField();
+    }
 
         var airbillAttachmentInput = previewForm.querySelector('#airbill_attachment');
         if (airbillAttachmentInput) {

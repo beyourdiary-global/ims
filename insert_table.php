@@ -161,6 +161,30 @@ function dropIndexIfExists($conn, $dbName, $tableName, $indexName, $alterSql)
     }
 }
 
+$customerTagAssignmentTable = defined('CUS_TAG_ASSIGNMENT') ? CUS_TAG_ASSIGNMENT : 'customer_tag_assignment';
+$createCustomerTagAssignmentTableSql = "CREATE TABLE IF NOT EXISTS `{$db_cms}`.`{$customerTagAssignmentTable}` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `platform` VARCHAR(30) NOT NULL,
+    `customer_id` INT NOT NULL,
+    `tag_id` INT NOT NULL,
+    `create_by` VARCHAR(30) DEFAULT NULL,
+    `create_date` DATE DEFAULT NULL,
+    `create_time` TIME DEFAULT NULL,
+    `update_by` VARCHAR(30) DEFAULT NULL,
+    `update_date` DATE DEFAULT NULL,
+    `update_time` TIME DEFAULT NULL,
+    `status` CHAR(1) NOT NULL DEFAULT 'A',
+    UNIQUE KEY `uniq_platform_customer_tag` (`platform`, `customer_id`, `tag_id`),
+    KEY `idx_platform_customer_status` (`platform`, `customer_id`, `status`),
+    KEY `idx_tag_status` (`tag_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+if ($conn->query($createCustomerTagAssignmentTableSql)) {
+    echo "<p style='color:blue;'>Table `{$customerTagAssignmentTable}` is ready in `{$db_cms}`.</p>";
+} else {
+    echo "<p style='color:red;'>Error creating `{$customerTagAssignmentTable}` in `{$db_cms}`: " . $conn->error . "</p>";
+}
+
 // function normalizeShopeePins($pinStr)
 // {
 //     $cleanPins = preg_replace('/\+?\[(128|129|130):[^\]]*\]/', '', (string) $pinStr);
@@ -2381,6 +2405,7 @@ if ($conn->select_db($db_fin)) {
 
     migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'airbill_no', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `airbill_no` VARCHAR(150) DEFAULT NULL AFTER `barcode_slot`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `airbill_no`.");
     migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'airbill_attachment', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `airbill_attachment` TEXT DEFAULT NULL AFTER `airbill_no`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `airbill_attachment`.");
+    migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'stock_out_warehouse_id', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `stock_out_warehouse_id` INT DEFAULT NULL AFTER `airbill_attachment`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `stock_out_warehouse_id`.");
     dropColumnIfExists($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'customer_name', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` DROP COLUMN `customer_name`");
     migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'customer_address', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `customer_address` TEXT DEFAULT NULL AFTER `buyer`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `customer_address`.");
     migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'package_qty_json', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `package_qty_json` LONGTEXT DEFAULT NULL AFTER `package`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `package_qty_json`.");

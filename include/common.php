@@ -443,7 +443,7 @@ function getData($search_val, $val, $val2, $tbl, $conn)
 		// Execute
 		$result = $conn->query($query);
     	 if (!$result) {
-            error_log("Query failed: $query — Error: " . mysqli_error($conn));
+            error_log("Query failed: $query - Error: " . mysqli_error($conn));
             echo $query;exit;
         }
 	}
@@ -2792,8 +2792,10 @@ if (!function_exists('customerLabelRenderNameCell')) {
     }
 }
 
+// Customer tag helpers moved to include/customer_tag.php.
+
 if (!function_exists('customerLabelRenderSummaryCell')) {
-    function customerLabelRenderSummaryCell($customerLabelMeta)
+    function customerLabelRenderSummaryCell($customerLabelMeta, $customerTagRows = array())
     {
         $parts = array();
         if (isset($customerLabelMeta['level'])) {
@@ -2801,6 +2803,10 @@ if (!function_exists('customerLabelRenderSummaryCell')) {
         }
         if (isset($customerLabelMeta['repeat'])) {
             $parts[] = customerLabelRenderBadge($customerLabelMeta['repeat']);
+        }
+        $tagBadgeHtml = customerTagRenderBadges($customerTagRows, 'customer-tag-table-badge-group', 'customer-tag-table-badge');
+        if ($tagBadgeHtml !== '') {
+            $parts[] = $tagBadgeHtml;
         }
 
         return empty($parts) ? '' : implode(' ', $parts);
@@ -2836,6 +2842,7 @@ if (!function_exists('customerLabelPrepareCustomerRows')) {
         return array(
             'rows' => $rows,
             'label_map' => customerLabelGetCustomerLabelMap($connect, $platform, $customerIds),
+            'tag_map' => customerTagGetCustomerTagMap($connect, $platform, $customerIds),
             'active_filter_type' => $labelType,
             'active_filter_id' => $labelId,
         );
@@ -3669,10 +3676,161 @@ if (!function_exists('shopeeOmsBuildOrderProductSummary')) {
     }
 }
 
+if (!function_exists('shopeeOmsNormalizeWarehouseId')) {
+    function shopeeOmsNormalizeWarehouseId($warehouseId)
+    {
+        $warehouseId = (int) $warehouseId;
+        return $warehouseId > 0 ? $warehouseId : 0;
+    }
+}
+
+if (!function_exists('shopeeOmsLoadActiveWarehouses')) {
+    function shopeeOmsLoadActiveWarehouses($connect)
+    {
+        $rows = array();
+        if (!($connect instanceof mysqli)) {
+            return $rows;
+        }
+
+        $result = mysqli_query($connect, "SELECT id, name FROM `" . WHSE . "` WHERE status = 'A' ORDER BY name ASC");
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $warehouseId = isset($row['id']) ? (int) $row['id'] : 0;
+                if ($warehouseId > 0) {
+                    $rows[] = array(
+                        'id' => $warehouseId,
+                        'name' => isset($row['name']) ? (string) $row['name'] : ('Warehouse #' . $warehouseId),
+                    );
+                }
+            }
+        }
+
+        return $rows;
+    }
+}
+
+if (!function_exists('shopeeOmsLoadWarehouseNameMap')) {
+    function shopeeOmsLoadWarehouseNameMap($connect, $activeOnly = false)
+    {
+        $nameMap = array();
+        if (!($connect instanceof mysqli)) {
+            return $nameMap;
+        }
+
+        $whereSql = $activeOnly ? " WHERE status = 'A'" : '';
+        $result = mysqli_query($connect, "SELECT id, name FROM `" . WHSE . "`" . $whereSql . " ORDER BY name ASC");
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $warehouseId = isset($row['id']) ? (int) $row['id'] : 0;
+                if ($warehouseId > 0) {
+                    $nameMap[$warehouseId] = isset($row['name']) ? (string) $row['name'] : ('Warehouse #' . $warehouseId);
+                }
+            }
+        }
+
+        return $nameMap;
+    }
+}
+
+if (!function_exists('shopeeOmsGetDefaultWarehouseId')) {
+    function shopeeOmsGetDefaultWarehouseId($connect, $warehouseRows = null)
+    {
+        $configuredWarehouseId = (int) shopeeOmsGetSetting($connect, 'shopee_oms_default_warehouse_id', '0');
+        if ($warehouseRows === null) {
+            $warehouseRows = shopeeOmsLoadActiveWarehouses($connect);
+        }
+        if (!is_array($warehouseRows)) {
+            $warehouseRows = array();
+        }
+
+        $firstActiveWarehouseId = 0;
+        foreach ($warehouseRows as $warehouseRow) {
+            $warehouseId = isset($warehouseRow['id']) ? (int) $warehouseRow['id'] : 0;
+            if ($warehouseId <= 0) {
+                continue;
+            }
+
+            if ($firstActiveWarehouseId <= 0) {
+                $firstActiveWarehouseId = $warehouseId;
+            }
+            if ($configuredWarehouseId > 0 && $warehouseId === $configuredWarehouseId) {
+                return $configuredWarehouseId;
+            }
+        }
+
+        if ($firstActiveWarehouseId > 0) {
+            return $firstActiveWarehouseId;
+        }
+
+        return $configuredWarehouseId > 0 ? $configuredWarehouseId : 0;
+    }
+}
+
+if (!function_exists('shopeeOmsResolveWarehouseNameById')) {
+    function shopeeOmsResolveWarehouseNameById($connect, $warehouseId, $defaultWarehouseId = null, $warehouseNameMap = null)
+    {
+        $warehouseId = shopeeOmsNormalizeWarehouseId($warehouseId);
+        if ($defaultWarehouseId === null) {
+            $defaultWarehouseId = shopeeOmsGetDefaultWarehouseId($connect);
+        }
+        $defaultWarehouseId = shopeeOmsNormalizeWarehouseId($defaultWarehouseId);
+        $resolvedWarehouseId = $warehouseId > 0 ? $warehouseId : $defaultWarehouseId;
+        if ($resolvedWarehouseId <= 0) {
+            return '';
+        }
+
+        if (!is_array($warehouseNameMap)) {
+            $warehouseNameMap = shopeeOmsLoadWarehouseNameMap($connect);
+        }
+
+        return isset($warehouseNameMap[$resolvedWarehouseId]) && trim((string) $warehouseNameMap[$resolvedWarehouseId]) !== ''
+            ? (string) $warehouseNameMap[$resolvedWarehouseId]
+            : ('Warehouse #' . $resolvedWarehouseId);
+    }
+}
+
+if (!function_exists('shopeeOmsResolveStockOutWarehouseId')) {
+    function shopeeOmsResolveStockOutWarehouseId($connect, $orderRow, $defaultWarehouseId = null)
+    {
+        $storedWarehouseId = 0;
+        if (is_array($orderRow) && isset($orderRow['stock_out_warehouse_id'])) {
+            $storedWarehouseId = shopeeOmsNormalizeWarehouseId($orderRow['stock_out_warehouse_id']);
+        } else if (!is_array($orderRow)) {
+            $storedWarehouseId = shopeeOmsNormalizeWarehouseId($orderRow);
+        }
+
+        if ($storedWarehouseId > 0) {
+            return $storedWarehouseId;
+        }
+
+        if ($defaultWarehouseId === null) {
+            $defaultWarehouseId = shopeeOmsGetDefaultWarehouseId($connect);
+        }
+
+        return shopeeOmsNormalizeWarehouseId($defaultWarehouseId);
+    }
+}
+
+if (!function_exists('shopeeOmsResolveStockOutWarehouseName')) {
+    function shopeeOmsResolveStockOutWarehouseName($connect, $orderRow, $defaultWarehouseId = null, $warehouseNameMap = null)
+    {
+        $resolvedWarehouseId = shopeeOmsResolveStockOutWarehouseId($connect, $orderRow, $defaultWarehouseId);
+        return shopeeOmsResolveWarehouseNameById($connect, $resolvedWarehouseId, $defaultWarehouseId, $warehouseNameMap);
+    }
+}
+
+if (!function_exists('shopeeOmsIsStockOutWarehouseEditable')) {
+    function shopeeOmsIsStockOutWarehouseEditable($orderStatus)
+    {
+        $statusCode = shopeeOmsNormalizeStatusCode($orderStatus);
+        return $statusCode === '' || in_array($statusCode, array('P', 'TP'), true);
+    }
+}
+
 if (!function_exists('shopeeOmsGetWarehouseId')) {
     function shopeeOmsGetWarehouseId($connect)
     {
-        return (int) shopeeOmsGetSetting($connect, 'shopee_oms_default_warehouse_id', '0');
+        return shopeeOmsGetDefaultWarehouseId($connect);
     }
 }
 
@@ -5408,6 +5566,7 @@ if (!function_exists('shopeeOmsGetImportantEditableFields')) {
             'buyer' => 'Buyer Username',
             'buyer_pay_meth' => 'Buyer Payment Method',
             'price' => 'Product Price',
+            'stock_out_warehouse_id' => 'Stock Out Warehouse',
             'airbill_no' => 'Airbill',
             'airbill_attachment' => 'Airbill Attachment',
             'remark' => 'Remark',
@@ -5422,21 +5581,38 @@ if (!function_exists('shopeeOmsBuildOrderFieldDisplayValue')) {
     function shopeeOmsBuildOrderFieldDisplayValue($connect, $fieldName, $fieldValue)
     {
         $fieldValue = is_scalar($fieldValue) || $fieldValue === null ? (string) $fieldValue : json_encode($fieldValue);
-        $fieldValue = trim((string) $fieldValue);
-        if ($fieldValue === '') {
-            return '';
-        }
 
         if ($fieldName === 'order_status') {
+            $fieldValue = trim((string) $fieldValue);
+            if ($fieldValue === '') {
+                return '';
+            }
             return shopeeOmsGetStatusLabel($fieldValue);
         }
 
         if ($fieldName === 'package') {
+            $fieldValue = trim((string) $fieldValue);
+            if ($fieldValue === '') {
+                return '';
+            }
             return shopeeOmsResolveIdCsvToNames($connect, PKG, $fieldValue);
         }
 
         if ($fieldName === 'brand') {
+            $fieldValue = trim((string) $fieldValue);
+            if ($fieldValue === '') {
+                return '';
+            }
             return shopeeOmsResolveIdCsvToNames($connect, BRAND, $fieldValue);
+        }
+
+        if ($fieldName === 'stock_out_warehouse_id') {
+            return shopeeOmsResolveWarehouseNameById($connect, $fieldValue, shopeeOmsGetDefaultWarehouseId($connect));
+        }
+
+        $fieldValue = trim((string) $fieldValue);
+        if ($fieldValue === '') {
+            return '';
         }
 
         if ($fieldName === 'package_qty_json') {
@@ -5591,7 +5767,7 @@ if (!function_exists('shopeeOmsRenderUserGroupBadge')) {
 }
 
 if (!function_exists('shopeeOmsGetDailyFlowReport')) {
-    function shopeeOmsGetDailyFlowReport($financeConnect, $dateFrom, $dateTo, $fromStatus = '', $toStatus = '', $orderCode = '')
+    function shopeeOmsGetDailyFlowReport($cmsConnect, $financeConnect, $dateFrom, $dateTo, $fromStatus = '', $toStatus = '', $orderCode = '', $warehouseId = 0)
     {
         $summary = array();
         $details = array();
@@ -5608,27 +5784,34 @@ if (!function_exists('shopeeOmsGetDailyFlowReport')) {
             $dateTo = date('Y-m-d');
         }
 
+        $warehouseId = shopeeOmsNormalizeWarehouseId($warehouseId);
+        $defaultWarehouseId = $cmsConnect instanceof mysqli ? shopeeOmsGetDefaultWarehouseId($cmsConnect) : 0;
         $conditions = array();
-        $conditions[] = "status = 'A'";
-        $conditions[] = "DATE(transition_at) >= '" . mysqli_real_escape_string($financeConnect, $dateFrom) . "'";
-        $conditions[] = "DATE(transition_at) <= '" . mysqli_real_escape_string($financeConnect, $dateTo) . "'";
+        $conditions[] = "l.status = 'A'";
+        $conditions[] = "DATE(l.transition_at) >= '" . mysqli_real_escape_string($financeConnect, $dateFrom) . "'";
+        $conditions[] = "DATE(l.transition_at) <= '" . mysqli_real_escape_string($financeConnect, $dateTo) . "'";
         if (trim((string) $fromStatus) !== '') {
-            $conditions[] = "from_status = '" . mysqli_real_escape_string($financeConnect, shopeeOmsNormalizeStatusCode($fromStatus)) . "'";
+            $conditions[] = "l.from_status = '" . mysqli_real_escape_string($financeConnect, shopeeOmsNormalizeStatusCode($fromStatus)) . "'";
         }
         if (trim((string) $toStatus) !== '') {
-            $conditions[] = "to_status = '" . mysqli_real_escape_string($financeConnect, shopeeOmsNormalizeStatusCode($toStatus)) . "'";
+            $conditions[] = "l.to_status = '" . mysqli_real_escape_string($financeConnect, shopeeOmsNormalizeStatusCode($toStatus)) . "'";
         }
         if (trim((string) $orderCode) !== '') {
             $safeOrderCode = mysqli_real_escape_string($financeConnect, trim((string) $orderCode));
-            $conditions[] = "order_code LIKE '%" . $safeOrderCode . "%'";
+            $conditions[] = "l.order_code LIKE '%" . $safeOrderCode . "%'";
+        }
+        if ($warehouseId > 0) {
+            $conditions[] = "COALESCE(NULLIF(o.stock_out_warehouse_id, 0), " . (int) $defaultWarehouseId . ") = " . $warehouseId;
         }
 
         $whereSql = implode(' AND ', $conditions);
-        $summarySql = "SELECT from_status, to_status, COUNT(*) AS total_count, MAX(transition_at) AS last_transition_time
-            FROM `" . ORDER_STATUS_TRANSITION_LOG . "`
+        $logFromSql = "`" . ORDER_STATUS_TRANSITION_LOG . "` l
+            LEFT JOIN `" . SHOPEE_SG_ORDER_REQ . "` o ON o.id = l.order_id";
+        $summarySql = "SELECT l.from_status, l.to_status, COUNT(*) AS total_count, MAX(l.transition_at) AS last_transition_time
+            FROM " . $logFromSql . "
             WHERE " . $whereSql . "
-            GROUP BY from_status, to_status
-            ORDER BY total_count DESC, from_status ASC, to_status ASC";
+            GROUP BY l.from_status, l.to_status
+            ORDER BY total_count DESC, l.from_status ASC, l.to_status ASC";
         $summaryResult = mysqli_query($financeConnect, $summarySql);
         if ($summaryResult) {
             while ($row = mysqli_fetch_assoc($summaryResult)) {
@@ -5645,10 +5828,10 @@ if (!function_exists('shopeeOmsGetDailyFlowReport')) {
             }
         }
 
-        $detailSql = "SELECT id, order_id, order_code, from_status, to_status, transition_action, user_id, user_group_id, transition_at, remark
-            FROM `" . ORDER_STATUS_TRANSITION_LOG . "`
+        $detailSql = "SELECT l.id, l.order_id, l.order_code, l.from_status, l.to_status, l.transition_action, l.user_id, l.user_group_id, l.transition_at, l.remark
+            FROM " . $logFromSql . "
             WHERE " . $whereSql . "
-            ORDER BY transition_at DESC, id DESC";
+            ORDER BY l.transition_at DESC, l.id DESC";
         $detailResult = mysqli_query($financeConnect, $detailSql);
         if ($detailResult) {
             while ($row = mysqli_fetch_assoc($detailResult)) {
@@ -5778,10 +5961,32 @@ if (!function_exists('shopeeOmsDeductInventoryForOrder')) {
             return array('success' => false, 'message' => 'No product item found for this order package.');
         }
 
-        $warehouseId = shopeeOmsGetWarehouseId($cmsConnect);
+        $defaultWarehouseId = shopeeOmsGetDefaultWarehouseId($cmsConnect);
+        $warehouseId = shopeeOmsResolveStockOutWarehouseId($cmsConnect, $orderRow, $defaultWarehouseId);
+        $warehouseName = shopeeOmsResolveWarehouseNameById($cmsConnect, $warehouseId, $defaultWarehouseId);
         $orderCode = trim((string) (isset($orderRow['orderID']) ? $orderRow['orderID'] : ''));
         if ($orderCode === '') {
             $orderCode = 'OMS-' . (int) (isset($orderRow['id']) ? $orderRow['id'] : 0);
+        }
+
+        $productNameMap = array();
+        $productIds = array();
+        foreach (array_keys($productQtyMap) as $productId) {
+            $productId = (int) $productId;
+            if ($productId > 0) {
+                $productIds[$productId] = $productId;
+            }
+        }
+        if (!empty($productIds)) {
+            $productResult = mysqli_query($cmsConnect, "SELECT id, name FROM `" . PROD . "` WHERE id IN (" . implode(',', $productIds) . ")");
+            if ($productResult) {
+                while ($productRow = mysqli_fetch_assoc($productResult)) {
+                    $resolvedProductId = isset($productRow['id']) ? (int) $productRow['id'] : 0;
+                    if ($resolvedProductId > 0) {
+                        $productNameMap[$resolvedProductId] = isset($productRow['name']) ? trim((string) $productRow['name']) : '';
+                    }
+                }
+            }
         }
 
         mysqli_begin_transaction($financeConnect);
@@ -5824,7 +6029,11 @@ if (!function_exists('shopeeOmsDeductInventoryForOrder')) {
                 }
 
                 if ($availableQty < $qty) {
-                    throw new Exception('Not enough warehouse stock for product #' . $productId . '.');
+                    $productLabel = isset($productNameMap[$productId]) && $productNameMap[$productId] !== ''
+                        ? $productNameMap[$productId]
+                        : ('product #' . $productId);
+                    $warehouseLabel = $warehouseName !== '' ? ($warehouseName) : '';
+                    throw new Exception($warehouseLabel . ' not enough warehouse stock for ' . $productLabel . '.');
                 }
 
                 $safeActor = mysqli_real_escape_string($financeConnect, $actorUserId);
@@ -5936,7 +6145,7 @@ if (!function_exists('shopeeOmsRestockInventoryForOrder')) {
             $orderCode = 'OMS-' . (int) (isset($orderRow['id']) ? $orderRow['id'] : 0);
         }
 
-        $warehouseId = shopeeOmsGetWarehouseId($cmsConnect);
+        $warehouseId = shopeeOmsResolveStockOutWarehouseId($cmsConnect, $orderRow, shopeeOmsGetDefaultWarehouseId($cmsConnect));
         $safeActor = mysqli_real_escape_string($financeConnect, trim((string) $actorUserId) !== '' ? trim((string) $actorUserId) : 'SYSTEM');
         $restockOrderNumber = mysqli_real_escape_string($financeConnect, 'OMS-RETURN-' . $orderCode . '-' . date('YmdHis'));
 
@@ -6246,7 +6455,7 @@ if (!function_exists('sorResolveTrackingMySlug')) {
             return 'shopee';
         }
         if (preg_match('/^MY[A-Z]{2}\d/i', $trackingNo)) {
-            // Generic MY prefix → DHL eCommerce (most common)
+            // Generic MY prefix â†’ DHL eCommerce (most common)
             return 'dhl-ecommerce';
         }
         if (preg_match('/^JT/i', $trackingNo)) {
@@ -6429,7 +6638,7 @@ if (!function_exists('sorWsDecode')) {
                 $payload[$i] = $payload[$i] ^ $mask[$i % 4];
             }
         }
-        // Ping → reply pong, then read next frame
+        // Ping â†’ reply pong, then read next frame
         if ($opcode === 0x9) {
             @fwrite($socket, chr(0x8A) . chr(strlen($payload)) . $payload);
             return sorWsDecode($socket);
@@ -6596,7 +6805,7 @@ if (!function_exists('sorFetchTrackingStatusEasyParcel')) {
 
         $cfg = sorGetEasyParcelConfig($countryCode);
 
-        // Demo credentials cannot track real parcels — skip entirely.
+        // Demo credentials cannot track real parcels â€” skip entirely.
         if (stripos($cfg['domain'], 'demo.connect') !== false) {
             return '';
         }

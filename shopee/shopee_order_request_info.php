@@ -101,6 +101,9 @@ $customerNameDisplayHtml = customerLabelRenderShopeeBuyerCell(
     $customerName,
     $shopeeBuyerMetaMap
 );
+$requestWarehouseNameMap = shopeeOmsLoadWarehouseNameMap($connect);
+$requestDefaultWarehouseId = shopeeOmsGetDefaultWarehouseId($connect);
+$stockOutWarehouseName = shopeeOmsResolveStockOutWarehouseName($connect, $requestRow, $requestDefaultWarehouseId, $requestWarehouseNameMap);
 $customerAddress = trim((string) (isset($requestRow['customer_address']) ? $requestRow['customer_address'] : ''));
 $airbillNo = trim((string) (isset($requestRow['airbill_no']) ? $requestRow['airbill_no'] : ''));
 $airbillAttachment = trim((string) (isset($requestRow['airbill_attachment']) ? $requestRow['airbill_attachment'] : ''));
@@ -225,6 +228,10 @@ if ($airbillAttachment !== '') {
                             <div class="mb-3">
                                 <label class="form-label form_lbl">Shopee Buyer Username</label>
                                 <div class="form-control d-flex align-items-center flex-nowrap gap-2" style="min-height:42px;"><?= $customerNameDisplayHtml ?></div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label form_lbl">Stock Out Warehouse</label>
+                                <input class="form-control" type="text" readonly value="<?= htmlspecialchars($stockOutWarehouseName, ENT_QUOTES, 'UTF-8') ?>">
                             </div>
                             <div class="mb-3">
                                 <label class="form-label form_lbl">Address</label>

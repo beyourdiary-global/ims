@@ -37,8 +37,10 @@ $dateTo = trim((string) input('date_to')) !== '' ? trim((string) input('date_to'
 $fromStatus = trim((string) input('from_status'));
 $toStatus = trim((string) input('to_status'));
 $orderCode = trim((string) input('order_id'));
+$stockOutWarehouseId = shopeeOmsNormalizeWarehouseId(input('stock_out_warehouse_id'));
+$flowReportWarehouseRows = shopeeOmsLoadActiveWarehouses($connect);
 
-$reportData = shopeeOmsGetDailyFlowReport($finance_connect, $dateFrom, $dateTo, $fromStatus, $toStatus, $orderCode);
+$reportData = shopeeOmsGetDailyFlowReport($connect, $finance_connect, $dateFrom, $dateTo, $fromStatus, $toStatus, $orderCode, $stockOutWarehouseId);
 $summaryRows = isset($reportData['summary']) ? $reportData['summary'] : array();
 $detailRows = isset($reportData['details']) ? $reportData['details'] : array();
 $statusOptions = shopeeOmsGetEditableStatusOptions();
@@ -68,7 +70,7 @@ $statusOptions = shopeeOmsGetEditableStatusOptions();
 
         .shopee-flow-report-filter-grid {
             display: grid;
-            grid-template-columns: repeat(5, minmax(0, 1fr));
+            grid-template-columns: repeat(6, minmax(0, 1fr));
             gap: 16px;
         }
 
@@ -240,6 +242,16 @@ $statusOptions = shopeeOmsGetEditableStatusOptions();
                         <div>
                             <label class="form-label" for="order_id">Order ID</label>
                             <input class="form-control" type="text" id="order_id" name="order_id" value="<?= htmlspecialchars($orderCode) ?>" placeholder="Search Order ID (optional)" autocomplete="off">
+                        </div>
+                        <div>
+                            <label class="form-label" for="stock_out_warehouse_id">Stock Out Warehouse</label>
+                            <select class="form-select" id="stock_out_warehouse_id" name="stock_out_warehouse_id">
+                                <option value="">All</option>
+                                <?php foreach ($flowReportWarehouseRows as $warehouseRow) { ?>
+                                    <?php $warehouseId = isset($warehouseRow['id']) ? (int) $warehouseRow['id'] : 0; ?>
+                                    <option value="<?= $warehouseId ?>" <?= $stockOutWarehouseId === $warehouseId ? 'selected' : '' ?>><?= htmlspecialchars((string) $warehouseRow['name']) ?></option>
+                                <?php } ?>
+                            </select>
                         </div>
                     </div>
                     <div class="shopee-flow-report-filter-actions">
