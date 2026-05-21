@@ -18,6 +18,16 @@ if (function_exists('isStatusFieldAvailable') && !isStatusFieldAvailable($tblNam
     @mysqli_query($connect, "ALTER TABLE `" . $tblName . "` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A'");
 }
 
+$tokenSettingPageUsedAvailable = false;
+$pageUsedColumnRst = @mysqli_query($connect, "SHOW COLUMNS FROM `" . $tblName . "` LIKE 'page_used'");
+if ($pageUsedColumnRst instanceof mysqli_result && $pageUsedColumnRst->num_rows > 0) {
+    $tokenSettingPageUsedAvailable = true;
+} else {
+    @mysqli_query($connect, "ALTER TABLE `" . $tblName . "` ADD COLUMN `page_used` VARCHAR(100) NOT NULL DEFAULT ''");
+    $pageUsedColumnRst = @mysqli_query($connect, "SHOW COLUMNS FROM `" . $tblName . "` LIKE 'page_used'");
+    $tokenSettingPageUsedAvailable = $pageUsedColumnRst instanceof mysqli_result && $pageUsedColumnRst->num_rows > 0;
+}
+
 $dataID = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
@@ -107,6 +117,11 @@ if (post('actionBtn')) {
 
             if ($pageUsed === '') {
                 $pageUsedErr = 'Page Used is required.';
+                break;
+            }
+
+            if (!$tokenSettingPageUsedAvailable) {
+                $pageUsedErr = 'Page Used is not available on this deployment yet. Please update the Token Setting table schema first.';
                 break;
             }
 

@@ -63,18 +63,18 @@ $qrUnavailableMessage = '';
 if ($orderLink !== '') {
     $qrRelativeDir = 'temp/shopee_order_request/';
     $qrFsDir = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $qrRelativeDir);
-    if (!file_exists($qrFsDir)) {
-        mkdir($qrFsDir, 0777, true);
+    if (!is_dir($qrFsDir) && !@mkdir($qrFsDir, 0755, true) && !is_dir($qrFsDir)) {
+        $qrUnavailableMessage = 'QR image folder could not be created on this server.';
     }
 
     $qrFileName = 'shopee_order_' . $requestId . '_' . md5($orderLink) . '.png';
     $qrFsPath = $qrFsDir . $qrFileName;
-    if (function_exists('imagecreate') && !file_exists($qrFsPath)) {
+    if ($qrUnavailableMessage === '' && function_exists('imagecreate') && !file_exists($qrFsPath)) {
         QRcode::png($orderLink, $qrFsPath, 'H', 6, 2);
     }
-    if (file_exists($qrFsPath)) {
+    if ($qrUnavailableMessage === '' && file_exists($qrFsPath)) {
         $qrImageUrl = rtrim((string) $SITEURL, '/') . '/' . trim($qrRelativeDir, '/\\') . '/' . $qrFileName;
-    } else {
+    } else if ($qrUnavailableMessage === '') {
         $qrUnavailableMessage = 'QR image could not be generated locally on this server.';
     }
 }

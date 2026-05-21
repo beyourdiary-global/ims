@@ -875,6 +875,28 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                 white-space: nowrap;
             }
         }
+
+        .attachment-preview-media {
+            width: 100%;
+            max-width: 520px;
+        }
+
+        .attachment-preview-media img,
+        .attachment-preview-media iframe {
+            width: 100%;
+            border: 1px solid #d9e2ef;
+            border-radius: 10px;
+            background: #fff;
+        }
+
+        .attachment-preview-media img {
+            height: auto;
+            display: block;
+        }
+
+        .attachment-preview-media iframe {
+            min-height: 520px;
+        }
     </style>
 
 </head>
@@ -962,6 +984,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                             <div class="d-flex justify-content-center justify-content-md-end px-4">
                                 <?php
                                 $attachmentSrc = '';
+                                $attachmentExt = '';
 
                                 if (isset($dataExisted) && isset($row['attachment']) && !isset($jt_attach)) {
                                     if ($row['attachment'] == '' || $row['attachment'] == NULL) {
@@ -982,8 +1005,19 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                         $attachmentSrc = $legacyImgUrl . basename($storedAttachment);
                                     }
                                 }
+                                if ($attachmentSrc !== '') {
+                                    $attachmentExt = strtolower(pathinfo(parse_url($attachmentSrc, PHP_URL_PATH), PATHINFO_EXTENSION));
+                                }
                                 ?>
-                                <img id="jt_attach_preview" name="jt_attach_preview" src="<?php echo $attachmentSrc; ?>" class="img-thumbnail" alt="Attachment Preview">
+                                <div id="jt_attach_preview_wrap" class="attachment-preview-media"<?php echo $attachmentSrc === '' ? ' style="display:none;"' : ''; ?>>
+                                    <?php if ($attachmentSrc !== '') { ?>
+                                        <?php if ($attachmentExt === 'pdf') { ?>
+                                            <iframe id="jt_attach_preview_pdf" src="<?php echo htmlspecialchars($attachmentSrc, ENT_QUOTES, 'UTF-8'); ?>" title="Attachment Preview"></iframe>
+                                        <?php } else { ?>
+                                            <img id="jt_attach_preview" name="jt_attach_preview" src="<?php echo htmlspecialchars($attachmentSrc, ENT_QUOTES, 'UTF-8'); ?>" class="img-thumbnail" alt="Attachment Preview">
+                                        <?php } ?>
+                                    <?php } ?>
+                                </div>
                                 <input type="hidden" name="jt_attachmentValue" id="jt_attachmentValue" value="<?php if (isset($dataExisted) && isset($row['attachment']) && !isset($jt_attach)) {
                                                                                                                     echo $row['attachment'];
                                                                                                                 } else if (isset($jt_attach)) {

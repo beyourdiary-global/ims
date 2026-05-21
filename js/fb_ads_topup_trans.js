@@ -6,8 +6,36 @@ setButtonColor();
 setAutofocus(action);
 preloader(300, action);
 
+function renderFatAttachmentPreview(file) {
+    var previewWrap = document.getElementById("fat_attach_preview_wrap");
+    if (!previewWrap) {
+        return;
+    }
+
+    if (!file) {
+        previewWrap.innerHTML = "";
+        previewWrap.style.display = "none";
+        return;
+    }
+
+    var fileUrl = URL.createObjectURL(file);
+    var fileName = (file.name || "").toLowerCase();
+    previewWrap.style.display = "block";
+
+    if (file.type && file.type.indexOf("image/") === 0) {
+        previewWrap.innerHTML =
+            '<img id="fat_attach_preview" src="' + fileUrl + '" class="img-thumbnail" alt="Attachment Preview">';
+    } else if (file.type === "application/pdf" || fileName.endsWith(".pdf")) {
+        previewWrap.innerHTML =
+            '<iframe id="fat_attach_preview_pdf" src="' + fileUrl + '" title="Attachment Preview"></iframe>';
+    } else {
+        previewWrap.innerHTML = "";
+        previewWrap.style.display = "none";
+    }
+}
+
 $('#fat_attach').on('change', function() {
-    previewImage(this, 'fat_attach_preview')
+    renderFatAttachmentPreview(this.files && this.files[0] ? this.files[0] : null);
 })
 
 //autocomplete

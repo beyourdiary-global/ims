@@ -5359,6 +5359,10 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
 
         $updateSql = "UPDATE `" . SHOPEE_SG_ORDER_REQ . "` SET " . implode(', ', $assignments) . " WHERE id = " . $orderId . " LIMIT 1";
         if (!mysqli_query($financeConnect, $updateSql)) {
+            if ($targetStatus === 'TP' && trim((string) (isset($orderRow['airbill_no']) ? $orderRow['airbill_no'] : '')) === '') {
+                return array('success' => false, 'message' => 'Airbill is required when Order Status is To Pack.');
+            }
+
             return array('success' => false, 'message' => 'Unable to update order status.');
         }
 

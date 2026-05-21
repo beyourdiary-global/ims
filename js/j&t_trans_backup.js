@@ -1,5 +1,37 @@
+function renderJtAttachmentPreview(file) {
+  var previewWrap = document.getElementById("jt_attach_preview_wrap");
+  if (!previewWrap) {
+    return;
+  }
+
+  if (!file) {
+    previewWrap.innerHTML = "";
+    previewWrap.style.display = "none";
+    return;
+  }
+
+  var fileUrl = URL.createObjectURL(file);
+  var fileName = (file.name || "").toLowerCase();
+  previewWrap.style.display = "block";
+
+  if (file.type && file.type.indexOf("image/") === 0) {
+    previewWrap.innerHTML =
+      '<img id="jt_attach_preview" src="' +
+      fileUrl +
+      '" class="img-thumbnail" alt="Attachment Preview">';
+  } else if (file.type === "application/pdf" || fileName.endsWith(".pdf")) {
+    previewWrap.innerHTML =
+      '<iframe id="jt_attach_preview_pdf" src="' +
+      fileUrl +
+      '" title="Attachment Preview"></iframe>';
+  } else {
+    previewWrap.innerHTML = "";
+    previewWrap.style.display = "none";
+  }
+}
+
 $("#jt_attach").on("change", function () {
-  previewImage(this, "jt_attach_preview");
+  renderJtAttachmentPreview(this.files && this.files[0] ? this.files[0] : null);
 });
 
 function toNum(value) {

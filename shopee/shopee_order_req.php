@@ -27,6 +27,7 @@ $sorAirbillAttachmentPath = img_server . 'shopee_airbill_attachment/';
 $sorAirbillAttachmentUrl = rtrim((string) $SITEURL, '/') . '/' . trim((string) $sorAirbillAttachmentPath, '/\\') . '/';
 $sorLocalTelegramFailureMessage = '';
 $sorIsLiveSite = isset($siteOrlocalMode) ? (bool) $siteOrlocalMode : true;
+$sorIsAjaxRequest = isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
 $sorBuildLocalTelegramFailureMessage = function ($notifyResult) use ($sorIsLiveSite) {
     if ($sorIsLiveSite || !is_array($notifyResult) || !empty($notifyResult['sent'])) {
         return '';
@@ -177,6 +178,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
 
 if (post('updateStatusBtn')) {
     $newStatus = post('updateStatusBtn');
+    $statusUpdateFallbackMessage = $newStatus === 'TP'
+        ? 'Airbill is required when Order Status is To Pack.'
+        : 'Unable to update order status.';
     $transitionResult = shopeeOmsExecuteTransition($connect, $finance_connect, (int) $dataID, $newStatus, array(
         'actor_user_id' => USER_ID,
         'actor_user_group_id' => USER_GROUP,
@@ -213,11 +217,30 @@ if (post('updateStatusBtn')) {
             'act_msg'      => USER_NAME . " updated Shopee order #" . (int) $dataID . " from " . htmlspecialchars($oldStatus, ENT_QUOTES, 'UTF-8') . " to " . htmlspecialchars($newStatusCode, ENT_QUOTES, 'UTF-8') . ".",
         ];
         audit_log($log);
+        if ($sorIsAjaxRequest) {
+            header('Content-Type: application/json');
+            echo json_encode(array(
+                'success' => true,
+                'message' => (string) $transitionResult['message'],
+                'redirect_url' => (string) $redirect_page,
+            ));
+            exit;
+        }
+
         echo '<script>alert("' . addslashes($transitionResult['message']) . '"); window.location.replace("' . $redirect_page . '");</script>';
         exit;
     }
 
-    echo '<script>alert("' . addslashes(isset($transitionResult['message']) ? $transitionResult['message'] : 'Unable to update order status.') . '");</script>';
+    if ($sorIsAjaxRequest) {
+        header('Content-Type: application/json');
+        echo json_encode(array(
+            'success' => false,
+            'message' => (string) (isset($transitionResult['message']) ? $transitionResult['message'] : $statusUpdateFallbackMessage),
+        ));
+        exit;
+    }
+
+    echo '<script>alert("' . addslashes(isset($transitionResult['message']) ? $transitionResult['message'] : $statusUpdateFallbackMessage) . '");</script>';
 }
 
 if (post('returnActionBtn')) {
@@ -1172,6 +1195,53 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
             color: #dc3545;
         }
 
+        .shopee-airbill-preview-media {
+            width: 100%;
+            max-width: 520px;
+        }
+
+        .shopee-airbill-preview-media img,
+        .shopee-airbill-preview-media iframe {
+            width: 100%;
+            border: 1px solid #d9e2ef;
+            border-radius: 10px;
+            background: #fff;
+        }
+
+        .shopee-airbill-preview-media img {
+            height: auto;
+            display: block;
+        }
+
+        .shopee-airbill-preview-media iframe {
+            min-height: 520px;
+        }
+
+        .shopee-airbill-current-attachment {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0 4px;
+            max-width: 100%;
+        }
+
+        .shopee-airbill-current-attachment-value {
+            min-width: 0;
+            overflow-wrap: anywhere;
+            word-break: break-word;
+        }
+
+        @media (max-width: 767px) {
+            .shopee-airbill-current-attachment {
+                display: block;
+            }
+
+            .shopee-airbill-current-attachment-label,
+            .shopee-airbill-current-attachment-value {
+                display: block;
+                max-width: 100%;
+            }
+        }
+
     </style>
 </head>
 
@@ -1584,8 +1654,9 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                             <small id="sor_airbill_extract_status" class="shopee-airbill-extract-status"></small>
                             <?php if (isset($row['airbill_attachment']) && $row['airbill_attachment']) { ?>
                                 <div id="err_msg">
-                                    <span class="mt-n1">
-                                        <?php echo "Current Attachment: " . htmlspecialchars($row['airbill_attachment']); ?>
+                                    <span class="mt-n1 shopee-airbill-current-attachment">
+                                        <span class="shopee-airbill-current-attachment-label">Current Attachment:</span>
+                                        <span class="shopee-airbill-current-attachment-value"><?php echo htmlspecialchars($row['airbill_attachment']); ?></span>
                                     </span>
                                 </div>
                             <?php } ?>
@@ -1621,8 +1692,30 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                                     }
                                 }
                                 ?>
-                                <img id="sor_airbill_attachment_preview" name="sor_airbill_attachment_preview" src="<?php echo $sorAirbillAttachmentSrc; ?>" class="img-thumbnail" alt="Airbill Attachment Preview">
-                                <input type="hidden" name="sor_airbill_attachment_value" id="sor_airbill_attachment_value" value="<?php if (isset($row['airbill_attachment'])) echo htmlspecialchars($row['airbill_attachment']); ?>">
+                                                                <?php
+                                $sorAirbillAttachmentExt = '';
+                                if ($sorAirbillAttachmentSrc !== '') {
+                                    $sorAirbillAttachmentExt = strtolower(pathinfo(parse_url($sorAirbillAttachmentSrc, PHP_URL_PATH), PATHINFO_EXTENSION));
+                                }
+                                ?>
+
+                                <?php if ($sorAirbillAttachmentSrc !== '') { ?>
+                                    <div id="sor_airbill_attachment_preview_wrap" class="shopee-airbill-preview-media">
+                                        <?php if (in_array($sorAirbillAttachmentExt, array('png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'), true)) { ?>
+                                            <img id="sor_airbill_attachment_preview_img"
+                                                 src="<?php echo htmlspecialchars($sorAirbillAttachmentSrc, ENT_QUOTES, 'UTF-8'); ?>"
+                                                 alt="Airbill Attachment Preview">
+                                        <?php } else if ($sorAirbillAttachmentExt === 'pdf') { ?>
+                                            <iframe id="sor_airbill_attachment_preview_pdf"
+                                                    src="<?php echo htmlspecialchars($sorAirbillAttachmentSrc, ENT_QUOTES, 'UTF-8'); ?>"
+                                                    title="Airbill Attachment Preview"></iframe>
+                                        <?php } ?>
+                                    </div>
+                                <?php } else { ?>
+                                    <div id="sor_airbill_attachment_preview_wrap" class="shopee-airbill-preview-media" style="display:none;"></div>
+                                <?php } ?>
+
+                                <input type="hidden" name="sor_airbill_attachment_value" id="sor_airbill_attachment_value" value="<?php if (isset($row['airbill_attachment'])) echo htmlspecialchars($row['airbill_attachment'], ENT_QUOTES, 'UTF-8'); ?>">
                             </div>
                         </div>
                     </div>
@@ -2226,6 +2319,149 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
     }
     ?>
     <script>
+        function ensureShopeeOrderReqActionPopup() {
+            var popupElement = document.getElementById('shopeeOrderReqActionPopup');
+            if (popupElement) {
+                return popupElement;
+            }
+
+            var popupWrap = document.createElement('div');
+            popupWrap.innerHTML =
+                '<div class="modal fade" id="shopeeOrderReqActionPopup" tabindex="-1" aria-hidden="true">' +
+                    '<div class="modal-dialog modal-dialog-centered" style="font-family:\'Segoe UI\', Tahoma, Geneva, Verdana, sans-serif;">' +
+                        '<div class="modal-content">' +
+                            '<div class="modal-body fs-6 mt-3">' +
+                                '<p id="shopeeOrderReqActionPopupTitle" style="text-align:center; font-weight:bold; font-size:25px; margin-bottom:0;"></p>' +
+                            '</div>' +
+                            '<div class="modal-footer d-flex justify-content-center mt-n3" style="border-top:0px;">' +
+                                '<button type="button" class="btn" data-bs-dismiss="modal" style="border:1px solid #FF9B44; background-color:#FFFFFF; color:#FF9B44; box-shadow:0 0 !important; border-radius:24px; text-transform:none;">Continue</button>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>';
+            document.body.appendChild(popupWrap.firstChild);
+
+            return document.getElementById('shopeeOrderReqActionPopup');
+        }
+
+        function showShopeeOrderReqPopupMessage(message, onClose) {
+            var popupMessage = String(message || '').trim();
+            if (!popupMessage) {
+                return;
+            }
+
+            if (typeof bootstrap === 'undefined' || !bootstrap.Modal) {
+                window.alert(popupMessage);
+                if (typeof onClose === 'function') {
+                    onClose();
+                }
+                return;
+            }
+
+            var popupElement = ensureShopeeOrderReqActionPopup();
+            if (!popupElement) {
+                window.alert(popupMessage);
+                if (typeof onClose === 'function') {
+                    onClose();
+                }
+                return;
+            }
+
+            var titleNode = document.getElementById('shopeeOrderReqActionPopupTitle');
+            if (titleNode) {
+                titleNode.textContent = popupMessage;
+            }
+
+            var popupModal = bootstrap.Modal.getOrCreateInstance(popupElement, {
+                keyboard: false,
+                backdrop: 'static'
+            });
+
+            if (typeof onClose === 'function') {
+                var handleHidden = function () {
+                    popupElement.removeEventListener('hidden.bs.modal', handleHidden);
+                    onClose();
+                };
+                popupElement.addEventListener('hidden.bs.modal', handleHidden);
+            }
+
+            popupModal.show();
+        }
+
+        function bindShopeeOrderReqStatusButtons() {
+            var form = document.getElementById('FORForm');
+            if (!form || typeof window.fetch !== 'function') {
+                return;
+            }
+
+            var statusButtons = form.querySelectorAll('button[name="updateStatusBtn"]');
+            if (!statusButtons.length) {
+                return;
+            }
+
+            statusButtons.forEach(function (button) {
+                button.addEventListener('click', function (event) {
+                    event.preventDefault();
+
+                    if (button.disabled) {
+                        return;
+                    }
+
+                    var fallbackMessage = button.value === 'TP'
+                        ? 'Airbill is required when Order Status is To Pack.'
+                        : 'Unable to update order status.';
+
+                    var formData = new FormData(form);
+                    formData.set('updateStatusBtn', button.value);
+
+                    statusButtons.forEach(function (statusButton) {
+                        statusButton.disabled = true;
+                    });
+
+                    fetch(window.location.href, {
+                        method: 'POST',
+                        body: formData,
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        credentials: 'same-origin'
+                    })
+                        .then(function (response) {
+                            return response.text().then(function (text) {
+                                try {
+                                    return JSON.parse(text);
+                                } catch (error) {
+                                    return {
+                                        success: false,
+                                        message: fallbackMessage
+                                    };
+                                }
+                            });
+                        })
+                        .then(function (result) {
+                            if (result && result.success) {
+                                showShopeeOrderReqPopupMessage(result.message || 'Order status updated successfully.', function () {
+                                    if (result.redirect_url) {
+                                        window.location.href = result.redirect_url;
+                                    }
+                                });
+                                return;
+                            }
+
+                            showShopeeOrderReqPopupMessage(result && result.message ? result.message : fallbackMessage);
+                        })
+                        .catch(function () {
+                            showShopeeOrderReqPopupMessage(fallbackMessage);
+                        })
+                        .finally(function () {
+                            statusButtons.forEach(function (statusButton) {
+                                statusButton.disabled = false;
+                            });
+                        });
+                });
+            });
+        }
+
         function toggleAirbillFields() {
             var updateAirbill = document.getElementById('sor_update_airbill');
             var updateAirbillToggle = document.getElementById('sor_update_airbill_toggle');
@@ -2275,6 +2511,37 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
 
         document.addEventListener('DOMContentLoaded', function () {
             toggleAirbillFields();
+            bindShopeeOrderReqStatusButtons();
+
+            var airbillFileInput = document.getElementById('sor_airbill_attachment');
+            var airbillPreviewWrap = document.getElementById('sor_airbill_attachment_preview_wrap');
+
+            if (airbillFileInput && airbillPreviewWrap) {
+                airbillFileInput.addEventListener('change', function () {
+                    var file = airbillFileInput.files && airbillFileInput.files[0] ? airbillFileInput.files[0] : null;
+
+                    if (!file) {
+                        return;
+                    }
+
+                    var fileUrl = URL.createObjectURL(file);
+                    var fileName = file.name.toLowerCase();
+
+                    airbillPreviewWrap.style.display = 'block';
+
+                    if (file.type.indexOf('image/') === 0) {
+                        airbillPreviewWrap.innerHTML =
+                            '<img id="sor_airbill_attachment_preview_img" src="' + fileUrl + '" alt="Airbill Attachment Preview">';
+                    } else if (file.type === 'application/pdf' || fileName.endsWith('.pdf')) {
+                        airbillPreviewWrap.innerHTML =
+                            '<iframe id="sor_airbill_attachment_preview_pdf" src="' + fileUrl + '" title="Airbill Attachment Preview"></iframe>';
+                    } else {
+                        airbillPreviewWrap.innerHTML = '';
+                        airbillPreviewWrap.style.display = 'none';
+                    }
+                });
+            }
+
             if (window.shopeeOmsAirbillPdfAutofill) {
                 window.shopeeOmsAirbillPdfAutofill.bind({
                     fileInputSelector: '#sor_airbill_attachment',

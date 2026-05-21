@@ -72,6 +72,12 @@ $estimatedDateMax = $estimatedDateToday->modify('+10 days')->format('Y-m-d');
 $num = $default_currency_id = 1; 
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceivedDateBtn')) {
+    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
+        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+        exit;
+    }
+
     if (!$canAssignEstimatedReceivedDate) {
         echo "<script>alert('Security Error: You do not have permission to assign Estimate Received Dates.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
         exit;
@@ -706,7 +712,7 @@ if ($result instanceof mysqli_result) {
                                 <?php } ?>
                                 </td>
                                 <td scope="row"><?= getOrderStatusLabel($row['order_status']) ?></td>
-                                <td scope="row"><?= $row['estimated_received_date'] ?? '' ?></td>
+                                <td scope="row"><?= isset($row['estimated_received_date']) ? htmlspecialchars((string) $row['estimated_received_date'], ENT_QUOTES, 'UTF-8') : '' ?></td>
                                 <td scope="row"><?= $acc['name'] ?? '' ?></td>
                                 <td scope="row"><?= $curr['unit'] ?? '' ?></td>
                                 <td scope="row"><?= $row['orderID'] ?? '' ?></td>
@@ -778,6 +784,7 @@ if ($result instanceof mysqli_result) {
     <div id="estimatedReceivedDateModal" class="estimated-date-modal" onclick="if (event.target === this) closeEstimatedReceivedDateModal();">
         <div class="estimated-date-modal__dialog">
             <form method="post" action="">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
                 <div class="d-flex justify-content-between align-items-start mb-3">
                     <h5 class="mb-0" id="estimatedReceivedDateTitle">Assign Estimate Received Date</h5>
                     <button type="button" class="btn btn-sm btn-light px-2 estimated-date-modal__close-btn" onclick="closeEstimatedReceivedDateModal()" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
