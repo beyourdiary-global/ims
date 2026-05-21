@@ -2515,16 +2515,29 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
 
             var airbillFileInput = document.getElementById('sor_airbill_attachment');
             var airbillPreviewWrap = document.getElementById('sor_airbill_attachment_preview_wrap');
+            var currentAirbillPreviewUrl = null;
 
             if (airbillFileInput && airbillPreviewWrap) {
+                var clearAirbillPreviewObjectUrl = function () {
+                    if (currentAirbillPreviewUrl) {
+                        URL.revokeObjectURL(currentAirbillPreviewUrl);
+                        currentAirbillPreviewUrl = null;
+                    }
+                };
+
                 airbillFileInput.addEventListener('change', function () {
                     var file = airbillFileInput.files && airbillFileInput.files[0] ? airbillFileInput.files[0] : null;
 
                     if (!file) {
+                        clearAirbillPreviewObjectUrl();
+                        airbillPreviewWrap.innerHTML = '';
+                        airbillPreviewWrap.style.display = 'none';
                         return;
                     }
 
+                    clearAirbillPreviewObjectUrl();
                     var fileUrl = URL.createObjectURL(file);
+                    currentAirbillPreviewUrl = fileUrl;
                     var fileName = file.name.toLowerCase();
 
                     airbillPreviewWrap.style.display = 'block';
@@ -2536,10 +2549,13 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                         airbillPreviewWrap.innerHTML =
                             '<iframe id="sor_airbill_attachment_preview_pdf" src="' + fileUrl + '" title="Airbill Attachment Preview"></iframe>';
                     } else {
+                        clearAirbillPreviewObjectUrl();
                         airbillPreviewWrap.innerHTML = '';
                         airbillPreviewWrap.style.display = 'none';
                     }
                 });
+
+                window.addEventListener('beforeunload', clearAirbillPreviewObjectUrl);
             }
 
             if (window.shopeeOmsAirbillPdfAutofill) {

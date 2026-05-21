@@ -1,3 +1,12 @@
+var currentJtAttachmentPreviewUrl = null;
+
+function clearJtAttachmentPreviewObjectUrl() {
+  if (currentJtAttachmentPreviewUrl) {
+    URL.revokeObjectURL(currentJtAttachmentPreviewUrl);
+    currentJtAttachmentPreviewUrl = null;
+  }
+}
+
 function renderJtAttachmentPreview(file) {
   var previewWrap = document.getElementById("jt_attach_preview_wrap");
   if (!previewWrap) {
@@ -5,12 +14,15 @@ function renderJtAttachmentPreview(file) {
   }
 
   if (!file) {
+    clearJtAttachmentPreviewObjectUrl();
     previewWrap.innerHTML = "";
     previewWrap.style.display = "none";
     return;
   }
 
+  clearJtAttachmentPreviewObjectUrl();
   var fileUrl = URL.createObjectURL(file);
+  currentJtAttachmentPreviewUrl = fileUrl;
   var fileName = (file.name || "").toLowerCase();
   previewWrap.style.display = "block";
 
@@ -25,6 +37,7 @@ function renderJtAttachmentPreview(file) {
       fileUrl +
       '" title="Attachment Preview"></iframe>';
   } else {
+    clearJtAttachmentPreviewObjectUrl();
     previewWrap.innerHTML = "";
     previewWrap.style.display = "none";
   }
@@ -33,6 +46,8 @@ function renderJtAttachmentPreview(file) {
 $("#jt_attach").on("change", function () {
   renderJtAttachmentPreview(this.files && this.files[0] ? this.files[0] : null);
 });
+
+window.addEventListener("beforeunload", clearJtAttachmentPreviewObjectUrl);
 
 function toNum(value) {
   var n = parseFloat(value);

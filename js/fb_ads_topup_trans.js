@@ -6,6 +6,15 @@ setButtonColor();
 setAutofocus(action);
 preloader(300, action);
 
+var currentFatAttachmentPreviewUrl = null;
+
+function clearFatAttachmentPreviewObjectUrl() {
+    if (currentFatAttachmentPreviewUrl) {
+        URL.revokeObjectURL(currentFatAttachmentPreviewUrl);
+        currentFatAttachmentPreviewUrl = null;
+    }
+}
+
 function renderFatAttachmentPreview(file) {
     var previewWrap = document.getElementById("fat_attach_preview_wrap");
     if (!previewWrap) {
@@ -13,12 +22,15 @@ function renderFatAttachmentPreview(file) {
     }
 
     if (!file) {
+        clearFatAttachmentPreviewObjectUrl();
         previewWrap.innerHTML = "";
         previewWrap.style.display = "none";
         return;
     }
 
+    clearFatAttachmentPreviewObjectUrl();
     var fileUrl = URL.createObjectURL(file);
+    currentFatAttachmentPreviewUrl = fileUrl;
     var fileName = (file.name || "").toLowerCase();
     previewWrap.style.display = "block";
 
@@ -29,6 +41,7 @@ function renderFatAttachmentPreview(file) {
         previewWrap.innerHTML =
             '<iframe id="fat_attach_preview_pdf" src="' + fileUrl + '" title="Attachment Preview"></iframe>';
     } else {
+        clearFatAttachmentPreviewObjectUrl();
         previewWrap.innerHTML = "";
         previewWrap.style.display = "none";
     }
@@ -37,6 +50,8 @@ function renderFatAttachmentPreview(file) {
 $('#fat_attach').on('change', function() {
     renderFatAttachmentPreview(this.files && this.files[0] ? this.files[0] : null);
 })
+
+window.addEventListener("beforeunload", clearFatAttachmentPreviewObjectUrl);
 
 //autocomplete
 $(document).ready(function() {
