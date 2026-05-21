@@ -690,7 +690,7 @@ if ($isViewMode && $dataID > 0 && isset($orderById[$dataID])) {
 
         #stockInItemTable td.autocomplete {
             position: relative;
-            overflow: visible;
+            overflow: visible !important;
         }
 
         #stockInItemTable td.autocomplete .searchResult {
@@ -701,11 +701,6 @@ if ($isViewMode && $dataID > 0 && isset($orderById[$dataID])) {
             background: #ffffff;
             border: 1px solid #333333;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
-        }
-
-        #stockInItemTable td.autocomplete {
-            position: relative;
-            overflow: visible !important;
         }
 
         #stockInForm .table-responsive,

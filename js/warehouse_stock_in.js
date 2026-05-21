@@ -85,15 +85,23 @@ function bindRow(row) {
   productName.dataset.bound = "1";
   productName.setAttribute("autocomplete", "off");
 
-  productName.addEventListener("keyup", function () {
+  var productSearchTimer = null;
+
+  function triggerProductSearch() {
     productId.value = "";
+
     if (
-      typeof searchInput === "function" &&
-      productName.id &&
-      productId.id &&
-      !productName.hasAttribute("readonly") &&
-      !productName.hasAttribute("disabled")
+      typeof searchInput !== "function" ||
+      !productName.id ||
+      !productId.id ||
+      productName.hasAttribute("readonly") ||
+      productName.hasAttribute("disabled")
     ) {
+      return;
+    }
+
+    clearTimeout(productSearchTimer);
+    productSearchTimer = setTimeout(function () {
       searchInput(
         {
           search: productName.value,
@@ -104,6 +112,7 @@ function bindRow(row) {
         },
         siteUrl,
       );
+
       setTimeout(function () {
         positionSearchList(productName.id);
       }, 0);
@@ -115,12 +124,11 @@ function bindRow(row) {
       setTimeout(function () {
         positionSearchList(productName.id);
       }, 300);
-    }
-  });
+    }, 150);
+  }
 
-  productName.addEventListener("input", function () {
-    productId.value = "";
-  });
+  productName.addEventListener("keyup", triggerProductSearch);
+  productName.addEventListener("input", triggerProductSearch);
 
   productName.addEventListener("change", function () {
     var byName = productByName[norm(productName.value)] || null;

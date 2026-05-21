@@ -37,7 +37,7 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && !isset($_GET['verify_id'])) {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET') {
     audit_log(array(
         'log_act' => 'view',
         'page' => $pageTitle,
@@ -111,13 +111,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceiv
     exit;
 }
 
-if (isset($_GET['verify_id'])) {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['verify_id'])) {
+    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
+        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('shopee_verify.php');</script>";
+        exit;
+    }
+    
     if (!$canVerifyAction) {
         echo "<script>alert('Security Error: You do not have permission to verify orders.'); location.replace('shopee_verify.php');</script>";
         exit;
     }
 
-    $orderId = intval($_GET['verify_id']);
+    $orderId = intval($_POST['verify_id']);
 
     $oldStatus = '';
     $orderCode = '';
@@ -683,7 +689,11 @@ if ($result instanceof mysqli_result) {
                                 ?>
 
                                 <?php if (in_array($statusCode, array('OC', 'WAFC'), true) && $canVerifyAction && $canVerifyThisOrder) { ?>
-                                <a href="?verify_id=<?= $row['id'] ?>" class="btn btn-sm btn-success btn-verified" onclick="return confirm('Mark this order as verified?')">Verified</a>
+                                <form method="post" class="d-inline" onsubmit="return confirm('Mark this order as verified?')">
+                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
+                                    <input type="hidden" name="verify_id" value="<?= (int) $row['id'] ?>">
+                                    <button type="submit" class="btn btn-sm btn-success btn-verified">Verified</button>
+                                </form>
                                 <?php } ?>
                                 <?php if (in_array($statusCode, array('SP', 'WAERD', 'WR', 'PR', 'WAFC', 'V', 'C'), true)) { ?>
                                  <form method="post" class="d-inline" onsubmit="return confirm('Mark this order as Return?')">
