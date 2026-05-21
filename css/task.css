@@ -2341,6 +2341,7 @@ body.task-board-page .task-board-scroll {
 .task-composer-controls-right {
   display: flex;
   align-items: center;
+  align-self: center;
 }
 
 .task-composer-controls .dropdown-menu {
@@ -2432,12 +2433,13 @@ body.task-board-page .task-board-scroll {
   background: #e8f0ff;
   color: #27476a;
   border-radius: 6px;
-  width: 36px;
-  height: 36px;
+  width: 34px;
+  height: 34px;
   padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  font-size: 0.85rem;
 }
 
 .task-create-item-btn:disabled {
