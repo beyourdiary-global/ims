@@ -2775,10 +2775,14 @@ if (!function_exists('customerLabelRenderBadge')) {
         }
 
         $badgeColor = isset($labelMeta['colorCode']) && trim((string) $labelMeta['colorCode']) !== '' ? (string) $labelMeta['colorCode'] : '#6c757d';
-        return '<span class="d-inline-flex align-items-center ms-1 px-2 py-1 rounded-pill text-white" style="background-color:' .
-            htmlspecialchars($badgeColor, ENT_QUOTES, 'UTF-8') .
-            ';font-size:13px;line-height:1;">' .
+        return '<span class="d-inline-flex align-items-center ms-1 px-2 py-1 rounded-pill text-white" title="' .
             htmlspecialchars($labelName, ENT_QUOTES, 'UTF-8') .
+            '" style="background-color:' .
+            htmlspecialchars($badgeColor, ENT_QUOTES, 'UTF-8') .
+            ';font-size:13px;line-height:1;flex-wrap:nowrap;white-space:nowrap;max-width:100%;">' .
+            '<span style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' .
+            htmlspecialchars($labelName, ENT_QUOTES, 'UTF-8') .
+            '</span>' .
             '</span>';
     }
 }
