@@ -1222,6 +1222,28 @@ function sorAttachmentUrl($relativePath, $siteUrl)
             align-items: center;
             cursor: pointer;
         }
+
+        .sor-copy-btn {
+            min-width: 42px;
+            border-radius: 8px !important;
+            border: 1px solid #2f67d8;
+            background: linear-gradient(180deg, #4f86eb 0%, #2f67d8 100%);
+            color: #fff;
+            transition: all .2s ease;
+            box-shadow: 0 2px 6px rgba(47, 103, 216, .25);
+        }
+
+        .sor-copy-btn:hover,
+        .sor-copy-btn:focus {
+            transform: translateY(-1px);
+            box-shadow: 0 5px 12px rgba(47, 103, 216, .35);
+            color: #fff;
+        }
+
+        .sor-copy-btn i {
+            font-size: 16px;
+            line-height: 1;
+        }
     </style>
 </head>
 <body>
@@ -1275,7 +1297,7 @@ function sorAttachmentUrl($relativePath, $siteUrl)
                                         <label class="form-label form_lbl">Encrypted Order Link</label>
                                         <div class="input-group mb-2">
                                             <input type="text" class="form-control" id="sorOrderLink" value="<?= sorEcho($orderLink) ?>" readonly>
-                                            <button type="button" class="btn btn-sm btn-rounded btn-primary" id="copyOrderLinkBtn">Copy Link</button>
+                                            <button type="button" class="btn sor-copy-btn" id="copyOrderLinkBtn" title="Copy Link" aria-label="Copy Link"><i class="fa-regular fa-copy"></i></button>
                                         </div>
                                         <a class="btn btn-sm btn-rounded btn-primary me-2" href="<?= sorEcho(sorQrSrc($qrWebPath, $SITEURL)) ?>" download>Download QR</a>
                                         <a class="btn btn-sm btn-rounded btn-primary" id="openOrderLinkBtn" href="<?= sorEcho($orderLink) ?>" target="_blank">Open Order Link</a>

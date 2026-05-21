@@ -32,10 +32,19 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
     audit_log($log);
 }
 
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
 $statusMessage = '';
 $statusClass = 'success';
 
 if (post('scanOrderBtn')) {
+    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
+        $statusClass = 'danger';
+        $statusMessage = 'Invalid session token. Please refresh the page and try again.';
+    } else {
     $scanValue = trim((string) postSpaceFilter('scan_value'));
     $scanToken = '';
     if ($scanValue !== '' && preg_match('/[?&]t=([^&]+)/', $scanValue, $matches)) {
@@ -70,6 +79,7 @@ if (post('scanOrderBtn')) {
         $scanResult = shopeeOmsProcessWarehouseScanByToken($connect, $finance_connect, $scanToken, USER_ID, USER_GROUP, $pageTitle);
         $statusClass = !empty($scanResult['success']) ? 'success' : 'danger';
         $statusMessage = isset($scanResult['message']) ? (string) $scanResult['message'] : 'Unable to process warehouse scan.';
+    }
     }
 }
 
@@ -131,6 +141,7 @@ if (!empty($orderRows)) {
 
         <div class="card p-3 mb-4">
             <form method="post" class="row g-3 align-items-end" id="waitingToPackScanForm">
+                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
                 <div class="col-12 col-md-9">
                     <label class="form-label" for="scan_value">Scan Input</label>
                     <input class="form-control" type="text" id="scan_value" name="scan_value" placeholder="Paste warehouse token, stock-out link, or Order ID">
@@ -205,19 +216,45 @@ if (!empty($orderRows)) {
             const modelResult = document.createElement('div');
             modelResult.id = 'waiting-to-pack-status-modal';
             modelResult.className = 'modal fade';
-            modelResult.innerHTML = `
-                <div class="modal-dialog modal-dialog-centered" style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
-                    <div class="modal-content">
-                        <div class="modal-body fs-6 mt-3">
-                            <p style="text-align:center; font-weight:bold; font-size:25px;">${message}</p>
-                        </div>
-                        <div class="modal-footer d-flex justify-content-center mt-n3" style="border-top:0px">
-                            <button id="waitingToPackContinueBtn" type="button" class="btn"
-                                style="border:1px solid #FF9B44; background-color:#FFFFFF; color:#FF9B44; box-shadow:0 0 !important; border-radius:24px; text-transform:none;">Continue</button>
-                        </div>
-                    </div>
-                </div>
-            `;
+
+            const dialog = document.createElement('div');
+            dialog.className = 'modal-dialog modal-dialog-centered';
+            dialog.style.fontFamily = "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif";
+
+            const content = document.createElement('div');
+            content.className = 'modal-content';
+
+            const body = document.createElement('div');
+            body.className = 'modal-body fs-6 mt-3';
+
+            const text = document.createElement('p');
+            text.style.textAlign = 'center';
+            text.style.fontWeight = 'bold';
+            text.style.fontSize = '25px';
+            text.textContent = String(message || '');
+            body.appendChild(text);
+
+            const footer = document.createElement('div');
+            footer.className = 'modal-footer d-flex justify-content-center mt-n3';
+            footer.style.borderTop = '0px';
+
+            const continueButton = document.createElement('button');
+            continueButton.id = 'waitingToPackContinueBtn';
+            continueButton.type = 'button';
+            continueButton.className = 'btn';
+            continueButton.style.border = '1px solid #FF9B44';
+            continueButton.style.backgroundColor = '#FFFFFF';
+            continueButton.style.color = '#FF9B44';
+            continueButton.style.setProperty('box-shadow', '0 0', 'important');
+            continueButton.style.borderRadius = '24px';
+            continueButton.style.textTransform = 'none';
+            continueButton.textContent = 'Continue';
+            footer.appendChild(continueButton);
+
+            content.appendChild(body);
+            content.appendChild(footer);
+            dialog.appendChild(content);
+            modelResult.appendChild(dialog);
             document.body.appendChild(modelResult);
 
             const popup = new bootstrap.Modal(modelResult, {

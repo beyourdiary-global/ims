@@ -650,6 +650,7 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
                 $previewData['buyer'] = isset($existingBuyerRow['id']) ? (int) $existingBuyerRow['id'] : '';
             } else {
                 $buyerPic = (int) $previewData['pic'];
+                $buyerUsernameForLog = trim((string) $previewData['buyer_name']);
 
                 $buyerBrand = 'NULL';
                 $brandParts = array_filter(array_map('trim', explode(',', (string) $previewData['brand'])));
@@ -663,7 +664,24 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
                     ('$safeBuyerUsername', '$buyerPic', $buyerBrand, '" . USER_ID . "', curdate(), curtime(), 'A')";
 
                 if (mysqli_query($finance_connect, $insertBuyerSql)) {
-                    $previewData['buyer'] = mysqli_insert_id($finance_connect);
+                    $newBuyerId = mysqli_insert_id($finance_connect);
+                    $previewData['buyer'] = $newBuyerId;
+
+                    $safeBuyerUsernameForLog = htmlspecialchars($buyerUsernameForLog, ENT_QUOTES, 'UTF-8');
+                    $buyerAuditLog = [
+                        'log_act' => 'Add',
+                        'cdate' => $cdate,
+                        'ctime' => $ctime,
+                        'uid' => USER_ID,
+                        'cby' => USER_ID,
+                        'query_rec' => $insertBuyerSql,
+                        'query_table' => SHOPEE_CUST_INFO,
+                        'newval' => 'buyer_username=' . $buyerUsernameForLog,
+                        'act_msg' => USER_NAME . " add the data [ <b> ID = " . (int) $newBuyerId . " </b> ] to <b><i>" . SHOPEE_CUST_INFO . " Table</i></b> for imported buyer username <b>" . $safeBuyerUsernameForLog . "</b>.",
+                        'page' => $pageTitle,
+                        'connect' => $connect,
+                    ];
+                    audit_log($buyerAuditLog);
                 } else {
                     $importErrors[] = 'Failed to auto create Shopee Buyer Username: ' . mysqli_error($finance_connect);
                 }
@@ -3480,7 +3498,19 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                                 <input type="hidden" id="buyer_hidden" name="buyer_hidden" value="<?= htmlspecialchars(isset($previewData['buyer']) ? (string) $previewData['buyer'] : '') ?>">
                                             </div>
                                             <?php if (!empty($previewData['source_buyer_username'])) { ?>
-                                                <small class="text-muted">Detected: <?= htmlspecialchars($previewData['source_buyer_username']) ?></small>
+                                                <?php $detectedBuyerMissingInDb = empty($previewData['buyer']); ?>
+                                                <div class="d-inline-flex align-items-center gap-2 mt-1">
+                                                    <small class="text-muted mb-0">Detected: <?= htmlspecialchars($previewData['source_buyer_username']) ?><?= $detectedBuyerMissingInDb ? ' (Not in database)' : '' ?></small>
+                                                    <button
+                                                        type="button"
+                                                        class="btn btn-outline-secondary btn-sm py-0 px-2"
+                                                        id="use_detected_buyer_btn"
+                                                        data-detected-buyer="<?= htmlspecialchars((string) $previewData['source_buyer_username'], ENT_QUOTES, 'UTF-8') ?>"
+                                                        title="Use detected buyer name"
+                                                        aria-label="Use detected buyer name">
+                                                        <i class="fa-solid fa-arrow-right"></i>
+                                                    </button>
+                                                </div>
                                             <?php } ?>
                                         </div>
                                         <div class="col-12 col-md-4">
@@ -3873,6 +3903,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
     }
 
     var buyerInput = previewForm.querySelector('#buyer');
+    var useDetectedBuyerBtn = previewForm.querySelector('#use_detected_buyer_btn');
     if (buyerInput) {
         buyerInput.addEventListener('keyup', function () {
             var buyerHidden = previewForm.querySelector('#buyer_hidden');
@@ -3931,6 +3962,21 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
         });
 
         syncBuyerHiddenField();
+    }
+
+    if (buyerInput && useDetectedBuyerBtn) {
+        useDetectedBuyerBtn.addEventListener('click', function () {
+            var detectedBuyer = String(useDetectedBuyerBtn.getAttribute('data-detected-buyer') || '').trim();
+            if (detectedBuyer === '') {
+                return;
+            }
+
+            buyerInput.value = detectedBuyer;
+            syncBuyerHiddenField();
+            clearBuyerAutocompleteBox();
+            clearInlineError(buyerInput);
+            buyerInput.focus();
+        });
     }
 
         var airbillAttachmentInput = previewForm.querySelector('#airbill_attachment');

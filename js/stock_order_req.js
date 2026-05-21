@@ -1112,6 +1112,8 @@
     var orderLinkInput = document.getElementById("sorOrderLink");
     if (copyBtn && orderLinkInput) {
       copyBtn.addEventListener("click", function () {
+        var originalIcon = copyBtn.innerHTML;
+        var doneIcon = '<i class="fa-solid fa-check"></i>';
         if (navigator.clipboard && navigator.clipboard.writeText) {
           navigator.clipboard.writeText(orderLinkInput.value);
         } else {
@@ -1119,6 +1121,13 @@
           orderLinkInput.select();
           document.execCommand("copy");
         }
+
+        copyBtn.innerHTML = doneIcon;
+        copyBtn.setAttribute("title", "Copied");
+        setTimeout(function () {
+          copyBtn.innerHTML = originalIcon;
+          copyBtn.setAttribute("title", "Copy Link");
+        }, 1200);
       });
     }
 

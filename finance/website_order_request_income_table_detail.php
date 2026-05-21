@@ -218,7 +218,17 @@ $estimatedDateToday = new DateTimeImmutable('today');
 $estimatedDateMin = $estimatedDateToday->modify('+1 day')->format('Y-m-d');
 $estimatedDateMax = $estimatedDateToday->modify('+10 days')->format('Y-m-d');
 
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceivedDateBtn')) {
+    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
+        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+        exit;
+    }
+
     if (!$canAssignEstimatedReceivedDate) {
         echo "<script>alert('Security Error: You do not have permission to assign Estimate Received Dates.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
         exit;
@@ -431,7 +441,7 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
                                 <?php } ?>
                                 </td>
                                 <td scope="row"><?= getMarketplaceRequestStatusLabel(isset($row['order_status']) ? $row['order_status'] : '') ?></td>
-                                <td scope="row"><?= !empty($row['estimated_received_date']) ? $row['estimated_received_date'] : '' ?></td>
+                                <td scope="row"><?= !empty($row['estimated_received_date']) ? htmlspecialchars((string) $row['estimated_received_date'], ENT_QUOTES, 'UTF-8') : '' ?></td>
                                 <td scope="row">
                                     <?= $row['order_id'] ?? '' ?>
                                 </td>
@@ -551,6 +561,7 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
             </button>
         </div>
         <form method="post">
+            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
             <input type="hidden" name="estimated_received_order_id" id="estimated_received_order_id" value="">
             <div class="mb-3">
                 <label class="form-label" for="estimated_received_date">Estimate Received Date</label>
