@@ -245,7 +245,7 @@ if (!empty($orderRows)) {
             continueButton.style.border = '1px solid #FF9B44';
             continueButton.style.backgroundColor = '#FFFFFF';
             continueButton.style.color = '#FF9B44';
-            continueButton.style.boxShadow = '0 0 !important';
+            continueButton.style.setProperty('box-shadow', '0 0', 'important');
             continueButton.style.borderRadius = '24px';
             continueButton.style.textTransform = 'none';
             continueButton.textContent = 'Continue';
