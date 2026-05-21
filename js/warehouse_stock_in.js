@@ -32,38 +32,6 @@ function clearSearchList(elementId) {
   if (clear) clear.remove();
 }
 
-function positionSearchList(elementId) {
-  if (!elementId) return;
-
-  var input = document.getElementById(elementId);
-  var result = document.getElementById("searchResult_" + elementId);
-
-  if (!input || !result) {
-    return;
-  }
-
-  var inputRect = input.getBoundingClientRect();
-  var viewportHeight =
-    window.innerHeight || document.documentElement.clientHeight || 0;
-
-  var resultHeight = result.offsetHeight || 0;
-  var spaceBelow = viewportHeight - inputRect.bottom;
-  var spaceAbove = inputRect.top;
-
-  result.style.left = "0";
-  result.style.right = "0";
-  result.style.width = "100%";
-  result.style.zIndex = "9999";
-
-  if (resultHeight > 0 && spaceBelow < resultHeight + 20 && spaceAbove > spaceBelow) {
-    result.style.top = "auto";
-    result.style.bottom = "calc(100% + 4px)";
-  } else {
-    result.style.top = "calc(100% + 4px)";
-    result.style.bottom = "auto";
-  }
-}
-
 function syncRowLookupIds(row, idx) {
   var productName = row.querySelector(".product_name");
   var productId = row.querySelector(".product_id");
@@ -85,8 +53,6 @@ function bindRow(row) {
   productName.dataset.bound = "1";
   productName.setAttribute("autocomplete", "off");
 
-  var productSearchTimer = null;
-
   function triggerProductSearch() {
     productId.value = "";
 
@@ -100,35 +66,19 @@ function bindRow(row) {
       return;
     }
 
-    clearTimeout(productSearchTimer);
-    productSearchTimer = setTimeout(function () {
-      searchInput(
-        {
-          search: productName.value,
-          searchType: "name",
-          elementID: productName.id,
-          hiddenElementID: productId.id,
-          dbTable: "product",
-        },
-        siteUrl,
-      );
-
-      setTimeout(function () {
-        positionSearchList(productName.id);
-      }, 0);
-
-      setTimeout(function () {
-        positionSearchList(productName.id);
-      }, 150);
-
-      setTimeout(function () {
-        positionSearchList(productName.id);
-      }, 300);
-    }, 150);
+    searchInput(
+      {
+        search: productName.value,
+        searchType: "name",
+        elementID: productName.id,
+        hiddenElementID: productId.id,
+        dbTable: "product",
+      },
+      siteUrl,
+    );
   }
 
   productName.addEventListener("keyup", triggerProductSearch);
-  productName.addEventListener("input", triggerProductSearch);
 
   productName.addEventListener("change", function () {
     var byName = productByName[norm(productName.value)] || null;
@@ -188,7 +138,7 @@ function AddStockInRow() {
   var tr = document.createElement("tr");
   tr.innerHTML =
     '<td class="row-no"></td>' +
-    '<td class="autocomplete"><input type="text" class="form-control product_name" name="product_name[]" placeholder="Type Product" required autocomplete="off"><input type="hidden" name="product_id[]" class="product_id" value=""></td>' +
+    '<td><div class="autocomplete stock-in-product-autocomplete"><input type="text" class="form-control product_name" name="product_name[]" placeholder="Type Product" required autocomplete="off"><input type="hidden" name="product_id[]" class="product_id" value=""></div></td>' +
     '<td><input class="form-control" type="number" name="product_quantity[]" min="1" value="" required></td>' +
     '<td class="row-action-cell" style="text-align:center;"></td>';
 
@@ -230,14 +180,6 @@ document.querySelectorAll("#stockInItemBody tr").forEach(function (row) {
 });
 reindexRows();
 updateRowActionButtons();
-
-window.addEventListener("resize", function () {
-  document.querySelectorAll(".product_name").forEach(function (input) {
-    if (input && input.id) {
-      positionSearchList(input.id);
-    }
-  });
-});
 
 function setFieldError(input, message) {
   if (!input) return;

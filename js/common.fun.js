@@ -1722,6 +1722,43 @@ function dropdownMenuDispFix() {
 }
 
 //autocomplete
+function ensureAutocompleteResultShell(elementID) {
+  var $input = $("#" + elementID);
+  if (!$input.length) {
+    return;
+  }
+
+  var resultId = "searchResult_" + elementID;
+  var clearId = "clear_" + elementID;
+  var $wrapper = $input.closest(".autocomplete");
+
+  if (!$wrapper.length) {
+    $wrapper = $input.parent();
+  }
+
+  if (!$("#" + resultId).length) {
+    $wrapper.append(
+      '<ul class="searchResult" id="' + resultId + '"></ul>',
+      '<div id="' + clearId + '" class="clear"></div>',
+    );
+  } else if ($("#" + resultId).parent().get(0) !== $wrapper.get(0)) {
+    $("#" + resultId).appendTo($wrapper);
+    $("#" + clearId).appendTo($wrapper);
+  }
+}
+
+function positionAutocompleteResult(elementID) {
+  var input = document.getElementById(elementID);
+  var result = document.getElementById("searchResult_" + elementID);
+  if (!input || !result) {
+    return;
+  }
+
+  result.style.left = input.offsetLeft + "px";
+  result.style.top = input.offsetTop + input.offsetHeight + 4 + "px";
+  result.style.width = input.offsetWidth + "px";
+}
+
 function searchInput(param, siteURL) {
   var elementID = param["elementID"];
   var hiddenElementID = param["hiddenElementID"];
@@ -1745,21 +1782,11 @@ function searchInput(param, siteURL) {
       dataType: "json",
       success: (result) => {
         // console.log(result);
-        if (
-          !(
-            ($("#searchResult_" + elementID).length &&
-              $("#clear_" + elementID).length) > 0
-          )
-        )
-          $("#" + elementID).after(
-            '<ul class="searchResult" id="searchResult_' +
-              elementID +
-              '"></ul>',
-            '<div id="clear_' + elementID + '" class="clear"></div>',
-          );
+        ensureAutocompleteResultShell(elementID);
 
         // set width same as input
         setWidth(elementID, "searchResult_" + elementID);
+        positionAutocompleteResult(elementID);
 
         var dataArr = [];
 
@@ -1833,21 +1860,11 @@ function searchInput2(param, siteURL) {
       dataType: "json",
       success: (result) => {
         // create div
-        if (
-          !(
-            ($("#searchResult_" + elementID).length &&
-              $("#clear_" + elementID).length) > 0
-          )
-        )
-          $("#" + elementID).after(
-            '<ul class="searchResult" id="searchResult_' +
-              elementID +
-              '"></ul>',
-            '<div id="clear_' + elementID + '" class="clear"></div>',
-          );
+        ensureAutocompleteResultShell(elementID);
 
         // set width same as input
         setWidth(elementID, "searchResult_" + elementID);
+        positionAutocompleteResult(elementID);
 
         var dataArr = [];
 

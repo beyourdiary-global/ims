@@ -70,6 +70,39 @@ dropdownMenuDispFix();
     $("#clear_" + inputId).remove();
   }
 
+  function ensureWarehouseSearchShell(input) {
+    var $input = $(input);
+    var inputId = input.id;
+    var $wrapper = $input.closest(".autocomplete");
+
+    if (!$wrapper.length) {
+      $wrapper = $input.parent();
+    }
+
+    if (!$("#searchResult_" + inputId).length) {
+      $wrapper.append(
+        '<ul class="searchResult" id="searchResult_' + inputId + '"></ul>',
+        '<div id="clear_' + inputId + '" class="clear"></div>',
+      );
+    } else if (
+      $("#searchResult_" + inputId).parent().get(0) !== $wrapper.get(0)
+    ) {
+      $("#searchResult_" + inputId).appendTo($wrapper);
+      $("#clear_" + inputId).appendTo($wrapper);
+    }
+  }
+
+  function positionWarehouseSearchUI(input) {
+    var result = document.getElementById("searchResult_" + input.id);
+    if (!result) {
+      return;
+    }
+
+    result.style.left = input.offsetLeft + "px";
+    result.style.top = input.offsetTop + input.offsetHeight + 4 + "px";
+    result.style.width = input.offsetWidth + "px";
+  }
+
   function showWarehouseSearchUI(input) {
     var inputId = input.id;
     clearWarehouseSearchUI(inputId);
@@ -94,19 +127,10 @@ dropdownMenuDispFix();
       matches.push("<i>No result</i>");
     }
 
-    if (
-      !(
-        ($("#searchResult_" + inputId).length &&
-          $("#clear_" + inputId).length) > 0
-      )
-    ) {
-      $("#" + inputId).after(
-        '<ul class="searchResult" id="searchResult_' + inputId + '"></ul>',
-        '<div id="clear_' + inputId + '" class="clear"></div>',
-      );
-    }
+    ensureWarehouseSearchShell(input);
 
     setWidth(inputId, "searchResult_" + inputId);
+    positionWarehouseSearchUI(input);
 
     $("#searchResult_" + inputId).empty();
     matches.forEach(function (match) {
