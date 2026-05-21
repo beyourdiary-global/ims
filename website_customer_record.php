@@ -1,10 +1,14 @@
 <?php
+ob_start();
+
 $currentPagePin = 84;
 $pageTitle = "Website Customer Record (Deals)";
 
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
+include_once ROOT . '/include/customer_tag.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
+$pinAccess = checkCurrentPin($connect, $pageTitle);
 include_once ROOT . '/include/user_record_log.php';
 
 $tblName = WEB_CUST_RCD;
@@ -74,6 +78,20 @@ if ($dataID && isset($_GET['open_order_id'])) {
         }
     }
 }
+
+$websiteCustomerTagPlatform = 'website';
+$websiteCustomerTagCustomerId = (isset($row['id']) ? (int) $row['id'] : 0);
+$websiteCustomerTagDisplayName = isset($row['name']) ? trim((string) $row['name']) : '';
+$websiteCustomerTagDraftToken = customerTagResolveDraftToken($act);
+$websiteCustomerFreshAddPage = ($act === 'I' && strtoupper((string) $_SERVER['REQUEST_METHOD']) === 'GET' && !customerTagIsAjaxRequest());
+customerTagResetDraftOnFreshAddPage($websiteCustomerTagPlatform, $act, $websiteCustomerTagDraftToken);
+$websiteCustomerTagState = array();
+if ($websiteCustomerFreshAddPage) {
+    customerTagClearDraftTags($websiteCustomerTagPlatform, $websiteCustomerTagDraftToken);
+}
+$websiteCustomerTagState = customerTagHandlePost($connect, $websiteCustomerTagPlatform, $websiteCustomerTagCustomerId, $pageTitle, $websiteCustomerTagDisplayName, $websiteCustomerTagDraftToken);
+$websiteCustomerActiveTags = $websiteCustomerFreshAddPage ? array() : customerTagGetDisplayTags($connect, $websiteCustomerTagPlatform, $websiteCustomerTagCustomerId, $websiteCustomerTagDraftToken);
+$websiteCustomerDraftTagIds = customerTagExtractTagIds($websiteCustomerActiveTags);
 
 $series_list_result = getData('*', '', '', BRD_SERIES, $connect);
 
@@ -213,8 +231,15 @@ if (post('actionBtn')) {
                     $query = "INSERT INTO " . $tblName . "(cust_id,name,contact,cust_email,cust_birthday,sales_pic,country,brand,series,ship_rec_name,ship_rec_add,ship_rec_contact,remark,create_by,create_date,create_time) VALUES ('$wcr_cust_id','$wcr_name','$wcr_ctc','$wcr_cust_email','$wcr_cust_birthday','$wcr_pic','$wcr_country','$wcr_brand','$wcr_series','$wcr_rec_name','$wcr_rec_add','$wcr_rec_ctc','$wcr_remark','" . USER_ID . "',curdate(),curtime())";
                     // Execute the query
                     $returnData = mysqli_query($connect, $query);
-                    
-                    $_SESSION['tempValConfirmBox'] = true;
+                    if ($returnData) {
+                        $dataID = $connect->insert_id;
+                        customerTagApplyDraftTagsToCustomer($connect, $websiteCustomerTagPlatform, $dataID, $pageTitle, $wcr_name, customerTagGetPostedDraftTagIds(), $websiteCustomerTagDraftToken);
+                        $_SESSION['tempValConfirmBox'] = true;
+                    } else {
+                        $errorMsg = mysqli_error($connect);
+                        $err1 = "Failed to add record: " . $errorMsg;
+                        $act = "F";
+                    }
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
                     $act = "F";
@@ -428,12 +453,18 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         <div id="formContainer" class="container d-flex justify-content-center">
             <div class="col-6 col-md-6 formWidthAdjust">
                 <form id="FORForm" method="post" action="" enctype="multipart/form-data">
+                    <input type="hidden" name="customerTagDraftIds" class="customer-tag-draft-input" data-platform="<?= htmlspecialchars($websiteCustomerTagPlatform, ENT_QUOTES, 'UTF-8') ?>" value="<?= htmlspecialchars(implode(',', $websiteCustomerDraftTagIds), ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="customerTagDraftToken" value="<?= htmlspecialchars($websiteCustomerTagDraftToken, ENT_QUOTES, 'UTF-8') ?>">
                     <div class="form-group mb-5">
-                        <h2>
-                            <?php
-                            echo displayPageAction($act, $pageTitle);
-                            ?>
-                        </h2>
+                        <?php $websiteCustomerPageActionTitle = displayPageAction($act, $pageTitle); ?>
+                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+                            <h2 class="mb-0 customer-tag-page-title" data-base-title="<?= htmlspecialchars($websiteCustomerPageActionTitle, ENT_QUOTES, 'UTF-8') ?>">
+                                <?php
+                                echo customerTagRenderTitle($websiteCustomerPageActionTitle, $websiteCustomerActiveTags);
+                                ?>
+                            </h2>
+                            <?php echo customerTagRenderManageButton($websiteCustomerTagPlatform, $websiteCustomerTagCustomerId, isActionAllowed('Edit', $pinAccess) && $act !== 'I'); ?>
+                        </div>
                     </div>
 
                     <div id="err_msg" class="mb-3">
@@ -884,7 +915,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                 }
                 ?>
 
-                <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
+                <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column mobile-sticky-form-actions-target">
                     <?php
                     switch ($act) {
                         case 'I':
@@ -913,6 +944,22 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         echo $clearLocalStorage;
         echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
     }
+    ?>
+    <?php
+    echo customerTagRenderManager(
+        $connect,
+        $websiteCustomerTagPlatform,
+        $websiteCustomerTagCustomerId,
+        $pageTitle,
+        $websiteCustomerTagDisplayName,
+        array(
+            'allow_manage' => isActionAllowed('Edit', $pinAccess) && $act !== 'I',
+            'ui_state' => $websiteCustomerTagState,
+            'active_tags' => $websiteCustomerActiveTags,
+            'reset_draft_on_load' => ($act === 'I' && strtoupper((string) $_SERVER['REQUEST_METHOD']) === 'GET'),
+            'draft_token' => $websiteCustomerTagDraftToken,
+        )
+    );
     ?>
     <script>
         var page = "<?= $pageTitle ?>";

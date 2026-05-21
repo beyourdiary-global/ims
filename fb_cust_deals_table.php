@@ -4,6 +4,7 @@ $currentPagePin = 75;
 $disablePinGroupPageTitleSync = true;
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+include_once ROOT . '/include/customer_tag.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);
@@ -15,6 +16,16 @@ $num = 1;   // numbering
 $redirect_page = $SITEURL . '/fb_cust_deals.php';
 $deleteRedirectPage = $SITEURL . '/fb_cust_deals_table.php';
 $result = getData('*', '', '', FB_CUST_DEALS, $connect);
+$tableRows = array();
+if ($result instanceof mysqli_result) {
+    while ($row = $result->fetch_assoc()) {
+        $tableRows[] = $row;
+    }
+}
+$customerLabelData = customerLabelPrepareCustomerRows($connect, 'facebook', $tableRows);
+$tableRows = isset($customerLabelData['rows']) ? $customerLabelData['rows'] : array();
+$customerLabelMap = isset($customerLabelData['label_map']) ? $customerLabelData['label_map'] : array();
+$customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag_map'] : array();
 ?>
 
 <!DOCTYPE html>
@@ -38,6 +49,29 @@ $result = getData('*', '', '', FB_CUST_DEALS, $connect);
         margin: 3px;
     }
     .btn-container {
+        white-space: nowrap;
+    }
+
+    .customer-tag-table-badge-group {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        margin-top: 0.35rem;
+        vertical-align: top;
+    }
+
+    .customer-tag-table-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.7rem;
+        border: 1px solid #cbd7f2;
+        border-radius: 999px;
+        background: #eef4ff;
+        color: #365a96;
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: inherit;
+        line-height: inherit;
         white-space: nowrap;
     }
 </style>
@@ -74,7 +108,7 @@ $result = getData('*', '', '', FB_CUST_DEALS, $connect);
                 </div>
             </div>
             <?php
-            if (!$result) {
+            if (empty($tableRows)) {
                 echo '<div class="text-center"><h4>No Result!</h4></div>';
             } else {
                 ?>
@@ -86,6 +120,7 @@ $result = getData('*', '', '', FB_CUST_DEALS, $connect);
                             <th scope="col">S/N</th>
                             <th scope="col" id="action_col">Action</th>
                             <th scope="col">Name</th>
+                            <th scope="col">Customer Label</th>
                             <th scope="col">Facebook Link</th>
                             <th scope="col">Contact</th>
                             <th scope="col">Sales Person In Charge</th>
@@ -101,7 +136,7 @@ $result = getData('*', '', '', FB_CUST_DEALS, $connect);
                         </tr>
                     </thead>
                     <tbody>
-                        <?php while ($row = $result->fetch_assoc()) {
+                        <?php foreach ($tableRows as $row) {
                             $pic_name = $country_name = $brand_name = $series_name = $fb_page_name = $channel_name = '';
 
                             $q1 = getData('name', "id='" . $row['sales_pic'] . "'", '', USR_USER, $connect);
@@ -161,8 +196,9 @@ $result = getData('*', '', '', FB_CUST_DEALS, $connect);
                         </td>
 
                                 <td scope="row">
-                                    <?= $row['name'] ?>
+                                    <?= customerLabelRenderNameCell(isset($row['name']) ? $row['name'] : '', isset($customerLabelMap[(int) $row['id']]) ? $customerLabelMap[(int) $row['id']] : array()) ?>
                                 </td>
+                                <td scope="row"><?= customerLabelRenderSummaryCell(isset($customerLabelMap[(int) $row['id']]) ? $customerLabelMap[(int) $row['id']] : array(), isset($customerTagMap[(int) $row['id']]) ? $customerTagMap[(int) $row['id']] : array()) ?></td>
                                 <td scope="row">
                                     <?= $row['fb_link'] ?>
                                 </td>
@@ -208,6 +244,7 @@ $result = getData('*', '', '', FB_CUST_DEALS, $connect);
                             <th scope="col">S/N</th>
                             <th scope="col" id="action_col">Action</th>
                             <th scope="col">Name</th>
+                            <th scope="col">Customer Label</th>
                             <th scope="col">Facebook Link</th>
                             <th scope="col">Contact</th>
                             <th scope="col">Sales Person In Charge</th>

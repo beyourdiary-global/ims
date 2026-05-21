@@ -673,6 +673,44 @@ if ($isViewMode && $dataID > 0 && isset($orderById[$dataID])) {
             font-weight: normal !important;
         }
 
+        #stockInForm .table-responsive {
+            overflow-x: auto;
+            overflow-y: visible;
+        }
+
+        #stockInItemTable {
+            overflow: visible;
+        }
+
+        #stockInItemTable td,
+        #stockInItemTable th,
+        #stockInItemBody tr {
+            overflow: visible;
+        }
+
+        #stockInItemTable td.autocomplete {
+            position: relative;
+            overflow: visible !important;
+        }
+
+        #stockInItemTable td.autocomplete .searchResult {
+            width: 100% !important;
+            max-height: none !important;
+            overflow-y: visible !important;
+            z-index: 9999 !important;
+            background: #ffffff;
+            border: 1px solid #333333;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+        }
+
+        #stockInForm .table-responsive,
+        #stockInItemTable,
+        #stockInItemTable tbody,
+        #stockInItemTable tr,
+        #stockInItemTable td {
+            overflow: visible !important;
+        }
+
         .si-attach-wrap {
             border: 1px solid #e2e2e2;
             border-radius: 8px;
@@ -835,8 +873,8 @@ if ($isViewMode && $dataID > 0 && isset($orderById[$dataID])) {
                                 <tr>
                                     <td class="row-no"><?= (int) ($idx + 1) ?></td>
                                     <td class="autocomplete">
-                                        <input type="text" class="form-control product_name" name="product_name[]" placeholder="Type Product" value="<?= siEsc($formRow['product_name']) ?>" required<?= $inputReadonlyAttr ?>>
-                                        <input type="hidden" name="product_id[]" class="product_id" value="<?= (int) $formRow['product_id'] ?>">
+                                        <input type="text" class="form-control product_name" id="product_name_<?= (int) $idx ?>" name="product_name[]" placeholder="Type Product" value="<?= siEsc($formRow['product_name']) ?>" required<?= $inputReadonlyAttr ?> autocomplete="off">
+                                        <input type="hidden" id="product_name_<?= (int) $idx ?>_hidden" name="product_id[]" class="product_id" value="<?= (int) $formRow['product_id'] ?>">
                                     </td>
                                     <td>
                                         <input class="form-control" type="number" name="product_quantity[]" min="1" value="<?= siEsc($formRow['product_quantity']) ?>" required<?= $inputReadonlyAttr ?>>
@@ -873,6 +911,7 @@ if ($isViewMode && $dataID > 0 && isset($orderById[$dataID])) {
 <script>
     var page = <?= json_encode($pageTitle) ?>;
     var action = <?= json_encode($act) ?>;
+    var stockInSiteUrl = <?= json_encode($SITEURL) ?>;
     checkCurrentPage(page, action);
     dropdownMenuDispFix();
     setButtonColor();

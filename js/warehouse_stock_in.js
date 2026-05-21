@@ -5,6 +5,11 @@ function norm(v) {
     .trim();
 }
 
+var siteUrl =
+  typeof stockInSiteUrl !== "undefined"
+    ? String(stockInSiteUrl || "")
+    : window.location.origin;
+
 var productsJsonInput = document.getElementById("stockInProductsJson");
 var products = [];
 if (productsJsonInput && productsJsonInput.value) {
@@ -19,51 +24,57 @@ products.forEach(function (p) {
   productByName[norm(p.name)] = p;
 });
 
-function closeList(input) {
-  var listId = input.getAttribute("data-list-id");
-  if (!listId) return;
-  var el = document.getElementById(listId);
-  if (el) el.remove();
+function clearSearchList(elementId) {
+  if (!elementId) return;
+  var result = document.getElementById("searchResult_" + elementId);
+  if (result) result.remove();
+  var clear = document.getElementById("clear_" + elementId);
+  if (clear) clear.remove();
 }
 
-function renderList(input, hiddenInput, options) {
-  closeList(input);
-  var keyword = norm(input.value);
-  if (
-    keyword === "" ||
-    input.hasAttribute("readonly") ||
-    input.hasAttribute("disabled")
-  )
+function positionSearchList(elementId) {
+  if (!elementId) return;
+
+  var input = document.getElementById(elementId);
+  var result = document.getElementById("searchResult_" + elementId);
+
+  if (!input || !result) {
     return;
+  }
 
-  var filtered = (options || [])
-    .filter(function (opt) {
-      return norm(opt.name).indexOf(keyword) !== -1;
-    })
-    .slice(0, 20);
-  if (filtered.length === 0) return;
+  var inputRect = input.getBoundingClientRect();
+  var viewportHeight =
+    window.innerHeight || document.documentElement.clientHeight || 0;
 
-  var listId = "sr_" + (input.name || "x") + "_" + Date.now();
-  input.setAttribute("data-list-id", listId);
+  var resultHeight = result.offsetHeight || 0;
+  var spaceBelow = viewportHeight - inputRect.bottom;
+  var spaceAbove = inputRect.top;
 
-  var ul = document.createElement("ul");
-  ul.className = "searchResult";
-  ul.id = listId;
-  ul.style.width = input.offsetWidth + "px";
+  result.style.left = "0";
+  result.style.right = "0";
+  result.style.width = "100%";
+  result.style.zIndex = "9999";
 
-  filtered.forEach(function (opt) {
-    var li = document.createElement("li");
-    li.textContent = opt.name;
-    li.addEventListener("mousedown", function (e) {
-      e.preventDefault();
-      input.value = opt.name;
-      hiddenInput.value = String(opt.id);
-      closeList(input);
-    });
-    ul.appendChild(li);
-  });
+  if (resultHeight > 0 && spaceBelow < resultHeight + 20 && spaceAbove > spaceBelow) {
+    result.style.top = "auto";
+    result.style.bottom = "calc(100% + 4px)";
+  } else {
+    result.style.top = "calc(100% + 4px)";
+    result.style.bottom = "auto";
+  }
+}
 
-  input.after(ul);
+function syncRowLookupIds(row, idx) {
+  var productName = row.querySelector(".product_name");
+  var productId = row.querySelector(".product_id");
+  if (!productName || !productId) {
+    return;
+  }
+
+  var safeIdx = typeof idx === "number" ? idx : 0;
+  var baseId = "product_name_" + safeIdx;
+  productName.id = baseId;
+  productId.id = baseId + "_hidden";
 }
 
 function bindRow(row) {
@@ -72,21 +83,67 @@ function bindRow(row) {
   if (!productName || !productId || productName.dataset.bound === "1") return;
 
   productName.dataset.bound = "1";
+  productName.setAttribute("autocomplete", "off");
 
-  productName.addEventListener("input", function () {
+  var productSearchTimer = null;
+
+  function triggerProductSearch() {
     productId.value = "";
-    renderList(productName, productId, products);
-  });
+
+    if (
+      typeof searchInput !== "function" ||
+      !productName.id ||
+      !productId.id ||
+      productName.hasAttribute("readonly") ||
+      productName.hasAttribute("disabled")
+    ) {
+      return;
+    }
+
+    clearTimeout(productSearchTimer);
+    productSearchTimer = setTimeout(function () {
+      searchInput(
+        {
+          search: productName.value,
+          searchType: "name",
+          elementID: productName.id,
+          hiddenElementID: productId.id,
+          dbTable: "product",
+        },
+        siteUrl,
+      );
+
+      setTimeout(function () {
+        positionSearchList(productName.id);
+      }, 0);
+
+      setTimeout(function () {
+        positionSearchList(productName.id);
+      }, 150);
+
+      setTimeout(function () {
+        positionSearchList(productName.id);
+      }, 300);
+    }, 150);
+  }
+
+  productName.addEventListener("keyup", triggerProductSearch);
+  productName.addEventListener("input", triggerProductSearch);
 
   productName.addEventListener("change", function () {
     var byName = productByName[norm(productName.value)] || null;
     productId.value = byName ? String(byName.id) : "";
+    if (productName.value.trim() === "") {
+      clearSearchList(productName.id);
+    }
   });
 
   productName.addEventListener("blur", function () {
     setTimeout(function () {
-      closeList(productName);
-    }, 120);
+      clearSearchList(productName.id);
+      var byName = productByName[norm(productName.value)] || null;
+      productId.value = byName ? String(byName.id) : "";
+    }, 200);
   });
 }
 
@@ -94,6 +151,7 @@ function reindexRows() {
   document.querySelectorAll("#stockInItemBody tr").forEach(function (row, idx) {
     var no = row.querySelector(".row-no");
     if (no) no.textContent = String(idx + 1);
+    syncRowLookupIds(row, idx);
   });
 }
 
@@ -130,13 +188,13 @@ function AddStockInRow() {
   var tr = document.createElement("tr");
   tr.innerHTML =
     '<td class="row-no"></td>' +
-    '<td class="autocomplete"><input type="text" class="form-control product_name" name="product_name[]" placeholder="Type Product" required><input type="hidden" name="product_id[]" class="product_id" value=""></td>' +
+    '<td class="autocomplete"><input type="text" class="form-control product_name" name="product_name[]" placeholder="Type Product" required autocomplete="off"><input type="hidden" name="product_id[]" class="product_id" value=""></td>' +
     '<td><input class="form-control" type="number" name="product_quantity[]" min="1" value="" required></td>' +
     '<td class="row-action-cell" style="text-align:center;"></td>';
 
   tbody.appendChild(tr);
-  bindRow(tr);
   reindexRows();
+  bindRow(tr);
   updateRowActionButtons();
 }
 
@@ -170,7 +228,16 @@ function RemoveStockInRow(btn) {
 document.querySelectorAll("#stockInItemBody tr").forEach(function (row) {
   bindRow(row);
 });
+reindexRows();
 updateRowActionButtons();
+
+window.addEventListener("resize", function () {
+  document.querySelectorAll(".product_name").forEach(function (input) {
+    if (input && input.id) {
+      positionSearchList(input.id);
+    }
+  });
+});
 
 function setFieldError(input, message) {
   if (!input) return;

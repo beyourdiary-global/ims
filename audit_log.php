@@ -160,7 +160,10 @@ if (!$result) {
                         if (mysqli_num_rows($result) >= 1) {
 
                             while ($row = $result->fetch_assoc()) {
-                                $displayUsername = 'Public User Scanning Stock Order QR Code';
+                                $screenType = isset($row['screen_type']) ? trim((string) $row['screen_type']) : '';
+                                $displayUsername = ($screenType === 'Shopee Order QR Scan')
+                                    ? 'Public User Scanning Shopee Order QR Code'
+                                    : 'Public User Scanning Stock Order QR Code';
                                 $userId = isset($row['user_id']) ? trim((string) $row['user_id']) : '';
 
                                 if ($userId !== '') {
@@ -171,7 +174,7 @@ if (!$result) {
                                             $displayUsername = (string) $rowUser['username'];
                                         }
                                     } else {
-                                        $displayUsername = 'Public User Scanning Stock Order QR Code (' . htmlspecialchars($userId, ENT_QUOTES, 'UTF-8') . ')';
+                                        $displayUsername .= ' (' . htmlspecialchars($userId, ENT_QUOTES, 'UTF-8') . ')';
                                     }
                                 }
 

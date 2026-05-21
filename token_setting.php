@@ -7,9 +7,25 @@ include 'checkCurrentPagePin.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = TOKEN_SETT;
+$tokenSettingPageOptions = function_exists('shopeeOmsGetTokenSettingPageOptions')
+    ? shopeeOmsGetTokenSettingPageOptions()
+    : array(
+        'Shopee Order Request' => 'Shopee Order Request',
+        'Stock Order Request' => 'Stock Order Request',
+    );
 
 if (function_exists('isStatusFieldAvailable') && !isStatusFieldAvailable($tblName, $connect)) {
     @mysqli_query($connect, "ALTER TABLE `" . $tblName . "` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A'");
+}
+
+$tokenSettingPageUsedAvailable = false;
+$pageUsedColumnRst = @mysqli_query($connect, "SHOW COLUMNS FROM `" . $tblName . "` LIKE 'page_used'");
+if ($pageUsedColumnRst instanceof mysqli_result && $pageUsedColumnRst->num_rows > 0) {
+    $tokenSettingPageUsedAvailable = true;
+} else {
+    @mysqli_query($connect, "ALTER TABLE `" . $tblName . "` ADD COLUMN `page_used` VARCHAR(100) NOT NULL DEFAULT ''");
+    $pageUsedColumnRst = @mysqli_query($connect, "SHOW COLUMNS FROM `" . $tblName . "` LIKE 'page_used'");
+    $tokenSettingPageUsedAvailable = $pageUsedColumnRst instanceof mysqli_result && $pageUsedColumnRst->num_rows > 0;
 }
 
 $dataID = !empty(input('id')) ? input('id') : post('id');
@@ -86,7 +102,9 @@ if (post('actionBtn')) {
     switch ($action) {
         case 'addData':
         case 'updData':
+            $pageUsedErr = '';
             $currentDataName = postSpaceFilter('currentDataName');
+            $pageUsed = trim((string) postSpaceFilter('pageUsed'));
             $botToken = postSpaceFilter('botToken');
             $chatId = postSpaceFilter('chatId');
             $remark = postSpaceFilter('remark');
@@ -97,15 +115,30 @@ if (post('actionBtn')) {
                 break;
             }
 
+            if ($pageUsed === '') {
+                $pageUsedErr = 'Page Used is required.';
+                break;
+            }
+
+            if (!$tokenSettingPageUsedAvailable) {
+                $pageUsedErr = 'Page Used is not available on this deployment yet. Please update the Token Setting table schema first.';
+                break;
+            }
+
             if ($botToken === '') {
                 $err = 'Bot Token is required.';
                 break;
             }
 
-            // Escape the input before checking for duplicates to prevent SQL injection
-            $safeCurrentDataName = mysqli_real_escape_string($connect, $currentDataName);
-            if (isDuplicateRecord('name', $safeCurrentDataName, $tblName, $connect, $dataID)) {
+            // Pass raw values here because isDuplicateRecord() escapes internally.
+            if (isDuplicateRecord('name', $currentDataName, $tblName, $connect, $dataID)) {
                 $err = 'Duplicate record found for Token Setting name.';
+                break;
+            }
+
+            $safePageUsed = mysqli_real_escape_string($connect, $pageUsed);
+            if (isDuplicateRecord('page_used', $pageUsed, $tblName, $connect, $dataID)) {
+                $pageUsedErr = 'Duplicate record found for selected Page Used.';
                 break;
             }
 
@@ -114,15 +147,17 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     $newvalarr[] = $currentDataName;
+                    $newvalarr[] = $pageUsed;
                     $newvalarr[] = $botToken;
                     $datafield[] = 'name';
+                    $datafield[] = 'page used';
                     $datafield[] = 'bot_token';
 
                     $safeName = mysqli_real_escape_string($connect, $currentDataName);
                     $safeToken = mysqli_real_escape_string($connect, $botToken);
                     $safeChatId = mysqli_real_escape_string($connect, $chatId);
                     $safeRemark = mysqli_real_escape_string($connect, $remark);
-                    $query = "INSERT INTO " . $tblName . "(name,bot_token,chat_id,remark,create_by,create_date,create_time,update_by,update_date,update_time,status) VALUES ('$safeName','$safeToken','$safeChatId','$safeRemark','" . USER_ID . "',CURDATE(),CURTIME(),'" . USER_ID . "',CURDATE(),CURTIME(),'A')";
+                    $query = "INSERT INTO " . $tblName . "(name,page_used,bot_token,chat_id,remark,create_by,create_date,create_time,update_by,update_date,update_time,status) VALUES ('$safeName','$safePageUsed','$safeToken','$safeChatId','$safeRemark','" . USER_ID . "',CURDATE(),CURTIME(),'" . USER_ID . "',CURDATE(),CURTIME(),'A')";
                     $returnData = mysqli_query($connect, $query);
                     $dataID = $connect->insert_id;
                 } catch (Exception $e) {
@@ -135,6 +170,12 @@ if (post('actionBtn')) {
                         $oldvalarr[] = $row['name'];
                         $chgvalarr[] = $currentDataName;
                         $datafield[] = 'name';
+                    }
+
+                    if ((string) (isset($row['page_used']) ? $row['page_used'] : '') !== (string) $pageUsed) {
+                        $oldvalarr[] = (string) (isset($row['page_used']) ? $row['page_used'] : '');
+                        $chgvalarr[] = (string) $pageUsed;
+                        $datafield[] = 'page used';
                     }
 
                     if ((string) (isset($row['bot_token']) ? $row['bot_token'] : '') !== (string) $botToken) {
@@ -162,7 +203,7 @@ if (post('actionBtn')) {
                         $safeToken = mysqli_real_escape_string($connect, $botToken);
                         $safeChatId = mysqli_real_escape_string($connect, $chatId);
                         $safeRemark = mysqli_real_escape_string($connect, $remark);
-                        $query = "UPDATE " . $tblName . " SET name ='$safeName', bot_token='$safeToken', chat_id='$safeChatId', remark='$safeRemark', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id = '$dataID' AND status='A'";
+                        $query = "UPDATE " . $tblName . " SET name ='$safeName', page_used='$safePageUsed', bot_token='$safeToken', chat_id='$safeChatId', remark='$safeRemark', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id = '$dataID' AND status='A'";
                         $returnData = mysqli_query($connect, $query);
                     } else {
                         $act = 'NC';
@@ -271,7 +312,22 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 
                     <div class="form-group mb-3">
                         <label class="form-label" for="currentDataName">Name*</label>
-                        <input class="form-control" type="text" name="currentDataName" id="currentDataName" value="<?= isset($row['name']) ? htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') : '' ?>" <?= ($act == '') ? 'readonly' : '' ?> required autocomplete="off">
+                        <input class="form-control" type="text" name="currentDataName" id="currentDataName" value="<?= htmlspecialchars(isset($currentDataName) ? (string) $currentDataName : (isset($row['name']) ? (string) $row['name'] : ''), ENT_QUOTES, 'UTF-8') ?>" <?= ($act == '') ? 'readonly' : '' ?> required autocomplete="off">
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label class="form-label" for="pageUsed">Page Used*</label>
+                        <select class="form-select" name="pageUsed" id="pageUsed" <?= ($act == '') ? 'disabled' : '' ?> required>
+                            <option value="">Select Page Used</option>
+                            <?php
+                            $selectedPageUsed = isset($pageUsed) ? (string) $pageUsed : (isset($row['page_used']) ? (string) $row['page_used'] : '');
+                            foreach ($tokenSettingPageOptions as $optionValue => $optionLabel) { ?>
+                                <option value="<?= htmlspecialchars((string) $optionValue, ENT_QUOTES, 'UTF-8') ?>" <?= $selectedPageUsed === (string) $optionValue ? 'selected' : '' ?>><?= htmlspecialchars((string) $optionLabel, ENT_QUOTES, 'UTF-8') ?></option>
+                            <?php } ?>
+                        </select>
+                        <?php if (isset($pageUsedErr) && $pageUsedErr !== '') { ?>
+                            <div class="text-danger mt-1"><?= htmlspecialchars((string) $pageUsedErr, ENT_QUOTES, 'UTF-8') ?></div>
+                        <?php } ?>
                     </div>
 
                     <div class="form-group mb-3">
@@ -281,7 +337,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                 <i class="fa-solid fa-circle-info"></i>
                             </button>
                         </label>
-                        <input class="form-control" type="text" name="botToken" id="botToken" value="<?= isset($row['bot_token']) ? htmlspecialchars((string) $row['bot_token'], ENT_QUOTES, 'UTF-8') : '' ?>" <?= ($act == '') ? 'readonly' : '' ?> required autocomplete="off">
+                        <input class="form-control" type="text" name="botToken" id="botToken" value="<?= htmlspecialchars(isset($botToken) ? (string) $botToken : (isset($row['bot_token']) ? (string) $row['bot_token'] : ''), ENT_QUOTES, 'UTF-8') ?>" <?= ($act == '') ? 'readonly' : '' ?> required autocomplete="off">
                     </div>
 
                     <div class="form-group mb-3">
@@ -291,12 +347,12 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                 <i class="fa-solid fa-circle-info"></i>
                             </button>
                         </label>
-                        <input class="form-control" type="text" name="chatId" id="chatId" value="<?= isset($row['chat_id']) ? htmlspecialchars((string) $row['chat_id'], ENT_QUOTES, 'UTF-8') : '' ?>" <?= ($act == '') ? 'readonly' : '' ?> autocomplete="off" placeholder="e.g. -1001234567890">
+                        <input class="form-control" type="text" name="chatId" id="chatId" value="<?= htmlspecialchars(isset($chatId) ? (string) $chatId : (isset($row['chat_id']) ? (string) $row['chat_id'] : ''), ENT_QUOTES, 'UTF-8') ?>" <?= ($act == '') ? 'readonly' : '' ?> autocomplete="off" placeholder="e.g. -1001234567890">
                     </div>
 
                     <div class="form-group mb-3">
                         <label class="form-label" for="remark">Remark</label>
-                        <textarea class="form-control" name="remark" id="remark" rows="3" <?= ($act == '') ? 'readonly' : '' ?>><?= isset($row['remark']) ? htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') : '' ?></textarea>
+                        <textarea class="form-control" name="remark" id="remark" rows="3" <?= ($act == '') ? 'readonly' : '' ?>><?= htmlspecialchars(isset($remark) ? (string) $remark : (isset($row['remark']) ? (string) $row['remark'] : ''), ENT_QUOTES, 'UTF-8') ?></textarea>
                     </div>
                     <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
 
@@ -348,7 +404,12 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                     In the JSON response, find <code>message</code> -&gt; <code>chat</code> -&gt; <code>id</code>.<br>
                                     <img class="token-help-media mt-2" src="<?= $SITEURL ?>/images_server/token_setting_guide/chat_id_step2.png" alt="Telegram getUpdates response with chat id">
                                 </li>
-                                <li>Copy that numeric value (example: <code>1064420282</code>) and paste it into Chat ID.</li>
+                                <li>
+                                    For a group chat, add your bot into the Telegram group first, then check the same <code>message</code> -&gt; <code>chat</code> -&gt; <code>id</code> value.
+                                    Group chat IDs are usually negative numbers.<br>
+                                    <img class="token-help-media mt-2" src="<?= $SITEURL ?>/images_server/token_setting_guide/chat_id_step3.png" alt="Telegram group chat id example from getUpdates response">
+                                </li>
+                                <li>Copy that numeric value (example: <code>1064420282</code> or group chat <code>-5185979975</code>) and paste it into Chat ID.</li>
                             </ol>
                             <p class="mb-0">Reference: <a href="https://core.telegram.org/bots/api#getupdates" target="_blank" rel="noopener noreferrer">Telegram Bot API - getUpdates</a></p>
                         </div>

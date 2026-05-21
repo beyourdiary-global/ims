@@ -31,7 +31,7 @@ if (!($dataID) && !($act) || !isActionAllowed($pageAction, $pinAccess))
 $rst = getData('*', "id = '$dataID'", '', $tblName, $connect);
 
 //Checking Data Error When Retrieved From Database
-if (!$rst || !($row = $rst->fetch_assoc()) && $act != 'I') {
+if ($act != 'I' && (!$rst || !($row = $rst->fetch_assoc()))) {
     $errorExist = 1;
     // $_SESSION['tempValConfirmBox'] = true;
     $act = "F";
@@ -128,6 +128,11 @@ if (post('actionBtn')) {
 
                     $returnData = mysqli_query($connect, $query);
                     $dataID = $connect->insert_id;
+                    if ($returnData) {
+                        $act = 'I';
+                    } else {
+                        $act = 'F';
+                    }
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
                     $act = "F";
@@ -146,12 +151,12 @@ if (post('actionBtn')) {
                         array_push($datafield, 'colorCode');
                     }
 
-                    if ($row['box_from'] != $currentDataboxFrom) {
+                    if ($row['boxFrom'] != $currentDataboxFrom) {
                         array_push($oldvalarr, $row['boxFrom']);
                         array_push($chgvalarr, $currentDataboxFrom);
                     }
 
-                    if ($row['box_until'] != $currentDataboxUntil) {
+                    if ($row['boxUntil'] != $currentDataboxUntil) {
                         array_push($oldvalarr, $row['boxUntil']);
                         array_push($chgvalarr, $currentDataboxUntil);
                     }
@@ -172,6 +177,11 @@ if (post('actionBtn')) {
                     if ($oldvalarr && $chgvalarr) {
                         $query = "UPDATE " . $tblName . " SET name ='$currentDataName', colorCode = '$colorSegmentation' , boxFrom='$currentDataboxFrom', boxUntil='$currentDataboxUntil', brandSeries='$brandSeries', remark ='$dataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
                         $returnData = mysqli_query($connect, $query);
+                        if ($returnData) {
+                            $act = 'E';
+                        } else {
+                            $act = 'F';
+                        }
                     } else {
                         $act = 'NC';
                     }

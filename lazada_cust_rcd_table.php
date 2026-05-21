@@ -3,6 +3,7 @@ $pageTitle = "Lazada Customer Record (Deals)";
 $currentPagePin = 91;
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+include_once ROOT . '/include/customer_tag.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);
@@ -14,6 +15,16 @@ $num = 1;   // numbering
 $redirect_page = $SITEURL . '/lazada_cust_rcd.php';
 $deleteRedirectPage = $SITEURL . '/lazada_cust_rcd_table.php';
 $result = getData('*', '', '', LAZADA_CUST_RCD, $connect);
+$tableRows = array();
+if ($result instanceof mysqli_result) {
+    while ($row = $result->fetch_assoc()) {
+        $tableRows[] = $row;
+    }
+}
+$customerLabelData = customerLabelPrepareCustomerRows($connect, 'lazada', $tableRows);
+$tableRows = isset($customerLabelData['rows']) ? $customerLabelData['rows'] : array();
+$customerLabelMap = isset($customerLabelData['label_map']) ? $customerLabelData['label_map'] : array();
+$customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag_map'] : array();
 ?>
 
 <!DOCTYPE html>
@@ -37,6 +48,33 @@ $result = getData('*', '', '', LAZADA_CUST_RCD, $connect);
     }
 
     .btn-container {
+        white-space: nowrap;
+    }
+
+    .customer-name-label-cell {
+        white-space: nowrap;
+    }
+
+    .customer-tag-table-badge-group {
+        display: inline-flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        margin-top: 0.35rem;
+        vertical-align: top;
+    }
+
+    .customer-tag-table-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.25rem 0.7rem;
+        border: 1px solid #cbd7f2;
+        border-radius: 999px;
+        background: #eef4ff;
+        color: #365a96;
+        font-family: inherit;
+        font-size: 13px;
+        font-weight: inherit;
+        line-height: inherit;
         white-space: nowrap;
     }
 </style>
@@ -67,7 +105,7 @@ $result = getData('*', '', '', LAZADA_CUST_RCD, $connect);
                     </div>
             </div>
             <?php
-            if (!$result) {
+            if (empty($tableRows)) {
                 echo '<div class="text-center"><h4>No Result!</h4></div>';
             } else {
                 ?>
@@ -80,6 +118,7 @@ $result = getData('*', '', '', LAZADA_CUST_RCD, $connect);
                             <th scope="col" id="action_col">Action</th>
                             <th scope="col">Customer ID</th>
                             <th scope="col">Customer Name</th>
+                            <th scope="col">Customer Label</th>
                             <th scope="col">Customer Email</th>
                             <th scope="col">Customer Phone</th>
                             <th scope="col">Sales Person In Charge</th>
@@ -93,7 +132,7 @@ $result = getData('*', '', '', LAZADA_CUST_RCD, $connect);
                         </tr>
                     </thead>
                     <tbody>
-                        <?php while ($row = $result->fetch_assoc()) {
+                        <?php foreach ($tableRows as $row) {
                             $pic = null;
                             $country = null;
                             $brand = null;
@@ -156,9 +195,11 @@ $result = getData('*', '', '', LAZADA_CUST_RCD, $connect);
                                     <?= $row['lcr_id'] ?>
                                 </td>
 
-                                <td scope="row">
-                                    <?= $row['name'] ?>
+                                <td scope="row" class="customer-name-label-cell">
+                                    <?= customerLabelRenderNameCell(isset($row['name']) ? $row['name'] : '', isset($customerLabelMap[(int) $row['id']]) ? $customerLabelMap[(int) $row['id']] : array()) ?>
                                 </td>
+
+                                <td scope="row"><?= customerLabelRenderSummaryCell(isset($customerLabelMap[(int) $row['id']]) ? $customerLabelMap[(int) $row['id']] : array(), isset($customerTagMap[(int) $row['id']]) ? $customerTagMap[(int) $row['id']] : array()) ?></td>
 
                                 <td scope="row">
                                     <?= $row['email'] ?>
@@ -200,6 +241,7 @@ $result = getData('*', '', '', LAZADA_CUST_RCD, $connect);
                             <th scope="col" id="action_col">Action</th>
                             <th scope="col">Customer ID</th>
                             <th scope="col">Customer Name</th>
+                            <th scope="col">Customer Label</th>
                             <th scope="col">Customer Email</th>
                             <th scope="col">Customer Phone</th>
                             <th scope="col">Sales Person In Charge</th>

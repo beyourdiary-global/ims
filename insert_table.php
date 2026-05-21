@@ -31,136 +31,159 @@ if (!$conn->select_db($db_fin)) {
     die('Unable to select database `' . $db_fin . '`: ' . $conn->error);
 }
 
-// // ==========================================
-// // HELPER FUNCTIONS (FIXED)
-// // ==========================================
+// ==========================================
+// HELPER FUNCTIONS (FIXED)
+// ==========================================
 
-// function columnExists($conn, $dbName, $tableName, $columnName)
-// {
-//     $safeDb = $conn->real_escape_string($dbName);
-//     $safeTable = $conn->real_escape_string($tableName);
-//     $safeColumn = $conn->real_escape_string($columnName);
-//     $sql = "SELECT 1 FROM information_schema.columns WHERE table_schema='$safeDb' AND table_name='$safeTable' AND column_name='$safeColumn' LIMIT 1";
-//     $rst = $conn->query($sql);
-//     return ($rst && $rst->num_rows > 0);
-// }
+function columnExists($conn, $dbName, $tableName, $columnName)
+{
+    $safeDb = $conn->real_escape_string($dbName);
+    $safeTable = $conn->real_escape_string($tableName);
+    $safeColumn = $conn->real_escape_string($columnName);
+    $sql = "SELECT 1 FROM information_schema.columns WHERE table_schema='$safeDb' AND table_name='$safeTable' AND column_name='$safeColumn' LIMIT 1";
+    $rst = $conn->query($sql);
+    return ($rst && $rst->num_rows > 0);
+}
 
-// function addColumnIfMissing($conn, $dbName, $tableName, $columnName, $alterSql)
-// {
-//     if (!columnExists($conn, $dbName, $tableName, $columnName)) {
-//         if ($conn->query($alterSql)) {
-//             echo "<p style='color:blue;'>Added column `$columnName` to `$tableName`.</p>";
-//         } else {
-//             echo "<p style='color:red;'>Failed adding `$columnName` to `$tableName`: " . $conn->error . "</p>";
-//         }
-//     } else {
-//         echo "<p style='color:green;'>Verified column `$columnName` already exists in `$tableName`.</p>";
-//     }
-// }
+function addColumnIfMissing($conn, $dbName, $tableName, $columnName, $alterSql)
+{
+    if (!columnExists($conn, $dbName, $tableName, $columnName)) {
+        if ($conn->query($alterSql)) {
+            echo "<p style='color:blue;'>Added column `$columnName` to `$tableName`.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed adding `$columnName` to `$tableName`: " . $conn->error . "</p>";
+        }
+    } else {
+        echo "<p style='color:green;'>Verified column `$columnName` already exists in `$tableName`.</p>";
+    }
+}
 
-// function dropColumnIfExists($conn, $dbName, $tableName, $columnName, $alterSql)
-// {
-//     if (columnExists($conn, $dbName, $tableName, $columnName)) {
-//         if ($conn->query($alterSql)) {
-//             echo "<p style='color:blue;'>Dropped column `$columnName` from `$tableName`.</p>";
-//         } else {
-//             echo "<p style='color:red;'>Failed dropping `$columnName` from `$tableName`: " . $conn->error . "</p>";
-//         }
-//     } else {
-//         echo "<p style='color:green;'>Verified column `$columnName` is already removed from `$tableName`.</p>";
-//     }
-// }
+function dropColumnIfExists($conn, $dbName, $tableName, $columnName, $alterSql)
+{
+    if (columnExists($conn, $dbName, $tableName, $columnName)) {
+        if ($conn->query($alterSql)) {
+            echo "<p style='color:blue;'>Dropped column `$columnName` from `$tableName`.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed dropping `$columnName` from `$tableName`: " . $conn->error . "</p>";
+        }
+    } else {
+        echo "<p style='color:green;'>Verified column `$columnName` is already removed from `$tableName`.</p>";
+    }
+}
 
-// function alterColumnToVarcharIfInt($conn, $dbName, $tableName, $columnName, $varcharLen = 255)
-// {
-//     $safeDb = $conn->real_escape_string($dbName);
-//     $safeTable = $conn->real_escape_string($tableName);
-//     $safeColumn = $conn->real_escape_string($columnName);
-    
-//     // Explicitly select DATA_TYPE
-//     $sql = "SELECT DATA_TYPE FROM information_schema.columns WHERE table_schema='$safeDb' AND table_name='$safeTable' AND column_name='$safeColumn' LIMIT 1";
-//     $rst = $conn->query($sql);
+function alterColumnToVarcharIfInt($conn, $dbName, $tableName, $columnName, $varcharLen = 255)
+{
+    $safeDb = $conn->real_escape_string($dbName);
+    $safeTable = $conn->real_escape_string($tableName);
+    $safeColumn = $conn->real_escape_string($columnName);
 
-//     if (!$rst || $rst->num_rows === 0) {
-//         echo "<p style='color:orange;'>Column `$columnName` not found in `$tableName` to alter.</p>";
-//         return;
-//     }
+    $sql = "SELECT DATA_TYPE FROM information_schema.columns WHERE table_schema='$safeDb' AND table_name='$safeTable' AND column_name='$safeColumn' LIMIT 1";
+    $rst = $conn->query($sql);
 
-//     $row = $rst->fetch_assoc();
-//     if ($row) {
-//         $row = array_change_key_case($row, CASE_LOWER);
-//     }
-    
-//     if (isset($row['data_type'])) {
-//         $dataType = strtolower((string) $row['data_type']);
-//         if (strpos($dataType, 'int') !== false) {
-//             $alterSql = "ALTER TABLE `$tableName` MODIFY COLUMN `$columnName` VARCHAR(" . (int) $varcharLen . ") NULL";
-//             if ($conn->query($alterSql)) {
-//                 echo "<p style='color:blue;'>Updated `$tableName`.`$columnName` to VARCHAR(" . (int) $varcharLen . ").</p>";
-//             } else {
-//                 echo "<p style='color:red;'>Failed updating `$tableName`.`$columnName`: " . $conn->error . "</p>";
-//             }
-//         } else {
-//             echo "<p style='color:green;'>Verified `$tableName`.`$columnName` is already non-integer ($dataType).</p>";
-//         }
-//     }
-// }
+    if (!$rst || $rst->num_rows === 0) {
+        echo "<p style='color:orange;'>Column `$columnName` not found in `$tableName` to alter.</p>";
+        return;
+    }
 
-// function alterColumnToTextIfVarchar($conn, $dbName, $tableName, $columnName)
-// {
-//     $safeDb = $conn->real_escape_string($dbName);
-//     $safeTable = $conn->real_escape_string($tableName);
-//     $safeColumn = $conn->real_escape_string($columnName);
-//     $sql = "SELECT DATA_TYPE FROM information_schema.columns WHERE table_schema='$safeDb' AND table_name='$safeTable' AND column_name='$safeColumn' LIMIT 1";
-//     $rst = $conn->query($sql);
+    $row = $rst->fetch_assoc();
+    if ($row) {
+        $row = array_change_key_case($row, CASE_LOWER);
+    }
 
-//     if (!$rst || $rst->num_rows === 0) {
-//         echo "<p style='color:orange;'>Column `$columnName` not found in `$tableName` to alter.</p>";
-//         return;
-//     }
+    if (isset($row['data_type'])) {
+        $dataType = strtolower((string) $row['data_type']);
+        if (strpos($dataType, 'int') !== false) {
+            $alterSql = "ALTER TABLE `$tableName` MODIFY COLUMN `$columnName` VARCHAR(" . (int) $varcharLen . ") NULL";
+            if ($conn->query($alterSql)) {
+                echo "<p style='color:blue;'>Updated `$tableName`.`$columnName` to VARCHAR(" . (int) $varcharLen . ").</p>";
+            } else {
+                echo "<p style='color:red;'>Failed updating `$tableName`.`$columnName`: " . $conn->error . "</p>";
+            }
+        } else {
+            echo "<p style='color:green;'>Verified `$tableName`.`$columnName` is already non-integer ($dataType).</p>";
+        }
+    }
+}
 
-//     $row = $rst->fetch_assoc();
-//     if ($row) {
-//         $row = array_change_key_case($row, CASE_LOWER);
-//     }
+function alterColumnToTextIfVarchar($conn, $dbName, $tableName, $columnName)
+{
+    $safeDb = $conn->real_escape_string($dbName);
+    $safeTable = $conn->real_escape_string($tableName);
+    $safeColumn = $conn->real_escape_string($columnName);
+    $sql = "SELECT DATA_TYPE FROM information_schema.columns WHERE table_schema='$safeDb' AND table_name='$safeTable' AND column_name='$safeColumn' LIMIT 1";
+    $rst = $conn->query($sql);
 
-//     if (isset($row['data_type'])) {
-//         $dataType = strtolower((string) $row['data_type']);
-//         if ($dataType === 'varchar') {
-//             $alterSql = "ALTER TABLE `$tableName` MODIFY COLUMN `$columnName` TEXT NULL";
-//             if ($conn->query($alterSql)) {
-//                 echo "<p style='color:blue;'>Updated `$tableName`.`$columnName` to TEXT.</p>";
-//             } else {
-//                 echo "<p style='color:red;'>Failed updating `$tableName`.`$columnName` to TEXT: " . $conn->error . "</p>";
-//             }
-//         } else {
-//             echo "<p style='color:green;'>Verified `$tableName`.`$columnName` is already non-varchar ($dataType).</p>";
-//         }
-//     }
-// }
+    if (!$rst || $rst->num_rows === 0) {
+        echo "<p style='color:orange;'>Column `$columnName` not found in `$tableName` to alter.</p>";
+        return;
+    }
 
-// function indexExists($conn, $dbName, $tableName, $indexName)
-// {
-//     $safeDb = $conn->real_escape_string($dbName);
-//     $safeTable = $conn->real_escape_string($tableName);
-//     $safeIndex = $conn->real_escape_string($indexName);
-//     $sql = "SELECT 1 FROM information_schema.statistics WHERE table_schema='$safeDb' AND table_name='$safeTable' AND index_name='$safeIndex' LIMIT 1";
-//     $rst = $conn->query($sql);
-//     return ($rst && $rst->num_rows > 0);
-// }
+    $row = $rst->fetch_assoc();
+    if ($row) {
+        $row = array_change_key_case($row, CASE_LOWER);
+    }
 
-// function dropIndexIfExists($conn, $dbName, $tableName, $indexName, $alterSql)
-// {
-//     if (indexExists($conn, $dbName, $tableName, $indexName)) {
-//         if ($conn->query($alterSql)) {
-//             echo "<p style='color:blue;'>Dropped index `$indexName` from `$tableName`.</p>";
-//         } else {
-//             echo "<p style='color:red;'>Failed dropping index `$indexName` from `$tableName`: " . $conn->error . "</p>";
-//         }
-//     } else {
-//         echo "<p style='color:green;'>Verified index `$indexName` is already removed from `$tableName`.</p>";
-//     }
-// }
+    if (isset($row['data_type'])) {
+        $dataType = strtolower((string) $row['data_type']);
+        if ($dataType === 'varchar') {
+            $alterSql = "ALTER TABLE `$tableName` MODIFY COLUMN `$columnName` TEXT NULL";
+            if ($conn->query($alterSql)) {
+                echo "<p style='color:blue;'>Updated `$tableName`.`$columnName` to TEXT.</p>";
+            } else {
+                echo "<p style='color:red;'>Failed updating `$tableName`.`$columnName` to TEXT: " . $conn->error . "</p>";
+            }
+        } else {
+            echo "<p style='color:green;'>Verified `$tableName`.`$columnName` is already non-varchar ($dataType).</p>";
+        }
+    }
+}
+
+function indexExists($conn, $dbName, $tableName, $indexName)
+{
+    $safeDb = $conn->real_escape_string($dbName);
+    $safeTable = $conn->real_escape_string($tableName);
+    $safeIndex = $conn->real_escape_string($indexName);
+    $sql = "SELECT 1 FROM information_schema.statistics WHERE table_schema='$safeDb' AND table_name='$safeTable' AND index_name='$safeIndex' LIMIT 1";
+    $rst = $conn->query($sql);
+    return ($rst && $rst->num_rows > 0);
+}
+
+function dropIndexIfExists($conn, $dbName, $tableName, $indexName, $alterSql)
+{
+    if (indexExists($conn, $dbName, $tableName, $indexName)) {
+        if ($conn->query($alterSql)) {
+            echo "<p style='color:blue;'>Dropped index `$indexName` from `$tableName`.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed dropping index `$indexName` from `$tableName`: " . $conn->error . "</p>";
+        }
+    } else {
+        echo "<p style='color:green;'>Verified index `$indexName` is already removed from `$tableName`.</p>";
+    }
+}
+
+$customerTagAssignmentTable = defined('CUS_TAG_ASSIGNMENT') ? CUS_TAG_ASSIGNMENT : 'customer_tag_assignment';
+$createCustomerTagAssignmentTableSql = "CREATE TABLE IF NOT EXISTS `{$db_cms}`.`{$customerTagAssignmentTable}` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `platform` VARCHAR(30) NOT NULL,
+    `customer_id` INT NOT NULL,
+    `tag_id` INT NOT NULL,
+    `create_by` VARCHAR(30) DEFAULT NULL,
+    `create_date` DATE DEFAULT NULL,
+    `create_time` TIME DEFAULT NULL,
+    `update_by` VARCHAR(30) DEFAULT NULL,
+    `update_date` DATE DEFAULT NULL,
+    `update_time` TIME DEFAULT NULL,
+    `status` CHAR(1) NOT NULL DEFAULT 'A',
+    UNIQUE KEY `uniq_platform_customer_tag` (`platform`, `customer_id`, `tag_id`),
+    KEY `idx_platform_customer_status` (`platform`, `customer_id`, `status`),
+    KEY `idx_tag_status` (`tag_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+if ($conn->query($createCustomerTagAssignmentTableSql)) {
+    echo "<p style='color:blue;'>Table `{$customerTagAssignmentTable}` is ready in `{$db_cms}`.</p>";
+} else {
+    echo "<p style='color:red;'>Error creating `{$customerTagAssignmentTable}` in `{$db_cms}`: " . $conn->error . "</p>";
+}
 
 // function normalizeShopeePins($pinStr)
 // {
@@ -367,6 +390,33 @@ if (!$conn->select_db($db_fin)) {
 // // Ensure Shopee Order Request supports storing multiple package/brand IDs as CSV.
 // alterColumnToVarcharIfInt($conn, $db_fin, 'shopee_sg_order_request', 'package', 255);
 // alterColumnToVarcharIfInt($conn, $db_fin, 'shopee_sg_order_request', 'brand', 255);
+if ($conn->select_db($db_cms)) {
+    addColumnIfMissing($conn, $db_cms, 'lazada_order_request', 'estimated_received_date', "ALTER TABLE `lazada_order_request` ADD COLUMN `estimated_received_date` DATE DEFAULT NULL AFTER `remark`");
+    addColumnIfMissing($conn, $db_cms, 'lazada_order_request', 'estimated_received_date_assigned_by', "ALTER TABLE `lazada_order_request` ADD COLUMN `estimated_received_date_assigned_by` VARCHAR(30) DEFAULT NULL AFTER `estimated_received_date`");
+    addColumnIfMissing($conn, $db_cms, 'lazada_order_request', 'estimated_received_date_assigned_date', "ALTER TABLE `lazada_order_request` ADD COLUMN `estimated_received_date_assigned_date` DATE DEFAULT NULL AFTER `estimated_received_date_assigned_by`");
+    addColumnIfMissing($conn, $db_cms, 'lazada_order_request', 'estimated_received_date_assigned_time', "ALTER TABLE `lazada_order_request` ADD COLUMN `estimated_received_date_assigned_time` TIME DEFAULT NULL AFTER `estimated_received_date_assigned_date`");
+} else {
+    echo "<p style='color:red;'>Unable to select CMS database `" . $db_cms . "` for Lazada Estimate Received Date columns.</p>";
+}
+
+if ($conn->select_db($db_fin)) {
+    addColumnIfMissing($conn, $db_fin, 'facebook_order_request', 'estimated_received_date', "ALTER TABLE `facebook_order_request` ADD COLUMN `estimated_received_date` DATE DEFAULT NULL AFTER `remark`");
+    addColumnIfMissing($conn, $db_fin, 'facebook_order_request', 'estimated_received_date_assigned_by', "ALTER TABLE `facebook_order_request` ADD COLUMN `estimated_received_date_assigned_by` VARCHAR(30) DEFAULT NULL AFTER `estimated_received_date`");
+    addColumnIfMissing($conn, $db_fin, 'facebook_order_request', 'estimated_received_date_assigned_date', "ALTER TABLE `facebook_order_request` ADD COLUMN `estimated_received_date_assigned_date` DATE DEFAULT NULL AFTER `estimated_received_date_assigned_by`");
+    addColumnIfMissing($conn, $db_fin, 'facebook_order_request', 'estimated_received_date_assigned_time', "ALTER TABLE `facebook_order_request` ADD COLUMN `estimated_received_date_assigned_time` TIME DEFAULT NULL AFTER `estimated_received_date_assigned_date`");
+
+    addColumnIfMissing($conn, $db_fin, 'website_order_request', 'estimated_received_date', "ALTER TABLE `website_order_request` ADD COLUMN `estimated_received_date` DATE DEFAULT NULL AFTER `remark`");
+    addColumnIfMissing($conn, $db_fin, 'website_order_request', 'estimated_received_date_assigned_by', "ALTER TABLE `website_order_request` ADD COLUMN `estimated_received_date_assigned_by` VARCHAR(30) DEFAULT NULL AFTER `estimated_received_date`");
+    addColumnIfMissing($conn, $db_fin, 'website_order_request', 'estimated_received_date_assigned_date', "ALTER TABLE `website_order_request` ADD COLUMN `estimated_received_date_assigned_date` DATE DEFAULT NULL AFTER `estimated_received_date_assigned_by`");
+    addColumnIfMissing($conn, $db_fin, 'website_order_request', 'estimated_received_date_assigned_time', "ALTER TABLE `website_order_request` ADD COLUMN `estimated_received_date_assigned_time` TIME DEFAULT NULL AFTER `estimated_received_date_assigned_date`");
+
+    addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'estimated_received_date', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `estimated_received_date` DATE DEFAULT NULL AFTER `remark`");
+    addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'estimated_received_date_assigned_by', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `estimated_received_date_assigned_by` VARCHAR(30) DEFAULT NULL AFTER `estimated_received_date`");
+    addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'estimated_received_date_assigned_date', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `estimated_received_date_assigned_date` DATE DEFAULT NULL AFTER `estimated_received_date_assigned_by`");
+    addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'estimated_received_date_assigned_time', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `estimated_received_date_assigned_time` TIME DEFAULT NULL AFTER `estimated_received_date_assigned_date`");
+} else {
+    echo "<p style='color:red;'>Unable to select Finance database `" . $db_fin . "` for Estimate Received Date columns.</p>";
+}
 // addColumnIfMissing($conn, $db_fin, 'shopee_customer_info', 'contact_no', "ALTER TABLE `shopee_customer_info` ADD COLUMN `contact_no` VARCHAR(30) DEFAULT NULL AFTER `series`");
 // addColumnIfMissing($conn, $db_fin, 'shopee_ads_topup_transaction', 'attachment', "ALTER TABLE `shopee_ads_topup_transaction` ADD COLUMN `attachment` VARCHAR(255) DEFAULT NULL AFTER `pay_meth`");
 
@@ -519,26 +569,29 @@ if (!$conn->select_db($db_fin)) {
 //         echo "<p style='color:red;'>Error creating `purchase_order`: " . $conn->error . "</p>";
 //     }
 
-//     $createTokenSettingTableSql = "CREATE TABLE IF NOT EXISTS `token_setting` (
-//     `id` INT AUTO_INCREMENT PRIMARY KEY,
-//     `name` VARCHAR(255) NOT NULL,
-//     `bot_token` VARCHAR(255) NOT NULL,
-//     `chat_id` VARCHAR(100) DEFAULT '',
-//     `remark` TEXT DEFAULT NULL,
-//     `create_by` VARCHAR(30) DEFAULT NULL,
-//     `create_date` DATE DEFAULT NULL,
-//     `create_time` TIME DEFAULT NULL,
-//     `update_by` VARCHAR(30) DEFAULT NULL,
-//     `update_date` DATE DEFAULT NULL,
-//     `update_time` TIME DEFAULT NULL,
-//     `status` CHAR(1) NOT NULL DEFAULT 'A'
-// ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    $safeCmsDb = str_replace('`', '``', $db_cms);
 
-//     if ($conn->query($createTokenSettingTableSql)) {
-//         echo "<p style='color:blue;'>Table `token_setting` is ready.</p>";
-//     } else {
-//         echo "<p style='color:red;'>Error creating `token_setting`: " . $conn->error . "</p>";
-//     }
+    $createTokenSettingTableSql = "CREATE TABLE IF NOT EXISTS `" . $safeCmsDb . "`.`token_setting` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `name` VARCHAR(255) NOT NULL,
+    `page_used` VARCHAR(100) NOT NULL,
+    `bot_token` VARCHAR(255) NOT NULL,
+    `chat_id` VARCHAR(100) DEFAULT '',
+    `remark` TEXT DEFAULT NULL,
+    `create_by` VARCHAR(30) DEFAULT NULL,
+    `create_date` DATE DEFAULT NULL,
+    `create_time` TIME DEFAULT NULL,
+    `update_by` VARCHAR(30) DEFAULT NULL,
+    `update_date` DATE DEFAULT NULL,
+    `update_time` TIME DEFAULT NULL,
+    `status` CHAR(1) NOT NULL DEFAULT 'A'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createTokenSettingTableSql)) {
+        echo "<p style='color:blue;'>Table `token_setting` is ready.</p>";
+    } else {
+        echo "<p style='color:red;'>Error creating `token_setting`: " . $conn->error . "</p>";
+    }
 
 //     $createUserRecordLogTableSql = "CREATE TABLE IF NOT EXISTS `user_record_log` (
 //     `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -559,7 +612,8 @@ if (!$conn->select_db($db_fin)) {
 //         echo "<p style='color:red;'>Error creating `user_record_log`: " . $conn->error . "</p>";
 //     }
 
-//     addColumnIfMissing($conn, $db_cms, 'token_setting', 'chat_id', "ALTER TABLE `token_setting` ADD COLUMN `chat_id` VARCHAR(100) DEFAULT '' AFTER `bot_token`");
+// addColumnIfMissing($conn, $db_cms, 'token_setting', 'chat_id', "ALTER TABLE `" . $safeCmsDb . "`.`token_setting` ADD COLUMN `chat_id` VARCHAR(100) DEFAULT '' AFTER `bot_token`");
+    addColumnIfMissing($conn, $db_cms, 'token_setting', 'page_used', "ALTER TABLE `" . $safeCmsDb . "`.`token_setting` ADD COLUMN `page_used` VARCHAR(100) NOT NULL DEFAULT '' AFTER `name`");
 
 //     addColumnIfMissing($conn, $db_cms, 'user', 'main_report_supervisor', "ALTER TABLE `user` ADD COLUMN `main_report_supervisor` INT DEFAULT NULL AFTER `access_id`");
 //     addColumnIfMissing($conn, $db_cms, 'user', 'second_report_supervisor', "ALTER TABLE `user` ADD COLUMN `second_report_supervisor` INT DEFAULT NULL AFTER `main_report_supervisor`");
@@ -1188,6 +1242,122 @@ if ($conn->select_db($db_cms)) {
         KEY `idx_task_project_owner` (`owner_user_id`),
         KEY `idx_task_project_name` (`name`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    $createCustomerLevelTableSql = "CREATE TABLE IF NOT EXISTS `" . CUS_LEVEL . "` (
+        `id` INT NOT NULL AUTO_INCREMENT,
+        `name` VARCHAR(100) CHARACTER SET latin1 COLLATE latin1_swedish_ci DEFAULT NULL,
+        `colorCode` VARCHAR(12) CHARACTER SET latin1 COLLATE latin1_swedish_ci DEFAULT NULL,
+        `create_by` VARCHAR(255) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(255) CHARACTER SET latin1 COLLATE latin1_swedish_ci DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) CHARACTER SET latin1 COLLATE latin1_swedish_ci DEFAULT 'A',
+        `purchaseAmountFrom` DECIMAL(10,2) DEFAULT NULL,
+        `purchaseAmountUntil` DECIMAL(10,2) DEFAULT NULL,
+        `currency` INT DEFAULT NULL,
+        `remark` VARCHAR(255) CHARACTER SET latin1 COLLATE latin1_swedish_ci DEFAULT NULL,
+        PRIMARY KEY (`id`)
+    ) ENGINE=MyISAM DEFAULT CHARSET=latin1";
+
+    if ($conn->query($createCustomerLevelTableSql)) {
+        echo "<p style='color:green;'>Verified table `" . CUS_LEVEL . "` is ready.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . CUS_LEVEL . "`: " . $conn->error . "</p>";
+    }
+
+    $createCustomerRepeatTableSql = "CREATE TABLE IF NOT EXISTS `" . CUS_REPEAT . "` (
+        `id` INT NOT NULL AUTO_INCREMENT,
+        `name` VARCHAR(100) CHARACTER SET latin1 COLLATE latin1_swedish_ci DEFAULT NULL,
+        `colorCode` VARCHAR(12) CHARACTER SET latin1 COLLATE latin1_swedish_ci DEFAULT NULL,
+        `create_by` VARCHAR(255) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(255) CHARACTER SET latin1 COLLATE latin1_swedish_ci DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) CHARACTER SET latin1 COLLATE latin1_swedish_ci DEFAULT 'A',
+        `orderFrequencyFrom` DECIMAL(10,2) DEFAULT NULL,
+        `orderFrequencyUntil` DECIMAL(10,2) DEFAULT NULL,
+        `remark` VARCHAR(255) CHARACTER SET latin1 COLLATE latin1_swedish_ci DEFAULT NULL,
+        PRIMARY KEY (`id`)
+    ) ENGINE=MyISAM DEFAULT CHARSET=latin1";
+
+    if ($conn->query($createCustomerRepeatTableSql)) {
+        echo "<p style='color:green;'>Verified table `" . CUS_REPEAT . "` is ready.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . CUS_REPEAT . "`: " . $conn->error . "</p>";
+    }
+
+    $createMessageShortcutsTableSql = "CREATE TABLE IF NOT EXISTS `" . MESSAGE_SHORTCUTS . "` ( 
+        `id` INT NOT NULL AUTO_INCREMENT,
+        `shortcuts_tag` VARCHAR(120) NOT NULL,
+        `shortcuts_message` MEDIUMTEXT DEFAULT NULL,
+        `create_by` VARCHAR(255) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(255) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        PRIMARY KEY (`id`),
+        KEY `idx_message_shortcuts_tag_status` (`shortcuts_tag`, `status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+
+    if ($conn->query($createMessageShortcutsTableSql)) {
+        echo "<p style='color:green;'>Verified table `" . MESSAGE_SHORTCUTS . "` is ready.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . MESSAGE_SHORTCUTS . "`: " . $conn->error . "</p>";
+    }
+
+    // Ensure only the shortcuts_message column uses utf8mb4_unicode_ci.
+    if (columnExists($conn, $db_cms, MESSAGE_SHORTCUTS, 'shortcuts_message')) {
+        $alterShortcutMessageColumnSql = "ALTER TABLE `" . MESSAGE_SHORTCUTS . "`
+            MODIFY COLUMN `shortcuts_message` MEDIUMTEXT
+            CHARACTER SET utf8mb4
+            COLLATE utf8mb4_unicode_ci
+            DEFAULT NULL";
+
+        if ($conn->query($alterShortcutMessageColumnSql)) {
+            echo "<p style='color:green;'>Verified `" . MESSAGE_SHORTCUTS . "`.`shortcuts_message` collation is utf8mb4_unicode_ci.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed altering `" . MESSAGE_SHORTCUTS . "`.`shortcuts_message` collation: " . $conn->error . "</p>";
+        }
+    } else {
+        echo "<p style='color:orange;'>Column `" . MESSAGE_SHORTCUTS . "`.`shortcuts_message` not found. Skipped collation update.</p>";
+    }
+
+    $messageShortcutsTableName = $conn->real_escape_string(MESSAGE_SHORTCUTS);
+    $messageShortcutsSchemaName = $conn->real_escape_string($db_cms);
+    $messageShortcutsCollationCheckSql = "SELECT TABLE_COLLATION
+        FROM information_schema.TABLES
+        WHERE TABLE_SCHEMA = '" . $messageShortcutsSchemaName . "'
+          AND TABLE_NAME = '" . $messageShortcutsTableName . "'
+        LIMIT 1";
+
+    $messageShortcutsCollationResult = $conn->query($messageShortcutsCollationCheckSql);
+
+    if ($messageShortcutsCollationResult) {
+        $messageShortcutsCollationRow = $messageShortcutsCollationResult->fetch_assoc();
+
+        if ($messageShortcutsCollationRow && $messageShortcutsCollationRow['TABLE_COLLATION'] !== 'utf8mb4_unicode_ci') {
+            $alterMessageShortcutsCollationSql = "ALTER TABLE `" . MESSAGE_SHORTCUTS . "`
+                CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
+
+            if ($conn->query($alterMessageShortcutsCollationSql)) {
+                echo "<p style='color:green;'>Verified table `" . MESSAGE_SHORTCUTS . "` collation is utf8mb4_unicode_ci.</p>";
+            } else {
+                echo "<p style='color:red;'>Failed altering `" . MESSAGE_SHORTCUTS . "` collation: " . $conn->error . "</p>";
+            }
+        } elseif ($messageShortcutsCollationRow) {
+            echo "<p style='color:green;'>Verified table `" . MESSAGE_SHORTCUTS . "` collation is utf8mb4_unicode_ci.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed verifying `" . MESSAGE_SHORTCUTS . "` collation: table metadata not found.</p>";
+        }
+    } else {
+        echo "<p style='color:red;'>Failed checking `" . MESSAGE_SHORTCUTS . "` collation: " . $conn->error . "</p>";
+    }
 
     if ($conn->query($createTaskProjectSql)) {
         echo "<p style='color:green;'>Verified table `" . TASK_PROJECT . "` for task projects.</p>";
@@ -1855,22 +2025,52 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Failed removing pin 26 (Create Project): " . $conn->error . "</p>";
     }
 
+    $createLabelSql = "CREATE TABLE IF NOT EXISTS `" . LABEL . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `name` VARCHAR(120) NOT NULL,
+        `parent_label` INT DEFAULT NULL,
+        `remark` TEXT DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_label_parent` (`parent_label`),
+        KEY `idx_label_name_status` (`name`, `status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createLabelSql)) {
+        echo "<p style='color:green;'>Verified table `" . LABEL . "` for product labels.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . LABEL . "`: " . $conn->error . "</p>";
+    }
+
     $taskPinGroupSql = "INSERT INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
         (136, 'Board', '1,2,3,4', 'Task Board Management', '1', CURDATE(), CURTIME(), 'A'),
         (137, 'Summary', '1', 'Task Summary Management', '1', CURDATE(), CURTIME(), 'A'),
         (138, 'Sheets', '1,2,3,4', 'Task Sheets Management', '1', CURDATE(), CURTIME(), 'A'),
         (139, 'Project Task', '1,2,3,4', 'Project task navigation', '1', CURDATE(), CURTIME(), 'A'),
         (140, 'Project Settings', '1,2,3,4', 'Project task settings management', '1', CURDATE(), CURTIME(), 'A'),
-        (141, 'Project User Access', '1,2,3,4', 'Project task user access management', '1', CURDATE(), CURTIME(), 'A')
+        (141, 'Project User Access', '1,2,3,4', 'Project task user access management', '1', CURDATE(), CURTIME(), 'A'),
+        (142, 'Customer Level', '1,2,3,4', 'Customer level management', '1', CURDATE(), CURTIME(), 'A'),
+        (143, 'Customer Repeat', '1,2,3,4', 'Customer repeat management', '1', CURDATE(), CURTIME(), 'A'),
+        (144, 'Message Shortcuts', '1,2,3,4', 'Message shortcuts management', '1', CURDATE(), CURTIME(), 'A'),
+        (145, 'Label', '1,2,3,4', 'Product label management', '1', CURDATE(), CURTIME(), 'A'),
+        (146, 'Shopee Waiting To Pack', '1', 'Shopee warehouse scan flow', '1', CURDATE(), CURTIME(), 'A'),
+        (147, 'Shopee Arrival Management', '1,2,3,4', 'Shopee arrival management workflow', '1', CURDATE(), CURTIME(), 'A'),
+        (148, 'Shopee Daily Flow Report', '1', 'Shopee daily flow reporting', '1', CURDATE(), CURTIME(), 'A'),
+        (149, 'Shopee Flow Setting', '1,2,3,4', 'Shopee flow setting management', '1', CURDATE(), CURTIME(), 'A')
         ON DUPLICATE KEY UPDATE
             `name` = VALUES(`name`),
             `pins` = VALUES(`pins`),
             `remark` = VALUES(`remark`),
             `status` = 'A'";
     if ($conn->query($taskPinGroupSql)) {
-        echo "<p style='color:green;'>Verified pin groups 136-141 for task management.</p>";
+        echo "<p style='color:green;'>Verified pin groups 136-149 for task, customer, product label, and Shopee OMS page management.</p>";
     } else {
-        echo "<p style='color:red;'>Failed creating task pin groups 136-141: " . $conn->error . "</p>";
+        echo "<p style='color:red;'>Failed creating pin groups 136-149: " . $conn->error . "</p>";
     }
 
     foreach (array(1, 2, 3) as $groupId) {
@@ -1892,6 +2092,16 @@ if ($conn->select_db($db_cms)) {
             $updatedPins = addAccessToPinBlock($updatedPins, 139, array(1, 2, 3, 4));
             $updatedPins = addAccessToPinBlock($updatedPins, 140, array(1, 2, 3, 4));
             $updatedPins = addAccessToPinBlock($updatedPins, 141, array(1, 2, 3, 4));
+            $updatedPins = addAccessToPinBlock($updatedPins, 142, array(1, 2, 3, 4));
+            $updatedPins = addAccessToPinBlock($updatedPins, 143, array(1, 2, 3, 4));
+            $updatedPins = addAccessToPinBlock($updatedPins, 145, array(1, 2, 3, 4));
+            $updatedPins = addAccessToPinBlock($updatedPins, 146, array(1));
+            $updatedPins = addAccessToPinBlock($updatedPins, 147, array(1, 2, 3, 4));
+            $updatedPins = addAccessToPinBlock($updatedPins, 148, array(1));
+        }
+
+        if ($groupId === 1) {
+            $updatedPins = addAccessToPinBlock($updatedPins, 149, array(1, 2, 3, 4));
         }
 
         if ($updatedPins !== $currentPins) {
@@ -1905,8 +2115,313 @@ if ($conn->select_db($db_cms)) {
             echo "<p style='color:green;'>Verified task pin access already exists for `user_group` id " . (int) $groupId . ".</p>";
         }
     }
+
+    $messageShortcutAccessGroups = array();
+    $messageShortcutUserResult = $conn->query("SELECT DISTINCT `access_id` FROM `user` WHERE `id` IN (1, 2) AND `status` = 'A'");
+    if ($messageShortcutUserResult) {
+        while ($messageShortcutUserRow = $messageShortcutUserResult->fetch_assoc()) {
+            $accessId = isset($messageShortcutUserRow['access_id']) ? (int) $messageShortcutUserRow['access_id'] : 0;
+            if ($accessId > 0) {
+                $messageShortcutAccessGroups[] = $accessId;
+            }
+        }
+    }
+
+    if (empty($messageShortcutAccessGroups)) {
+        $messageShortcutAccessGroups = array(1, 2);
+    }
+
+    $messageShortcutAccessGroups = array_values(array_unique($messageShortcutAccessGroups));
+
+    foreach ($messageShortcutAccessGroups as $groupId) {
+        $userGroupResult = $conn->query("SELECT `pins` FROM `user_group` WHERE `id` = " . (int) $groupId . " LIMIT 1");
+        if (!$userGroupResult || $userGroupResult->num_rows === 0) {
+            echo "<p style='color:orange;'>`user_group` id " . (int) $groupId . " not found. Skipped Message Shortcuts pin assignment.</p>";
+            continue;
+        }
+
+        $userGroupRow = $userGroupResult->fetch_assoc();
+        $currentPins = isset($userGroupRow['pins']) ? (string) $userGroupRow['pins'] : '';
+        $updatedPins = addAccessToPinBlock($currentPins, 144, array(1, 2, 3, 4));
+
+        if ($updatedPins !== $currentPins) {
+            $safePins = $conn->real_escape_string($updatedPins);
+            if ($conn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $groupId)) {
+                echo "<p style='color:green;'>Verified Message Shortcuts pin access for `user_group` id " . (int) $groupId . ".</p>";
+            } else {
+                echo "<p style='color:red;'>Failed updating Message Shortcuts pin access for `user_group` id " . (int) $groupId . ": " . $conn->error . "</p>";
+            }
+        } else {
+            echo "<p style='color:green;'>Verified Message Shortcuts pin access already exists for `user_group` id " . (int) $groupId . ".</p>";
+        }
+    }
 } else {
     echo "<p style='color:red;'>Failed selecting CMS database for task management migration.</p>";
+}
+
+if ($conn->select_db($db_cms)) {
+    $createOmsSettingSql = "CREATE TABLE IF NOT EXISTS `" . ORDER_FLOW_SETTING . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `setting_key` VARCHAR(120) NOT NULL,
+        `setting_value` TEXT DEFAULT NULL,
+        `remark` TEXT DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        UNIQUE KEY `uq_order_flow_setting_key` (`setting_key`),
+        KEY `idx_order_flow_setting_status` (`status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    if ($conn->query($createOmsSettingSql)) {
+        echo "<p style='color:green;'>Verified table `" . ORDER_FLOW_SETTING . "` for OMS settings.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . ORDER_FLOW_SETTING . "`: " . $conn->error . "</p>";
+    }
+
+    $createOmsPermissionSql = "CREATE TABLE IF NOT EXISTS `" . ORDER_FLOW_TRANSITION_PERMISSION . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `module_key` VARCHAR(60) NOT NULL DEFAULT 'shopee_oms',
+        `transition_key` VARCHAR(120) NOT NULL,
+        `from_status` VARCHAR(50) NOT NULL,
+        `to_status` VARCHAR(50) NOT NULL,
+        `user_group_id` INT NOT NULL,
+        `can_move` TINYINT(1) NOT NULL DEFAULT 1,
+        `remark` TEXT DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        UNIQUE KEY `uq_order_flow_transition_permission` (`module_key`, `from_status`, `to_status`, `user_group_id`),
+        KEY `idx_order_flow_perm_group` (`user_group_id`, `can_move`, `status`),
+        KEY `idx_order_flow_perm_transition` (`transition_key`, `status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    if ($conn->query($createOmsPermissionSql)) {
+        echo "<p style='color:green;'>Verified table `" . ORDER_FLOW_TRANSITION_PERMISSION . "` for OMS transition permissions.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . ORDER_FLOW_TRANSITION_PERMISSION . "`: " . $conn->error . "</p>";
+    }
+
+    migrationEnsureColumn($conn, $db_cms, USR_GRP, 'badge_color', "ALTER TABLE `" . USR_GRP . "` ADD COLUMN `badge_color` VARCHAR(20) NOT NULL DEFAULT '#6c757d' AFTER `name`", "Verified `" . USR_GRP . "` includes `badge_color`.");
+    migrationEnsureColumn($conn, $db_cms, USR_GRP, 'badge_icon_class', "ALTER TABLE `" . USR_GRP . "` ADD COLUMN `badge_icon_class` VARCHAR(120) NOT NULL DEFAULT 'fa-solid fa-user-group' AFTER `badge_color`", "Verified `" . USR_GRP . "` includes `badge_icon_class`.");
+
+    $defaultOmsSettings = array(
+        array('shopee_oms_assignment_scope', 'global', 'OMS assignment scope: global or individual.'),
+        array('shopee_oms_default_warehouse_id', '0', 'Default warehouse id used for OMS stock-out selection.'),
+        array('shopee_oms_daily_report_main_supervisor_user_id', '0', 'Main supervisor user id for OMS daily email report.'),
+        array('shopee_oms_daily_report_second_supervisor_user_id', '0', 'Second supervisor user id for OMS daily email report.')
+    );
+    foreach ($defaultOmsSettings as $settingRow) {
+        $safeKey = $conn->real_escape_string((string) $settingRow[0]);
+        $safeValue = $conn->real_escape_string((string) $settingRow[1]);
+        $safeRemark = $conn->real_escape_string((string) $settingRow[2]);
+        $seedSettingSql = "INSERT INTO `" . ORDER_FLOW_SETTING . "` (`setting_key`, `setting_value`, `remark`, `create_by`, `create_date`, `create_time`, `status`)
+            VALUES ('" . $safeKey . "', '" . $safeValue . "', '" . $safeRemark . "', '1', CURDATE(), CURTIME(), 'A')
+            ON DUPLICATE KEY UPDATE `remark` = VALUES(`remark`), `status` = 'A'";
+        if ($conn->query($seedSettingSql)) {
+            echo "<p style='color:green;'>Verified OMS setting `" . $safeKey . "`.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed seeding OMS setting `" . $safeKey . "`: " . $conn->error . "</p>";
+        }
+    }
+
+    $defaultBadgeUpdates = array(
+        1 => array('#b3261e', 'fa-solid fa-crown'),
+        2 => array('#0d6efd', 'fa-solid fa-user-shield'),
+        3 => array('#6c757d', 'fa-solid fa-user'),
+        4 => array('#198754', 'fa-solid fa-user-tag')
+    );
+    foreach ($defaultBadgeUpdates as $groupId => $badgeInfo) {
+        $safeColor = $conn->real_escape_string((string) $badgeInfo[0]);
+        $safeIcon = $conn->real_escape_string((string) $badgeInfo[1]);
+        if ($conn->query("UPDATE `" . USR_GRP . "` SET `badge_color` = CASE WHEN IFNULL(TRIM(`badge_color`), '') = '' THEN '" . $safeColor . "' ELSE `badge_color` END, `badge_icon_class` = CASE WHEN IFNULL(TRIM(`badge_icon_class`), '') = '' THEN '" . $safeIcon . "' ELSE `badge_icon_class` END WHERE `id` = " . (int) $groupId)) {
+            echo "<p style='color:green;'>Verified default OMS badge for `user_group` id " . (int) $groupId . ".</p>";
+        } else {
+            echo "<p style='color:red;'>Failed updating default OMS badge for `user_group` id " . (int) $groupId . ": " . $conn->error . "</p>";
+        }
+    }
+
+    $transitionSeeds = array(
+        array('move_to_pack', 'P', 'TP'),
+        array('warehouse_scan', 'TP', 'SP'),
+        array('assign_estimated_received_date', 'WAERD', 'WR'),
+        array('confirm_parcel_received', 'WR', 'PR'),
+        array('admin_audit', 'WAFC', 'V'),
+        array('finalize_complete', 'V', 'C'),
+        array('return_restock', 'SP', 'CR'),
+        array('return_restock', 'WAERD', 'CR'),
+        array('return_restock', 'WR', 'CR'),
+        array('return_restock', 'PR', 'CR'),
+        array('return_restock', 'WAFC', 'CR'),
+        array('return_restock', 'V', 'CR')
+    );
+    $userGroupSeedRst = $conn->query("SELECT `id` FROM `" . USR_GRP . "` WHERE `status` = 'A' ORDER BY `id` ASC");
+    if ($userGroupSeedRst) {
+        while ($userGroupSeedRow = $userGroupSeedRst->fetch_assoc()) {
+            $userGroupId = isset($userGroupSeedRow['id']) ? (int) $userGroupSeedRow['id'] : 0;
+            if ($userGroupId <= 0) {
+                continue;
+            }
+
+            foreach ($transitionSeeds as $transitionSeed) {
+                $safeTransitionKey = $conn->real_escape_string((string) $transitionSeed[0]);
+                $safeFromStatus = $conn->real_escape_string((string) $transitionSeed[1]);
+                $safeToStatus = $conn->real_escape_string((string) $transitionSeed[2]);
+                $seedPermSql = "INSERT INTO `" . ORDER_FLOW_TRANSITION_PERMISSION . "` (`module_key`, `transition_key`, `from_status`, `to_status`, `user_group_id`, `can_move`, `remark`, `create_by`, `create_date`, `create_time`, `status`)
+                    VALUES ('shopee_oms', '" . $safeTransitionKey . "', '" . $safeFromStatus . "', '" . $safeToStatus . "', " . $userGroupId . ", 1, '', '1', CURDATE(), CURTIME(), 'A')
+                    ON DUPLICATE KEY UPDATE `module_key` = `module_key`";
+                if ($conn->query($seedPermSql)) {
+                    echo "<p style='color:green;'>Verified OMS transition permission " . $safeFromStatus . " -> " . $safeToStatus . " for user group " . $userGroupId . ".</p>";
+                } else {
+                    echo "<p style='color:red;'>Failed seeding OMS transition permission " . $safeFromStatus . " -> " . $safeToStatus . " for user group " . $userGroupId . ": " . $conn->error . "</p>";
+                }
+            }
+        }
+    } else {
+        echo "<p style='color:red;'>Failed loading active user groups for OMS permission seeding.</p>";
+    }
+} else {
+    echo "<p style='color:red;'>Failed selecting CMS database for OMS migration.</p>";
+}
+
+if ($conn->select_db($db_fin)) {
+    $createOmsTransitionLogSql = "CREATE TABLE IF NOT EXISTS `" . ORDER_STATUS_TRANSITION_LOG . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `order_id` INT NOT NULL,
+        `order_code` VARCHAR(120) DEFAULT NULL,
+        `from_status` VARCHAR(50) DEFAULT NULL,
+        `to_status` VARCHAR(50) DEFAULT NULL,
+        `transition_action` VARCHAR(120) DEFAULT NULL,
+        `user_id` VARCHAR(30) DEFAULT NULL,
+        `user_group_id` INT DEFAULT NULL,
+        `remark` TEXT DEFAULT NULL,
+        `source_page` VARCHAR(150) DEFAULT NULL,
+        `related_token_scan_id` VARCHAR(120) DEFAULT NULL,
+        `transition_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_oms_transition_order` (`order_id`, `status`),
+        KEY `idx_oms_transition_status` (`from_status`, `to_status`, `status`),
+        KEY `idx_oms_transition_date` (`transition_at`),
+        KEY `idx_oms_transition_group` (`user_group_id`, `status`),
+        KEY `idx_oms_transition_token` (`related_token_scan_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    if ($conn->query($createOmsTransitionLogSql)) {
+        echo "<p style='color:green;'>Verified table `" . ORDER_STATUS_TRANSITION_LOG . "` for OMS transition logs.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . ORDER_STATUS_TRANSITION_LOG . "`: " . $conn->error . "</p>";
+    }
+
+    $createOmsEditHistorySql = "CREATE TABLE IF NOT EXISTS `" . ORDER_EDIT_HISTORY . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `order_id` INT NOT NULL,
+        `order_code` VARCHAR(120) DEFAULT NULL,
+        `field_name` VARCHAR(120) NOT NULL,
+        `field_label` VARCHAR(160) DEFAULT NULL,
+        `old_value` LONGTEXT DEFAULT NULL,
+        `new_value` LONGTEXT DEFAULT NULL,
+        `user_id` VARCHAR(30) DEFAULT NULL,
+        `user_group_id` INT DEFAULT NULL,
+        `source_page` VARCHAR(150) DEFAULT NULL,
+        `change_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_oms_edit_history_order` (`order_id`, `status`),
+        KEY `idx_oms_edit_history_date` (`change_at`),
+        KEY `idx_oms_edit_history_field` (`field_name`, `status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    if ($conn->query($createOmsEditHistorySql)) {
+        echo "<p style='color:green;'>Verified table `" . ORDER_EDIT_HISTORY . "` for OMS edit history.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . ORDER_EDIT_HISTORY . "`: " . $conn->error . "</p>";
+    }
+
+    $createOmsReturnLogSql = "CREATE TABLE IF NOT EXISTS `" . ORDER_RETURN_LOG . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `order_id` INT NOT NULL,
+        `order_code` VARCHAR(120) DEFAULT NULL,
+        `status_before` VARCHAR(50) DEFAULT NULL,
+        `status_after` VARCHAR(50) DEFAULT NULL,
+        `return_type` VARCHAR(40) DEFAULT NULL,
+        `inventory_effect` VARCHAR(40) DEFAULT NULL,
+        `remark` TEXT DEFAULT NULL,
+        `user_id` VARCHAR(30) DEFAULT NULL,
+        `user_group_id` INT DEFAULT NULL,
+        `source_page` VARCHAR(150) DEFAULT NULL,
+        `action_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_oms_return_order` (`order_id`, `status`),
+        KEY `idx_oms_return_date` (`action_at`),
+        KEY `idx_oms_return_type` (`return_type`, `status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    if ($conn->query($createOmsReturnLogSql)) {
+        echo "<p style='color:green;'>Verified table `" . ORDER_RETURN_LOG . "` for OMS return logs.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . ORDER_RETURN_LOG . "`: " . $conn->error . "</p>";
+    }
+
+    $createOmsWarehouseTokenSql = "CREATE TABLE IF NOT EXISTS `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `order_id` INT NOT NULL,
+        `order_code` VARCHAR(120) DEFAULT NULL,
+        `token` VARCHAR(190) NOT NULL,
+        `token_type` VARCHAR(30) NOT NULL DEFAULT 'stock_out',
+        `customer_name` VARCHAR(200) DEFAULT NULL,
+        `customer_address` LONGTEXT DEFAULT NULL,
+        `package_summary` LONGTEXT DEFAULT NULL,
+        `product_summary` LONGTEXT DEFAULT NULL,
+        `airbill_attachment` LONGTEXT DEFAULT NULL,
+        `payload_text` LONGTEXT DEFAULT NULL,
+        `sent_result` LONGTEXT DEFAULT NULL,
+        `used_at` DATETIME DEFAULT NULL,
+        `used_by` VARCHAR(30) DEFAULT NULL,
+        `used_source` VARCHAR(150) DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        UNIQUE KEY `uq_oms_warehouse_token` (`token`),
+        KEY `idx_oms_warehouse_order` (`order_id`, `status`),
+        KEY `idx_oms_warehouse_used` (`used_at`),
+        KEY `idx_oms_warehouse_code` (`order_code`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    if ($conn->query($createOmsWarehouseTokenSql)) {
+        echo "<p style='color:green;'>Verified table `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` for OMS warehouse scan tokens.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . ORDER_WAREHOUSE_SCAN_TOKEN . "`: " . $conn->error . "</p>";
+    }
+
+    migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'airbill_no', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `airbill_no` VARCHAR(150) DEFAULT NULL AFTER `barcode_slot`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `airbill_no`.");
+    migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'airbill_attachment', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `airbill_attachment` TEXT DEFAULT NULL AFTER `airbill_no`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `airbill_attachment`.");
+    migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'stock_out_warehouse_id', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `stock_out_warehouse_id` INT DEFAULT NULL AFTER `airbill_attachment`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `stock_out_warehouse_id`.");
+    dropColumnIfExists($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'customer_name', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` DROP COLUMN `customer_name`");
+    migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'customer_address', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `customer_address` TEXT DEFAULT NULL AFTER `buyer`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `customer_address`.");
+    migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'package_qty_json', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `package_qty_json` LONGTEXT DEFAULT NULL AFTER `package`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `package_qty_json`.");
+    migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'latest_transition_at', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `latest_transition_at` DATETIME DEFAULT NULL AFTER `estimated_received_date_assigned_time`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `latest_transition_at`.");
+    migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'warehouse_scan_at', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `warehouse_scan_at` DATETIME DEFAULT NULL AFTER `latest_transition_at`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `warehouse_scan_at`.");
+    migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'warehouse_scan_by', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `warehouse_scan_by` VARCHAR(30) DEFAULT NULL AFTER `warehouse_scan_at`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `warehouse_scan_by`.");
+    migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'warehouse_scan_ref', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `warehouse_scan_ref` VARCHAR(120) DEFAULT NULL AFTER `warehouse_scan_by`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `warehouse_scan_ref`.");
+    migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'delay_remark', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `delay_remark` TEXT DEFAULT NULL AFTER `warehouse_scan_ref`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `delay_remark`.");
+    migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'step_a_sent_at', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `step_a_sent_at` DATETIME DEFAULT NULL AFTER `delay_remark`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `step_a_sent_at`.");
+
+    migrationEnsureIndex($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'idx_shopee_order_status', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD INDEX `idx_shopee_order_status` (`order_status`)", "Verified `" . SHOPEE_SG_ORDER_REQ . "` status index.");
+    migrationEnsureIndex($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'idx_shopee_order_code', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD INDEX `idx_shopee_order_code` (`orderID`)", "Verified `" . SHOPEE_SG_ORDER_REQ . "` order code index.");
+    migrationEnsureIndex($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'idx_shopee_order_airbill', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD INDEX `idx_shopee_order_airbill` (`airbill_no`)", "Verified `" . SHOPEE_SG_ORDER_REQ . "` airbill index.");
+    migrationEnsureIndex($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'idx_shopee_order_transition_at', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD INDEX `idx_shopee_order_transition_at` (`latest_transition_at`)", "Verified `" . SHOPEE_SG_ORDER_REQ . "` transition timestamp index.");
+} else {
+    echo "<p style='color:red;'>Failed selecting finance database for OMS migration.</p>";
 }
 
 // if ($conn->select_db($db_cms)) {

@@ -23,6 +23,12 @@ $img_path = '../' . img_server . 'finance/fb_ads_topup/';
 if (!file_exists($img_path)) {
     mkdir($img_path, 0777, true);
 }
+$fbAdsTopupAttachmentPage = 'facebook_ads_topup_import';
+$fbAdsTopupAttachmentRelDir = 'attachment/' . substr((string) comYMD, 0, 4) . '/' . substr((string) comYMD, 4, 2) . '/' . $fbAdsTopupAttachmentPage . '/';
+$fbAdsTopupAttachmentAbsDir = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $fbAdsTopupAttachmentRelDir);
+if (!is_dir($fbAdsTopupAttachmentAbsDir)) {
+    @mkdir($fbAdsTopupAttachmentAbsDir, 0777, true);
+}
 
 // to display data to input
 if ($dataID) { //edit/remove/view
@@ -77,22 +83,17 @@ if (post('actionBtn')) {
                 $img_ext_lc = strtolower($img_ext);
 
                 if (in_array($img_ext_lc, $allowed_ext)) {
-                    $highestNumber = 0;
-                    $files = glob($img_path . $fat_trans_id . '_*.' . $img_ext);
-                    foreach ($files as $file) {
-                        $filename = basename($file);
-                        if (preg_match('/' . preg_quote($fat_trans_id, '/') . '_(\d+)\.' . preg_quote($img_ext, '/') . '$/', $filename, $matches)) {
-                            $number = (int)$matches[1];
-                            $highestNumber = max($highestNumber, $number);
-                        }
+                    $baseName = (string) pathinfo($fat_file_name, PATHINFO_FILENAME);
+                    $safeBaseName = preg_replace('/[^a-zA-Z0-9_-]/', '_', $baseName);
+                    if ($safeBaseName === '') {
+                        $safeBaseName = 'fb_ads_topup_attachment';
                     }
-
-                    $unique_id = $highestNumber + 1;
-                    $new_file_name = $fat_trans_id . '_' . $unique_id . '.' . $img_ext_lc;
+                    $new_file_name = $safeBaseName . '_' . date('Ymd_His') . '_' . mt_rand(1000, 9999) . '.' . $img_ext_lc;
+                    $targetAttachmentPath = $fbAdsTopupAttachmentAbsDir . $new_file_name;
 
                     // Move the uploaded file
-                    if (move_uploaded_file($fat_file_tmp_name, $img_path . $new_file_name)) {
-                        $fat_attach = $new_file_name; // Update $fat_attach with the new filename
+                    if (is_dir($fbAdsTopupAttachmentAbsDir) && move_uploaded_file($fat_file_tmp_name, $targetAttachmentPath)) {
+                        $fat_attach = $fbAdsTopupAttachmentRelDir . $new_file_name; // Update $fat_attach with the new relative path
                     } else {
                         $err2 = "Failed to upload the file.";
                     }
@@ -315,6 +316,29 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 
 <head>
     <link rel="stylesheet" href="../css/main.css">
+    <style>
+        .attachment-preview-media {
+            width: 100%;
+            max-width: 520px;
+        }
+
+        .attachment-preview-media img,
+        .attachment-preview-media iframe {
+            width: 100%;
+            border: 1px solid #d9e2ef;
+            border-radius: 10px;
+            background: #fff;
+        }
+
+        .attachment-preview-media img {
+            height: auto;
+            display: block;
+        }
+
+        .attachment-preview-media iframe {
+            min-height: 520px;
+        }
+    </style>
 
 </head>
 
@@ -503,17 +527,37 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                             <div class="d-flex justify-content-center justify-content-md-end px-4">
                                 <?php
                                 $attachmentSrc = '';
+                                $attachmentValue = '';
+                                $attachmentExt = '';
 
                                 if (isset($dataExisted) && isset($row['attachment']) && !isset($fat_attach)) {
-                                    $attachmentSrc = ($row['attachment'] == '' || $row['attachment'] == NULL) ? '' : $img_path . $row['attachment'];
+                                    $attachmentValue = (string) $row['attachment'];
                                 } else if (isset($fat_attach)) {
-                                    $attachmentSrc = $img_path . $fat_attach;
+                                    $attachmentValue = (string) $fat_attach;
+                                }
+
+                                if ($attachmentValue !== '') {
+                                    $normalizedAttachment = trim(str_replace('\\', '/', $attachmentValue), '/');
+                                    if (strpos($normalizedAttachment, 'attachment/') === 0) {
+                                        $attachmentSrc = rtrim((string) $SITEURL, '/') . '/' . $normalizedAttachment;
+                                    } else {
+                                        $attachmentSrc = $img_path . $normalizedAttachment;
+                                    }
+                                    $attachmentExt = strtolower(pathinfo(parse_url($attachmentSrc, PHP_URL_PATH), PATHINFO_EXTENSION));
                                 }
                                 ?>
-                                <img id="fat_attach_preview" name="fat_attach_preview"
-                                    src="<?php echo $attachmentSrc; ?>" class="img-thumbnail" alt="Attachment Preview">
+                                <div id="fat_attach_preview_wrap" class="attachment-preview-media"<?php echo $attachmentSrc === '' ? ' style="display:none;"' : ''; ?>>
+                                    <?php if ($attachmentSrc !== '') { ?>
+                                        <?php if ($attachmentExt === 'pdf') { ?>
+                                            <iframe id="fat_attach_preview_pdf" src="<?php echo htmlspecialchars($attachmentSrc, ENT_QUOTES, 'UTF-8'); ?>" title="Attachment Preview"></iframe>
+                                        <?php } else { ?>
+                                            <img id="fat_attach_preview" name="fat_attach_preview"
+                                                src="<?php echo htmlspecialchars($attachmentSrc, ENT_QUOTES, 'UTF-8'); ?>" class="img-thumbnail" alt="Attachment Preview">
+                                        <?php } ?>
+                                    <?php } ?>
+                                </div>
                                 <input type="hidden" name="fat_attachmentValue" id="fat_attachmentValue"
-                                    value="<?php if (isset($row['attachment'])) echo $row['attachment']; ?>">
+                                    value="<?php echo htmlspecialchars($attachmentValue, ENT_QUOTES, 'UTF-8'); ?>">
                             </div>
                         </div>
                     </div>

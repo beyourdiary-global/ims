@@ -1,10 +1,14 @@
 <?php
+ob_start();
+
 $currentPagePin = 91;
 $pageTitle = "Lazada Customer Record (Deals)";
 
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
+include_once ROOT . '/include/customer_tag.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
+$pinAccess = checkCurrentPin($connect, $pageTitle);
 include_once ROOT . '/include/user_record_log.php';
 
 $tblName = LAZADA_CUST_RCD;
@@ -74,6 +78,20 @@ if ($dataID && isset($_GET['open_order_id'])) {
         }
     }
 }
+
+$lazadaCustomerTagPlatform = 'lazada';
+$lazadaCustomerTagCustomerId = (isset($row['id']) ? (int) $row['id'] : 0);
+$lazadaCustomerTagDisplayName = isset($row['name']) ? trim((string) $row['name']) : '';
+$lazadaCustomerTagDraftToken = customerTagResolveDraftToken($act);
+$lazadaCustomerFreshAddPage = ($act === 'I' && strtoupper((string) $_SERVER['REQUEST_METHOD']) === 'GET' && !customerTagIsAjaxRequest());
+customerTagResetDraftOnFreshAddPage($lazadaCustomerTagPlatform, $act, $lazadaCustomerTagDraftToken);
+$lazadaCustomerTagState = array();
+if ($lazadaCustomerFreshAddPage) {
+    customerTagClearDraftTags($lazadaCustomerTagPlatform, $lazadaCustomerTagDraftToken);
+}
+$lazadaCustomerTagState = customerTagHandlePost($connect, $lazadaCustomerTagPlatform, $lazadaCustomerTagCustomerId, $pageTitle, $lazadaCustomerTagDisplayName, $lazadaCustomerTagDraftToken);
+$lazadaCustomerActiveTags = $lazadaCustomerFreshAddPage ? array() : customerTagGetDisplayTags($connect, $lazadaCustomerTagPlatform, $lazadaCustomerTagCustomerId, $lazadaCustomerTagDraftToken);
+$lazadaCustomerDraftTagIds = customerTagExtractTagIds($lazadaCustomerActiveTags);
 
 $series_list_result = getData('*', '', '', BRD_SERIES, $connect);
 
@@ -200,7 +218,15 @@ if (post('actionBtn')) {
                     $query = "INSERT INTO " . $tblName . "(lcr_id,name,email,phone,sales_pic,country,brand,series,ship_rec_name,ship_rec_add,ship_rec_contact,remark,create_by,create_date,create_time) VALUES ('$lcr_id','$lcr_name','$lcr_email','$lcr_phone','$lcr_pic','$lcr_country','$lcr_brand','$lcr_series','$lcr_rec_name','$lcr_rec_add','$lcr_rec_ctc','$lcr_remark','" . USER_ID . "',curdate(),curtime())";
                     // Execute the query
                     $returnData = mysqli_query($connect, $query);
-                    $_SESSION['tempValConfirmBox'] = true;
+                    if ($returnData) {
+                        $dataID = $connect->insert_id;
+                        customerTagApplyDraftTagsToCustomer($connect, $lazadaCustomerTagPlatform, $dataID, $pageTitle, $lcr_name, customerTagGetPostedDraftTagIds(), $lazadaCustomerTagDraftToken);
+                        $_SESSION['tempValConfirmBox'] = true;
+                    } else {
+                        $errorMsg = mysqli_error($connect);
+                        $err1 = "Failed to add record: " . $errorMsg;
+                        $act = "F";
+                    }
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
                     $act = "F";
@@ -408,12 +434,18 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         <div id="formContainer" class="container d-flex justify-content-center">
             <div class="col-6 col-md-6 formWidthAdjust">
                 <form id="FORForm" method="post" action="" enctype="multipart/form-data">
+                    <input type="hidden" name="customerTagDraftIds" class="customer-tag-draft-input" data-platform="<?= htmlspecialchars($lazadaCustomerTagPlatform, ENT_QUOTES, 'UTF-8') ?>" value="<?= htmlspecialchars(implode(',', $lazadaCustomerDraftTagIds), ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="customerTagDraftToken" value="<?= htmlspecialchars($lazadaCustomerTagDraftToken, ENT_QUOTES, 'UTF-8') ?>">
                     <div class="form-group mb-5">
-                        <h2>
-                            <?php
-                            echo displayPageAction($act, $pageTitle);
-                            ?>
-                        </h2>
+                        <?php $lazadaCustomerPageActionTitle = displayPageAction($act, $pageTitle); ?>
+                        <div class="d-flex align-items-center justify-content-between flex-wrap gap-3">
+                            <h2 class="mb-0 customer-tag-page-title" data-base-title="<?= htmlspecialchars($lazadaCustomerPageActionTitle, ENT_QUOTES, 'UTF-8') ?>">
+                                <?php
+                                echo customerTagRenderTitle($lazadaCustomerPageActionTitle, $lazadaCustomerActiveTags);
+                                ?>
+                            </h2>
+                            <?php echo customerTagRenderManageButton($lazadaCustomerTagPlatform, $lazadaCustomerTagCustomerId, isActionAllowed('Edit', $pinAccess) && $act !== 'I'); ?>
+                        </div>
                     </div>
 
                     <div id="err_msg" class="mb-3">
@@ -825,7 +857,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                 }
                 ?>
 
-                <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
+                <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column mobile-sticky-form-actions-target">
                     <?php
                     switch ($act) {
                         case 'I':
@@ -854,6 +886,22 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         echo $clearLocalStorage;
         echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
     }
+    ?>
+    <?php
+    echo customerTagRenderManager(
+        $connect,
+        $lazadaCustomerTagPlatform,
+        $lazadaCustomerTagCustomerId,
+        $pageTitle,
+        $lazadaCustomerTagDisplayName,
+        array(
+            'allow_manage' => isActionAllowed('Edit', $pinAccess) && $act !== 'I',
+            'ui_state' => $lazadaCustomerTagState,
+            'active_tags' => $lazadaCustomerActiveTags,
+            'reset_draft_on_load' => ($act === 'I' && strtoupper((string) $_SERVER['REQUEST_METHOD']) === 'GET'),
+            'draft_token' => $lazadaCustomerTagDraftToken,
+        )
+    );
     ?>
     <script>
         var page = "<?= $pageTitle ?>";

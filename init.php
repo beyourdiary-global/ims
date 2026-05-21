@@ -164,6 +164,9 @@ define('STOCK_ORDER_REQ', 'stock_order_request');
 define('STOCK_ORDER_REQ_ITEM', 'stock_order_request_item');
 define('L_TYPE', 'leave_type');
 define('CUR_SEGMENTATION', 'customer_segmentation');
+define('CUS_LEVEL', 'customer_level');
+define('CUS_REPEAT', 'customer_repeat');
+define('MESSAGE_SHORTCUTS', 'message_shortcuts');
 define('RACE', 'race');
 define('L_STS', 'leave_status');
 define('ID_TYPE', 'identity_type');
@@ -176,6 +179,8 @@ define('TOKEN_SETT', 'token_setting');
 define('EMPINFO', 'employee_info');
 define('EMPPERSONALINFO', 'employee_personal_info');
 define('TAG', 'tag');
+define('CUS_TAG_ASSIGNMENT', 'customer_tag_assignment');
+define('LABEL', 'label');
 define('EMPLEAVE', 'employee_leave');
 define('CUS_INFO', 'customer_info');
 define('L_PENDING', 'leave_pending');
@@ -183,6 +188,12 @@ define('BRD_SERIES', 'brand_series');
 define('FB_CUST_DEALS', 'customer_facebook_deals_transaction');
 define('URBAN_CUST_REG', 'urbanism_customer_register_info');
 define('OFFICIAL_PROCESS_ORDER', 'official_process_order');
+define('ORDER_FLOW_TRANSITION_PERMISSION', 'order_flow_transition_permission');
+define('ORDER_FLOW_SETTING', 'order_flow_setting');
+define('ORDER_STATUS_TRANSITION_LOG', 'order_status_transition_log');
+define('ORDER_EDIT_HISTORY', 'order_edit_history');
+define('ORDER_RETURN_LOG', 'order_return_log');
+define('ORDER_WAREHOUSE_SCAN_TOKEN', 'order_warehouse_scan_token');
 define('YEARLYGOAL', 'yearly_goals');
 define('USER_RECORD_LOG', 'user_record_log');
 define('TASK_COLUMN', 'task_board_status');
@@ -261,5 +272,12 @@ define('LAZADA_ORDER_REQ', 'lazada_order_request');
 $connect = @mysqli_connect(dbhost, dbuser, dbpwd, dbname);
 $finance_connect = @mysqli_connect(dbhost, dbuser, dbpwd, dbFinance);
 
+if ($connect) {
+    mysqli_set_charset($connect, 'utf8mb4');
+}
+
+if ($finance_connect) {
+    mysqli_set_charset($finance_connect, 'utf8mb4');
+}
 //define session
 ?>

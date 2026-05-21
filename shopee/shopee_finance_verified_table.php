@@ -48,6 +48,15 @@ if (isset($_GET['verify_id'])) {
 $redirect_page = $SITEURL . '/shopee/shopee_order_req.php';
 $deleteRedirectPage = $SITEURL . '/shopee/shopee_finance_verified_table.php';
 $result = getData('*', 'order_status="OC"', '', SHOPEE_SG_ORDER_REQ, $finance_connect);
+$shopeeBuyerMetaMap = array();
+if ($result instanceof mysqli_result) {
+    $shopeeBuyerLookupValues = array();
+    while ($buyerLookupRow = $result->fetch_assoc()) {
+        $shopeeBuyerLookupValues[] = isset($buyerLookupRow['buyer']) ? $buyerLookupRow['buyer'] : '';
+    }
+    mysqli_data_seek($result, 0);
+    $shopeeBuyerMetaMap = customerLabelGetShopeeCustomerMetaMap($connect, $finance_connect, $shopeeBuyerLookupValues);
+}
 
 ?>
 
@@ -171,9 +180,6 @@ $result = getData('*', 'order_status="OC"', '', SHOPEE_SG_ORDER_REQ, $finance_co
                             $q3 = getData('name', "id='" . $row['brand'] ."'", '', BRAND, $connect);
                             $brand = $q3->fetch_assoc();
 
-                            $q4 = getData('buyer_username', "id='" . $row['buyer'] . "'", '', SHOPEE_CUST_INFO, $finance_connect);
-                            $buyer = $q4->fetch_assoc();
-
                             $q6 = getData('*', "id='" . $row['buyer_pay_meth'] . "'", '', PAY_MTHD_SHOPEE, $finance_connect);
                             $pay = $q6->fetch_assoc();
 
@@ -220,9 +226,7 @@ $result = getData('*', 'order_status="OC"', '', SHOPEE_SG_ORDER_REQ, $finance_co
                                     <td scope="row">
                                         <?= $brand['name'] ?? '' ?>
                                     </td>
-                                    <td scope="row">
-                                        <?= $buyer['buyer_username'] ?? '' ?>
-                                    </td>
+                                    <td scope="row"><?= customerLabelRenderShopeeBuyerCell($connect, $finance_connect, isset($row['buyer']) ? $row['buyer'] : '', '', $shopeeBuyerMetaMap) ?></td>
                                     <td scope="row">
                                         <?= $pay['name'] ?? '' ?>
                                     </td>

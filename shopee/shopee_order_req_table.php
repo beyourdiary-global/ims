@@ -23,13 +23,13 @@ $pinAccess = checkPin($connect, $allOrdersPageName);
 if (!is_array($pinAccess) || count($pinAccess) === 0) {
     $verifyAccess = checkPin($connect, $verifyPageName);
     if (is_array($verifyAccess) && count($verifyAccess) > 0) {
-        echo "<script>location.replace('shopee_verify.php');</script>";
+        echo "<script>location.replace('shopee_arrival_management.php');</script>";
         exit;
     }
 
     $processingAccess = checkPin($connect, $processingPageName);
     if (is_array($processingAccess) && count($processingAccess) > 0) {
-        echo "<script>location.replace('shopee_processing_order.php');</script>";
+        echo "<script>location.replace('shopee_waiting_to_pack.php');</script>";
         exit;
     }
     echo "<script>alert('You do not have permission to view Shopee All Orders.'); location.replace('../dashboard.php');</script>";
@@ -40,6 +40,12 @@ $_SESSION['act'] = '';
 $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
+shopeeOmsEnsureRealtimePostponedSync($connect, $finance_connect);
+
 // Build numeric action keys from login session pin access.
 $accessActionKey = array();
 $shopeePinGroups = array(128, 129, 130);
@@ -49,51 +55,138 @@ foreach ($shopeePinGroups as $pinGroupId) {
     }
 }
 $accessActionKey = array_values(array_unique(array_map('intval', $accessActionKey)));
+$canVerifyAction = in_array(14, $accessActionKey, true);
+$canAssignEstimatedReceivedDate = in_array(2, $accessActionKey, true) || $canVerifyAction;
+$estimatedDateToday = new DateTimeImmutable('today');
+$estimatedDateMin = $estimatedDateToday->modify('+1 day')->format('Y-m-d');
+$estimatedDateMax = $estimatedDateToday->modify('+10 days')->format('Y-m-d');
 $num = $default_currency_id = 1; 
 
-if (isset($_GET['verify_id'])) {
-    // SECURITY FIX: Explicitly check if the user has the Verify action permission (14)
-    if (!in_array(14, $accessActionKey)) {
-        echo "<script>alert('Security Error: You do not have permission to verify orders.'); location.replace('shopee_verify.php');</script>";
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceivedDateBtn')) {
+    if (!$canAssignEstimatedReceivedDate) {
+        echo "<script>alert('Security Error: You do not have permission to assign Estimate Received Dates.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
         exit;
     }
 
-    $orderId = intval($_GET['verify_id']);
-    $verifyMessageText = '';
-    $checkSql = "SELECT order_status FROM " . SHOPEE_SG_ORDER_REQ . " WHERE id = $orderId";
-    $checkResult = mysqli_query($finance_connect, $checkSql);
-    if ($checkResult && $row = mysqli_fetch_assoc($checkResult)) {
-        if ($row['order_status'] === 'OC') {
-            $updateSql = "UPDATE " . SHOPEE_SG_ORDER_REQ . " SET order_status = 'C', update_by = '" . USER_ID . "', update_date = curdate(), update_time = curtime() WHERE id = $orderId";
-            $updateResult = mysqli_query($finance_connect, $updateSql);
-            if ($updateResult) {
-                $auditData = array(
-                    'log_act'     => 'edit',
-                    'page'        => 'Order Verification',
-                    'query_rec'   => $orderId,
-                    'query_table' => SHOPEE_SG_ORDER_REQ,
-                    'oldval'      => 'order_status: OC',
-                    'changes'     => 'order_status: C',
-                    'uid'         => USER_ID,
-                    'act_msg'     => "Verified order #$orderId (status changed from OC to C)",
-                    'cdate'       => date('Y-m-d'),
-                    'ctime'       => date('H:i:s'),
-                    'cby'         => USER_NAME,
-                    'connect'     => $connect
-                );
-                audit_log($auditData);
-                $verifyMessageText = "Order #$orderId has been successfully verified.";
-            } else {
-                $verifyMessageText = "Failed to update order #$orderId.";
-            }
-        } else {
-            $verifyMessageText = "Order #$orderId is not in OC status.";
+    $assignOrderId = postSpaceFilter('estimated_received_order_id');
+    $assignDate = postSpaceFilter('estimated_received_date');
+    $assignmentResult = assignEstimatedReceivedDate($finance_connect, SHOPEE_SG_ORDER_REQ, $assignOrderId, $assignDate, USER_ID);
+
+    if ($assignmentResult['success']) {
+        $safeAssignedDate = isset($assignmentResult['date']) ? $assignmentResult['date'] : '';
+        $safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
+        $oldStatus = isset($assignmentResult['old_status']) ? (string) $assignmentResult['old_status'] : '';
+        $newStatus = isset($assignmentResult['new_status']) ? (string) $assignmentResult['new_status'] : '';
+        $changeSummary = 'estimated_received_date: ' . $safeAssignedDate;
+        if ($oldStatus !== '' && $newStatus !== '' && $oldStatus !== $newStatus) {
+            $changeSummary = 'order_status: ' . $oldStatus . ' -> ' . $newStatus . ', ' . $changeSummary;
         }
-    } else {
-        $verifyMessageText = "Order #$orderId not found.";
+        $auditData = array(
+            'log_act' => 'edit',
+            'page' => $pageTitle,
+            'query_rec' => 'estimated_received_date=' . $safeAssignedDate,
+            'query_table' => SHOPEE_SG_ORDER_REQ,
+            'oldval' => $oldStatus !== '' ? ('order_status: ' . $oldStatus) : '',
+            'changes' => $changeSummary,
+            'uid' => USER_ID,
+            'act_msg' => $safeUserName . " assigned the Estimate Received Date <b>" . $safeAssignedDate . "</b> for Shopee order [ <b>ID = " . (int) $assignOrderId . "</b> ].",
+            'cdate' => $cdate,
+            'ctime' => $ctime,
+            'cby' => USER_ID,
+            'connect' => $connect
+        );
+        audit_log($auditData);
     }
 
-    echo "<script>alert('" . addslashes($verifyMessageText) . "'); location.replace('shopee_order_req_table.php');</script>";
+    echo "<script>alert('" . addslashes($assignmentResult['message']) . "'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+    exit;
+}
+
+if (isset($_GET['verify_id'])) {
+    $orderId = intval($_GET['verify_id']);
+    $verifyResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'V', array(
+        'actor_user_id' => USER_ID,
+        'actor_user_group_id' => USER_GROUP,
+        'source_page' => $pageTitle,
+        'remark' => 'Verified from all orders list.',
+    ));
+    echo "<script>alert('" . addslashes(isset($verifyResult['message']) ? $verifyResult['message'] : 'Unable to verify order.') . "'); location.replace('shopee_order_req_table.php');</script>";
+    exit;
+}
+
+if (isset($_GET['complete_id'])) {
+    $orderId = intval($_GET['complete_id']);
+    $completeResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'C', array(
+        'actor_user_id' => USER_ID,
+        'actor_user_group_id' => USER_GROUP,
+        'source_page' => $pageTitle,
+        'remark' => 'Completed from all orders list.',
+    ));
+    echo "<script>alert('" . addslashes(isset($completeResult['message']) ? $completeResult['message'] : 'Unable to complete order.') . "'); location.replace('shopee_order_req_table.php');</script>";
+    exit;
+}
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['force_wafc_id'])) {
+    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+
+    if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
+        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('shopee_order_req_table.php');</script>";
+        exit;
+    }
+
+    $orderId = intval($_POST['force_wafc_id']);
+
+    $wafcResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'WAFC', array(
+        'actor_user_id' => USER_ID,
+        'actor_user_group_id' => USER_GROUP,
+        'source_page' => $pageTitle,
+        'remark' => 'Moved to Waiting Admin Final Check without waiting 14 days.',
+        'action' => 'manual_force_wafc',
+        'skip_permission' => true,
+        'allow_auto_follow_up' => false,
+    ));
+
+    if (!empty($wafcResult['success'])) {
+        $oldStatus = isset($wafcResult['old_status']) ? (string) $wafcResult['old_status'] : 'PR';
+        $newStatus = isset($wafcResult['new_status']) ? (string) $wafcResult['new_status'] : 'WAFC';
+
+        audit_log(array(
+            'log_act' => 'edit',
+            'page' => $pageTitle,
+            'query_rec' => $orderId,
+            'query_table' => SHOPEE_SG_ORDER_REQ,
+            'oldval' => 'order_status: ' . $oldStatus,
+            'changes' => 'order_status: ' . $oldStatus . ' -> ' . $newStatus,
+            'uid' => USER_ID,
+            'act_msg' => USER_NAME . " Moved Shopee order [ <b>ID = " . $orderId . "</b> ] from <b>" . $oldStatus . "</b> to <b>" . $newStatus . "</b> without waiting 14 days.",
+            'cdate' => $cdate,
+            'ctime' => $ctime,
+            'cby' => USER_ID,
+            'connect' => $connect
+        ));
+    }
+
+    echo "<script>alert('" . addslashes(isset($wafcResult['message']) ? $wafcResult['message'] : 'Unable to move order to WAFC.') . "'); location.replace('shopee_order_req_table.php');</script>";
+    exit;
+}
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['return_id'])) {
+
+    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
+        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('shopee_order_req_table.php');</script>";
+        exit;
+    }
+
+    $orderId = intval($_POST['return_id']);
+    $returnResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'R', array(
+        'actor_user_id' => USER_ID,
+        'actor_user_group_id' => USER_GROUP,
+        'source_page' => $pageTitle,
+        'remark' => 'Marked as Return from all orders list.',
+        'action' => 'mark_return',
+    ));
+    echo "<script>alert('" . addslashes(isset($returnResult['message']) ? $returnResult['message'] : 'Unable to mark order as Return.') . "'); location.replace('shopee_order_req_table.php');</script>";
     exit;
 }
 
@@ -133,6 +226,15 @@ $whereSql = implode(" AND ", $whereConditions);
 $redirect_page = $SITEURL . '/shopee/shopee_order_req.php';
 $deleteRedirectPage = $SITEURL . '/shopee/shopee_order_req_table.php';
 $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_connect);
+$shopeeBuyerMetaMap = array();
+if ($result instanceof mysqli_result) {
+    $shopeeBuyerLookupValues = array();
+    while ($buyerLookupRow = $result->fetch_assoc()) {
+        $shopeeBuyerLookupValues[] = isset($buyerLookupRow['buyer']) ? $buyerLookupRow['buyer'] : '';
+    }
+    mysqli_data_seek($result, 0);
+    $shopeeBuyerMetaMap = customerLabelGetShopeeCustomerMetaMap($connect, $finance_connect, $shopeeBuyerLookupValues);
+}
 $hasRows = ($result && mysqli_num_rows($result) > 0);
 ?>
 
@@ -141,8 +243,63 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
 <head>
     <link rel="stylesheet" href="../css/main.css">
     <link rel="stylesheet" href="../css/shopeeOrderRequest.css">
+    <style>
+        .estimated-date-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 2000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.45);
+            padding: 16px;
+        }
+
+        .estimated-date-modal.is-open {
+            display: flex;
+        }
+
+        .estimated-date-modal__dialog {
+            width: 100%;
+            max-width: 420px;
+            border-radius: 12px;
+            background: #fff;
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+            padding: 20px;
+        }
+
+        .estimated-date-modal__close-btn,
+        .estimated-date-modal__action-btn {
+            text-transform: none !important;
+        }
+    </style>
 </head>
 <script>
+    function openEstimatedReceivedDateModal(orderId, orderCode, minDate, maxDate) {
+        const modal = document.getElementById('estimatedReceivedDateModal');
+        const title = document.getElementById('estimatedReceivedDateTitle');
+        const orderIdInput = document.getElementById('estimated_received_order_id');
+        const dateInput = document.getElementById('estimated_received_date');
+
+        if (!modal || !orderIdInput || !dateInput) {
+            return;
+        }
+
+        title.textContent = orderCode ? 'Assign Estimate Received Date for ' + orderCode : 'Assign Estimate Received Date';
+        orderIdInput.value = orderId;
+        dateInput.value = '';
+        dateInput.min = minDate;
+        dateInput.max = maxDate;
+        modal.classList.add('is-open');
+    }
+
+    function closeEstimatedReceivedDateModal() {
+        const modal = document.getElementById('estimatedReceivedDateModal');
+        if (modal) {
+            modal.classList.remove('is-open');
+        }
+    }
+
   function toggleFilters(sectionId) {
         const section = document.getElementById(sectionId);
         section.style.display = (section.style.display === 'none') ? 'flex' : 'none';
@@ -165,6 +322,15 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
     window.onload = autoToggleSections;
     $(document).ready(() => {
         createSortingTable('shopee_order_req_table');
+
+        $(document).on('click', '.btn-assign-estimated-date', function () {
+            openEstimatedReceivedDateModal(
+                $(this).data('orderId'),
+                $(this).data('orderCode'),
+                $(this).data('minDate'),
+                $(this).data('maxDate')
+            );
+        });
     });
 </script>
 <body>
@@ -369,6 +535,7 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                             <th scope="col" width="60px">S/N</th>
                             <th scope="col" id="action_col" width="100px">Action</th>
                             <th scope="col">Order Status</th>
+                            <th scope="col">Estimate Received Date</th>
                             <th scope="col">Shopee Account</th>
                             <th scope="col">Currency</th>
                             <th scope="col">Order ID</th>
@@ -472,9 +639,6 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                                 $pkg['name'] = implode(', ', $pkgNames);
                             }
 
-                            $q4 = getData('buyer_username', "id='" . $row['buyer'] . "'", '', SHOPEE_CUST_INFO, $finance_connect);
-                            $buyer = $q4 ? $q4->fetch_assoc() : [];
-
                             $q6 = getData('*', "id='" . $row['buyer_pay_meth'] . "'", '', PAY_MTHD_SHOPEE, $finance_connect);
                             $pay = $q6 ? $q6->fetch_assoc() : [];
 
@@ -520,11 +684,54 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                                 <?php renderViewEditButtonByPin("1", $redirect_page, $row, $accessActionKey); ?>
                                 <?php renderViewEditButtonByPin("2", $redirect_page, $row, $accessActionKey, $act_2); ?>
                                 <?php renderDeleteButtonByPin($accessActionKey, $row['id'], $row['orderID'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?> 
-                                <?php if($row['order_status'] == 'OC' && in_array(14, $accessActionKey)){ ?>
+                                <?php
+                                $statusCode = shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '');
+                                $canAssignThisOrder = $canAssignEstimatedReceivedDate && shopeeOmsPassesAssignmentScope($connect, $row, USER_ID, USER_GROUP);
+                                $canVerifyThisOrder = shopeeOmsHasTransitionPermission($connect, $statusCode, 'V', USER_GROUP, $row, USER_ID);
+                                $canCompleteThisOrder = shopeeOmsHasTransitionPermission($connect, $statusCode, 'C', USER_GROUP, $row, USER_ID);
+                                ?>
+                                <?php if ($statusCode === 'TP') { ?>
+                                 <a class="btn btn-sm btn-rounded btn-primary" href="<?= $SITEURL . '/shopee/shopee_order_request_info.php?id=' . (int) $row['id'] ?>" title="Open QR Info">
+                                     <i class="fa-solid fa-qrcode"></i>
+                                 </a>
+                                <?php } ?>
+                                <?php if (shouldShowEstimatedReceivedDateButton($row) && $canAssignThisOrder) { ?>
+                                 <button
+                                     type="button"
+                                     class="btn btn-sm btn-warning btn-assign-estimated-date"
+                                     data-order-id="<?= (int) $row['id'] ?>"
+                                     data-order-code="<?= htmlspecialchars((string) ($row['orderID'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                     data-min-date="<?= $estimatedDateMin ?>"
+                                     data-max-date="<?= $estimatedDateMax ?>"
+                                     title="Assign Estimate Received Date"><i class="fa-solid fa-calendar-days"></i></button>
+                                <?php } ?>
+                                <?php if ($statusCode === 'WAFC' && $canVerifyThisOrder) { ?>
                                  <a href="?verify_id=<?= $row['id'] ?>" class="btn btn-sm btn-success btn-verified" onclick="return confirm('Mark this order as verified?')">Verified</a>
+                                <?php } ?>
+                                <?php if ($statusCode === 'V' && $canCompleteThisOrder) { ?>
+                                 <a href="?complete_id=<?= $row['id'] ?>" class="btn btn-sm btn-dark btn-verified" onclick="return confirm('Mark this order as complete?')">Complete</a>
+                                <?php } ?>
+                                <?php if (in_array($statusCode, array('SP', 'WAERD', 'WR', 'PD', 'PR', 'WAFC', 'V', 'C'), true)) { ?>
+                                <?php if ($statusCode === 'PR') { ?>
+                                <form method="post" class="d-inline" onsubmit="return confirm('Move this order to Waiting Admin Final Check now without waiting 14 days?')">
+                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
+                                    <input type="hidden" name="force_wafc_id" value="<?= (int) $row['id'] ?>">
+                                    <button type="submit" class="btn btn-sm btn-rounded btn-info" title="Move to WAFC Now">
+                                        <i class="fas fa-forward"></i>
+                                    </button>
+                                </form>
+                                <?php } ?>
+                                 <form method="post" class="d-inline" onsubmit="return confirm('Mark this order as Return?')">
+                                     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
+                                     <input type="hidden" name="return_id" value="<?= (int) $row['id'] ?>">
+                                     <button type="submit" class="btn btn-sm btn-rounded btn-warning" title="Mark as Return">
+                                         <i class="fa-solid fa-rotate-left"></i>
+                                     </button>
+                                 </form>
                                 <?php } ?>
                                 </td>
                                 <td scope="row"><?= getOrderStatusLabel($row['order_status']) ?></td>
+                                <td scope="row"><?= !empty($row['estimated_received_date']) ? $row['estimated_received_date'] : '' ?></td>
                                 <td scope="row"><?= $acc['name'] ?? '' ?></td>
                                 <td scope="row"><?= $curr['unit'] ?? '' ?></td>
                                 <td scope="row"><?= $row['orderID'] ?? '' ?></td>
@@ -532,7 +739,7 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                                 <td scope="row"><?= $row['time'] ?? '' ?></td>
                                 <td scope="row"><?= $pkg['name'] ?? '' ?></td>
                                 <td scope="row"><?= $brand['name'] ?? '' ?></td>
-                                <td scope="row"><?= $buyer['buyer_username'] ?? '' ?></td>
+                                <td scope="row"><?= customerLabelRenderShopeeBuyerCell($connect, $finance_connect, isset($row['buyer']) ? $row['buyer'] : '', '', $shopeeBuyerMetaMap) ?></td>
                                 <td scope="row"><?= $pay['name'] ?? '' ?></td>
                                 <td scope="row"><?= $pic['name'] ?? '' ?></td>
                                 <td scope="row"><?= $row['price'] ?? '' ?></td>
@@ -562,6 +769,7 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                             <th scope="col" width="60px">S/N</th>
                             <th scope="col" id="action_col" width="100px">Action</th>
                             <th scope="col">Order Status</th>
+                            <th scope="col">Estimate Received Date</th>
                             <th scope="col">Shopee Account</th>
                             <th scope="col">Currency</th>
                             <th scope="col">Order ID</th>
@@ -590,6 +798,27 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                 </table>
                 </div>
             <?php } ?>
+        </div>
+    </div>
+    <div id="estimatedReceivedDateModal" class="estimated-date-modal" onclick="if (event.target === this) closeEstimatedReceivedDateModal();">
+        <div class="estimated-date-modal__dialog">
+            <form method="post" action="">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <h5 class="mb-0" id="estimatedReceivedDateTitle">Assign Estimate Received Date</h5>
+                    <button type="button" class="btn btn-sm btn-light px-2 estimated-date-modal__close-btn" onclick="closeEstimatedReceivedDateModal()" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <input type="hidden" name="assignEstimatedReceivedDateBtn" value="1">
+                <input type="hidden" name="estimated_received_order_id" id="estimated_received_order_id" value="">
+                <div class="mb-3">
+                    <label class="form-label" for="estimated_received_date">Estimate Received Date</label>
+                    <input type="date" class="form-control" name="estimated_received_date" id="estimated_received_date" min="<?= $estimatedDateMin ?>" max="<?= $estimatedDateMax ?>" required>
+                    <small class="text-muted">Choose a date from <?= $estimatedDateMin ?> until <?= $estimatedDateMax ?>.</small>
+                </div>
+                <div class="d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-outline-secondary estimated-date-modal__action-btn" onclick="closeEstimatedReceivedDateModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary estimated-date-modal__action-btn">Save</button>
+                </div>
+            </form>
         </div>
     </div>
 </body>
