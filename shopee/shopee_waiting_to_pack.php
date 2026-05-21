@@ -279,30 +279,33 @@ if (!empty($orderRows)) {
             showWaitingToPackStatusPopup(<?= json_encode($statusMessage) ?>);
             <?php } ?>
 
-            var waitingToPackRowCount = $('#waiting_to_pack_table tbody tr').length;
-            var waitingToPackTable = new DataTable('#waiting_to_pack_table', {
-                paging: waitingToPackRowCount > 10,
-                info: waitingToPackRowCount > 10,
-                searching: false,
-                ordering: true,
-                lengthChange: waitingToPackRowCount > 10,
-                pageLength: 10,
-                lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],
-                autoWidth: false,
-                order: [],
-                columnDefs: [
-                    { orderable: false, searchable: false, targets: [0, 6] }
-                ]
-            });
-            datatableAlignment('waiting_to_pack_table');
-
-            waitingToPackTable.on('draw', function () {
-                var pageInfo = waitingToPackTable.page.info();
-                waitingToPackTable.column(0, { page: 'current' }).nodes().each(function (cell, index) {
-                    cell.innerHTML = pageInfo.start + index + 1;
+            var waitingToPackRowCount = <?= !empty($orderRows) ? count($orderRows) : 0 ?>;
+            var waitingToPackTable = null;
+            if (waitingToPackRowCount > 0) {
+                waitingToPackTable = new DataTable('#waiting_to_pack_table', {
+                    paging: waitingToPackRowCount > 10,
+                    info: waitingToPackRowCount > 10,
+                    searching: false,
+                    ordering: true,
+                    lengthChange: waitingToPackRowCount > 10,
+                    pageLength: 10,
+                    lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, 'All']],
+                    autoWidth: false,
+                    order: [],
+                    columnDefs: [
+                        { orderable: false, searchable: false, targets: [0, 6] }
+                    ]
                 });
-            });
-            waitingToPackTable.draw(false);
+                datatableAlignment('waiting_to_pack_table');
+
+                waitingToPackTable.on('draw', function () {
+                    var pageInfo = waitingToPackTable.page.info();
+                    waitingToPackTable.column(0, { page: 'current' }).nodes().each(function (cell, index) {
+                        cell.innerHTML = pageInfo.start + index + 1;
+                    });
+                });
+                waitingToPackTable.draw(false);
+            }
 
             var form = document.getElementById('waitingToPackScanForm');
             var scanValueInput = document.getElementById('scan_value');
