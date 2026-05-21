@@ -90,7 +90,7 @@ if ($dataID) { //edit/remove/view
 }
 
 $scrSegmentationBadgeHtml = '';
-if (isset($row['id']) && (int) $row['id'] > 0) {
+if (isset($dataExisted) && !empty($dataID) && $act !== 'I' && isset($row['id']) && (int) $row['id'] > 0) {
     $scrCustomerLabelMap = customerLabelGetCustomerLabelMap($connect, 'shopee', array((int) $row['id']));
     if (isset($scrCustomerLabelMap[(int) $row['id']]['segmentation'])) {
         $scrSegmentationBadgeHtml = customerLabelRenderBadge($scrCustomerLabelMap[(int) $row['id']]['segmentation']);

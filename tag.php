@@ -103,7 +103,13 @@ if (post('actionBtn')) {
 
                     $query = "INSERT INTO " . $tblName . "(name,remark,create_by,create_date,create_time) VALUES ('$currentDataName','$dataRemark','" . USER_ID . "',curdate(),curtime())";
                     $returnData = mysqli_query($connect, $query);
-                    $dataID = $connect->insert_id;
+                    if ($returnData) {
+                        $dataID = $connect->insert_id;
+                        $act = 'I';
+                    } else {
+                        $errorMsg = mysqli_error($connect);
+                        $act = 'F';
+                    }
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
                     $act = "F";
@@ -127,6 +133,12 @@ if (post('actionBtn')) {
                     if ($oldvalarr && $chgvalarr) {
                         $query = "UPDATE " . $tblName . " SET name ='$currentDataName', remark ='$dataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
                         $returnData = mysqli_query($connect, $query);
+                        if ($returnData) {
+                            $act = 'E';
+                        } else {
+                            $errorMsg = mysqli_error($connect);
+                            $act = 'F';
+                        }
                     } else {
                         $act = 'NC';
                     }
