@@ -4587,12 +4587,90 @@ $("#taskBoardSearchInput").on("input", function () {
   applyBoardFilters();
 });
 
+function positionTaskBoardFilterMenu() {
+  var dropdown = document.getElementById("taskBoardFilterDropdown");
+  var button = document.getElementById("taskBoardFilterBtn");
+  var menu = document.getElementById("taskBoardFilterMenu");
+  if (!dropdown || !button || !menu || !dropdown.classList.contains("show")) {
+    return;
+  }
+
+  var buttonRect = button.getBoundingClientRect();
+  var mainContent = document.querySelector(".task-main-content");
+  var boardCards = document.querySelectorAll("#taskBoardGrid .task-item-card");
+  var viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  var menuWidth = Math.min(380, Math.max(280, viewportWidth - 18));
+  var left = Math.max(9, Math.min(buttonRect.left, viewportWidth - menuWidth - 9));
+  var top = buttonRect.bottom + 8;
+
+  if (mainContent && boardCards.length === 0) {
+    var mainContentRect = mainContent.getBoundingClientRect();
+    top = mainContentRect.bottom + 8;
+  }
+
+  menu.classList.add("task-board-filter-menu-fixed");
+  menu.style.width = menuWidth + "px";
+  menu.style.left = left + "px";
+  menu.style.top = top + "px";
+}
+
+function attachTaskBoardFilterMenuToBody() {
+  var menu = document.getElementById("taskBoardFilterMenu");
+  if (!menu || menu.parentNode === document.body) {
+    return;
+  }
+
+  menu.__taskBoardFilterOriginalParent = menu.parentNode;
+  menu.__taskBoardFilterOriginalNextSibling = menu.nextSibling;
+  document.body.appendChild(menu);
+}
+
+function restoreTaskBoardFilterMenuParent() {
+  var menu = document.getElementById("taskBoardFilterMenu");
+  if (
+    !menu ||
+    !menu.__taskBoardFilterOriginalParent ||
+    menu.parentNode !== document.body
+  ) {
+    return;
+  }
+
+  var parent = menu.__taskBoardFilterOriginalParent;
+  var nextSibling = menu.__taskBoardFilterOriginalNextSibling || null;
+  parent.insertBefore(menu, nextSibling);
+  menu.__taskBoardFilterOriginalParent = null;
+  menu.__taskBoardFilterOriginalNextSibling = null;
+}
+
+function resetTaskBoardFilterMenuPosition() {
+  var menu = document.getElementById("taskBoardFilterMenu");
+  if (!menu) {
+    return;
+  }
+
+  menu.classList.remove("task-board-filter-menu-fixed");
+  menu.style.width = "";
+  menu.style.left = "";
+  menu.style.top = "";
+}
+
 $(document).on("shown.bs.dropdown", "#taskBoardFilterDropdown", function () {
   renderBoardFilterUi();
+  attachTaskBoardFilterMenuToBody();
+  positionTaskBoardFilterMenu();
+});
+
+$(document).on("hidden.bs.dropdown", "#taskBoardFilterDropdown", function () {
+  resetTaskBoardFilterMenuPosition();
+  restoreTaskBoardFilterMenuParent();
 });
 
 $(document).on("show.bs.dropdown", "#taskBoardGroupDropdown", function () {
   syncBoardGroupControlUi();
+});
+
+$(window).on("resize scroll", function () {
+  positionTaskBoardFilterMenu();
 });
 
 $(document).on("click", ".task-board-group-option", function (e) {
