@@ -36,7 +36,7 @@ $_SESSION['delChk'] = '';
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && !isset($_GET['verify_id'])) {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET') {
     audit_log(array(
         'log_act' => 'view',
         'page' => $pageTitle,
