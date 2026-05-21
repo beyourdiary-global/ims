@@ -176,6 +176,8 @@ $formRows = array(
 );
 
 $err = '';
+$invalidProductRows = array();
+$invalidProductMessage = '';
 
 $orderById = array();
 foreach (siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTable) as $row) {
@@ -348,6 +350,8 @@ if (post('actionBtn')) {
             $items = array();
             $formRows = array();
             $invalidProduct = false;
+            $invalidProductRows = array();
+            $invalidProductMessage = '';
             $max = max(count($productIds), count($productNames), count($quantities));
 
             for ($i = 0; $i < $max; $i++) {
@@ -376,6 +380,7 @@ if (post('actionBtn')) {
 
                 if ($prodId <= 0) {
                     $invalidProduct = true;
+                    $invalidProductRows[] = $i;
                     continue;
                 }
 
@@ -409,7 +414,7 @@ if (post('actionBtn')) {
             } else if (count(siAttachmentDecodeList($attachmentPath)) === 0) {
                 $err = 'At least 1 attachment is required.';
             } else if ($invalidProduct) {
-                $err = 'Please select valid product name from the list.';
+                $invalidProductMessage = 'Please select valid product name from the dropdown list.';
             } else if (count($items) === 0) {
                 $err = 'Please add at least one valid product row.';
             } else if ($action === 'addData') {
@@ -688,19 +693,16 @@ if ($isViewMode && $dataID > 0 && isset($orderById[$dataID])) {
             overflow: visible;
         }
 
-        #stockInItemTable td.autocomplete {
-            position: relative;
-            overflow: visible !important;
+        #stockInItemTable .stock-in-product-autocomplete {
+            width: 100%;
         }
 
-        #stockInItemTable td.autocomplete .searchResult {
+        #stockInItemTable .stock-in-product-autocomplete .searchResult {
             width: 100% !important;
-            max-height: none !important;
-            overflow-y: visible !important;
+            max-height: 200px !important;
+            overflow-y: auto !important;
+            overflow-x: hidden;
             z-index: 9999 !important;
-            background: #ffffff;
-            border: 1px solid #333333;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
         }
 
         #stockInForm .table-responsive,
@@ -872,9 +874,14 @@ if ($isViewMode && $dataID > 0 && isset($orderById[$dataID])) {
                                 <?php foreach ($formRows as $idx => $formRow) { ?>
                                 <tr>
                                     <td class="row-no"><?= (int) ($idx + 1) ?></td>
-                                    <td class="autocomplete">
-                                        <input type="text" class="form-control product_name" id="product_name_<?= (int) $idx ?>" name="product_name[]" placeholder="Type Product" value="<?= siEsc($formRow['product_name']) ?>" required<?= $inputReadonlyAttr ?> autocomplete="off">
-                                        <input type="hidden" id="product_name_<?= (int) $idx ?>_hidden" name="product_id[]" class="product_id" value="<?= (int) $formRow['product_id'] ?>">
+                                    <td>
+                                        <div class="autocomplete stock-in-product-autocomplete">
+                                            <input type="text" class="form-control product_name" id="product_name_<?= (int) $idx ?>" name="product_name[]" placeholder="Type Product" value="<?= siEsc($formRow['product_name']) ?>" required<?= $inputReadonlyAttr ?> autocomplete="off">
+                                            <input type="hidden" id="product_name_<?= (int) $idx ?>_hidden" name="product_id[]" class="product_id" value="<?= (int) $formRow['product_id'] ?>">
+                                            <?php if ($invalidProductMessage !== '' && in_array((int) $idx, $invalidProductRows, true)) { ?>
+                                                <div class="si-field-error" style="color:#ff0000; margin-top:4px; font-size:0.95rem;"><?= siEsc($invalidProductMessage) ?></div>
+                                            <?php } ?>
+                                        </div>
                                     </td>
                                     <td>
                                         <input class="form-control" type="number" name="product_quantity[]" min="1" value="<?= siEsc($formRow['product_quantity']) ?>" required<?= $inputReadonlyAttr ?>>
