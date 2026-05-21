@@ -557,7 +557,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                     <?php } ?>
                                 </div>
                                 <input type="hidden" name="fat_attachmentValue" id="fat_attachmentValue"
-                                    value="<?php if (isset($row['attachment'])) echo $row['attachment']; ?>">
+                                    value="<?php echo htmlspecialchars($attachmentValue, ENT_QUOTES, 'UTF-8'); ?>">
                             </div>
                         </div>
                     </div>
