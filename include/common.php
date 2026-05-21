@@ -443,7 +443,7 @@ function getData($search_val, $val, $val2, $tbl, $conn)
 		// Execute
 		$result = $conn->query($query);
     	 if (!$result) {
-            error_log("Query failed: $query â€” Error: " . mysqli_error($conn));
+            error_log("Query failed: $query - Error: " . mysqli_error($conn));
             echo $query;exit;
         }
 	}
