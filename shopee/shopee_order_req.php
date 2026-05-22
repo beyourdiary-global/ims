@@ -2,6 +2,11 @@
 $currentPagePin = 0;
 $pageTitle = "Shopee Order Request";
 $isFinance = 1;
+$sorIsAjaxRequest = isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+
+if ($sorIsAjaxRequest) {
+    ob_start();
+}
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
@@ -27,7 +32,17 @@ $sorAirbillAttachmentPath = img_server . 'shopee_airbill_attachment/';
 $sorAirbillAttachmentUrl = rtrim((string) $SITEURL, '/') . '/' . trim((string) $sorAirbillAttachmentPath, '/\\') . '/';
 $sorLocalTelegramFailureMessage = '';
 $sorIsLiveSite = isset($siteOrlocalMode) ? (bool) $siteOrlocalMode : true;
-$sorIsAjaxRequest = isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+$sorPrepareAjaxJsonResponse = function () use ($sorIsAjaxRequest) {
+    if (!$sorIsAjaxRequest) {
+        return;
+    }
+
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+
+    header('Content-Type: application/json');
+};
 $sorSkipSaveBeforeStatusUpdate = post('skipSaveBeforeStatus') === '1';
 $sorSaveBeforeStatusOnly = $sorIsAjaxRequest && post('saveBeforeStatusOnly') === '1';
 $pendingStatusUpdate = shopeeOmsNormalizeStatusCode(post('updateStatusBtn'));
@@ -89,7 +104,7 @@ $sorHandleStatusTransition = function ($newStatus) use ($connect, $finance_conne
         ];
         audit_log($log);
         if ($sorIsAjaxRequest) {
-            header('Content-Type: application/json');
+            $sorPrepareAjaxJsonResponse();
             echo json_encode(array(
                 'success' => true,
                 'message' => (string) $transitionResult['message'],
@@ -98,12 +113,12 @@ $sorHandleStatusTransition = function ($newStatus) use ($connect, $finance_conne
             exit;
         }
 
-        echo '<script>alert("' . addslashes($transitionResult['message']) . '"); window.location.replace("' . $redirect_page . '");</script>';
+        echo '<script>alert(' . json_encode((string) $transitionResult['message']) . '); window.location.replace(' . json_encode((string) $redirect_page) . ');</script>';
         exit;
     }
 
     if ($sorIsAjaxRequest) {
-        header('Content-Type: application/json');
+        $sorPrepareAjaxJsonResponse();
         echo json_encode(array(
             'success' => false,
             'message' => (string) (isset($transitionResult['message']) ? $transitionResult['message'] : $statusUpdateFallbackMessage),
@@ -111,7 +126,7 @@ $sorHandleStatusTransition = function ($newStatus) use ($connect, $finance_conne
         exit;
     }
 
-    echo '<script>alert("' . addslashes(isset($transitionResult['message']) ? $transitionResult['message'] : $statusUpdateFallbackMessage) . '");</script>';
+    echo '<script>alert(' . json_encode((string) (isset($transitionResult['message']) ? $transitionResult['message'] : $statusUpdateFallbackMessage)) . ');</script>';
     exit;
 };
 
@@ -273,11 +288,11 @@ if (post('returnActionBtn')) {
             'act_msg' => USER_NAME . " marked Shopee order #" . (int) $dataID . " as returned (" . htmlspecialchars($returnType, ENT_QUOTES, 'UTF-8') . ").",
         ];
         audit_log($log);
-        echo '<script>alert("' . addslashes($returnResult['message']) . '"); window.location.replace("' . $redirect_page . '");</script>';
+        echo '<script>alert(' . json_encode((string) $returnResult['message']) . '); window.location.replace(' . json_encode((string) $redirect_page) . ');</script>';
         exit;
     }
 
-    echo '<script>alert("' . addslashes(isset($returnResult['message']) ? $returnResult['message'] : 'Unable to save return action.') . '");</script>';
+    echo '<script>alert(' . json_encode((string) (isset($returnResult['message']) ? $returnResult['message'] : 'Unable to save return action.')) . ');</script>';
 }
 
 if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
@@ -286,48 +301,14 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
         $action = 'updRecord';
     }
     $errorMsg = '';
-    $buildShopeeOrderReqSaveErrorMessage = function () use (
-        &$airbill_err,
-        &$airbill_attachment_err,
-        &$customer_address_err,
-        &$stock_out_warehouse_err,
-        &$pkg_err,
-        &$brand_err,
-        &$user_err,
-        &$pay_err,
-        &$pic_err,
-        &$price_err,
-        &$order_err,
-        &$date_err,
-        &$time_err,
-        &$curr_err,
-        &$acc_err,
-        &$errorMsg
-    ) {
-        $statusSaveErrorCandidates = array(
-            isset($airbill_err) ? $airbill_err : '',
-            isset($airbill_attachment_err) ? $airbill_attachment_err : '',
-            isset($customer_address_err) ? $customer_address_err : '',
-            isset($stock_out_warehouse_err) ? $stock_out_warehouse_err : '',
-            isset($pkg_err) ? $pkg_err : '',
-            isset($brand_err) ? $brand_err : '',
-            isset($user_err) ? $user_err : '',
-            isset($pay_err) ? $pay_err : '',
-            isset($pic_err) ? $pic_err : '',
-            isset($price_err) ? $price_err : '',
-            isset($order_err) ? $order_err : '',
-            isset($date_err) ? $date_err : '',
-            isset($time_err) ? $time_err : '',
-            isset($curr_err) ? $curr_err : '',
-            isset($acc_err) ? $acc_err : '',
-        );
-        foreach ($statusSaveErrorCandidates as $candidateMessage) {
+    $buildShopeeOrderReqSaveErrorMessage = function ($statusSaveErrorCandidates, $fallbackErrorMsg = '') {
+        foreach ((array) $statusSaveErrorCandidates as $candidateMessage) {
             if (trim((string) $candidateMessage) !== '') {
                 return (string) $candidateMessage;
             }
         }
-        if (trim((string) $errorMsg) !== '') {
-            return trim((string) $errorMsg);
+        if (trim((string) $fallbackErrorMsg) !== '') {
+            return trim((string) $fallbackErrorMsg);
         }
         return 'Unable to save edited order details.';
     };
@@ -581,10 +562,26 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
 
             if (isset($error)) {
                 if ($action === 'updRecord' && $sorSaveBeforeStatusOnly) {
-                    header('Content-Type: application/json');
+                    $sorPrepareAjaxJsonResponse();
                     echo json_encode(array(
                         'success' => false,
-                        'message' => $buildShopeeOrderReqSaveErrorMessage(),
+                        'message' => $buildShopeeOrderReqSaveErrorMessage(array(
+                            isset($airbill_err) ? $airbill_err : '',
+                            isset($airbill_attachment_err) ? $airbill_attachment_err : '',
+                            isset($customer_address_err) ? $customer_address_err : '',
+                            isset($stock_out_warehouse_err) ? $stock_out_warehouse_err : '',
+                            isset($pkg_err) ? $pkg_err : '',
+                            isset($brand_err) ? $brand_err : '',
+                            isset($user_err) ? $user_err : '',
+                            isset($pay_err) ? $pay_err : '',
+                            isset($pic_err) ? $pic_err : '',
+                            isset($price_err) ? $price_err : '',
+                            isset($order_err) ? $order_err : '',
+                            isset($date_err) ? $date_err : '',
+                            isset($time_err) ? $time_err : '',
+                            isset($curr_err) ? $curr_err : '',
+                            isset($acc_err) ? $acc_err : '',
+                        ), $errorMsg),
                     ));
                     exit;
                 }
@@ -1060,8 +1057,24 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
             }
 
             if ($action === 'updRecord' && $sorSaveBeforeStatusOnly) {
-                $statusSaveErrorMessage = $buildShopeeOrderReqSaveErrorMessage();
-                header('Content-Type: application/json');
+                $statusSaveErrorMessage = $buildShopeeOrderReqSaveErrorMessage(array(
+                    isset($airbill_err) ? $airbill_err : '',
+                    isset($airbill_attachment_err) ? $airbill_attachment_err : '',
+                    isset($customer_address_err) ? $customer_address_err : '',
+                    isset($stock_out_warehouse_err) ? $stock_out_warehouse_err : '',
+                    isset($pkg_err) ? $pkg_err : '',
+                    isset($brand_err) ? $brand_err : '',
+                    isset($user_err) ? $user_err : '',
+                    isset($pay_err) ? $pay_err : '',
+                    isset($pic_err) ? $pic_err : '',
+                    isset($price_err) ? $price_err : '',
+                    isset($order_err) ? $order_err : '',
+                    isset($date_err) ? $date_err : '',
+                    isset($time_err) ? $time_err : '',
+                    isset($curr_err) ? $curr_err : '',
+                    isset($acc_err) ? $acc_err : '',
+                ), $errorMsg);
+                $sorPrepareAjaxJsonResponse();
                 if (isset($error) || $act === 'F') {
                     echo json_encode(array(
                         'success' => false,
@@ -1084,10 +1097,26 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                     $sorHandleStatusTransition($pendingStatusUpdate);
                 }
 
-                $statusSaveErrorMessage = $buildShopeeOrderReqSaveErrorMessage();
+                $statusSaveErrorMessage = $buildShopeeOrderReqSaveErrorMessage(array(
+                    isset($airbill_err) ? $airbill_err : '',
+                    isset($airbill_attachment_err) ? $airbill_attachment_err : '',
+                    isset($customer_address_err) ? $customer_address_err : '',
+                    isset($stock_out_warehouse_err) ? $stock_out_warehouse_err : '',
+                    isset($pkg_err) ? $pkg_err : '',
+                    isset($brand_err) ? $brand_err : '',
+                    isset($user_err) ? $user_err : '',
+                    isset($pay_err) ? $pay_err : '',
+                    isset($pic_err) ? $pic_err : '',
+                    isset($price_err) ? $price_err : '',
+                    isset($order_err) ? $order_err : '',
+                    isset($date_err) ? $date_err : '',
+                    isset($time_err) ? $time_err : '',
+                    isset($curr_err) ? $curr_err : '',
+                    isset($acc_err) ? $acc_err : '',
+                ), $errorMsg);
 
                 if ($sorIsAjaxRequest) {
-                    header('Content-Type: application/json');
+                    $sorPrepareAjaxJsonResponse();
                     echo json_encode(array(
                         'success' => false,
                         'message' => $statusSaveErrorMessage,
@@ -1095,7 +1124,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                     exit;
                 }
 
-                echo '<script>alert("' . addslashes($statusSaveErrorMessage) . '");</script>';
+                echo '<script>alert(' . json_encode((string) $statusSaveErrorMessage) . ');</script>';
                 exit;
             }
 
@@ -2516,6 +2545,21 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
             if (!statusButtons.length) {
                 return;
             }
+
+            var resetStatusButtons = function () {
+                statusButtons.forEach(function (statusButton) {
+                    delete statusButton.dataset.submitting;
+                    statusButton.disabled = false;
+                });
+            };
+
+            form.addEventListener('invalid', function () {
+                resetStatusButtons();
+            }, true);
+
+            window.addEventListener('pageshow', function () {
+                resetStatusButtons();
+            });
 
             statusButtons.forEach(function (button) {
                 button.addEventListener('click', function (event) {
