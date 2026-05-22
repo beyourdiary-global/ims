@@ -261,12 +261,26 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
                 $product_price = parseShopeeOrderAmountByLabels($amountFallbackText, ['Product Price', 'Deal Price', 'Merchandise Subtotal']);
             }
 
-            $voucher = parseShopeeOrderAmountFromPairs($buyerPaymentPairs, ['Seller Voucher', 'Shop voucher']);
-            if ($voucher === '') {
-                $voucher = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Seller Voucher', 'Shop voucher']);
-            }
-            if ($voucher === '' && $extension !== 'pdf') {
-                $voucher = parseShopeeOrderAmountByLabels($amountFallbackText, ['Seller Voucher', 'Shop voucher']);
+            $voucherLabels = array(
+                'Seller Voucher',
+                'Seller Voucher Paid by Seller',
+                'Shop Voucher',
+                'Shop voucher',
+                'Shop voucher paid by seller',
+                'Seller voucher paid by seller'
+            );
+
+            $voucher = '';
+
+            if ($extension !== 'pdf') {
+                $voucher = parseShopeeOrderAmountFromPairs($buyerPaymentPairs, $voucherLabels);
+                if ($voucher === '') {
+                    $voucher = parseShopeeOrderAmountFromPairs($paymentInfoPairs, $voucherLabels);
+                }
+
+                if ($voucher === '') {
+                    $voucher = extractShopeeHtmlIncomeAmountByLabels($html, $voucherLabels);
+                }
             }
 
             // Actual shipping must follow Shipping Subtotal (buyer shipping subtotal), not logistic provider fee.
@@ -3151,18 +3165,45 @@ function extractShopeePdfAmountByLooseLabels($text, $labels)
 
 function extractShopeePdfVoucherAmount($text)
 {
-    $boundaries = getShopeePdfMoneyBoundaryLabels();
-
-    $voucherPart = extractShopeePdfAmountByStrictLabels($text, ['Seller Voucher', 'Shop Voucher'], $boundaries, 220, true);
-    if ($voucherPart === '') {
-        $voucherPart = extractShopeePdfAmountByLineLabels($text, ['Seller Voucher', 'Shop Voucher'], 2);
+    $text = (string) $text;
+    if (trim($text) === '') {
+        return '';
     }
-    if ($voucherPart === '') {
-        $voucherPart = extractShopeePdfAmountByLooseLabels($text, ['Seller Voucher', 'Shop Voucher']);
+    
+    $normalizedText = normalizeImportText($text);
+
+    $labelPattern = '(?:shop|seller)\s+voucher\s+paid\s+by\s+seller';
+
+    // Best case: label and amount are close in the full text.
+    if (preg_match('/' . $labelPattern . '.{0,180}?-\s*(?:RM|MYR|SGD|USD)?\s*([0-9][0-9,]*\.[0-9]{2})/i', $normalizedText, $matches)) {
+        return normalizeImportAmount($matches[1]);
     }
 
-    if ($voucherPart !== '') {
-        return $voucherPart;
+    $lines = getPdfTextLines($text);
+    $lineCount = count($lines);
+
+    for ($i = 0; $i < $lineCount; $i++) {
+        $lineText = trim((string) $lines[$i]);
+        if ($lineText === '') {
+            continue;
+        }
+
+        if (!preg_match('/\b(?:shop|seller)\s+voucher\s+paid\s+by\s+seller\b/i', $lineText)) {
+            continue;
+        }
+
+        // Some PDF text extraction splits label and amount into nearby lines.
+        $nearText = $lineText;
+        for ($j = 1; $j <= 3; $j++) {
+            if (isset($lines[$i + $j])) {
+                $nearText .= ' ' . trim((string) $lines[$i + $j]);
+            }
+        }
+
+        if (preg_match_all('/-\s*(?:RM|MYR|SGD|USD)?\s*([0-9][0-9,]*\.[0-9]{2})/i', $nearText, $matches) && !empty($matches[1])) {
+            $amount = end($matches[1]);
+            return normalizeImportAmount($amount);
+        }
     }
 
     return '';
