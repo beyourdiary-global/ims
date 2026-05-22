@@ -212,8 +212,8 @@ $accFilter = isset($_GET['acc']) ? $_GET['acc'] : '';
 
 $whereConditions = [];
 
-// Show verify-stage orders, but keep WAERD out of the verify list.
-$whereConditions[] = "order_status IN ('Waiting Admin Final Check', 'Order Received', 'Verified', 'WAFC', 'OC', 'V')";
+// Show Shopee OMS orders from To Ship upward, covering both legacy labels and status codes.
+$whereConditions[] = "order_status IN ('To Ship', 'To Pack', 'Processing', 'Shipped', 'Waiting Assign Estimate Received Date', 'Assigned Estimate Date', 'Waiting Receive', 'Postponed', 'Parcel Received', 'Waiting Admin Final Check', 'Order Received', 'Verified', 'Complete', 'Return', 'Closed-Returned', 'P', 'TP', 'SP', 'WAERD', 'WR', 'AED', 'PD', 'PR', 'WAFC', 'OC', 'V', 'C', 'R', 'CR')";
 
 if (!empty($monthFilter)) { $whereConditions[] = "DATE_FORMAT(date, '%Y-%m') = '" . mysqli_real_escape_string($finance_connect, $monthFilter) . "'"; }
 if (!empty($statusFilter)) { $whereConditions[] = "order_status = '" . mysqli_real_escape_string($finance_connect, $statusFilter) . "'"; }
