@@ -28,6 +28,11 @@ $sorAirbillAttachmentUrl = rtrim((string) $SITEURL, '/') . '/' . trim((string) $
 $sorLocalTelegramFailureMessage = '';
 $sorIsLiveSite = isset($siteOrlocalMode) ? (bool) $siteOrlocalMode : true;
 $sorIsAjaxRequest = isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+$sorSkipSaveBeforeStatusUpdate = post('skipSaveBeforeStatus') === '1';
+$sorSaveBeforeStatusOnly = $sorIsAjaxRequest && post('saveBeforeStatusOnly') === '1';
+$pendingStatusUpdate = shopeeOmsNormalizeStatusCode(post('updateStatusBtn'));
+$sorShouldSaveBeforeStatusUpdate = $pendingStatusUpdate !== '' && $act === 'E' && !$sorSkipSaveBeforeStatusUpdate && !$sorSaveBeforeStatusOnly;
+$sorTriggerStatusTransitionAfterSave = false;
 $sorBuildLocalTelegramFailureMessage = function ($notifyResult) use ($sorIsLiveSite) {
     if ($sorIsLiveSite || !is_array($notifyResult) || !empty($notifyResult['sent'])) {
         return '';
@@ -39,6 +44,75 @@ $sorBuildLocalTelegramFailureMessage = function ($notifyResult) use ($sorIsLiveS
     }
 
     return "Telegram message failed to send.\nReason: " . $reason;
+};
+$sorHandleStatusTransition = function ($newStatus) use ($connect, $finance_connect, $dataID, $pageTitle, $cdate, $ctime, $tblName, $redirect_page, $sorBuildLocalTelegramFailureMessage, $sorIsAjaxRequest) {
+    $newStatus = shopeeOmsNormalizeStatusCode($newStatus);
+    $transitionRemark = 'Order Status Update to ' . shopeeOmsGetStatusLabel($newStatus);
+    $statusUpdateFallbackMessage = $newStatus === 'TP'
+        ? 'Airbill is required when Order Status is To Pack.'
+        : 'Unable to update order status.';
+    $transitionResult = shopeeOmsExecuteTransition($connect, $finance_connect, (int) $dataID, $newStatus, array(
+        'actor_user_id' => USER_ID,
+        'actor_user_group_id' => USER_GROUP,
+        'source_page' => $pageTitle,
+        'remark' => $transitionRemark,
+    ));
+
+    if (!empty($transitionResult['success'])) {
+        $transitionResult['message'] = $transitionRemark;
+        if (isset($transitionResult['new_status']) && (string) $transitionResult['new_status'] === 'TP') {
+            $notifyResult = isset($transitionResult['step_a_result']['notify_result']) && is_array($transitionResult['step_a_result']['notify_result'])
+                ? $transitionResult['step_a_result']['notify_result']
+                : array();
+            $localTelegramFailureMessage = $sorBuildLocalTelegramFailureMessage($notifyResult);
+            if ($localTelegramFailureMessage !== '') {
+                $transitionResult['message'] .= "\n\n" . $localTelegramFailureMessage;
+            }
+        }
+
+        $oldStatus = isset($transitionResult['old_status']) ? (string) $transitionResult['old_status'] : '';
+        $newStatusCode = isset($transitionResult['new_status']) ? (string) $transitionResult['new_status'] : '';
+        $queryStatusUpdate = "OMS transition " . $oldStatus . " -> " . $newStatusCode;
+        $log = [
+            'log_act'      => 'edit',
+            'cdate'        => $cdate,
+            'ctime'        => $ctime,
+            'uid'          => USER_ID,
+            'cby'          => USER_ID,
+            'query_rec'    => $queryStatusUpdate,
+            'query_table'  => $tblName,
+            'page'         => $pageTitle,
+            'connect'      => $connect,
+            'oldval'       => 'order_status: ' . $oldStatus,
+            'changes'      => 'order_status: ' . $newStatusCode,
+            'act_msg'      => USER_NAME . " updated Shopee order #" . (int) $dataID . " from " . htmlspecialchars($oldStatus, ENT_QUOTES, 'UTF-8') . " to " . htmlspecialchars($newStatusCode, ENT_QUOTES, 'UTF-8') . ".",
+        ];
+        audit_log($log);
+        if ($sorIsAjaxRequest) {
+            header('Content-Type: application/json');
+            echo json_encode(array(
+                'success' => true,
+                'message' => (string) $transitionResult['message'],
+                'redirect_url' => (string) $redirect_page,
+            ));
+            exit;
+        }
+
+        echo '<script>alert("' . addslashes($transitionResult['message']) . '"); window.location.replace("' . $redirect_page . '");</script>';
+        exit;
+    }
+
+    if ($sorIsAjaxRequest) {
+        header('Content-Type: application/json');
+        echo json_encode(array(
+            'success' => false,
+            'message' => (string) (isset($transitionResult['message']) ? $transitionResult['message'] : $statusUpdateFallbackMessage),
+        ));
+        exit;
+    }
+
+    echo '<script>alert("' . addslashes(isset($transitionResult['message']) ? $transitionResult['message'] : $statusUpdateFallbackMessage) . '");</script>';
+    exit;
 };
 
 // to display data to input
@@ -176,71 +250,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
     }
 }
 
-if (post('updateStatusBtn')) {
-    $newStatus = post('updateStatusBtn');
-    $statusUpdateFallbackMessage = $newStatus === 'TP'
-        ? 'Airbill is required when Order Status is To Pack.'
-        : 'Unable to update order status.';
-    $transitionResult = shopeeOmsExecuteTransition($connect, $finance_connect, (int) $dataID, $newStatus, array(
-        'actor_user_id' => USER_ID,
-        'actor_user_group_id' => USER_GROUP,
-        'source_page' => $pageTitle,
-        'remark' => '',
-    ));
-
-    if (!empty($transitionResult['success'])) {
-        if (isset($transitionResult['new_status']) && (string) $transitionResult['new_status'] === 'TP') {
-            $notifyResult = isset($transitionResult['step_a_result']['notify_result']) && is_array($transitionResult['step_a_result']['notify_result'])
-                ? $transitionResult['step_a_result']['notify_result']
-                : array();
-            $localTelegramFailureMessage = $sorBuildLocalTelegramFailureMessage($notifyResult);
-            if ($localTelegramFailureMessage !== '') {
-                $transitionResult['message'] .= "\n\n" . $localTelegramFailureMessage;
-            }
-        }
-
-        $oldStatus = isset($transitionResult['old_status']) ? (string) $transitionResult['old_status'] : '';
-        $newStatusCode = isset($transitionResult['new_status']) ? (string) $transitionResult['new_status'] : '';
-        $queryStatusUpdate = "OMS transition " . $oldStatus . " -> " . $newStatusCode;
-        $log = [
-            'log_act'      => 'edit',
-            'cdate'        => $cdate,
-            'ctime'        => $ctime,
-            'uid'          => USER_ID,
-            'cby'          => USER_ID,
-            'query_rec'    => $queryStatusUpdate,
-            'query_table'  => $tblName,
-            'page'         => $pageTitle,
-            'connect'      => $connect,
-            'oldval'       => 'order_status: ' . $oldStatus,
-            'changes'      => 'order_status: ' . $newStatusCode,
-            'act_msg'      => USER_NAME . " updated Shopee order #" . (int) $dataID . " from " . htmlspecialchars($oldStatus, ENT_QUOTES, 'UTF-8') . " to " . htmlspecialchars($newStatusCode, ENT_QUOTES, 'UTF-8') . ".",
-        ];
-        audit_log($log);
-        if ($sorIsAjaxRequest) {
-            header('Content-Type: application/json');
-            echo json_encode(array(
-                'success' => true,
-                'message' => (string) $transitionResult['message'],
-                'redirect_url' => (string) $redirect_page,
-            ));
-            exit;
-        }
-
-        echo '<script>alert("' . addslashes($transitionResult['message']) . '"); window.location.replace("' . $redirect_page . '");</script>';
-        exit;
-    }
-
-    if ($sorIsAjaxRequest) {
-        header('Content-Type: application/json');
-        echo json_encode(array(
-            'success' => false,
-            'message' => (string) (isset($transitionResult['message']) ? $transitionResult['message'] : $statusUpdateFallbackMessage),
-        ));
-        exit;
-    }
-
-    echo '<script>alert("' . addslashes(isset($transitionResult['message']) ? $transitionResult['message'] : $statusUpdateFallbackMessage) . '");</script>';
+if ($pendingStatusUpdate !== '' && !$sorShouldSaveBeforeStatusUpdate) {
+    $sorHandleStatusTransition($pendingStatusUpdate);
 }
 
 if (post('returnActionBtn')) {
@@ -269,8 +280,57 @@ if (post('returnActionBtn')) {
     echo '<script>alert("' . addslashes(isset($returnResult['message']) ? $returnResult['message'] : 'Unable to save return action.') . '");</script>';
 }
 
-if (post('actionBtn')) {
+if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
     $action = post('actionBtn');
+    if ($action === '' && $sorShouldSaveBeforeStatusUpdate) {
+        $action = 'updRecord';
+    }
+    $errorMsg = '';
+    $buildShopeeOrderReqSaveErrorMessage = function () use (
+        &$airbill_err,
+        &$airbill_attachment_err,
+        &$customer_address_err,
+        &$stock_out_warehouse_err,
+        &$pkg_err,
+        &$brand_err,
+        &$user_err,
+        &$pay_err,
+        &$pic_err,
+        &$price_err,
+        &$order_err,
+        &$date_err,
+        &$time_err,
+        &$curr_err,
+        &$acc_err,
+        &$errorMsg
+    ) {
+        $statusSaveErrorCandidates = array(
+            isset($airbill_err) ? $airbill_err : '',
+            isset($airbill_attachment_err) ? $airbill_attachment_err : '',
+            isset($customer_address_err) ? $customer_address_err : '',
+            isset($stock_out_warehouse_err) ? $stock_out_warehouse_err : '',
+            isset($pkg_err) ? $pkg_err : '',
+            isset($brand_err) ? $brand_err : '',
+            isset($user_err) ? $user_err : '',
+            isset($pay_err) ? $pay_err : '',
+            isset($pic_err) ? $pic_err : '',
+            isset($price_err) ? $price_err : '',
+            isset($order_err) ? $order_err : '',
+            isset($date_err) ? $date_err : '',
+            isset($time_err) ? $time_err : '',
+            isset($curr_err) ? $curr_err : '',
+            isset($acc_err) ? $acc_err : '',
+        );
+        foreach ($statusSaveErrorCandidates as $candidateMessage) {
+            if (trim((string) $candidateMessage) !== '') {
+                return (string) $candidateMessage;
+            }
+        }
+        if (trim((string) $errorMsg) !== '') {
+            return trim((string) $errorMsg);
+        }
+        return 'Unable to save edited order details.';
+    };
 
     $resolveMultiIds = function ($hiddenInput, $nameInput, $tableName) use ($connect) {
         $resolved = array();
@@ -520,6 +580,14 @@ if (post('actionBtn')) {
             }
 
             if (isset($error)) {
+                if ($action === 'updRecord' && $sorSaveBeforeStatusOnly) {
+                    header('Content-Type: application/json');
+                    echo json_encode(array(
+                        'success' => false,
+                        'message' => $buildShopeeOrderReqSaveErrorMessage(),
+                    ));
+                    exit;
+                }
                 break;
             }
             if ($action == 'addRecord') {
@@ -917,7 +985,7 @@ if (post('actionBtn')) {
                         $query .= "airbill_no = '" . mysqli_real_escape_string($finance_connect, $sor_airbill) . "', ";
                         $query .= "airbill_attachment = '" . mysqli_real_escape_string($finance_connect, $sor_airbill_attachment) . "', ";
                         $query .= $stockOutWarehouseSqlAssignment;
-                        $query .= "remark = '$sor_remark', ";
+                        $query .= "remark = '" . mysqli_real_escape_string($finance_connect, $sor_remark) . "', ";
                         $query .= "update_by = '" . USER_ID . "', ";
                         $query .= "update_date = curdate(), ";
                         $query .= "update_time = curtime() ";
@@ -944,6 +1012,12 @@ if (post('actionBtn')) {
                             );
                             $orderChanges = shopeeOmsDetectOrderChanges($connect, $row, $newValuesForHistory);
                             shopeeOmsLogOrderEditHistory($finance_connect, (int) $dataID, $sor_order, $orderChanges, USER_ID, USER_GROUP, $pageTitle);
+                        } else {
+                            $error = 1;
+                            $errorMsg = trim((string) mysqli_error($finance_connect)) !== ''
+                                ? 'Unable to save edited order details: ' . mysqli_error($finance_connect)
+                                : 'Unable to save edited order details.';
+                            $act = "F";
                         }
 
                     } else {
@@ -953,6 +1027,10 @@ if (post('actionBtn')) {
                     $errorMsg = $e->getMessage();
                     $act = "F";
                 }
+            }
+
+            if ($action === 'updRecord' && $sorShouldSaveBeforeStatusUpdate && !isset($error) && (($act === 'NC') || !empty($returnData))) {
+                $sorTriggerStatusTransitionAfterSave = true;
             }
 
             // audit log
@@ -979,6 +1057,46 @@ if (post('actionBtn')) {
                     $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
+            }
+
+            if ($action === 'updRecord' && $sorSaveBeforeStatusOnly) {
+                $statusSaveErrorMessage = $buildShopeeOrderReqSaveErrorMessage();
+                header('Content-Type: application/json');
+                if (isset($error) || $act === 'F') {
+                    echo json_encode(array(
+                        'success' => false,
+                        'message' => $statusSaveErrorMessage,
+                    ));
+                    exit;
+                }
+
+                echo json_encode(array(
+                    'success' => true,
+                    'message' => !empty($returnData) ? 'Order details updated successfully.' : 'No changes were made.',
+                    'has_changes' => !empty($returnData),
+                ));
+                exit;
+            }
+
+            if ($action === 'updRecord' && $sorShouldSaveBeforeStatusUpdate) {
+                if ($sorTriggerStatusTransitionAfterSave) {
+                    unset($_SESSION['tempValConfirmBox']);
+                    $sorHandleStatusTransition($pendingStatusUpdate);
+                }
+
+                $statusSaveErrorMessage = $buildShopeeOrderReqSaveErrorMessage();
+
+                if ($sorIsAjaxRequest) {
+                    header('Content-Type: application/json');
+                    echo json_encode(array(
+                        'success' => false,
+                        'message' => $statusSaveErrorMessage,
+                    ));
+                    exit;
+                }
+
+                echo '<script>alert("' . addslashes($statusSaveErrorMessage) . '");</script>';
+                exit;
             }
 
             break;
@@ -2390,7 +2508,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
 
         function bindShopeeOrderReqStatusButtons() {
             var form = document.getElementById('FORForm');
-            if (!form || typeof window.fetch !== 'function') {
+            if (!form) {
                 return;
             }
 
@@ -2401,63 +2519,16 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
 
             statusButtons.forEach(function (button) {
                 button.addEventListener('click', function (event) {
-                    event.preventDefault();
-
-                    if (button.disabled) {
+                    if (button.dataset.submitting === '1') {
+                        event.preventDefault();
                         return;
                     }
-
-                    var fallbackMessage = button.value === 'TP'
-                        ? 'Airbill is required when Order Status is To Pack.'
-                        : 'Unable to update order status.';
-
-                    var formData = new FormData(form);
-                    formData.set('updateStatusBtn', button.value);
-
+                    button.dataset.submitting = '1';
                     statusButtons.forEach(function (statusButton) {
-                        statusButton.disabled = true;
+                        if (statusButton !== button) {
+                            statusButton.disabled = true;
+                        }
                     });
-
-                    fetch(window.location.href, {
-                        method: 'POST',
-                        body: formData,
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest'
-                        },
-                        credentials: 'same-origin'
-                    })
-                        .then(function (response) {
-                            return response.text().then(function (text) {
-                                try {
-                                    return JSON.parse(text);
-                                } catch (error) {
-                                    return {
-                                        success: false,
-                                        message: fallbackMessage
-                                    };
-                                }
-                            });
-                        })
-                        .then(function (result) {
-                            if (result && result.success) {
-                                showShopeeOrderReqPopupMessage(result.message || 'Order status updated successfully.', function () {
-                                    if (result.redirect_url) {
-                                        window.location.href = result.redirect_url;
-                                    }
-                                });
-                                return;
-                            }
-
-                            showShopeeOrderReqPopupMessage(result && result.message ? result.message : fallbackMessage);
-                        })
-                        .catch(function () {
-                            showShopeeOrderReqPopupMessage(fallbackMessage);
-                        })
-                        .finally(function () {
-                            statusButtons.forEach(function (statusButton) {
-                                statusButton.disabled = false;
-                            });
-                        });
                 });
             });
         }
