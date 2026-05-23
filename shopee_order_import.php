@@ -4880,36 +4880,48 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                     data: new Uint8Array(buffer)
                 }).promise;
             }).then(function (pdfDoc) {
-                var pageTasks = [];
+                var pageTexts = [];
+                var sequence = Promise.resolve();
 
                 for (var pageNumber = 1; pageNumber <= pdfDoc.numPages; pageNumber++) {
-                    pageTasks.push(
-                        pdfDoc.getPage(pageNumber).then(function (page) {
-                            var viewport = page.getViewport({ scale: 2.0 });
-                            var canvas = document.createElement('canvas');
-                            var context = canvas.getContext('2d');
-                            canvas.width = viewport.width;
-                            canvas.height = viewport.height;
+                    (function (currentPageNumber) {
+                        sequence = sequence.then(function () {
+                            return pdfDoc.getPage(currentPageNumber).then(function (page) {
+                                var viewport = page.getViewport({ scale: 2.0 });
+                                var canvas = document.createElement('canvas');
+                                var context = canvas.getContext('2d');
+                                canvas.width = viewport.width;
+                                canvas.height = viewport.height;
 
-                            return page.render({
-                                canvasContext: context,
-                                viewport: viewport
-                            }).promise.then(function () {
-                                return Tesseract.recognize(canvas, 'eng').then(function (result) {
-                                    return result && result.data && result.data.text
-                                        ? String(result.data.text).trim()
-                                        : '';
+                                if (!context) {
+                                    pageTexts.push('');
+                                    return;
+                                }
+
+                                return page.render({
+                                    canvasContext: context,
+                                    viewport: viewport
+                                }).promise.then(function () {
+                                    return Tesseract.recognize(canvas, 'eng').then(function (result) {
+                                        pageTexts.push(
+                                            result && result.data && result.data.text
+                                                ? String(result.data.text).trim()
+                                                : ''
+                                        );
+                                    }).catch(function () {
+                                        pageTexts.push('');
+                                    });
                                 }).catch(function () {
-                                    return '';
+                                    pageTexts.push('');
                                 });
                             }).catch(function () {
-                                return '';
+                                pageTexts.push('');
                             });
-                        })
-                    );
+                        });
+                    })(pageNumber);
                 }
 
-                return Promise.all(pageTasks).then(function (pageTexts) {
+                return sequence.then(function () {
                     return pageTexts.join('\n').trim();
                 });
             }).catch(function () {
