@@ -258,12 +258,14 @@ $(document).ready(function () {
   }
 
   function recalculateImportFees(preserveDetectedFee) {
+    var shouldPreserveDetectedFee = preserveDetectedFee === true;
+
     var service = toPositiveNumber($("#service_fee").val());
     var transaction = toPositiveNumber($("#trans_fee").val());
     var commission = toPositiveNumber($("#ams_fee").val());
     var saverProgramFee = toPositiveNumber($("#saver_program_fee").val());
 
-    if (!(preserveDetectedFee && hasDetectedImportFees())) {
+    if (!(shouldPreserveDetectedFee && hasDetectedImportFees())) {
       $("#fees").val(
         (service + transaction + commission + saverProgramFee).toFixed(2),
       );
@@ -314,7 +316,11 @@ $(document).ready(function () {
 
   $("#fees").prop("readonly", true);
   $("#final_amt").prop("readonly", true);
-  $("#service_fee, #trans_fee, #ams_fee").on("input", recalculateImportFees);
+  
+  $("#service_fee, #trans_fee, #ams_fee").on("input", function () {
+    recalculateImportFees(false);
+  });
+
   $("#service_fee, #trans_fee, #ams_fee").on("change blur", function () {
     normalizePositiveField($(this));
     recalculateImportFees();

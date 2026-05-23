@@ -166,7 +166,13 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
                     $sourceTypeLabel = 'PDF';
                     $pdfUnicodeMapBundle = buildPdfUnicodeMapFromContent($rawContent);
                     $GLOBALS['sor_pdf_unicode_map'] = $pdfUnicodeMapBundle;
+                    
                     $clientPdfText = isset($_POST['client_pdf_text']) ? trim((string) $_POST['client_pdf_text']) : '';
+
+                    $maxClientPdfTextBytes = 512 * 1024; // 256KB
+                    if ($clientPdfText !== '') {
+                        $clientPdfText = mb_strcut($clientPdfText, 0, $maxClientPdfTextBytes, 'UTF-8');
+                    }
 
                     $rawPdfText = (string) extractTextFromPdfContent($rawContent);
 
@@ -185,7 +191,10 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
                         $rawPdfText = trim($rawPdfText . "\n" . $decodedPdfTextDigitsPreserved);
                     }
                     if ($clientPdfText !== '') {
-                        $rawPdfText = trim($rawPdfText . "\n" . $clientPdfText);
+                        $serverPdfTextLen = strlen(trim((string) $rawPdfText));
+                        if ($serverPdfTextLen < 20000) {
+                            $rawPdfText = trim($rawPdfText . "\n" . $clientPdfText);
+                        }
                     }
 
                     $cleanText = normalizeImportText($rawPdfText);
@@ -3041,7 +3050,7 @@ function extractShopeePdfOcrServiceFeeDirect($text)
         return '';
     }
 
-    if (preg_match('/SERVICE\s*FEE.{0,100}?(?:[\$\x{00A9}]?\s*)?(5000|0000|000|0\.00)(?![0-9])/u', $text) === 1) {
+    if (preg_match('/SERVICE\s*FEE.{0,100}?(?:RM|MYR|SGD|USD|\$)?\s*(0|00|000|0000|0\.00)(?![0-9])/u', $text) === 1) {
         return '0.00';
     }
 
@@ -4964,7 +4973,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
             setStatus('Extracting text from the PDF before upload...', false);
 
             extractPdfTextViaBrowser(selectedFile).then(function (text) {
-                clientPdfTextField.value = text;
+                clientPdfTextField.value = String(text || '').slice(0, 512 * 1024);
                 clientPdfSubmitReady = true;
                 setStatus(
                     text !== ''
