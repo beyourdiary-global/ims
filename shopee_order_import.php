@@ -3081,7 +3081,7 @@ function shopeePdfServiceFeeLooksLikeZeroOcr($text, $labels)
             continue;
         }
 
-        if (preg_match('/(?:^|[^0-9])(5000|000|0000)(?![0-9])/', $lineUpper) === 1) {
+        if (preg_match('/(?:^|[^0-9])(000|0000)(?![0-9])/', $lineUpper) === 1) {
             return true;
         }
     }
