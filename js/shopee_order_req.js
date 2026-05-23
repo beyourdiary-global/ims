@@ -253,15 +253,23 @@ $(document).ready(function () {
     field.val(normalized.toFixed(2));
   }
 
-  function recalculateImportFees() {
+  function hasDetectedImportFees() {
+    return $("input[name='fees_detected']").val() === "yes";
+  }
+
+  function recalculateImportFees(preserveDetectedFee) {
+    var shouldPreserveDetectedFee = preserveDetectedFee === true;
+
     var service = toPositiveNumber($("#service_fee").val());
     var transaction = toPositiveNumber($("#trans_fee").val());
     var commission = toPositiveNumber($("#ams_fee").val());
     var saverProgramFee = toPositiveNumber($("#saver_program_fee").val());
 
-    $("#fees").val(
-      (service + transaction + commission + saverProgramFee).toFixed(2),
-    );
+    if (!(shouldPreserveDetectedFee && hasDetectedImportFees())) {
+      $("#fees").val(
+        (service + transaction + commission + saverProgramFee).toFixed(2),
+      );
+    }
 
     var saverHint = $("#saver_program_fee_hint");
     if (saverHint.length > 0) {
@@ -308,7 +316,11 @@ $(document).ready(function () {
 
   $("#fees").prop("readonly", true);
   $("#final_amt").prop("readonly", true);
-  $("#service_fee, #trans_fee, #ams_fee").on("input", recalculateImportFees);
+  
+  $("#service_fee, #trans_fee, #ams_fee").on("input", function () {
+    recalculateImportFees(false);
+  });
+
   $("#service_fee, #trans_fee, #ams_fee").on("change blur", function () {
     normalizePositiveField($(this));
     recalculateImportFees();
@@ -347,7 +359,7 @@ $(document).ready(function () {
     }
   });
 
-  recalculateImportFees();
+  recalculateImportFees(true);
   recalculateImportFinalAmount();
   trimSinglePackageRowsOnLoad();
 
