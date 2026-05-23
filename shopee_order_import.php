@@ -359,18 +359,6 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
                 $pdfMoneySource = $pdfSourceText !== '' ? $pdfSourceText : $cleanText;
                 $pdfMoney = extractShopeePdfMonetaryValues($pdfMoneySource);
 
-                $pdfBoundaries = getShopeePdfMoneyBoundaryLabels();
-                $pdfServiceStrict = extractShopeePdfAmountByStrictLabels($pdfMoneySource, $serviceFeeLabels, $pdfBoundaries, 220, true);
-                $pdfServiceLine = extractShopeePdfAmountByLineLabels($pdfMoneySource, $serviceFeeLabels, 2);
-                $pdfServiceLoose = extractShopeePdfAmountByLooseLabels($pdfMoneySource, $serviceFeeLabels);
-                $pdfTransactionStrict = extractShopeePdfAmountByStrictLabels($pdfMoneySource, $transactionFeeLabels, $pdfBoundaries, 220, true);
-                $pdfTransactionLine = extractShopeePdfAmountByLineLabels($pdfMoneySource, $transactionFeeLabels, 2);
-                $pdfTransactionLoose = extractShopeePdfAmountByLooseLabels($pdfMoneySource, $transactionFeeLabels);
-                $pdfTransactionOcrLine = extractShopeePdfOcrDigitsAmountByLineLabels($pdfMoneySource, $transactionFeeLabels, 1);
-                $pdfTransactionOcrNear = extractShopeePdfOcrDigitsAmountNearLabels($pdfMoneySource, $transactionFeeLabels, 80);
-                $pdfTransactionOcrDirect = extractShopeePdfOcrTransactionFeeDirect($pdfMoneySource);
-                $pdfServiceOcrDirect = extractShopeePdfOcrServiceFeeDirect($pdfMoneySource);
-
                 if (is_array($pdfMoney)) {
                     if (array_key_exists('product_price', $pdfMoney) && (string) $pdfMoney['product_price'] !== '') {
                         $product_price = (string) $pdfMoney['product_price'];
