@@ -3228,7 +3228,7 @@ if (!function_exists('shopeeOmsTransitionDefinitions')) {
                 'SP' => array('action' => 'warehouse_scan', 'requires_permission' => true, 'auto' => false),
             ),
             'SP' => array(
-                'WAERD' => array('action' => 'auto_post_ship', 'requires_permission' => false, 'auto' => true),
+                'WAERD' => array('action' => 'auto_post_ship', 'requires_permission' => true, 'auto' => true),
                 'R' => array('action' => 'mark_return', 'requires_permission' => true, 'auto' => false),
             ),
             'WAERD' => array(
@@ -5433,7 +5433,8 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
             $actionName = isset($transitionInfo['action']) ? (string) $transitionInfo['action'] : 'status_transition';
         }
 
-        if (!$skipPermission && !shopeeOmsHasTransitionPermission($cmsConnect, $fromStatus, $targetStatus, $actorUserGroupId, $orderRow, $actorUserId)) {
+        $requiresPermission = !empty($transitionInfo['requires_permission']);
+        if ($requiresPermission && !$skipPermission && !shopeeOmsHasTransitionPermission($cmsConnect, $fromStatus, $targetStatus, $actorUserGroupId, $orderRow, $actorUserId)) {
             return array('success' => false, 'message' => 'You are not allowed to perform this status transition.');
         }
 
@@ -6240,8 +6241,11 @@ if (!function_exists('shopeeOmsFinalizeInitialShippedOrder')) {
 }
 
 if (!function_exists('shopeeOmsBulkMoveCurrentShippedOrdersToWaerd')) {
-    function shopeeOmsBulkMoveCurrentShippedOrdersToWaerd($cmsConnect, $financeConnect, $actorUserId = 'SYSTEM', $actorUserGroupId = 0, $sourcePage = 'Shopee OMS')
+    function shopeeOmsBulkMoveCurrentShippedOrdersToWaerd($cmsConnect, $financeConnect, $actorUserId = 'SYSTEM', $actorUserGroupId = 0, $sourcePage = 'Shopee OMS', $options = array())
     {
+        $options = is_array($options) ? $options : array();
+        $skipPermission = !empty($options['skip_permission']);
+
         if (!($cmsConnect instanceof mysqli) || !($financeConnect instanceof mysqli)) {
             return array(
                 'success' => false,
@@ -6310,7 +6314,7 @@ if (!function_exists('shopeeOmsBulkMoveCurrentShippedOrdersToWaerd')) {
                 'source_page' => $sourcePage,
                 'remark' => 'Bulk move current Shipped orders to Waiting Assign Estimate Received Date.',
                 'action' => 'bulk_post_ship_sync',
-                'skip_permission' => true,
+                'skip_permission' => $skipPermission,
                 'allow_auto_follow_up' => false,
             ));
 

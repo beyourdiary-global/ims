@@ -44,10 +44,6 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && function_exists('shopeeOmsBulkMoveCurrentShippedOrdersToWaerd')) {
-    shopeeOmsBulkMoveCurrentShippedOrdersToWaerd($connect, $finance_connect, USER_ID, USER_GROUP, $pageTitle);
-}
-
 shopeeOmsEnsureRealtimePostponedSync($connect, $finance_connect);
 
 // Build numeric action keys from login session pin access.
@@ -61,10 +57,16 @@ foreach ($shopeePinGroups as $pinGroupId) {
 $accessActionKey = array_values(array_unique(array_map('intval', $accessActionKey)));
 $canVerifyAction = in_array(14, $accessActionKey, true);
 $canAssignEstimatedReceivedDate = in_array(2, $accessActionKey, true) || $canVerifyAction;
+$canBulkSyncShippedOrders = function_exists('shopeeOmsHasTransitionPermission')
+    ? shopeeOmsHasTransitionPermission($connect, 'SP', 'WAERD', USER_GROUP, array('create_by' => USER_ID), USER_ID)
+    : false;
 $estimatedDateToday = new DateTimeImmutable('today');
 $estimatedDateMin = $estimatedDateToday->modify('+1 day')->format('Y-m-d');
 $estimatedDateMax = $estimatedDateToday->modify('+10 days')->format('Y-m-d');
 $num = $default_currency_id = 1; 
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && $canBulkSyncShippedOrders && function_exists('shopeeOmsBulkMoveCurrentShippedOrdersToWaerd')) {
+    shopeeOmsBulkMoveCurrentShippedOrdersToWaerd($connect, $finance_connect, USER_ID, USER_GROUP, $pageTitle);
+}
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceivedDateBtn')) {
     if (!$canAssignEstimatedReceivedDate) {
