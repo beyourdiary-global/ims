@@ -185,6 +185,57 @@ if ($conn->query($createCustomerTagAssignmentTableSql)) {
     echo "<p style='color:red;'>Error creating `{$customerTagAssignmentTable}` in `{$db_cms}`: " . $conn->error . "</p>";
 }
 
+$createTagTableSql = "CREATE TABLE IF NOT EXISTS `{$db_cms}`.`" . TAG . "` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `name` VARCHAR(120) NOT NULL,
+    `remark` TEXT DEFAULT NULL,
+    `create_by` VARCHAR(30) DEFAULT NULL,
+    `create_date` DATE DEFAULT NULL,
+    `create_time` TIME DEFAULT NULL,
+    `update_by` VARCHAR(30) DEFAULT NULL,
+    `update_date` DATE DEFAULT NULL,
+    `update_time` TIME DEFAULT NULL,
+    `status` CHAR(1) NOT NULL DEFAULT 'A',
+    KEY `idx_tag_name_status` (`name`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+
+if ($conn->query($createTagTableSql)) {
+    echo "<p style='color:green;'>Verified table `" . TAG . "` is ready with utf8mb4 support.</p>";
+} else {
+    echo "<p style='color:red;'>Failed creating `" . TAG . "`: " . $conn->error . "</p>";
+}
+
+$tagTableName = $conn->real_escape_string(TAG);
+$tagSchemaName = $conn->real_escape_string($db_cms);
+$tagCollationCheckSql = "SELECT TABLE_COLLATION
+    FROM information_schema.TABLES
+    WHERE TABLE_SCHEMA = '" . $tagSchemaName . "'
+      AND TABLE_NAME = '" . $tagTableName . "'
+    LIMIT 1";
+
+$tagCollationResult = $conn->query($tagCollationCheckSql);
+
+if ($tagCollationResult) {
+    $tagCollationRow = $tagCollationResult->fetch_assoc();
+
+    if ($tagCollationRow && $tagCollationRow['TABLE_COLLATION'] !== 'utf8mb4_unicode_ci') {
+        $alterTagCollationSql = "ALTER TABLE `{$db_cms}`.`" . TAG . "`
+            CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
+
+        if ($conn->query($alterTagCollationSql)) {
+            echo "<p style='color:green;'>Verified table `" . TAG . "` collation is utf8mb4_unicode_ci.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed altering `" . TAG . "` collation: " . $conn->error . "</p>";
+        }
+    } elseif ($tagCollationRow) {
+        echo "<p style='color:green;'>Verified table `" . TAG . "` collation is utf8mb4_unicode_ci.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed verifying `" . TAG . "` collation: table metadata not found.</p>";
+    }
+} else {
+    echo "<p style='color:red;'>Failed checking `" . TAG . "` collation: " . $conn->error . "</p>";
+}
+
 // function normalizeShopeePins($pinStr)
 // {
 //     $cleanPins = preg_replace('/\+?\[(128|129|130):[^\]]*\]/', '', (string) $pinStr);

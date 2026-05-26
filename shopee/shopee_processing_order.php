@@ -36,6 +36,9 @@ $_SESSION['delChk'] = '';
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && function_exists('shopeeOmsBulkMoveCurrentShippedOrdersToWaerd')) {
+    shopeeOmsBulkMoveCurrentShippedOrdersToWaerd($connect, $finance_connect, USER_ID, USER_GROUP, $pageTitle);
+}
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET') {
     audit_log(array(
         'log_act' => 'view',
@@ -113,39 +116,50 @@ if (isset($_GET['verify_id'])) {
     if (!$canVerifyAction) {
         $verifyMessage = "Security Error: You do not have permission to verify orders.";
     } else {
-    $orderId = intval($_GET['verify_id']);
-    $checkSql = "SELECT order_status FROM " . SHOPEE_SG_ORDER_REQ . " WHERE id = $orderId";
-    $checkResult = mysqli_query($finance_connect, $checkSql);
-    if ($checkResult && $row = mysqli_fetch_assoc($checkResult)) {
-        if (normalizeOrderStatusKey($row['order_status']) === 'oc') {
-            $updateSql = "UPDATE " . SHOPEE_SG_ORDER_REQ . " SET order_status = 'V', update_by = '" . USER_ID . "', update_date = curdate(), update_time = curtime() WHERE id = $orderId";
-            $updateResult = mysqli_query($finance_connect, $updateSql);
-            if ($updateResult) {
-                $auditData = array(
-                    'log_act'     => 'edit',
-                    'page'        => 'Order Verification',
-                    'query_rec'   => $orderId,
-                    'query_table' => SHOPEE_SG_ORDER_REQ,
-                    'oldval'      => 'order_status: OC',
-                    'changes'     => 'order_status: V',
-                    'uid'         => USER_ID,
-                    'act_msg'     => "Verified order #$orderId (status changed from OC to V)",
-                    'cdate'       => date('Y-m-d'),
-                    'ctime'       => date('H:i:s'),
-                    'cby'         => USER_NAME,
-                    'connect'     => $connect
-                );
-                audit_log($auditData);
-                $verifyMessage = "Success: Order #$orderId has been successfully verified.";
+        $orderId = intval($_GET['verify_id']);
+        $orderRow = shopeeOmsLoadOrder($finance_connect, $orderId);
+        if (!empty($orderRow)) {
+            $oldStatus = isset($orderRow['order_status']) ? (string) $orderRow['order_status'] : '';
+            $oldStatusCode = shopeeOmsNormalizeStatusCode($oldStatus);
+            if ($oldStatusCode === 'WAFC') {
+                $verifyResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'V', array(
+                    'actor_user_id' => USER_ID,
+                    'actor_user_group_id' => USER_GROUP,
+                    'source_page' => $pageTitle,
+                    'remark' => 'Verified from processing order list.',
+                    'action' => 'verify_order',
+                    'allow_auto_follow_up' => false,
+                ));
+                if (!empty($verifyResult['success'])) {
+                    $orderCode = isset($orderRow['orderID']) ? (string) $orderRow['orderID'] : '';
+                    $newStatus = isset($verifyResult['new_status']) ? (string) $verifyResult['new_status'] : 'V';
+                    $safeOrderCode = htmlspecialchars($orderCode, ENT_QUOTES, 'UTF-8');
+                    $safeOldStatus = htmlspecialchars($oldStatusCode, ENT_QUOTES, 'UTF-8');
+                    $safeNewStatus = htmlspecialchars($newStatus, ENT_QUOTES, 'UTF-8');
+
+                    audit_log(array(
+                        'log_act' => 'edit',
+                        'page' => $pageTitle,
+                        'query_rec' => $orderId,
+                        'query_table' => SHOPEE_SG_ORDER_REQ,
+                        'oldval' => 'order_status: ' . $oldStatusCode,
+                        'changes' => 'order_status: ' . $oldStatusCode . ' -> ' . $newStatus,
+                        'uid' => USER_ID,
+                        'act_msg' => USER_NAME . " verified Shopee order [ <b>ID = " . $orderId . "</b> ]" . ($safeOrderCode !== '' ? " [ <b>Order ID = " . $safeOrderCode . "</b> ]" : "") . " from <b>" . $safeOldStatus . "</b> to <b>" . $safeNewStatus . "</b>.",
+                        'cdate' => $cdate,
+                        'ctime' => $ctime,
+                        'cby' => USER_ID,
+                        'connect' => $connect
+                    ));
+                }
+
+                $verifyMessage = isset($verifyResult['message']) ? (string) $verifyResult['message'] : 'Unable to verify order.';
             } else {
-                $verifyMessage = "Error: Failed to update order #$orderId.";
+                $verifyMessage = "Warning: Order #$orderId is not in 'OC' or 'WAFC' status.";
             }
         } else {
-            $verifyMessage = "Warning: Order #$orderId is not in 'OC' status.";
+            $verifyMessage = "Error: Order #$orderId not found.";
         }
-    } else {
-        $verifyMessage = "Error: Order #$orderId not found.";
-    }
     }
 }
 
@@ -252,10 +266,18 @@ $accFilter = isset($_GET['acc']) ? $_GET['acc'] : '';
 $whereConditions = [];
 
 // Show processing-related states, including mixed legacy-label and code forms.
-$whereConditions[] = "order_status IN ('Processing', 'To Pack', 'Order Received', 'Waiting Receive', 'Postponed', 'Parcel Received', 'Waiting Assign Estimate Received Date', 'Assigned Estimate Date', 'P', 'TP', 'SP', 'OC', 'WR', 'PD', 'PR', 'WAERD', 'AED')";
+$processingStatusCondition = shopeeOmsBuildOrderStatusInCondition($finance_connect, 'order_status', array('P', 'TP', 'SP', 'WAERD', 'WR', 'PD', 'PR', 'WAFC'));
+if ($processingStatusCondition !== '') {
+    $whereConditions[] = $processingStatusCondition;
+}
 
 if (!empty($monthFilter)) { $whereConditions[] = "DATE_FORMAT(date, '%Y-%m') = '" . mysqli_real_escape_string($finance_connect, $monthFilter) . "'"; }
-if (!empty($statusFilter)) { $whereConditions[] = "order_status = '" . mysqli_real_escape_string($finance_connect, $statusFilter) . "'"; }
+if (!empty($statusFilter)) {
+    $statusCondition = shopeeOmsBuildOrderStatusFilterCondition($finance_connect, 'order_status', $statusFilter);
+    if ($statusCondition !== '') {
+        $whereConditions[] = $statusCondition;
+    }
+}
 // Use FIND_IN_SET to correctly search inside comma-separated IDs
 if (!empty($brandFilter)) { $whereConditions[] = "FIND_IN_SET('" . mysqli_real_escape_string($finance_connect, $brandFilter) . "', brand) > 0"; }
 if (!empty($pkgFilter)) { $whereConditions[] = "FIND_IN_SET('" . mysqli_real_escape_string($finance_connect, $pkgFilter) . "', package) > 0"; }
@@ -578,7 +600,6 @@ if ($result instanceof mysqli_result) {
                 echo '<div class="text-center"><h4>No Result!</h4></div>';
             } else {
                 ?>
-                <div class="table-responsive">
                 <?php
                 $total_price = 0; $total_voucher = 0; $total_shipping = 0;
                 $total_trans_fee = 0; $total_ams_fee = 0; $total_fees = 0;
@@ -732,7 +753,7 @@ if ($result instanceof mysqli_result) {
                                      data-max-date="<?= $estimatedDateMax ?>"
                                      title="Assign Estimate Received Date"><i class="fa-solid fa-calendar-days"></i></button>
                                 <?php } ?>
-                                <?php if(normalizeOrderStatusKey($row['order_status']) === 'oc' && $canVerifyAction){ ?>
+                                <?php if($statusCode === 'WAFC' && $canVerifyAction){ ?>
                                  <a href="?verify_id=<?= $row['id'] ?>&month=<?= urlencode($monthFilter) ?>&status=<?= urlencode($statusFilter) ?>" class="btn btn-sm btn-success btn-verified" onclick="return confirm('Mark this order as verified?')">Verified</a>
                                 <?php } ?>
                                 <?php
@@ -832,7 +853,6 @@ if ($result instanceof mysqli_result) {
                         </tr>
                     </tfoot>
                 </table>
-                </div>
             <?php } ?>
         </div>
     </div>
@@ -861,5 +881,6 @@ if ($result instanceof mysqli_result) {
 <script>
     dropdownMenuDispFix();
     datatableAlignment('shopee_order_req_table');
+    keepDataTableControlsVisible('shopee_order_req_table');
 </script>
 </html>

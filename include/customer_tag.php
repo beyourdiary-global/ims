@@ -1071,6 +1071,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     modalElement.dataset.customerTagAjaxBound = "1";
     var customerTagResetBodyHtml = ' . json_encode($emptyDraftBodyHtml) . ';
+    var customerTagPopupAutoCloseTimer = null;
 
     function customerTagEscapeHtml(value) {
         var text = String(value || "");
@@ -1101,6 +1102,34 @@ document.addEventListener("DOMContentLoaded", function () {
         document.body.classList.toggle("customer-tag-modal-open", hasOpenTagModal);
     }
 
+    function customerTagCloseManagerModal() {
+        if (!modalElement || typeof bootstrap === "undefined" || !bootstrap.Modal) {
+            return;
+        }
+
+        var managerModal = bootstrap.Modal.getInstance(modalElement);
+        if (managerModal && modalElement.classList.contains("show")) {
+            managerModal.hide();
+        }
+    }
+
+    function customerTagSchedulePopupAutoClose(popupElement) {
+        if (!popupElement || typeof bootstrap === "undefined" || !bootstrap.Modal) {
+            return;
+        }
+
+        if (customerTagPopupAutoCloseTimer) {
+            window.clearTimeout(customerTagPopupAutoCloseTimer);
+        }
+
+        customerTagPopupAutoCloseTimer = window.setTimeout(function () {
+            var popupModal = bootstrap.Modal.getInstance(popupElement);
+            if (popupModal && popupElement.classList.contains("show")) {
+                popupModal.hide();
+            }
+        }, 1800);
+    }
+
     function customerTagEnsurePopupModal() {
         var popupElement = document.getElementById("customerTagActionPopup");
         if (popupElement) {
@@ -1126,7 +1155,14 @@ document.addEventListener("DOMContentLoaded", function () {
 
         if (popupElement) {
             popupElement.addEventListener("shown.bs.modal", customerTagSyncBodyModalClass);
-            popupElement.addEventListener("hidden.bs.modal", customerTagSyncBodyModalClass);
+            popupElement.addEventListener("hidden.bs.modal", function () {
+                if (customerTagPopupAutoCloseTimer) {
+                    window.clearTimeout(customerTagPopupAutoCloseTimer);
+                    customerTagPopupAutoCloseTimer = null;
+                }
+                customerTagSyncBodyModalClass();
+                customerTagCloseManagerModal();
+            });
         }
 
         return popupElement;
@@ -1158,6 +1194,7 @@ document.addEventListener("DOMContentLoaded", function () {
             keyboard: false,
             backdrop: "static"
         }).show();
+        customerTagSchedulePopupAutoClose(popupElement);
     }
 
     function customerTagClearDraftUi() {
@@ -1385,6 +1422,9 @@ document.addEventListener("DOMContentLoaded", function () {
         return;
     }
 
+    var managerModalElement = document.getElementById(' . json_encode((string) $modalId) . ');
+    var customerTagPopupAutoCloseTimer = null;
+
     var popupElement = document.getElementById("customerTagActionPopup");
     if (!popupElement) {
         var popupWrap = document.createElement("div");
@@ -1405,15 +1445,41 @@ document.addEventListener("DOMContentLoaded", function () {
         popupElement = document.getElementById("customerTagActionPopup");
     }
 
+    if (popupElement && !popupElement.hasAttribute("data-customer-tag-close-bound")) {
+        popupElement.setAttribute("data-customer-tag-close-bound", "1");
+        popupElement.addEventListener("hidden.bs.modal", function () {
+            if (customerTagPopupAutoCloseTimer) {
+                window.clearTimeout(customerTagPopupAutoCloseTimer);
+                customerTagPopupAutoCloseTimer = null;
+            }
+
+            if (!managerModalElement || typeof bootstrap === "undefined" || !bootstrap.Modal) {
+                return;
+            }
+
+            var managerModal = bootstrap.Modal.getInstance(managerModalElement);
+            if (managerModal && managerModalElement.classList.contains("show")) {
+                managerModal.hide();
+            }
+        });
+    }
+
     var titleNode = document.getElementById("customerTagActionPopupTitle");
     if (titleNode) {
         titleNode.textContent = popupMessage;
     }
 
-    bootstrap.Modal.getOrCreateInstance(popupElement, {
+    var popupModal = bootstrap.Modal.getOrCreateInstance(popupElement, {
         keyboard: false,
         backdrop: "static"
-    }).show();
+    });
+    popupModal.show();
+
+    customerTagPopupAutoCloseTimer = window.setTimeout(function () {
+        if (popupElement.classList.contains("show")) {
+            popupModal.hide();
+        }
+    }, 3000);
 });
 </script>';
         }
@@ -1421,4 +1487,3 @@ document.addEventListener("DOMContentLoaded", function () {
         return $html;
     }
 }
-

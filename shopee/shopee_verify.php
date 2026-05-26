@@ -37,6 +37,10 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && function_exists('shopeeOmsBulkMoveCurrentShippedOrdersToWaerd')) {
+    shopeeOmsBulkMoveCurrentShippedOrdersToWaerd($connect, $finance_connect, USER_ID, USER_GROUP, $pageTitle);
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET') {
     audit_log(array(
         'log_act' => 'view',
@@ -213,10 +217,18 @@ $accFilter = isset($_GET['acc']) ? $_GET['acc'] : '';
 $whereConditions = [];
 
 // Show Shopee OMS orders from To Ship upward, covering both legacy labels and status codes.
-$whereConditions[] = "order_status IN ('To Ship', 'To Pack', 'Processing', 'Shipped', 'Waiting Assign Estimate Received Date', 'Assigned Estimate Date', 'Waiting Receive', 'Postponed', 'Parcel Received', 'Waiting Admin Final Check', 'Order Received', 'Verified', 'Complete', 'Return', 'Closed-Returned', 'P', 'TP', 'SP', 'WAERD', 'WR', 'AED', 'PD', 'PR', 'WAFC', 'OC', 'V', 'C', 'R', 'CR')";
+$verifyStatusCondition = shopeeOmsBuildOrderStatusInCondition($finance_connect, 'order_status', array('P', 'TP', 'SP', 'WAERD', 'WR', 'PD', 'PR', 'WAFC', 'V', 'C', 'R', 'CR'));
+if ($verifyStatusCondition !== '') {
+    $whereConditions[] = $verifyStatusCondition;
+}
 
 if (!empty($monthFilter)) { $whereConditions[] = "DATE_FORMAT(date, '%Y-%m') = '" . mysqli_real_escape_string($finance_connect, $monthFilter) . "'"; }
-if (!empty($statusFilter)) { $whereConditions[] = "order_status = '" . mysqli_real_escape_string($finance_connect, $statusFilter) . "'"; }
+if (!empty($statusFilter)) {
+    $statusCondition = shopeeOmsBuildOrderStatusFilterCondition($finance_connect, 'order_status', $statusFilter);
+    if ($statusCondition !== '') {
+        $whereConditions[] = $statusCondition;
+    }
+}
 // Use FIND_IN_SET to correctly search inside comma-separated IDs
 if (!empty($brandFilter)) { $whereConditions[] = "FIND_IN_SET('" . mysqli_real_escape_string($finance_connect, $brandFilter) . "', brand) > 0"; }
 if (!empty($pkgFilter)) { $whereConditions[] = "FIND_IN_SET('" . mysqli_real_escape_string($finance_connect, $pkgFilter) . "', package) > 0"; }
@@ -535,7 +547,6 @@ if ($result instanceof mysqli_result) {
                 echo '<div class="text-center"><h4>No Result!</h4></div>';
             } else {
                 ?>
-                <div class="table-responsive">
                 <?php
                 $total_price = 0; $total_voucher = 0; $total_shipping = 0;
                 $total_trans_fee = 0; $total_ams_fee = 0; $total_fees = 0;
@@ -777,7 +788,6 @@ if ($result instanceof mysqli_result) {
                         </tr>
                     </tfoot>
                 </table>
-                </div>
             <?php } ?>
         </div>
     </div>
@@ -807,5 +817,6 @@ if ($result instanceof mysqli_result) {
 <script>
     dropdownMenuDispFix();
     datatableAlignment('shopee_order_req_table');
+    keepDataTableControlsVisible('shopee_order_req_table');
 </script>
 </html>
