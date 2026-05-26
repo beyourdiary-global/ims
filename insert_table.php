@@ -1048,6 +1048,44 @@ function migrationEnsureIndex($conn, $dbName, $tableName, $indexName, $alterSql,
     }
 }
 
+function migrationGetSettingValue($conn, $dbName, $tableName, $settingKey)
+{
+    $safeDb = $conn->real_escape_string($dbName);
+    $safeTable = $conn->real_escape_string($tableName);
+    $safeKey = $conn->real_escape_string($settingKey);
+    $sql = "SELECT `setting_value` FROM `" . $safeDb . "`.`" . $safeTable . "` WHERE `setting_key` = '" . $safeKey . "' LIMIT 1";
+    $result = $conn->query($sql);
+
+    if (!$result || $result->num_rows === 0) {
+        return null;
+    }
+
+    $row = $result->fetch_assoc();
+    return isset($row['setting_value']) ? (string) $row['setting_value'] : null;
+}
+
+function migrationUpsertSetting($conn, $dbName, $tableName, $settingKey, $settingValue, $remark, $actorUserId)
+{
+    $safeDb = $conn->real_escape_string($dbName);
+    $safeTable = $conn->real_escape_string($tableName);
+    $safeKey = $conn->real_escape_string($settingKey);
+    $safeValue = $conn->real_escape_string($settingValue);
+    $safeRemark = $conn->real_escape_string($remark);
+    $safeActor = $conn->real_escape_string($actorUserId);
+
+    $sql = "INSERT INTO `" . $safeDb . "`.`" . $safeTable . "` (`setting_key`, `setting_value`, `remark`, `create_by`, `create_date`, `create_time`, `status`)
+        VALUES ('" . $safeKey . "', '" . $safeValue . "', '" . $safeRemark . "', '" . $safeActor . "', CURDATE(), CURTIME(), 'A')
+        ON DUPLICATE KEY UPDATE
+            `setting_value` = VALUES(`setting_value`),
+            `remark` = VALUES(`remark`),
+            `update_by` = '" . $safeActor . "',
+            `update_date` = CURDATE(),
+            `update_time` = CURTIME(),
+            `status` = 'A'";
+
+    return $conn->query($sql);
+}
+
 function removePinAccessIds($pinList, $removeIds = array(7, 8))
 {
     $values = array_filter(array_map('trim', explode(',', (string) $pinList)), 'strlen');
@@ -2473,6 +2511,88 @@ if ($conn->select_db($db_fin)) {
     migrationEnsureIndex($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'idx_shopee_order_code', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD INDEX `idx_shopee_order_code` (`orderID`)", "Verified `" . SHOPEE_SG_ORDER_REQ . "` order code index.");
     migrationEnsureIndex($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'idx_shopee_order_airbill', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD INDEX `idx_shopee_order_airbill` (`airbill_no`)", "Verified `" . SHOPEE_SG_ORDER_REQ . "` airbill index.");
     migrationEnsureIndex($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'idx_shopee_order_transition_at', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD INDEX `idx_shopee_order_transition_at` (`latest_transition_at`)", "Verified `" . SHOPEE_SG_ORDER_REQ . "` transition timestamp index.");
+
+    $forceToPackOrderIds = array(
+        '260504GYX6GCCD',
+        '260504HHY8G2NA',
+        '260505HQWNF1HT',
+        '260505HR7UNE6Q',
+        '260505HRAFMBQM',
+        '260505HTWVVDYK',
+        '260505JJGC63Q0',
+        '260505K8ECUT82',
+        '260505KWQVHV45',
+        '260505KXF874VX',
+        '260505M2KKHJB8',
+        '260506N025CBXV',
+        '260506PFXTX105',
+        '260507R9GQTUY2'
+    );
+    $sanitizedForceToPackIds = array();
+
+    foreach ($forceToPackOrderIds as $forceToPackOrderId) {
+        $normalizedForceToPackId = strtoupper(trim((string) $forceToPackOrderId));
+        if ($normalizedForceToPackId !== '' && preg_match('/^[A-Z0-9]+$/', $normalizedForceToPackId)) {
+            $sanitizedForceToPackIds[] = $normalizedForceToPackId;
+        }
+    }
+
+    $sanitizedForceToPackIds = array_values(array_unique($sanitizedForceToPackIds));
+
+    if (count($sanitizedForceToPackIds) === count($forceToPackOrderIds)) {
+        $actorUserId = isset($_SESSION['userid']) && trim((string) $_SESSION['userid']) !== '' ? trim((string) $_SESSION['userid']) : 'SYSTEM';
+
+        foreach ($sanitizedForceToPackIds as $forceToPackOrderId) {
+            $forceToPackSettingKey = 'shopee_oms_force_to_pack_20260526_' . strtolower($forceToPackOrderId);
+            $completedSettingValue = migrationGetSettingValue($conn, $db_cms, ORDER_FLOW_SETTING, $forceToPackSettingKey);
+
+            if ($completedSettingValue === 'completed') {
+                echo "<p style='color:green;'>Skipped one-time Shopee To Pack batch `" . $forceToPackSettingKey . "` because it already completed.</p>";
+                continue;
+            }
+
+            $safeForceToPackOrderId = $conn->real_escape_string($forceToPackOrderId);
+            $checkTargetSql = "SELECT `id`
+                FROM `" . $db_fin . "`.`" . SHOPEE_SG_ORDER_REQ . "`
+                WHERE `orderID` = '" . $safeForceToPackOrderId . "'
+                LIMIT 1";
+            $checkTargetResult = $conn->query($checkTargetSql);
+
+            if (!$checkTargetResult) {
+                echo "<p style='color:red;'>Failed verifying target order ID for one-time Shopee To Pack batch `" . $forceToPackSettingKey . "`: " . $conn->error . "</p>";
+                continue;
+            }
+
+            if ($checkTargetResult->num_rows === 0) {
+                echo "<p style='color:orange;'>Skipped one-time Shopee To Pack batch `" . $forceToPackSettingKey . "` because order ID `" . htmlspecialchars($forceToPackOrderId, ENT_QUOTES) . "` was not found.</p>";
+                continue;
+            }
+
+            $batchRemark = 'One-time batch to force Shopee order ID ' . $forceToPackOrderId . ' to To Pack on 2026-05-26.';
+            $updateTargetSql = "UPDATE `" . $db_fin . "`.`" . SHOPEE_SG_ORDER_REQ . "`
+                SET `order_status` = 'P',
+                    `latest_transition_at` = NOW(),
+                    `update_by` = '" . $conn->real_escape_string($actorUserId) . "',
+                    `update_date` = CURDATE(),
+                    `update_time` = CURTIME()
+                WHERE `orderID` = '" . $safeForceToPackOrderId . "'";
+
+            $conn->begin_transaction();
+            $updateBatchSuccess = $conn->query($updateTargetSql);
+            $updatedRowCount = $updateBatchSuccess ? (int) $conn->affected_rows : 0;
+            $markerBatchSuccess = $updateBatchSuccess && migrationUpsertSetting($conn, $db_cms, ORDER_FLOW_SETTING, $forceToPackSettingKey, 'completed', $batchRemark, $actorUserId);
+
+            if ($markerBatchSuccess) {
+                $conn->commit();
+                echo "<p style='color:green;'>Completed one-time Shopee To Pack batch `" . $forceToPackSettingKey . "` for order ID `" . htmlspecialchars($forceToPackOrderId, ENT_QUOTES) . "`. Rows changed: " . $updatedRowCount . ".</p>";
+            } else {
+                $conn->rollback();
+                echo "<p style='color:red;'>Failed one-time Shopee To Pack batch `" . $forceToPackSettingKey . "`: " . $conn->error . "</p>";
+            }
+        }
+    } else {
+        echo "<p style='color:red;'>Skipped one-time Shopee To Pack batches for 2026-05-26 because the hard-coded order ID list failed validation.</p>";
+    }
 } else {
     echo "<p style='color:red;'>Failed selecting finance database for OMS migration.</p>";
 }
