@@ -471,6 +471,8 @@ if ($conn->select_db($db_fin)) {
 // addColumnIfMissing($conn, $db_fin, 'shopee_customer_info', 'contact_no', "ALTER TABLE `shopee_customer_info` ADD COLUMN `contact_no` VARCHAR(30) DEFAULT NULL AFTER `series`");
 // addColumnIfMissing($conn, $db_fin, 'shopee_ads_topup_transaction', 'attachment', "ALTER TABLE `shopee_ads_topup_transaction` ADD COLUMN `attachment` VARCHAR(255) DEFAULT NULL AFTER `pay_meth`");
 
+addColumnIfMissing($conn, $db_fin, 'stock_in_order', 'stock_type', "ALTER TABLE `stock_in_order` ADD COLUMN `stock_type` VARCHAR(20) NOT NULL DEFAULT 'Stock In' AFTER `attachment`");
+
 // // Ensure Stock In item supports CSV products and quantities.
 // alterColumnToVarcharIfInt($conn, $db_fin, 'stock_in_order_item', 'product_id', 100);
 // alterColumnToVarcharIfInt($conn, $db_fin, 'stock_in_order_item', 'product_quantity', 255);

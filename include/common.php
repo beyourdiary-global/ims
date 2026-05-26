@@ -2886,12 +2886,17 @@ if (!function_exists('customerLabelBuildRecordFilterUrl')) {
 }
 
 if (!function_exists('validateEstimatedReceivedDate')) {
-    function validateEstimatedReceivedDate($date)
+    function validateEstimatedReceivedDate($date, $orderContext = null)
     {
         $date = trim((string) $date);
-        $today = new DateTimeImmutable('today');
-        $minDate = $today->modify('+1 day');
-        $maxDate = $today->modify('+10 days');
+        $dateRange = function_exists('shopeeOmsGetEstimatedReceivedDateRange')
+            ? shopeeOmsGetEstimatedReceivedDateRange($orderContext)
+            : array(
+                'min_date' => (new DateTimeImmutable('today'))->format('Y-m-d'),
+                'max_date' => (new DateTimeImmutable('today'))->modify('+1 month')->format('Y-m-d'),
+            );
+        $minDate = new DateTimeImmutable((string) $dateRange['min_date']);
+        $maxDate = new DateTimeImmutable((string) $dateRange['max_date']);
 
         $result = array(
             'valid' => false,
@@ -2922,6 +2927,65 @@ if (!function_exists('validateEstimatedReceivedDate')) {
         $result['valid'] = true;
         $result['normalized_date'] = $parsed->format('Y-m-d');
         return $result;
+    }
+}
+
+if (!function_exists('shopeeOmsParseEstimatedDateBaseDate')) {
+    function shopeeOmsParseEstimatedDateBaseDate($value)
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return null;
+        }
+
+        $formats = array('Y-m-d', 'd/m/Y', 'Y/m/d', 'Y-m-d H:i:s', 'Y-m-d H:i');
+        foreach ($formats as $format) {
+            $parsed = DateTimeImmutable::createFromFormat($format, $value);
+            $errors = DateTimeImmutable::getLastErrors();
+            $hasParseErrors = is_array($errors) && (($errors['warning_count'] ?? 0) > 0 || ($errors['error_count'] ?? 0) > 0);
+            if ($parsed instanceof DateTimeImmutable && !$hasParseErrors) {
+                return $parsed;
+            }
+        }
+
+        $timestamp = strtotime($value);
+        if ($timestamp !== false) {
+            return (new DateTimeImmutable())->setTimestamp($timestamp);
+        }
+
+        return null;
+    }
+}
+
+if (!function_exists('shopeeOmsGetEstimatedReceivedDateRange')) {
+    function shopeeOmsGetEstimatedReceivedDateRange($orderContext = null)
+    {
+        $baseDate = null;
+
+        if (is_array($orderContext)) {
+            $candidateFields = array('date', 'order_date', 'create_date');
+            foreach ($candidateFields as $fieldName) {
+                if (!isset($orderContext[$fieldName])) {
+                    continue;
+                }
+
+                $baseDate = shopeeOmsParseEstimatedDateBaseDate($orderContext[$fieldName]);
+                if ($baseDate instanceof DateTimeImmutable) {
+                    break;
+                }
+            }
+        } else if ($orderContext !== null) {
+            $baseDate = shopeeOmsParseEstimatedDateBaseDate($orderContext);
+        }
+
+        if (!($baseDate instanceof DateTimeImmutable)) {
+            $baseDate = new DateTimeImmutable('today');
+        }
+
+        return array(
+            'min_date' => $baseDate->format('Y-m-d'),
+            'max_date' => $baseDate->modify('+1 month')->format('Y-m-d'),
+        );
     }
 }
 
@@ -5532,14 +5596,6 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
 if (!function_exists('shopeeOmsAssignEstimatedReceivedDate')) {
     function shopeeOmsAssignEstimatedReceivedDate($connect, $tableName, $orderId, $date, $currentUserId)
     {
-        $validation = validateEstimatedReceivedDate($date);
-        if (!$validation['valid']) {
-            return array(
-                'success' => false,
-                'message' => $validation['message'],
-            );
-        }
-
         $tableName = trim((string) $tableName);
         if ($tableName !== SHOPEE_SG_ORDER_REQ) {
             return array(
@@ -5562,6 +5618,14 @@ if (!function_exists('shopeeOmsAssignEstimatedReceivedDate')) {
             return array(
                 'success' => false,
                 'message' => 'Order not found.',
+            );
+        }
+
+        $validation = validateEstimatedReceivedDate($date, $orderRow);
+        if (!$validation['valid']) {
+            return array(
+                'success' => false,
+                'message' => $validation['message'],
             );
         }
 
@@ -6062,7 +6126,7 @@ if (!function_exists('shopeeOmsRunFourteenDayAutoMove')) {
 }
 
 if (!function_exists('shopeeOmsDeductInventoryForOrder')) {
-    function shopeeOmsDeductInventoryForOrder($cmsConnect, $financeConnect, $orderRow, $actorUserId = 'SYSTEM', $scanReference = '')
+    function shopeeOmsDeductInventoryForOrder($cmsConnect, $financeConnect, $orderRow, $actorUserId = 'SYSTEM', $scanReference = '', $attachments = array())
     {
         if (!($cmsConnect instanceof mysqli) || !($financeConnect instanceof mysqli) || !is_array($orderRow)) {
             return array('success' => false, 'message' => 'Unable to connect to warehouse inventory.');
@@ -6081,6 +6145,7 @@ if (!function_exists('shopeeOmsDeductInventoryForOrder')) {
         if ($orderCode === '') {
             $orderCode = 'OMS-' . (int) (isset($orderRow['id']) ? $orderRow['id'] : 0);
         }
+        $attachmentValue = siAttachmentEncodeList($attachments);
 
         $productNameMap = array();
         $productIds = array();
@@ -6117,6 +6182,7 @@ if (!function_exists('shopeeOmsDeductInventoryForOrder')) {
                     INNER JOIN `stock_in_order` o ON o.id = i.stock_in_order_id
                     WHERE i.status = 'A'
                       AND o.status = 'A'
+                      AND COALESCE(NULLIF(TRIM(o.stock_type), ''), 'Stock In') <> 'Stock Out'
                       AND i.product_id = " . $productId . "
                       AND i.product_quantity > 0";
                 if ($warehouseId > 0) {
@@ -6178,12 +6244,41 @@ if (!function_exists('shopeeOmsDeductInventoryForOrder')) {
                 }
             }
 
+            $safeActor = mysqli_real_escape_string($financeConnect, $actorUserId);
+            $safeOrderCode = mysqli_real_escape_string($financeConnect, $orderCode);
+            $safeAttachment = mysqli_real_escape_string($financeConnect, $attachmentValue);
+            $insertOrderSql = "INSERT INTO `stock_in_order`
+                (`warehouse_id`, `order_number`, `stock_in_date`, `attachment`, `stock_type`, `create_by`, `create_date`, `create_time`, `status`)
+                VALUES
+                (" . (int) $warehouseId . ", '" . $safeOrderCode . "', NOW(), '" . $safeAttachment . "', 'Stock Out', '" . $safeActor . "', CURDATE(), CURTIME(), 'A')";
+            if (!mysqli_query($financeConnect, $insertOrderSql)) {
+                throw new Exception('Failed to save stock out record.');
+            }
+
+            $stockOutOrderId = (int) mysqli_insert_id($financeConnect);
+            foreach ($productQtyMap as $productId => $qty) {
+                $productId = (int) $productId;
+                $qty = (int) $qty;
+                if ($productId <= 0 || $qty <= 0) {
+                    continue;
+                }
+
+                $insertItemSql = "INSERT INTO `stock_in_order_item`
+                    (`stock_in_order_id`, `product_id`, `package_id`, `product_quantity`, `create_by`, `create_date`, `create_time`, `status`)
+                    VALUES
+                    (" . $stockOutOrderId . ", " . $productId . ", 0, " . $qty . ", '" . $safeActor . "', CURDATE(), CURTIME(), 'A')";
+                if (!mysqli_query($financeConnect, $insertItemSql)) {
+                    throw new Exception('Failed to save stock out item.');
+                }
+            }
+
             mysqli_commit($financeConnect);
             return array(
                 'success' => true,
                 'message' => 'Warehouse inventory deducted successfully.',
                 'item_ids' => $updatedItemIds,
                 'product_qty_map' => $productQtyMap,
+                'stock_out_order_id' => $stockOutOrderId,
             );
         } catch (Exception $exception) {
             mysqli_rollback($financeConnect);
@@ -6377,9 +6472,9 @@ if (!function_exists('shopeeOmsRestockInventoryForOrder')) {
         mysqli_begin_transaction($financeConnect);
         try {
             $insertOrderSql = "INSERT INTO `stock_in_order`
-                (`warehouse_id`, `order_number`, `stock_in_date`, `attachment`, `create_by`, `create_date`, `create_time`, `status`)
+                (`warehouse_id`, `order_number`, `stock_in_date`, `attachment`, `stock_type`, `create_by`, `create_date`, `create_time`, `status`)
                 VALUES
-                (" . (int) $warehouseId . ", '" . $restockOrderNumber . "', CURDATE(), '', '" . $safeActor . "', CURDATE(), CURTIME(), 'A')";
+                (" . (int) $warehouseId . ", '" . $restockOrderNumber . "', CURDATE(), '', 'Stock In', '" . $safeActor . "', CURDATE(), CURTIME(), 'A')";
             if (!mysqli_query($financeConnect, $insertOrderSql)) {
                 throw new Exception('Unable to restock warehouse inventory.');
             }
@@ -6416,7 +6511,7 @@ if (!function_exists('shopeeOmsRestockInventoryForOrder')) {
 }
 
 if (!function_exists('shopeeOmsProcessWarehouseScanByToken')) {
-    function shopeeOmsProcessWarehouseScanByToken($cmsConnect, $financeConnect, $tokenValue, $actorUserId = 'QR_PUBLIC', $actorUserGroupId = 0, $sourcePage = 'Warehouse Stock-out Scan')
+    function shopeeOmsProcessWarehouseScanByToken($cmsConnect, $financeConnect, $tokenValue, $actorUserId = 'QR_PUBLIC', $actorUserGroupId = 0, $sourcePage = 'Warehouse Stock-out Scan', $attachments = array())
     {
         $tokenValue = trim((string) $tokenValue);
         if ($tokenValue === '' || !($financeConnect instanceof mysqli)) {
@@ -6448,7 +6543,7 @@ if (!function_exists('shopeeOmsProcessWarehouseScanByToken')) {
             return array('success' => false, 'message' => 'You do not have permission to perform this warehouse stock-out scan.');
         }
 
-        $deductResult = shopeeOmsDeductInventoryForOrder($cmsConnect, $financeConnect, $orderRow, $actorUserId, $tokenValue);
+        $deductResult = shopeeOmsDeductInventoryForOrder($cmsConnect, $financeConnect, $orderRow, $actorUserId, $tokenValue, $attachments);
         if (empty($deductResult['success'])) {
             return $deductResult;
         }
@@ -6456,7 +6551,7 @@ if (!function_exists('shopeeOmsProcessWarehouseScanByToken')) {
         $safeActor = mysqli_real_escape_string($financeConnect, trim((string) $actorUserId) !== '' ? trim((string) $actorUserId) : 'QR_PUBLIC');
         mysqli_query($financeConnect, "UPDATE `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` SET `used_at` = NOW(), `used_by` = '" . $safeActor . "', `used_source` = '" . mysqli_real_escape_string($financeConnect, $sourcePage) . "', `update_by` = '" . $safeActor . "', `update_date` = CURDATE(), `update_time` = CURTIME() WHERE id = " . (int) $tokenRow['id'] . " LIMIT 1");
 
-        return shopeeOmsExecuteTransition($cmsConnect, $financeConnect, (int) $orderRow['id'], 'SP', array(
+        $transitionResult = shopeeOmsExecuteTransition($cmsConnect, $financeConnect, (int) $orderRow['id'], 'SP', array(
             'actor_user_id' => $actorUserId,
             'actor_user_group_id' => (int) $actorUserGroupId,
             'source_page' => $sourcePage,
@@ -6470,6 +6565,10 @@ if (!function_exists('shopeeOmsProcessWarehouseScanByToken')) {
             ),
             'related_token_scan_id' => $tokenValue,
         ));
+        if (is_array($transitionResult)) {
+            $transitionResult['stock_out_order_id'] = isset($deductResult['stock_out_order_id']) ? (int) $deductResult['stock_out_order_id'] : 0;
+        }
+        return $transitionResult;
     }
 }
 
@@ -7392,6 +7491,184 @@ if (!function_exists('siAttachmentEncodeList')) {
     }
 }
 
+if (!function_exists('siNormalizeStockType')) {
+    function siNormalizeStockType($value)
+    {
+        $value = strtolower(trim((string) $value));
+        return $value === 'stock out' ? 'Stock Out' : 'Stock In';
+    }
+}
+
+if (!function_exists('siBuildProductQtyMap')) {
+    function siBuildProductQtyMap($items)
+    {
+        $map = array();
+        foreach ((array) $items as $item) {
+            $productId = isset($item['product_id']) ? (int) $item['product_id'] : 0;
+            $qty = isset($item['qty']) ? (int) $item['qty'] : (isset($item['product_quantity']) ? (int) $item['product_quantity'] : 0);
+            if ($productId <= 0 || $qty <= 0) {
+                continue;
+            }
+            if (!isset($map[$productId])) {
+                $map[$productId] = 0;
+            }
+            $map[$productId] += $qty;
+        }
+        return $map;
+    }
+}
+
+if (!function_exists('siDeductWarehouseInventoryQtyMap')) {
+    function siDeductWarehouseInventoryQtyMap($financeConnect, $warehouseId, $productQtyMap, $actorUserId = 'SYSTEM')
+    {
+        $warehouseId = (int) $warehouseId;
+        $actorUserId = trim((string) $actorUserId) !== '' ? trim((string) $actorUserId) : 'SYSTEM';
+
+        foreach ((array) $productQtyMap as $productId => $qty) {
+            $productId = (int) $productId;
+            $qty = (int) $qty;
+            if ($productId <= 0 || $qty <= 0) {
+                continue;
+            }
+
+            $selectSql = "SELECT i.id, i.product_quantity
+                FROM `stock_in_order_item` i
+                INNER JOIN `stock_in_order` o ON o.id = i.stock_in_order_id
+                WHERE i.status = 'A'
+                  AND o.status = 'A'
+                  AND COALESCE(NULLIF(TRIM(o.stock_type), ''), 'Stock In') <> 'Stock Out'
+                  AND i.product_id = " . $productId . "
+                  AND i.product_quantity > 0";
+            if ($warehouseId > 0) {
+                $selectSql .= " AND o.warehouse_id = " . $warehouseId;
+            }
+            $selectSql .= " ORDER BY o.stock_in_date ASC, o.id ASC, i.id ASC";
+
+            $selectResult = mysqli_query($financeConnect, $selectSql);
+            $stockRows = array();
+            $availableQty = 0;
+            if ($selectResult) {
+                while ($row = mysqli_fetch_assoc($selectResult)) {
+                    $itemId = isset($row['id']) ? (int) $row['id'] : 0;
+                    $itemQty = isset($row['product_quantity']) ? (int) $row['product_quantity'] : 0;
+                    if ($itemId > 0 && $itemQty > 0) {
+                        $stockRows[] = array(
+                            'id' => $itemId,
+                            'qty' => $itemQty,
+                        );
+                        $availableQty += $itemQty;
+                    }
+                }
+            }
+
+            if ($availableQty < $qty) {
+                throw new Exception('Warehouse stock is not enough for product #' . $productId . '.');
+            }
+
+            $safeActor = mysqli_real_escape_string($financeConnect, $actorUserId);
+            $remainingQty = $qty;
+            foreach ($stockRows as $stockRow) {
+                if ($remainingQty <= 0) {
+                    break;
+                }
+
+                $itemId = (int) $stockRow['id'];
+                $currentQty = (int) $stockRow['qty'];
+                $deductQty = min($remainingQty, $currentQty);
+                $newQty = $currentQty - $deductQty;
+
+                $updateSql = "UPDATE `stock_in_order_item`
+                    SET `product_quantity` = " . $newQty . ",
+                        `update_by` = '" . $safeActor . "',
+                        `update_date` = CURDATE(),
+                        `update_time` = CURTIME()
+                    WHERE id = " . $itemId . "
+                      AND status = 'A'
+                    LIMIT 1";
+                if (!mysqli_query($financeConnect, $updateSql)) {
+                    throw new Exception('Failed to deduct warehouse stock.');
+                }
+
+                $remainingQty -= $deductQty;
+            }
+        }
+
+        return true;
+    }
+}
+
+if (!function_exists('siRestoreWarehouseInventoryQtyMap')) {
+    function siRestoreWarehouseInventoryQtyMap($financeConnect, $warehouseId, $productQtyMap, $actorUserId = 'SYSTEM', $referenceOrderNumber = '')
+    {
+        $warehouseId = (int) $warehouseId;
+        $actorUserId = trim((string) $actorUserId) !== '' ? trim((string) $actorUserId) : 'SYSTEM';
+        $safeActor = mysqli_real_escape_string($financeConnect, $actorUserId);
+        $referenceOrderNumber = trim((string) $referenceOrderNumber);
+
+        foreach ((array) $productQtyMap as $productId => $qty) {
+            $productId = (int) $productId;
+            $qty = (int) $qty;
+            if ($productId <= 0 || $qty <= 0) {
+                continue;
+            }
+
+            $selectSql = "SELECT i.id, i.product_quantity
+                FROM `stock_in_order_item` i
+                INNER JOIN `stock_in_order` o ON o.id = i.stock_in_order_id
+                WHERE i.status = 'A'
+                  AND o.status = 'A'
+                  AND COALESCE(NULLIF(TRIM(o.stock_type), ''), 'Stock In') <> 'Stock Out'
+                  AND i.product_id = " . $productId;
+            if ($warehouseId > 0) {
+                $selectSql .= " AND o.warehouse_id = " . $warehouseId;
+            }
+            $selectSql .= " ORDER BY o.stock_in_date DESC, o.id DESC, i.id DESC LIMIT 1";
+
+            $selectResult = mysqli_query($financeConnect, $selectSql);
+            if ($selectResult && ($row = mysqli_fetch_assoc($selectResult))) {
+                $itemId = isset($row['id']) ? (int) $row['id'] : 0;
+                $currentQty = isset($row['product_quantity']) ? (int) $row['product_quantity'] : 0;
+                if ($itemId > 0) {
+                    $newQty = $currentQty + $qty;
+                    $updateSql = "UPDATE `stock_in_order_item`
+                        SET `product_quantity` = " . $newQty . ",
+                            `update_by` = '" . $safeActor . "',
+                            `update_date` = CURDATE(),
+                            `update_time` = CURTIME()
+                        WHERE id = " . $itemId . "
+                          AND status = 'A'
+                        LIMIT 1";
+                    if (!mysqli_query($financeConnect, $updateSql)) {
+                        throw new Exception('Failed to restore warehouse stock.');
+                    }
+                    continue;
+                }
+            }
+
+            $adjustOrderNumber = 'STOCK-OUT-EDIT-RESTORE-' . ($referenceOrderNumber !== '' ? preg_replace('/[^A-Za-z0-9\-]/', '-', $referenceOrderNumber) : date('YmdHis')) . '-' . mt_rand(1000, 9999);
+            $safeAdjustOrderNumber = mysqli_real_escape_string($financeConnect, $adjustOrderNumber);
+            $insertOrderSql = "INSERT INTO `stock_in_order`
+                (`warehouse_id`, `order_number`, `stock_in_date`, `attachment`, `stock_type`, `create_by`, `create_date`, `create_time`, `status`)
+                VALUES
+                (" . $warehouseId . ", '" . $safeAdjustOrderNumber . "', CURDATE(), '', 'Stock In', '" . $safeActor . "', CURDATE(), CURTIME(), 'A')";
+            if (!mysqli_query($financeConnect, $insertOrderSql)) {
+                throw new Exception('Failed to restore warehouse stock.');
+            }
+
+            $stockInOrderId = (int) mysqli_insert_id($financeConnect);
+            $insertItemSql = "INSERT INTO `stock_in_order_item`
+                (`stock_in_order_id`, `product_id`, `package_id`, `product_quantity`, `create_by`, `create_date`, `create_time`, `status`)
+                VALUES
+                (" . $stockInOrderId . ", " . $productId . ", 0, " . $qty . ", '" . $safeActor . "', CURDATE(), CURTIME(), 'A')";
+            if (!mysqli_query($financeConnect, $insertItemSql)) {
+                throw new Exception('Failed to restore warehouse stock.');
+            }
+        }
+
+        return true;
+    }
+}
+
 if (!function_exists('siSaveOrder')) {
     function siSaveOrder($financeConnect, $orderTable, $itemTable, $warehouseId, $stockInDate, $orderNumber, $items, $attachmentPath = '')
     {
@@ -7412,9 +7689,9 @@ if (!function_exists('siSaveOrder')) {
             $safeAttachment = mysqli_real_escape_string($financeConnect, $attachmentPath);
 
             $insertOrderSql = "INSERT INTO `" . $orderTable . "`
-                (warehouse_id, order_number, stock_in_date, attachment, create_by, create_date, create_time, status)
+                (warehouse_id, order_number, stock_in_date, attachment, stock_type, create_by, create_date, create_time, status)
                 VALUES
-                ('" . $warehouseId . "', '" . $safeOrderNumber . "', '" . $safeDate . "', '" . $safeAttachment . "', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
+                ('" . $warehouseId . "', '" . $safeOrderNumber . "', '" . $safeDate . "', '" . $safeAttachment . "', 'Stock In', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
 
             if (!mysqli_query($financeConnect, $insertOrderSql)) {
                 throw new Exception('Failed to save stock in order.');
@@ -7460,6 +7737,13 @@ if (!function_exists('siFetchFlatRows')) {
                     o.order_number,
                     o.stock_in_date,
                     o.attachment,
+                    COALESCE(NULLIF(TRIM(o.stock_type), ''), 'Stock In') AS stock_type,
+                    o.create_by,
+                    o.create_date,
+                    o.create_time,
+                    o.update_by,
+                    o.update_date,
+                    o.update_time,
                     i.product_id,
                     i.package_id,
                     i.product_quantity
@@ -7484,6 +7768,13 @@ if (!function_exists('siFetchFlatRows')) {
                         'order_number' => (string) $r['order_number'],
                         'stock_in_date' => (string) $r['stock_in_date'],
                         'attachment' => (string) (isset($r['attachment']) ? $r['attachment'] : ''),
+                        'stock_type' => siNormalizeStockType(isset($r['stock_type']) ? $r['stock_type'] : ''),
+                        'create_by' => isset($r['create_by']) ? (string) $r['create_by'] : '',
+                        'create_date' => isset($r['create_date']) ? (string) $r['create_date'] : '',
+                        'create_time' => isset($r['create_time']) ? (string) $r['create_time'] : '',
+                        'update_by' => isset($r['update_by']) ? (string) $r['update_by'] : '',
+                        'update_date' => isset($r['update_date']) ? (string) $r['update_date'] : '',
+                        'update_time' => isset($r['update_time']) ? (string) $r['update_time'] : '',
                         'product_id' => (int) $productRaw,
                         'package_id' => (int) $r['package_id'],
                         'product_quantity' => (int) $qtyRaw,
@@ -7504,6 +7795,13 @@ if (!function_exists('siFetchFlatRows')) {
                         'order_number' => (string) $r['order_number'],
                         'stock_in_date' => (string) $r['stock_in_date'],
                         'attachment' => (string) (isset($r['attachment']) ? $r['attachment'] : ''),
+                        'stock_type' => siNormalizeStockType(isset($r['stock_type']) ? $r['stock_type'] : ''),
+                        'create_by' => isset($r['create_by']) ? (string) $r['create_by'] : '',
+                        'create_date' => isset($r['create_date']) ? (string) $r['create_date'] : '',
+                        'create_time' => isset($r['create_time']) ? (string) $r['create_time'] : '',
+                        'update_by' => isset($r['update_by']) ? (string) $r['update_by'] : '',
+                        'update_date' => isset($r['update_date']) ? (string) $r['update_date'] : '',
+                        'update_time' => isset($r['update_time']) ? (string) $r['update_time'] : '',
                         'product_id' => $pid,
                         'package_id' => (int) $r['package_id'],
                         'product_quantity' => $qty,
@@ -7766,7 +8064,7 @@ if (!function_exists('siFindOrderIdByFields')) {
         $warehouseId = (int) $warehouseId;
         $safeDate = mysqli_real_escape_string($financeConnect, (string) $stockInDate);
         $safeOrderNo = mysqli_real_escape_string($financeConnect, (string) $orderNumber);
-        $sql = "SELECT id FROM `" . $orderTable . "` WHERE status='A' AND warehouse_id='" . $warehouseId . "' AND stock_in_date='" . $safeDate . "' AND order_number='" . $safeOrderNo . "' LIMIT 1";
+        $sql = "SELECT id FROM `" . $orderTable . "` WHERE status='A' AND warehouse_id='" . $warehouseId . "' AND stock_in_date='" . $safeDate . "' AND order_number='" . $safeOrderNo . "' AND COALESCE(NULLIF(TRIM(stock_type), ''), 'Stock In')='Stock In' LIMIT 1";
         $rst = mysqli_query($financeConnect, $sql);
         if ($rst && ($row = mysqli_fetch_assoc($rst))) {
             return (int) $row['id'];

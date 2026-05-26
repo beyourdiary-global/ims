@@ -152,7 +152,7 @@
   }
 }
 
-@media (min-width: 426px) and (max-width: 768px) {
+@media (max-width: 768px) {
   body.has-mobile-floating-add-btn #dispTable {
     padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px));
   }

@@ -316,6 +316,31 @@ if (!function_exists('customerTagGetPostedDraftTagIds')) {
     }
 }
 
+if (!function_exists('customerTagGetPostedSelectedTagIds')) {
+    function customerTagGetPostedSelectedTagIds()
+    {
+        $tagIds = array();
+
+        if (isset($_POST['customerTagSelectedIds']) && is_array($_POST['customerTagSelectedIds'])) {
+            foreach ($_POST['customerTagSelectedIds'] as $tagId) {
+                $tagId = (int) $tagId;
+                if ($tagId > 0 && !in_array($tagId, $tagIds, true)) {
+                    $tagIds[] = $tagId;
+                }
+            }
+        }
+
+        if (empty($tagIds)) {
+            $singleTagId = (int) postSpaceFilter('customerTagSelectedId');
+            if ($singleTagId > 0) {
+                $tagIds[] = $singleTagId;
+            }
+        }
+
+        return $tagIds;
+    }
+}
+
 if (!function_exists('customerTagGetDraftTags')) {
     function customerTagGetDraftTags($connect, $platform, $draftToken = '')
     {
@@ -638,6 +663,7 @@ if (!function_exists('customerTagHandlePost')) {
         $draftTagIds = $isDraftTagState ? customerTagGetPostedDraftTagIds() : array();
         $customerLabel = customerTagBuildCustomerLabel($pageTitle, $customerDisplayName, $customerId);
         $selectedTagId = (int) postSpaceFilter('customerTagSelectedId');
+        $selectedTagIds = customerTagGetPostedSelectedTagIds();
         $currentTagId = (int) postSpaceFilter('customerTagCurrentId');
 
         switch ($action) {
@@ -657,57 +683,78 @@ if (!function_exists('customerTagHandlePost')) {
                 break;
 
             case 'assign_existing':
-                if ($selectedTagId <= 0) {
+                if (empty($selectedTagIds)) {
                     $state['message_type'] = 'danger';
-                    $state['message'] = 'Please select an existing tag to assign.';
+                    $state['message'] = 'Please select at least one tag to assign.';
                     break;
                 }
 
-                $tagRow = customerTagGetTagById($connect, $selectedTagId);
-                if (!$tagRow || (isset($tagRow['status']) ? $tagRow['status'] : '') !== 'A') {
-                    $state['message_type'] = 'danger';
-                    $state['message'] = 'Selected tag is not available.';
-                    break;
-                }
+                $assignedTagNames = array();
+                $alreadyAssignedTagNames = array();
+                $failedTagNames = array();
 
-                if ($isDraftTagState) {
-                    if (in_array($selectedTagId, $draftTagIds, true)) {
-                        $state['message_type'] = 'info';
-                        $state['message'] = 'Tag [' . $tagRow['name'] . '] is already assigned to this customer.';
-                        break;
+                foreach ($selectedTagIds as $selectedTagIdItem) {
+                    $tagRow = customerTagGetTagById($connect, $selectedTagIdItem);
+                    $tagName = ($tagRow && isset($tagRow['name'])) ? $tagRow['name'] : ('Tag #' . $selectedTagIdItem);
+
+                    if (!$tagRow || (isset($tagRow['status']) ? $tagRow['status'] : '') !== 'A') {
+                        $failedTagNames[] = $tagName;
+                        continue;
                     }
 
-                    $draftTagIds[] = $selectedTagId;
+                    if ($isDraftTagState) {
+                        if (in_array($selectedTagIdItem, $draftTagIds, true)) {
+                            $alreadyAssignedTagNames[] = $tagName;
+                            continue;
+                        }
+
+                        $draftTagIds[] = $selectedTagIdItem;
+                        $assignedTagNames[] = $tagName;
+                        continue;
+                    }
+
+                    $assignResult = customerTagAssignToCustomer($connect, $platform, $customerId, $selectedTagIdItem);
+                    if (!$assignResult['success']) {
+                        $failedTagNames[] = $tagName;
+                        continue;
+                    }
+
+                    if ($assignResult['already_active']) {
+                        $alreadyAssignedTagNames[] = $tagName;
+                        continue;
+                    }
+
+                    $assignedTagNames[] = $tagName;
+                    customerTagWriteAuditLog(
+                        $connect,
+                        $pageTitle,
+                        'Edit',
+                        USER_NAME . ' assigned customer tag [<b>' . htmlspecialchars((string) $tagName, ENT_QUOTES, 'UTF-8') . '</b>] to <b>' . htmlspecialchars($customerLabel, ENT_QUOTES, 'UTF-8') . '</b>.',
+                        $assignResult['query'],
+                        customerTagGetAssignmentTable()
+                    );
+                }
+
+                $messageParts = array();
+                if (!empty($assignedTagNames)) {
+                    $messageParts[] = 'Assigned tag(s) [' . implode(', ', $assignedTagNames) . '] to this customer.';
+                }
+                if (!empty($alreadyAssignedTagNames)) {
+                    $messageParts[] = 'Already assigned: [' . implode(', ', $alreadyAssignedTagNames) . '].';
+                }
+                if (!empty($failedTagNames)) {
+                    $messageParts[] = 'Unable to assign: [' . implode(', ', $failedTagNames) . '].';
+                }
+
+                $state['success'] = !empty($assignedTagNames);
+                if (!empty($assignedTagNames)) {
                     $state['message_type'] = 'success';
-                    $state['message'] = 'Assigned tag [' . $tagRow['name'] . '] to this customer.';
-                    $state['success'] = true;
-                    break;
-                }
-
-                $assignResult = customerTagAssignToCustomer($connect, $platform, $customerId, $selectedTagId);
-                if (!$assignResult['success']) {
-                    $state['message_type'] = 'danger';
-                    $state['message'] = 'Unable to assign the selected tag right now.';
-                    break;
-                }
-
-                if ($assignResult['already_active']) {
+                } elseif (!empty($alreadyAssignedTagNames) && empty($failedTagNames)) {
                     $state['message_type'] = 'info';
-                    $state['message'] = 'Tag [' . $tagRow['name'] . '] is already assigned to this customer.';
-                    break;
+                } else {
+                    $state['message_type'] = 'danger';
                 }
-
-                $state['message_type'] = 'success';
-                $state['message'] = 'Assigned tag [' . $tagRow['name'] . '] to this customer.';
-                $state['success'] = true;
-                customerTagWriteAuditLog(
-                    $connect,
-                    $pageTitle,
-                    'Edit',
-                    USER_NAME . ' assigned customer tag [<b>' . htmlspecialchars((string) $tagRow['name'], ENT_QUOTES, 'UTF-8') . '</b>] to <b>' . htmlspecialchars($customerLabel, ENT_QUOTES, 'UTF-8') . '</b>.',
-                    $assignResult['query'],
-                    customerTagGetAssignmentTable()
-                );
+                $state['message'] = implode(' ', $messageParts);
                 break;
 
             case 'replace_assignment':
@@ -935,9 +982,35 @@ if (!function_exists('customerTagRenderManagerBody')) {
         $tagRows = isset($options['active_tags']) && is_array($options['active_tags']) ? $options['active_tags'] : customerTagGetDisplayTags($connect, $platform, $customerId, $draftToken);
         $tagOptions = isset($options['tag_options']) && is_array($options['tag_options']) ? $options['tag_options'] : customerTagGetActiveTagOptions($connect);
         $tableReady = customerTagTableExists($connect);
-
-        $assignOptionHtml = customerTagBuildSelectOptions($tagOptions, 0, 'Select Tag', true);
+        $assignedTagIds = customerTagExtractTagIds($tagRows);
+        $assignOptionParts = array();
         $activeAssignedHtml = '';
+
+        foreach ((array) $tagOptions as $tagOption) {
+            $tagId = isset($tagOption['id']) ? (int) $tagOption['id'] : 0;
+            if ($tagId <= 0) {
+                continue;
+            }
+
+            $tagName = isset($tagOption['name']) ? trim((string) $tagOption['name']) : '';
+            if ($tagName === '') {
+                continue;
+            }
+
+            $isAssigned = in_array($tagId, $assignedTagIds, true);
+            $assignOptionParts[] = '<label class="form-check customer-tag-checkbox-item' . ($isAssigned ? ' customer-tag-checkbox-item-disabled' : '') . '" data-tag-label="' . htmlspecialchars(function_exists('mb_strtolower') ? mb_strtolower($tagName, 'UTF-8') : strtolower($tagName), ENT_QUOTES, 'UTF-8') . '">' .
+                '<input class="form-check-input" type="checkbox" name="customerTagSelectedIds[]" value="' . $tagId . '"' . ($isAssigned ? ' disabled' : '') . '>' .
+                '<span class="form-check-label">' . htmlspecialchars($tagName, ENT_QUOTES, 'UTF-8') . '</span>' .
+                '</label>';
+        }
+
+        $assignOptionsHtml = empty($assignOptionParts)
+            ? '<div class="text-muted">No active tags available.</div>'
+            : '<div class="customer-tag-assign-picker">' .
+                '<input type="text" class="form-control customer-tag-checkbox-search mb-2" placeholder="Search tag">' .
+                '<div class="customer-tag-checkbox-list">' . implode('', $assignOptionParts) . '</div>' .
+                '<div class="customer-tag-checkbox-empty text-muted" style="display:none;">No matching tag found.</div>' .
+            '</div>';
 
         if (empty($tagRows)) {
             $activeAssignedHtml = '<div class="text-muted">No active tags assigned yet.</div>';
@@ -953,7 +1026,7 @@ if (!function_exists('customerTagRenderManagerBody')) {
                 $assignedParts[] = '<div class="customer-tag-assigned-item">' .
                     '<div class="customer-tag-assigned-name">' . customerTagRenderBadges(array($tagRow), 'customer-tag-modal-badge-group', 'customer-tag-modal-badge') . '</div>' .
                     '<div class="customer-tag-action-group">' .
-                    '<button type="button" class="btn btn-sm btn-warning customer-tag-icon-btn customer-tag-edit-toggle" title="Edit Tag"><i class="fa-solid fa-pen-to-square"></i></button>' .
+                    '<button type="button" class="btn btn-sm btn-warning customer-tag-icon-btn customer-tag-edit-toggle" title="Change Tag"><i class="fa-solid fa-pen-to-square"></i></button>' .
                     '<form method="post" class="customer-tag-inline-form customer-tag-ajax-form" data-confirm="Are you sure you want to remove this tag?">' .
                     customerTagRenderActionHiddenFields($platform, $customerId, 'remove_assignment', $draftToken) .
                     '<input type="hidden" name="customerTagSelectedId" value="' . $tagId . '">' .
@@ -962,13 +1035,13 @@ if (!function_exists('customerTagRenderManagerBody')) {
                     '</div>' .
                     '</div>' .
                     '<div class="customer-tag-edit-panel" style="display:none;">' .
-                    '<div class="customer-tag-edit-title">Edit Tag</div>' .
+                    '<div class="customer-tag-edit-title">Change Tag</div>' .
                     '<form method="post" class="customer-tag-ajax-form customer-tag-edit-form">' .
                     customerTagRenderActionHiddenFields($platform, $customerId, 'replace_assignment', $draftToken) .
                     '<input type="hidden" name="customerTagCurrentId" value="' . $tagId . '">' .
                     '<select class="form-select" name="customerTagSelectedId">' . $editOptionHtml . '</select>' .
                     '<div class="customer-tag-edit-btn-row">' .
-                    '<button type="submit" class="btn btn-lg btn-rounded btn-primary customer-tag-form-btn">Edit</button>' .
+                    '<button type="submit" class="btn btn-lg btn-rounded btn-primary customer-tag-form-btn">Change</button>' .
                     '<button type="button" class="btn btn-lg btn-rounded btn-primary customer-tag-form-btn customer-tag-edit-cancel">Cancel</button>' .
                     '</div>' .
                     '</form>' .
@@ -988,7 +1061,7 @@ if (!function_exists('customerTagRenderManagerBody')) {
         $html .= '<div class="customer-tag-modal-section"><div class="fw-semibold mb-2">Assigned Tags</div>' . $activeAssignedHtml . '</div>';
         $html .= '<div class="customer-tag-modal-section"><div class="fw-semibold mb-2">Assign Tag</div><form method="post" class="customer-tag-ajax-form">' .
             customerTagRenderActionHiddenFields($platform, $customerId, 'assign_existing', $draftToken) .
-            '<select class="form-select" name="customerTagSelectedId">' . $assignOptionHtml . '</select>' .
+            $assignOptionsHtml .
             '<button type="submit" class="btn btn-lg btn-rounded btn-primary customer-tag-form-btn customer-tag-primary-btn">Assign Selected Tag</button>' .
             '</form></div>';
 
@@ -1212,6 +1285,34 @@ document.addEventListener("DOMContentLoaded", function () {
         });
     }
 
+    function customerTagApplyCheckboxSearch(searchInput) {
+        if (!searchInput) {
+            return;
+        }
+
+        var pickerWrap = searchInput.closest(".customer-tag-assign-picker");
+        if (!pickerWrap) {
+            return;
+        }
+
+        var keyword = String(searchInput.value || "").toLowerCase().trim();
+        var hasVisibleItem = false;
+
+        pickerWrap.querySelectorAll(".customer-tag-checkbox-item").forEach(function (item) {
+            var itemText = item.getAttribute("data-tag-label") || "";
+            var isVisible = keyword === "" || itemText.indexOf(keyword) !== -1;
+            item.style.display = isVisible ? "" : "none";
+            if (isVisible) {
+                hasVisibleItem = true;
+            }
+        });
+
+        var emptyNode = pickerWrap.querySelector(".customer-tag-checkbox-empty");
+        if (emptyNode) {
+            emptyNode.style.display = hasVisibleItem ? "none" : "";
+        }
+    }
+
     modalElement.addEventListener("shown.bs.modal", customerTagSyncBodyModalClass);
     modalElement.addEventListener("hidden.bs.modal", customerTagSyncBodyModalClass);
     ' . (($resetDraftOnLoad && $customerId === 0) ? '
@@ -1246,6 +1347,13 @@ document.addEventListener("DOMContentLoaded", function () {
                 cancelPanel.style.display = "none";
             }
             return;
+        }
+    });
+
+    modalElement.addEventListener("input", function (event) {
+        var searchInput = event.target.closest(".customer-tag-checkbox-search");
+        if (searchInput) {
+            customerTagApplyCheckboxSearch(searchInput);
         }
     });
 

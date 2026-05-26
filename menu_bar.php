@@ -872,6 +872,14 @@ if ($hasTaskManagementAccess) {
     var taskSidebarMaxWidth = 520;
     var hasTaskManagementAccess = <?php echo $hasTaskManagementAccess ? 'true' : 'false'; ?>;
 
+    function syncMobileSidebarOpenState() {
+        if (isMobileViewport() && sidebar.hasClass('active')) {
+            $('body').addClass('mobile-sidebar-open');
+        } else {
+            $('body').removeClass('mobile-sidebar-open');
+        }
+    }
+
     function positionTaskProjectOptionsPanel(actionBtn) {
         if (!actionBtn) {
             return;
@@ -1067,6 +1075,7 @@ if ($hasTaskManagementAccess) {
                     sidebar.toggleClass('active', true);
                     sidebar.toggleClass('close', false);
                     opacityBackground.show();
+                    syncMobileSidebarOpenState();
                 }
                 expandTaskMenuInMobileSidebar();
                 return;
@@ -1081,11 +1090,13 @@ if ($hasTaskManagementAccess) {
             if (sidebar.hasClass("active")) {
                 sidebar.toggleClass("close", true);
                 opacityBackground.hide();
+                syncMobileSidebarOpenState();
 
                 // timeout value based on .close css transition (0.3s)
                 setTimeout(() => {
                     sidebar.removeClass('active');
                     sidebar.removeClass('close');
+                    syncMobileSidebarOpenState();
                 }, 500);
             } else {
                 sidebar.toggleClass("active", true);
@@ -1095,6 +1106,7 @@ if ($hasTaskManagementAccess) {
                 } else {
                     opacityBackground.hide();
                 }
+                syncMobileSidebarOpenState();
             }
         });
 
@@ -1115,6 +1127,7 @@ if ($hasTaskManagementAccess) {
                     setTaskGlobalSidebar(false);
                 }
             }
+            syncMobileSidebarOpenState();
         });
 
         opacityBackground.on('click', function (e) {
@@ -1122,12 +1135,16 @@ if ($hasTaskManagementAccess) {
             if (!sidebar2.is(e.target) && sidebar2.has(e.target).length === 0) {
                 sidebar.toggleClass('close', true);
                 opacityBackground.hide();
+                syncMobileSidebarOpenState();
                 setTimeout(() => {
                     sidebar.removeClass('active');
                     sidebar.removeClass('close');
+                    syncMobileSidebarOpenState();
                 }, 300);
             }
         });
+
+        syncMobileSidebarOpenState();
 
         document.addEventListener('DOMContentLoaded', function () {
 
