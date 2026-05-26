@@ -224,15 +224,15 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 
                     <div class="form-group mb-3">
                         <label class="form-label" for="currentDataName"><?php echo $pageTitle ?> Name</label>
-                        <input class="form-control" type="text" name="currentDataName" id="currentDataName" value="<?php if (isset($row['name'])) echo $row['name'] ?>" <?php if ($act == '') echo 'readonly' ?> required autocomplete="off">
+                        <input class="form-control" type="text" name="currentDataName" id="currentDataName" value="<?php if (isset($row['name'])) echo htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') ?>" <?php if ($act == '') echo 'readonly' ?> required autocomplete="off">
                         <div id="err_msg">
-                            <span class="mt-n1" id="errorSpan"><?php if (isset($err)) echo $err; ?></span>
+                            <span class="mt-n1" id="errorSpan"><?php if (isset($err)) echo htmlspecialchars((string) $err, ENT_QUOTES, 'UTF-8'); ?></span>
                         </div>
                     </div>
 
                     <div class="form-group mb-3">
                         <label class="form-label" for="currentDataRemark"><?php echo $pageTitle ?> Remark</label>
-                        <textarea class="form-control" name="currentDataRemark" id="currentDataRemark" rows="3" <?php if ($act == '') echo 'readonly' ?>><?php if (isset($row['remark'])) echo $row['remark'] ?></textarea>
+                        <textarea class="form-control" name="currentDataRemark" id="currentDataRemark" rows="3" <?php if ($act == '') echo 'readonly' ?>><?php if (isset($row['remark'])) echo htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') ?></textarea>
                     </div>
                     <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
 

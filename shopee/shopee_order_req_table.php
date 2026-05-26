@@ -57,10 +57,16 @@ foreach ($shopeePinGroups as $pinGroupId) {
 $accessActionKey = array_values(array_unique(array_map('intval', $accessActionKey)));
 $canVerifyAction = in_array(14, $accessActionKey, true);
 $canAssignEstimatedReceivedDate = in_array(2, $accessActionKey, true) || $canVerifyAction;
+$canBulkSyncShippedOrders = function_exists('shopeeOmsHasTransitionPermission')
+    ? shopeeOmsHasTransitionPermission($connect, 'SP', 'WAERD', USER_GROUP, array('create_by' => USER_ID), USER_ID)
+    : false;
 $estimatedDateToday = new DateTimeImmutable('today');
 $estimatedDateMin = $estimatedDateToday->modify('+1 day')->format('Y-m-d');
 $estimatedDateMax = $estimatedDateToday->modify('+10 days')->format('Y-m-d');
 $num = $default_currency_id = 1; 
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && $canBulkSyncShippedOrders && function_exists('shopeeOmsBulkMoveCurrentShippedOrdersToWaerd')) {
+    shopeeOmsBulkMoveCurrentShippedOrdersToWaerd($connect, $finance_connect, USER_ID, USER_GROUP, $pageTitle);
+}
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceivedDateBtn')) {
     if (!$canAssignEstimatedReceivedDate) {
@@ -201,7 +207,12 @@ $whereConditions = [];
 // ROLE FILTER: Superadmins see ALL orders, no base status restriction applied here!
 
 if (!empty($monthFilter)) { $whereConditions[] = "DATE_FORMAT(date, '%Y-%m') = '" . mysqli_real_escape_string($finance_connect, $monthFilter) . "'"; }
-if (!empty($statusFilter)) { $whereConditions[] = "order_status = '" . mysqli_real_escape_string($finance_connect, $statusFilter) . "'"; }
+if (!empty($statusFilter)) {
+    $statusCondition = shopeeOmsBuildOrderStatusFilterCondition($finance_connect, 'order_status', $statusFilter);
+    if ($statusCondition !== '') {
+        $whereConditions[] = $statusCondition;
+    }
+}
 // Use FIND_IN_SET to correctly search inside comma-separated IDs
 if (!empty($brandFilter)) { $whereConditions[] = "FIND_IN_SET('" . mysqli_real_escape_string($finance_connect, $brandFilter) . "', brand) > 0"; }
 if (!empty($pkgFilter)) { $whereConditions[] = "FIND_IN_SET('" . mysqli_real_escape_string($finance_connect, $pkgFilter) . "', package) > 0"; }
@@ -521,7 +532,6 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                 echo '<div class="text-center"><h4>No Result!</h4></div>';
             } else {
                 ?>
-                <div class="table-responsive">
                 <?php
                 $total_price = 0; $total_voucher = 0; $total_shipping = 0;
                 $total_trans_fee = 0; $total_ams_fee = 0; $total_fees = 0;
@@ -796,7 +806,6 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                         </tr>
                     </tfoot>
                 </table>
-                </div>
             <?php } ?>
         </div>
     </div>
@@ -825,5 +834,6 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
 <script>
     dropdownMenuDispFix();
     datatableAlignment('shopee_order_req_table');
+    keepDataTableControlsVisible('shopee_order_req_table');
 </script>
 </html>

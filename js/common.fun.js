@@ -1424,6 +1424,60 @@ function datatableAlignment(elementID) {
   });
 }
 
+function keepDataTableControlsVisible(elementID) {
+  $(window).on("load resize", () => {
+    var tableElement = $("#" + elementID);
+    if (!tableElement.length) {
+      return;
+    }
+
+    var wrapperElement = tableElement.closest(
+      ".dataTables_wrapper, .dt-container, #" + elementID + "_wrapper",
+    );
+    if (!wrapperElement.length) {
+      wrapperElement = $("#" + elementID + "_wrapper");
+    }
+
+    if (!wrapperElement.length) {
+      return;
+    }
+
+    var scrollWrap = tableElement.parent(".datatable-scroll-wrap");
+    if (!scrollWrap.length) {
+      tableElement.wrap(
+        '<div class="datatable-scroll-wrap table-responsive"></div>',
+      );
+      scrollWrap = tableElement.parent(".datatable-scroll-wrap");
+    }
+
+    if (
+      wrapperElement.hasClass("table-responsive") &&
+      !wrapperElement.hasClass("datatable-scroll-wrap")
+    ) {
+      wrapperElement.removeClass("table-responsive");
+    }
+
+    var outerResponsiveWrap = wrapperElement.parent(".table-responsive");
+    if (
+      outerResponsiveWrap.length &&
+      !outerResponsiveWrap.hasClass("datatable-scroll-wrap")
+    ) {
+      outerResponsiveWrap.removeClass("table-responsive");
+    }
+
+    wrapperElement
+      .parents(".table-responsive")
+      .not(".datatable-scroll-wrap")
+      .removeClass("table-responsive");
+
+    if (window.matchMedia("(max-width: 769px)").matches) {
+      wrapperElement.addClass("datatable-mobile-controls");
+    } else {
+      wrapperElement.removeClass("datatable-mobile-controls");
+    }
+  });
+}
+
 function centerAlignment(elementID) {
   $(window).on("load resize", () => {
     var form = $("#" + elementID);

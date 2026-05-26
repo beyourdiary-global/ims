@@ -3059,6 +3059,110 @@ if (!function_exists('shopeeOmsGetMarketplaceStatusLabel')) {
     }
 }
 
+if (!function_exists('shopeeOmsGetStoredStatusVariants')) {
+    function shopeeOmsGetStoredStatusVariants($status)
+    {
+        $status = trim((string) $status);
+        if ($status === '') {
+            return array();
+        }
+
+        $storedVariantsMap = array(
+            'P' => array('P', 'To Ship'),
+            'TP' => array('TP', 'To Pack'),
+            'SP' => array('SP', 'Processing', 'Shipped'),
+            'WAERD' => array('WAERD', 'Waiting Assign Estimate Received Date'),
+            'WR' => array('WR', 'AED', 'Waiting Receive', 'Assigned Estimate Date'),
+            'PD' => array('PD', 'Postponed'),
+            'PR' => array('PR', 'Parcel Received'),
+            'WAFC' => array('WAFC', 'OC', 'Waiting Admin Final Check', 'Order Received'),
+            'V' => array('V', 'Verify', 'Verified'),
+            'C' => array('C', 'Complete'),
+            'R' => array('R', 'Return'),
+            'CR' => array('CR', 'Closed-Returned'),
+        );
+
+        $statusCode = shopeeOmsNormalizeStatusCode($status);
+        $candidates = array($status);
+        if ($statusCode !== '' && isset($storedVariantsMap[$statusCode])) {
+            $candidates = array_merge($candidates, $storedVariantsMap[$statusCode]);
+        }
+
+        $uniqueVariants = array();
+        foreach ($candidates as $candidate) {
+            $candidate = trim((string) $candidate);
+            if ($candidate === '') {
+                continue;
+            }
+
+            $variantKey = normalizeOrderStatusKey($candidate);
+            if ($variantKey === '') {
+                $variantKey = strtoupper($candidate);
+            }
+
+            if (!isset($uniqueVariants[$variantKey])) {
+                $uniqueVariants[$variantKey] = $candidate;
+            }
+        }
+
+        return array_values($uniqueVariants);
+    }
+}
+
+if (!function_exists('shopeeOmsBuildOrderStatusFilterCondition')) {
+    function shopeeOmsBuildOrderStatusFilterCondition($connect, $columnName, $status)
+    {
+        if (!($connect instanceof mysqli) || !preg_match('/^[A-Za-z0-9_]+$/', (string) $columnName)) {
+            return '';
+        }
+
+        $variants = shopeeOmsGetStoredStatusVariants($status);
+        if (empty($variants)) {
+            return '';
+        }
+
+        $escapedValues = array();
+        foreach ($variants as $variant) {
+            $escapedValues[] = "'" . mysqli_real_escape_string($connect, $variant) . "'";
+        }
+
+        if (count($escapedValues) === 1) {
+            return $columnName . " = " . $escapedValues[0];
+        }
+
+        return $columnName . " IN (" . implode(', ', $escapedValues) . ")";
+    }
+}
+
+if (!function_exists('shopeeOmsBuildOrderStatusInCondition')) {
+    function shopeeOmsBuildOrderStatusInCondition($connect, $columnName, $statuses)
+    {
+        if (!($connect instanceof mysqli) || !preg_match('/^[A-Za-z0-9_]+$/', (string) $columnName) || !is_array($statuses)) {
+            return '';
+        }
+
+        $allVariants = array();
+        foreach ($statuses as $status) {
+            foreach (shopeeOmsGetStoredStatusVariants($status) as $variant) {
+                $variantKey = normalizeOrderStatusKey($variant);
+                if ($variantKey === '') {
+                    $variantKey = strtoupper((string) $variant);
+                }
+
+                if (!isset($allVariants[$variantKey])) {
+                    $allVariants[$variantKey] = "'" . mysqli_real_escape_string($connect, $variant) . "'";
+                }
+            }
+        }
+
+        if (empty($allVariants)) {
+            return '';
+        }
+
+        return $columnName . " IN (" . implode(', ', array_values($allVariants)) . ")";
+    }
+}
+
 if (!function_exists('shopeeOmsGetEditableStatusOptions')) {
     function shopeeOmsGetEditableStatusOptions()
     {
@@ -3124,7 +3228,7 @@ if (!function_exists('shopeeOmsTransitionDefinitions')) {
                 'SP' => array('action' => 'warehouse_scan', 'requires_permission' => true, 'auto' => false),
             ),
             'SP' => array(
-                'WAERD' => array('action' => 'auto_post_ship', 'requires_permission' => false, 'auto' => true),
+                'WAERD' => array('action' => 'auto_post_ship', 'requires_permission' => true, 'auto' => true),
                 'R' => array('action' => 'mark_return', 'requires_permission' => true, 'auto' => false),
             ),
             'WAERD' => array(
@@ -5329,7 +5433,8 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
             $actionName = isset($transitionInfo['action']) ? (string) $transitionInfo['action'] : 'status_transition';
         }
 
-        if (!$skipPermission && !shopeeOmsHasTransitionPermission($cmsConnect, $fromStatus, $targetStatus, $actorUserGroupId, $orderRow, $actorUserId)) {
+        $requiresPermission = !empty($transitionInfo['requires_permission']);
+        if ($requiresPermission && !$skipPermission && !shopeeOmsHasTransitionPermission($cmsConnect, $fromStatus, $targetStatus, $actorUserGroupId, $orderRow, $actorUserId)) {
             return array('success' => false, 'message' => 'You are not allowed to perform this status transition.');
         }
 
@@ -6131,6 +6236,118 @@ if (!function_exists('shopeeOmsFinalizeInitialShippedOrder')) {
             'message' => 'Warehouse inventory deducted and order moved to ' . shopeeOmsGetStatusLabel('WAERD') . '.',
             'deduct_result' => $deductResult,
             'transition_result' => $transitionResult,
+        );
+    }
+}
+
+if (!function_exists('shopeeOmsBulkMoveCurrentShippedOrdersToWaerd')) {
+    function shopeeOmsBulkMoveCurrentShippedOrdersToWaerd($cmsConnect, $financeConnect, $actorUserId = 'SYSTEM', $actorUserGroupId = 0, $sourcePage = 'Shopee OMS', $options = array())
+    {
+        $options = is_array($options) ? $options : array();
+        $skipPermission = !empty($options['skip_permission']);
+
+        if (!($cmsConnect instanceof mysqli) || !($financeConnect instanceof mysqli)) {
+            return array(
+                'success' => false,
+                'message' => 'Unable to bulk update Shipped orders.',
+                'matched_count' => 0,
+                'updated_count' => 0,
+                'failed_count' => 0,
+                'results' => array(),
+            );
+        }
+
+        $statusCondition = shopeeOmsBuildOrderStatusFilterCondition($financeConnect, 'order_status', 'SP');
+        if ($statusCondition === '') {
+            return array(
+                'success' => false,
+                'message' => 'Unable to resolve the current Shipped status filter.',
+                'matched_count' => 0,
+                'updated_count' => 0,
+                'failed_count' => 0,
+                'results' => array(),
+            );
+        }
+
+        $sql = "SELECT id, orderID, order_status FROM `" . SHOPEE_SG_ORDER_REQ . "` WHERE status = 'A' AND " . $statusCondition . " ORDER BY id ASC";
+        $result = mysqli_query($financeConnect, $sql);
+        if (!$result) {
+            return array(
+                'success' => false,
+                'message' => 'Unable to load current Shipped orders.',
+                'matched_count' => 0,
+                'updated_count' => 0,
+                'failed_count' => 0,
+                'results' => array(),
+            );
+        }
+
+        $matchedRows = array();
+        while ($row = mysqli_fetch_assoc($result)) {
+            $matchedRows[] = (array) $row;
+        }
+
+        if (empty($matchedRows)) {
+            return array(
+                'success' => true,
+                'message' => 'No current Shipped orders found to update.',
+                'matched_count' => 0,
+                'updated_count' => 0,
+                'failed_count' => 0,
+                'results' => array(),
+            );
+        }
+
+        $updatedCount = 0;
+        $failedCount = 0;
+        $transitionResults = array();
+
+        foreach ($matchedRows as $orderRow) {
+            $orderId = isset($orderRow['id']) ? (int) $orderRow['id'] : 0;
+            if ($orderId <= 0) {
+                continue;
+            }
+
+            $transitionResult = shopeeOmsExecuteTransition($cmsConnect, $financeConnect, $orderId, 'WAERD', array(
+                'actor_user_id' => $actorUserId,
+                'actor_user_group_id' => (int) $actorUserGroupId,
+                'source_page' => $sourcePage,
+                'remark' => 'Bulk move current Shipped orders to Waiting Assign Estimate Received Date.',
+                'action' => 'bulk_post_ship_sync',
+                'skip_permission' => $skipPermission,
+                'allow_auto_follow_up' => false,
+            ));
+
+            $transitionResults[] = array(
+                'order_id' => $orderId,
+                'order_code' => isset($orderRow['orderID']) ? (string) $orderRow['orderID'] : '',
+                'old_status' => isset($orderRow['order_status']) ? (string) $orderRow['order_status'] : '',
+                'result' => $transitionResult,
+            );
+
+            if (!empty($transitionResult['success'])) {
+                $updatedCount++;
+            } else {
+                $failedCount++;
+            }
+        }
+
+        $success = $failedCount === 0;
+        $message = $updatedCount > 0
+            ? 'Updated ' . $updatedCount . ' current Shipped order(s) to ' . shopeeOmsGetStatusLabel('WAERD') . '.'
+            : 'No current Shipped orders were updated.';
+
+        if ($failedCount > 0) {
+            $message .= ' ' . $failedCount . ' order(s) failed to update.';
+        }
+
+        return array(
+            'success' => $success,
+            'message' => $message,
+            'matched_count' => count($matchedRows),
+            'updated_count' => $updatedCount,
+            'failed_count' => $failedCount,
+            'results' => $transitionResults,
         );
     }
 }
