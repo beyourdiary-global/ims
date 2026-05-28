@@ -293,6 +293,21 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
         $omsStockOutWarehouseName = !empty($omsOrderRow)
             ? shopeeOmsResolveStockOutWarehouseName($connect, $omsOrderRow, $omsDefaultWarehouseId)
             : '';
+        $omsCustomerDisplayName = '';
+        if (isset($omsTokenRow['customer_name']) && trim((string) $omsTokenRow['customer_name']) !== '') {
+            $omsCustomerDisplayName = trim((string) $omsTokenRow['customer_name']);
+        } elseif (isset($omsOrderRow['buyer']) && trim((string) $omsOrderRow['buyer']) !== '') {
+            $omsCustomerDisplayName = trim((string) $omsOrderRow['buyer']);
+            if (ctype_digit($omsCustomerDisplayName)) {
+                $buyerRst = getData('buyer_username', "id='" . (int) $omsCustomerDisplayName . "'", 'LIMIT 1', SHOPEE_CUST_INFO, $finance_connect);
+                if ($buyerRst && $buyerRst->num_rows > 0) {
+                    $buyerRow = $buyerRst->fetch_assoc();
+                    if (isset($buyerRow['buyer_username']) && trim((string) $buyerRow['buyer_username']) !== '') {
+                        $omsCustomerDisplayName = trim((string) $buyerRow['buyer_username']);
+                    }
+                }
+            }
+        }
         $omsAirbillAttachmentUrl = '';
         $omsAirbillAttachmentName = '';
         $omsAirbillAttachmentExt = '';
@@ -355,7 +370,7 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
                         <div class="card">
                             <h4>Order Details</h4>
                             <div><span class="k">Order ID:</span> <span class="v"><?= htmlspecialchars((string) (isset($omsOrderRow['orderID']) ? $omsOrderRow['orderID'] : '')) ?></span></div>
-                            <div><span class="k">Customer:</span> <span class="v"><?= htmlspecialchars((string) (isset($omsOrderRow['customer_name']) && trim((string) $omsOrderRow['customer_name']) !== '' ? $omsOrderRow['customer_name'] : (isset($omsOrderRow['buyer']) ? $omsOrderRow['buyer'] : '-'))) ?></span></div>
+                            <div><span class="k">Customer Name:</span> <span class="v"><?= htmlspecialchars($omsCustomerDisplayName !== '' ? $omsCustomerDisplayName : '-') ?></span></div>
                             <div><span class="k">Address:</span> <span class="v"><?= nl2br(htmlspecialchars((string) (isset($omsOrderRow['customer_address']) ? $omsOrderRow['customer_address'] : '-'))) ?></span></div>
                             <div><span class="k">Airbill:</span> <span class="v"><?= htmlspecialchars((string) (isset($omsOrderRow['airbill_no']) && trim((string) $omsOrderRow['airbill_no']) !== '' ? $omsOrderRow['airbill_no'] : '-')) ?></span></div>
                             <div><span class="k">Airbill Attachment:</span> <span class="v"><?= htmlspecialchars($omsAirbillAttachmentName !== '' ? $omsAirbillAttachmentName : '-') ?></span></div>
@@ -412,7 +427,7 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
 
                     <?php if (empty($omsTokenRow['used_at'])) { ?>
                         <h3 style="margin-top: 20px;">Upload Attachment</h3>
-                        <form method="post" enctype="multipart/form-data" style="margin-top: 20px;">
+                        <form method="post" enctype="multipart/form-data" style="margin-top: 10px;">
                             <input type="hidden" name="scan_token" value="<?= htmlspecialchars($omsToken) ?>">
                             <input type="hidden" name="current_attachment" value="<?= htmlspecialchars((string) siAttachmentEncodeList($omsPersistedAttachments)) ?>">
                             <div style="max-width: 560px;">
@@ -420,7 +435,7 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
                                 <div id="stock_in_attachment_inputs" style="display:flex;flex-direction:column;gap:8px;">
                                     <div class="scan-attachment-input-row">
                                         <input id="stock_in_attachment" class="scan-attachment-input" name="stock_in_attachment[]" type="file" accept=".png,.jpg,.jpeg,.webp"<?= count($omsPersistedAttachments) === 0 ? ' required' : '' ?>>
-                                        <button type="button" class="mt-1 scan-attachment-action-btn" data-attach-action="add" title="Add another attachment"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>
+                                        <button type="button" class="mt-1" id="action_menu_btn" data-attach-action="add" title="Add another attachment"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>
                                     </div>
                                 </div>
                                 <?php if (count($omsPersistedAttachments) > 0) { ?>
@@ -446,13 +461,14 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
                                     <span id="stock_in_attachment_placeholder" class="small">Image preview</span>
                                 </div>
                                 <div class="small" style="margin-top:6px;">Required: upload at least one photo to complete stock out. Click + to add more attachments.</div>
+                                <button type="submit" name="actionBtn" value="submitOmsStockOut" style="margin-top:12px;padding:10px 16px;border:0;border-radius:8px;background:#1f6fd5;color:#fff;font-weight:600;">Submit Warehouse Stock-out</button>
                             </div>
-                            <button type="submit" name="actionBtn" value="submitOmsStockOut" style="padding:10px 16px;border:0;border-radius:8px;background:#1f6fd5;color:#fff;font-weight:600;">Submit Warehouse Stock-out</button>
                         </form>
                     <?php } ?>
                 <?php } else { ?>
                     <div class="alert alert-danger">Order linked to this warehouse stock-out token could not be found.</div>
                 <?php } ?>
+                <p class="small" style="margin-top:16px;">If you are blocked unexpectedly, please contact administrator.</p>
             </div>
             <script>
             (function () {
