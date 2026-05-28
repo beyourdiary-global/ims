@@ -296,6 +296,8 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
         $omsCustomerDisplayName = '';
         if (isset($omsTokenRow['customer_name']) && trim((string) $omsTokenRow['customer_name']) !== '') {
             $omsCustomerDisplayName = trim((string) $omsTokenRow['customer_name']);
+        } elseif (isset($omsOrderRow['customer_name']) && trim((string) $omsOrderRow['customer_name']) !== '') {
+            $omsCustomerDisplayName = trim((string) $omsOrderRow['customer_name']);
         } elseif (isset($omsOrderRow['buyer']) && trim((string) $omsOrderRow['buyer']) !== '') {
             $omsCustomerDisplayName = trim((string) $omsOrderRow['buyer']);
             if (ctype_digit($omsCustomerDisplayName)) {

@@ -3682,7 +3682,7 @@ if (!function_exists('shopeeOmsLoadTableSnapshotRows')) {
     function shopeeOmsLoadTableSnapshotRows($tableName)
     {
         $tableName = trim((string) $tableName);
-        if ($tableName === '' || !defined('ROOT')) {
+        if ($tableName === '' || !preg_match('/^[A-Za-z0-9_]+$/', $tableName) || !defined('ROOT')) {
             return array();
         }
 
