@@ -1176,6 +1176,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                     </div>
                 </div>
 
+                <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
                 <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
                     <?php
                     switch ($act) {

@@ -319,6 +319,10 @@ function generateYearlyGoalForm($goals = [], $isReadOnly = false)
 
         <?php echo generateYearlyGoalForm($goals, $isReadOnly); ?>
 
+        <?php
+        $goalHistoryRow = !empty($goals) ? reset($goals) : array();
+        echo commonRenderCreateUpdateInfo(is_array($goalHistoryRow) ? $goalHistoryRow : array(), $connect, isset($action) ? $action : '');
+        ?>
         <div class="textMIddle">
             <button type="submit" class="btn btn-primary btn-lg floatLeftBtn" <?php if ($isReadOnly)
                 echo 'disabled'; ?>><?php echo $pageActionTitle; ?></button>

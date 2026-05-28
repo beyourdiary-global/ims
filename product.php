@@ -544,6 +544,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                         </div>
                     </div>
 
+                    <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
                     <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
                         <?php echo ($act) ? '<button class="btn btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="actionBtn" value="' . $actionBtnValue . '">' . $pageActionTitle . '</button>' : ''; ?>
                         <button class="btn btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="actionBtn" value="back">Back</button>

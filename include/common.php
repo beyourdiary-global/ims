@@ -3678,11 +3678,119 @@ if (!function_exists('shopeeOmsBuildPackageQtySnapshotFromInputs')) {
     }
 }
 
+if (!function_exists('shopeeOmsLoadTableSnapshotRows')) {
+    function shopeeOmsLoadTableSnapshotRows($tableName)
+    {
+        $tableName = trim((string) $tableName);
+        if ($tableName === '' || !preg_match('/^[A-Za-z0-9_]+$/', $tableName) || !defined('ROOT')) {
+            return array();
+        }
+
+        static $snapshotCache = array();
+        if (array_key_exists($tableName, $snapshotCache)) {
+            return $snapshotCache[$tableName];
+        }
+
+        $rootPath = rtrim((string) ROOT, '/\\');
+        $candidatePaths = array(
+            $rootPath . '/data/' . $tableName . '.json',
+            $rootPath . '/' . $tableName . '.json',
+        );
+
+        foreach ($candidatePaths as $path) {
+            if (!is_file($path) || !is_readable($path)) {
+                continue;
+            }
+
+            $json = file_get_contents($path);
+            if ($json === false || trim((string) $json) === '') {
+                continue;
+            }
+
+            $rows = json_decode($json, true);
+            if (is_array($rows)) {
+                $snapshotCache[$tableName] = $rows;
+                return $snapshotCache[$tableName];
+            }
+        }
+
+        $snapshotCache[$tableName] = array();
+        return $snapshotCache[$tableName];
+    }
+}
+
+if (!function_exists('shopeeOmsGetPackageSnapshotMap')) {
+    function shopeeOmsGetPackageSnapshotMap($packageIds)
+    {
+        $snapshotMap = array();
+        if (!is_array($packageIds) || empty($packageIds)) {
+            return $snapshotMap;
+        }
+
+        $safeIds = array();
+        foreach ($packageIds as $packageId) {
+            $packageId = (int) $packageId;
+            if ($packageId > 0) {
+                $safeIds[$packageId] = $packageId;
+            }
+        }
+
+        if (empty($safeIds)) {
+            return $snapshotMap;
+        }
+
+        $rows = shopeeOmsLoadTableSnapshotRows(PKG);
+        foreach ($rows as $row) {
+            $rowId = isset($row['id']) ? (int) $row['id'] : 0;
+            if ($rowId > 0 && isset($safeIds[$rowId])) {
+                $snapshotMap[$rowId] = array(
+                    'name' => isset($row['name']) ? (string) $row['name'] : '',
+                    'product' => isset($row['product']) ? (string) $row['product'] : '',
+                );
+            }
+        }
+
+        return $snapshotMap;
+    }
+}
+
+if (!function_exists('shopeeOmsGetProductSnapshotNameMap')) {
+    function shopeeOmsGetProductSnapshotNameMap($productIds)
+    {
+        $nameMap = array();
+        if (!is_array($productIds) || empty($productIds)) {
+            return $nameMap;
+        }
+
+        $safeIds = array();
+        foreach ($productIds as $productId) {
+            $productId = (int) $productId;
+            if ($productId > 0) {
+                $safeIds[$productId] = $productId;
+            }
+        }
+
+        if (empty($safeIds)) {
+            return $nameMap;
+        }
+
+        $rows = shopeeOmsLoadTableSnapshotRows(PROD);
+        foreach ($rows as $row) {
+            $rowId = isset($row['id']) ? (int) $row['id'] : 0;
+            if ($rowId > 0 && isset($safeIds[$rowId])) {
+                $nameMap[$rowId] = isset($row['name']) ? (string) $row['name'] : '';
+            }
+        }
+
+        return $nameMap;
+    }
+}
+
 if (!function_exists('shopeeOmsGetPackageNameMap')) {
     function shopeeOmsGetPackageNameMap($connect, $packageIds)
     {
         $nameMap = array();
-        if (!($connect instanceof mysqli) || !is_array($packageIds) || empty($packageIds)) {
+        if (!is_array($packageIds) || empty($packageIds)) {
             return $nameMap;
         }
 
@@ -3698,13 +3806,31 @@ if (!function_exists('shopeeOmsGetPackageNameMap')) {
             return $nameMap;
         }
 
-        $idList = implode(',', $safeIds);
-        $result = mysqli_query($connect, "SELECT id, name FROM `" . PKG . "` WHERE id IN (" . $idList . ")");
-        if ($result) {
-            while ($row = mysqli_fetch_assoc($result)) {
-                $rowId = isset($row['id']) ? (int) $row['id'] : 0;
-                if ($rowId > 0) {
-                    $nameMap[$rowId] = isset($row['name']) ? (string) $row['name'] : '';
+        if ($connect instanceof mysqli) {
+            $idList = implode(',', $safeIds);
+            $result = mysqli_query($connect, "SELECT id, name FROM `" . PKG . "` WHERE id IN (" . $idList . ")");
+            if ($result) {
+                while ($row = mysqli_fetch_assoc($result)) {
+                    $rowId = isset($row['id']) ? (int) $row['id'] : 0;
+                    if ($rowId > 0) {
+                        $nameMap[$rowId] = isset($row['name']) ? (string) $row['name'] : '';
+                    }
+                }
+            }
+        }
+
+        $missingIds = array();
+        foreach ($safeIds as $packageId) {
+            if (!isset($nameMap[$packageId]) || trim((string) $nameMap[$packageId]) === '') {
+                $missingIds[$packageId] = $packageId;
+            }
+        }
+
+        if (!empty($missingIds)) {
+            $snapshotMap = shopeeOmsGetPackageSnapshotMap($missingIds);
+            foreach ($missingIds as $packageId) {
+                if (isset($snapshotMap[$packageId]['name']) && trim((string) $snapshotMap[$packageId]['name']) !== '') {
+                    $nameMap[$packageId] = (string) $snapshotMap[$packageId]['name'];
                 }
             }
         }
@@ -3797,6 +3923,22 @@ if (!function_exists('shopeeOmsBuildOrderProductSummary')) {
             }
         }
 
+        $missingPackageIds = array();
+        foreach ($packageIds as $packageId) {
+            if (!isset($packageProductMap[$packageId]) || trim((string) $packageProductMap[$packageId]['product']) === '') {
+                $missingPackageIds[$packageId] = $packageId;
+            }
+        }
+
+        if (!empty($missingPackageIds)) {
+            $packageSnapshotMap = shopeeOmsGetPackageSnapshotMap($missingPackageIds);
+            foreach ($missingPackageIds as $packageId) {
+                if (isset($packageSnapshotMap[$packageId])) {
+                    $packageProductMap[$packageId] = $packageSnapshotMap[$packageId];
+                }
+            }
+        }
+
         foreach ($packageRows as $packageRow) {
             $packageId = isset($packageRow['package_id']) ? (int) $packageRow['package_id'] : 0;
             $qty = isset($packageRow['qty']) ? (int) $packageRow['qty'] : 1;
@@ -3829,6 +3971,23 @@ if (!function_exists('shopeeOmsBuildOrderProductSummary')) {
                     if ($productId > 0) {
                         $productNameMap[$productId] = isset($row['name']) ? (string) $row['name'] : '';
                     }
+                }
+            }
+        }
+
+        $missingProductIds = array();
+        foreach (array_keys($productQtyMap) as $productId) {
+            $productId = (int) $productId;
+            if ($productId > 0 && (!isset($productNameMap[$productId]) || trim((string) $productNameMap[$productId]) === '')) {
+                $missingProductIds[$productId] = $productId;
+            }
+        }
+
+        if (!empty($missingProductIds)) {
+            $productSnapshotNameMap = shopeeOmsGetProductSnapshotNameMap($missingProductIds);
+            foreach ($missingProductIds as $productId) {
+                if (isset($productSnapshotNameMap[$productId]) && trim((string) $productSnapshotNameMap[$productId]) !== '') {
+                    $productNameMap[$productId] = (string) $productSnapshotNameMap[$productId];
                 }
             }
         }
