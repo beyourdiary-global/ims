@@ -159,9 +159,16 @@ $formData = array(
     'order_id' => 0,
     'item_id' => 0,
     'warehouse_id' => 0,
+    'stock_type' => 'Stock In',
     'stock_in_date' => '',
     'order_number' => '',
     'attachment' => '',
+    'create_by' => '',
+    'create_date' => '',
+    'create_time' => '',
+    'update_by' => '',
+    'update_date' => '',
+    'update_time' => '',
     'product_id' => 0,
     'product_name' => '',
     'product_quantity' => '',
@@ -186,9 +193,16 @@ foreach (siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTable
         $orderById[$orderId] = array(
             'order_id' => $orderId,
             'warehouse_id' => (int) $row['warehouse_id'],
+            'stock_type' => isset($row['stock_type']) ? (string) $row['stock_type'] : 'Stock In',
             'stock_in_date' => (string) $row['stock_in_date'],
             'order_number' => (string) $row['order_number'],
             'attachment' => (string) (isset($row['attachment']) ? $row['attachment'] : ''),
+            'create_by' => isset($row['create_by']) ? (string) $row['create_by'] : '',
+            'create_date' => isset($row['create_date']) ? (string) $row['create_date'] : '',
+            'create_time' => isset($row['create_time']) ? (string) $row['create_time'] : '',
+            'update_by' => isset($row['update_by']) ? (string) $row['update_by'] : '',
+            'update_date' => isset($row['update_date']) ? (string) $row['update_date'] : '',
+            'update_time' => isset($row['update_time']) ? (string) $row['update_time'] : '',
             'items' => array(),
         );
     }
@@ -215,9 +229,16 @@ if ($dataID > 0 && $act !== 'I') {
         $formData['order_id'] = (int) $r['order_id'];
         $formData['item_id'] = isset($r['items'][0]['item_id']) ? (int) $r['items'][0]['item_id'] : 0;
         $formData['warehouse_id'] = (int) $r['warehouse_id'];
+        $formData['stock_type'] = isset($r['stock_type']) ? (string) $r['stock_type'] : 'Stock In';
         $formData['stock_in_date'] = (string) $r['stock_in_date'];
         $formData['order_number'] = (string) $r['order_number'];
         $formData['attachment'] = (string) (isset($r['attachment']) ? $r['attachment'] : '');
+        $formData['create_by'] = isset($r['create_by']) ? (string) $r['create_by'] : '';
+        $formData['create_date'] = isset($r['create_date']) ? (string) $r['create_date'] : '';
+        $formData['create_time'] = isset($r['create_time']) ? (string) $r['create_time'] : '';
+        $formData['update_by'] = isset($r['update_by']) ? (string) $r['update_by'] : '';
+        $formData['update_date'] = isset($r['update_date']) ? (string) $r['update_date'] : '';
+        $formData['update_time'] = isset($r['update_time']) ? (string) $r['update_time'] : '';
         $formData['product_id'] = isset($r['items'][0]['product_id']) ? (int) $r['items'][0]['product_id'] : 0;
         $formData['product_name'] = isset($productNameMap[(int) $formData['product_id']]) ? (string) $productNameMap[(int) $formData['product_id']] : '';
         $formData['product_quantity'] = isset($r['items'][0]['product_quantity']) ? (string) ((int) $r['items'][0]['product_quantity']) : '';
@@ -470,16 +491,19 @@ if (post('actionBtn')) {
                 $oldWarehouseId = 0;
                 $oldStockInDate = '';
                 $oldOrderNumber = '';
+                $oldStockType = 'Stock In';
                 $oldAttachment = '';
                 $oldAttachmentNorm = '';
                 $oldSummaryRows = array();
+                $oldItems = array();
 
-                $oldOrderSql = "SELECT warehouse_id, stock_in_date, order_number, attachment FROM `" . $stockInOrderTable . "` WHERE id='" . $orderId . "' AND status='A' LIMIT 1";
+                $oldOrderSql = "SELECT warehouse_id, stock_in_date, order_number, COALESCE(NULLIF(TRIM(stock_type), ''), 'Stock In') AS stock_type, attachment FROM `" . $stockInOrderTable . "` WHERE id='" . $orderId . "' AND status='A' LIMIT 1";
                 $oldOrderRst = mysqli_query($finance_connect, $oldOrderSql);
                 if ($oldOrderRst && ($oldOrderRow = mysqli_fetch_assoc($oldOrderRst))) {
                     $oldWarehouseId = (int) $oldOrderRow['warehouse_id'];
                     $oldStockInDate = (string) $oldOrderRow['stock_in_date'];
                     $oldOrderNumber = (string) $oldOrderRow['order_number'];
+                    $oldStockType = siNormalizeStockType(isset($oldOrderRow['stock_type']) ? $oldOrderRow['stock_type'] : 'Stock In');
                     $oldAttachment = (string) (isset($oldOrderRow['attachment']) ? $oldOrderRow['attachment'] : '');
                     $oldAttachmentNorm = siAttachmentEncodeList(siAttachmentDecodeList($oldAttachment));
                 }
@@ -490,6 +514,10 @@ if (post('actionBtn')) {
                 $oldItemsRst = mysqli_query($finance_connect, $oldItemsSql);
                 if ($oldItemsRst) {
                     while ($oldItem = mysqli_fetch_assoc($oldItemsRst)) {
+                        $oldItems[] = array(
+                            'product_id' => isset($oldItem['product_id']) ? (int) $oldItem['product_id'] : 0,
+                            'qty' => isset($oldItem['product_quantity']) ? (int) $oldItem['product_quantity'] : 0,
+                        );
                         $oldSummaryRows[] = 'ProductID=' . (int) $oldItem['product_id'] . ', Qty=' . (int) $oldItem['product_quantity'];
                     }
                 }
@@ -520,6 +548,38 @@ if (post('actionBtn')) {
 
                 mysqli_begin_transaction($finance_connect);
                 try {
+                    if ($oldStockType === 'Stock Out') {
+                        $oldQtyMap = siBuildProductQtyMap($oldItems);
+                        $newQtyMap = siBuildProductQtyMap($items);
+                        $restoreQtyMap = array();
+                        $deductQtyMap = array();
+
+                        if ((int) $oldWarehouseId !== (int) $warehouseId) {
+                            $restoreQtyMap = $oldQtyMap;
+                            $deductQtyMap = $newQtyMap;
+                        } else {
+                            $allProductIds = array_unique(array_merge(array_keys($oldQtyMap), array_keys($newQtyMap)));
+                            foreach ($allProductIds as $productId) {
+                                $productId = (int) $productId;
+                                $oldQty = isset($oldQtyMap[$productId]) ? (int) $oldQtyMap[$productId] : 0;
+                                $newQty = isset($newQtyMap[$productId]) ? (int) $newQtyMap[$productId] : 0;
+                                $deltaQty = $newQty - $oldQty;
+                                if ($deltaQty > 0) {
+                                    $deductQtyMap[$productId] = $deltaQty;
+                                } else if ($deltaQty < 0) {
+                                    $restoreQtyMap[$productId] = abs($deltaQty);
+                                }
+                            }
+                        }
+
+                        if (count($restoreQtyMap) > 0) {
+                            siRestoreWarehouseInventoryQtyMap($finance_connect, (int) $oldWarehouseId, $restoreQtyMap, USER_ID, $oldOrderNumber !== '' ? $oldOrderNumber : ('ORDER-' . $orderId));
+                        }
+                        if (count($deductQtyMap) > 0) {
+                            siDeductWarehouseInventoryQtyMap($finance_connect, (int) $warehouseId, $deductQtyMap, USER_ID);
+                        }
+                    }
+
                     $okOrder = mysqli_query($finance_connect, $uOrder);
                     if (!$okOrder) {
                         throw new Exception(mysqli_error($finance_connect));
@@ -901,6 +961,10 @@ if ($isViewMode && $dataID > 0 && isset($orderById[$dataID])) {
                         </table>
                     </div>
                 </div>
+
+                <?php if (!$isAddMode) { ?>
+                    <?= commonRenderCreateUpdateInfo($formData, $connect, $act) ?>
+                <?php } ?>
 
                 <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
                     <?php if ($isAddMode) { ?>

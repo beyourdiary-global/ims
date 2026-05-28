@@ -471,6 +471,7 @@ foreach ($listRows as $row) {
             'warehouse_id' => (int) $row['warehouse_id'],
             'stock_in_date' => (string) $row['stock_in_date'],
             'order_number' => (string) $row['order_number'],
+            'stock_type' => isset($row['stock_type']) ? (string) $row['stock_type'] : 'Stock In',
             'product_names' => array(),
             'product_quantities' => array(),
         );
@@ -526,15 +527,16 @@ foreach ($listRows as $row) {
                 <table class="table table-striped" id="stockInListTable">
                     <thead>
                         <tr>
-                            <th class="hideColumn">ID</th>
-                            <th class="text-center"><input type="checkbox" class="exportAll"></th>
-                            <th>S/N</th>
-                            <th>Action</th>
-                            <th>Warehouse</th>
-                            <th>Product Name</th>
-                            <th>Product Quantity</th>
-                            <th>Stock In Date</th>
-                            <th>Order Number</th>
+                            <th class="hideColumn" scope="col">ID</th>
+                            <th class="text-center" scope="col"><input type="checkbox" class="exportAll"></th>
+                            <th scope="col" width="60px">S/N</th>
+                            <th scope="col" width="100px">Action</th>
+                            <th scope="col">Warehouse</th>
+                            <th scope="col">Product Name</th>
+                            <th scope="col">Product Quantity</th>
+                            <th scope="col">Stock Type</th>
+                            <th scope="col">Stock In / Stock Out Date</th>
+                            <th scope="col">Order Number</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -546,7 +548,7 @@ foreach ($listRows as $row) {
                             <tr>
                                 <td class="hideColumn"><?= (int) $row['order_id'] ?></td>
                                 <td class="text-center"><input type="checkbox" class="export" value="<?= (int) $row['order_id'] ?>"></td>
-                                <td><?= $sn++ ?></td>
+                                <th scope="row"><?= $sn++ ?></th>
                                 <td class="btn-container">
                                     <?php if (isActionAllowed('View', $pinAccess)) { ?>
                                         <a class="btn btn-sm btn-rounded btn-primary" href="<?= $formPage ?>?order_id=<?= (int) $row['order_id'] ?>" title="View"><i class="fa-solid fa-eye"></i></a>
@@ -561,6 +563,7 @@ foreach ($listRows as $row) {
                                 <td><?= siEsc($warehouseName) ?></td>
                                 <td><?= siEsc($productName) ?></td>
                                 <td><?= siEsc($productQty) ?></td>
+                                <td><?= siEsc($row['stock_type']) ?></td>
                                 <td><?= siEsc($row['stock_in_date']) ?></td>
                                 <td><?= siEsc($row['order_number']) ?></td>
                             </tr>
@@ -568,15 +571,16 @@ foreach ($listRows as $row) {
                     </tbody>
                     <tfoot>
                         <tr>
-                            <th class="hideColumn">ID</th>
-                            <th class="text-center"><input type="checkbox" class="exportAll"></th>
-                            <th>S/N</th>
-                            <th>Action</th>
-                            <th>Warehouse</th>
-                            <th>Product Name</th>
-                            <th>Product Quantity</th>
-                            <th>Stock In Date</th>
-                            <th>Order Number</th>
+                            <th class="hideColumn" scope="col">ID</th>
+                            <th class="text-center" scope="col"><input type="checkbox" class="exportAll"></th>
+                            <th scope="col" width="60px">S/N</th>
+                            <th scope="col" id="action_col" width="100px">Action</th>
+                            <th scope="col">Warehouse</th>
+                            <th scope="col">Product Name</th>
+                            <th scope="col">Product Quantity</th>
+                            <th scope="col">Stock Type</th>
+                            <th scope="col">Stock In / Stock Out Date</th>
+                            <th scope="col">Order Number</th>
                         </tr>
                     </tfoot>
                 </table>
@@ -592,7 +596,7 @@ foreach ($listRows as $row) {
     dropdownMenuDispFix();
     // Bypass the custom wrapper and initialize DataTables directly so options apply correctly
     $('#stockInListTable').DataTable({
-        "order": [[7, 'desc']], // Stock In Date descending
+        "order": [[8, 'desc']], // Stock In Date descending
         "columnDefs": [
             { "orderable": false, "targets": [1, 3] } // checkbox, action columns
         ],

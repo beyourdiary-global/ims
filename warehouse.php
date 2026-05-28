@@ -108,7 +108,9 @@ if ($isStockBalanceView) {
                     ) AS last_updated_at
                 FROM `stock_in_order` o
                 INNER JOIN `stock_in_order_item` i ON i.stock_in_order_id = o.id AND i.status='A'
-                WHERE o.status='A' AND o.warehouse_id='" . $warehouseId . "'
+                WHERE o.status='A'
+                  AND o.warehouse_id='" . $warehouseId . "'
+                  AND COALESCE(NULLIF(TRIM(o.stock_type), ''), 'Stock In') <> 'Stock Out'
                 GROUP BY i.product_id
                 HAVING SUM(i.product_quantity) > 0
                 ORDER BY i.product_id ASC";
@@ -215,6 +217,8 @@ if ($isStockBalanceView) {
                             <?php } ?>
                         </table>
                     </div>
+
+                    <?= commonRenderCreateUpdateInfo($warehouseRow, $connect, '') ?>
 
                     <div class="form-group mt-4 d-flex justify-content-center">
                         <form method="get" action="<?= $tablePage ?>" class="m-0">
@@ -437,6 +441,10 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                             <span class="mt-n1" id="errorSpan"><?php if (isset($err)) echo $err; ?></span>
                         </div>
                     </div>
+
+                    <?php if ($act != 'I' && isset($row) && is_array($row)) { ?>
+                        <?= commonRenderCreateUpdateInfo($row, $connect, $act) ?>
+                    <?php } ?>
 
                     <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
                         <?php echo ($act) ? '<button class="btn btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="actionBtn" value="' . $actionBtnValue . '">' . $pageActionTitle . '</button>' : ''; ?>

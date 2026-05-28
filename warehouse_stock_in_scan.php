@@ -2,6 +2,215 @@
 include_once 'init.php';
 include_once ROOT . '/include/common.php';
 
+if (!function_exists('scanAttachmentDirRel')) {
+    function scanAttachmentDirRel()
+    {
+        $base = defined('img_server') ? (string) constant('img_server') : '/images_server/';
+        $base = '/' . trim($base, '/');
+        return $base . '/finance/stock_in/';
+    }
+}
+
+if (!function_exists('scanAttachmentDirAbs')) {
+    function scanAttachmentDirAbs()
+    {
+        $rel = ltrim((string) scanAttachmentDirRel(), '/\\');
+        return rtrim((string) ROOT, '/\\') . '/' . $rel;
+    }
+}
+
+if (!function_exists('scanEnsureAttachmentDir')) {
+    function scanEnsureAttachmentDir()
+    {
+        $dir = scanAttachmentDirAbs();
+        if (!is_dir($dir)) {
+            if (!mkdir($dir, 0755, true) && !is_dir($dir)) {
+                error_log('Failed to create attachment directory: ' . $dir);
+                return false;
+            }
+        }
+        return is_dir($dir);
+    }
+}
+
+if (!function_exists('scanUploadAttachmentFiles')) {
+    function scanUploadAttachmentFiles($fileField)
+    {
+        if (!isset($_FILES[$fileField]) || !is_array($_FILES[$fileField])) {
+            return array(false, array(), 'Attachment file is missing.');
+        }
+
+        $file = $_FILES[$fileField];
+        $names = isset($file['name']) ? $file['name'] : array();
+        $tmpNames = isset($file['tmp_name']) ? $file['tmp_name'] : array();
+        $errors = isset($file['error']) ? $file['error'] : array();
+
+        if (!is_array($names)) {
+            $names = array($names);
+            $tmpNames = array($tmpNames);
+            $errors = array($errors);
+        }
+
+        $allowed = array('png', 'jpg', 'jpeg', 'webp');
+
+        if (!scanEnsureAttachmentDir()) {
+            return array(false, array(), 'Attachment folder is not ready.');
+        }
+
+        $saved = array();
+        $hasAnyFile = false;
+        $validFiles = array();
+
+        for ($idx = 0; $idx < count($names); $idx++) {
+            $origName = isset($names[$idx]) ? (string) $names[$idx] : '';
+            $tmpName = isset($tmpNames[$idx]) ? (string) $tmpNames[$idx] : '';
+            $errCode = isset($errors[$idx]) ? (int) $errors[$idx] : UPLOAD_ERR_NO_FILE;
+
+            if ($errCode === UPLOAD_ERR_NO_FILE) {
+                continue;
+            }
+
+            $hasAnyFile = true;
+            if ($errCode !== UPLOAD_ERR_OK) {
+                return array(false, array(), 'Attachment upload failed.');
+            }
+
+            $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
+            if (!in_array($ext, $allowed, true)) {
+                return array(false, array(), 'Attachment must be png, jpg, jpeg or webp.');
+            }
+
+            $validFiles[] = array('tmpName' => $tmpName, 'ext' => $ext);
+        }
+
+        if (!$hasAnyFile || count($validFiles) === 0) {
+            return array(false, array(), 'Attachment is required.');
+        }
+
+        foreach ($validFiles as $idx => $f) {
+            $newName = 'stock_in_scan_' . date('Ymd_His') . '_' . mt_rand(1000, 9999) . '_' . $idx . '.' . $f['ext'];
+            $absPath = scanAttachmentDirAbs() . $newName;
+            $relPath = scanAttachmentDirRel() . $newName;
+
+            if (!@move_uploaded_file($f['tmpName'], $absPath)) {
+                foreach ($saved as $savedRelPath) {
+                    $savedAbsPath = rtrim((string) ROOT, '/\\') . '/' . ltrim((string) $savedRelPath, '/\\');
+                    @unlink($savedAbsPath);
+                }
+                return array(false, array(), 'Failed to save attachment file.');
+            }
+
+            $saved[] = $relPath;
+        }
+
+        return array(true, $saved, '');
+    }
+}
+
+if (!function_exists('scanHasUploadedFiles')) {
+    function scanHasUploadedFiles($fileField)
+    {
+        if (!isset($_FILES[$fileField]) || !is_array($_FILES[$fileField])) {
+            return false;
+        }
+
+        $errors = isset($_FILES[$fileField]['error']) ? $_FILES[$fileField]['error'] : array();
+        if (!is_array($errors)) {
+            $errors = array($errors);
+        }
+
+        foreach ($errors as $errCode) {
+            if ((int) $errCode !== UPLOAD_ERR_NO_FILE) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+}
+
+if (!function_exists('scanNormalizeAttachmentPath')) {
+    function scanNormalizeAttachmentPath($path)
+    {
+        $path = trim((string) $path);
+        if ($path === '' || strpos($path, "\0") !== false) {
+            return '';
+        }
+
+        $path = str_replace('\\', '/', $path);
+        return preg_replace('#/+#', '/', $path);
+    }
+}
+
+if (!function_exists('scanIsTrustedAttachmentPath')) {
+    function scanIsTrustedAttachmentPath($path)
+    {
+        $normalizedPath = scanNormalizeAttachmentPath($path);
+        if ($normalizedPath === '') {
+            return false;
+        }
+
+        $allowedPrefix = rtrim(str_replace('\\', '/', (string) scanAttachmentDirRel()), '/') . '/';
+        if (strpos($normalizedPath, $allowedPrefix) !== 0) {
+            return false;
+        }
+
+        $fileName = basename($normalizedPath);
+        if (!preg_match('/^stock_in_scan_\d{8}_\d{6}_\d{4}_\d+\.(png|jpg|jpeg|webp)$/i', $fileName)) {
+            return false;
+        }
+
+        $attachmentDir = realpath(scanAttachmentDirAbs());
+        $absolutePath = rtrim(str_replace('\\', '/', (string) ROOT), '/') . '/' . ltrim($normalizedPath, '/');
+        $realPath = realpath($absolutePath);
+        if ($attachmentDir === false || $realPath === false || !is_file($realPath)) {
+            return false;
+        }
+
+        $normalizedDir = rtrim(str_replace('\\', '/', $attachmentDir), '/') . '/';
+        $normalizedRealPath = str_replace('\\', '/', $realPath);
+        return strpos($normalizedRealPath, $normalizedDir) === 0;
+    }
+}
+
+if (!function_exists('scanFilterTrustedAttachmentList')) {
+    function scanFilterTrustedAttachmentList($rawValue)
+    {
+        $filtered = array();
+        foreach (siAttachmentDecodeList($rawValue) as $path) {
+            $normalizedPath = scanNormalizeAttachmentPath($path);
+            if ($normalizedPath !== '' && scanIsTrustedAttachmentPath($normalizedPath)) {
+                $filtered[$normalizedPath] = true;
+            }
+        }
+
+        return array_keys($filtered);
+    }
+}
+
+if (!function_exists('scanResolveSubmittedAttachments')) {
+    function scanResolveSubmittedAttachments($fileField, $currentField = 'current_attachment')
+    {
+        $currentRaw = trim((string) postSpaceFilter($currentField));
+        $attachmentList = scanFilterTrustedAttachmentList($currentRaw);
+
+        if (scanHasUploadedFiles($fileField)) {
+            $uploadResult = scanUploadAttachmentFiles($fileField);
+            if (!$uploadResult[0]) {
+                return array(false, $attachmentList, (string) $uploadResult[2]);
+            }
+            $attachmentList = array_merge($attachmentList, (array) $uploadResult[1]);
+        }
+
+        $attachmentList = siAttachmentDecodeList(siAttachmentEncodeList($attachmentList));
+        if (count($attachmentList) === 0) {
+            return array(false, $attachmentList, 'Attachment is required.');
+        }
+
+        return array(true, $attachmentList, '');
+    }
+}
+
 $submittedOmsToken = isset($_POST['scan_token']) ? trim((string) $_POST['scan_token']) : '';
 $omsToken = $submittedOmsToken !== '' ? $submittedOmsToken : (isset($_GET['t']) ? trim((string) $_GET['t']) : '');
 if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
@@ -25,34 +234,48 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
             'ip' => ($omsClientIp === '' ? 'Unknown' : $omsClientIp),
             'country' => ($omsCountryCode === '' ? 'Unknown' : $omsCountryCode),
         ));
+        $omsPersistedAttachments = scanFilterTrustedAttachmentList(trim((string) postSpaceFilter('current_attachment')));
         $omsScanSubmit = (strtolower((string) $_SERVER['REQUEST_METHOD']) === 'post' && isset($_POST['actionBtn']) && (string) $_POST['actionBtn'] === 'submitOmsStockOut');
         $omsStatusTitle = 'Warehouse Stock-out Ready';
         $omsStatusClass = 'warning';
         $omsMessage = 'Review the order details below, then submit the warehouse stock-out scan to move this order to Shipped.';
 
         if ($omsScanSubmit) {
-            $omsScanResult = shopeeOmsProcessWarehouseScanByToken(
-                $connect,
-                $finance_connect,
-                $omsToken,
-                defined('USER_ID') && USER_ID !== '' ? USER_ID : 'QR_PUBLIC',
-                defined('USER_GROUP') ? (int) USER_GROUP : 0,
-                'Warehouse Stock-out Scan'
-            );
-            $omsStatusClass = !empty($omsScanResult['success']) ? 'success' : 'danger';
-            $omsStatusTitle = !empty($omsScanResult['success']) ? 'Warehouse Stock-out Completed' : 'Warehouse Stock-out Failed';
-            $omsMessage = isset($omsScanResult['message']) ? (string) $omsScanResult['message'] : 'Unable to process warehouse stock-out scan.';
-            if (!empty($omsScanResult['success'])) {
-                shopeeOmsAuditLog('submit_success', $omsMessage, array(
-                    'order_id' => (int) (isset($omsTokenRow['order_id']) ? $omsTokenRow['order_id'] : 0),
-                    'order_code' => (string) (isset($omsOrderRow['orderID']) ? $omsOrderRow['orderID'] : ''),
-                    'status' => 'shipped',
-                ));
-            } else {
+            $attachmentResult = scanResolveSubmittedAttachments('stock_in_attachment');
+            $omsPersistedAttachments = isset($attachmentResult[1]) ? (array) $attachmentResult[1] : array();
+            if (!$attachmentResult[0]) {
+                $omsStatusClass = 'danger';
+                $omsStatusTitle = 'Attachment Required';
+                $omsMessage = isset($attachmentResult[2]) ? (string) $attachmentResult[2] : 'Please upload at least 1 attachment photo to submit stock out.';
                 shopeeOmsAuditLog('submit_failed', $omsMessage, array(
                     'order_id' => (int) (isset($omsTokenRow['order_id']) ? $omsTokenRow['order_id'] : 0),
                     'order_code' => (string) (isset($omsOrderRow['orderID']) ? $omsOrderRow['orderID'] : ''),
                 ));
+            } else {
+                $omsScanResult = shopeeOmsProcessWarehouseScanByToken(
+                    $connect,
+                    $finance_connect,
+                    $omsToken,
+                    defined('USER_ID') && USER_ID !== '' ? USER_ID : 'QR_PUBLIC',
+                    defined('USER_GROUP') ? (int) USER_GROUP : 0,
+                    'Warehouse Stock-out Scan',
+                    $omsPersistedAttachments
+                );
+                $omsStatusClass = !empty($omsScanResult['success']) ? 'success' : 'danger';
+                $omsStatusTitle = !empty($omsScanResult['success']) ? 'Warehouse Stock-out Completed' : 'Warehouse Stock-out Failed';
+                $omsMessage = isset($omsScanResult['message']) ? (string) $omsScanResult['message'] : 'Unable to process warehouse stock-out scan.';
+                if (!empty($omsScanResult['success'])) {
+                    shopeeOmsAuditLog('submit_success', $omsMessage, array(
+                        'order_id' => (int) (isset($omsTokenRow['order_id']) ? $omsTokenRow['order_id'] : 0),
+                        'order_code' => (string) (isset($omsOrderRow['orderID']) ? $omsOrderRow['orderID'] : ''),
+                        'status' => 'shipped',
+                    ));
+                } else {
+                    shopeeOmsAuditLog('submit_failed', $omsMessage, array(
+                        'order_id' => (int) (isset($omsTokenRow['order_id']) ? $omsTokenRow['order_id'] : 0),
+                        'order_code' => (string) (isset($omsOrderRow['orderID']) ? $omsOrderRow['orderID'] : ''),
+                    ));
+                }
             }
             $omsOrderRow = shopeeOmsLoadOrder($finance_connect, isset($omsTokenRow['order_id']) ? (int) $omsTokenRow['order_id'] : 0);
             $omsTokenRst = mysqli_query($finance_connect, $omsTokenSql);
@@ -113,6 +336,9 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
                 .attachment-preview-media img { max-width: 100%; max-height: 360px; border: 1px solid #d8e3ee; border-radius: 8px; background: #fff; display: block; }
                 .attachment-preview-media iframe { width: 100%; height: 420px; border: 1px solid #d8e3ee; border-radius: 8px; background: #fff; }
                 .attachment-link { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; text-decoration: none; }
+                .scan-attachment-input-row { display:flex; gap:8px; align-items:center; }
+                .scan-attachment-input { display:block; flex:1; padding:8px; border:1px solid #ccd9e6; border-radius:8px; background:#fff; }
+                .small { font-size: 12px; color: #617487; }
                 table { width: 100%; border-collapse: collapse; margin-top: 10px; }
                 th, td { border: 1px solid #d8e3ee; padding: 8px; text-align: left; }
                 th { background: #f3f8fd; }
@@ -185,8 +411,42 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
                     <?php } ?>
 
                     <?php if (empty($omsTokenRow['used_at'])) { ?>
-                        <form method="post" style="margin-top: 20px;">
+                        <h3 style="margin-top: 20px;">Upload Attachment</h3>
+                        <form method="post" enctype="multipart/form-data" style="margin-top: 20px;">
                             <input type="hidden" name="scan_token" value="<?= htmlspecialchars($omsToken) ?>">
+                            <input type="hidden" name="current_attachment" value="<?= htmlspecialchars((string) siAttachmentEncodeList($omsPersistedAttachments)) ?>">
+                            <div style="max-width: 560px;">
+                                <label for="stock_in_attachment" style="display:block;margin-bottom:8px;font-weight:600;">Attachment Photo <span style="color:#d00000;">*</span></label>
+                                <div id="stock_in_attachment_inputs" style="display:flex;flex-direction:column;gap:8px;">
+                                    <div class="scan-attachment-input-row">
+                                        <input id="stock_in_attachment" class="scan-attachment-input" name="stock_in_attachment[]" type="file" accept=".png,.jpg,.jpeg,.webp"<?= count($omsPersistedAttachments) === 0 ? ' required' : '' ?>>
+                                        <button type="button" class="mt-1 scan-attachment-action-btn" data-attach-action="add" title="Add another attachment"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>
+                                    </div>
+                                </div>
+                                <?php if (count($omsPersistedAttachments) > 0) { ?>
+                                    <div style="margin-top:10px;padding:10px;border:1px solid #d8e3ee;border-radius:8px;background:#fff;max-width:420px;">
+                                        <div class="small" style="margin-bottom:8px;">Uploaded attachment kept after the failed submit:</div>
+                                        <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                                            <?php foreach ($omsPersistedAttachments as $attachIdx => $attachPath) {
+                                                $attachUrl = rtrim((string) $SITEURL, '/') . '/' . ltrim((string) $attachPath, '/');
+                                                $attachExt = strtolower((string) pathinfo((string) $attachPath, PATHINFO_EXTENSION));
+                                            ?>
+                                                <div style="display:flex;flex-direction:column;gap:6px;">
+                                                    <?php if (in_array($attachExt, array('png', 'jpg', 'jpeg', 'webp', 'gif'), true)) { ?>
+                                                        <a href="<?= htmlspecialchars($attachUrl) ?>" target="_blank" rel="noopener noreferrer"><img src="<?= htmlspecialchars($attachUrl) ?>" alt="Attachment <?= (int) ($attachIdx + 1) ?>" style="max-width:120px;max-height:120px;object-fit:cover;border-radius:6px;border:1px solid #d8e3ee;"></a>
+                                                    <?php } ?>
+                                                    <a href="<?= htmlspecialchars($attachUrl) ?>" target="_blank" rel="noopener noreferrer" class="small">View Attachment <?= (int) ($attachIdx + 1) ?></a>
+                                                </div>
+                                            <?php } ?>
+                                        </div>
+                                    </div>
+                                <?php } ?>
+                                <div id="stock_in_attachment_preview" style="margin-top:10px;padding:10px;border:1px dashed #c7d7e8;border-radius:8px;background:#f8fbff;max-width:420px;">
+                                    <div id="stock_in_attachment_img_list" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
+                                    <span id="stock_in_attachment_placeholder" class="small">Image preview</span>
+                                </div>
+                                <div class="small" style="margin-top:6px;">Required: upload at least one photo to complete stock out. Click + to add more attachments.</div>
+                            </div>
                             <button type="submit" name="actionBtn" value="submitOmsStockOut" style="padding:10px 16px;border:0;border-radius:8px;background:#1f6fd5;color:#fff;font-weight:600;">Submit Warehouse Stock-out</button>
                         </form>
                     <?php } ?>
@@ -194,6 +454,94 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
                     <div class="alert alert-danger">Order linked to this warehouse stock-out token could not be found.</div>
                 <?php } ?>
             </div>
+            <script>
+            (function () {
+                var inputWrap = document.getElementById('stock_in_attachment_inputs');
+                var listWrap = document.getElementById('stock_in_attachment_img_list');
+                var placeholder = document.getElementById('stock_in_attachment_placeholder');
+                if (!inputWrap || !listWrap || !placeholder) {
+                    return;
+                }
+
+                function refreshPreview() {
+                    listWrap.innerHTML = '';
+
+                    var hasImage = false;
+                    var hasFiles = false;
+                    var inputs = inputWrap.querySelectorAll('.scan-attachment-input');
+                    inputs.forEach(function (input) {
+                        if (!input.files || input.files.length === 0) {
+                            return;
+                        }
+
+                        hasFiles = true;
+                        Array.prototype.forEach.call(input.files, function (file) {
+                            if (!file || !file.type || file.type.indexOf('image/') !== 0) {
+                                return;
+                            }
+
+                            hasImage = true;
+                            var objectUrl = URL.createObjectURL(file);
+                            var img = document.createElement('img');
+                            img.src = objectUrl;
+                            img.alt = 'Attachment Preview';
+                            img.style.maxWidth = '120px';
+                            img.style.maxHeight = '120px';
+                            img.style.objectFit = 'cover';
+                            img.style.borderRadius = '6px';
+                            img.onload = function () {
+                                URL.revokeObjectURL(objectUrl);
+                            };
+                            listWrap.appendChild(img);
+                        });
+                    });
+
+                    placeholder.style.display = hasImage ? 'none' : 'inline';
+                    placeholder.textContent = hasFiles && !hasImage ? 'Selected file is not an image preview.' : 'Image preview';
+                }
+
+                inputWrap.addEventListener('change', function (e) {
+                    if (e.target && e.target.classList.contains('scan-attachment-input')) {
+                        refreshPreview();
+                    }
+                });
+
+                inputWrap.addEventListener('click', function (e) {
+                    var target = e.target;
+                    if (!target) {
+                        return;
+                    }
+
+                    var addBtn = target.closest('[data-attach-action="add"]');
+                    var removeBtn = target.closest('[data-attach-action="remove"]');
+
+                    if (addBtn) {
+                        var row = document.createElement('div');
+                        row.className = 'scan-attachment-input-row';
+                        row.innerHTML = '<input class="scan-attachment-input" name="stock_in_attachment[]" type="file" accept=".png,.jpg,.jpeg,.webp">' +
+                            '<button type="button" class="mt-1" id="action_menu_btn" data-attach-action="remove" title="Remove attachment row"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>';
+                        inputWrap.appendChild(row);
+                        return;
+                    }
+
+                    if (removeBtn) {
+                        var rows = inputWrap.querySelectorAll('.scan-attachment-input-row');
+                        if (rows.length <= 1) {
+                            var onlyInput = rows[0] ? rows[0].querySelector('.scan-attachment-input') : null;
+                            if (onlyInput) {
+                                onlyInput.value = '';
+                            }
+                        } else {
+                            var rowToRemove = removeBtn.closest('.scan-attachment-input-row');
+                            if (rowToRemove) {
+                                rowToRemove.remove();
+                            }
+                        }
+                        refreshPreview();
+                    }
+                });
+            })();
+            </script>
         </body>
         </html>
         <?php
@@ -474,13 +822,17 @@ if (!function_exists('scanSaveOrderSecure')) {
             $actor = 'QR_PUBLIC';
         }
 
+        if (!siEnsureStockTypeColumn($db, $orderTable)) {
+            return array(false, 'Failed to prepare stock type column.', 0, false);
+        }
+
         mysqli_begin_transaction($db);
 
         $stockInOrderId = 0;
         $createdNewOrder = false;
 
         try {
-            $checkSql = "SELECT id FROM `" . $orderTable . "` WHERE warehouse_id=? AND order_number=? AND status='A' LIMIT 1";
+            $checkSql = "SELECT id FROM `" . $orderTable . "` WHERE warehouse_id=? AND order_number=? AND status='A' AND COALESCE(NULLIF(TRIM(stock_type), ''), 'Stock In')='Stock In' LIMIT 1";
             $checkStmt = mysqli_prepare($db, $checkSql);
             if (!$checkStmt) {
                 throw new Exception('Failed to prepare duplicate check.');
@@ -545,9 +897,9 @@ if (!function_exists('scanSaveOrderSecure')) {
                 mysqli_stmt_close($checkStmt);
 
                 $insertOrderSql = "INSERT INTO `" . $orderTable . "`
-                    (warehouse_id, order_number, stock_in_date, attachment, create_by, create_date, create_time, status)
+                    (warehouse_id, order_number, stock_in_date, attachment, stock_type, create_by, create_date, create_time, status)
                     VALUES
-                    (?, ?, NOW(), ?, ?, CURDATE(), CURTIME(), 'A')";
+                    (?, ?, NOW(), ?, 'Stock In', ?, CURDATE(), CURTIME(), 'A')";
                 $insertOrderStmt = mysqli_prepare($db, $insertOrderSql);
                 if (!$insertOrderStmt) {
                     throw new Exception('Failed to prepare stock in order insert.');
@@ -680,6 +1032,7 @@ list($productNameMap, $productNameToId) = siBuildNameMaps($products);
 $isSubmit = (strtolower((string) $_SERVER['REQUEST_METHOD']) === 'post' && isset($_POST['actionBtn']) && (string) $_POST['actionBtn'] === 'submitStockIn');
 $submittedToken = isset($_POST['scan_token']) ? trim((string) $_POST['scan_token']) : '';
 $token = $submittedToken !== '' ? $submittedToken : (isset($_GET['t']) ? trim((string) $_GET['t']) : '');
+$persistedAttachments = scanFilterTrustedAttachmentList(trim((string) postSpaceFilter('current_attachment')));
 $statusClass = 'danger';
 $statusTitle = 'Stock In Failed';
 $message = '';
@@ -802,17 +1155,16 @@ if ($token === '') {
                             $statusTitle = 'Attachment Required';
                             $message = 'Please upload at least 1 attachment photo to submit stock in.';
                         } else {
-                            $uploadResult = scanUploadAttachmentFiles('stock_in_attachment');
-                            if (!$uploadResult[0]) {
+                            $attachmentResult = scanResolveSubmittedAttachments('stock_in_attachment');
+                            $persistedAttachments = isset($attachmentResult[1]) ? (array) $attachmentResult[1] : array();
+                            if (!$attachmentResult[0]) {
                                 $statusClass = 'danger';
                                 $statusTitle = 'Attachment Required';
-                                $message = (string) $uploadResult[2];
+                                $message = (string) $attachmentResult[2];
                                 scanAuditLog('submit_failed', $message, array(
                                     'request_id' => (int) $requestInfo['id'],
                                 ));
                             } else {
-                                $uploadedAttachments = (array) $uploadResult[1];
-
                                 $saveResult = scanSaveOrderSecure(
                                     $finance_connect,
                                     $stockInOrderTable,
@@ -821,7 +1173,7 @@ if ($token === '') {
                                     (string) $requestInfo['order_number'],
                                     $requestItems,
                                     (string) (USER_ID !== '' ? USER_ID : 'QR_PUBLIC'),
-                                    $uploadedAttachments
+                                    $persistedAttachments
                                 );
 
                                 $saveOk = isset($saveResult[0]) ? (bool) $saveResult[0] : false;
@@ -966,14 +1318,33 @@ if ($token === '') {
             <h3 style="margin-top: 20px;">Upload Attachment</h3>
             <form method="post" enctype="multipart/form-data" style="margin-top: 10px;">
                 <input type="hidden" name="scan_token" value="<?= siEsc($token) ?>">
+                <input type="hidden" name="current_attachment" value="<?= siEsc((string) siAttachmentEncodeList($persistedAttachments)) ?>">
                 <div style="max-width: 560px;">
                     <label for="stock_in_attachment" style="display:block;margin-bottom:8px;font-weight:600;">Attachment Photo <span style="color:#d00000;">*</span></label>
                     <div id="stock_in_attachment_inputs" style="display:flex;flex-direction:column;gap:8px;">
                         <div class="scan-attachment-input-row">
-                            <input id="stock_in_attachment" class="scan-attachment-input" name="stock_in_attachment[]" type="file" accept=".png,.jpg,.jpeg,.webp" required>
+                            <input id="stock_in_attachment" class="scan-attachment-input" name="stock_in_attachment[]" type="file" accept=".png,.jpg,.jpeg,.webp"<?= count($persistedAttachments) === 0 ? ' required' : '' ?>>
                             <button type="button" class="mt-1" id="action_menu_btn" data-attach-action="add" title="Add another attachment"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>
                         </div>
                     </div>
+                    <?php if (count($persistedAttachments) > 0) { ?>
+                        <div style="margin-top:10px;padding:10px;border:1px solid #d8e3ee;border-radius:8px;background:#fff;max-width:420px;">
+                            <div class="small" style="margin-bottom:8px;">Uploaded attachment kept after the failed submit:</div>
+                            <div style="display:flex;flex-wrap:wrap;gap:8px;">
+                                <?php foreach ($persistedAttachments as $attachIdx => $attachPath) {
+                                    $attachUrl = rtrim((string) $SITEURL, '/') . '/' . ltrim((string) $attachPath, '/');
+                                    $attachExt = strtolower((string) pathinfo((string) $attachPath, PATHINFO_EXTENSION));
+                                ?>
+                                    <div style="display:flex;flex-direction:column;gap:6px;">
+                                        <?php if (in_array($attachExt, array('png', 'jpg', 'jpeg', 'webp', 'gif'), true)) { ?>
+                                            <a href="<?= siEsc($attachUrl) ?>" target="_blank" rel="noopener noreferrer"><img src="<?= siEsc($attachUrl) ?>" alt="Attachment <?= (int) ($attachIdx + 1) ?>" style="max-width:120px;max-height:120px;object-fit:cover;border-radius:6px;border:1px solid #d8e3ee;"></a>
+                                        <?php } ?>
+                                        <a href="<?= siEsc($attachUrl) ?>" target="_blank" rel="noopener noreferrer" class="small">View Attachment <?= (int) ($attachIdx + 1) ?></a>
+                                    </div>
+                                <?php } ?>
+                            </div>
+                        </div>
+                    <?php } ?>
                     <div id="stock_in_attachment_preview" style="margin-top:10px;padding:10px;border:1px dashed #c7d7e8;border-radius:8px;background:#f8fbff;max-width:420px;">
                         <div id="stock_in_attachment_img_list" style="display:flex;flex-wrap:wrap;gap:8px;"></div>
                         <span id="stock_in_attachment_placeholder" class="small">Image preview</span>

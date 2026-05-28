@@ -135,14 +135,15 @@ if ($actionBtn === 'confirmImport') {
         $postedRows[$idx] = $cleanRow;
     }
 
-    if (!is_array($postedRows) || count($postedRows) === 0) {
-        $importErrors[] = 'No import preview to confirm.';
-    } else {
-        $currentRows = siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTable);
-        $currentByItemId = array();
-        foreach ($currentRows as $r) {
-            $currentByItemId[(int) $r['item_id']] = $r;
-        }
+        if (!is_array($postedRows) || count($postedRows) === 0) {
+            $importErrors[] = 'No import preview to confirm.';
+        } else {
+            siEnsureStockTypeColumn($finance_connect, $stockInOrderTable);
+            $currentRows = siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTable);
+            $currentByItemId = array();
+            foreach ($currentRows as $r) {
+                $currentByItemId[(int) $r['item_id']] = $r;
+            }
 
         $rebuildEntries = array();
         $validationErrorCount = 0;
@@ -307,7 +308,7 @@ if ($actionBtn === 'confirmImport') {
                     if ($orderId <= 0) {
                         $safeDate = mysqli_real_escape_string($finance_connect, $stockInDate);
                         $safeOrderNo = mysqli_real_escape_string($finance_connect, $orderNumber);
-                        $iOrder = "INSERT INTO `" . $stockInOrderTable . "` (warehouse_id, order_number, stock_in_date, create_by, create_date, create_time, status) VALUES ('" . $warehouseId . "', '" . $safeOrderNo . "', '" . $safeDate . "', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
+                        $iOrder = "INSERT INTO `" . $stockInOrderTable . "` (warehouse_id, order_number, stock_in_date, stock_type, create_by, create_date, create_time, status) VALUES ('" . $warehouseId . "', '" . $safeOrderNo . "', '" . $safeDate . "', 'Stock In', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
                         mysqli_query($finance_connect, $iOrder);
                         $orderId = (int) mysqli_insert_id($finance_connect);
                     }

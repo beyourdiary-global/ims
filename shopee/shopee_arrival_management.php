@@ -568,6 +568,9 @@ $arrivalDefaultWarehouseId = shopeeOmsGetDefaultWarehouseId($connect);
                                     $shippedTime = trim((string) (isset($row['time']) ? $row['time'] : ''));
                                     $shippedDisplay = $shippedDate !== '' ? $shippedDate . ($shippedTime !== '' ? ' ' . $shippedTime : '') : '-';
                                     $estimatedDate = trim((string) (isset($row['estimated_received_date']) ? $row['estimated_received_date'] : ''));
+                                    $estimatedDateRange = function_exists('shopeeOmsGetEstimatedReceivedDateRange')
+                                        ? shopeeOmsGetEstimatedReceivedDateRange($row)
+                                        : $estimatedDateValidation;
                                     $statusBadgeClass = $statusCode === 'WAERD'
                                         ? 'shopee-arrival-status-badge-waerd'
                                         : ($statusCode === 'PD' ? 'shopee-arrival-status-badge-pd' : 'shopee-arrival-status-badge-wr');
@@ -591,8 +594,8 @@ $arrivalDefaultWarehouseId = shopeeOmsGetDefaultWarehouseId($connect);
                                                     class="btn btn-sm btn-warning btn-assign-estimated-date"
                                                     data-order-id="<?= (int) $row['id'] ?>"
                                                     data-order-code="<?= htmlspecialchars((string) $row['orderID'], ENT_QUOTES, 'UTF-8') ?>"
-                                                    data-min-date="<?= htmlspecialchars($estimatedDateValidation['min_date'], ENT_QUOTES, 'UTF-8') ?>"
-                                                    data-max-date="<?= htmlspecialchars($estimatedDateValidation['max_date'], ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-min-date="<?= htmlspecialchars((string) $estimatedDateRange['min_date'], ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-max-date="<?= htmlspecialchars((string) $estimatedDateRange['max_date'], ENT_QUOTES, 'UTF-8') ?>"
                                                     title="Assign Estimate Received Date"><i class="fa-solid fa-calendar-days"></i></button>
                                             <?php } else if (in_array($statusCode, array('WR', 'PD'), true) && $canConfirm) { ?>
                                                 <button class="btn btn-sm btn-success confirm-receive-btn" type="button" data-order-id="<?= (int) $row['id'] ?>">Confirm Received</button>
@@ -652,7 +655,7 @@ $arrivalDefaultWarehouseId = shopeeOmsGetDefaultWarehouseId($connect);
                     <label class="form-label" for="estimated_received_date">Estimate Received Date</label>
                     <input type="date" class="form-control" name="estimated_received_date" id="estimated_received_date" min="<?= htmlspecialchars($estimatedDateValidation['min_date']) ?>" max="<?= htmlspecialchars($estimatedDateValidation['max_date']) ?>" required>
                 </div>
-                <div class="text-muted mb-4">
+                <div class="text-muted mb-4" id="estimated_received_date_hint">
                     Choose a date from <?= htmlspecialchars($estimatedDateValidation['min_date']) ?> until <?= htmlspecialchars($estimatedDateValidation['max_date']) ?>.
                 </div>
 
@@ -706,6 +709,7 @@ $arrivalDefaultWarehouseId = shopeeOmsGetDefaultWarehouseId($connect);
         const title = document.getElementById('estimatedReceivedDateTitle');
         const orderIdInput = document.getElementById('estimated_received_order_id');
         const dateInput = document.getElementById('estimated_received_date');
+        const dateHint = document.getElementById('estimated_received_date_hint');
 
         if (!modal || !orderIdInput || !dateInput) {
             return;
@@ -716,6 +720,9 @@ $arrivalDefaultWarehouseId = shopeeOmsGetDefaultWarehouseId($connect);
         dateInput.value = '';
         dateInput.min = minDate;
         dateInput.max = maxDate;
+        if (dateHint) {
+            dateHint.textContent = 'Choose a date from ' + minDate + ' until ' + maxDate + '.';
+        }
         modal.classList.add('is-open');
     }
 
