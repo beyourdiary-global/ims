@@ -546,10 +546,10 @@ foreach ($listRows as $row) {
                             $productQty = implode(', ', $row['product_quantities']);
                         ?>
                             <tr>
-                                <td class="hideColumn" scope="row"><?= (int) $row['order_id'] ?></td>
-                                <td class="text-center" scope="row"><input type="checkbox" class="export" value="<?= (int) $row['order_id'] ?>"></td>
-                                <td scope="row"><?= $sn++ ?></td>
-                                <td scope="row" class="btn-container">
+                                <td class="hideColumn"><?= (int) $row['order_id'] ?></td>
+                                <td class="text-center"><input type="checkbox" class="export" value="<?= (int) $row['order_id'] ?>"></td>
+                                <th scope="row"><?= $sn++ ?></th>
+                                <td class="btn-container">
                                     <?php if (isActionAllowed('View', $pinAccess)) { ?>
                                         <a class="btn btn-sm btn-rounded btn-primary" href="<?= $formPage ?>?order_id=<?= (int) $row['order_id'] ?>" title="View"><i class="fa-solid fa-eye"></i></a>
                                     <?php } ?>
