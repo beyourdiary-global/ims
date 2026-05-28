@@ -193,7 +193,7 @@ if ($actionBtn === 'confirmImport') {
                 $fieldErrors['product_quantity'] = 'Quantity must be greater than 0.';
             }
             if ($stockInDateRaw === '') {
-                $fieldErrors['stock_in_date'] = ' field is required!';
+                $fieldErrors['stock_in_date'] = 'Stock In Date field is required!';
             } else if ($stockInDate === '') {
                 $fieldErrors['stock_in_date'] = 'Stock In Date format is invalid.';
             }
