@@ -530,7 +530,7 @@ foreach ($listRows as $row) {
                             <th class="hideColumn" scope="col">ID</th>
                             <th class="text-center" scope="col"><input type="checkbox" class="exportAll"></th>
                             <th scope="col" width="60px">S/N</th>
-                            <th scope="col" id="action_col" width="100px">Action</th>
+                            <th scope="col" width="100px">Action</th>
                             <th scope="col">Warehouse</th>
                             <th scope="col">Product Name</th>
                             <th scope="col">Product Quantity</th>
