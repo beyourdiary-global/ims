@@ -70,7 +70,7 @@ $canBulkSyncShippedOrders = function_exists('shopeeOmsHasTransitionPermission')
     : false;
 $estimatedDateToday = new DateTimeImmutable('today');
 $estimatedDateMin = $estimatedDateToday->modify('+1 day')->format('Y-m-d');
-$estimatedDateMax = $estimatedDateToday->modify('+10 days')->format('Y-m-d');
+$estimatedDateMax = $estimatedDateToday->modify('+1 month')->format('Y-m-d');
 
 $num = $default_currency_id = 1; 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && $canBulkSyncShippedOrders && function_exists('shopeeOmsBulkMoveCurrentShippedOrdersToWaerd')) {

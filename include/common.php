@@ -2982,9 +2982,10 @@ if (!function_exists('shopeeOmsGetEstimatedReceivedDateRange')) {
             $baseDate = new DateTimeImmutable('today');
         }
 
+        $minDate = $baseDate->modify('+1 day');
         return array(
-            'min_date' => $baseDate->format('Y-m-d'),
-            'max_date' => $baseDate->modify('+1 month')->format('Y-m-d'),
+            'min_date' => $minDate->format('Y-m-d'),
+            'max_date' => $minDate->modify('+1 month')->format('Y-m-d'),
         );
     }
 }

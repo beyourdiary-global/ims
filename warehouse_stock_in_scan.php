@@ -129,11 +129,70 @@ if (!function_exists('scanHasUploadedFiles')) {
     }
 }
 
+if (!function_exists('scanNormalizeAttachmentPath')) {
+    function scanNormalizeAttachmentPath($path)
+    {
+        $path = trim((string) $path);
+        if ($path === '' || strpos($path, "\0") !== false) {
+            return '';
+        }
+
+        $path = str_replace('\\', '/', $path);
+        return preg_replace('#/+#', '/', $path);
+    }
+}
+
+if (!function_exists('scanIsTrustedAttachmentPath')) {
+    function scanIsTrustedAttachmentPath($path)
+    {
+        $normalizedPath = scanNormalizeAttachmentPath($path);
+        if ($normalizedPath === '') {
+            return false;
+        }
+
+        $allowedPrefix = rtrim(str_replace('\\', '/', (string) scanAttachmentDirRel()), '/') . '/';
+        if (strpos($normalizedPath, $allowedPrefix) !== 0) {
+            return false;
+        }
+
+        $fileName = basename($normalizedPath);
+        if (!preg_match('/^stock_in_scan_\d{8}_\d{6}_\d{4}_\d+\.(png|jpg|jpeg|webp)$/i', $fileName)) {
+            return false;
+        }
+
+        $attachmentDir = realpath(scanAttachmentDirAbs());
+        $absolutePath = rtrim(str_replace('\\', '/', (string) ROOT), '/') . '/' . ltrim($normalizedPath, '/');
+        $realPath = realpath($absolutePath);
+        if ($attachmentDir === false || $realPath === false || !is_file($realPath)) {
+            return false;
+        }
+
+        $normalizedDir = rtrim(str_replace('\\', '/', $attachmentDir), '/') . '/';
+        $normalizedRealPath = str_replace('\\', '/', $realPath);
+        return strpos($normalizedRealPath, $normalizedDir) === 0;
+    }
+}
+
+if (!function_exists('scanFilterTrustedAttachmentList')) {
+    function scanFilterTrustedAttachmentList($rawValue)
+    {
+        $filtered = array();
+        foreach (siAttachmentDecodeList($rawValue) as $path) {
+            $normalizedPath = scanNormalizeAttachmentPath($path);
+            if ($normalizedPath !== '' && scanIsTrustedAttachmentPath($normalizedPath)) {
+                $filtered[$normalizedPath] = true;
+            }
+        }
+
+        return array_keys($filtered);
+    }
+}
+
 if (!function_exists('scanResolveSubmittedAttachments')) {
     function scanResolveSubmittedAttachments($fileField, $currentField = 'current_attachment')
     {
         $currentRaw = trim((string) postSpaceFilter($currentField));
-        $attachmentList = siAttachmentDecodeList($currentRaw);
+        $attachmentList = scanFilterTrustedAttachmentList($currentRaw);
 
         if (scanHasUploadedFiles($fileField)) {
             $uploadResult = scanUploadAttachmentFiles($fileField);
@@ -175,7 +234,7 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
             'ip' => ($omsClientIp === '' ? 'Unknown' : $omsClientIp),
             'country' => ($omsCountryCode === '' ? 'Unknown' : $omsCountryCode),
         ));
-        $omsPersistedAttachments = siAttachmentDecodeList(trim((string) postSpaceFilter('current_attachment')));
+        $omsPersistedAttachments = scanFilterTrustedAttachmentList(trim((string) postSpaceFilter('current_attachment')));
         $omsScanSubmit = (strtolower((string) $_SERVER['REQUEST_METHOD']) === 'post' && isset($_POST['actionBtn']) && (string) $_POST['actionBtn'] === 'submitOmsStockOut');
         $omsStatusTitle = 'Warehouse Stock-out Ready';
         $omsStatusClass = 'warning';
@@ -973,7 +1032,7 @@ list($productNameMap, $productNameToId) = siBuildNameMaps($products);
 $isSubmit = (strtolower((string) $_SERVER['REQUEST_METHOD']) === 'post' && isset($_POST['actionBtn']) && (string) $_POST['actionBtn'] === 'submitStockIn');
 $submittedToken = isset($_POST['scan_token']) ? trim((string) $_POST['scan_token']) : '';
 $token = $submittedToken !== '' ? $submittedToken : (isset($_GET['t']) ? trim((string) $_GET['t']) : '');
-$persistedAttachments = siAttachmentDecodeList(trim((string) postSpaceFilter('current_attachment')));
+$persistedAttachments = scanFilterTrustedAttachmentList(trim((string) postSpaceFilter('current_attachment')));
 $statusClass = 'danger';
 $statusTitle = 'Stock In Failed';
 $message = '';
