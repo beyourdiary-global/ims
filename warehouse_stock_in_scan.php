@@ -361,7 +361,7 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
                                 <div id="stock_in_attachment_inputs" style="display:flex;flex-direction:column;gap:8px;">
                                     <div class="scan-attachment-input-row">
                                         <input id="stock_in_attachment" class="scan-attachment-input" name="stock_in_attachment[]" type="file" accept=".png,.jpg,.jpeg,.webp"<?= count($omsPersistedAttachments) === 0 ? ' required' : '' ?>>
-                                        <button type="button" class="mt-1" id="action_menu_btn" data-attach-action="add" title="Add another attachment"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>
+                                        <button type="button" class="mt-1 scan-attachment-action-btn" data-attach-action="add" title="Add another attachment"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>
                                     </div>
                                 </div>
                                 <?php if (count($omsPersistedAttachments) > 0) { ?>
