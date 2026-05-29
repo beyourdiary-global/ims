@@ -73,7 +73,13 @@ $estimatedDateMin = $estimatedDateToday->modify('+1 day')->format('Y-m-d');
 $estimatedDateMax = $estimatedDateToday->modify('+1 month')->format('Y-m-d');
 
 $num = $default_currency_id = 1; 
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && $canBulkSyncShippedOrders && function_exists('shopeeOmsBulkMoveCurrentShippedOrdersToWaerd')) {
+if (
+    ($_SERVER['REQUEST_METHOD'] ?? '') === 'GET'
+    && isset($_GET['bulk_sync_shipped_orders'])
+    && $_GET['bulk_sync_shipped_orders'] === '1'
+    && $canBulkSyncShippedOrders
+    && function_exists('shopeeOmsBulkMoveCurrentShippedOrdersToWaerd')
+) {
     shopeeOmsBulkMoveCurrentShippedOrdersToWaerd($connect, $finance_connect, USER_ID, USER_GROUP, $pageTitle);
 }
 

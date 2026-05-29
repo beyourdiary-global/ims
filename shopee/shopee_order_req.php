@@ -60,7 +60,7 @@ $sorBuildLocalTelegramFailureMessage = function ($notifyResult) use ($sorIsLiveS
 
     return "Telegram message failed to send.\nReason: " . $reason;
 };
-$sorHandleStatusTransition = function ($newStatus) use ($connect, $finance_connect, $dataID, $pageTitle, $cdate, $ctime, $tblName, $redirect_page, $sorBuildLocalTelegramFailureMessage, $sorIsAjaxRequest) {
+$sorHandleStatusTransition = function ($newStatus) use ($connect, $finance_connect, $dataID, $pageTitle, $cdate, $ctime, $tblName, $redirect_page, $sorBuildLocalTelegramFailureMessage, $sorIsAjaxRequest, $sorPrepareAjaxJsonResponse) {
     $newStatus = shopeeOmsNormalizeStatusCode($newStatus);
     $transitionRemark = 'Order Status Update to ' . shopeeOmsGetStatusLabel($newStatus);
     $statusUpdateFallbackMessage = $newStatus === 'TP'
