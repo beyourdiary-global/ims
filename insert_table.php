@@ -2643,4 +2643,79 @@ if ($conn->select_db($db_fin)) {
 //     echo "<p style='color:red;'>Failed selecting CMS database for Export pin migration update.</p>";
 // }
 
+if ($conn->select_db($db_cms)) {
+    $leavePinGroupIds = array(73, 71, 27, 24);
+    $targetUserGroupIds = array(1, 2);
+
+    foreach ($targetUserGroupIds as $userGroupId) {
+        $userGroupResult = $conn->query("SELECT `pins` FROM `user_group` WHERE `id` = " . (int) $userGroupId . " LIMIT 1");
+        if (!$userGroupResult || $userGroupResult->num_rows === 0) {
+            echo "<p style='color:orange;'>`user_group` id " . (int) $userGroupId . " not found. Skipped leave pin cleanup.</p>";
+            continue;
+        }
+
+        $userGroupRow = $userGroupResult->fetch_assoc();
+        $currentPins = isset($userGroupRow['pins']) ? (string) $userGroupRow['pins'] : '';
+        $updatedPins = $currentPins;
+
+        foreach ($leavePinGroupIds as $leavePinGroupId) {
+            $updatedPins = removePinBlockById($updatedPins, $leavePinGroupId);
+        }
+
+        if ($updatedPins !== $currentPins) {
+            $safePins = $conn->real_escape_string($updatedPins);
+            if ($conn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $userGroupId)) {
+                echo "<p style='color:green;'>Verified `user_group` id " . (int) $userGroupId . " removed leave pin groups 73, 71, 27, 24.</p>";
+            } else {
+                echo "<p style='color:red;'>Failed updating `user_group` id " . (int) $userGroupId . " for leave pin cleanup: " . $conn->error . "</p>";
+            }
+        } else {
+            echo "<p style='color:green;'>Verified `user_group` id " . (int) $userGroupId . " already does not contain leave pin groups 73, 71, 27, 24.</p>";
+        }
+    }
+
+    $leavePinGroupIdSql = implode(',', array_map('intval', $leavePinGroupIds));
+    $pinGroupResult = $conn->query("SELECT `id`, `status` FROM `pin_group` WHERE `id` IN (" . $leavePinGroupIdSql . ")");
+
+    if ($pinGroupResult) {
+        $foundPinGroups = array();
+        $actorUserId = defined('USER_ID') ? (string) USER_ID : (isset($_SESSION['userid']) ? (string) $_SESSION['userid'] : '');
+        $safeActorUserId = $conn->real_escape_string($actorUserId);
+
+        while ($pinGroupRow = $pinGroupResult->fetch_assoc()) {
+            $pinGroupId = (int) $pinGroupRow['id'];
+            $foundPinGroups[$pinGroupId] = true;
+            $currentStatus = isset($pinGroupRow['status']) ? (string) $pinGroupRow['status'] : '';
+
+            if ($currentStatus === 'D') {
+                echo "<p style='color:green;'>Verified `pin_group` id " . $pinGroupId . " is already soft deleted.</p>";
+                continue;
+            }
+
+            $softDeleteSql = "UPDATE `pin_group`
+                SET `status` = 'D',
+                    `update_by` = '" . $safeActorUserId . "',
+                    `update_date` = CURDATE(),
+                    `update_time` = CURTIME()
+                WHERE `id` = " . $pinGroupId;
+
+            if ($conn->query($softDeleteSql)) {
+                echo "<p style='color:green;'>Verified `pin_group` id " . $pinGroupId . " soft deleted.</p>";
+            } else {
+                echo "<p style='color:red;'>Failed soft deleting `pin_group` id " . $pinGroupId . ": " . $conn->error . "</p>";
+            }
+        }
+
+        foreach ($leavePinGroupIds as $leavePinGroupId) {
+            if (!isset($foundPinGroups[(int) $leavePinGroupId])) {
+                echo "<p style='color:orange;'>`pin_group` id " . (int) $leavePinGroupId . " not found. Skipped soft delete.</p>";
+            }
+        }
+    } else {
+        echo "<p style='color:red;'>Failed reading `pin_group` for leave pin cleanup: " . $conn->error . "</p>";
+    }
+} else {
+    echo "<p style='color:red;'>Failed selecting CMS database for leave pin cleanup.</p>";
+}
+
 $conn->close();
