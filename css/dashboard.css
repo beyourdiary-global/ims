@@ -67,6 +67,11 @@
   border-color: white;
 }
 
+.dropdownContainer .dropdown-menu {
+  max-height: 320px;
+  overflow-y: auto;
+}
+
 .platformMainDashboard .separatorContainer,
 .platformMainDashboard .separatorContainer2,
 .platformsepearatorLine .separatorContainer,
