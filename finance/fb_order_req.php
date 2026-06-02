@@ -18,10 +18,59 @@ $allowed_ext = array("png", "jpg", "jpeg", "svg", "pdf");
 $redirect_page = $SITEURL . '/finance/fb_order_req_table.php';
 $redirectLink = ("<script>location.href = '$redirect_page';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
+$pendingStatusUpdate = shopeeOmsNormalizeStatusCode(post('updateStatusBtn'));
+$forShouldSaveBeforeStatusUpdate = $pendingStatusUpdate !== '' && $act === 'E';
+$forTriggerStatusTransitionAfterSave = false;
+$forHandleStatusTransition = function ($newStatus) use ($connect, $finance_connect, $dataID, $pageTitle, $cdate, $ctime, $tblName, $redirect_page) {
+    $newStatus = shopeeOmsNormalizeStatusCode($newStatus);
+    $transitionRemark = 'Order Status Update to ' . shopeeOmsGetStatusLabel($newStatus);
+    $transitionResult = shopeeOmsExecuteTransition($connect, $finance_connect, (int) $dataID, $newStatus, array(
+        'actor_user_id' => USER_ID,
+        'actor_user_group_id' => USER_GROUP,
+        'source_page' => $pageTitle,
+        'remark' => $transitionRemark,
+        'platform' => 'facebook',
+    ));
+
+    if (!empty($transitionResult['success'])) {
+        $oldStatus = isset($transitionResult['old_status']) ? (string) $transitionResult['old_status'] : '';
+        $newStatusCode = isset($transitionResult['new_status']) ? (string) $transitionResult['new_status'] : '';
+        audit_log(array(
+            'log_act' => 'edit',
+            'cdate' => $cdate,
+            'ctime' => $ctime,
+            'uid' => USER_ID,
+            'cby' => USER_ID,
+            'query_rec' => 'OMS transition ' . $oldStatus . ' -> ' . $newStatusCode,
+            'query_table' => $tblName,
+            'page' => $pageTitle,
+            'connect' => $connect,
+            'oldval' => 'order_status: ' . $oldStatus,
+            'changes' => 'order_status: ' . $newStatusCode,
+            'act_msg' => USER_NAME . " updated Facebook order #" . (int) $dataID . " from " . htmlspecialchars($oldStatus, ENT_QUOTES, 'UTF-8') . " to " . htmlspecialchars($newStatusCode, ENT_QUOTES, 'UTF-8') . ".",
+        ));
+        echo '<script>alert(' . json_encode((string) $transitionRemark) . '); window.location.replace(' . json_encode((string) $redirect_page) . ');</script>';
+        exit;
+    }
+
+    echo '<script>alert(' . json_encode((string) (isset($transitionResult['message']) ? $transitionResult['message'] : 'Unable to update order status.')) . ');</script>';
+    exit;
+};
 
 $img_path = '../' . img_server . 'finance/fb_order_req/';
 if (!file_exists($img_path)) {
     mkdir($img_path, 0777, true);
+}
+$forStatusOptions = shopeeOmsGetEditableStatusOptions();
+$forWarehouseRows = shopeeOmsLoadActiveWarehouses($connect);
+$forDefaultWarehouseId = shopeeOmsGetDefaultWarehouseId($connect, $forWarehouseRows);
+$forWarehouseNameMap = shopeeOmsLoadWarehouseNameMap($connect, true);
+$forWarehouseOptionMap = array();
+foreach ($forWarehouseRows as $forWarehouseRow) {
+    $forWarehouseId = isset($forWarehouseRow['id']) ? (int) $forWarehouseRow['id'] : 0;
+    if ($forWarehouseId > 0) {
+        $forWarehouseOptionMap[$forWarehouseId] = isset($forWarehouseRow['name']) ? (string) $forWarehouseRow['name'] : ('Warehouse #' . $forWarehouseId);
+    }
 }
 
 // to display data to input
@@ -39,6 +88,10 @@ if ($dataID) { //edit/remove/view
     }
 }
 
+if ($pendingStatusUpdate !== '' && !$forShouldSaveBeforeStatusUpdate) {
+    $forHandleStatusTransition($pendingStatusUpdate);
+}
+
 if (!($dataID) && !($act)) {
     echo '<script>
     alert("Invalid action.");
@@ -46,8 +99,11 @@ if (!($dataID) && !($act)) {
     </script>';
 }
 
-if (post('actionBtn')) {
+if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
     $action = post('actionBtn');
+    if ($action === '' && $forShouldSaveBeforeStatusUpdate) {
+        $action = 'updRecord';
+    }
 
     $for_name = postSpaceFilter('for_name');
     $for_link = postSpaceFilter('for_link');
@@ -65,6 +121,27 @@ if (post('actionBtn')) {
     $for_rec_ctc = postSpaceFilter('for_rec_ctc');
     $for_rec_add = postSpaceFilter('for_rec_add');
     $for_remark = postSpaceFilter('for_remark');
+    $for_order_status = shopeeOmsNormalizeStatusCode(postSpaceFilter('for_order_status'));
+    if ($for_order_status === '') {
+        $for_order_status = isset($row['order_status']) ? shopeeOmsNormalizeStatusCode($row['order_status']) : 'P';
+    }
+    $forCurrentEffectiveWarehouseId = isset($row) ? shopeeOmsResolveStockOutWarehouseId($connect, $row, $forDefaultWarehouseId) : $forDefaultWarehouseId;
+    $for_stock_out_warehouse_id = shopeeOmsNormalizeWarehouseId(postSpaceFilter('for_stock_out_warehouse_id'));
+    if ($for_stock_out_warehouse_id <= 0) {
+        $for_stock_out_warehouse_id = $forDefaultWarehouseId;
+    }
+    $forStockOutWarehouseEditable = $action === 'addRecord'
+        ? true
+        : shopeeOmsIsStockOutWarehouseEditable(isset($row['order_status']) ? $row['order_status'] : '');
+    if (!$forStockOutWarehouseEditable && $action === 'updRecord') {
+        $for_stock_out_warehouse_id = $forCurrentEffectiveWarehouseId;
+    }
+    $for_update_airbill = strtolower(trim((string) postSpaceFilter('for_update_airbill')));
+    if ($for_update_airbill === '') {
+        $for_update_airbill = 'yes';
+    }
+    $for_airbill_no = postSpaceFilter('for_airbill_no');
+    $for_airbill_attachment = postSpaceFilter('for_airbill_attachment_value');
 
     $for_attach = null;
     if (isset($_FILES["for_attach"]) && $_FILES["for_attach"]["size"] != 0) {
@@ -78,6 +155,8 @@ if (post('actionBtn')) {
     switch ($action) {
         case 'addRecord':
         case 'updRecord':
+            $error = 0;
+
             if ($_FILES["for_attach"]["size"] != 0) {
                 // move file
                 $for_file_name = $_FILES["for_attach"]["name"];
@@ -116,6 +195,32 @@ if (post('actionBtn')) {
                     }
                 } else
                     $err2 = "Only allow PNG, JPG, JPEG, SVG or PDF file";
+            }
+
+            if ($for_update_airbill === 'yes' && isset($_FILES['for_airbill_attachment']) && isset($_FILES['for_airbill_attachment']['size']) && (int) $_FILES['for_airbill_attachment']['size'] > 0) {
+                $forAirbillUploadResult = shopeeOmsStoreAirbillAttachmentUpload(
+                    $_FILES['for_airbill_attachment'],
+                    $connect,
+                    $for_brand,
+                    $for_pkg,
+                    'fb_order_req'
+                );
+                if (!empty($forAirbillUploadResult['success'])) {
+                    $for_airbill_attachment = isset($forAirbillUploadResult['path']) ? (string) $forAirbillUploadResult['path'] : '';
+                } else {
+                    $airbill_attachment_err = isset($forAirbillUploadResult['message']) ? (string) $forAirbillUploadResult['message'] : 'Failed to upload the airbill attachment.';
+                    $error = 1;
+                }
+            }
+
+            if ($for_update_airbill !== 'yes') {
+                if ($action === 'updRecord') {
+                    $for_airbill_no = isset($row['airbill_no']) ? (string) $row['airbill_no'] : '';
+                    $for_airbill_attachment = isset($row['airbill_attachment']) ? (string) $row['airbill_attachment'] : '';
+                } else {
+                    $for_airbill_no = '';
+                    $for_airbill_attachment = '';
+                }
             }
 
             if (!$for_name) {
@@ -166,7 +271,45 @@ if (post('actionBtn')) {
             } else if (!$for_attach) {
                 $desc_err = "Attachment cannot be empty.";
                 break;
-            } else if ($action == 'addRecord') {
+            }
+
+            if ($forStockOutWarehouseEditable) {
+                if ($for_stock_out_warehouse_id <= 0) {
+                    $stock_out_warehouse_err = "Stock Out Warehouse is required.";
+                    $error = 1;
+                } else if (!isset($forWarehouseOptionMap[$for_stock_out_warehouse_id])) {
+                    $stock_out_warehouse_err = "Please select a valid active Stock Out Warehouse.";
+                    $error = 1;
+                }
+            }
+
+            $forEffectiveAirbill = $for_airbill_no;
+            if ($action === 'updRecord' && $for_update_airbill !== 'yes') {
+                $forEffectiveAirbill = isset($row['airbill_no']) ? (string) $row['airbill_no'] : '';
+            }
+
+            $forStatusValidation = shopeeOmsValidateInitialStatusAndAirbill($for_order_status, $forEffectiveAirbill);
+            if (!$forStatusValidation['valid']) {
+                $airbill_err = isset($forStatusValidation['message']) ? (string) $forStatusValidation['message'] : 'Invalid order status or airbill.';
+                $error = 1;
+            }
+
+            if ($for_update_airbill === 'yes') {
+                if (trim((string) $for_airbill_no) === '') {
+                    $airbill_err = 'Airbill No cannot be empty when Update Airbill is enabled.';
+                    $error = 1;
+                }
+                if (trim((string) $for_airbill_attachment) === '') {
+                    $airbill_attachment_err = 'Airbill Attachment cannot be empty when Update Airbill is enabled.';
+                    $error = 1;
+                }
+            }
+
+            if ($error) {
+                break;
+            }
+
+            if ($action == 'addRecord') {
                 try {
                     //check values
                     if ($for_name) {
@@ -252,9 +395,25 @@ if (post('actionBtn')) {
                         array_push($newvalarr, $for_remark);
                         array_push($datafield, 'remark');
                     }
+                    if ($for_order_status) {
+                        array_push($newvalarr, $for_order_status);
+                        array_push($datafield, 'order_status');
+                    }
+                    if ($for_stock_out_warehouse_id > 0) {
+                        array_push($newvalarr, isset($forWarehouseOptionMap[$for_stock_out_warehouse_id]) ? $forWarehouseOptionMap[$for_stock_out_warehouse_id] : ('Warehouse #' . $for_stock_out_warehouse_id));
+                        array_push($datafield, 'stock_out_warehouse_id');
+                    }
+                    if ($for_airbill_no !== '') {
+                        array_push($newvalarr, $for_airbill_no);
+                        array_push($datafield, 'airbill_no');
+                    }
+                    if ($for_airbill_attachment !== '') {
+                        array_push($newvalarr, $for_airbill_attachment);
+                        array_push($datafield, 'airbill_attachment');
+                    }
 
                     $tblName2 = FB_CUST_DEALS;
-                    $query = "INSERT INTO " . $tblName . " (name,fb_link,contact,sales_pic,country,brand,series,package,fb_page,channel,price,pay_method,ship_rec_name,ship_rec_add,ship_rec_contact,remark,attachment,create_by,create_date,create_time) VALUES ('$for_name','$for_link','$for_ctc','$for_pic','$for_country','$for_brand','$for_series','$for_pkg','$for_fbpage','$for_channel','$for_price','$for_pay','$for_rec_name','$for_rec_add','$for_rec_ctc','$for_remark','$for_attach','" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . " (name,fb_link,contact,sales_pic,country,brand,series,package,fb_page,channel,price,pay_method,ship_rec_name,ship_rec_add,ship_rec_contact,remark,attachment,order_status,stock_out_warehouse_id,airbill_no,airbill_attachment,create_by,create_date,create_time) VALUES ('$for_name','$for_link','$for_ctc','$for_pic','$for_country','$for_brand','$for_series','$for_pkg','$for_fbpage','$for_channel','$for_price','$for_pay','$for_rec_name','$for_rec_add','$for_rec_ctc','$for_remark','$for_attach','$for_order_status'," . ($for_stock_out_warehouse_id > 0 ? $for_stock_out_warehouse_id : 'NULL') . ",'$for_airbill_no','" . mysqli_real_escape_string($finance_connect, $for_airbill_attachment) . "','" . USER_ID . "',curdate(),curtime())";
                    
                     $result2 = getData('*', "name = '$for_name' AND fb_link = '$for_link'", '', $tblName2, $connect);
                     
@@ -264,6 +423,19 @@ if (post('actionBtn')) {
                     }
                     // Execute the query
                     $returnData = mysqli_query($finance_connect, $query);
+                    if ($returnData) {
+                        $dataID = (int) mysqli_insert_id($finance_connect);
+                        if ($for_order_status === 'TP' && $dataID > 0) {
+                            $freshOrderRow = shopeeOmsLoadOrder($finance_connect, $dataID, 'facebook');
+                            $tokenResult = shopeeOmsCreateWarehouseToken($connect, $finance_connect, $freshOrderRow, USER_ID, 'facebook');
+                            if (!empty($tokenResult['success']) && !empty($tokenResult['token_row']) && !empty($tokenResult['notification'])) {
+                                $notifyResult = shopeeOmsSendWarehouseNotification($connect, $finance_connect, $tokenResult['token_row'], $tokenResult['notification'], $pageTitle);
+                                if (!empty($notifyResult['sent']) && shopeeOmsTableHasColumn($finance_connect, dbFinance, $tblName, 'step_a_sent_at')) {
+                                    mysqli_query($finance_connect, "UPDATE `" . $tblName . "` SET `step_a_sent_at` = NOW() WHERE id = " . $dataID . " LIMIT 1");
+                                }
+                            }
+                        }
+                    }
                     
                     $_SESSION['tempValConfirmBox'] = true;
                 } catch (Exception $e) {
@@ -379,6 +551,26 @@ if (post('actionBtn')) {
                         array_push($chgvalarr, $for_remark == '' ? 'Empty Value' : $for_remark);
                         array_push($datafield, 'remark');
                     }
+                    if (shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '') !== $for_order_status) {
+                        array_push($oldvalarr, isset($row['order_status']) && $row['order_status'] !== '' ? shopeeOmsGetStatusLabel($row['order_status']) : 'Empty Value');
+                        array_push($chgvalarr, $for_order_status !== '' ? shopeeOmsGetStatusLabel($for_order_status) : 'Empty Value');
+                        array_push($datafield, 'order_status');
+                    }
+                    if ((int) (isset($row['stock_out_warehouse_id']) ? $row['stock_out_warehouse_id'] : 0) !== (int) $for_stock_out_warehouse_id) {
+                        array_push($oldvalarr, shopeeOmsResolveWarehouseNameById($connect, isset($row['stock_out_warehouse_id']) ? $row['stock_out_warehouse_id'] : 0, $forDefaultWarehouseId, $forWarehouseNameMap));
+                        array_push($chgvalarr, shopeeOmsResolveWarehouseNameById($connect, $for_stock_out_warehouse_id, $forDefaultWarehouseId, $forWarehouseNameMap));
+                        array_push($datafield, 'stock_out_warehouse_id');
+                    }
+                    if ((string) (isset($row['airbill_no']) ? $row['airbill_no'] : '') !== (string) $for_airbill_no) {
+                        array_push($oldvalarr, isset($row['airbill_no']) && $row['airbill_no'] !== '' ? $row['airbill_no'] : 'Empty Value');
+                        array_push($chgvalarr, $for_airbill_no !== '' ? $for_airbill_no : 'Empty Value');
+                        array_push($datafield, 'airbill_no');
+                    }
+                    if ((string) (isset($row['airbill_attachment']) ? $row['airbill_attachment'] : '') !== (string) $for_airbill_attachment) {
+                        array_push($oldvalarr, isset($row['airbill_attachment']) && $row['airbill_attachment'] !== '' ? $row['airbill_attachment'] : 'Empty Value');
+                        array_push($chgvalarr, $for_airbill_attachment !== '' ? $for_airbill_attachment : 'Empty Value');
+                        array_push($datafield, 'airbill_attachment');
+                    }
 
                     // convert into string
                     $oldval = implode(",", $oldvalarr);
@@ -386,7 +578,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
-                        $query = "UPDATE " . $tblName . " SET name = '$for_name', fb_link = '$for_link', contact = '$for_ctc', sales_pic = '$for_pic', country = '$for_country', brand = '$for_brand', series = '$for_series', package = '$for_pkg', fb_page = '$for_fbpage', channel = '$for_channel', price = '$for_price', pay_method = '$for_pay', ship_rec_name = '$for_rec_name', ship_rec_add = '$for_rec_add', ship_rec_contact = '$for_rec_ctc', remark ='$for_remark', attachment ='$for_attach', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
+                        $query = "UPDATE " . $tblName . " SET name = '$for_name', fb_link = '$for_link', contact = '$for_ctc', sales_pic = '$for_pic', country = '$for_country', brand = '$for_brand', series = '$for_series', package = '$for_pkg', fb_page = '$for_fbpage', channel = '$for_channel', price = '$for_price', pay_method = '$for_pay', ship_rec_name = '$for_rec_name', ship_rec_add = '$for_rec_add', ship_rec_contact = '$for_rec_ctc', remark ='$for_remark', attachment ='$for_attach', order_status = '$for_order_status', stock_out_warehouse_id = " . ($for_stock_out_warehouse_id > 0 ? $for_stock_out_warehouse_id : 'NULL') . ", airbill_no = '$for_airbill_no', airbill_attachment = '" . mysqli_real_escape_string($finance_connect, $for_airbill_attachment) . "', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
                         $returnData = mysqli_query($finance_connect, $query);
 
                         // --- FIX: Delete the old attachment from the folder ---
@@ -404,6 +596,10 @@ if (post('actionBtn')) {
                     $errorMsg = $e->getMessage();
                     $act = "F";
                 }
+            }
+
+            if ($action === 'updRecord' && $forShouldSaveBeforeStatusUpdate && (($act === 'NC') || !empty($returnData))) {
+                $forTriggerStatusTransitionAfterSave = true;
             }
 
             // audit log
@@ -430,6 +626,16 @@ if (post('actionBtn')) {
                     $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
+            }
+
+            if ($action === 'updRecord' && $forShouldSaveBeforeStatusUpdate) {
+                if ($forTriggerStatusTransitionAfterSave) {
+                    $forHandleStatusTransition($pendingStatusUpdate);
+                }
+
+                $forSaveErrorMessage = trim((string) $errorMsg) !== '' ? trim((string) $errorMsg) : 'Unable to save edited order details.';
+                echo '<script>alert(' . json_encode($forSaveErrorMessage) . ');</script>';
+                exit;
             }
 
             break;
@@ -526,6 +732,128 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
 
 <head>
     <link rel="stylesheet" href="../css/main.css">
+    <script src="header/js/pdf.min.js"></script>
+    <style>
+        .shopee-airbill-toggle-col {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .shopee-airbill-toggle-field {
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 10px;
+            margin-top: 0;
+            padding: 0;
+        }
+
+        .shopee-airbill-toggle-label {
+            margin: 0;
+        }
+
+        @media (max-width: 767px) {
+            .shopee-airbill-toggle-col {
+                margin-top: 0;
+            }
+        }
+
+        .shopee-airbill-toggle {
+            position: relative;
+            width: 54px;
+            height: 28px;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .shopee-airbill-toggle input[type="checkbox"] {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .shopee-airbill-toggle-slider {
+            position: relative;
+            display: inline-block;
+            width: 54px;
+            height: 28px;
+            border-radius: 999px;
+            background: #31343a;
+            transition: all 0.18s ease;
+        }
+
+        .shopee-airbill-toggle-slider::before {
+            content: "";
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 22px;
+            height: 22px;
+            border-radius: 999px;
+            background: #ffffff;
+            transition: all 0.18s ease;
+        }
+
+        .shopee-airbill-toggle-slider::after {
+            content: "\f00d";
+            font-family: "Font Awesome 6 Free";
+            font-weight: 900;
+            color: #ffffff;
+            font-size: 0.62rem;
+            position: absolute;
+            right: 10px;
+            top: 8px;
+            transition: all 0.18s ease;
+        }
+
+        .shopee-airbill-toggle input:checked + .shopee-airbill-toggle-slider {
+            background: #6f922f;
+        }
+
+        .shopee-airbill-toggle input:checked + .shopee-airbill-toggle-slider::before {
+            left: 29px;
+        }
+
+        .shopee-airbill-toggle input:checked + .shopee-airbill-toggle-slider::after {
+            content: "\f00c";
+            right: 32px;
+        }
+
+        .shopee-airbill-extract-status {
+            display: block;
+            min-height: 18px;
+            margin-top: 6px;
+            color: #198754;
+        }
+
+        .shopee-airbill-extract-status.is-error {
+            color: #dc3545;
+        }
+
+        .shopee-airbill-preview-media {
+            width: 100%;
+            max-width: 520px;
+        }
+
+        .shopee-airbill-preview-media img,
+        .shopee-airbill-preview-media iframe {
+            width: 100%;
+            border: 1px solid #d9e2ef;
+            border-radius: 10px;
+            background: #fff;
+        }
+
+        .shopee-airbill-preview-media img {
+            height: auto;
+            display: block;
+        }
+
+        .shopee-airbill-preview-media iframe {
+            min-height: 520px;
+        }
+    </style>
 
 </head>
 
@@ -936,6 +1264,144 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                                     </div>
                                 <?php } ?>
                             </div>
+
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label form_lbl" for="for_order_status">Initial Order Status<span class="requireRed">*</span></label>
+                                <?php
+                                $forCurrentOrderStatusValue = isset($for_order_status) && trim((string) $for_order_status) !== ''
+                                    ? $for_order_status
+                                    : (isset($row['order_status']) ? shopeeOmsNormalizeStatusCode($row['order_status']) : 'P');
+                                ?>
+                                <?php if ($act === 'I') { ?>
+                                    <select class="form-select" id="for_order_status" name="for_order_status">
+                                        <?php foreach ($forStatusOptions as $statusCode => $statusLabel) { ?>
+                                            <option value="<?= htmlspecialchars($statusCode) ?>" <?= $forCurrentOrderStatusValue === $statusCode ? 'selected' : '' ?>><?= htmlspecialchars($statusLabel) ?></option>
+                                        <?php } ?>
+                                    </select>
+                                <?php } else { ?>
+                                    <input class="form-control" type="text" value="<?= htmlspecialchars(shopeeOmsGetStatusLabel($forCurrentOrderStatusValue)) ?>" readonly>
+                                    <input type="hidden" id="for_order_status" name="for_order_status" value="<?= htmlspecialchars($forCurrentOrderStatusValue) ?>">
+                                <?php } ?>
+                            </div>
+
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label form_lbl" for="for_stock_out_warehouse_id">Stock Out Warehouse<span class="requireRed">*</span></label>
+                                <?php
+                                $forCurrentStockOutWarehouseId = isset($for_stock_out_warehouse_id) && (int) $for_stock_out_warehouse_id > 0
+                                    ? (int) $for_stock_out_warehouse_id
+                                    : (isset($row) ? shopeeOmsResolveStockOutWarehouseId($connect, $row, $forDefaultWarehouseId) : $forDefaultWarehouseId);
+                                if ($forCurrentStockOutWarehouseId <= 0 && !empty($forWarehouseRows)) {
+                                    $forCurrentStockOutWarehouseId = (int) $forWarehouseRows[0]['id'];
+                                }
+                                $forCurrentStockOutWarehouseName = shopeeOmsResolveWarehouseNameById($connect, $forCurrentStockOutWarehouseId, $forDefaultWarehouseId, $forWarehouseNameMap);
+                                $forIsStockOutWarehouseEditableForForm = $act !== '' && ($act === 'I' || shopeeOmsIsStockOutWarehouseEditable(isset($row['order_status']) ? $row['order_status'] : ''));
+                                ?>
+                                <?php if ($forIsStockOutWarehouseEditableForForm) { ?>
+                                    <select class="form-select" id="for_stock_out_warehouse_id" name="for_stock_out_warehouse_id">
+                                        <?php foreach ($forWarehouseRows as $forWarehouseRow) { ?>
+                                            <?php $forWarehouseId = isset($forWarehouseRow['id']) ? (int) $forWarehouseRow['id'] : 0; ?>
+                                            <option value="<?= $forWarehouseId ?>" <?= $forCurrentStockOutWarehouseId === $forWarehouseId ? 'selected' : '' ?>><?= htmlspecialchars((string) $forWarehouseRow['name']) ?></option>
+                                        <?php } ?>
+                                    </select>
+                                <?php } else { ?>
+                                    <input class="form-control" type="text" value="<?= htmlspecialchars($forCurrentStockOutWarehouseName) ?>" readonly>
+                                    <input type="hidden" id="for_stock_out_warehouse_id" name="for_stock_out_warehouse_id" value="<?= (int) $forCurrentStockOutWarehouseId ?>">
+                                <?php } ?>
+                                <?php if (isset($stock_out_warehouse_err)) { ?>
+                                    <div id="err_msg">
+                                        <span class="mt-n1"><?php echo $stock_out_warehouse_err; ?></span>
+                                    </div>
+                                <?php } ?>
+                            </div>
+
+                            <div class="col-md-2 mb-3 shopee-airbill-toggle-col">
+                                <?php
+                                $forHasSavedAirbillData = false;
+                                if (isset($row['airbill_no']) && trim((string) $row['airbill_no']) !== '') {
+                                    $forHasSavedAirbillData = true;
+                                }
+                                if (isset($row['airbill_attachment']) && trim((string) $row['airbill_attachment']) !== '') {
+                                    $forHasSavedAirbillData = true;
+                                }
+                                $forUpdateAirbillValue = isset($for_update_airbill) && trim((string) $for_update_airbill) !== ''
+                                    ? strtolower(trim((string) $for_update_airbill))
+                                    : ($forHasSavedAirbillData ? 'yes' : ($act === 'I' ? 'yes' : 'no'));
+                                if ($forUpdateAirbillValue !== 'yes' && $forHasSavedAirbillData) {
+                                    $forUpdateAirbillValue = 'yes';
+                                } else if ($forUpdateAirbillValue !== 'yes') {
+                                    $forUpdateAirbillValue = 'no';
+                                }
+                                ?>
+                                <input type="hidden" id="for_update_airbill" name="for_update_airbill" value="<?= htmlspecialchars($forUpdateAirbillValue) ?>">
+                                <label class="form-label form_lbl shopee-airbill-toggle-label" for="for_update_airbill_toggle">Update Airbill?</label>
+                                <div class="shopee-airbill-toggle-field">
+                                    <label class="shopee-airbill-toggle mb-0" for="for_update_airbill_toggle">
+                                        <input type="checkbox" id="for_update_airbill_toggle" <?= $forUpdateAirbillValue === 'yes' ? 'checked' : '' ?> <?= $act == '' ? 'disabled' : '' ?>>
+                                        <span class="shopee-airbill-toggle-slider"></span>
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label form_lbl" for="for_airbill_no">Airbill No</label>
+                                <input class="form-control" type="text" name="for_airbill_no" id="for_airbill_no" value="<?php
+                                if (isset($for_airbill_no)) {
+                                    echo htmlspecialchars($for_airbill_no);
+                                } else if (isset($row['airbill_no'])) {
+                                    echo htmlspecialchars((string) $row['airbill_no']);
+                                }
+                                ?>" <?php if ($act == '') echo 'disabled' ?>>
+                                <?php if (isset($airbill_err)) { ?>
+                                    <div id="err_msg">
+                                        <span class="mt-n1"><?php echo $airbill_err; ?></span>
+                                    </div>
+                                <?php } ?>
+                            </div>
+
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label form_lbl" for="for_airbill_attachment">Airbill Attachment</label>
+                                <input class="form-control" type="file" name="for_airbill_attachment" id="for_airbill_attachment" <?php if ($act == '') echo 'disabled' ?>>
+                                <small id="for_airbill_extract_status" class="shopee-airbill-extract-status"></small>
+                                <?php
+                                $forCurrentAirbillAttachmentValue = isset($for_airbill_attachment) && trim((string) $for_airbill_attachment) !== ''
+                                    ? trim((string) $for_airbill_attachment)
+                                    : (isset($row['airbill_attachment']) ? trim((string) $row['airbill_attachment']) : '');
+                                $forCurrentAirbillAttachmentUrl = $forCurrentAirbillAttachmentValue !== '' ? shopeeOmsBuildAirbillAttachmentUrl($forCurrentAirbillAttachmentValue) : '';
+                                $forCurrentAirbillAttachmentExt = $forCurrentAirbillAttachmentUrl !== ''
+                                    ? strtolower(pathinfo((string) parse_url($forCurrentAirbillAttachmentUrl, PHP_URL_PATH), PATHINFO_EXTENSION))
+                                    : '';
+                                ?>
+                                <?php if ($forCurrentAirbillAttachmentValue !== '') { ?>
+                                    <div class="mt-2 small">
+                                        Current Attachment:
+                                        <?php if ($forCurrentAirbillAttachmentUrl !== '') { ?>
+                                            <a href="<?= htmlspecialchars($forCurrentAirbillAttachmentUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank"><?= htmlspecialchars($forCurrentAirbillAttachmentValue) ?></a>
+                                        <?php } else { ?>
+                                            <span><?= htmlspecialchars($forCurrentAirbillAttachmentValue) ?></span>
+                                        <?php } ?>
+                                    </div>
+                                <?php } ?>
+                                <input type="hidden" name="for_airbill_attachment_value" id="for_airbill_attachment_value" value="<?= htmlspecialchars($forCurrentAirbillAttachmentValue, ENT_QUOTES, 'UTF-8') ?>">
+                                <?php if (isset($airbill_attachment_err)) { ?>
+                                    <div id="err_msg">
+                                        <span class="mt-n1"><?php echo $airbill_attachment_err; ?></span>
+                                    </div>
+                                <?php } ?>
+                            </div>
+
+                            <div class="col-md-6 mb-3 d-flex justify-content-center justify-content-md-end">
+                                <?php if ($forCurrentAirbillAttachmentUrl !== '') { ?>
+                                    <div id="for_airbill_attachment_preview_wrap" class="shopee-airbill-preview-media">
+                                        <?php if (in_array($forCurrentAirbillAttachmentExt, array('png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'), true)) { ?>
+                                            <img src="<?= htmlspecialchars($forCurrentAirbillAttachmentUrl, ENT_QUOTES, 'UTF-8') ?>" alt="Airbill Attachment Preview">
+                                        <?php } else if ($forCurrentAirbillAttachmentExt === 'pdf') { ?>
+                                            <iframe src="<?= htmlspecialchars($forCurrentAirbillAttachmentUrl, ENT_QUOTES, 'UTF-8') ?>" title="Airbill Attachment Preview"></iframe>
+                                        <?php } ?>
+                                    </div>
+                                <?php } else { ?>
+                                    <div id="for_airbill_attachment_preview_wrap" class="shopee-airbill-preview-media" style="display:none;"></div>
+                                <?php } ?>
+                            </div>
                         </div>
                     </div>
                 </fieldset>
@@ -1176,6 +1642,13 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                             echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="updRecord">Edit Record</button>';
                             break;
                     }
+                    if ($act === 'E' && isset($row['order_status'])) {
+                        $statusCode = shopeeOmsNormalizeStatusCode($row['order_status']);
+                        $canMoveToPack = shopeeOmsHasTransitionPermission($connect, $statusCode, 'TP', USER_GROUP, $row, USER_ID);
+                        if ($statusCode === 'P' && $canMoveToPack) {
+                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" value="TP" formnovalidate>MOVE TO TO PACK</button>';
+                        }
+                    }
                     ?>
                     <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn" id="actionBtn"
                         value="back">Back</button>
@@ -1199,6 +1672,9 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
     }
     ?>
     <script>
+        <?php echo shopeeOmsRenderAirbillPdfAutofillScript(); ?>
+        <?php echo shopeeOmsRenderAirbillAttachmentPreviewScript(); ?>
+
         var page = "<?= $pageTitle ?>";
         var action = "<?php echo isset($act) ? $act : ' '; ?>";
 
@@ -1210,6 +1686,52 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
         <?php
         include "../js/fb_order_req.js"
             ?>
+
+        document.addEventListener('DOMContentLoaded', function () {
+            function toggleFacebookAirbillFields() {
+                var updateAirbill = document.getElementById('for_update_airbill');
+                var updateAirbillToggle = document.getElementById('for_update_airbill_toggle');
+                var airbillNo = document.getElementById('for_airbill_no');
+                var airbillAttachment = document.getElementById('for_airbill_attachment');
+                var existingAttachment = document.getElementById('for_airbill_attachment_value');
+                if (!updateAirbill || !updateAirbillToggle || !airbillNo || !airbillAttachment) {
+                    return;
+                }
+
+                updateAirbill.value = updateAirbillToggle.checked ? 'yes' : 'no';
+                var enabled = updateAirbillToggle.checked;
+                var readOnlyMode = "<?= $act ?>" === '';
+                airbillNo.disabled = readOnlyMode || !enabled;
+                airbillAttachment.disabled = readOnlyMode || !enabled;
+                airbillNo.required = enabled;
+                airbillAttachment.required = enabled && (!existingAttachment || existingAttachment.value.trim() === '');
+            }
+
+            if (window.shopeeOmsAirbillAttachmentPreview) {
+                window.shopeeOmsAirbillAttachmentPreview.bind({
+                    fileInputSelector: '#for_airbill_attachment',
+                    previewWrapSelector: '#for_airbill_attachment_preview_wrap'
+                });
+            }
+
+            if (window.shopeeOmsAirbillPdfAutofill) {
+                window.shopeeOmsAirbillPdfAutofill.bind({
+                    fileInputSelector: '#for_airbill_attachment',
+                    airbillNoSelector: '#for_airbill_no',
+                    customerAddressSelector: '#for_rec_add',
+                    statusSelector: '#for_airbill_extract_status',
+                    workerSrc: 'header/js/pdf.worker.min.js',
+                    errorClass: 'is-error'
+                });
+            }
+
+            toggleFacebookAirbillFields();
+
+            var facebookUpdateAirbillToggle = document.getElementById('for_update_airbill_toggle');
+            if (facebookUpdateAirbillToggle) {
+                facebookUpdateAirbillToggle.addEventListener('change', toggleFacebookAirbillFields);
+            }
+        });
     </script>
 
 </body>

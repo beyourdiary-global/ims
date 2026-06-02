@@ -23,13 +23,13 @@ $pinAccess = checkPin($connect, $allOrdersPageName);
 if (!is_array($pinAccess) || count($pinAccess) === 0) {
     $verifyAccess = checkPin($connect, $verifyPageName);
     if (is_array($verifyAccess) && count($verifyAccess) > 0) {
-        echo "<script>location.replace('shopee_arrival_management.php');</script>";
+        echo "<script>location.replace('../finance/arrival_management.php');</script>";
         exit;
     }
 
     $processingAccess = checkPin($connect, $processingPageName);
     if (is_array($processingAccess) && count($processingAccess) > 0) {
-        echo "<script>location.replace('shopee_waiting_to_pack.php');</script>";
+        echo "<script>location.replace('../finance/waiting_to_pack.php');</script>";
         exit;
     }
     echo "<script>alert('You do not have permission to view Shopee All Orders.'); location.replace('../dashboard.php');</script>";
@@ -136,6 +136,26 @@ if (isset($_GET['complete_id'])) {
         'remark' => 'Completed from all orders list.',
     ));
     echo "<script>alert('" . addslashes(isset($completeResult['message']) ? $completeResult['message'] : 'Unable to complete order.') . "'); location.replace('shopee_order_req_table.php');</script>";
+    exit;
+}
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['move_to_pack_id'])) {
+    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
+        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('shopee_order_req_table.php');</script>";
+        exit;
+    }
+
+    $orderId = intval($_POST['move_to_pack_id']);
+    $moveToPackResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'TP', array(
+        'actor_user_id' => USER_ID,
+        'actor_user_group_id' => USER_GROUP,
+        'source_page' => $pageTitle,
+        'remark' => 'Moved to To Pack from all orders list.',
+        'action' => 'move_to_pack',
+        'platform' => 'shopee',
+    ));
+    echo "<script>alert('" . addslashes(isset($moveToPackResult['message']) ? $moveToPackResult['message'] : 'Unable to move order to To Pack.') . "'); location.replace('shopee_order_req_table.php');</script>";
     exit;
 }
 
@@ -708,14 +728,24 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                                 <?php
                                 $statusCode = shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '');
                                 $canAssignThisOrder = $canAssignEstimatedReceivedDate && shopeeOmsPassesAssignmentScope($connect, $row, USER_ID, USER_GROUP);
+                                $canMoveToPackThisOrder = shopeeOmsHasTransitionPermission($connect, $statusCode, 'TP', USER_GROUP, $row, USER_ID);
                                 $canVerifyThisOrder = shopeeOmsHasTransitionPermission($connect, $statusCode, 'V', USER_GROUP, $row, USER_ID);
                                 $canCompleteThisOrder = shopeeOmsHasTransitionPermission($connect, $statusCode, 'C', USER_GROUP, $row, USER_ID);
                                 $estimatedDateRange = function_exists('shopeeOmsGetEstimatedReceivedDateRange')
                                     ? shopeeOmsGetEstimatedReceivedDateRange($row)
                                     : array('min_date' => $estimatedDateMin, 'max_date' => $estimatedDateMax);
                                 ?>
+                                <?php if ($statusCode === 'P' && $canMoveToPackThisOrder) { ?>
+                                 <form method="post" class="d-inline" onsubmit="return confirm('Move this order to To Pack?')">
+                                     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
+                                     <input type="hidden" name="move_to_pack_id" value="<?= (int) $row['id'] ?>">
+                                     <button type="submit" class="btn btn-sm btn-rounded btn-info" title="Move to To Pack">
+                                         <i class="fas fa-box-open"></i>
+                                     </button>
+                                 </form>
+                                <?php } ?>
                                 <?php if ($statusCode === 'TP') { ?>
-                                 <a class="btn btn-sm btn-rounded btn-primary" href="<?= $SITEURL . '/shopee/shopee_order_request_info.php?id=' . (int) $row['id'] ?>" title="Open QR Info">
+                                 <a class="btn btn-sm btn-rounded btn-primary" href="<?= htmlspecialchars((string) shopeeOmsGetOrderSourceViewUrl('shopee', (int) $row['id']), ENT_QUOTES, 'UTF-8') ?>" title="View Order">
                                      <i class="fa-solid fa-qrcode"></i>
                                  </a>
                                 <?php } ?>

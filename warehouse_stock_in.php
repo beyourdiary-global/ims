@@ -14,6 +14,7 @@ $tblName = $stockInOrderTable;
 $redirectTable = $SITEURL . '/warehouse_stock_in_table.php';
 $redirectLink = "<script>location.href='" . $redirectTable . "';</script>";
 $clearLocalStorage = '<script>localStorage.clear();</script>';
+$backButtonTitle = 'Back to Stock In';
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 if (!is_array($pinAccess)) {
@@ -218,6 +219,15 @@ foreach (siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTable
     }
 }
 
+if ($dataID > 0 && isset($orderById[$dataID])) {
+    $selectedStockType = siNormalizeStockType(isset($orderById[$dataID]['stock_type']) ? $orderById[$dataID]['stock_type'] : 'Stock In');
+    if ($selectedStockType === 'Stock Out') {
+        $redirectTable = $SITEURL . '/stock_list_table.php';
+        $redirectLink = "<script>location.href='" . $redirectTable . "';</script>";
+        $backButtonTitle = 'Back to Stock List';
+    }
+}
+
 if ($dataID > 0 && $act !== 'I') {
     if (!isset($orderById[$dataID])) {
         $err = 'Stock In row not found.';
@@ -273,11 +283,23 @@ if ($act === 'D') {
     }
 
     $orderNo = (string) $orderById[$dataID]['order_number'];
+    $orderStockType = siNormalizeStockType(isset($orderById[$dataID]['stock_type']) ? $orderById[$dataID]['stock_type'] : 'Stock In');
     $deleteOrderQuery = "UPDATE `" . $stockInOrderTable . "` SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . (int) $dataID . "' AND status='A'";
     $deleteItemsQuery = "UPDATE `" . $stockInItemTable . "` SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE stock_in_order_id='" . (int) $dataID . "' AND status='A'";
 
     mysqli_begin_transaction($finance_connect);
     try {
+        if ($orderStockType === 'Stock Out') {
+            if (!siDeactivateStockOutBatchUsageRowsByOrder($finance_connect, (int) $dataID)) {
+                throw new Exception('Failed to remove stock out batch usage.');
+            }
+        } else {
+            $usedQtyMap = siGetStockInUsedQtyMap($finance_connect, (int) $dataID);
+            if (!empty($usedQtyMap)) {
+                throw new Exception('This Stock In batch is already used by Stock Out records and cannot be deleted.');
+            }
+        }
+
         $okOrder = mysqli_query($finance_connect, $deleteOrderQuery);
         if (!$okOrder) {
             throw new Exception(mysqli_error($finance_connect));
@@ -539,6 +561,24 @@ if (post('actionBtn')) {
                     break;
                 }
 
+                $hasProtectedStockInUsage = false;
+                $reuseExistingStockInItems = false;
+                if ($oldStockType !== 'Stock Out') {
+                    $activeUsageMap = siGetStockInUsedQtyMap($finance_connect, $orderId);
+                    $hasProtectedStockInUsage = !empty($activeUsageMap);
+                    $itemShapeChanged = (implode(' | ', $oldSummaryRows) !== implode(' | ', $newSummaryRows));
+                    $criticalStockInChange = ((int) $oldWarehouseId !== (int) $warehouseId)
+                        || ($oldStockInDate !== $stockInDate)
+                        || $itemShapeChanged;
+                    if ($hasProtectedStockInUsage && $criticalStockInChange) {
+                        $err = 'This Stock In batch is already used by Stock Out records. Only order number or attachment can be updated.';
+                        break;
+                    }
+                    if ($hasProtectedStockInUsage && !$itemShapeChanged) {
+                        $reuseExistingStockInItems = true;
+                    }
+                }
+
                 $safeDate = mysqli_real_escape_string($finance_connect, $stockInDate);
                 $safeOrderNo = mysqli_real_escape_string($finance_connect, $orderNumber);
                 $safeAttachment = mysqli_real_escape_string($finance_connect, $newAttachmentNorm);
@@ -549,34 +589,11 @@ if (post('actionBtn')) {
                 mysqli_begin_transaction($finance_connect);
                 try {
                     if ($oldStockType === 'Stock Out') {
-                        $oldQtyMap = siBuildProductQtyMap($oldItems);
-                        $newQtyMap = siBuildProductQtyMap($items);
-                        $restoreQtyMap = array();
-                        $deductQtyMap = array();
-
-                        if ((int) $oldWarehouseId !== (int) $warehouseId) {
-                            $restoreQtyMap = $oldQtyMap;
-                            $deductQtyMap = $newQtyMap;
-                        } else {
-                            $allProductIds = array_unique(array_merge(array_keys($oldQtyMap), array_keys($newQtyMap)));
-                            foreach ($allProductIds as $productId) {
-                                $productId = (int) $productId;
-                                $oldQty = isset($oldQtyMap[$productId]) ? (int) $oldQtyMap[$productId] : 0;
-                                $newQty = isset($newQtyMap[$productId]) ? (int) $newQtyMap[$productId] : 0;
-                                $deltaQty = $newQty - $oldQty;
-                                if ($deltaQty > 0) {
-                                    $deductQtyMap[$productId] = $deltaQty;
-                                } else if ($deltaQty < 0) {
-                                    $restoreQtyMap[$productId] = abs($deltaQty);
-                                }
-                            }
+                        if (!siEnsureStockOutBatchUsageTable($finance_connect)) {
+                            throw new Exception('Failed to prepare stock out batch usage table.');
                         }
-
-                        if (count($restoreQtyMap) > 0) {
-                            siRestoreWarehouseInventoryQtyMap($finance_connect, (int) $oldWarehouseId, $restoreQtyMap, USER_ID, $oldOrderNumber !== '' ? $oldOrderNumber : ('ORDER-' . $orderId));
-                        }
-                        if (count($deductQtyMap) > 0) {
-                            siDeductWarehouseInventoryQtyMap($finance_connect, (int) $warehouseId, $deductQtyMap, USER_ID);
+                        if (!siDeactivateStockOutBatchUsageRowsByOrder($finance_connect, $orderId)) {
+                            throw new Exception('Failed to rebuild stock out batch usage.');
                         }
                     }
 
@@ -585,18 +602,70 @@ if (post('actionBtn')) {
                         throw new Exception(mysqli_error($finance_connect));
                     }
 
-                    $okDeactivate = mysqli_query($finance_connect, $deactivateItems);
-                    if (!$okDeactivate) {
-                        throw new Exception(mysqli_error($finance_connect));
+                    $newStockOutItems = array();
+                    if (!$reuseExistingStockInItems) {
+                        $okDeactivate = mysqli_query($finance_connect, $deactivateItems);
+                        if (!$okDeactivate) {
+                            throw new Exception(mysqli_error($finance_connect));
+                        }
+
+                        foreach ($items as $item) {
+                            $productId = (int) $item['product_id'];
+                            $packageId = isset($item['package_id']) ? (int) $item['package_id'] : 0;
+                            $qty = (int) $item['qty'];
+                            $iItem = "INSERT INTO `" . $stockInItemTable . "` (stock_in_order_id, product_id, package_id, product_quantity, create_by, create_date, create_time, status) VALUES ('" . $orderId . "', '" . $productId . "', '" . $packageId . "', '" . $qty . "', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
+                            $okItem = mysqli_query($finance_connect, $iItem);
+                            if (!$okItem) {
+                                throw new Exception(mysqli_error($finance_connect));
+                            }
+
+                            if ($oldStockType === 'Stock Out') {
+                                $newStockOutItems[] = array(
+                                    'item_id' => (int) mysqli_insert_id($finance_connect),
+                                    'product_id' => $productId,
+                                    'package_id' => $packageId,
+                                    'qty' => $qty,
+                                );
+                            }
+                        }
                     }
 
-                    foreach ($items as $item) {
-                        $productId = (int) $item['product_id'];
-                        $qty = (int) $item['qty'];
-                        $iItem = "INSERT INTO `" . $stockInItemTable . "` (stock_in_order_id, product_id, package_id, product_quantity, create_by, create_date, create_time, status) VALUES ('" . $orderId . "', '" . $productId . "', '0', '" . $qty . "', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
-                        $okItem = mysqli_query($finance_connect, $iItem);
-                        if (!$okItem) {
-                            throw new Exception(mysqli_error($finance_connect));
+                    if ($oldStockType === 'Stock Out') {
+                        $stockOutAllocations = array();
+                        $warehouseLabel = isset($warehouseNameMap[(int) $warehouseId]) ? (string) $warehouseNameMap[(int) $warehouseId] : '';
+                        foreach ($newStockOutItems as $stockOutItem) {
+                            $productId = (int) $stockOutItem['product_id'];
+                            $qty = (int) $stockOutItem['qty'];
+                            if ($productId <= 0 || $qty <= 0) {
+                                continue;
+                            }
+
+                            $productLabel = isset($productNameMap[$productId]) ? (string) $productNameMap[$productId] : ('product #' . $productId);
+                            $stockOutAllocations[(int) $stockOutItem['item_id']] = siAllocateStockOutQuantityAcrossFifoBatches(
+                                $finance_connect,
+                                (int) $warehouseId,
+                                $productId,
+                                $qty,
+                                isset($stockOutItem['package_id']) ? (int) $stockOutItem['package_id'] : 0,
+                                $orderId,
+                                $productLabel,
+                                $warehouseLabel
+                            );
+                        }
+
+                        foreach ($newStockOutItems as $stockOutItem) {
+                            $stockOutItemId = isset($stockOutItem['item_id']) ? (int) $stockOutItem['item_id'] : 0;
+                            if ($stockOutItemId <= 0) {
+                                continue;
+                            }
+
+                            siInsertStockOutBatchUsageRows(
+                                $finance_connect,
+                                $orderId,
+                                $stockOutItemId,
+                                isset($stockOutAllocations[$stockOutItemId]) ? $stockOutAllocations[$stockOutItemId] : array(),
+                                USER_ID
+                            );
                         }
                     }
 
@@ -972,7 +1041,7 @@ if ($isViewMode && $dataID > 0 && isset($orderById[$dataID])) {
                     <?php } else if ($isEditMode) { ?>
                         <button class="btn btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="actionBtn" value="updData"><?= siEsc($pageActionTitle) ?></button>
                     <?php } ?>
-                    <button class="btn btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="actionBtn" value="back">Back</button>
+                    <button class="btn btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="actionBtn" value="back" title="<?= siEsc($backButtonTitle) ?>" aria-label="<?= siEsc($backButtonTitle) ?>">Back</button>
                 </div>
             </form>
         </div>
@@ -983,9 +1052,19 @@ if ($isViewMode && $dataID > 0 && isset($orderById[$dataID])) {
     var page = <?= json_encode($pageTitle) ?>;
     var action = <?= json_encode($act) ?>;
     var stockInSiteUrl = <?= json_encode($SITEURL) ?>;
+    var stockInBackButtonTitle = <?= json_encode($backButtonTitle) ?>;
     checkCurrentPage(page, action);
     dropdownMenuDispFix();
     setButtonColor();
+    function applyStockInBackButtonTitle() {
+        var backButton = document.querySelector('button[name="actionBtn"][value="back"]');
+        if (backButton && stockInBackButtonTitle) {
+            backButton.setAttribute('title', stockInBackButtonTitle);
+            backButton.setAttribute('aria-label', stockInBackButtonTitle);
+        }
+    }
+    applyStockInBackButtonTitle();
+    window.addEventListener('load', applyStockInBackButtonTitle);
     preloader(300, action);
 </script>
 </body>

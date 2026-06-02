@@ -1,6 +1,6 @@
 <?php
 // Expected cPanel cron:
-// 0 8 * * * /usr/local/bin/php -q /home/USERNAME/public_html/ims/cron_shopee_flow_daily_email.php
+// 0 8 * * * /usr/local/bin/php -q /home/USERNAME/public_html/ims/cron_flow_daily_email.php
 
 include_once 'init.php';
 include_once ROOT . '/include/common.php';
@@ -41,9 +41,38 @@ if (!function_exists('shopeeOmsSendMail')) {
     }
 }
 
+if (!function_exists('shopeeOmsBuildEmailSummaryLines')) {
+    function shopeeOmsBuildEmailSummaryLines($summaryRows, $platform = '')
+    {
+        $platform = trim((string) $platform);
+        $lines = array();
+
+        foreach ((array) $summaryRows as $summaryRow) {
+            $rowPlatform = isset($summaryRow['platform']) ? trim((string) $summaryRow['platform']) : '';
+            if ($platform !== '' && $rowPlatform !== $platform) {
+                continue;
+            }
+
+            $prefix = '';
+            if ($platform === '') {
+                $prefix = isset($summaryRow['platform_label']) ? (string) $summaryRow['platform_label'] . ': ' : '';
+            }
+
+            $lines[] = $prefix
+                . (string) $summaryRow['from_label']
+                . ' -> '
+                . (string) $summaryRow['to_label']
+                . ': '
+                . (int) $summaryRow['total_count'];
+        }
+
+        return $lines;
+    }
+}
+
 if (date('H') !== '08') {
     header('Content-Type: text/plain; charset=utf-8');
-    echo "Shopee OMS daily email report skipped.\n";
+    echo "OMS daily email report skipped.\n";
     echo "Current server time: " . date('Y-m-d H:i:s') . "\n";
     echo "This script only sends during the 08:00 AM hour.\n";
     exit;
@@ -92,15 +121,28 @@ if ($projectSettings != false) {
     }
 }
 
-$reportUrl = rtrim((string) SITEURL, '/') . '/shopee/shopee_flow_report.php?date_from=' . rawurlencode($dateFrom) . '&date_to=' . rawurlencode($dateTo);
-$subject = 'Shopee OMS Daily Flow Report - ' . $dateFrom;
-$summaryLines = array();
-if (!empty($summaryRows)) {
-    foreach ($summaryRows as $summaryRow) {
-        $summaryLines[] = (string) $summaryRow['from_label'] . ' -> ' . (string) $summaryRow['to_label'] . ': ' . (int) $summaryRow['total_count'];
+$reportUrl = rtrim((string) SITEURL, '/') . '/finance/flow_report.php?date_from=' . rawurlencode($dateFrom) . '&date_to=' . rawurlencode($dateTo);
+$subject = 'OMS Daily Flow Report - ' . $dateFrom;
+$allSummaryLines = shopeeOmsBuildEmailSummaryLines($summaryRows);
+if (empty($allSummaryLines)) {
+    $allSummaryLines[] = 'No status transition recorded for the previous day.';
+}
+
+$platformSectionsHtml = '';
+foreach (shopeeOmsGetOrderSourceConfigs() as $platformKey => $platformConfig) {
+    $platformLabel = isset($platformConfig['label']) ? (string) $platformConfig['label'] : ucfirst((string) $platformKey);
+    $platformSummaryLines = shopeeOmsBuildEmailSummaryLines($summaryRows, $platformKey);
+    if (empty($platformSummaryLines)) {
+        $platformSummaryLines[] = 'No status transition recorded.';
     }
-} else {
-    $summaryLines[] = 'No status transition recorded for the previous day.';
+
+    $platformUrl = $reportUrl . '&platform=' . rawurlencode($platformKey);
+    $platformSectionsHtml .= '
+        <div style="margin:18px 0 0;padding:16px;border:1px solid #f0e2d5;border-radius:14px;background-color:#fffaf5;">
+            <p style="font-size:16px;font-weight:bold;margin:0 0 10px;">' . htmlspecialchars($platformLabel, ENT_QUOTES, 'UTF-8') . '</p>
+            <div style="font-size:13px;line-height:1.6;margin:0 0 12px;">' . nl2br(htmlspecialchars(implode("\n", $platformSummaryLines), ENT_QUOTES, 'UTF-8')) . '</div>
+            <a href="' . htmlspecialchars($platformUrl, ENT_QUOTES, 'UTF-8') . '" style="color:#000000;">View ' . htmlspecialchars($platformLabel, ENT_QUOTES, 'UTF-8') . ' Report</a>
+        </div>';
 }
 
 $message = '
@@ -116,13 +158,14 @@ $message = '
                 <table style="border-spacing:0;width:100%;background-color:#FFFFFF;border-radius:18px;">
                     <tr>
                         <td style="padding:24px 28px;">
-                            <p style="font-size:22px;font-weight:bold;margin:0 0 18px;">Shopee OMS Daily Flow Report</p>
+                            <p style="font-size:22px;font-weight:bold;margin:0 0 18px;">OMS Daily Flow Report</p>
                             <p style="font-size:14px;margin:0 0 12px;">Report Date: <b>' . htmlspecialchars($dateFrom, ENT_QUOTES, 'UTF-8') . '</b></p>
-                            <p style="font-size:14px;margin:0 0 12px;">Transition Summary:</p>
-                            <div style="font-size:13px;line-height:1.6;margin:0 0 18px;">' . nl2br(htmlspecialchars(implode("\n", $summaryLines), ENT_QUOTES, 'UTF-8')) . '</div>
+                            <p style="font-size:14px;font-weight:bold;margin:0 0 12px;">All Platforms</p>
+                            <div style="font-size:13px;line-height:1.6;margin:0 0 18px;">' . nl2br(htmlspecialchars(implode("\n", $allSummaryLines), ENT_QUOTES, 'UTF-8')) . '</div>
                             <p style="font-size:14px;margin:0;">
                                 <a href="' . htmlspecialchars($reportUrl, ENT_QUOTES, 'UTF-8') . '" style="color:#000000;">View Full Report</a>
                             </p>
+                            ' . $platformSectionsHtml . '
                         </td>
                     </tr>
                 </table>
@@ -141,7 +184,7 @@ if (!empty($recipientEmails)) {
 }
 
 header('Content-Type: text/plain; charset=utf-8');
-echo "Shopee OMS daily email report completed.\n";
+echo "OMS daily email report completed.\n";
 echo "Report date: " . $dateFrom . "\n";
 echo "Recipients configured: " . count($recipientEmails) . "\n";
 echo "Emails sent: " . (int) $sentCount . "\n";

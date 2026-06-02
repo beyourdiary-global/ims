@@ -160,6 +160,7 @@ define('PROD', 'product');
 define('PKG', 'package');
 define('PROJ', 'projects');
 define('STK_REC', 'stock_record');
+define('STOCK_OUT_BATCH_USAGE', 'stock_out_batch_usage');
 define('STOCK_ORDER_REQ', 'stock_order_request');
 define('STOCK_ORDER_REQ_ITEM', 'stock_order_request_item');
 define('L_TYPE', 'leave_type');
