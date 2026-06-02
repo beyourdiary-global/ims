@@ -16,6 +16,44 @@ $pageAction = getPageAction($act);
 $redirect_page = $SITEURL . '/lazada_order_req_table.php';
 $redirectLink = ("<script>location.href = '$redirect_page';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
+$pendingStatusUpdate = shopeeOmsNormalizeStatusCode(post('updateStatusBtn'));
+$lorShouldSaveBeforeStatusUpdate = $pendingStatusUpdate !== '' && $act === 'E';
+$lorTriggerStatusTransitionAfterSave = false;
+$lorHandleStatusTransition = function ($newStatus) use ($connect, $finance_connect, $dataID, $pageTitle, $cdate, $ctime, $tblName, $redirect_page) {
+    $newStatus = shopeeOmsNormalizeStatusCode($newStatus);
+    $transitionRemark = 'Order Status Update to ' . shopeeOmsGetStatusLabel($newStatus);
+    $transitionResult = shopeeOmsExecuteTransition($connect, $finance_connect, (int) $dataID, $newStatus, array(
+        'actor_user_id' => USER_ID,
+        'actor_user_group_id' => USER_GROUP,
+        'source_page' => $pageTitle,
+        'remark' => $transitionRemark,
+        'platform' => 'lazada',
+    ));
+
+    if (!empty($transitionResult['success'])) {
+        $oldStatus = isset($transitionResult['old_status']) ? (string) $transitionResult['old_status'] : '';
+        $newStatusCode = isset($transitionResult['new_status']) ? (string) $transitionResult['new_status'] : '';
+        audit_log(array(
+            'log_act' => 'edit',
+            'cdate' => $cdate,
+            'ctime' => $ctime,
+            'uid' => USER_ID,
+            'cby' => USER_ID,
+            'query_rec' => 'OMS transition ' . $oldStatus . ' -> ' . $newStatusCode,
+            'query_table' => $tblName,
+            'page' => $pageTitle,
+            'connect' => $connect,
+            'oldval' => 'order_status: ' . $oldStatus,
+            'changes' => 'order_status: ' . $newStatusCode,
+            'act_msg' => USER_NAME . " updated Lazada order #" . (int) $dataID . " from " . htmlspecialchars($oldStatus, ENT_QUOTES, 'UTF-8') . " to " . htmlspecialchars($newStatusCode, ENT_QUOTES, 'UTF-8') . ".",
+        ));
+        echo '<script>alert(' . json_encode((string) $transitionRemark) . '); window.location.replace(' . json_encode((string) $redirect_page) . ');</script>';
+        exit;
+    }
+
+    echo '<script>alert(' . json_encode((string) (isset($transitionResult['message']) ? $transitionResult['message'] : 'Unable to update order status.')) . ');</script>';
+    exit;
+};
 
 // to display data to input
 if ($dataID) { //edit/remove/view
@@ -40,37 +78,77 @@ if (!($dataID) && !($act)) {
 }
 
 $pay_meth_list_result = getData('*', '', '', FIN_PAY_METH, $finance_connect);
+$lorStatusOptions = shopeeOmsGetEditableStatusOptions();
+$lorWarehouseRows = shopeeOmsLoadActiveWarehouses($connect);
+$lorDefaultWarehouseId = shopeeOmsGetDefaultWarehouseId($connect, $lorWarehouseRows);
+$lorWarehouseNameMap = shopeeOmsLoadWarehouseNameMap($connect, true);
+$lorWarehouseOptionMap = array();
+foreach ($lorWarehouseRows as $lorWarehouseRow) {
+    $lorWarehouseId = isset($lorWarehouseRow['id']) ? (int) $lorWarehouseRow['id'] : 0;
+    if ($lorWarehouseId > 0) {
+        $lorWarehouseOptionMap[$lorWarehouseId] = isset($lorWarehouseRow['name']) ? (string) $lorWarehouseRow['name'] : ('Warehouse #' . $lorWarehouseId);
+    }
+}
+
+if ($pendingStatusUpdate !== '' && !$lorShouldSaveBeforeStatusUpdate) {
+    $lorHandleStatusTransition($pendingStatusUpdate);
+}
 
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
-    $customer_id = $_POST['customer_id'];
-    $customer_name = $_POST['customer_name'];
-    $customer_email = $_POST['customer_email'];
-    $customer_phone = $_POST['customer_phone'];
-    $shipping_name = $_POST['shipping_name'];
-    $shipping_address = $_POST['shipping_address'];
-    $shipping_contact = $_POST['shipping_contact'];
-    $sales_pic = $_POST['sales_pic'];
+    $customer_id = postSpaceFilter('customer_id');
+    $customer_name = postSpaceFilter('customer_name');
+    $customer_email = postSpaceFilter('customer_email');
+    $customer_phone = postSpaceFilter('customer_phone');
+    $shipping_name = postSpaceFilter('shipping_name');
+    $shipping_address = postSpaceFilter('shipping_address');
+    $shipping_contact = postSpaceFilter('shipping_contact');
+    $sales_pic = postSpaceFilter('sales_pic');
 
-    $duplicate_check_query = "SELECT * FROM customer_lazada_deals_transaction WHERE lcr_id = '$customer_id'";
-    $duplicate_result = mysqli_query($connect, $duplicate_check_query);
+    $requiredNewCustomerFields = array(
+        $customer_id,
+        $customer_name,
+        $customer_email,
+        $customer_phone,
+        $shipping_name,
+        $shipping_address,
+        $shipping_contact,
+        $sales_pic,
+    );
+    $hasMissingNewCustomerField = false;
+    foreach ($requiredNewCustomerFields as $requiredValue) {
+        if (trim((string) $requiredValue) === '') {
+            $hasMissingNewCustomerField = true;
+            break;
+        }
+    }
 
-    if (mysqli_num_rows($duplicate_result) > 0) {
-        echo "<script>alert('Error: Duplicate record found!');</script>";
+    if ($hasMissingNewCustomerField) {
+        echo "<script>alert('Please fill in all required fields for the new customer record.');</script>";
     } else {
-        $insert_query = "INSERT INTO customer_lazada_deals_transaction (lcr_id, name, email, phone, ship_rec_name, ship_rec_add, ship_rec_contact, sales_pic) 
-                         VALUES ('$customer_id', '$customer_name', '$customer_email', '$customer_phone', '$shipping_name', '$shipping_address', '$shipping_contact', '$sales_pic')";
+        $duplicate_check_query = "SELECT * FROM customer_lazada_deals_transaction WHERE lcr_id = '$customer_id'";
+        $duplicate_result = mysqli_query($connect, $duplicate_check_query);
 
-        if (mysqli_query($connect, $insert_query)) {
-            echo "<script>alert('New record created successfully');</script>";
+        if (mysqli_num_rows($duplicate_result) > 0) {
+            echo "<script>alert('Error: Duplicate record found!');</script>";
         } else {
-            echo "<script>alert('Error: " . $insert_query . "<br>" . mysqli_error($connect) . "');</script>";
+            $insert_query = "INSERT INTO customer_lazada_deals_transaction (lcr_id, name, email, phone, ship_rec_name, ship_rec_add, ship_rec_contact, sales_pic) 
+                             VALUES ('$customer_id', '$customer_name', '$customer_email', '$customer_phone', '$shipping_name', '$shipping_address', '$shipping_contact', '$sales_pic')";
+
+            if (mysqli_query($connect, $insert_query)) {
+                echo "<script>alert('New record created successfully');</script>";
+            } else {
+                echo "<script>alert('Error: " . $insert_query . "<br>" . mysqli_error($connect) . "');</script>";
+            }
         }
     }
 }
 
 
-if (post('actionBtn')) {
+if (post('actionBtn') || $lorShouldSaveBeforeStatusUpdate) {
     $action = post('actionBtn');
+    if ($action === '' && $lorShouldSaveBeforeStatusUpdate) {
+        $action = 'updRequest';
+    }
 
     $lor_lazada_acc = postSpaceFilter('lor_lazada_acc_hidden');
     $lor_curr_unit = postSpaceFilter('lor_curr_unit_hidden');
@@ -95,19 +173,104 @@ if (post('actionBtn')) {
     $lor_final_income = postSpaceFilter('lor_final_income');
     $lor_pay_meth = postSpaceFilter('lor_pay_meth');
     $lor_remark = postSpaceFilter('lor_remark');
+    $lor_order_status = shopeeOmsNormalizeStatusCode(postSpaceFilter('lor_order_status'));
+    if ($lor_order_status === '') {
+        $lor_order_status = isset($row['order_status']) ? shopeeOmsNormalizeStatusCode($row['order_status']) : 'P';
+    }
+    $lorCurrentEffectiveWarehouseId = isset($row) ? shopeeOmsResolveStockOutWarehouseId($connect, $row, $lorDefaultWarehouseId) : $lorDefaultWarehouseId;
+    $lor_stock_out_warehouse_id = shopeeOmsNormalizeWarehouseId(postSpaceFilter('lor_stock_out_warehouse_id'));
+    if ($lor_stock_out_warehouse_id <= 0) {
+        $lor_stock_out_warehouse_id = $lorDefaultWarehouseId;
+    }
+    $lorStockOutWarehouseEditable = $action === 'addRequest'
+        ? true
+        : shopeeOmsIsStockOutWarehouseEditable(isset($row['order_status']) ? $row['order_status'] : '');
+    if (!$lorStockOutWarehouseEditable && $action === 'updRequest') {
+        $lor_stock_out_warehouse_id = $lorCurrentEffectiveWarehouseId;
+    }
+    $lor_update_airbill = strtolower(trim((string) postSpaceFilter('lor_update_airbill')));
+    if ($lor_update_airbill === '') {
+        $lor_update_airbill = 'yes';
+    }
+    $lor_airbill_no = postSpaceFilter('lor_airbill_no');
+    $lor_airbill_attachment = postSpaceFilter('lor_airbill_attachment_value');
 
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
     switch ($action) {
         case 'addRequest':
         case 'updRequest':
+            $error = 0;
+
+            if ($lor_update_airbill === 'yes' && isset($_FILES['lor_airbill_attachment']) && isset($_FILES['lor_airbill_attachment']['size']) && (int) $_FILES['lor_airbill_attachment']['size'] > 0) {
+                $lorAirbillUploadResult = shopeeOmsStoreAirbillAttachmentUpload(
+                    $_FILES['lor_airbill_attachment'],
+                    $connect,
+                    $lor_brand,
+                    $lor_pkg,
+                    'lazada_order_request'
+                );
+                if (!empty($lorAirbillUploadResult['success'])) {
+                    $lor_airbill_attachment = isset($lorAirbillUploadResult['path']) ? (string) $lorAirbillUploadResult['path'] : '';
+                } else {
+                    $airbill_attachment_err = isset($lorAirbillUploadResult['message']) ? (string) $lorAirbillUploadResult['message'] : 'Failed to upload the airbill attachment.';
+                    $error = 1;
+                }
+            }
+
+            if ($lor_update_airbill !== 'yes') {
+                if ($action === 'updRequest') {
+                    $lor_airbill_no = isset($row['airbill_no']) ? (string) $row['airbill_no'] : '';
+                    $lor_airbill_attachment = isset($row['airbill_attachment']) ? (string) $row['airbill_attachment'] : '';
+                } else {
+                    $lor_airbill_no = '';
+                    $lor_airbill_attachment = '';
+                }
+            }
 
             if ($lor_cust_email && !isEmail($lor_cust_email)) {
                 $cust_email_err = "Wrong email format!";
                 $error = 1;
                 break;
+            }
 
-            } else if ($action == 'addRequest') {
+            if ($lorStockOutWarehouseEditable) {
+                if ($lor_stock_out_warehouse_id <= 0) {
+                    $stock_out_warehouse_err = "Stock Out Warehouse is required.";
+                    $error = 1;
+                } else if (!isset($lorWarehouseOptionMap[$lor_stock_out_warehouse_id])) {
+                    $stock_out_warehouse_err = "Please select a valid active Stock Out Warehouse.";
+                    $error = 1;
+                }
+            }
+
+            $lorEffectiveAirbill = $lor_airbill_no;
+            if ($action === 'updRequest' && $lor_update_airbill !== 'yes') {
+                $lorEffectiveAirbill = isset($row['airbill_no']) ? (string) $row['airbill_no'] : '';
+            }
+
+            $lorStatusValidation = shopeeOmsValidateInitialStatusAndAirbill($lor_order_status, $lorEffectiveAirbill);
+            if (!$lorStatusValidation['valid']) {
+                $airbill_err = isset($lorStatusValidation['message']) ? (string) $lorStatusValidation['message'] : 'Invalid order status or airbill.';
+                $error = 1;
+            }
+
+            if ($lor_update_airbill === 'yes') {
+                if (trim((string) $lor_airbill_no) === '') {
+                    $airbill_err = 'Airbill No cannot be empty when Update Airbill is enabled.';
+                    $error = 1;
+                }
+                if (trim((string) $lor_airbill_attachment) === '') {
+                    $airbill_attachment_err = 'Airbill Attachment cannot be empty when Update Airbill is enabled.';
+                    $error = 1;
+                }
+            }
+
+            if ($error) {
+                break;
+            }
+
+            if ($action == 'addRequest') {
                 try {
                     //check values
 
@@ -216,12 +379,41 @@ if (post('actionBtn')) {
                         array_push($newvalarr, $lor_remark);
                         array_push($datafield, 'remark');
                     }
+                    if ($lor_order_status) {
+                        array_push($newvalarr, $lor_order_status);
+                        array_push($datafield, 'order_status');
+                    }
+                    if ($lor_stock_out_warehouse_id > 0) {
+                        array_push($newvalarr, isset($lorWarehouseOptionMap[$lor_stock_out_warehouse_id]) ? $lorWarehouseOptionMap[$lor_stock_out_warehouse_id] : ('Warehouse #' . $lor_stock_out_warehouse_id));
+                        array_push($datafield, 'stock_out_warehouse_id');
+                    }
+                    if ($lor_airbill_no !== '') {
+                        array_push($newvalarr, $lor_airbill_no);
+                        array_push($datafield, 'airbill_no');
+                    }
+                    if ($lor_airbill_attachment !== '') {
+                        array_push($newvalarr, $lor_airbill_attachment);
+                        array_push($datafield, 'airbill_attachment');
+                    }
                     $tblName2 = LAZADA_CUST_RCD;
-                    $query = "INSERT INTO " . $tblName . "(lazada_acc,curr_unit,lzd_country,cust_id,cust_name,cust_email,cust_phone,country,oder_number,sales_pic,ship_rec_name,ship_rec_address,ship_rec_contact,brand,series,pkg,item_price_credit,commision,other_discount,pay_fee,final_income,pay_meth,remark,create_by,create_date,create_time) VALUES ('$lor_lazada_acc','$lor_curr_unit','$lor_lzd_country','$lor_cust_id','$lor_cust_name','$lor_cust_email','$lor_cust_phone','$lor_country','$lor_oder_number','$lor_sales_pic','$lor_ship_rec_name','$lor_ship_rec_address','$lor_ship_rec_contact','$lor_brand','$lor_series','$lor_pkg','$lor_item_price_credit','$lor_commision','$lor_other_discount','$lor_pay_fee','$lor_final_income','$lor_pay_meth','$lor_remark','" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . "(lazada_acc,curr_unit,lzd_country,cust_id,cust_name,cust_email,cust_phone,country,oder_number,sales_pic,ship_rec_name,ship_rec_address,ship_rec_contact,brand,series,pkg,item_price_credit,commision,other_discount,pay_fee,final_income,pay_meth,remark,order_status,stock_out_warehouse_id,airbill_no,airbill_attachment,create_by,create_date,create_time) VALUES ('$lor_lazada_acc','$lor_curr_unit','$lor_lzd_country','$lor_cust_id','$lor_cust_name','$lor_cust_email','$lor_cust_phone','$lor_country','$lor_oder_number','$lor_sales_pic','$lor_ship_rec_name','$lor_ship_rec_address','$lor_ship_rec_contact','$lor_brand','$lor_series','$lor_pkg','$lor_item_price_credit','$lor_commision','$lor_other_discount','$lor_pay_fee','$lor_final_income','$lor_pay_meth','$lor_remark','$lor_order_status'," . ($lor_stock_out_warehouse_id > 0 ? $lor_stock_out_warehouse_id : 'NULL') . ",'$lor_airbill_no','" . mysqli_real_escape_string($connect, $lor_airbill_attachment) . "','" . USER_ID . "',curdate(),curtime())";
                     $query2 = "INSERT INTO " . $tblName2 . "(lcr_id,name,email,phone,sales_pic,country,brand,series,ship_rec_name,ship_rec_add,ship_rec_contact,remark,create_by,create_date,create_time) VALUES ('$lor_cust_id','$lor_cust_name','$lor_cust_email','$lor_cust_phone','$lor_sales_pic','$lor_country','$lor_brand','$lor_series','$lor_ship_rec_name','$lor_ship_rec_address','$lor_ship_rec_contact','$lor_remark','" . USER_ID . "',curdate(),curtime())";
 
                     // Execute the query
                     $returnData = mysqli_query($connect, $query);
+                    if ($returnData) {
+                        $dataID = (int) mysqli_insert_id($connect);
+                        if ($lor_order_status === 'TP' && $dataID > 0) {
+                            $freshOrderRow = shopeeOmsLoadOrder($connect, $dataID, 'lazada');
+                            $tokenResult = shopeeOmsCreateWarehouseToken($connect, $finance_connect, $freshOrderRow, USER_ID, 'lazada');
+                            if (!empty($tokenResult['success']) && !empty($tokenResult['token_row']) && !empty($tokenResult['notification'])) {
+                                $notifyResult = shopeeOmsSendWarehouseNotification($connect, $finance_connect, $tokenResult['token_row'], $tokenResult['notification'], $pageTitle);
+                                if (!empty($notifyResult['sent']) && shopeeOmsTableHasColumn($connect, dbname, $tblName, 'step_a_sent_at')) {
+                                    mysqli_query($connect, "UPDATE `" . $tblName . "` SET `step_a_sent_at` = NOW() WHERE id = " . $dataID . " LIMIT 1");
+                                }
+                            }
+                        }
+                    }
                     $returnData2 = mysqli_query($connect, $query2);
                     $_SESSION['tempValConfirmBox'] = true;
                 } catch (Exception $e) {
@@ -368,6 +560,26 @@ if (post('actionBtn')) {
                         array_push($chgvalarr, $lor_remark == '' ? 'Empty Value' : $lor_remark);
                         array_push($datafield, 'remark');
                     }
+                    if (shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '') !== $lor_order_status) {
+                        array_push($oldvalarr, isset($row['order_status']) && $row['order_status'] !== '' ? shopeeOmsGetStatusLabel($row['order_status']) : 'Empty Value');
+                        array_push($chgvalarr, $lor_order_status !== '' ? shopeeOmsGetStatusLabel($lor_order_status) : 'Empty Value');
+                        array_push($datafield, 'order_status');
+                    }
+                    if ((int) (isset($row['stock_out_warehouse_id']) ? $row['stock_out_warehouse_id'] : 0) !== (int) $lor_stock_out_warehouse_id) {
+                        array_push($oldvalarr, shopeeOmsResolveWarehouseNameById($connect, isset($row['stock_out_warehouse_id']) ? $row['stock_out_warehouse_id'] : 0, $lorDefaultWarehouseId, $lorWarehouseNameMap));
+                        array_push($chgvalarr, shopeeOmsResolveWarehouseNameById($connect, $lor_stock_out_warehouse_id, $lorDefaultWarehouseId, $lorWarehouseNameMap));
+                        array_push($datafield, 'stock_out_warehouse_id');
+                    }
+                    if ((string) (isset($row['airbill_no']) ? $row['airbill_no'] : '') !== (string) $lor_airbill_no) {
+                        array_push($oldvalarr, isset($row['airbill_no']) && $row['airbill_no'] !== '' ? $row['airbill_no'] : 'Empty Value');
+                        array_push($chgvalarr, $lor_airbill_no !== '' ? $lor_airbill_no : 'Empty Value');
+                        array_push($datafield, 'airbill_no');
+                    }
+                    if ((string) (isset($row['airbill_attachment']) ? $row['airbill_attachment'] : '') !== (string) $lor_airbill_attachment) {
+                        array_push($oldvalarr, isset($row['airbill_attachment']) && $row['airbill_attachment'] !== '' ? $row['airbill_attachment'] : 'Empty Value');
+                        array_push($chgvalarr, $lor_airbill_attachment !== '' ? $lor_airbill_attachment : 'Empty Value');
+                        array_push($datafield, 'airbill_attachment');
+                    }
 
                     // convert into string
                     $oldval = implode(",", $oldvalarr);
@@ -375,7 +587,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
-                        $query = "UPDATE " . $tblName . " SET lazada_acc = '$lor_lazada_acc', curr_unit = '$lor_curr_unit', lzd_country = '$lor_lzd_country', cust_id = '$lor_cust_id', cust_name = '$lor_cust_name', cust_email = '$lor_cust_email', cust_phone = '$lor_cust_phone', country = '$lor_country', oder_number = '$lor_oder_number', sales_pic = '$lor_sales_pic', ship_rec_name = '$lor_ship_rec_name', ship_rec_address = '$lor_ship_rec_address', ship_rec_contact = '$lor_ship_rec_contact', brand = '$lor_brand', series = '$lor_series', pkg = '$lor_pkg', item_price_credit = '$lor_item_price_credit', commision = '$commision', other_discount = '$lor_other_discount', pay_fee = '$lor_pay_fee', final_income = '$lor_final_income', pay_meth = '$lor_pay_meth', remark ='$lor_remark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
+                        $query = "UPDATE " . $tblName . " SET lazada_acc = '$lor_lazada_acc', curr_unit = '$lor_curr_unit', lzd_country = '$lor_lzd_country', cust_id = '$lor_cust_id', cust_name = '$lor_cust_name', cust_email = '$lor_cust_email', cust_phone = '$lor_cust_phone', country = '$lor_country', oder_number = '$lor_oder_number', sales_pic = '$lor_sales_pic', ship_rec_name = '$lor_ship_rec_name', ship_rec_address = '$lor_ship_rec_address', ship_rec_contact = '$lor_ship_rec_contact', brand = '$lor_brand', series = '$lor_series', pkg = '$lor_pkg', item_price_credit = '$lor_item_price_credit', commision = '$commision', other_discount = '$lor_other_discount', pay_fee = '$lor_pay_fee', final_income = '$lor_final_income', pay_meth = '$lor_pay_meth', remark ='$lor_remark', order_status = '$lor_order_status', stock_out_warehouse_id = " . ($lor_stock_out_warehouse_id > 0 ? $lor_stock_out_warehouse_id : 'NULL') . ", airbill_no = '$lor_airbill_no', airbill_attachment = '" . mysqli_real_escape_string($connect, $lor_airbill_attachment) . "', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
                         $returnData = mysqli_query($connect, $query);
 
                     } else {
@@ -385,6 +597,10 @@ if (post('actionBtn')) {
                     $errorMsg = $e->getMessage();
                     $act = "F";
                 }
+            }
+
+            if ($action === 'updRequest' && $lorShouldSaveBeforeStatusUpdate && (($act === 'NC') || !empty($returnData))) {
+                $lorTriggerStatusTransitionAfterSave = true;
             }
 
             // audit log
@@ -411,6 +627,16 @@ if (post('actionBtn')) {
                     $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
+            }
+
+            if ($action === 'updRequest' && $lorShouldSaveBeforeStatusUpdate) {
+                if ($lorTriggerStatusTransitionAfterSave) {
+                    $lorHandleStatusTransition($pendingStatusUpdate);
+                }
+
+                $lorSaveErrorMessage = trim((string) $errorMsg) !== '' ? trim((string) $errorMsg) : 'Unable to save edited order details.';
+                echo '<script>alert(' . json_encode($lorSaveErrorMessage) . ');</script>';
+                exit;
             }
 
             break;
@@ -487,6 +713,144 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
 
 <head>
     <link rel="stylesheet" href="../css/main.css">
+    <script src="finance/header/js/pdf.min.js"></script>
+    <style>
+        .shopee-airbill-row {
+            align-items: flex-start;
+        }
+
+        .shopee-airbill-toggle-col {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .shopee-airbill-toggle-field {
+            min-height: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 10px;
+            margin-top: 0;
+            padding: 0;
+        }
+
+        .shopee-airbill-toggle-label {
+            margin: 0;
+        }
+
+        @media (max-width: 767px) {
+            .shopee-airbill-toggle-col {
+                margin-top: 0;
+            }
+        }
+
+        .shopee-airbill-toggle {
+            position: relative;
+            width: 54px;
+            height: 28px;
+            display: inline-flex;
+            align-items: center;
+        }
+
+        .shopee-airbill-toggle input[type="checkbox"] {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .shopee-airbill-toggle-slider {
+            position: relative;
+            display: inline-block;
+            width: 54px;
+            height: 28px;
+            border-radius: 999px;
+            background: #31343a;
+            transition: all 0.18s ease;
+        }
+
+        .shopee-airbill-toggle-slider::before {
+            content: "";
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 22px;
+            height: 22px;
+            border-radius: 999px;
+            background: #ffffff;
+            transition: all 0.18s ease;
+        }
+
+        .shopee-airbill-toggle-slider::after {
+            content: "\f00d";
+            font-family: "Font Awesome 6 Free";
+            font-weight: 900;
+            color: #ffffff;
+            font-size: 0.62rem;
+            position: absolute;
+            right: 10px;
+            top: 8px;
+            transition: all 0.18s ease;
+        }
+
+        .shopee-airbill-toggle input:checked + .shopee-airbill-toggle-slider {
+            background: #6f922f;
+        }
+
+        .shopee-airbill-toggle input:checked + .shopee-airbill-toggle-slider::before {
+            left: 29px;
+        }
+
+        .shopee-airbill-toggle input:checked + .shopee-airbill-toggle-slider::after {
+            content: "\f00c";
+            right: 32px;
+        }
+
+        .shopee-inline-error {
+            display: block;
+            margin-top: 6px;
+            color: #dc3545;
+            font-size: 14px;
+        }
+
+        .shopee-inline-invalid {
+            border-color: #dc3545 !important;
+            box-shadow: none !important;
+        }
+
+        .shopee-airbill-extract-status {
+            display: block;
+            min-height: 18px;
+            margin-top: 6px;
+            color: #198754;
+        }
+
+        .shopee-airbill-extract-status.is-error {
+            color: #dc3545;
+        }
+
+        .shopee-airbill-preview-media {
+            width: 100%;
+            max-width: 520px;
+        }
+
+        .shopee-airbill-preview-media img,
+        .shopee-airbill-preview-media iframe {
+            width: 100%;
+            border: 1px solid #d9e2ef;
+            border-radius: 10px;
+            background: #fff;
+        }
+
+        .shopee-airbill-preview-media img {
+            height: auto;
+            display: block;
+        }
+
+        .shopee-airbill-preview-media iframe {
+            min-height: 520px;
+        }
+    </style>
 
 </head>
 
@@ -749,28 +1113,28 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                                                             <label class="form-label form_lbl" for="customer_id">Customer
                                                                 ID</label>
                                                             <input class="form-control" type="text" id="customer_id"
-                                                                name="customer_id">
+                                                                name="customer_id" data-new-customer-required="1">
                                                         </div>
 
                                                         <div class="col-md-3 mb-3">
                                                             <label class="form-label form_lbl" for="customer_name">Customer
                                                                 Name</label>
                                                             <input class="form-control" type="text" id="customer_name"
-                                                                name="customer_name">
+                                                                name="customer_name" data-new-customer-required="1">
                                                         </div>
 
                                                         <div class="col-md-3 mb-3">
                                                             <label class="form-label form_lbl" for="customer_email">Customer
                                                                 Email</label>
                                                             <input class="form-control" type="email" id="customer_email"
-                                                                name="customer_email">
+                                                                name="customer_email" data-new-customer-required="1">
                                                         </div>
 
                                                         <div class="col-md-3 mb-3">
                                                             <label class="form-label form_lbl" for="customer_phone">Customer
                                                                 Phone</label>
                                                             <input class="form-control" type="number" id="customer_phone"
-                                                                name="customer_phone">
+                                                                name="customer_phone" data-new-customer-required="1">
                                                         </div>
                                                     </div>
 
@@ -779,30 +1143,30 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                                                             <label class="form-label form_lbl" for="shipping_name">Shipping
                                                                 Name</label>
                                                             <input class="form-control" type="text" id="shipping_name"
-                                                                name="shipping_name">
+                                                                name="shipping_name" data-new-customer-required="1">
                                                         </div>
 
                                                         <div class="col-md-3 mb-3">
                                                             <label class="form-label form_lbl"
                                                                 for="shipping_address">Shipping Address</label>
                                                             <input class="form-control" type="text" id="shipping_address"
-                                                                name="shipping_address">
+                                                                name="shipping_address" data-new-customer-required="1">
                                                         </div>
 
                                                         <div class="col-md-3 mb-3">
                                                             <label class="form-label form_lbl"
                                                                 for="shipping_contact">Shipping Contact</label>
                                                             <input class="form-control" type="number" id="shipping_contact"
-                                                                name="shipping_contact">
+                                                                name="shipping_contact" data-new-customer-required="1">
                                                         </div>
                                                         <div class="col-md-3 mb-3">
                                                             <label class="form-label form_lbl" for="sales_pic">Sales Person
                                                                 In Charge</label>
                                                             <input class="form-control" type="text" id="sales_pic"
-                                                                name="sales_pic">
+                                                                name="sales_pic" data-new-customer-required="1">
                                                         </div>
                                                     </div>
-                                                    <input type="submit" name="submit" value="Submit">
+                                                    <button type="button" id="lazada_new_customer_submit_btn">Submit</button>
                                                 </div>
                                             <?php } ?>
                     </fieldset>
@@ -885,6 +1249,146 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                                         </div>
                                     <?php } ?>
                                 </div>
+
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label form_lbl" for="lor_order_status">Initial Order Status<span class="requireRed">*</span></label>
+                                    <?php
+                                    $lorCurrentOrderStatusValue = isset($lor_order_status) && trim((string) $lor_order_status) !== ''
+                                        ? $lor_order_status
+                                        : (isset($row['order_status']) ? shopeeOmsNormalizeStatusCode($row['order_status']) : 'P');
+                                    ?>
+                                    <?php if ($act === 'I') { ?>
+                                        <select class="form-select" id="lor_order_status" name="lor_order_status">
+                                            <?php foreach ($lorStatusOptions as $statusCode => $statusLabel) { ?>
+                                                <option value="<?= htmlspecialchars($statusCode) ?>" <?= $lorCurrentOrderStatusValue === $statusCode ? 'selected' : '' ?>><?= htmlspecialchars($statusLabel) ?></option>
+                                            <?php } ?>
+                                        </select>
+                                    <?php } else { ?>
+                                        <input class="form-control" type="text" value="<?= htmlspecialchars(shopeeOmsGetStatusLabel($lorCurrentOrderStatusValue)) ?>" readonly>
+                                        <input type="hidden" id="lor_order_status" name="lor_order_status" value="<?= htmlspecialchars($lorCurrentOrderStatusValue) ?>">
+                                    <?php } ?>
+                                </div>
+
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label form_lbl" for="lor_stock_out_warehouse_id">Stock Out Warehouse<span class="requireRed">*</span></label>
+                                    <?php
+                                    $lorCurrentStockOutWarehouseId = isset($lor_stock_out_warehouse_id) && (int) $lor_stock_out_warehouse_id > 0
+                                        ? (int) $lor_stock_out_warehouse_id
+                                        : (isset($row) ? shopeeOmsResolveStockOutWarehouseId($connect, $row, $lorDefaultWarehouseId) : $lorDefaultWarehouseId);
+                                    if ($lorCurrentStockOutWarehouseId <= 0 && !empty($lorWarehouseRows)) {
+                                        $lorCurrentStockOutWarehouseId = (int) $lorWarehouseRows[0]['id'];
+                                    }
+                                    $lorCurrentStockOutWarehouseName = shopeeOmsResolveWarehouseNameById($connect, $lorCurrentStockOutWarehouseId, $lorDefaultWarehouseId, $lorWarehouseNameMap);
+                                    $lorIsStockOutWarehouseEditableForForm = $act !== '' && ($act === 'I' || shopeeOmsIsStockOutWarehouseEditable(isset($row['order_status']) ? $row['order_status'] : ''));
+                                    ?>
+                                    <?php if ($lorIsStockOutWarehouseEditableForForm) { ?>
+                                        <select class="form-select" id="lor_stock_out_warehouse_id" name="lor_stock_out_warehouse_id">
+                                            <?php foreach ($lorWarehouseRows as $lorWarehouseRow) { ?>
+                                                <?php $lorWarehouseId = isset($lorWarehouseRow['id']) ? (int) $lorWarehouseRow['id'] : 0; ?>
+                                                <option value="<?= $lorWarehouseId ?>" <?= $lorCurrentStockOutWarehouseId === $lorWarehouseId ? 'selected' : '' ?>><?= htmlspecialchars((string) $lorWarehouseRow['name']) ?></option>
+                                            <?php } ?>
+                                        </select>
+                                    <?php } else { ?>
+                                        <input class="form-control" type="text" value="<?= htmlspecialchars($lorCurrentStockOutWarehouseName) ?>" readonly>
+                                        <input type="hidden" id="lor_stock_out_warehouse_id" name="lor_stock_out_warehouse_id" value="<?= (int) $lorCurrentStockOutWarehouseId ?>">
+                                    <?php } ?>
+                                    <?php if (isset($stock_out_warehouse_err)) { ?>
+                                        <div id="err_msg">
+                                            <span class="mt-n1"><?php echo $stock_out_warehouse_err; ?></span>
+                                        </div>
+                                    <?php } ?>
+                                </div>
+
+                                <div class="col-md-2 mb-3 shopee-airbill-toggle-col">
+                                    <?php
+                                    $lorHasSavedAirbillData = false;
+                                    if (isset($row['airbill_no']) && trim((string) $row['airbill_no']) !== '') {
+                                        $lorHasSavedAirbillData = true;
+                                    }
+                                    if (isset($row['airbill_attachment']) && trim((string) $row['airbill_attachment']) !== '') {
+                                        $lorHasSavedAirbillData = true;
+                                    }
+                                    $lorUpdateAirbillValue = isset($lor_update_airbill) && trim((string) $lor_update_airbill) !== ''
+                                        ? strtolower(trim((string) $lor_update_airbill))
+                                        : ($lorHasSavedAirbillData ? 'yes' : ($act === 'I' ? 'yes' : 'no'));
+                                    if ($lorUpdateAirbillValue !== 'yes' && $lorHasSavedAirbillData) {
+                                        $lorUpdateAirbillValue = 'yes';
+                                    } else if ($lorUpdateAirbillValue !== 'yes') {
+                                        $lorUpdateAirbillValue = 'no';
+                                    }
+                                    ?>
+                                    <input type="hidden" id="lor_update_airbill" name="lor_update_airbill" value="<?= htmlspecialchars($lorUpdateAirbillValue) ?>">
+                                    <label class="form-label form_lbl shopee-airbill-toggle-label" for="lor_update_airbill_toggle">Update Airbill?</label>
+                                    <div class="shopee-airbill-toggle-field">
+                                        <label class="shopee-airbill-toggle mb-0" for="lor_update_airbill_toggle">
+                                            <input type="checkbox" id="lor_update_airbill_toggle" <?= $lorUpdateAirbillValue === 'yes' ? 'checked' : '' ?> <?= $act == '' ? 'disabled' : '' ?>>
+                                            <span class="shopee-airbill-toggle-slider"></span>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label form_lbl" for="lor_airbill_no">Airbill No</label>
+                                    <input class="form-control" type="text" name="lor_airbill_no" id="lor_airbill_no" value="<?php
+                                    if (isset($lor_airbill_no)) {
+                                        echo htmlspecialchars($lor_airbill_no);
+                                    } else if (isset($row['airbill_no'])) {
+                                        echo htmlspecialchars((string) $row['airbill_no']);
+                                    }
+                                    ?>" <?php if ($act == '') echo 'disabled' ?>>
+                                    <?php if (isset($airbill_err)) { ?>
+                                        <div id="err_msg">
+                                            <span class="mt-n1"><?php echo $airbill_err; ?></span>
+                                        </div>
+                                    <?php } ?>
+                                </div>
+
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label form_lbl" for="lor_airbill_attachment">Airbill Attachment</label>
+                                    <input class="form-control" type="file" name="lor_airbill_attachment" id="lor_airbill_attachment" <?php if ($act == '') echo 'disabled' ?>>
+                                    <small id="lor_airbill_extract_status" class="shopee-airbill-extract-status"></small>
+                                    <?php
+                                    $lorCurrentAirbillAttachmentValue = isset($lor_airbill_attachment) && trim((string) $lor_airbill_attachment) !== ''
+                                        ? trim((string) $lor_airbill_attachment)
+                                        : (isset($row['airbill_attachment']) ? trim((string) $row['airbill_attachment']) : '');
+                                    $lorCurrentAirbillAttachmentUrl = $lorCurrentAirbillAttachmentValue !== '' ? shopeeOmsBuildAirbillAttachmentUrl($lorCurrentAirbillAttachmentValue) : '';
+                                    $lorCurrentAirbillAttachmentExt = $lorCurrentAirbillAttachmentUrl !== ''
+                                        ? strtolower(pathinfo((string) parse_url($lorCurrentAirbillAttachmentUrl, PHP_URL_PATH), PATHINFO_EXTENSION))
+                                        : '';
+                                    ?>
+                                    <?php if ($lorCurrentAirbillAttachmentValue !== '') { ?>
+                                        <div class="mt-2 small">
+                                            Current Attachment:
+                                            <?php if ($lorCurrentAirbillAttachmentUrl !== '') { ?>
+                                                <a href="<?= htmlspecialchars($lorCurrentAirbillAttachmentUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank"><?= htmlspecialchars($lorCurrentAirbillAttachmentValue) ?></a>
+                                            <?php } else { ?>
+                                                <span><?= htmlspecialchars($lorCurrentAirbillAttachmentValue) ?></span>
+                                            <?php } ?>
+                                        </div>
+                                    <?php } ?>
+                                    <input type="hidden" name="lor_airbill_attachment_value" id="lor_airbill_attachment_value" value="<?= htmlspecialchars($lorCurrentAirbillAttachmentValue, ENT_QUOTES, 'UTF-8') ?>">
+                                    <?php if (isset($airbill_attachment_err)) { ?>
+                                        <div id="err_msg">
+                                            <span class="mt-n1"><?php echo $airbill_attachment_err; ?></span>
+                                        </div>
+                                    <?php } ?>
+                                </div>
+
+                                <div class="col-md-6 mb-3 d-flex justify-content-center justify-content-md-end">
+                                    <?php if ($lorCurrentAirbillAttachmentUrl !== '') { ?>
+                                        <div id="lor_airbill_attachment_preview_wrap" class="shopee-airbill-preview-media">
+                                            <?php if (in_array($lorCurrentAirbillAttachmentExt, array('png', 'jpg', 'jpeg', 'webp', 'gif', 'svg'), true)) { ?>
+                                                <img src="<?= htmlspecialchars($lorCurrentAirbillAttachmentUrl, ENT_QUOTES, 'UTF-8') ?>" alt="Airbill Attachment Preview">
+                                            <?php } else if ($lorCurrentAirbillAttachmentExt === 'pdf') { ?>
+                                                <iframe src="<?= htmlspecialchars($lorCurrentAirbillAttachmentUrl, ENT_QUOTES, 'UTF-8') ?>" title="Airbill Attachment Preview"></iframe>
+                                            <?php } ?>
+                                        </div>
+                                    <?php } else { ?>
+                                        <div id="lor_airbill_attachment_preview_wrap" class="shopee-airbill-preview-media" style="display:none;"></div>
+                                    <?php } ?>
+                                </div>
+                            </div>
+                        </div>
                     </fieldset>
 
                     <fieldset class="border p-2 mb-3" style="border-radius: 3px;">
@@ -1326,6 +1830,13 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                                 echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="updRequest">Edit Request</button>';
                                 break;
                         }
+                        if ($act === 'E' && isset($row['order_status'])) {
+                            $statusCode = shopeeOmsNormalizeStatusCode($row['order_status']);
+                            $canMoveToPack = shopeeOmsHasTransitionPermission($connect, $statusCode, 'TP', USER_GROUP, $row, USER_ID);
+                            if ($statusCode === 'P' && $canMoveToPack) {
+                                echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" value="TP" formnovalidate>MOVE TO TO PACK</button>';
+                            }
+                        }
                         ?>
                         <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn"
                             id="actionBtn" value="back">Back</button>
@@ -1349,6 +1860,8 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
     }
     ?>
     <script>
+        <?php echo shopeeOmsRenderAirbillPdfAutofillScript(); ?>
+        <?php echo shopeeOmsRenderAirbillAttachmentPreviewScript(); ?>
 
         var page = "<?= $pageTitle ?>";
         var action = "<?php echo isset($act) ? $act : ' '; ?>";
@@ -1360,6 +1873,125 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
         <?php
         include "./js/lazada_order_req.js"
             ?>
+
+        document.addEventListener('DOMContentLoaded', function () {
+            function toggleLazadaAirbillFields() {
+                var updateAirbill = document.getElementById('lor_update_airbill');
+                var updateAirbillToggle = document.getElementById('lor_update_airbill_toggle');
+                var airbillNo = document.getElementById('lor_airbill_no');
+                var airbillAttachment = document.getElementById('lor_airbill_attachment');
+                var existingAttachment = document.getElementById('lor_airbill_attachment_value');
+                if (!updateAirbill || !updateAirbillToggle || !airbillNo || !airbillAttachment) {
+                    return;
+                }
+
+                updateAirbill.value = updateAirbillToggle.checked ? 'yes' : 'no';
+                var enabled = updateAirbillToggle.checked;
+                var readOnlyMode = "<?= $act ?>" === '';
+                airbillNo.disabled = readOnlyMode || !enabled;
+                airbillAttachment.disabled = readOnlyMode || !enabled;
+                airbillNo.required = enabled;
+                airbillAttachment.required = enabled && (!existingAttachment || existingAttachment.value.trim() === '');
+            }
+
+            var lazadaNewCustomerSection = document.getElementById('new_customer_section');
+            var lazadaNewCustomerSubmitBtn = document.getElementById('lazada_new_customer_submit_btn');
+            var lazadaNewCustomerForm = lazadaNewCustomerSection ? lazadaNewCustomerSection.closest('form') : null;
+            var lazadaNewCustomerFields = lazadaNewCustomerSection
+                ? lazadaNewCustomerSection.querySelectorAll('[data-new-customer-required="1"]')
+                : [];
+
+            function clearNewCustomerInlineError(field) {
+                if (!field) {
+                    return;
+                }
+                field.classList.remove('shopee-inline-invalid');
+                var wrapper = field.parentElement;
+                if (!wrapper) {
+                    return;
+                }
+                wrapper.querySelectorAll('.shopee-inline-error').forEach(function (node) {
+                    node.remove();
+                });
+            }
+
+            function showNewCustomerInlineError(field, message) {
+                if (!field) {
+                    return;
+                }
+                clearNewCustomerInlineError(field);
+                field.classList.add('shopee-inline-invalid');
+                var errorNode = document.createElement('small');
+                errorNode.className = 'shopee-inline-error';
+                errorNode.textContent = message;
+                field.parentElement.appendChild(errorNode);
+            }
+
+            function validateLazadaNewCustomerForm() {
+                var firstInvalidField = null;
+                Array.prototype.forEach.call(lazadaNewCustomerFields, function (field) {
+                    clearNewCustomerInlineError(field);
+                    if (field.disabled) {
+                        return;
+                    }
+                    if (field.value.trim() === '') {
+                        showNewCustomerInlineError(field, 'This field is required.');
+                        if (!firstInvalidField) {
+                            firstInvalidField = field;
+                        }
+                    }
+                });
+
+                if (firstInvalidField) {
+                    firstInvalidField.focus();
+                    return false;
+                }
+
+                return true;
+            }
+
+            Array.prototype.forEach.call(lazadaNewCustomerFields, function (field) {
+                field.addEventListener('input', function () {
+                    if (field.value.trim() !== '') {
+                        clearNewCustomerInlineError(field);
+                    }
+                });
+            });
+
+            if (lazadaNewCustomerSubmitBtn) {
+                lazadaNewCustomerSubmitBtn.addEventListener('click', function () {
+                    if (!validateLazadaNewCustomerForm() || !lazadaNewCustomerForm) {
+                        return;
+                    }
+                    HTMLFormElement.prototype.submit.call(lazadaNewCustomerForm);
+                });
+            }
+
+            if (window.shopeeOmsAirbillAttachmentPreview) {
+                window.shopeeOmsAirbillAttachmentPreview.bind({
+                    fileInputSelector: '#lor_airbill_attachment',
+                    previewWrapSelector: '#lor_airbill_attachment_preview_wrap'
+                });
+            }
+
+            if (window.shopeeOmsAirbillPdfAutofill) {
+                window.shopeeOmsAirbillPdfAutofill.bind({
+                    fileInputSelector: '#lor_airbill_attachment',
+                    airbillNoSelector: '#lor_airbill_no',
+                    customerAddressSelector: '#lor_ship_rec_address',
+                    statusSelector: '#lor_airbill_extract_status',
+                    workerSrc: 'finance/header/js/pdf.worker.min.js',
+                    errorClass: 'is-error'
+                });
+            }
+
+            toggleLazadaAirbillFields();
+
+            var lazadaUpdateAirbillToggle = document.getElementById('lor_update_airbill_toggle');
+            if (lazadaUpdateAirbillToggle) {
+                lazadaUpdateAirbillToggle.addEventListener('change', toggleLazadaAirbillFields);
+            }
+        });
     </script>
 
 </body>

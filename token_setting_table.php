@@ -113,7 +113,7 @@ if (!$result) {
                                         <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], '', $pageTitle, $redirect_page, $deleteRedirectPage); ?>
                                     </td>
                                     <td scope="row"><?= htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') ?></td>
-                                    <td scope="row"><?= htmlspecialchars((string) (isset($row['page_used']) ? $row['page_used'] : ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?= htmlspecialchars((string) (function_exists('shopeeOmsGetTokenSettingPageDisplayText') ? shopeeOmsGetTokenSettingPageDisplayText(isset($row['page_used']) ? $row['page_used'] : '') : (isset($row['page_used']) ? $row['page_used'] : '')), ENT_QUOTES, 'UTF-8') ?></td>
                                 </tr>
                             <?php }
                             } ?>

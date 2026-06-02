@@ -14,6 +14,7 @@ $num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/finance/curr_bank_trans.php';
 $result = getData('*', '', '', CURR_BANK_TRANS, $finance_connect);
+$hasRows = $result instanceof mysqli_result && $result->num_rows > 0;
 ?>
 
 <!DOCTYPE html>
@@ -27,7 +28,9 @@ $result = getData('*', '', '', CURR_BANK_TRANS, $finance_connect);
     preloader(300);
 
     $(document).ready(() => {
-        createSortingTable('curr_bank_trans_table');
+        if ($('#curr_bank_trans_table').length) {
+            createSortingTable('curr_bank_trans_table');
+        }
     });
 </script>
 <style>
@@ -67,6 +70,7 @@ $result = getData('*', '', '', CURR_BANK_TRANS, $finance_connect);
                     </div>
                 </div>
 
+                <?php if ($hasRows) { ?>
                 <table class="table table-striped" id="curr_bank_trans_table">
                     <thead>
                         <tr>
@@ -90,10 +94,10 @@ $result = getData('*', '', '', CURR_BANK_TRANS, $finance_connect);
                         <?php while ($row = $result->fetch_assoc()) {
                             if (isset($row['transactionID'], $row['id']) && !empty($row['transactionID'])) {
                                 $curr_unit = getData('unit', "id='" . $row['currency'] . "'", '', CUR_UNIT, $connect);
-                                $row2 = $curr_unit->fetch_assoc();
+                                $row2 = $curr_unit instanceof mysqli_result ? $curr_unit->fetch_assoc() : array();
 
                                 $bank = getData('name', "id='" . $row['bank'] . "'", '', BANK, $connect);
-                                $row3 = $bank->fetch_assoc();
+                                $row3 = $bank instanceof mysqli_result ? $bank->fetch_assoc() : array();
                         ?>
 
                                 <tr>
@@ -139,6 +143,9 @@ $result = getData('*', '', '', CURR_BANK_TRANS, $finance_connect);
                         </tr>
                     </tfoot>
                 </table>
+                <?php } else { ?>
+                    <div class="text-center"><h4>No Result!</h4></div>
+                <?php } ?>
             </div>
         </div>
     </div>
@@ -152,7 +159,9 @@ $result = getData('*', '', '', CURR_BANK_TRANS, $finance_connect);
     /* function(void) : to solve the issue of dropdown menu displaying inside the table when table class include table-responsive */
     dropdownMenuDispFix();
     /* function(id): to resize table with bootstrap 5 classes */
-    datatableAlignment('curr_bank_trans_table');
+    if ($('#curr_bank_trans_table').length) {
+        datatableAlignment('curr_bank_trans_table');
+    }
     setButtonColor();
 </script>
 

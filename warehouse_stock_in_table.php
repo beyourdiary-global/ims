@@ -79,7 +79,7 @@ if (!function_exists('siFetchAssocRows')) {
             return array();
         }
 
-        $where = "WHERE o.status='A' AND i.status='A'";
+        $where = "WHERE o.status='A' AND i.status='A' AND COALESCE(NULLIF(TRIM(o.stock_type), ''), 'Stock In') <> 'Stock Out'";
         if (!empty($selectedOrderIds)) {
             $ids = array_filter(array_map('intval', $selectedOrderIds), function ($v) {
                 return $v > 0;
@@ -460,7 +460,7 @@ if ((post('act') === 'D' && post('id')) || (input('act') === 'D' && (input('orde
     exit;
 }
 
-$listRows = siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTable);
+$listRows = siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTable, 'Stock In');
 $groupedRows = array();
 foreach ($listRows as $row) {
     $orderId = (int) $row['order_id'];
@@ -472,16 +472,15 @@ foreach ($listRows as $row) {
             'stock_in_date' => (string) $row['stock_in_date'],
             'order_number' => (string) $row['order_number'],
             'stock_type' => isset($row['stock_type']) ? (string) $row['stock_type'] : 'Stock In',
-            'product_names' => array(),
-            'product_quantities' => array(),
+            'items' => array(),
         );
     }
 
-    $productName = isset($productNameMap[(int) $row['product_id']]) ? $productNameMap[(int) $row['product_id']] : '';
-    if ($productName !== '') {
-        $groupedRows[$orderId]['product_names'][] = $productName;
-    }
-    $groupedRows[$orderId]['product_quantities'][] = (string) ((int) $row['product_quantity']);
+    $groupedRows[$orderId]['items'][] = array(
+        'product_id' => (int) $row['product_id'],
+        'package_id' => (int) $row['package_id'],
+        'qty' => (int) $row['product_quantity'],
+    );
 }
 ?>
 <!DOCTYPE html>
@@ -523,6 +522,7 @@ foreach ($listRows as $row) {
                 <script>alert(<?= json_encode($err) ?>);</script>
             <?php } ?>
 
+            <?php if (!empty($groupedRows)) { ?>
             <div class="table-responsive">
                 <table class="table table-striped" id="stockInListTable">
                     <thead>
@@ -532,18 +532,15 @@ foreach ($listRows as $row) {
                             <th scope="col" width="60px">S/N</th>
                             <th scope="col" width="100px">Action</th>
                             <th scope="col">Warehouse</th>
-                            <th scope="col">Product Name</th>
-                            <th scope="col">Product Quantity</th>
-                            <th scope="col">Stock Type</th>
-                            <th scope="col">Stock In / Stock Out Date</th>
+                            <th scope="col">Product + Quantity</th>
+                            <th scope="col">Stock In Date</th>
                             <th scope="col">Order Number</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php $sn = 1; foreach ($groupedRows as $row) {
                             $warehouseName = isset($warehouseNameMap[(int) $row['warehouse_id']]) ? $warehouseNameMap[(int) $row['warehouse_id']] : '';
-                            $productName = implode(', ', $row['product_names']);
-                            $productQty = implode(', ', $row['product_quantities']);
+                            $productLines = siBuildProductQtyLines(isset($row['items']) ? $row['items'] : array(), $productNameMap);
                         ?>
                             <tr>
                                 <td class="hideColumn"><?= (int) $row['order_id'] ?></td>
@@ -557,13 +554,15 @@ foreach ($listRows as $row) {
                                         <a class="btn btn-sm btn-rounded btn-warning" href="<?= $formPage ?>?act=E&order_id=<?= (int) $row['order_id'] ?>" title="Edit"><i class="fa-solid fa-pen-to-square"></i></a>
                                     <?php } ?>
                                     <?php if (isActionAllowed('Delete', $pinAccess)) { ?>
-                                        <a class="btn btn-sm btn-rounded btn-danger" onclick="confirmationDialog('<?= (int) $row['order_id'] ?>',['<?= siEsc($row['order_number']) ?>','<?= siEsc($productName) ?>'],'<?= siEsc($pageTitle) ?>','<?= $formPage ?>?act=D','<?= $tablePage ?>','D')" title="Delete"><i class="fa-solid fa-trash"></i></a>
+                                        <a class="btn btn-sm btn-rounded btn-danger" onclick="confirmationDialog('<?= (int) $row['order_id'] ?>',['<?= siEsc($row['order_number']) ?>','<?= siEsc(implode(', ', $productLines)) ?>'],'<?= siEsc($pageTitle) ?>','<?= $formPage ?>?act=D','<?= $tablePage ?>','D')" title="Delete"><i class="fa-solid fa-trash"></i></a>
                                     <?php } ?>
                                 </td>
                                 <td><?= siEsc($warehouseName) ?></td>
-                                <td><?= siEsc($productName) ?></td>
-                                <td><?= siEsc($productQty) ?></td>
-                                <td><?= siEsc($row['stock_type']) ?></td>
+                                <td>
+                                    <?php foreach ($productLines as $line) { ?>
+                                        <div><?= siEsc($line) ?></div>
+                                    <?php } ?>
+                                </td>
                                 <td><?= siEsc($row['stock_in_date']) ?></td>
                                 <td><?= siEsc($row['order_number']) ?></td>
                             </tr>
@@ -576,15 +575,16 @@ foreach ($listRows as $row) {
                             <th scope="col" width="60px">S/N</th>
                             <th scope="col" id="action_col" width="100px">Action</th>
                             <th scope="col">Warehouse</th>
-                            <th scope="col">Product Name</th>
-                            <th scope="col">Product Quantity</th>
-                            <th scope="col">Stock Type</th>
-                            <th scope="col">Stock In / Stock Out Date</th>
+                            <th scope="col">Product + Quantity</th>
+                            <th scope="col">Stock In Date</th>
                             <th scope="col">Order Number</th>
                         </tr>
                     </tfoot>
                 </table>
             </div>
+            <?php } else { ?>
+                <div class="text-center"><h4>No records found</h4></div>
+            <?php } ?>
         </div>
     </div>
 </div>
@@ -595,14 +595,16 @@ foreach ($listRows as $row) {
     checkCurrentPage(page, action);
     dropdownMenuDispFix();
     // Bypass the custom wrapper and initialize DataTables directly so options apply correctly
-    $('#stockInListTable').DataTable({
-        "order": [[8, 'desc']], // Stock In Date descending
-        "columnDefs": [
-            { "orderable": false, "targets": [1, 3] } // checkbox, action columns
-        ],
-        "autoWidth": false
-    });
-    datatableAlignment('stockInListTable');
+    if ($('#stockInListTable').length) {
+        $('#stockInListTable').DataTable({
+            "order": [[6, 'desc']],
+            "columnDefs": [
+                { "orderable": false, "targets": [1, 3] }
+            ],
+            "autoWidth": false
+        });
+        datatableAlignment('stockInListTable');
+    }
     setButtonColor();
     preloader(300);
 </script>

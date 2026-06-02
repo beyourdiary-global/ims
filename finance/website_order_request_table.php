@@ -17,6 +17,14 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
+$currentTablePath = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+$currentTableQuery = $_GET;
+unset($currentTableQuery['verify_id'], $currentTableQuery['complete_id']);
+$currentTableRedirect = $currentTablePath !== '' ? $currentTablePath : '/finance/website_order_request_table.php';
+if (!empty($currentTableQuery)) {
+    $currentTableRedirect .= '?' . http_build_query($currentTableQuery);
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceivedDateBtn')) {
     $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
@@ -61,6 +69,95 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceiv
     }
 
     echo "<script>alert('" . addslashes($assignmentResult['message']) . "'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+    exit;
+}
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('moveToPackBtn')) {
+    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
+        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+        exit;
+    }
+
+    $moveOrderId = (int) postSpaceFilter('move_to_pack_order_id');
+    $moveToPackResult = shopeeOmsExecuteTransition($connect, $finance_connect, $moveOrderId, 'TP', array(
+        'actor_user_id' => USER_ID,
+        'actor_user_group_id' => USER_GROUP,
+        'source_page' => $pageTitle,
+        'remark' => 'Moved to To Pack from Website order request table.',
+        'action' => 'move_to_pack',
+        'platform' => 'website',
+    ));
+
+    echo "<script>alert('" . addslashes(isset($moveToPackResult['message']) ? $moveToPackResult['message'] : 'Unable to move order to To Pack.') . "'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
+    exit;
+}
+
+if (isset($_GET['verify_id'])) {
+    $orderId = (int) $_GET['verify_id'];
+    $verifyResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'V', array(
+        'actor_user_id' => USER_ID,
+        'actor_user_group_id' => USER_GROUP,
+        'source_page' => $pageTitle,
+        'remark' => 'Verified from Website order request table.',
+        'platform' => 'website',
+    ));
+    echo "<script>alert('" . addslashes(isset($verifyResult['message']) ? $verifyResult['message'] : 'Unable to verify order.') . "'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
+    exit;
+}
+
+if (isset($_GET['complete_id'])) {
+    $orderId = (int) $_GET['complete_id'];
+    $completeResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'C', array(
+        'actor_user_id' => USER_ID,
+        'actor_user_group_id' => USER_GROUP,
+        'source_page' => $pageTitle,
+        'remark' => 'Completed from Website order request table.',
+        'platform' => 'website',
+    ));
+    echo "<script>alert('" . addslashes(isset($completeResult['message']) ? $completeResult['message'] : 'Unable to complete order.') . "'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
+    exit;
+}
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['force_wafc_id'])) {
+    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
+        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
+        exit;
+    }
+
+    $orderId = (int) $_POST['force_wafc_id'];
+    $wafcResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'WAFC', array(
+        'actor_user_id' => USER_ID,
+        'actor_user_group_id' => USER_GROUP,
+        'source_page' => $pageTitle,
+        'remark' => 'Moved to Waiting Admin Final Check without waiting 14 days.',
+        'action' => 'manual_force_wafc',
+        'skip_permission' => true,
+        'allow_auto_follow_up' => false,
+        'platform' => 'website',
+    ));
+    echo "<script>alert('" . addslashes(isset($wafcResult['message']) ? $wafcResult['message'] : 'Unable to move order to WAFC.') . "'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
+    exit;
+}
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['return_id'])) {
+    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
+        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
+        exit;
+    }
+
+    $orderId = (int) $_POST['return_id'];
+    $returnResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'R', array(
+        'actor_user_id' => USER_ID,
+        'actor_user_group_id' => USER_GROUP,
+        'source_page' => $pageTitle,
+        'remark' => 'Marked as Return from Website order request table.',
+        'action' => 'mark_return',
+        'platform' => 'website',
+    ));
+    echo "<script>alert('" . addslashes(isset($returnResult['message']) ? $returnResult['message'] : 'Unable to mark order as Return.') . "'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
     exit;
 }
 
@@ -298,15 +395,61 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
                                             <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
                                             <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
                                             <?php renderDeleteButton($pinAccess, $row['id'], $row['order_id'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
-                                            <?php if (shouldShowEstimatedReceivedDateButton($row) && $canAssignEstimatedReceivedDate) { ?>
+                                            <?php
+                                            $statusCode = shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '');
+                                            $canAssignThisOrder = $canAssignEstimatedReceivedDate && shopeeOmsPassesAssignmentScope($connect, $row, USER_ID, USER_GROUP);
+                                            $canMoveToPackThisOrder = shopeeOmsHasTransitionPermission($connect, $statusCode, 'TP', USER_GROUP, $row, USER_ID);
+                                            $canVerifyThisOrder = shopeeOmsHasTransitionPermission($connect, $statusCode, 'V', USER_GROUP, $row, USER_ID);
+                                            $canCompleteThisOrder = shopeeOmsHasTransitionPermission($connect, $statusCode, 'C', USER_GROUP, $row, USER_ID);
+                                            $estimatedDateRange = function_exists('shopeeOmsGetEstimatedReceivedDateRange')
+                                                ? shopeeOmsGetEstimatedReceivedDateRange($row)
+                                                : array('min_date' => $estimatedDateMin, 'max_date' => $estimatedDateMax);
+                                            $verifyQuery = $currentTableQuery;
+                                            $verifyQuery['verify_id'] = (int) $row['id'];
+                                            $completeQuery = $currentTableQuery;
+                                            $completeQuery['complete_id'] = (int) $row['id'];
+                                            $verifyActionUrl = $currentTablePath . '?' . http_build_query($verifyQuery);
+                                            $completeActionUrl = $currentTablePath . '?' . http_build_query($completeQuery);
+                                            ?>
+                                            <?php if ($statusCode === 'P' && $canMoveToPackThisOrder) { ?>
+                                                <form method="post" class="d-inline me-1" onsubmit="return confirm('Move this order to To Pack?')">
+                                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
+                                                    <input type="hidden" name="move_to_pack_order_id" value="<?= (int) $row['id'] ?>">
+                                                    <button type="submit" class="btn btn-sm btn-rounded btn-info" name="moveToPackBtn" value="1" title="Move to To Pack"><i class="fas fa-box-open"></i></button>
+                                                </form>
+                                            <?php } ?>
+                                            <?php if ($statusCode === 'TP') { ?>
+                                                <a class="btn btn-sm btn-rounded btn-primary me-1" href="<?= htmlspecialchars((string) shopeeOmsGetOrderSourceViewUrl('website', (int) $row['id']), ENT_QUOTES, 'UTF-8') ?>" title="View Order"><i class="fa-solid fa-qrcode"></i></a>
+                                            <?php } ?>
+                                            <?php if (shouldShowEstimatedReceivedDateButton($row) && $canAssignThisOrder) { ?>
                                                 <button
                                                     type="button"
                                                     class="btn btn-sm btn-warning btn-assign-estimated-date"
                                                     data-order-id="<?= (int) $row['id'] ?>"
                                                     data-order-code="<?= htmlspecialchars((string) (isset($row['order_id']) ? $row['order_id'] : ('Website Order #' . (int) $row['id'])), ENT_QUOTES, 'UTF-8') ?>"
-                                                    data-min-date="<?= $estimatedDateMin ?>"
-                                                    data-max-date="<?= $estimatedDateMax ?>"
+                                                    data-min-date="<?= htmlspecialchars((string) $estimatedDateRange['min_date'], ENT_QUOTES, 'UTF-8') ?>"
+                                                    data-max-date="<?= htmlspecialchars((string) $estimatedDateRange['max_date'], ENT_QUOTES, 'UTF-8') ?>"
                                                     title="Assign Estimate Received Date"><i class="fa-solid fa-calendar-days"></i></button>
+                                            <?php } ?>
+                                            <?php if ($statusCode === 'WAFC' && $canVerifyThisOrder) { ?>
+                                                <a href="<?= htmlspecialchars((string) $verifyActionUrl, ENT_QUOTES, 'UTF-8') ?>" class="btn btn-sm btn-success btn-verified" onclick="return confirm('Mark this order as verified?')">Verified</a>
+                                            <?php } ?>
+                                            <?php if ($statusCode === 'V' && $canCompleteThisOrder) { ?>
+                                                <a href="<?= htmlspecialchars((string) $completeActionUrl, ENT_QUOTES, 'UTF-8') ?>" class="btn btn-sm btn-dark btn-verified" onclick="return confirm('Mark this order as complete?')">Complete</a>
+                                            <?php } ?>
+                                            <?php if (in_array($statusCode, array('SP', 'WAERD', 'WR', 'PD', 'PR', 'WAFC', 'V', 'C'), true)) { ?>
+                                                <?php if ($statusCode === 'PR') { ?>
+                                                    <form method="post" class="d-inline" onsubmit="return confirm('Move this order to Waiting Admin Final Check now without waiting 14 days?')">
+                                                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
+                                                        <input type="hidden" name="force_wafc_id" value="<?= (int) $row['id'] ?>">
+                                                        <button type="submit" class="btn btn-sm btn-rounded btn-info" title="Move to WAFC Now"><i class="fas fa-forward"></i></button>
+                                                    </form>
+                                                <?php } ?>
+                                                <form method="post" class="d-inline" onsubmit="return confirm('Mark this order as Return?')">
+                                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
+                                                    <input type="hidden" name="return_id" value="<?= (int) $row['id'] ?>">
+                                                    <button type="submit" class="btn btn-sm btn-rounded btn-warning" title="Mark as Return"><i class="fa-solid fa-rotate-left"></i></button>
+                                                </form>
                                             <?php } ?>
                                         </div>
                                     </td>
