@@ -138,7 +138,6 @@ if ($actionBtn === 'confirmImport') {
         if (!is_array($postedRows) || count($postedRows) === 0) {
             $importErrors[] = 'No import preview to confirm.';
         } else {
-            siEnsureStockTypeColumn($finance_connect, $stockInOrderTable);
             $currentRows = siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTable);
             $currentByItemId = array();
             foreach ($currentRows as $r) {

@@ -570,15 +570,6 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
 $stockInOrderTable = 'stock_in_order';
 $stockInItemTable = 'stock_in_order_item';
 
-if (!function_exists('scanAttachmentDirRel')) {
-    function scanAttachmentDirRel()
-    {
-        $base = defined('img_server') ? (string) constant('img_server') : '/images_server/';
-        $base = '/' . trim($base, '/');
-        return $base . '/finance/stock_in/';
-    }
-}
-
 if (!function_exists('scanAttachmentDirAbs')) {
     function scanAttachmentDirAbs()
     {
@@ -838,10 +829,6 @@ if (!function_exists('scanSaveOrderSecure')) {
 
         if ($actor === '') {
             $actor = 'QR_PUBLIC';
-        }
-
-        if (!siEnsureStockTypeColumn($db, $orderTable)) {
-            return array(false, 'Failed to prepare stock type column.', 0, false);
         }
 
         mysqli_begin_transaction($db);
