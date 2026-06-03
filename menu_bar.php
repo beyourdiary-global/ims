@@ -205,13 +205,6 @@ if (in_array('130', GlobalPin)) {
     $userShopeeLink = $SITEURL . '/shopee/shopee_processing_order.php';
 }
 
-$shopeeOrderMenuItems = array(
-    array('Shopee Order', 'mdi mdi-cart', $userShopeeLink, $userShopeePin),
-    array('Shopee Waiting To Pack', 'mdi mdi-package-variant-closed', $SITEURL . '/shopee/shopee_waiting_to_pack.php', '146'),
-    array('Shopee Arrival Management', 'mdi mdi-truck-delivery-outline', $SITEURL . '/shopee/shopee_arrival_management.php', '147'),
-    array('Shopee Daily Flow Report', 'mdi mdi-chart-box-outline', $SITEURL . '/shopee/shopee_flow_report.php', '148'),
-);
-
 include_once ROOT . '/task/common_task.php';
 
 $hasTaskSummaryAccess = taskIsActionAllowed('view', taskGetPinAccessByGroupId($connect, 137));
@@ -253,6 +246,7 @@ $menuList = array(
             array('Facebook Customer', 'mdi mdi-deal-outline', $SITEURL . '/fb_cust_deals_table.php', '75'),
             array('Website Customer', 'mdi mdi-deal-outline', $SITEURL . '/website_customer_record_table.php', '84'),
             array('Whatsapp Customer', 'mdi mdi-deal-outline', $SITEURL . '/customerInfoTable.php', '38'),
+            array('Customer Daily Report', 'mdi mdi-file-chart-outline', $SITEURL . '/customer_daily_report.php', '150'),
             array(
                 'Setting',
                 'mdi mdi-cog',
@@ -268,17 +262,21 @@ $menuList = array(
                 'pin' => array('29', '142', '143', '144', '35'),
             ),
         ),
-        'pin' => array('85', '91', '75', '84', '38', '29', '142', '143', '144', '35')
+        'pin' => array('85', '91', '75', '84', '38', '150', '29', '142', '143', '144', '35')
     ),
     array(
         'Order',
         'mdi mdi-cart-outline',
         'javascript:void(0)',
         'y',
-        'expand' => array_merge($shopeeOrderMenuItems, array(
+        'expand' => array(
+            array('Shopee Order', 'mdi mdi-cart', $userShopeeLink, $userShopeePin),
             array('Lazada Order', 'mdi mdi-note-text-outline', $SITEURL . '/lazada_order_req_table.php', '93'),
             array('Facebook Order', 'mdi mdi-note-text-outline', $SITEURL . '/finance/fb_order_req_table.php', '69'),
             array('Website Order', 'mdi mdi-note-text-outline', $SITEURL . '/finance/website_order_request_table.php', '92'),
+            array('Waiting To Pack', 'mdi mdi-package-variant-closed', $SITEURL . '/finance/waiting_to_pack.php', '146'),
+            array('Arrival Management', 'mdi mdi-truck-delivery-outline', $SITEURL . '/finance/arrival_management.php', '147'),
+            array('Daily Flow Report', 'mdi mdi-chart-box-outline', $SITEURL . '/finance/flow_report.php', '148'),
             array(
                 'Setting',
                 'mdi mdi-cog',
@@ -290,11 +288,11 @@ $menuList = array(
                     array('Shopee SG Setting', 'mdi mdi-contactless-payment-circle', $SITEURL . '/shopee/shopee_sg_setting_table.php', '82'),
                     array('Shopee Service Charges Rate Setting', 'mdi storefront-outline', $SITEURL . '/shopee/shopee_service_charges_rate_setting_table.php', '83'),
                 ), ((int) USER_GROUP === 1 ? array(
-                    array('Shopee Flow Setting', 'mdi mdi-cog-outline', $SITEURL . '/shopee/shopee_flow_setting.php', '149'),
+                    array('Flow Setting', 'mdi mdi-cog-outline', $SITEURL . '/finance/flow_setting.php', '149'),
                 ) : array())),
                 'pin' => array('58', '80', '82', '83', '149'),
             ),
-        )),
+        ),
         'pin' => array('128', '129', '130', '146', '147', '148', '149', '93', '69', '92', '58', '80', '82', '83')
     ),
     array(

@@ -12,6 +12,9 @@ $tokenSettingPageOptions = function_exists('shopeeOmsGetTokenSettingPageOptions'
     : array(
         'Shopee Order Request' => 'Shopee Order Request',
         'Stock Order Request' => 'Stock Order Request',
+        'Lazada Order Request' => 'Lazada Order Request',
+        'Facebook Order Request' => 'Facebook Order Request',
+        'Website Order Request' => 'Website Order Request',
     );
 
 if (function_exists('isStatusFieldAvailable') && !isStatusFieldAvailable($tblName, $connect)) {
@@ -22,8 +25,15 @@ $tokenSettingPageUsedAvailable = false;
 $pageUsedColumnRst = @mysqli_query($connect, "SHOW COLUMNS FROM `" . $tblName . "` LIKE 'page_used'");
 if ($pageUsedColumnRst instanceof mysqli_result && $pageUsedColumnRst->num_rows > 0) {
     $tokenSettingPageUsedAvailable = true;
+    $pageUsedColumnRow = $pageUsedColumnRst->fetch_assoc();
+    $pageUsedColumnType = isset($pageUsedColumnRow['Type']) ? strtolower((string) $pageUsedColumnRow['Type']) : '';
+    if ($pageUsedColumnType !== '' && strpos($pageUsedColumnType, 'varchar(') === 0 && preg_match('/varchar\((\d+)\)/', $pageUsedColumnType, $pageUsedLengthMatches)) {
+        if ((int) $pageUsedLengthMatches[1] < 255) {
+            @mysqli_query($connect, "ALTER TABLE `" . $tblName . "` MODIFY COLUMN `page_used` VARCHAR(255) NOT NULL DEFAULT ''");
+        }
+    }
 } else {
-    @mysqli_query($connect, "ALTER TABLE `" . $tblName . "` ADD COLUMN `page_used` VARCHAR(100) NOT NULL DEFAULT ''");
+    @mysqli_query($connect, "ALTER TABLE `" . $tblName . "` ADD COLUMN `page_used` VARCHAR(255) NOT NULL DEFAULT ''");
     $pageUsedColumnRst = @mysqli_query($connect, "SHOW COLUMNS FROM `" . $tblName . "` LIKE 'page_used'");
     $tokenSettingPageUsedAvailable = $pageUsedColumnRst instanceof mysqli_result && $pageUsedColumnRst->num_rows > 0;
 }
@@ -104,7 +114,17 @@ if (post('actionBtn')) {
         case 'updData':
             $pageUsedErr = '';
             $currentDataName = postSpaceFilter('currentDataName');
-            $pageUsed = trim((string) postSpaceFilter('pageUsed'));
+            $pageUsedValues = isset($_POST['pageUsed']) ? $_POST['pageUsed'] : array();
+            if (!is_array($pageUsedValues)) {
+                $pageUsedValues = array($pageUsedValues);
+            }
+            $pageUsedSelections = function_exists('shopeeOmsNormalizeTokenSettingPageValues')
+                ? shopeeOmsNormalizeTokenSettingPageValues($pageUsedValues, $tokenSettingPageOptions)
+                : array_values(array_unique(array_map('trim', $pageUsedValues)));
+            $pageUsed = implode(',', $pageUsedSelections);
+            $pageUsedDisplay = function_exists('shopeeOmsGetTokenSettingPageDisplayText')
+                ? shopeeOmsGetTokenSettingPageDisplayText($pageUsedSelections)
+                : implode(', ', $pageUsedSelections);
             $botToken = postSpaceFilter('botToken');
             $chatId = postSpaceFilter('chatId');
             $remark = postSpaceFilter('remark');
@@ -115,7 +135,7 @@ if (post('actionBtn')) {
                 break;
             }
 
-            if ($pageUsed === '') {
+            if (empty($pageUsedSelections)) {
                 $pageUsedErr = 'Page Used is required.';
                 break;
             }
@@ -137,8 +157,22 @@ if (post('actionBtn')) {
             }
 
             $safePageUsed = mysqli_real_escape_string($connect, $pageUsed);
-            if (isDuplicateRecord('page_used', $pageUsed, $tblName, $connect, $dataID)) {
-                $pageUsedErr = 'Duplicate record found for selected Page Used.';
+            $pageUsedConflicts = function_exists('shopeeOmsFindTokenSettingPageConflicts')
+                ? shopeeOmsFindTokenSettingPageConflicts($connect, $pageUsedSelections, $dataID)
+                : array();
+            if (!empty($pageUsedConflicts)) {
+                $conflictPages = array();
+                foreach ($pageUsedConflicts as $pageUsedConflict) {
+                    if (isset($pageUsedConflict['pages']) && is_array($pageUsedConflict['pages'])) {
+                        $conflictPages = array_merge($conflictPages, $pageUsedConflict['pages']);
+                    }
+                }
+                $conflictPages = function_exists('shopeeOmsNormalizeTokenSettingPageValues')
+                    ? shopeeOmsNormalizeTokenSettingPageValues($conflictPages, $tokenSettingPageOptions)
+                    : array_values(array_unique($conflictPages));
+                $pageUsedErr = 'These pages are already assigned to another active token: ' . (function_exists('shopeeOmsGetTokenSettingPageDisplayText')
+                    ? shopeeOmsGetTokenSettingPageDisplayText($conflictPages)
+                    : implode(', ', $conflictPages)) . '.';
                 break;
             }
 
@@ -147,7 +181,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     $newvalarr[] = $currentDataName;
-                    $newvalarr[] = $pageUsed;
+                    $newvalarr[] = $pageUsedDisplay;
                     $newvalarr[] = $botToken;
                     $datafield[] = 'name';
                     $datafield[] = 'page used';
@@ -173,8 +207,10 @@ if (post('actionBtn')) {
                     }
 
                     if ((string) (isset($row['page_used']) ? $row['page_used'] : '') !== (string) $pageUsed) {
-                        $oldvalarr[] = (string) (isset($row['page_used']) ? $row['page_used'] : '');
-                        $chgvalarr[] = (string) $pageUsed;
+                        $oldvalarr[] = function_exists('shopeeOmsGetTokenSettingPageDisplayText')
+                            ? shopeeOmsGetTokenSettingPageDisplayText(isset($row['page_used']) ? $row['page_used'] : '')
+                            : (string) (isset($row['page_used']) ? $row['page_used'] : '');
+                        $chgvalarr[] = (string) $pageUsedDisplay;
                         $datafield[] = 'page used';
                     }
 
@@ -290,6 +326,54 @@ if (isset($_SESSION['tempValConfirmBox'])) {
         .token-help-steps li {
             margin-bottom: 8px;
         }
+
+        .token-page-dropdown {
+            position: relative;
+        }
+
+        .token-page-dropdown-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .token-page-dropdown-menu {
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            right: 0;
+            z-index: 20;
+            display: none;
+            max-height: 260px;
+            overflow-y: auto;
+            padding: 8px 0;
+            border: 1px solid #d7dce3;
+            border-radius: 8px;
+            background: #fff;
+            box-shadow: 0 10px 25px rgba(15, 23, 42, 0.12);
+        }
+
+        .token-page-dropdown-menu.is-open {
+            display: block;
+        }
+
+        .token-page-dropdown-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 14px;
+            margin: 0;
+            cursor: pointer;
+        }
+
+        .token-page-dropdown-item:hover {
+            background: #f5f8fd;
+        }
+
+        .token-page-dropdown-item input {
+            margin: 0;
+        }
     </style>
 </head>
 
@@ -317,14 +401,35 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 
                     <div class="form-group mb-3">
                         <label class="form-label" for="pageUsed">Page Used*</label>
-                        <select class="form-select" name="pageUsed" id="pageUsed" <?= ($act == '') ? 'disabled' : '' ?> required>
-                            <option value="">Select Page Used</option>
-                            <?php
-                            $selectedPageUsed = isset($pageUsed) ? (string) $pageUsed : (isset($row['page_used']) ? (string) $row['page_used'] : '');
-                            foreach ($tokenSettingPageOptions as $optionValue => $optionLabel) { ?>
-                                <option value="<?= htmlspecialchars((string) $optionValue, ENT_QUOTES, 'UTF-8') ?>" <?= $selectedPageUsed === (string) $optionValue ? 'selected' : '' ?>><?= htmlspecialchars((string) $optionLabel, ENT_QUOTES, 'UTF-8') ?></option>
-                            <?php } ?>
-                        </select>
+                        <?php
+                        $selectedPageUsedCsv = isset($pageUsed) ? (string) $pageUsed : (isset($row['page_used']) ? (string) $row['page_used'] : '');
+                        $selectedPageUsedValues = function_exists('shopeeOmsNormalizeTokenSettingPageValues')
+                            ? shopeeOmsNormalizeTokenSettingPageValues($selectedPageUsedCsv, $tokenSettingPageOptions)
+                            : array_filter(array_map('trim', explode(',', $selectedPageUsedCsv)));
+                        $selectedPageUsedText = function_exists('shopeeOmsGetTokenSettingPageDisplayText')
+                            ? shopeeOmsGetTokenSettingPageDisplayText($selectedPageUsedValues)
+                            : implode(', ', $selectedPageUsedValues);
+                        ?>
+                        <div class="token-page-dropdown" id="pageUsedDropdown">
+                            <button type="button" class="form-select token-page-dropdown-toggle text-start" id="pageUsedDropdownToggle" aria-haspopup="listbox" aria-expanded="false" aria-controls="pageUsedDropdownMenu" <?= ($act == '') ? 'disabled' : '' ?>>
+                                <span id="pageUsedDropdownLabel"><?= htmlspecialchars($selectedPageUsedText !== '' ? $selectedPageUsedText : 'Select Page Used', ENT_QUOTES, 'UTF-8') ?></span>
+                            </button>
+                            <div class="token-page-dropdown-menu" id="pageUsedDropdownMenu">
+                                <?php foreach ($tokenSettingPageOptions as $optionValue => $optionLabel) { ?>
+                                    <label class="token-page-dropdown-item" for="pageUsedOption<?= md5((string) $optionValue) ?>">
+                                        <input
+                                            type="checkbox"
+                                            class="token-page-checkbox"
+                                            name="pageUsed[]"
+                                            id="pageUsedOption<?= md5((string) $optionValue) ?>"
+                                            value="<?= htmlspecialchars((string) $optionValue, ENT_QUOTES, 'UTF-8') ?>"
+                                            <?= in_array((string) $optionValue, $selectedPageUsedValues, true) ? 'checked' : '' ?>
+                                            <?= ($act == '') ? 'disabled' : '' ?>>
+                                        <span><?= htmlspecialchars((string) $optionLabel, ENT_QUOTES, 'UTF-8') ?></span>
+                                    </label>
+                                <?php } ?>
+                            </div>
+                        </div>
                         <?php if (isset($pageUsedErr) && $pageUsedErr !== '') { ?>
                             <div class="text-danger mt-1"><?= htmlspecialchars((string) $pageUsedErr, ENT_QUOTES, 'UTF-8') ?></div>
                         <?php } ?>
@@ -432,6 +537,55 @@ if (isset($_SESSION['tempValConfirmBox'])) {
         preloader(300, action);
 
         (function () {
+            var dropdownWrap = document.getElementById('pageUsedDropdown');
+            var dropdownToggle = document.getElementById('pageUsedDropdownToggle');
+            var dropdownMenu = document.getElementById('pageUsedDropdownMenu');
+            var dropdownLabel = document.getElementById('pageUsedDropdownLabel');
+            var pageCheckboxes = dropdownMenu ? dropdownMenu.querySelectorAll('.token-page-checkbox') : [];
+
+            function updatePageUsedLabel() {
+                if (!dropdownLabel) {
+                    return;
+                }
+                var labels = [];
+                pageCheckboxes.forEach(function (checkbox) {
+                    if (!checkbox.checked) {
+                        return;
+                    }
+                    var optionLabel = checkbox.parentElement ? checkbox.parentElement.querySelector('span') : null;
+                    labels.push(optionLabel ? optionLabel.textContent.trim() : checkbox.value);
+                });
+                dropdownLabel.textContent = labels.length ? labels.join(', ') : 'Select Page Used';
+            }
+
+            function closePageUsedDropdown() {
+                if (dropdownMenu) {
+                    dropdownMenu.classList.remove('is-open');
+                }
+                if (dropdownToggle) {
+                    dropdownToggle.setAttribute('aria-expanded', 'false');
+                }
+            }
+
+            if (dropdownWrap && dropdownToggle && dropdownMenu && !dropdownToggle.disabled) {
+                dropdownToggle.addEventListener('click', function () {
+                    var isOpen = dropdownMenu.classList.toggle('is-open');
+                    dropdownToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+                });
+
+                document.addEventListener('click', function (event) {
+                    if (!dropdownWrap.contains(event.target)) {
+                        closePageUsedDropdown();
+                    }
+                });
+
+                pageCheckboxes.forEach(function (checkbox) {
+                    checkbox.addEventListener('change', updatePageUsedLabel);
+                });
+            }
+
+            updatePageUsedLabel();
+
             var triggers = document.querySelectorAll('.token-help-trigger');
             var modalEl = document.getElementById('tokenHelpModal');
             if (!triggers.length || !modalEl || typeof bootstrap === 'undefined' || !bootstrap.Modal) {

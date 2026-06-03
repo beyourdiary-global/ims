@@ -1,6 +1,6 @@
 <?php
 $isFinance = 1;
-$pageTitle = 'Shopee Flow Setting';
+$pageTitle = 'Flow Setting';
 include_once '../include/connection.php';
 include_once '../include/common.php';
 
@@ -11,7 +11,7 @@ if (empty($_SESSION['csrf_token'])) {
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['flow_action']) && $_POST['flow_action'] === 'save_shopee_flow_setting_ajax') {
     if ((int) USER_GROUP !== 1) {
         header('Content-Type: application/json');
-        echo json_encode(array('ok' => 0, 'message' => 'Only Super Admin can update Shopee Flow Setting.'));
+        echo json_encode(array('ok' => 0, 'message' => 'Only Super Admin can update Flow Setting.'));
         exit;
     }
 
@@ -210,20 +210,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['flow_action']) && $_P
 }
 
 $currentPagePin = 149;
-$pageTitle = 'Shopee Flow Setting';
+$pageTitle = 'Flow Setting';
 $disablePinGroupPageTitleSync = true;
 $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
 
-$pageTitle = 'Shopee Flow Setting';
+$pageTitle = 'Flow Setting';
 if (!isActionAllowed('View', checkPinByGroupId($connect, 149))) {
-    echo '<script>alert("You do not have permission to view Shopee Flow Setting."); location.replace("../dashboard.php");</script>';
+    echo '<script>alert("You do not have permission to view Flow Setting."); location.replace("../dashboard.php");</script>';
     exit;
 }
 if ((int) USER_GROUP !== 1) {
-    echo '<script>alert("Only Super Admin can access Shopee Flow Setting."); location.replace("../dashboard.php");</script>';
+    echo '<script>alert("Only Super Admin can access Flow Setting."); location.replace("../dashboard.php");</script>';
     exit;
 }
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
@@ -627,11 +627,11 @@ foreach ($userGroups as $userGroup) {
                 })
                 .then(function (data) {
                     if (!data || !data.ok) {
-                        window.alert(data && data.message ? data.message : 'Failed to update Shopee Flow Setting.');
+                        window.alert(data && data.message ? data.message : 'Failed to update Flow Setting.');
                     }
                 })
                 .catch(function () {
-                    window.alert('Failed to update Shopee Flow Setting.');
+                    window.alert('Failed to update Flow Setting.');
                 })
                 .finally(function () {
                     saveInFlight = false;

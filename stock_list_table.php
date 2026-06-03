@@ -1,33 +1,82 @@
 <?php
-$pageTitle = "Stock List";
+$pageTitle = 'Stock List';
 $currentPagePin = 120;
+
+include_once 'include/connection.php';
+include_once ROOT . '/include/common.php';
+
+$stockInOrderTable = 'stock_in_order';
+$stockInItemTable = 'stock_in_order_item';
+$stockOutBatchUsageTable = STOCK_OUT_BATCH_USAGE;
+$stockFormPage = $SITEURL . '/warehouse_stock_in.php';
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$tblName = STK_REC;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
-
-$redirect_page = $SITEURL . '/stock_list_table.php';
-$deleteRedirectPage = $SITEURL . '/stock_list_table.php';
-
-$result = getData('*', '', '', $tblName, $connect);
-
-if (!$result) {
-    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+if (!is_array($pinAccess)) {
+    $pinAccess = array();
 }
+
+$warehouses = siLoadWarehouses($connect);
+$products = siLoadProducts($connect);
+$userNameMap = siLoadUserNameMap($connect);
+list($warehouseNameMap, $warehouseNameToId) = siBuildNameMaps($warehouses);
+list($productNameMap, $productNameToId) = siBuildNameMaps($products);
+
+$stockOutRows = siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTable, 'Stock Out');
+$orderIds = array();
+$orderNumbers = array();
+$groupedRows = array();
+
+foreach ($stockOutRows as $row) {
+    $orderId = isset($row['order_id']) ? (int) $row['order_id'] : 0;
+    if ($orderId <= 0) {
+        continue;
+    }
+
+    $orderIds[$orderId] = $orderId;
+    $orderNumber = isset($row['order_number']) ? trim((string) $row['order_number']) : '';
+    if ($orderNumber !== '') {
+        $orderNumbers[$orderNumber] = $orderNumber;
+    }
+
+    if (!isset($groupedRows[$orderId])) {
+        $groupedRows[$orderId] = array(
+            'order_id' => $orderId,
+            'warehouse_id' => isset($row['warehouse_id']) ? (int) $row['warehouse_id'] : 0,
+            'stock_out_date' => isset($row['stock_in_date']) ? (string) $row['stock_in_date'] : '',
+            'order_number' => $orderNumber,
+            'create_by' => isset($row['create_by']) ? (string) $row['create_by'] : '',
+            'create_date' => isset($row['create_date']) ? (string) $row['create_date'] : '',
+            'create_time' => isset($row['create_time']) ? (string) $row['create_time'] : '',
+            'items' => array(),
+            'usage_rows' => array(),
+        );
+    }
+
+    $groupedRows[$orderId]['items'][] = array(
+        'item_id' => isset($row['item_id']) ? (int) $row['item_id'] : 0,
+        'product_id' => isset($row['product_id']) ? (int) $row['product_id'] : 0,
+        'package_id' => isset($row['package_id']) ? (int) $row['package_id'] : 0,
+        'qty' => isset($row['product_quantity']) ? (int) $row['product_quantity'] : 0,
+    );
+}
+
+$usageRows = siGetStockOutUsageRowsByOrderIds($finance_connect, array_values($orderIds), $stockOutBatchUsageTable);
+foreach ($usageRows as $usageRow) {
+    $stockOutOrderId = isset($usageRow['stock_out_order_id']) ? (int) $usageRow['stock_out_order_id'] : 0;
+    if ($stockOutOrderId > 0 && isset($groupedRows[$stockOutOrderId])) {
+        $groupedRows[$stockOutOrderId]['usage_rows'][] = $usageRow;
+    }
+}
+
+$sourceOrderLinkMap = siBuildSourceOrderLinkMap($connect, $finance_connect, array_values($orderNumbers));
 ?>
 
 <!DOCTYPE html>
 <html>
-
 <head>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
 </head>
@@ -36,7 +85,16 @@ if (!$result) {
     preloader(300);
 
     $(document).ready(() => {
-        createSortingTable('table');
+        if ($('#stockMovementTable').length) {
+            $('#stockMovementTable').DataTable({
+                "order": [[5, 'desc']],
+                "columnDefs": [
+                    { "orderable": false, "targets": [2] }
+                ],
+                "autoWidth": false
+            });
+            datatableAlignment('stockMovementTable');
+        }
     });
 </script>
 
@@ -48,6 +106,12 @@ if (!$result) {
     }
     .btn-container {
         white-space: nowrap;
+    }
+    .cell-lines div {
+        margin-bottom: 4px;
+    }
+    .cell-lines div:last-child {
+        margin-bottom: 0;
     }
 </style>
 
@@ -62,182 +126,154 @@ if (!$result) {
 
                 <div class="d-flex flex-column mb-3">
                     <div class="row">
-                        <p><a href="<?= $SITEURL ?>/dashboard.php">Dashboard</a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?php echo $pageTitle ?></p>
+                        <p><a href="<?= $SITEURL ?>/dashboard.php">Dashboard</a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?= siEsc($pageTitle) ?></p>
                     </div>
 
                     <div class="row">
                         <div class="col-12 d-flex justify-content-between flex-wrap">
-                            <h2><?php echo $pageTitle ?></h2>
-                            <div class="mt-auto mb-auto">
-                            </div>
+                            <h2><?= siEsc($pageTitle) ?></h2>
+                            <div class="mt-auto mb-auto"></div>
                         </div>
                     </div>
                 </div>
 
-                <table class="table table-striped" id="table">
-                    <thead>
-                    <tr>
-                        <th class="hideColumn" scope="col">ID</th>
-                        <th scope="col" width="60px">S/N</th>
-                       
-                        <th scope="col">Brand</th>
-                        <th scope="col">Product</th>
-                        <th scope="col">Stock In Date</th>
-                        <th scope="col">Stock Out Date</th>
-                        <th scope="col">Transfer Date</th>
-                        <th scope="col">Barcode</th>
-                        <th scope="col">Product Batch Code</th>
-                        <th scope="col">Product Status ID</th>
-                        <th scope="col">Product Category ID</th>
-                        <th scope="col">Platform ID</th>
-                        <th scope="col">Warehouse ID</th>
-                        <th scope="col">Stock In Person in Charges</th>
-                        <th scope="col">Stock Out Person in Charges</th>
-                        <th scope="col">Stock Out Customer Purchase ID</th>
-                        <th scope="col">Remark</th>
-                        <th scope="col">Create Date</th>
-                        <th scope="col">Create Time</th>
-                        <th scope="col">Create By</th>
-                        <th scope="col">Update Date</th>
-                        <th scope="col">Update Time</th>
-                        <th scope="col">Update By</th>
-                        <th scope="col">Status</th>
-                    </tr>
+                <?php if (!empty($groupedRows)) { ?>
+                    <table class="table table-striped" id="stockMovementTable">
+                        <thead>
+                            <tr>
+                                <th class="hideColumn" scope="col">ID</th>
+                                <th scope="col" width="60px">S/N</th>
+                                <th scope="col" width="90px">Action</th>
+                                <th scope="col">Warehouse</th>
+                                <th scope="col">Product + Quantity</th>
+                                <th scope="col">Stock Out Date</th>
+                                <th scope="col">Stock Out Order Number</th>
+                                <th scope="col">Source Stock In Order Number</th>
+                                <th scope="col">Source Stock In Date</th>
+                                <th scope="col">Created By</th>
+                                <th scope="col">Created Date / Time</th>
+                            </tr>
+                        </thead>
 
-                    </thead>
+                        <tbody>
+                            <?php
+                            $sn = 1;
+                            foreach ($groupedRows as $row) {
+                                $warehouseName = isset($warehouseNameMap[(int) $row['warehouse_id']]) ? $warehouseNameMap[(int) $row['warehouse_id']] : '';
+                                $productLines = siBuildProductQtyLines(isset($row['items']) ? $row['items'] : array(), $productNameMap);
+                                if (empty($productLines)) {
+                                    $productLines = array('Not recorded');
+                                }
 
-                    <tbody>
-                        <?php
-                        while ($row = $result->fetch_assoc()) {
-                            $brand = isset($row['brand_id']) ? $row['brand_id'] : '';
-                            $q1 = getData('name', "id='" . $brand . "'", '', BRAND, $connect);
-                            $brd_fetch = $q1->fetch_assoc();
-                            $brd_name = isset($brd_fetch['name']) ? $brd_fetch['name'] : '';
+                                $usageLinkRows = array();
+                                $usageDateLines = array();
+                                if (!empty($row['usage_rows'])) {
+                                    foreach ($row['usage_rows'] as $usageRow) {
+                                        $sourceStockInOrderId = isset($usageRow['stock_in_order_id']) ? (int) $usageRow['stock_in_order_id'] : 0;
+                                        $sourceStockInOrderNumber = trim((string) (isset($usageRow['stock_in_order_number']) ? $usageRow['stock_in_order_number'] : ''));
+                                        if ($sourceStockInOrderNumber === '') {
+                                            $sourceStockInOrderNumber = $sourceStockInOrderId > 0 ? (string) $sourceStockInOrderId : '-';
+                                        }
+                                        $usageLinkRows[] = array(
+                                            'label' => $sourceStockInOrderNumber,
+                                            'url' => $sourceStockInOrderId > 0 ? ($stockFormPage . '?order_id=' . $sourceStockInOrderId) : '',
+                                        );
+                                        $usageDateLines[] = trim((string) (isset($usageRow['stock_in_order_date']) ? $usageRow['stock_in_order_date'] : ''));
+                                    }
+                                } else {
+                                    $usageLinkRows[] = array(
+                                        'label' => 'Not recorded',
+                                        'url' => '',
+                                    );
+                                    $usageDateLines[] = '-';
+                                }
 
-                            $product = isset($row['product_id']) ? $row['product_id'] : '';
-                            $q2 = getData('name', "id='" . $product . "'", '', PROD, $connect);
-                            $prod_fetch = $q2->fetch_assoc();
-                            $prod_name = isset($prod_fetch['name']) ? $prod_fetch['name'] : '';
+                                $createdByKey = isset($row['create_by']) ? (string) $row['create_by'] : '';
+                                $createdByName = $createdByKey !== '' && isset($userNameMap[$createdByKey]) ? $userNameMap[$createdByKey] : $createdByKey;
+                                $createdDateTime = trim(((string) $row['create_date']) . ' ' . ((string) $row['create_time']));
+                                if ($createdDateTime === '') {
+                                    $createdDateTime = '-';
+                                }
 
-                            $product_status = isset($row['product_status_id']) ? $row['product_status_id'] : '';
-                            $q3 = getData('name', "id='" . $product_status . "'", '', PROD_STATUS, $connect);
-                            $prod_stat_fetch = $q3->fetch_assoc();
-                            $prod_stat = isset($prod_stat_fetch['name']) ? $prod_stat_fetch['name'] : '';
-
-
-                            $product_category = isset($row['product_category_id']) ? $row['product_category_id'] : '';
-                            $q4 = getData('name', "id='" . $product_status . "'", '', PROD_CATEGORY, $connect);
-                            $prod_cat_fetch = $q4->fetch_assoc();
-                            $prod_cat = isset($prod_cat_fetch['name']) ? $prod_cat_fetch['name'] : '';
-
-                          
-
-                            $platform_id = isset($row['platform_id']) ? $row['platform_id'] : '';
-                            $q6 = getData('name', "id='" . $platform_id . "'", '', PLTF, $connect);
-                            $plat_id_fetch = $q6->fetch_assoc();
-                            $plat_name = isset($plat_id_fetch['name']) ? $plat_id_fetch['name'] : '';
-
-                            $warehouse_id = isset($row['warehouse_id']) ? $row['warehouse_id'] : '';
-                            $q7 = getData('name', "id='" . $warehouse_id . "'", '', WHSE, $connect);
-                            $ware_id_fetch = $q7->fetch_assoc();
-                            $ware_name = isset($ware_id_fetch['name']) ? $ware_id_fetch['name'] : '';
-
-                            $stockInUsr = isset($row['stock_in_person_in_charges']) ? $row['stock_in_person_in_charges'] : '';
-                            $q8 = getData('name', "id='" . $stockInUsr . "'", '', USR_USER, $connect);
-                            $stockInUsr_fetch = $q8->fetch_assoc();
-                            $stockInUsr_name = isset($stockInUsr_fetch['name']) ? $stockInUsr_fetch['name'] : '';
-
-                            $stockOutUsr = isset($row['stock_out_person_in_charges']) ? $row['stock_out_person_in_charges'] : '';
-                            $q9 = getData('name', "id='" . $stockOutUsr . "'", '', USR_USER, $connect);
-                            $stockOutUsr_fetch = $q9->fetch_assoc();
-                            $stockOutUsr_name = isset($stockOutUsr_fetch['name']) ? $stockOutUsr_fetch['name'] : '';
-
-                            $created = isset($row['create_by']) ? $row['create_by'] : '';
-                            $q10 = getData('name', "id='" . $created . "'", '', USR_USER, $connect);
-                            $updated = isset($row['update_by']) ? $row['update_by'] : '';
-                            $q11 = getData('name', "id='" . $created . "'", '', USR_USER, $connect);
-                            $created_fetch = $q10->fetch_assoc();
-                            $updated_fetch = $q11->fetch_assoc();
-                            $updated_name = isset($updated_fetch['name']) ? $updated_fetch['name'] : '';
-                            $created_name = isset($created_fetch['name']) ? $created_fetch['name'] : '';
-                            if (isset( $row['id'])) { ?>
+                                $orderNumber = isset($row['order_number']) ? (string) $row['order_number'] : '';
+                                $orderLinkMeta = isset($sourceOrderLinkMap[$orderNumber]) ? $sourceOrderLinkMap[$orderNumber] : array('url' => '');
+                                $orderViewUrl = isset($orderLinkMeta['url']) ? trim((string) $orderLinkMeta['url']) : '';
+                                ?>
                                 <tr>
-                                    <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
-                                    <th scope="row"><?= $num++; ?></th>
-                                   
-                                    <td scope="row"><?php if (isset($brd_name)) echo $brd_name ?></td>
-                                    <td scope="row"><?php if (isset($prod_name)) echo $prod_name ?></td>
-                                    <td scope="row"><?php if (isset($row['stock_in_date'])) echo $row['stock_in_date'] ?></td>
-                                    <td scope="row"><?php if (isset($row['stock_out_date'])) echo $row['stock_out_date'] ?></td>
-                                    <td scope="row"><?php if (isset($row['transfer_date'])) echo $row['transfer_date'] ?></td>
-                                    <td scope="row"><?php if (isset($row['barcode'])) echo $row['barcode'] ?></td>
-                                    <td scope="row"><?php if (isset($row['product_batch_code'])) echo $row['product_batch_code'] ?></td>
-                                    <td scope="row"><?php if (isset($prod_stat)) echo $prod_stat ?></td>
-                                    <td scope="row"><?php if (isset($prod_cat)) echo $prod_cat ?></td>
-                                    <td scope="row"><?php if (isset($plat_name)) echo $plat_name ?></td>
-                                    <td scope="row"><?php if (isset($ware_name)) echo $ware_name ?></td>
-                                    <td scope="row"><?php if (isset($stockInUsr_name)) echo $stockInUsr_name ?></td>
-                                    <td scope="row"><?php if (isset($stockOutUsr_name)) echo $stockOutUsr_name ?></td>
-                                    <td scope="row"><?php if (isset($row['stock_out_customer_purchase_id'])) echo $row['stock_out_customer_purchase_id'] ?></td>
-                                    <td scope="row"><?php if (isset($row['remark'])) echo $row['remark'] ?></td>
-                                    <td scope="row"><?php if (isset($row['create_date'])) echo $row['create_date'] ?></td>
-                                    <td scope="row"><?php if (isset($row['create_time'])) echo $row['create_time'] ?></td>
-                                    <td scope="row"><?php if (isset($created_name)) echo $created_name ?></td>
-                                    <td scope="row"><?php echo isset($row['update_date']) ? $row['update_date'] : '-'; ?></td>
-                                    <td scope="row"><?php echo isset($row['update_time']) ? $row['update_time'] : ''; ?></td>
-                                    <td scope="row"><?php echo isset($updated_name) ? $updated_name : '-'; ?></td>
-                                    <td scope="row"><?php if (isset($row['status'])) echo strtoupper($row['status']) === 'A' ? 'Active' : $row['status']; ?></td>
+                                    <td class="hideColumn"><?= (int) $row['order_id'] ?></td>
+                                    <th scope="row"><?= $sn++ ?></th>
+                                    <td class="btn-container">
+                                        <?php if (isActionAllowed('View', $pinAccess)) { ?>
+                                            <a class="btn btn-sm btn-rounded btn-primary" href="<?= $stockFormPage ?>?order_id=<?= (int) $row['order_id'] ?>" title="View"><i class="fa-solid fa-eye"></i></a>
+                                        <?php } else { ?>
+                                            <span>-</span>
+                                        <?php } ?>
+                                    </td>
+                                    <td><?= siEsc($warehouseName !== '' ? $warehouseName : '-') ?></td>
+                                    <td class="cell-lines">
+                                        <?php foreach ($productLines as $line) { ?>
+                                            <div><?= siEsc($line) ?></div>
+                                        <?php } ?>
+                                    </td>
+                                    <td><?= siEsc(isset($row['stock_out_date']) ? $row['stock_out_date'] : '') ?></td>
+                                    <td>
+                                        <?php if ($orderViewUrl !== '') { ?>
+                                            <a href="<?= siEsc($orderViewUrl) ?>"><?= siEsc($orderNumber) ?></a>
+                                        <?php } else { ?>
+                                            <?= siEsc($orderNumber !== '' ? $orderNumber : '-') ?>
+                                        <?php } ?>
+                                    </td>
+                                    <td class="cell-lines">
+                                        <?php foreach ($usageLinkRows as $usageLinkRow) { ?>
+                                            <div>
+                                                <?php if (isset($usageLinkRow['url']) && $usageLinkRow['url'] !== '') { ?>
+                                                    <a href="<?= siEsc($usageLinkRow['url']) ?>"><?= siEsc(isset($usageLinkRow['label']) ? $usageLinkRow['label'] : '-') ?></a>
+                                                <?php } else { ?>
+                                                    <?= siEsc(isset($usageLinkRow['label']) ? $usageLinkRow['label'] : '-') ?>
+                                                <?php } ?>
+                                            </div>
+                                        <?php } ?>
+                                    </td>
+                                    <td class="cell-lines">
+                                        <?php foreach ($usageDateLines as $line) { ?>
+                                            <div><?= siEsc($line !== '' ? $line : '-') ?></div>
+                                        <?php } ?>
+                                    </td>
+                                    <td><?= siEsc($createdByName !== '' ? $createdByName : '-') ?></td>
+                                    <td><?= siEsc($createdDateTime) ?></td>
                                 </tr>
-                        <?php
-                            }
-                        }
-                        ?>
-                    </tbody>
+                            <?php } ?>
+                        </tbody>
 
-                    <tfoot>
-                        <tr>
-                            <th class="hideColumn" scope="col">ID</th>
-                            <th scope="col" width="60px">S/N</th>
-                           
-                            <th scope="col">Brand ID</th>
-                            <th scope="col">Product ID</th>
-                            <th scope="col">Stock In Date</th>
-                            <th scope="col">Stock Out Date</th>
-                            <th scope="col">Transfer Date</th>
-                            <th scope="col">Barcode</th>
-                            <th scope="col">Product Batch Code</th>
-                            <th scope="col">Product Status ID</th>
-                            <th scope="col">Product Category ID</th>
-                            <th scope="col">Platform ID</th>
-                            <th scope="col">Warehouse ID</th>
-                            <th scope="col">Stock In Person in Charges</th>
-                            <th scope="col">Stock Out Person in Charges</th>
-                            <th scope="col">Stock Out Customer Purchase ID</th>
-                            <th scope="col">Remark</th>
-                            <th scope="col">Create Date</th>
-                            <th scope="col">Create Time</th>
-                            <th scope="col">Create By</th>
-                            <th scope="col">Update Date</th>
-                            <th scope="col">Update Time</th>
-                            <th scope="col">Update By</th>
-                            <th scope="col">Status</th>
-                        </tr>
-                    </tfoot>
-                </table>
+                        <tfoot>
+                            <tr>
+                                <th class="hideColumn" scope="col">ID</th>
+                                <th scope="col" width="60px">S/N</th>
+                                <th scope="col" width="90px">Action</th>
+                                <th scope="col">Warehouse</th>
+                                <th scope="col">Product + Quantity</th>
+                                <th scope="col">Stock Out Date</th>
+                                <th scope="col">Stock Out Order Number</th>
+                                <th scope="col">Source Stock In Order Number</th>
+                                <th scope="col">Source Stock In Date</th>
+                                <th scope="col">Created By</th>
+                                <th scope="col">Created Date / Time</th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                <?php } else { ?>
+                    <div class="text-center"><h4>No records found</h4></div>
+                <?php } ?>
             </div>
         </div>
     </div>
 
     <script>
-        //Initial Page And Action Value
-        var page = "<?= $pageTitle ?>";
-        var action = "<?php echo isset($act) ? $act : ' '; ?>";
+        var page = <?= json_encode($pageTitle) ?>;
+        var action = '';
 
         checkCurrentPage(page, action);
-        //to solve the issue of dropdown menu displaying inside the table when table class include table-responsive
         dropdownMenuDispFix();
-        //to resize table with bootstrap 5 classes
-        datatableAlignment('table');
         setButtonColor();
     </script>
 

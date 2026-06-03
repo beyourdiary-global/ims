@@ -327,9 +327,10 @@ function sorInfoFindPreferredTokenRow($connect, $tokenTable, $pageName = 'Stock 
     }
 
     $safePageName = mysqli_real_escape_string($connect, $pageName);
-    $rst = mysqli_query($connect, "SELECT * FROM `" . $tokenTable . "` WHERE status='A' AND page_used='" . $safePageName . "' ORDER BY id DESC LIMIT 1");
+    $rst = mysqli_query($connect, "SELECT * FROM `" . $tokenTable . "` WHERE status='A' AND FIND_IN_SET('" . $safePageName . "', REPLACE(page_used, ' ', '')) > 0 ORDER BY id DESC LIMIT 1");
     if ($rst && mysqli_num_rows($rst) > 0) {
         return mysqli_fetch_assoc($rst);
+    }
     }
 
     return null;
