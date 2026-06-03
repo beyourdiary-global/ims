@@ -269,8 +269,8 @@ $sourceOrderLinkMap = siBuildSourceOrderLinkMap($connect, $finance_connect, arra
     </div>
 
     <script>
-        var page = "<?= addslashes($pageTitle) ?>";
-        var action = "";
+        var page = <?= json_encode($pageTitle) ?>;
+        var action = '';
 
         checkCurrentPage(page, action);
         dropdownMenuDispFix();
