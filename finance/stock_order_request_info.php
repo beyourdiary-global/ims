@@ -326,16 +326,11 @@ function sorInfoFindPreferredTokenRow($connect, $tokenTable, $pageName = 'Stock 
         return null;
     }
 
-    $rst = mysqli_query($connect, "SELECT * FROM `" . $tokenTable . "` WHERE status='A' ORDER BY id DESC");
-    if ($rst) {
-        while ($tokenRow = mysqli_fetch_assoc($rst)) {
-            $rowPages = function_exists('shopeeOmsNormalizeTokenSettingPageValues')
-                ? shopeeOmsNormalizeTokenSettingPageValues(isset($tokenRow['page_used']) ? $tokenRow['page_used'] : '')
-                : array_filter(array_map('trim', explode(',', (string) (isset($tokenRow['page_used']) ? $tokenRow['page_used'] : ''))));
-            if (in_array($pageName, $rowPages, true)) {
-                return $tokenRow;
-            }
-        }
+    $safePageName = mysqli_real_escape_string($connect, $pageName);
+    $rst = mysqli_query($connect, "SELECT * FROM `" . $tokenTable . "` WHERE status='A' AND FIND_IN_SET('" . $safePageName . "', REPLACE(page_used, ' ', '')) > 0 ORDER BY id DESC LIMIT 1");
+    if ($rst && mysqli_num_rows($rst) > 0) {
+        return mysqli_fetch_assoc($rst);
+    }
     }
 
     return null;
