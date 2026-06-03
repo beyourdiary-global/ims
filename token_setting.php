@@ -572,11 +572,15 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                 if (dropdownMenu) {
                     dropdownMenu.classList.remove('is-open');
                 }
+                if (dropdownToggle) {
+                    dropdownToggle.setAttribute('aria-expanded', 'false');
+                }
             }
 
             if (dropdownWrap && dropdownToggle && dropdownMenu && !dropdownToggle.disabled) {
                 dropdownToggle.addEventListener('click', function () {
-                    dropdownMenu.classList.toggle('is-open');
+                    var isOpen = dropdownMenu.classList.toggle('is-open');
+                    dropdownToggle.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
                 });
 
                 document.addEventListener('click', function (event) {
