@@ -745,7 +745,7 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                                  </form>
                                 <?php } ?>
                                 <?php if ($statusCode === 'TP') { ?>
-                                 <a class="btn btn-sm btn-rounded btn-primary" href="<?= htmlspecialchars((string) shopeeOmsGetOrderSourceViewUrl('shopee', (int) $row['id']), ENT_QUOTES, 'UTF-8') ?>" title="View Order">
+                                 <a class="btn btn-sm btn-rounded btn-primary" href="<?= htmlspecialchars((string) shopeeOmsGetOrderSourceInfoUrl('shopee', (int) $row['id']), ENT_QUOTES, 'UTF-8') ?>" title="Open QR Info">
                                      <i class="fa-solid fa-qrcode"></i>
                                  </a>
                                 <?php } ?>

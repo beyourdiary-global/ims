@@ -1,11 +1,9 @@
 <?php
-include_once dirname(__DIR__) . '/include/connection.php';
+$currentPagePin = 69;
+$disablePinGroupPageTitleSync = true;
+$isFinance = 1;
+$orderRequestInfoSource = 'facebook';
+$orderRequestInfoPageTitle = 'Facebook Order Request Info';
+$orderRequestInfoAllowedPins = array(69);
 
-$requestId = (int) (!empty(input('id')) ? input('id') : post('id'));
-$redirectUrl = rtrim((string) $SITEURL, '/') . '/finance/fb_order_req_table.php';
-if ($requestId > 0) {
-    $redirectUrl = rtrim((string) $SITEURL, '/') . '/finance/fb_order_req.php?id=' . $requestId;
-}
-
-header('Location: ' . $redirectUrl);
-exit;
+include_once dirname(__DIR__) . '/order_request_info_common.php';

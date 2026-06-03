@@ -395,7 +395,7 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
                                         </form>
                                     <?php } ?>
                                     <?php if ($statusCode === 'TP') { ?>
-                                        <a class="btn btn-sm btn-rounded btn-primary" href="<?= htmlspecialchars((string) shopeeOmsGetOrderSourceViewUrl('lazada', (int) $row['id']), ENT_QUOTES, 'UTF-8') ?>" title="View Order"><i class="fa-solid fa-qrcode"></i></a>
+                                        <a class="btn btn-sm btn-rounded btn-primary" href="<?= htmlspecialchars((string) shopeeOmsGetOrderSourceInfoUrl('lazada', (int) $row['id']), ENT_QUOTES, 'UTF-8') ?>" title="Open QR Info"><i class="fa-solid fa-qrcode"></i></a>
                                     <?php } ?>
                                     <?php if (shouldShowEstimatedReceivedDateButton($row) && $canAssignThisOrder) { ?>
                                         <button

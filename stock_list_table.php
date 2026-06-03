@@ -8,7 +8,7 @@ include_once ROOT . '/include/common.php';
 $stockInOrderTable = 'stock_in_order';
 $stockInItemTable = 'stock_in_order_item';
 $stockOutBatchUsageTable = STOCK_OUT_BATCH_USAGE;
-$stockFormPage = $SITEURL . '/warehouse_stock_in.php';
+$stockFormPage = $SITEURL . '/stock_list.php';
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';

@@ -1,20 +1,28 @@
 <?php
-$currentPagePin = 125;
-$pageTitle = 'Stock In';
+$stockMovementViewOnly = !empty($stockMovementViewOnly);
+$currentPagePin = isset($currentPagePin) ? (int) $currentPagePin : 125;
+$pageTitle = isset($pageTitle) && trim((string) $pageTitle) !== '' ? (string) $pageTitle : 'Stock In';
+$stockMovementUsePinTitle = !isset($stockMovementUsePinTitle) || $stockMovementUsePinTitle;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+if ($stockMovementUsePinTitle) {
+    $pageTitle = getPinGroupNameById($connect, $currentPagePin);
+}
 include_once ROOT . '/include/common.php';
 
 $stockInOrderTable = 'stock_in_order';
 $stockInItemTable = 'stock_in_order_item';
 $tblName = $stockInOrderTable;
 
-$redirectTable = $SITEURL . '/warehouse_stock_in_table.php';
+$redirectTable = isset($stockMovementRedirectTable) && trim((string) $stockMovementRedirectTable) !== ''
+    ? (string) $stockMovementRedirectTable
+    : $SITEURL . '/warehouse_stock_in_table.php';
 $redirectLink = "<script>location.href='" . $redirectTable . "';</script>";
 $clearLocalStorage = '<script>localStorage.clear();</script>';
-$backButtonTitle = 'Back to Stock In';
+$backButtonTitle = isset($stockMovementBackButtonTitle) && trim((string) $stockMovementBackButtonTitle) !== ''
+    ? (string) $stockMovementBackButtonTitle
+    : 'Back to Stock In';
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 if (!is_array($pinAccess)) {
@@ -25,6 +33,11 @@ $legacyItemId = !empty(input('item_id')) ? (int) input('item_id') : 0;
 $dataID = !empty(input('order_id')) ? (int) input('order_id') : (!empty(input('id')) ? (int) input('id') : ((int) post('order_id') > 0 ? (int) post('order_id') : (int) post('id')));
 $act = !empty(input('act')) ? strtoupper(trim((string) input('act'))) : strtoupper(trim((string) post('act')));
 $token = trim((string) input('t'));
+
+if ($stockMovementViewOnly) {
+    $act = '';
+    $token = '';
+}
 
 if ($act === 'V') {
     $act = '';
@@ -346,6 +359,11 @@ if ($act === 'D') {
 
 if (post('actionBtn')) {
     $action = post('actionBtn');
+
+    if ($stockMovementViewOnly && $action !== 'back') {
+        echo $redirectLink;
+        exit;
+    }
 
     switch ($action) {
         case 'addData':

@@ -331,7 +331,6 @@ function sorInfoFindPreferredTokenRow($connect, $tokenTable, $pageName = 'Stock 
     if ($rst && mysqli_num_rows($rst) > 0) {
         return mysqli_fetch_assoc($rst);
     }
-    }
 
     return null;
 }

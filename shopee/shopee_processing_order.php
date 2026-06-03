@@ -778,7 +778,7 @@ if ($result instanceof mysqli_result) {
                                 $statusCode = shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '');
                                 ?>
                                 <?php if ($statusCode === 'TP') { ?>
-                                 <a class="btn btn-sm btn-rounded btn-primary" href="<?= $SITEURL . '/shopee/shopee_order_request_info.php?id=' . (int) $row['id'] ?>" title="Open QR Info">
+                                 <a class="btn btn-sm btn-rounded btn-primary" href="<?= htmlspecialchars((string) shopeeOmsGetOrderSourceInfoUrl('shopee', (int) $row['id']), ENT_QUOTES, 'UTF-8') ?>" title="Open QR Info">
                                      <i class="fa-solid fa-qrcode"></i>
                                  </a>
                                 <?php } ?>
