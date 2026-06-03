@@ -3,6 +3,9 @@ $stockMovementViewOnly = !empty($stockMovementViewOnly);
 $currentPagePin = isset($currentPagePin) ? (int) $currentPagePin : 125;
 $pageTitle = isset($pageTitle) && trim((string) $pageTitle) !== '' ? (string) $pageTitle : 'Stock In';
 $stockMovementUsePinTitle = !isset($stockMovementUsePinTitle) || $stockMovementUsePinTitle;
+if (!$stockMovementUsePinTitle) {
+    $disablePinGroupPageTitleSync = true;
+}
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
