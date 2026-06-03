@@ -421,7 +421,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                             : implode(', ', $selectedPageUsedValues);
                         ?>
                         <div class="token-page-dropdown" id="pageUsedDropdown">
-                            <button type="button" class="form-select token-page-dropdown-toggle text-start" id="pageUsedDropdownToggle" <?= ($act == '') ? 'disabled' : '' ?>>
+                            <button type="button" class="form-select token-page-dropdown-toggle text-start" id="pageUsedDropdownToggle" aria-haspopup="listbox" aria-expanded="false" aria-controls="pageUsedDropdownMenu" <?= ($act == '') ? 'disabled' : '' ?>>
                                 <span id="pageUsedDropdownLabel"><?= htmlspecialchars($selectedPageUsedText !== '' ? $selectedPageUsedText : 'Select Page Used', ENT_QUOTES, 'UTF-8') ?></span>
                             </button>
                             <div class="token-page-dropdown-menu" id="pageUsedDropdownMenu">
