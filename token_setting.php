@@ -338,16 +338,6 @@ if (isset($_SESSION['tempValConfirmBox'])) {
             gap: 12px;
         }
 
-        .token-page-dropdown-toggle::after {
-            content: '';
-            width: 0;
-            height: 0;
-            border-left: 5px solid transparent;
-            border-right: 5px solid transparent;
-            border-top: 6px solid #495057;
-            margin-left: auto;
-        }
-
         .token-page-dropdown-menu {
             position: absolute;
             top: calc(100% + 6px);
