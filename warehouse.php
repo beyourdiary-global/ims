@@ -113,9 +113,12 @@ if ($isStockBalanceView) {
                     ) AS total_quantity,
                     MAX(
                         GREATEST(
-                            TIMESTAMP(
-                                COALESCE(i.update_date, o.update_date, i.create_date, o.create_date),
-                                COALESCE(i.update_time, o.update_time, i.create_time, o.create_time)
+                            IFNULL(
+                                TIMESTAMP(
+                                    COALESCE(i.update_date, o.update_date, i.create_date, o.create_date),
+                                    COALESCE(i.update_time, o.update_time, i.create_time, o.create_time)
+                                ),
+                                '1000-01-01 00:00:00'
                             ),
                             IFNULL(u.last_used_at, '1000-01-01 00:00:00')
                         )
