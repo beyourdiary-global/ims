@@ -399,7 +399,7 @@ function fbReqFetchAssoc($rst)
                                         </form>
                                     <?php } ?>
                                     <?php if ($statusCode === 'TP') { ?>
-                                        <a class="btn btn-sm btn-rounded btn-primary me-1" href="<?= htmlspecialchars((string) shopeeOmsGetOrderSourceViewUrl('facebook', (int) $row['id']), ENT_QUOTES, 'UTF-8') ?>" title="View Order"><i class="fa-solid fa-qrcode"></i></a>
+                                        <a class="btn btn-sm btn-rounded btn-primary me-1" href="<?= htmlspecialchars((string) shopeeOmsGetOrderSourceInfoUrl('facebook', (int) $row['id']), ENT_QUOTES, 'UTF-8') ?>" title="Open QR Info"><i class="fa-solid fa-qrcode"></i></a>
                                     <?php } ?>
                                     <?php if (shouldShowEstimatedReceivedDateButton($row) && $canAssignThisOrder) { ?>
                                         <button

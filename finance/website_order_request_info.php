@@ -1,11 +1,9 @@
 <?php
-include_once dirname(__DIR__) . '/include/connection.php';
+$currentPagePin = 92;
+$disablePinGroupPageTitleSync = true;
+$isFinance = 1;
+$orderRequestInfoSource = 'website';
+$orderRequestInfoPageTitle = 'Website Order Request Info';
+$orderRequestInfoAllowedPins = array(92);
 
-$requestId = (int) (!empty(input('id')) ? input('id') : post('id'));
-$redirectUrl = rtrim((string) $SITEURL, '/') . '/finance/website_order_request_table.php';
-if ($requestId > 0) {
-    $redirectUrl = rtrim((string) $SITEURL, '/') . '/finance/website_order_request.php?id=' . $requestId;
-}
-
-header('Location: ' . $redirectUrl);
-exit;
+include_once dirname(__DIR__) . '/order_request_info_common.php';

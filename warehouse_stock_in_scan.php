@@ -239,7 +239,13 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
     $omsTokenRst = mysqli_query($finance_connect, $omsTokenSql);
     if ($omsTokenRst && mysqli_num_rows($omsTokenRst) > 0) {
         $omsTokenRow = mysqli_fetch_assoc($omsTokenRst);
-        $omsOrderRow = shopeeOmsLoadOrder($finance_connect, isset($omsTokenRow['order_id']) ? (int) $omsTokenRow['order_id'] : 0);
+        $omsSourceConfig = null;
+        $omsOrderRow = shopeeOmsLoadOrderFromTokenRow($connect, $finance_connect, $omsTokenRow, $omsSourceConfig, 'shopee');
+        $omsPlatform = isset($omsSourceConfig['platform']) ? (string) $omsSourceConfig['platform'] : shopeeOmsGetOrderSourcePlatform($omsOrderRow, 'shopee');
+        $omsPlatformLabel = isset($omsSourceConfig['label']) ? (string) $omsSourceConfig['label'] : ucfirst($omsPlatform);
+        $omsOrderCode = !empty($omsOrderRow)
+            ? shopeeOmsGetOrderCodeValue($omsOrderRow, $omsSourceConfig)
+            : trim((string) (isset($omsTokenRow['order_code']) ? $omsTokenRow['order_code'] : ''));
         $omsClientIp = shopeeOmsGetClientIp();
         $omsCountryCode = '';
         if ($omsClientIp !== '') {
@@ -269,7 +275,7 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
                 $omsMessage = isset($attachmentResult[2]) ? (string) $attachmentResult[2] : 'Please upload at least 1 attachment photo to submit stock out.';
                 shopeeOmsAuditLog('submit_failed', $omsMessage, array(
                     'order_id' => (int) (isset($omsTokenRow['order_id']) ? $omsTokenRow['order_id'] : 0),
-                    'order_code' => (string) (isset($omsOrderRow['orderID']) ? $omsOrderRow['orderID'] : ''),
+                    'order_code' => $omsOrderCode,
                 ));
             } else {
                 $omsScanResult = shopeeOmsProcessWarehouseScanByToken(
@@ -287,28 +293,35 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
                 if (!empty($omsScanResult['success'])) {
                     shopeeOmsAuditLog('submit_success', $omsMessage, array(
                         'order_id' => (int) (isset($omsTokenRow['order_id']) ? $omsTokenRow['order_id'] : 0),
-                        'order_code' => (string) (isset($omsOrderRow['orderID']) ? $omsOrderRow['orderID'] : ''),
+                        'order_code' => $omsOrderCode,
                         'status' => 'shipped',
                     ));
                 } else {
                     shopeeOmsAuditLog('submit_failed', $omsMessage, array(
                         'order_id' => (int) (isset($omsTokenRow['order_id']) ? $omsTokenRow['order_id'] : 0),
-                        'order_code' => (string) (isset($omsOrderRow['orderID']) ? $omsOrderRow['orderID'] : ''),
+                        'order_code' => $omsOrderCode,
                     ));
                 }
             }
-            $omsOrderRow = shopeeOmsLoadOrder($finance_connect, isset($omsTokenRow['order_id']) ? (int) $omsTokenRow['order_id'] : 0);
             $omsTokenRst = mysqli_query($finance_connect, $omsTokenSql);
             if ($omsTokenRst && mysqli_num_rows($omsTokenRst) > 0) {
                 $omsTokenRow = mysqli_fetch_assoc($omsTokenRst);
             }
+            $omsSourceConfig = null;
+            $omsOrderRow = shopeeOmsLoadOrderFromTokenRow($connect, $finance_connect, $omsTokenRow, $omsSourceConfig, 'shopee');
+            $omsPlatform = isset($omsSourceConfig['platform']) ? (string) $omsSourceConfig['platform'] : shopeeOmsGetOrderSourcePlatform($omsOrderRow, 'shopee');
+            $omsPlatformLabel = isset($omsSourceConfig['label']) ? (string) $omsSourceConfig['label'] : ucfirst($omsPlatform);
+            $omsOrderCode = !empty($omsOrderRow)
+                ? shopeeOmsGetOrderCodeValue($omsOrderRow, $omsSourceConfig)
+                : trim((string) (isset($omsTokenRow['order_code']) ? $omsTokenRow['order_code'] : ''));
         } else if (!empty($omsTokenRow['used_at'])) {
             $omsStatusTitle = 'Warehouse Stock-out Already Completed';
             $omsStatusClass = 'success';
             $omsMessage = 'This warehouse stock-out link has already been used.';
         }
 
-        $omsSummary = !empty($omsOrderRow) ? shopeeOmsBuildOrderProductSummary($connect, $omsOrderRow) : array();
+        $omsSourceConfig = is_array($omsSourceConfig) ? $omsSourceConfig : array();
+        $omsSummary = !empty($omsOrderRow) ? shopeeOmsBuildOrderProductSummaryBySource($connect, $omsOrderRow, $omsSourceConfig) : array();
         $omsPackagePinAccess = checkPinByGroupId($connect, 21);
         $omsProductPinAccess = checkPinByGroupId($connect, 20);
         $omsCanEditPackage = isActionAllowed('Edit', $omsPackagePinAccess);
@@ -317,33 +330,27 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
         $omsStockOutWarehouseName = !empty($omsOrderRow)
             ? shopeeOmsResolveStockOutWarehouseName($connect, $omsOrderRow, $omsDefaultWarehouseId)
             : '';
-        $omsCustomerDisplayName = '';
-        if (isset($omsTokenRow['customer_name']) && trim((string) $omsTokenRow['customer_name']) !== '') {
-            $omsCustomerDisplayName = trim((string) $omsTokenRow['customer_name']);
-        } elseif (isset($omsOrderRow['customer_name']) && trim((string) $omsOrderRow['customer_name']) !== '') {
-            $omsCustomerDisplayName = trim((string) $omsOrderRow['customer_name']);
-        } elseif (isset($omsOrderRow['buyer']) && trim((string) $omsOrderRow['buyer']) !== '') {
-            $omsCustomerDisplayName = trim((string) $omsOrderRow['buyer']);
-            if (ctype_digit($omsCustomerDisplayName)) {
-                $buyerRst = getData('buyer_username', "id='" . (int) $omsCustomerDisplayName . "'", 'LIMIT 1', SHOPEE_CUST_INFO, $finance_connect);
-                if ($buyerRst && $buyerRst->num_rows > 0) {
-                    $buyerRow = $buyerRst->fetch_assoc();
-                    if (isset($buyerRow['buyer_username']) && trim((string) $buyerRow['buyer_username']) !== '') {
-                        $omsCustomerDisplayName = trim((string) $buyerRow['buyer_username']);
-                    }
-                }
-            }
-        }
+        $omsCustomerDisplayName = !empty($omsOrderRow)
+            ? shopeeOmsGetOrderCustomerNameText($connect, $finance_connect, $omsOrderRow, $omsSourceConfig)
+            : trim((string) (isset($omsTokenRow['customer_name']) ? $omsTokenRow['customer_name'] : ''));
+        $omsAddressField = isset($omsSourceConfig['address_field']) ? (string) $omsSourceConfig['address_field'] : 'customer_address';
+        $omsAirbillField = isset($omsSourceConfig['airbill_no_field']) ? (string) $omsSourceConfig['airbill_no_field'] : 'airbill_no';
+        $omsAirbillAttachmentField = isset($omsSourceConfig['airbill_attachment_field']) ? (string) $omsSourceConfig['airbill_attachment_field'] : 'airbill_attachment';
+        $omsAddressValue = isset($omsOrderRow[$omsAddressField]) && trim((string) $omsOrderRow[$omsAddressField]) !== ''
+            ? (string) $omsOrderRow[$omsAddressField]
+            : '-';
+        $omsAirbillValue = isset($omsOrderRow[$omsAirbillField]) && trim((string) $omsOrderRow[$omsAirbillField]) !== ''
+            ? (string) $omsOrderRow[$omsAirbillField]
+            : '-';
         $omsAirbillAttachmentUrl = '';
         $omsAirbillAttachmentName = '';
         $omsAirbillAttachmentExt = '';
-        if (!empty($omsOrderRow['airbill_attachment'])) {
-            $storedAttachment = trim(str_replace('\\', '/', (string) $omsOrderRow['airbill_attachment']), '/');
+        if (!empty($omsOrderRow[$omsAirbillAttachmentField])) {
+            $storedAttachment = trim(str_replace('\\', '/', (string) $omsOrderRow[$omsAirbillAttachmentField]), '/');
             $omsAirbillAttachmentName = basename($storedAttachment);
             $omsAirbillAttachmentExt = strtolower((string) pathinfo($omsAirbillAttachmentName, PATHINFO_EXTENSION));
-            if (strpos($storedAttachment, 'attachment/') === 0) {
-                $omsAirbillAttachmentUrl = rtrim((string) $SITEURL, '/') . '/' . $storedAttachment;
-            } else {
+            $omsAirbillAttachmentUrl = shopeeOmsBuildAirbillAttachmentUrl($storedAttachment);
+            if ($omsAirbillAttachmentUrl === '') {
                 $imgServerBase = defined('img_server') ? (string) constant('img_server') : '/images_server/';
                 $omsAirbillAttachmentUrl = rtrim((string) $SITEURL, '/') . '/' . trim($imgServerBase, '/\\') . '/shopee_airbill_attachment/' . rawurlencode($omsAirbillAttachmentName);
             }
@@ -390,17 +397,17 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
         <body>
             <div class="container">
                 <h1 class="title"><?= htmlspecialchars($omsStatusTitle) ?></h1>
-                <p class="subtitle">Shopee OMS Warehouse Stock-out Scan</p>
+                <p class="subtitle"><?= htmlspecialchars($omsPlatformLabel) ?> OMS Warehouse Stock-out Scan</p>
                 <div class="alert alert-<?= htmlspecialchars($omsStatusClass) ?>"><?= htmlspecialchars($omsMessage) ?></div>
 
                 <?php if (!empty($omsOrderRow)) { ?>
                     <div class="grid">
                         <div class="card">
                             <h4>Order Details</h4>
-                            <div><span class="k">Order ID:</span> <span class="v"><?= htmlspecialchars((string) (isset($omsOrderRow['orderID']) ? $omsOrderRow['orderID'] : '')) ?></span></div>
+                            <div><span class="k">Order ID:</span> <span class="v"><?= htmlspecialchars($omsOrderCode !== '' ? $omsOrderCode : '-') ?></span></div>
                             <div><span class="k">Customer Name:</span> <span class="v"><?= htmlspecialchars($omsCustomerDisplayName !== '' ? $omsCustomerDisplayName : '-') ?></span></div>
-                            <div><span class="k">Address:</span> <span class="v"><?= nl2br(htmlspecialchars((string) (isset($omsOrderRow['customer_address']) ? $omsOrderRow['customer_address'] : '-'))) ?></span></div>
-                            <div><span class="k">Airbill:</span> <span class="v"><?= htmlspecialchars((string) (isset($omsOrderRow['airbill_no']) && trim((string) $omsOrderRow['airbill_no']) !== '' ? $omsOrderRow['airbill_no'] : '-')) ?></span></div>
+                            <div><span class="k">Address:</span> <span class="v"><?= nl2br(htmlspecialchars($omsAddressValue)) ?></span></div>
+                            <div><span class="k">Airbill:</span> <span class="v"><?= htmlspecialchars($omsAirbillValue) ?></span></div>
                             <div><span class="k">Airbill Attachment:</span> <span class="v"><?= htmlspecialchars($omsAirbillAttachmentName !== '' ? $omsAirbillAttachmentName : '-') ?></span></div>
                             <div><span class="k">Current Status:</span> <span class="v"><?= htmlspecialchars(shopeeOmsGetStatusLabel(isset($omsOrderRow['order_status']) ? $omsOrderRow['order_status'] : '')) ?></span></div>
                         </div>
@@ -413,11 +420,16 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
                                     $omsPackageParts = array();
                                     foreach ($omsPackageSummaryRows as $omsPackageIndex => $omsPackageRow) {
                                         $omsPackageLabel = isset($omsPackageRow['label']) ? (string) $omsPackageRow['label'] : '';
+                                        $omsPackageId = isset($omsPackageRow['package_id']) ? (int) $omsPackageRow['package_id'] : 0;
                                         $omsPackageDisplayLabel = shopeeOmsFormatWarehousePackageDisplayLabel($omsPackageLabel, $omsPackageIndex);
                                         if ($omsPackageDisplayLabel === '') {
                                             continue;
                                         }
-                                        $omsPackageParts[] = htmlspecialchars($omsPackageDisplayLabel, ENT_QUOTES, 'UTF-8');
+                                        if ($omsCanEditPackage && $omsPackageId > 0) {
+                                            $omsPackageParts[] = '<a href="' . htmlspecialchars($SITEURL . '/package.php?id=' . $omsPackageId . '&act=E', ENT_QUOTES, 'UTF-8') . '" target="_blank" rel="noopener noreferrer">' . htmlspecialchars($omsPackageDisplayLabel, ENT_QUOTES, 'UTF-8') . '</a>';
+                                        } else {
+                                            $omsPackageParts[] = htmlspecialchars($omsPackageDisplayLabel, ENT_QUOTES, 'UTF-8');
+                                        }
                                     }
                                     echo implode('<br>', $omsPackageParts);
                                 } else {

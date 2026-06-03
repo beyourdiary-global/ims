@@ -2399,7 +2399,7 @@ if (!function_exists('shopeeOmsGetOrderSourceConfigs')) {
                 'date_field' => 'create_date',
                 'fallback_code_prefix' => 'LAZ',
                 'view_url' => '/lazada_order_req.php',
-                'info_url' => '/lazada_order_req.php',
+                'info_url' => '/lazada_order_request_info.php',
                 'attachment_page_name' => 'lazada_order_request',
             ),
             'facebook' => array(
@@ -2420,7 +2420,7 @@ if (!function_exists('shopeeOmsGetOrderSourceConfigs')) {
                 'date_field' => 'create_date',
                 'fallback_code_prefix' => 'FB',
                 'view_url' => '/finance/fb_order_req.php',
-                'info_url' => '/finance/fb_order_req.php',
+                'info_url' => '/finance/fb_order_request_info.php',
                 'attachment_page_name' => 'fb_order_request',
             ),
             'website' => array(
@@ -2441,7 +2441,7 @@ if (!function_exists('shopeeOmsGetOrderSourceConfigs')) {
                 'date_field' => 'create_date',
                 'fallback_code_prefix' => 'WEB',
                 'view_url' => '/finance/website_order_request.php',
-                'info_url' => '/finance/website_order_request.php',
+                'info_url' => '/finance/website_order_request_info.php',
                 'attachment_page_name' => 'website_order_request',
             ),
         );
@@ -4732,6 +4732,54 @@ if (!function_exists('shopeeOmsLoadOrderByCodeAnyPlatform')) {
             $conn = shopeeOmsGetOrderSourceDbConnection($cmsConnect, $financeConnect, $sourceConfig);
             $orderRow = shopeeOmsLoadOrderByCode($conn, $orderCode, $sourceConfig);
             if (!empty($orderRow)) {
+                return $orderRow;
+            }
+        }
+
+        return array();
+    }
+}
+
+if (!function_exists('shopeeOmsResolveOrderSourceConfigFromTokenRow')) {
+    function shopeeOmsResolveOrderSourceConfigFromTokenRow($cmsConnect, $financeConnect, $tokenRow, $fallbackPlatform = 'shopee')
+    {
+        $fallbackPlatform = shopeeOmsNormalizePlatformKey($fallbackPlatform) ?: 'shopee';
+        $platform = shopeeOmsNormalizePlatformKey(isset($tokenRow['platform']) ? $tokenRow['platform'] : '');
+        if ($platform !== '') {
+            return shopeeOmsResolveOrderSourceConfig($platform, $fallbackPlatform);
+        }
+
+        $orderCode = trim((string) (isset($tokenRow['order_code']) ? $tokenRow['order_code'] : ''));
+        if ($orderCode !== '') {
+            $orderRow = shopeeOmsLoadOrderByCodeAnyPlatform($cmsConnect, $financeConnect, $orderCode);
+            if (!empty($orderRow)) {
+                return shopeeOmsResolveOrderSourceConfig(shopeeOmsGetOrderSourcePlatform($orderRow, $fallbackPlatform), $fallbackPlatform);
+            }
+        }
+
+        return shopeeOmsResolveOrderSourceConfig($fallbackPlatform, $fallbackPlatform);
+    }
+}
+
+if (!function_exists('shopeeOmsLoadOrderFromTokenRow')) {
+    function shopeeOmsLoadOrderFromTokenRow($cmsConnect, $financeConnect, $tokenRow, &$resolvedSourceConfig = null, $fallbackPlatform = 'shopee')
+    {
+        $resolvedSourceConfig = shopeeOmsResolveOrderSourceConfigFromTokenRow($cmsConnect, $financeConnect, $tokenRow, $fallbackPlatform);
+        $orderConnect = shopeeOmsGetOrderSourceDbConnection($cmsConnect, $financeConnect, $resolvedSourceConfig);
+        $orderId = isset($tokenRow['order_id']) ? (int) $tokenRow['order_id'] : 0;
+        if ($orderId > 0) {
+            $orderRow = shopeeOmsLoadOrder($orderConnect, $orderId, $resolvedSourceConfig);
+            if (!empty($orderRow)) {
+                return $orderRow;
+            }
+        }
+
+        $orderCode = trim((string) (isset($tokenRow['order_code']) ? $tokenRow['order_code'] : ''));
+        if ($orderCode !== '') {
+            $platform = isset($resolvedSourceConfig['platform']) ? (string) $resolvedSourceConfig['platform'] : '';
+            $orderRow = shopeeOmsLoadOrderByCodeAnyPlatform($cmsConnect, $financeConnect, $orderCode, $platform);
+            if (!empty($orderRow)) {
+                $resolvedSourceConfig = shopeeOmsResolveOrderSourceConfig(shopeeOmsGetOrderSourcePlatform($orderRow, $fallbackPlatform), $fallbackPlatform);
                 return $orderRow;
             }
         }
@@ -8303,13 +8351,12 @@ if (!function_exists('shopeeOmsProcessWarehouseScanByToken')) {
             return array('success' => false, 'message' => 'This warehouse stock-out scan link has already been used.');
         }
 
-        $tokenPlatform = shopeeOmsNormalizePlatformKey(isset($tokenRow['platform']) ? $tokenRow['platform'] : '') ?: 'shopee';
-        $sourceConfig = shopeeOmsResolveOrderSourceConfig($tokenPlatform, 'shopee');
-        $orderConnect = shopeeOmsGetOrderSourceDbConnection($cmsConnect, $financeConnect, $sourceConfig);
-        $orderRow = shopeeOmsLoadOrder($orderConnect, isset($tokenRow['order_id']) ? (int) $tokenRow['order_id'] : 0, $sourceConfig);
+        $sourceConfig = null;
+        $orderRow = shopeeOmsLoadOrderFromTokenRow($cmsConnect, $financeConnect, $tokenRow, $sourceConfig, 'shopee');
         if (empty($orderRow)) {
             return array('success' => false, 'message' => 'Order linked to this scan token was not found.');
         }
+        $tokenPlatform = isset($sourceConfig['platform']) ? (string) $sourceConfig['platform'] : shopeeOmsGetOrderSourcePlatform($orderRow, 'shopee');
 
         if (shopeeOmsNormalizeStatusCode(isset($orderRow['order_status']) ? $orderRow['order_status'] : '') !== 'TP') {
             return array('success' => false, 'message' => 'This order is no longer waiting for warehouse stock-out.');
