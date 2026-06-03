@@ -142,6 +142,8 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
     }
     $for_airbill_no = postSpaceFilter('for_airbill_no');
     $for_airbill_attachment = postSpaceFilter('for_airbill_attachment_value');
+    $for_order_status_sql = mysqli_real_escape_string($finance_connect, $for_order_status);
+    $for_airbill_no_sql = mysqli_real_escape_string($finance_connect, $for_airbill_no);
 
     $for_attach = null;
     if (isset($_FILES["for_attach"]) && $_FILES["for_attach"]["size"] != 0) {
@@ -413,7 +415,7 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
                     }
 
                     $tblName2 = FB_CUST_DEALS;
-                    $query = "INSERT INTO " . $tblName . " (name,fb_link,contact,sales_pic,country,brand,series,package,fb_page,channel,price,pay_method,ship_rec_name,ship_rec_add,ship_rec_contact,remark,attachment,order_status,stock_out_warehouse_id,airbill_no,airbill_attachment,create_by,create_date,create_time) VALUES ('$for_name','$for_link','$for_ctc','$for_pic','$for_country','$for_brand','$for_series','$for_pkg','$for_fbpage','$for_channel','$for_price','$for_pay','$for_rec_name','$for_rec_add','$for_rec_ctc','$for_remark','$for_attach','$for_order_status'," . ($for_stock_out_warehouse_id > 0 ? $for_stock_out_warehouse_id : 'NULL') . ",'$for_airbill_no','" . mysqli_real_escape_string($finance_connect, $for_airbill_attachment) . "','" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . " (name,fb_link,contact,sales_pic,country,brand,series,package,fb_page,channel,price,pay_method,ship_rec_name,ship_rec_add,ship_rec_contact,remark,attachment,order_status,stock_out_warehouse_id,airbill_no,airbill_attachment,create_by,create_date,create_time) VALUES ('$for_name','$for_link','$for_ctc','$for_pic','$for_country','$for_brand','$for_series','$for_pkg','$for_fbpage','$for_channel','$for_price','$for_pay','$for_rec_name','$for_rec_add','$for_rec_ctc','$for_remark','$for_attach','$for_order_status_sql'," . ($for_stock_out_warehouse_id > 0 ? $for_stock_out_warehouse_id : 'NULL') . ",'$for_airbill_no_sql','" . mysqli_real_escape_string($finance_connect, $for_airbill_attachment) . "','" . USER_ID . "',curdate(),curtime())";
                    
                     $result2 = getData('*', "name = '$for_name' AND fb_link = '$for_link'", '', $tblName2, $connect);
                     
@@ -578,7 +580,7 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
-                        $query = "UPDATE " . $tblName . " SET name = '$for_name', fb_link = '$for_link', contact = '$for_ctc', sales_pic = '$for_pic', country = '$for_country', brand = '$for_brand', series = '$for_series', package = '$for_pkg', fb_page = '$for_fbpage', channel = '$for_channel', price = '$for_price', pay_method = '$for_pay', ship_rec_name = '$for_rec_name', ship_rec_add = '$for_rec_add', ship_rec_contact = '$for_rec_ctc', remark ='$for_remark', attachment ='$for_attach', order_status = '$for_order_status', stock_out_warehouse_id = " . ($for_stock_out_warehouse_id > 0 ? $for_stock_out_warehouse_id : 'NULL') . ", airbill_no = '$for_airbill_no', airbill_attachment = '" . mysqli_real_escape_string($finance_connect, $for_airbill_attachment) . "', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
+                        $query = "UPDATE " . $tblName . " SET name = '$for_name', fb_link = '$for_link', contact = '$for_ctc', sales_pic = '$for_pic', country = '$for_country', brand = '$for_brand', series = '$for_series', package = '$for_pkg', fb_page = '$for_fbpage', channel = '$for_channel', price = '$for_price', pay_method = '$for_pay', ship_rec_name = '$for_rec_name', ship_rec_add = '$for_rec_add', ship_rec_contact = '$for_rec_ctc', remark ='$for_remark', attachment ='$for_attach', order_status = '$for_order_status_sql', stock_out_warehouse_id = " . ($for_stock_out_warehouse_id > 0 ? $for_stock_out_warehouse_id : 'NULL') . ", airbill_no = '$for_airbill_no_sql', airbill_attachment = '" . mysqli_real_escape_string($finance_connect, $for_airbill_attachment) . "', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
                         $returnData = mysqli_query($finance_connect, $query);
 
                         // --- FIX: Delete the old attachment from the folder ---
