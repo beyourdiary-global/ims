@@ -98,7 +98,10 @@ if ($isStockBalanceView) {
     $stockRows = array();
     $grandTotalPrice = 0.00;
     if (function_exists('siEnsureStockOutBatchUsageTable')) {
-        siEnsureStockOutBatchUsageTable($finance_connect);
+        $sobuReady = function_exists('session_status') && session_status() === PHP_SESSION_ACTIVE && !empty($_SESSION['sobu_ready']);
+        if (!$sobuReady && siEnsureStockOutBatchUsageTable($finance_connect) && function_exists('session_status') && session_status() === PHP_SESSION_ACTIVE) {
+            $_SESSION['sobu_ready'] = 1;
+        }
     }
     $stockSql = "SELECT
                     i.product_id,
