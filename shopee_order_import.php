@@ -113,7 +113,11 @@ $currencyUnits = getImportOptionList(CUR_UNIT, 'unit', $connect);
 $userOptions = getImportOptionList(USR_USER, 'name', $connect);
 $shopeePayMethods = getImportOptionList(PAY_MTHD_SHOPEE, 'name', $finance_connect);
 $brandOptions = getImportOptionList(BRAND, 'name', $connect);
-$pkgOptions = getImportOptionList(PKG, 'name', $connect);
+$pkgMetaOptions = getActivePackageImportMeta($connect);
+$pkgOptions = array();
+foreach ($pkgMetaOptions as $pkgMetaId => $pkgMetaRow) {
+    $pkgOptions[$pkgMetaId] = isset($pkgMetaRow['name']) ? (string) $pkgMetaRow['name'] : '';
+}
 $shopeeBuyers = getImportOptionList(SHOPEE_CUST_INFO, 'buyer_username', $finance_connect);
 
 $sorWarehouseRows = shopeeOmsLoadActiveWarehouses($connect);
@@ -225,13 +229,20 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
             $pdfSourceText = $extension === 'pdf' ? (isset($rawPdfText) ? (string) $rawPdfText : '') : '';
             $order_id = extractShopeeOrderId($cleanText, $html, $pdfSourceText, $extension === 'pdf' ? (string) $rawContent : '');
 
-            $skuSourceText = $pdfSourceText !== '' ? $pdfSourceText : $cleanText;
-            $sku = extractShopeeSkuFromText($skuSourceText);
-            if ($sku === '') {
-                $sku = extractShopeeSkuFromText($cleanText);
-            }
-            if ($sku === '' && $extension === 'pdf') {
-                $sku = extractShopeeSkuFromPdfBinary((string) $rawContent);
+            $sku = '';
+            if ($extension === 'pdf') {
+                $skuSourceText = $pdfSourceText !== '' ? $pdfSourceText : $cleanText;
+                $sku = extractShopeeSkuFromText($skuSourceText);
+                if ($sku === '') {
+                    $sku = extractShopeeSkuFromText($cleanText);
+                }
+                if ($sku === '') {
+                    $sku = extractShopeeSkuFromPdfBinary((string) $rawContent);
+                }
+            } else if ($xpath instanceof DOMXPath) {
+                // HTML import should only trust visible order-detail nodes for SKU detection.
+                // Whole-page text includes bundled scripts/styles that can contain unrelated "SKU" strings.
+                $sku = extractShopeeSkuFromHtml($xpath);
             }
 
             // Extract one or more product names for package matching.
@@ -486,7 +497,7 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
                 $orderIdFieldError = 'Duplicate Order ID found in Shopee Order Request records.';
             }
 
-            $pkgIds = resolvePackageIdsFromDetectedData($sku, $productNameCandidates, $connect);
+            $pkgIds = resolvePackageIdsFromDetectedData($sku, $productNameCandidates, $connect, $pkgMetaOptions);
             $pkg_id = implode(',', $pkgIds);
             $missing_sku = empty($pkgIds);
             $brandIds = resolveBrandIdsByPackageIds($pkgIds, $connect);
@@ -550,9 +561,12 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
             $finalAmt = $finalAmt !== '' ? $finalAmt : calculateShopeeImportFinalAmount($product_price, $voucher, $actShippingFee, $fees);
 
             $mappedInitialStatus = shopeeOmsGetImportDefaultStatus($detectedOrderStatus);
+            $skuMatched = (!$missing_sku && $sku !== '') ? 'yes' : 'no';
             $previewData = [
                 'order_id' => $order_id,
-                'sku' => $sku,
+                'sku' => $skuMatched === 'yes' ? $sku : '',
+                'detected_sku' => $sku,
+                'sku_matched' => $skuMatched,
                 'package_id' => $pkg_id,
                 'product_price' => $product_price !== '' ? $product_price : '0.00',
                 'order_status' => shopeeOmsGetStatusLabel($mappedInitialStatus),
@@ -670,7 +684,9 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
         'order_status' => $orderStatusVal,
         'order_status_val' => $orderStatusVal,
         'stock_out_warehouse_id' => $stockOutWarehouseId,
-        'sku' => isset($_POST['sku']) ? $_POST['sku'] : '',
+        'sku' => postSpaceFilter('sku_matched') === 'yes' ? (isset($_POST['sku']) ? $_POST['sku'] : '') : '',
+        'detected_sku' => isset($_POST['detected_sku']) ? $_POST['detected_sku'] : '',
+        'sku_matched' => postSpaceFilter('sku_matched') === 'yes' ? 'yes' : 'no',
         'missing_sku' => empty($packageIdsStr),
         'shopee_acc' => postSpaceFilter('shopee_acc'),
         'currency' => postSpaceFilter('currency'),
@@ -963,6 +979,29 @@ function getImportOptionList($tableName, $labelField, $dbConnect)
     return $list;
 }
 
+function getActivePackageImportMeta($dbConnect)
+{
+    $list = array();
+    $query = "SELECT id, name, item_code FROM `" . PKG . "` WHERE status = 'A' ORDER BY name ASC";
+    $result = mysqli_query($dbConnect, $query);
+
+    if ($result) {
+        while ($row = mysqli_fetch_assoc($result)) {
+            $pkgId = isset($row['id']) ? (int) $row['id'] : 0;
+            if ($pkgId <= 0) {
+                continue;
+            }
+
+            $list[$pkgId] = array(
+                'name' => isset($row['name']) ? (string) $row['name'] : '',
+                'item_code' => isset($row['item_code']) ? (string) $row['item_code'] : '',
+            );
+        }
+    }
+
+    return $list;
+}
+
 function normalizeImportText($text)
 {
     $text = html_entity_decode((string) $text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
@@ -1053,7 +1092,55 @@ function extractShopeeProductNameCandidates($xpath, $cleanText)
     return array_values($normalized);
 }
 
-function resolvePackageIdsFromDetectedData($sku, $productNameCandidates, $connect)
+function extractShopeeSkuFromHtml($xpath)
+{
+    if (!($xpath instanceof DOMXPath)) {
+        return '';
+    }
+
+    $bestSku = '';
+    $bestScore = -999;
+    $queries = array(
+        "//*[contains(@class,'product-meta')]//div",
+        "//*[contains(@class,'product-detail')]//div[contains(., 'SKU') or contains(., 'Item Code')]",
+        "//*[contains(@class,'product-info')]//div[contains(., 'SKU') or contains(., 'Item Code')]",
+    );
+
+    foreach ($queries as $query) {
+        $nodes = $xpath->query($query);
+        if (!$nodes) {
+            continue;
+        }
+
+        foreach ($nodes as $node) {
+            $nodeText = normalizeImportText($node->textContent);
+            if ($nodeText === '' || !preg_match('/(?:SKU|ITEM\s*CODE)/i', $nodeText)) {
+                continue;
+            }
+
+            if (preg_match_all('/(?:SKU|ITEM\s*CODE)\s*[:\-]?\s*([A-Za-z0-9&%:=;,\-\/\\_]{4,60})/i', $nodeText, $matches)) {
+                foreach ($matches[1] as $rawCandidate) {
+                    $rawCandidate = preg_replace('/\b(?:VIEW|TRANSACTION|HISTORY|UNIT|PRICE|MERCHANDISE|SUBTOTAL|PAYMENT|INFO|INFORMATION|DELIVERY|ADDRESS|LOGISTIC)\b.*$/i', '', (string) $rawCandidate);
+                    $rawCandidate = preg_replace('/\s+[0-9]{1,4}(?:\.[0-9]{2})?.*$/', '', (string) $rawCandidate);
+                    $candidate = normalizeShopeeSkuCandidate($rawCandidate);
+                    if ($candidate === '') {
+                        continue;
+                    }
+
+                    $score = scoreShopeeSkuCandidate($candidate);
+                    if ($score > $bestScore) {
+                        $bestScore = $score;
+                        $bestSku = $candidate;
+                    }
+                }
+            }
+        }
+    }
+
+    return $bestScore >= 5 ? $bestSku : '';
+}
+
+function resolvePackageIdsFromDetectedData($sku, $productNameCandidates, $connect, $packageMetaOptions = array())
 {
     $resolvedIds = array();
 
@@ -1064,26 +1151,89 @@ function resolvePackageIdsFromDetectedData($sku, $productNameCandidates, $connec
         }
     };
 
+    if (!is_array($packageMetaOptions)) {
+        $packageMetaOptions = array();
+    }
+
+    $pushMatchesFromMeta = function ($value, $preferItemCode = false) use ($packageMetaOptions, $pushId) {
+        $value = trim((string) $value);
+        if ($value === '' || empty($packageMetaOptions)) {
+            return false;
+        }
+
+        $matched = false;
+        $normalizedValue = normalizeImportLookup($value);
+
+        foreach ($packageMetaOptions as $pkgId => $pkgMeta) {
+            $itemCode = trim((string) (isset($pkgMeta['item_code']) ? $pkgMeta['item_code'] : ''));
+            if ($itemCode !== '' && strcasecmp($itemCode, $value) === 0) {
+                $pushId($pkgId);
+                $matched = true;
+            }
+        }
+
+        if ($preferItemCode && $matched) {
+            return true;
+        }
+
+        foreach ($packageMetaOptions as $pkgId => $pkgMeta) {
+            $packageName = trim((string) (isset($pkgMeta['name']) ? $pkgMeta['name'] : ''));
+            if ($packageName !== '' && strcasecmp($packageName, $value) === 0) {
+                $pushId($pkgId);
+                $matched = true;
+            }
+        }
+
+        if ($normalizedValue === '') {
+            return $matched;
+        }
+
+        foreach ($packageMetaOptions as $pkgId => $pkgMeta) {
+            $itemCodeLookup = normalizeImportLookup(isset($pkgMeta['item_code']) ? $pkgMeta['item_code'] : '');
+            if ($itemCodeLookup !== '' && $itemCodeLookup === $normalizedValue) {
+                $pushId($pkgId);
+                $matched = true;
+            }
+        }
+
+        if ($preferItemCode && $matched) {
+            return true;
+        }
+
+        foreach ($packageMetaOptions as $pkgId => $pkgMeta) {
+            $packageNameLookup = normalizeImportLookup(isset($pkgMeta['name']) ? $pkgMeta['name'] : '');
+            if ($packageNameLookup !== '' && $packageNameLookup === $normalizedValue) {
+                $pushId($pkgId);
+                $matched = true;
+            }
+        }
+
+        return $matched;
+    };
+
     $sku = trim((string) $sku);
     if ($sku !== '') {
-        $safeSku = mysqli_real_escape_string($connect, $sku);
-        $pkgResult = getData('id', "item_code='$safeSku' OR name='$safeSku'", 'LIMIT 1', PKG, $connect);
-        if ($pkgResult && $pkgResult->num_rows > 0) {
-            $pkgRow = $pkgResult->fetch_assoc();
-            $pushId($pkgRow['id']);
-        } else {
-            $safeSkuLike = sanitizeImportLikeTerm($sku);
-            if ($safeSkuLike !== '') {
-                $escapedSkuLike = mysqli_real_escape_string($connect, $safeSkuLike);
-                try {
-                    $pkgResult = getData('id', "item_code LIKE '%$escapedSkuLike%' OR name LIKE '%$escapedSkuLike%'", 'LIMIT 1', PKG, $connect);
-                } catch (Throwable $throwable) {
-                    $pkgResult = false;
-                }
+        $matchedFromMeta = $pushMatchesFromMeta($sku, true);
+        if (!$matchedFromMeta) {
+            $safeSku = mysqli_real_escape_string($connect, $sku);
+            $pkgResult = getData('id', "item_code='$safeSku' OR name='$safeSku'", 'LIMIT 1', PKG, $connect);
+            if ($pkgResult && $pkgResult->num_rows > 0) {
+                $pkgRow = $pkgResult->fetch_assoc();
+                $pushId($pkgRow['id']);
+            } else {
+                $safeSkuLike = sanitizeImportLikeTerm($sku);
+                if ($safeSkuLike !== '') {
+                    $escapedSkuLike = mysqli_real_escape_string($connect, $safeSkuLike);
+                    try {
+                        $pkgResult = getData('id', "item_code LIKE '%$escapedSkuLike%' OR name LIKE '%$escapedSkuLike%'", 'LIMIT 1', PKG, $connect);
+                    } catch (Throwable $throwable) {
+                        $pkgResult = false;
+                    }
 
-                if ($pkgResult && $pkgResult->num_rows > 0) {
-                    $pkgRow = $pkgResult->fetch_assoc();
-                    $pushId($pkgRow['id']);
+                    if ($pkgResult && $pkgResult->num_rows > 0) {
+                        $pkgRow = $pkgResult->fetch_assoc();
+                        $pushId($pkgRow['id']);
+                    }
                 }
             }
         }
@@ -1096,6 +1246,10 @@ function resolvePackageIdsFromDetectedData($sku, $productNameCandidates, $connec
     foreach ($productNameCandidates as $productName) {
         $productName = trim((string) $productName);
         if ($productName === '') {
+            continue;
+        }
+
+        if ($pushMatchesFromMeta($productName)) {
             continue;
         }
 
@@ -1680,52 +1834,65 @@ function normalizeShopeeSkuCandidate($value)
         return '';
     }
 
-    // Repair common encoded glyph substitutions seen in Shopee PDF text extraction.
-    $value = strtr($value, array(
+    $validateCandidate = function ($candidate) {
+        if ($candidate === null) {
+            return '';
+        }
+
+        $candidate = strtoupper(trim((string) $candidate));
+        if ($candidate === '' || strlen($candidate) < 4 || strlen($candidate) > 40) {
+            return '';
+        }
+
+        $invalidTokens = array(
+            'TOTAL',
+            'SUBTOTAL',
+            'MERCHANDISE',
+            'SHIPPING',
+            'VOUCHER',
+            'COMMISSION',
+            'SERVICE',
+            'TRANSACTION',
+            'PAYMENT',
+            'ORDERINCOME',
+        );
+
+        foreach ($invalidTokens as $token) {
+            if (strpos(str_replace(array('-', '_', '/'), '', $candidate), $token) !== false) {
+                return '';
+            }
+        }
+
+        if (!preg_match('/[A-Z]{2,}/', $candidate)) {
+            return '';
+        }
+
+        if (!preg_match('/\d/', $candidate)) {
+            return '';
+        }
+
+        return trim($candidate, "-_/");
+    };
+
+    $value = preg_replace('/\b(?:VIEW|TRANSACTION|HISTORY|UNIT|PRICE|MERCHANDISE|SUBTOTAL|PAYMENT|INFO|INFORMATION)\b.*$/i', '', $value);
+    $preservedCandidate = preg_replace('/[^A-Z0-9\-_\/]+/', '', (string) $value);
+    $preservedCandidate = $validateCandidate($preservedCandidate);
+    if ($preservedCandidate !== '') {
+        return $preservedCandidate;
+    }
+
+    // Fallback repair path for noisy PDF extraction, while keeping real hyphenated HTML SKUs intact.
+    $repairedCandidate = strtr((string) $value, array(
         '&' => 'B',
         '%' => 'A',
-        '-' => 'I',
         '=' => 'Y',
         ':' => 'V',
         ';' => 'W',
         ',' => 'X',
     ));
+    $repairedCandidate = preg_replace('/[^A-Z0-9\-_\/]+/', '', (string) $repairedCandidate);
 
-    $value = preg_replace('/\b(?:VIEW|TRANSACTION|HISTORY|UNIT|PRICE|MERCHANDISE|SUBTOTAL|PAYMENT|INFO|INFORMATION)\b.*$/i', '', $value);
-    $value = preg_replace('/[^A-Z0-9]+/', '', $value);
-
-    if ($value === null || strlen($value) < 4 || strlen($value) > 32) {
-        return '';
-    }
-
-    $invalidTokens = array(
-        'TOTAL',
-        'SUBTOTAL',
-        'MERCHANDISE',
-        'SHIPPING',
-        'VOUCHER',
-        'COMMISSION',
-        'SERVICE',
-        'TRANSACTION',
-        'PAYMENT',
-        'ORDERINCOME',
-    );
-
-    foreach ($invalidTokens as $token) {
-        if (strpos($value, $token) !== false) {
-            return '';
-        }
-    }
-
-    if (!preg_match('/[A-Z]{3,}/', $value)) {
-        return '';
-    }
-
-    if (!preg_match('/\d{2,}/', $value)) {
-        return '';
-    }
-
-    return $value;
+    return $validateCandidate($repairedCandidate);
 }
 
 function scoreShopeeSkuCandidate($candidate)
@@ -4127,15 +4294,21 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                             <?php } ?>
                                         </div>
                                         <div class="col-12 col-md-4">
-                                            <label class="form-label">Detected SKU / Item Code</label>
-                                            <input class="form-control" type="text" value="<?= htmlspecialchars($previewData['sku']) ?>" readonly>
+                                            <label class="form-label">SKU / Item Code</label>
+                                            <input class="form-control <?= empty($previewData['sku']) ? 'border-warning' : '' ?>" type="text" value="<?= htmlspecialchars($previewData['sku']) ?>" readonly>
                                             <input type="hidden" name="sku" value="<?= htmlspecialchars($previewData['sku']) ?>">
+                                            <input type="hidden" name="detected_sku" value="<?= htmlspecialchars(isset($previewData['detected_sku']) ? $previewData['detected_sku'] : '') ?>">
+                                            <input type="hidden" name="sku_matched" value="<?= htmlspecialchars(isset($previewData['sku_matched']) ? $previewData['sku_matched'] : 'no') ?>">
+                                            <?php if (!empty($previewData['detected_sku'])) { ?>
+                                                <small class="<?= $previewData['missing_sku'] ? 'text-muted' : 'text-success' ?>">
+                                                    Detected SKU: <?= htmlspecialchars($previewData['detected_sku']) ?><?= $previewData['missing_sku'] ? '' : ' - package auto-selected.' ?>
+                                                </small>
+                                            <?php } else { ?>
+                                                <small class="text-danger fw-bold"><i class="fa-solid fa-circle-exclamation"></i> Detected SKU: Not detected.</small>
+                                            <?php } ?>
                                         </div>
                                         <div class="col-12 col-md-4">
                                             <label class="form-label" id="sor_pkg_lbl">Package<span class="requireRed">*</span></label>
-                                            <?php if ($previewData['missing_sku']) { ?>
-                                                <div class="text-danger fw-bold mb-1" style="font-size:12px;"><i class="fa-solid fa-circle-exclamation"></i> Auto-match failed. Please add / select manually.</div>
-                                            <?php } ?>
                                             <?php
                                             $selectedPkgIds = array_filter(array_map('trim', explode(',', (string) $previewData['package_id'])), 'strlen');
                                             $pkgRows = array();
@@ -4174,6 +4347,11 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                                     </div>
                                                 <?php } ?>
                                             </div>
+                                            <?php if ($previewData['missing_sku']) { ?>
+                                                <div class="text-danger fw-bold mb-1" style="font-size:12px;"><i class="fa-solid fa-circle-exclamation"></i> Auto-match failed. Please add / select manually.</div>
+                                            <?php } else if (!empty($previewData['sku'])) { ?>
+                                                <div class="text-success fw-bold mb-1" style="font-size:12px;"><i class="fa-solid fa-circle-check"></i> Auto-matched package from detected SKU.</div>
+                                            <?php } ?>
                                             <button type="button" class="btn btn-outline-primary btn-sm mt-1" id="add_pkg_btn">+ Add Package</button>
                                             <?php if ($previewData['missing_sku']) { ?>
                                                 <a href="<?= $SITEURL ?>/package.php?act=I" target="_blank" class="btn btn-sm btn-outline-danger mt-1">Add New Package</a>
