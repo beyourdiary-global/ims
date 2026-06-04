@@ -55,28 +55,6 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
         white-space: nowrap;
     }
 
-    .customer-tag-table-badge-group {
-        display: inline-flex;
-        flex-wrap: wrap;
-        gap: 0.35rem;
-        margin-top: 0.35rem;
-        vertical-align: top;
-    }
-
-    .customer-tag-table-badge {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.25rem 0.7rem;
-        border: 1px solid #cbd7f2;
-        border-radius: 999px;
-        background: #eef4ff;
-        color: #365a96;
-        font-family: inherit;
-        font-size: 13px;
-        font-weight: inherit;
-        line-height: inherit;
-        white-space: nowrap;
-    }
 </style>
 
 <body>

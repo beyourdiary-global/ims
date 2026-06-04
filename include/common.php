@@ -2775,12 +2775,12 @@ if (!function_exists('customerLabelRenderBadge')) {
         }
 
         $badgeColor = isset($labelMeta['colorCode']) && trim((string) $labelMeta['colorCode']) !== '' ? (string) $labelMeta['colorCode'] : '#6c757d';
-        return '<span class="d-inline-flex align-items-center ms-1 px-2 py-1 rounded-pill text-white" title="' .
+        return '<span class="customer-label-badge text-white" title="' .
             htmlspecialchars($labelName, ENT_QUOTES, 'UTF-8') .
             '" style="background-color:' .
             htmlspecialchars($badgeColor, ENT_QUOTES, 'UTF-8') .
-            ';font-size:13px;line-height:1;flex-wrap:nowrap;white-space:nowrap;max-width:100%;">' .
-            '<span style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">' .
+            ';">' .
+            '<span class="customer-label-badge-text">' .
             htmlspecialchars($labelName, ENT_QUOTES, 'UTF-8') .
             '</span>' .
             '</span>';
@@ -2792,7 +2792,7 @@ if (!function_exists('customerLabelRenderNameCell')) {
     {
         $safeDisplayName = htmlspecialchars((string) $displayName, ENT_QUOTES, 'UTF-8');
         $segmentationBadge = isset($customerLabelMeta['segmentation']) ? customerLabelRenderBadge($customerLabelMeta['segmentation']) : '';
-        return '<span class="d-inline-flex align-items-center flex-nowrap">' . $safeDisplayName . ($segmentationBadge !== '' ? ' ' . $segmentationBadge : '') . '</span>';
+        return '<span class="customer-name-label-wrap"><span class="customer-name-label-text">' . $safeDisplayName . '</span>' . $segmentationBadge . '</span>';
     }
 }
 
@@ -2813,7 +2813,7 @@ if (!function_exists('customerLabelRenderSummaryCell')) {
             $parts[] = $tagBadgeHtml;
         }
 
-        return empty($parts) ? '' : implode(' ', $parts);
+        return empty($parts) ? '' : '<span class="customer-label-summary-wrap">' . implode('', $parts) . '</span>';
     }
 }
 

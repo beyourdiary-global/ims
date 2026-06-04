@@ -1612,6 +1612,50 @@ td.btn-container.mobile-action-open-left .mobile-action-menu {
   gap: .75rem;
 }
 
+.customer-label-badge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: .25rem .5rem;
+  border-radius: 999px;
+  font-size: 13px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.customer-label-badge-text {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.customer-name-label-wrap {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .35rem;
+  max-width: 100%;
+}
+
+.customer-name-label-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.customer-label-summary-wrap {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .35rem;
+  max-width: 100%;
+}
+
+.customer-label-summary-wrap .customer-tag-table-badge-group {
+  margin-top: 0;
+}
+
 .customer-tag-title-badge-group {
   display: inline-flex;
   align-items: center;
@@ -1675,6 +1719,31 @@ td.btn-container.mobile-action-open-left .mobile-action-menu {
   align-items: center;
   flex-wrap: wrap;
   gap: .5rem;
+}
+
+.customer-tag-table-badge-group {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .35rem;
+  max-width: 100%;
+  vertical-align: top;
+}
+
+.customer-tag-table-badge {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: .25rem .7rem;
+  border: 1px solid #cbd7f2;
+  border-radius: 999px;
+  background: #eef4ff;
+  color: #365a96;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: inherit;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 .customer-tag-assigned-item {
