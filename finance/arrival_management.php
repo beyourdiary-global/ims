@@ -7,6 +7,7 @@ $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+include_once ROOT . '/include/customer_follow_up_common.php';
 
 $verifyAccess = checkPinByGroupId($connect, 147);
 $legacyVerifyAccess = checkPinByGroupId($connect, 129);
@@ -15,6 +16,10 @@ $canViewPage = isActionAllowed('View', $verifyAccess) || isActionAllowed('View',
 if (!$canViewPage) {
     echo '<script>alert("You do not have permission to view Arrival Management."); location.replace("../dashboard.php");</script>';
     exit;
+}
+
+if (empty($_SESSION['arrival_follow_up_csrf'])) {
+    $_SESSION['arrival_follow_up_csrf'] = bin2hex(random_bytes(32));
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
@@ -63,6 +68,7 @@ $orderIdFilter = trim((string) input('order_id'));
 $customerFilter = trim((string) input('customer'));
 $estimatedDateValidation = validateEstimatedReceivedDate(date('Y-m-d', strtotime('+1 day')));
 $arrivalAuditSafeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
+$arrivalFollowUpShortcutOptions = customerFollowUpGetMessageShortcutOptions($connect);
 
 $buildArrivalAuditStatusMessage = function ($platformLabel, $orderCode, $oldStatus, $newStatus) use ($arrivalAuditSafeUserName) {
     return $arrivalAuditSafeUserName . " updated " . htmlspecialchars((string) $platformLabel, ENT_QUOTES, 'UTF-8') . " order [ <b>ID = " . htmlspecialchars((string) $orderCode, ENT_QUOTES, 'UTF-8') . "</b> ] status from <b>" . htmlspecialchars((string) $oldStatus, ENT_QUOTES, 'UTF-8') . "</b> to <b>" . htmlspecialchars((string) $newStatus, ENT_QUOTES, 'UTF-8') . "</b>.";
@@ -194,26 +200,42 @@ if (post('saveEstimatedDateBtn')) {
     }
 }
 
-if (post('confirmReceiveBtn')) {
-    $platformKey = shopeeOmsNormalizePlatformKey(postSpaceFilter('confirm_receive_platform'));
-    $orderId = (int) postSpaceFilter('confirm_receive_id');
-    if ($platformKey === '' || $orderId <= 0) {
+if (post('confirmReceiveFollowUpBtn')) {
+    $postedCsrfToken = isset($_POST['arrival_follow_up_csrf']) ? (string) $_POST['arrival_follow_up_csrf'] : '';
+    if (!hash_equals((string) $_SESSION['arrival_follow_up_csrf'], $postedCsrfToken)) {
         $statusClass = 'danger';
-        $statusMessage = 'Order platform is invalid for Confirm Received.';
+        $statusMessage = 'Invalid follow-up session token. Please refresh and try again.';
     } else {
-        $sourceConfig = shopeeOmsGetOrderSourceConfig($platformKey);
-        $confirmResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'PR', array(
-            'actor_user_id' => USER_ID,
-            'actor_user_group_id' => USER_GROUP,
-            'source_page' => $pageTitle,
-            'remark' => 'Parcel received confirmed by admin.',
-            'platform' => $platformKey,
-        ));
-        if (!empty($confirmResult['success'])) {
-            $orderConnect = shopeeOmsGetOrderSourceDbConnection($connect, $finance_connect, $sourceConfig);
-            $orderRow = shopeeOmsLoadOrder($orderConnect, $orderId, $sourceConfig);
-            $oldStatus = isset($confirmResult['old_status']) ? (string) $confirmResult['old_status'] : '';
-            $newStatus = isset($confirmResult['new_status']) ? (string) $confirmResult['new_status'] : 'PR';
+        $platformKey = shopeeOmsNormalizePlatformKey(postSpaceFilter('confirm_receive_platform'));
+        $orderId = (int) postSpaceFilter('confirm_receive_id');
+        $submitResult = customerFollowUpSubmitReceivedOrderAndTransition(
+            $connect,
+            $finance_connect,
+            $platformKey,
+            $orderId,
+            array(
+                'message_shortcut_id' => postSpaceFilter('follow_up_message_shortcut_id'),
+                'next_follow_up_date' => postSpaceFilter('follow_up_next_follow_up_date'),
+                'contact_no' => postSpaceFilter('follow_up_contact_no'),
+            ),
+            isset($_FILES['follow_up_attachment']) ? $_FILES['follow_up_attachment'] : array(),
+            USER_ID,
+            USER_GROUP,
+            array(
+                'source_page' => $pageTitle,
+                'transition_remark' => 'Parcel received confirmed by admin.',
+            )
+        );
+
+        if (!empty($submitResult['success'])) {
+            $sourceConfig = isset($submitResult['source_config']) ? $submitResult['source_config'] : shopeeOmsGetOrderSourceConfig($platformKey);
+            $orderRow = isset($submitResult['order_row_after']) && !empty($submitResult['order_row_after'])
+                ? $submitResult['order_row_after']
+                : shopeeOmsLoadOrder(shopeeOmsGetOrderSourceDbConnection($connect, $finance_connect, $sourceConfig), $orderId, $sourceConfig);
+            $transitionResult = isset($submitResult['transition_result']) ? $submitResult['transition_result'] : array();
+            $oldStatus = isset($transitionResult['old_status']) ? (string) $transitionResult['old_status'] : '';
+            $newStatus = isset($transitionResult['new_status']) ? (string) $transitionResult['new_status'] : 'PR';
+
             audit_log(array(
                 'log_act' => 'edit',
                 'page' => $pageTitle,
@@ -234,9 +256,15 @@ if (post('confirmReceiveBtn')) {
                 'connect' => $connect
             ));
         }
-        $statusClass = !empty($confirmResult['success']) ? 'success' : 'danger';
-        $statusMessage = isset($confirmResult['message']) ? (string) $confirmResult['message'] : 'Unable to confirm parcel received.';
+
+        $statusClass = !empty($submitResult['success']) ? 'success' : 'danger';
+        $statusMessage = isset($submitResult['message']) ? (string) $submitResult['message'] : 'Unable to confirm parcel received.';
     }
+}
+
+if (post('confirmReceiveBtn')) {
+    $statusClass = 'danger';
+    $statusMessage = 'Please submit the Customer Follow-Up form before confirming parcel received.';
 }
 
 if (post('saveDelayBtn')) {
@@ -643,6 +671,88 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
             text-transform: none !important;
         }
 
+        .arrival-follow-up-summary {
+            background: #f8f9fa;
+            border: 1px solid #e9ecef;
+            border-radius: 10px;
+            padding: 12px 14px;
+            margin-bottom: 14px;
+        }
+
+        .arrival-follow-up-summary-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            font-size: 0.9rem;
+            margin-bottom: 6px;
+        }
+
+        .arrival-follow-up-summary-row:last-child {
+            margin-bottom: 0;
+        }
+
+        .arrival-follow-up-summary-label {
+            color: #6c757d;
+        }
+
+        .arrival-follow-up-contact-display {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 0.625rem 0.75rem;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            background: #f8f9fa;
+        }
+
+        .arrival-follow-up-contact-edit {
+            border: 0;
+            background: transparent;
+            color: #0d6efd;
+            padding: 0;
+        }
+
+        .arrival-follow-up-preview {
+            display: none;
+            margin-top: 0.75rem;
+            border: 1px solid #dee2e6;
+            border-radius: 0.5rem;
+            background: #f8f9fa;
+            padding: 0.75rem;
+        }
+
+        .arrival-follow-up-preview img {
+            display: block;
+            max-width: 100%;
+            max-height: 260px;
+            margin: 0 auto;
+            border-radius: 0.375rem;
+            object-fit: contain;
+        }
+
+        .arrival-follow-up-preview-note {
+            font-size: 0.85rem;
+            color: #6c757d;
+            text-align: center;
+        }
+
+        .arrival-required-star {
+            color: #dc3545;
+            margin-left: 2px;
+        }
+
+        .arrival-follow-up-field-error {
+            display: none;
+            color: #dc3545;
+            font-size: 0.82rem;
+            margin-top: 4px;
+        }
+
+        .arrival-follow-up-field-error.is-visible {
+            display: block;
+        }
+
         @media (max-width: 1199px) {
             .shopee-arrival-date-filter-grid,
             .shopee-arrival-filter-grid {
@@ -820,6 +930,10 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
                                                 $delayRemarkField = isset($rowSourceConfig['delay_remark_field']) && trim((string) $rowSourceConfig['delay_remark_field']) !== ''
                                                     ? trim((string) $rowSourceConfig['delay_remark_field'])
                                                     : 'delay_remark';
+                                                $followUpModalContext = array();
+                                                if (in_array($statusCode, array('WR', 'PD'), true) && $canConfirm) {
+                                                    $followUpModalContext = customerFollowUpBuildReceivedOrderContext($connect, $finance_connect, $rowPlatform, (int) $row['id'], $row);
+                                                }
                                                 ?>
                                                 <tr>
                                                     <td>
@@ -848,7 +962,24 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
                                                                 data-max-date="<?= htmlspecialchars((string) $estimatedDateRange['max_date'], ENT_QUOTES, 'UTF-8') ?>"
                                                                 title="Assign Estimate Received Date"><i class="fa-solid fa-calendar-days"></i></button>
                                                         <?php } else if (in_array($statusCode, array('WR', 'PD'), true) && $canConfirm) { ?>
-                                                            <button class="btn btn-sm btn-success confirm-receive-btn" type="button" data-platform="<?= htmlspecialchars($rowPlatform, ENT_QUOTES, 'UTF-8') ?>" data-order-id="<?= (int) $row['id'] ?>">Confirm Received</button>
+                                                            <button
+                                                                class="btn btn-sm btn-success confirm-receive-btn"
+                                                                type="button"
+                                                                data-platform="<?= htmlspecialchars($rowPlatform, ENT_QUOTES, 'UTF-8') ?>"
+                                                                data-order-id="<?= (int) $row['id'] ?>"
+                                                                data-order-code="<?= htmlspecialchars($orderCode, ENT_QUOTES, 'UTF-8') ?>"
+                                                                data-customer-name="<?= htmlspecialchars((string) (isset($followUpModalContext['customer_name']) ? $followUpModalContext['customer_name'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                                data-customer-username="<?= htmlspecialchars((string) (isset($followUpModalContext['customer_username']) ? $followUpModalContext['customer_username'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                                data-package-name="<?= htmlspecialchars((string) (isset($followUpModalContext['package_name']) ? $followUpModalContext['package_name'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                                data-received-date="<?= htmlspecialchars((string) (isset($followUpModalContext['received_date']) ? $followUpModalContext['received_date'] : customerFollowUpNowDate()), ENT_QUOTES, 'UTF-8') ?>"
+                                                                data-purchase-count="<?= (int) (isset($followUpModalContext['purchase_count_snapshot']) ? $followUpModalContext['purchase_count_snapshot'] : 0) ?>"
+                                                                data-customer-type="<?= htmlspecialchars((string) (isset($followUpModalContext['customer_type']) ? $followUpModalContext['customer_type'] : 'new'), ENT_QUOTES, 'UTF-8') ?>"
+                                                                data-contact-no="<?= htmlspecialchars((string) (isset($followUpModalContext['contact_no']) ? $followUpModalContext['contact_no'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                                data-max-date="<?= htmlspecialchars((string) (isset($followUpModalContext['max_date']) ? $followUpModalContext['max_date'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                                data-rule-label="<?= htmlspecialchars((string) (isset($followUpModalContext['rule_label']) ? $followUpModalContext['rule_label'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                                data-block-message="<?= htmlspecialchars((string) (isset($followUpModalContext['block_message']) ? $followUpModalContext['block_message'] : ''), ENT_QUOTES, 'UTF-8') ?>">
+                                                                Confirm Received
+                                                            </button>
                                                         <?php } else { ?>
                                                             <span class="shopee-arrival-empty-action">No direct action</span>
                                                         <?php } ?>
@@ -889,6 +1020,102 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
         </div>
     </div>
 
+    <div class="modal fade" id="arrivalFollowUpModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="post" enctype="multipart/form-data" id="arrival_follow_up_form" novalidate>
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="arrivalFollowUpModalTitle">Customer Follow-Up</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" name="arrival_follow_up_csrf" value="<?= htmlspecialchars((string) $_SESSION['arrival_follow_up_csrf'], ENT_QUOTES, 'UTF-8') ?>">
+                        <input type="hidden" name="confirm_receive_platform" id="arrival_follow_up_platform" value="">
+                        <input type="hidden" name="confirm_receive_id" id="arrival_follow_up_order_id" value="">
+                        <input type="hidden" name="platform_section" id="arrival_follow_up_platform_section" value="<?= htmlspecialchars($activePlatform, ENT_QUOTES, 'UTF-8') ?>">
+
+                        <div class="arrival-follow-up-summary">
+                            <div class="arrival-follow-up-summary-row">
+                                <span class="arrival-follow-up-summary-label">Order ID</span>
+                                <span id="arrival_follow_up_order_code_text"></span>
+                            </div>
+                            <div class="arrival-follow-up-summary-row">
+                                <span class="arrival-follow-up-summary-label">Customer</span>
+                                <span id="arrival_follow_up_customer_text"></span>
+                            </div>
+                            <div class="arrival-follow-up-summary-row">
+                                <span class="arrival-follow-up-summary-label">Package</span>
+                                <span id="arrival_follow_up_package_text"></span>
+                            </div>
+                            <div class="arrival-follow-up-summary-row">
+                                <span class="arrival-follow-up-summary-label">Received Date</span>
+                                <span id="arrival_follow_up_received_date_text"></span>
+                            </div>
+                            <div class="arrival-follow-up-summary-row">
+                                <span class="arrival-follow-up-summary-label">Customer Type</span>
+                                <span id="arrival_follow_up_customer_type_text"></span>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="arrival_follow_up_attachment">
+                                Screenshot / Attachment<span class="arrival-required-star">*</span>
+                            </label>
+                            <input type="file" class="form-control" id="arrival_follow_up_attachment" name="follow_up_attachment" required>
+                            <div class="arrival-follow-up-field-error" id="arrival_follow_up_attachment_error">Screenshot / Attachment is required.</div>
+                            <div class="arrival-follow-up-preview" id="arrival_follow_up_attachment_preview_wrap">
+                                <img id="arrival_follow_up_attachment_preview_img" alt="Follow-Up Attachment Preview">
+                                <div class="arrival-follow-up-preview-note d-none" id="arrival_follow_up_attachment_preview_note"></div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="arrival_follow_up_message_shortcut_id">
+                                Message Shortcut<span class="arrival-required-star">*</span>
+                            </label>
+                            <select class="form-select" id="arrival_follow_up_message_shortcut_id" name="follow_up_message_shortcut_id" required>
+                                <option value="">Select Message Shortcut</option>
+                                <?php foreach ($arrivalFollowUpShortcutOptions as $shortcutRow) {
+                                    $shortcutId = isset($shortcutRow['id']) ? (int) $shortcutRow['id'] : 0;
+                                    if ($shortcutId <= 0) {
+                                        continue;
+                                    }
+                                    $shortcutLabel = trim((string) (isset($shortcutRow['shortcuts_tag']) ? $shortcutRow['shortcuts_tag'] : ''));
+                                    ?>
+                                    <option value="<?= $shortcutId ?>"><?= htmlspecialchars($shortcutLabel !== '' ? $shortcutLabel : ('Shortcut #' . $shortcutId), ENT_QUOTES, 'UTF-8') ?></option>
+                                <?php } ?>
+                            </select>
+                            <div class="arrival-follow-up-field-error" id="arrival_follow_up_message_shortcut_error">Message Shortcut is required.</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="arrival_follow_up_next_date">
+                                Next Follow-Up Date<span class="arrival-required-star">*</span>
+                            </label>
+                            <input type="date" class="form-control" id="arrival_follow_up_next_date" name="follow_up_next_follow_up_date" required>
+                            <div class="arrival-follow-up-field-error" id="arrival_follow_up_next_date_error">Next Follow-Up Date is required.</div>
+                            <small class="text-muted" id="arrival_follow_up_rule_hint"></small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">WhatsApp / Contact Number</label>
+                            <div id="arrival_follow_up_contact_display_wrap" class="arrival-follow-up-contact-display d-none">
+                                <div id="arrival_follow_up_contact_display_text"></div>
+                                <button type="button" class="arrival-follow-up-contact-edit" id="arrival_follow_up_contact_edit_btn" title="Edit Contact Number">
+                                    <i class="fa-solid fa-pen-to-square"></i>
+                                </button>
+                            </div>
+                            <div id="arrival_follow_up_contact_input_wrap">
+                                <input type="text" class="form-control" id="arrival_follow_up_contact_no" name="follow_up_contact_no" placeholder="Enter Contact Number">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" style="text-transform: none !important;">Cancel</button>
+                        <button type="submit" name="confirmReceiveFollowUpBtn" value="1" class="btn btn-success" style="text-transform: none !important;">Submit & Confirm Received</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <div id="estimatedReceivedDateModal" class="estimated-date-modal" onclick="if (event.target === this) closeEstimatedReceivedDateModal();">
         <div class="estimated-date-modal__dialog">
             <form method="post">
@@ -917,6 +1144,61 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
     </div>
 
     <script>
+    function bindArrivalFollowUpAttachmentPreview(inputId, wrapId, imageId, noteId) {
+        var fileInput = document.getElementById(inputId);
+        var previewWrap = document.getElementById(wrapId);
+        var previewImage = document.getElementById(imageId);
+        var previewNote = document.getElementById(noteId);
+        if (!fileInput || !previewWrap || !previewImage || !previewNote) {
+            return null;
+        }
+
+        var currentObjectUrl = null;
+        var clearPreview = function () {
+            if (currentObjectUrl) {
+                URL.revokeObjectURL(currentObjectUrl);
+                currentObjectUrl = null;
+            }
+            previewImage.removeAttribute('src');
+            previewImage.style.display = 'none';
+            previewNote.textContent = '';
+            previewNote.classList.add('d-none');
+            previewWrap.style.display = 'none';
+        };
+
+        fileInput.addEventListener('change', function () {
+            var file = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+            if (!file) {
+                clearPreview();
+                return;
+            }
+
+            if (currentObjectUrl) {
+                URL.revokeObjectURL(currentObjectUrl);
+                currentObjectUrl = null;
+            }
+
+            if (file.type.indexOf('image/') === 0) {
+                currentObjectUrl = URL.createObjectURL(file);
+                previewImage.src = currentObjectUrl;
+                previewImage.style.display = 'block';
+                previewNote.textContent = '';
+                previewNote.classList.add('d-none');
+                previewWrap.style.display = 'block';
+                return;
+            }
+
+            previewImage.removeAttribute('src');
+            previewImage.style.display = 'none';
+            previewNote.textContent = 'Preview is available for image files only.';
+            previewNote.classList.remove('d-none');
+            previewWrap.style.display = 'block';
+        });
+
+        window.addEventListener('beforeunload', clearPreview);
+        return clearPreview;
+    }
+
     function showArrivalStatusPopup(message) {
         const modelResult = document.createElement('div');
         modelResult.id = 'arrival-status-modal';
@@ -1101,27 +1383,184 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
         });
 
         var arrivalForm = document.getElementById('arrival_order_form');
-        var confirmReceiveId = document.getElementById('table_confirm_receive_id');
-        var confirmReceivePlatform = document.getElementById('table_confirm_receive_platform');
         var delayOrderId = document.getElementById('table_delay_order_id');
         var delayPlatform = document.getElementById('table_delay_platform');
         var delayRemark = document.getElementById('table_delay_remark');
+        var clearArrivalFollowUpAttachmentPreview = bindArrivalFollowUpAttachmentPreview(
+            'arrival_follow_up_attachment',
+            'arrival_follow_up_attachment_preview_wrap',
+            'arrival_follow_up_attachment_preview_img',
+            'arrival_follow_up_attachment_preview_note'
+        );
+        
+        var arrivalFollowUpModalElement = document.getElementById('arrivalFollowUpModal');
+        var arrivalFollowUpModal = arrivalFollowUpModalElement && typeof bootstrap !== 'undefined' && bootstrap.Modal
+            ? bootstrap.Modal.getOrCreateInstance(arrivalFollowUpModalElement)
+            : null;
 
-        document.querySelectorAll('.confirm-receive-btn').forEach(function (button) {
-            button.addEventListener('click', function () {
-                if (!window.confirm('Confirm parcel received for this order?')) {
+        function setArrivalFollowUpFieldError(fieldId, errorId, hasError) {
+            var field = document.getElementById(fieldId);
+            var error = document.getElementById(errorId);
+
+            if (field) {
+                field.classList.toggle('is-invalid', hasError);
+            }
+
+            if (error) {
+                error.classList.toggle('is-visible', hasError);
+            }
+        }
+
+        function clearArrivalFollowUpRequiredErrors() {
+            setArrivalFollowUpFieldError('arrival_follow_up_attachment', 'arrival_follow_up_attachment_error', false);
+            setArrivalFollowUpFieldError('arrival_follow_up_message_shortcut_id', 'arrival_follow_up_message_shortcut_error', false);
+            setArrivalFollowUpFieldError('arrival_follow_up_next_date', 'arrival_follow_up_next_date_error', false);
+        }
+
+        function validateArrivalFollowUpRequiredFields() {
+            var attachmentInput = document.getElementById('arrival_follow_up_attachment');
+            var shortcutInput = document.getElementById('arrival_follow_up_message_shortcut_id');
+            var nextDateInput = document.getElementById('arrival_follow_up_next_date');
+
+            var attachmentMissing = !attachmentInput || !attachmentInput.files || attachmentInput.files.length === 0;
+            var shortcutMissing = !shortcutInput || shortcutInput.value.trim() === '';
+            var nextDateMissing = !nextDateInput || nextDateInput.value.trim() === '';
+
+            setArrivalFollowUpFieldError('arrival_follow_up_attachment', 'arrival_follow_up_attachment_error', attachmentMissing);
+            setArrivalFollowUpFieldError('arrival_follow_up_message_shortcut_id', 'arrival_follow_up_message_shortcut_error', shortcutMissing);
+            setArrivalFollowUpFieldError('arrival_follow_up_next_date', 'arrival_follow_up_next_date_error', nextDateMissing);
+
+            if (attachmentMissing || shortcutMissing || nextDateMissing) {
+                var firstInvalidField = attachmentMissing
+                    ? attachmentInput
+                    : (shortcutMissing ? shortcutInput : nextDateInput);
+
+                if (firstInvalidField) {
+                    firstInvalidField.focus();
+                }
+
+                return false;
+            }
+
+            return true;
+        }
+
+        var arrivalFollowUpFormSubmitted = false;
+
+        function clearSingleArrivalFollowUpFieldError(fieldId) {
+            if (fieldId === 'arrival_follow_up_attachment') {
+                var attachmentInput = document.getElementById('arrival_follow_up_attachment');
+                var hasAttachment = attachmentInput && attachmentInput.files && attachmentInput.files.length > 0;
+                if (hasAttachment) {
+                    setArrivalFollowUpFieldError('arrival_follow_up_attachment', 'arrival_follow_up_attachment_error', false);
+                }
+                return;
+            }
+
+            if (fieldId === 'arrival_follow_up_message_shortcut_id') {
+                var shortcutInput = document.getElementById('arrival_follow_up_message_shortcut_id');
+                if (shortcutInput && shortcutInput.value.trim() !== '') {
+                    setArrivalFollowUpFieldError('arrival_follow_up_message_shortcut_id', 'arrival_follow_up_message_shortcut_error', false);
+                }
+                return;
+            }
+
+            if (fieldId === 'arrival_follow_up_next_date') {
+                var nextDateInput = document.getElementById('arrival_follow_up_next_date');
+                if (nextDateInput && nextDateInput.value.trim() !== '') {
+                    setArrivalFollowUpFieldError('arrival_follow_up_next_date', 'arrival_follow_up_next_date_error', false);
+                }
+            }
+        }
+
+        var arrivalFollowUpForm = document.getElementById('arrival_follow_up_form');
+        if (arrivalFollowUpForm) {
+            arrivalFollowUpForm.addEventListener('submit', function (event) {
+                arrivalFollowUpFormSubmitted = true;
+
+                if (!validateArrivalFollowUpRequiredFields()) {
+                    event.preventDefault();
+                    event.stopPropagation();
+                }
+            });
+        }
+
+        ['arrival_follow_up_attachment', 'arrival_follow_up_message_shortcut_id', 'arrival_follow_up_next_date'].forEach(function (fieldId) {
+            var field = document.getElementById(fieldId);
+            if (!field) {
+                return;
+            }
+
+            field.addEventListener('change', function () {
+                if (!arrivalFollowUpFormSubmitted) {
                     return;
                 }
-                confirmReceiveId.value = button.getAttribute('data-order-id') || '';
-                confirmReceivePlatform.value = button.getAttribute('data-platform') || '';
-                var hiddenButton = document.createElement('input');
-                hiddenButton.type = 'hidden';
-                hiddenButton.name = 'confirmReceiveBtn';
-                hiddenButton.value = '1';
-                arrivalForm.appendChild(hiddenButton);
-                arrivalForm.submit();
+
+                clearSingleArrivalFollowUpFieldError(fieldId);
             });
         });
+        document.querySelectorAll('.confirm-receive-btn').forEach(function (button) {
+            button.addEventListener('click', function () {
+                var blockMessage = button.getAttribute('data-block-message') || '';
+                if (blockMessage) {
+                    window.alert(blockMessage);
+                    return;
+                }
+
+                document.getElementById('arrival_follow_up_platform').value = button.getAttribute('data-platform') || '';
+                document.getElementById('arrival_follow_up_order_id').value = button.getAttribute('data-order-id') || '';
+                document.getElementById('arrival_follow_up_platform_section').value = <?= json_encode($activePlatform) ?>;
+                document.getElementById('arrivalFollowUpModalTitle').textContent = 'Customer Follow-Up - ' + (button.getAttribute('data-order-code') || '');
+                document.getElementById('arrival_follow_up_order_code_text').textContent = button.getAttribute('data-order-code') || '-';
+                document.getElementById('arrival_follow_up_customer_text').textContent = button.getAttribute('data-customer-username') || button.getAttribute('data-customer-name') || '-';
+                document.getElementById('arrival_follow_up_package_text').textContent = button.getAttribute('data-package-name') || '-';
+                document.getElementById('arrival_follow_up_received_date_text').textContent = button.getAttribute('data-received-date') || '';
+                document.getElementById('arrival_follow_up_customer_type_text').textContent =
+                    (button.getAttribute('data-customer-type') || 'new') === 'return'
+                        ? 'Return Customer (' + (button.getAttribute('data-purchase-count') || '0') + ' previous purchase)'
+                        : 'New Customer';
+                document.getElementById('arrival_follow_up_attachment').value = '';
+                document.getElementById('arrival_follow_up_message_shortcut_id').value = '';
+                document.getElementById('arrival_follow_up_next_date').value = '';
+                document.getElementById('arrival_follow_up_next_date').max = button.getAttribute('data-max-date') || '';
+                document.getElementById('arrival_follow_up_rule_hint').textContent = button.getAttribute('data-rule-label') || '';
+                
+                arrivalFollowUpFormSubmitted = false;
+                clearArrivalFollowUpRequiredErrors();
+
+                var contactNo = button.getAttribute('data-contact-no') || '';
+                var contactDisplayWrap = document.getElementById('arrival_follow_up_contact_display_wrap');
+                var contactDisplayText = document.getElementById('arrival_follow_up_contact_display_text');
+                var contactInputWrap = document.getElementById('arrival_follow_up_contact_input_wrap');
+                var contactInput = document.getElementById('arrival_follow_up_contact_no');
+                contactInput.value = contactNo;
+                if (contactNo) {
+                    contactDisplayText.textContent = contactNo;
+                    contactDisplayWrap.classList.remove('d-none');
+                    contactInputWrap.classList.add('d-none');
+                } else {
+                    contactDisplayWrap.classList.add('d-none');
+                    contactInputWrap.classList.remove('d-none');
+                }
+
+                if (typeof clearArrivalFollowUpAttachmentPreview === 'function') {
+                    clearArrivalFollowUpAttachmentPreview();
+                }
+
+                if (arrivalFollowUpModal) {
+                    arrivalFollowUpModal.show();
+                }
+            });
+        });
+
+        var arrivalFollowUpContactEditBtn = document.getElementById('arrival_follow_up_contact_edit_btn');
+        if (arrivalFollowUpContactEditBtn) {
+            arrivalFollowUpContactEditBtn.addEventListener('click', function () {
+                document.getElementById('arrival_follow_up_contact_display_wrap').classList.add('d-none');
+                document.getElementById('arrival_follow_up_contact_input_wrap').classList.remove('d-none');
+                document.getElementById('arrival_follow_up_contact_no').focus();
+            });
+        }
 
         document.querySelectorAll('.save-delay-btn').forEach(function (button) {
             button.addEventListener('click', function () {

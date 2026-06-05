@@ -27,7 +27,7 @@ $actionBtnValue = ($act === 'I') ? 'addRecord' : 'updRecord';
 
 $redirect_page = $SITEURL . '/shopee/shopee_cust_info_table.php';
 $redirectLink = ("<script>location.href = '$redirect_page';</script>");
-$clearLocalStorage = '<script>localStorage.clear();</script>';
+$clearLocalStorage = '<script>clearLocalStoragePreservingCustomerRecordFilters();</script>';
 
 //Check a current page pin is exist or not
 $pageAction = getPageAction($act);

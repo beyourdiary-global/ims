@@ -10,8 +10,17 @@ if ($sorIsAjaxRequest) {
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+include_once ROOT . '/include/customer_follow_up_common.php';
+include_once ROOT . '/include/shopee_order_detail_pdf_common.php';
 
 $tblName = SHOPEE_SG_ORDER_REQ;
+
+if (empty($_SESSION['shopee_order_follow_up_csrf'])) {
+    $_SESSION['shopee_order_follow_up_csrf'] = bin2hex(random_bytes(32));
+}
+if (empty($_SESSION['shopee_order_verify_pdf_csrf'])) {
+    $_SESSION['shopee_order_verify_pdf_csrf'] = bin2hex(random_bytes(32));
+}
 
 $dataID = input('id');
 $act = input('act');
@@ -46,8 +55,10 @@ $sorPrepareAjaxJsonResponse = function () use ($sorIsAjaxRequest) {
 $sorSkipSaveBeforeStatusUpdate = post('skipSaveBeforeStatus') === '1';
 $sorSaveBeforeStatusOnly = $sorIsAjaxRequest && post('saveBeforeStatusOnly') === '1';
 $pendingStatusUpdate = shopeeOmsNormalizeStatusCode(post('updateStatusBtn'));
+$sorConfirmReceiveWithFollowUp = postSpaceFilter('confirmReceiveFollowUpBtn') === '1';
 $sorShouldSaveBeforeStatusUpdate = $pendingStatusUpdate !== '' && $act === 'E' && !$sorSkipSaveBeforeStatusUpdate && !$sorSaveBeforeStatusOnly;
 $sorTriggerStatusTransitionAfterSave = false;
+$sorFollowUpShortcutOptions = customerFollowUpGetMessageShortcutOptions($connect);
 $sorBuildLocalTelegramFailureMessage = function ($notifyResult) use ($sorIsLiveSite) {
     if ($sorIsLiveSite || !is_array($notifyResult) || !empty($notifyResult['sent'])) {
         return '';
@@ -129,6 +140,123 @@ $sorHandleStatusTransition = function ($newStatus) use ($connect, $finance_conne
     echo '<script>alert(' . json_encode((string) (isset($transitionResult['message']) ? $transitionResult['message'] : $statusUpdateFallbackMessage)) . ');</script>';
     exit;
 };
+$sorLogOmsTransitionAudit = function ($transitionResult) use ($pageTitle, $cdate, $ctime, $tblName, $connect, $dataID) {
+    $oldStatus = isset($transitionResult['old_status']) ? (string) $transitionResult['old_status'] : '';
+    $newStatusCode = isset($transitionResult['new_status']) ? (string) $transitionResult['new_status'] : '';
+    $queryStatusUpdate = "OMS transition " . $oldStatus . " -> " . $newStatusCode;
+    audit_log(array(
+        'log_act' => 'edit',
+        'cdate' => $cdate,
+        'ctime' => $ctime,
+        'uid' => USER_ID,
+        'cby' => USER_ID,
+        'query_rec' => $queryStatusUpdate,
+        'query_table' => $tblName,
+        'page' => $pageTitle,
+        'connect' => $connect,
+        'oldval' => 'order_status: ' . $oldStatus,
+        'changes' => 'order_status: ' . $newStatusCode,
+        'act_msg' => USER_NAME . " updated Shopee order #" . (int) $dataID . " from " . htmlspecialchars($oldStatus, ENT_QUOTES, 'UTF-8') . " to " . htmlspecialchars($newStatusCode, ENT_QUOTES, 'UTF-8') . ".",
+    ));
+};
+$sorWriteVerifyAuditLog = function ($queryRecord, $oldValue, $changeValue, $message) use ($pageTitle, $cdate, $ctime, $tblName, $connect) {
+    audit_log(array(
+        'log_act' => 'edit',
+        'cdate' => $cdate,
+        'ctime' => $ctime,
+        'uid' => USER_ID,
+        'cby' => USER_ID,
+        'query_rec' => (string) $queryRecord,
+        'query_table' => $tblName,
+        'page' => $pageTitle,
+        'connect' => $connect,
+        'oldval' => (string) $oldValue,
+        'changes' => (string) $changeValue,
+        'act_msg' => (string) $message,
+    ));
+};
+$sorHandleConfirmReceiveWithFollowUp = function () use ($connect, $finance_connect, $dataID, $pageTitle, $cdate, $ctime, $tblName, $redirect_page, $sorIsAjaxRequest, $sorPrepareAjaxJsonResponse) {
+    $postedCsrfToken = isset($_POST['shopee_order_follow_up_csrf']) ? (string) $_POST['shopee_order_follow_up_csrf'] : '';
+    if (!hash_equals((string) $_SESSION['shopee_order_follow_up_csrf'], $postedCsrfToken)) {
+        $message = 'Invalid follow-up session token. Please refresh and try again.';
+        if ($sorIsAjaxRequest) {
+            $sorPrepareAjaxJsonResponse();
+            echo json_encode(array('success' => false, 'message' => $message));
+            exit;
+        }
+        echo '<script>alert(' . json_encode($message) . ');</script>';
+        exit;
+    }
+
+    $submitResult = customerFollowUpSubmitReceivedOrderAndTransition(
+        $connect,
+        $finance_connect,
+        'shopee',
+        (int) $dataID,
+        array(
+            'message_shortcut_id' => postSpaceFilter('follow_up_message_shortcut_id'),
+            'next_follow_up_date' => postSpaceFilter('follow_up_next_follow_up_date'),
+            'contact_no' => postSpaceFilter('follow_up_contact_no'),
+        ),
+        isset($_FILES['follow_up_attachment']) ? $_FILES['follow_up_attachment'] : array(),
+        USER_ID,
+        USER_GROUP,
+        array(
+            'source_page' => $pageTitle,
+            'transition_remark' => 'Order Status Update to Parcel Received',
+        )
+    );
+
+    if (!empty($submitResult['success'])) {
+        $sourceConfig = isset($submitResult['source_config']) ? $submitResult['source_config'] : shopeeOmsGetOrderSourceConfig('shopee');
+        $orderRow = isset($submitResult['order_row_after']) && !empty($submitResult['order_row_after'])
+            ? $submitResult['order_row_after']
+            : shopeeOmsLoadOrder(shopeeOmsGetOrderSourceDbConnection($connect, $finance_connect, $sourceConfig), (int) $dataID, $sourceConfig);
+        $transitionResult = isset($submitResult['transition_result']) ? $submitResult['transition_result'] : array();
+        $oldStatus = isset($transitionResult['old_status']) ? (string) $transitionResult['old_status'] : '';
+        $newStatusCode = isset($transitionResult['new_status']) ? (string) $transitionResult['new_status'] : 'PR';
+        $queryStatusUpdate = "OMS transition " . $oldStatus . " -> " . $newStatusCode;
+        audit_log(array(
+            'log_act' => 'edit',
+            'cdate' => $cdate,
+            'ctime' => $ctime,
+            'uid' => USER_ID,
+            'cby' => USER_ID,
+            'query_rec' => $queryStatusUpdate,
+            'query_table' => $tblName,
+            'page' => $pageTitle,
+            'connect' => $connect,
+            'oldval' => 'order_status: ' . $oldStatus,
+            'changes' => 'order_status: ' . $newStatusCode,
+            'act_msg' => USER_NAME . " updated Shopee order #" . (int) $dataID . " from " . htmlspecialchars($oldStatus, ENT_QUOTES, 'UTF-8') . " to " . htmlspecialchars($newStatusCode, ENT_QUOTES, 'UTF-8') . ".",
+        ));
+
+        if ($sorIsAjaxRequest) {
+            $sorPrepareAjaxJsonResponse();
+            echo json_encode(array(
+                'success' => true,
+                'message' => isset($submitResult['message']) ? (string) $submitResult['message'] : 'Follow-up submitted successfully.',
+                'redirect_url' => (string) $redirect_page,
+            ));
+            exit;
+        }
+
+        echo '<script>alert(' . json_encode((string) (isset($submitResult['message']) ? $submitResult['message'] : 'Follow-up submitted successfully.')) . '); window.location.replace(' . json_encode((string) $redirect_page) . ');</script>';
+        exit;
+    }
+
+    if ($sorIsAjaxRequest) {
+        $sorPrepareAjaxJsonResponse();
+        echo json_encode(array(
+            'success' => false,
+            'message' => (string) (isset($submitResult['message']) ? $submitResult['message'] : 'Unable to confirm parcel received.'),
+        ));
+        exit;
+    }
+
+    echo '<script>alert(' . json_encode((string) (isset($submitResult['message']) ? $submitResult['message'] : 'Unable to confirm parcel received.')) . ');</script>';
+    exit;
+};
 
 // to display data to input
 if ($dataID) { //edit/remove/view
@@ -144,6 +272,10 @@ if ($dataID) { //edit/remove/view
         $act = "F";
     }
 }
+
+$sorFollowUpModalContext = isset($row) && is_array($row)
+    ? customerFollowUpBuildReceivedOrderContext($connect, $finance_connect, 'shopee', (int) $dataID, $row)
+    : array();
 
 $sorWarehouseRows = shopeeOmsLoadActiveWarehouses($connect);
 $sorWarehouseOptionMap = array();
@@ -162,6 +294,205 @@ if (!($dataID) && !($act)) {
     window.location.replace("' . $redirect_page . '");
     </script>';
 }
+
+$sorHandleVerifyWorkflowRequest = function () use (
+    $connect,
+    $finance_connect,
+    $dataID,
+    $tblName,
+    $row,
+    $redirect_page,
+    $pageTitle,
+    $sorPrepareAjaxJsonResponse,
+    $sorLogOmsTransitionAudit,
+    $sorWriteVerifyAuditLog
+) {
+    $sorPrepareAjaxJsonResponse();
+    $verifyRedirectUrl = trim((string) post('sor_verify_redirect_url'));
+
+    $postedCsrfToken = isset($_POST['shopee_order_verify_pdf_csrf']) ? (string) $_POST['shopee_order_verify_pdf_csrf'] : '';
+    if (!hash_equals((string) $_SESSION['shopee_order_verify_pdf_csrf'], $postedCsrfToken)) {
+        echo json_encode(array('success' => false, 'message' => 'Invalid verify session token. Please refresh and try again.'));
+        exit;
+    }
+
+    if (empty($row) || !is_array($row)) {
+        echo json_encode(array('success' => false, 'message' => 'Invalid order.'));
+        exit;
+    }
+
+    if (!shopeeOmsTableHasColumn($finance_connect, dbFinance, $tblName, 'order_detail_pdf')) {
+        echo json_encode(array('success' => false, 'message' => 'Order Detail PDF column is missing. Please run insert_table.php first.'));
+        exit;
+    }
+
+    $verifyAction = trim((string) post('sor_verify_order_action'));
+    $freshOrderRow = shopeeOmsLoadOrder($finance_connect, (int) $dataID, shopeeOmsResolveOrderSourceConfig('shopee'));
+    if (empty($freshOrderRow)) {
+        echo json_encode(array('success' => false, 'message' => 'Invalid order.'));
+        exit;
+    }
+    $currentStatus = shopeeOmsNormalizeStatusCode(isset($freshOrderRow['order_status']) ? $freshOrderRow['order_status'] : '');
+    if (!shopeeOmsHasTransitionPermission($connect, $currentStatus, 'V', USER_GROUP, $freshOrderRow, USER_ID)) {
+        echo json_encode(array('success' => false, 'message' => 'You are not allowed to verify this order.'));
+        exit;
+    }
+
+    if ($verifyAction === 'compare_pdf') {
+        if (!isset($_FILES['sor_order_detail_pdf'])) {
+            echo json_encode(array('success' => false, 'message' => 'Please upload a Shopee Order Detail PDF.'));
+            exit;
+        }
+
+        $uploadValidation = shopeeOrderDetailPdfValidateUpload($_FILES['sor_order_detail_pdf']);
+        if (empty($uploadValidation['success'])) {
+            echo json_encode(array('success' => false, 'message' => isset($uploadValidation['message']) ? (string) $uploadValidation['message'] : 'Failed to read the Order Detail PDF.'));
+            exit;
+        }
+
+        $parseResult = shopeeOrderDetailPdfParse(
+            $connect,
+            $finance_connect,
+            isset($uploadValidation['raw_content']) ? $uploadValidation['raw_content'] : '',
+            postSpaceFilter('sor_order_detail_pdf_client_text')
+        );
+        if (empty($parseResult['success'])) {
+            echo json_encode(array('success' => false, 'message' => isset($parseResult['message']) ? (string) $parseResult['message'] : 'Failed to parse the uploaded PDF.'));
+            exit;
+        }
+
+        $latestOrderRow = shopeeOmsLoadOrder($finance_connect, (int) $dataID, shopeeOmsResolveOrderSourceConfig('shopee'));
+        $comparisonRows = shopeeOrderDetailPdfBuildComparisonRows(
+            $connect,
+            $finance_connect,
+            !empty($latestOrderRow) ? $latestOrderRow : $freshOrderRow,
+            isset($parseResult['parsed']) ? $parseResult['parsed'] : array()
+        );
+
+        echo json_encode(array(
+            'success' => true,
+            'message' => empty($comparisonRows)
+                ? 'PDF compared successfully. No different fields were found.'
+                : 'PDF compared successfully. Please confirm the final values before verifying.',
+            'comparison_rows' => $comparisonRows,
+        ));
+        exit;
+    }
+
+    if ($verifyAction === 'finalize_pdf_verified' || $verifyAction === 'direct_verified') {
+        $fieldUpdates = array();
+        if ($verifyAction === 'finalize_pdf_verified') {
+            $finalValuesJson = isset($_POST['sor_verify_final_values']) ? (string) $_POST['sor_verify_final_values'] : '';
+            $finalValues = json_decode($finalValuesJson, true);
+            if (!is_array($finalValues)) {
+                $finalValues = array();
+            }
+
+            $pdfPath = '';
+            if (isset($_FILES['sor_order_detail_pdf']) && is_array($_FILES['sor_order_detail_pdf']) && !empty($_FILES['sor_order_detail_pdf']['name'])) {
+                $uploadResult = shopeeOrderDetailPdfStoreUpload($_FILES['sor_order_detail_pdf'], $connect, $finance_connect, $freshOrderRow);
+                if (empty($uploadResult['success'])) {
+                    echo json_encode(array('success' => false, 'message' => isset($uploadResult['message']) ? (string) $uploadResult['message'] : 'Failed to save the Order Detail PDF.'));
+                    exit;
+                }
+                $pdfPath = isset($uploadResult['path']) ? (string) $uploadResult['path'] : '';
+            }
+
+            if ($pdfPath === '') {
+                $pdfPath = trim((string) post('sor_verify_pdf_path'));
+            }
+            if ($pdfPath === '') {
+                $pdfPath = trim((string) (isset($freshOrderRow['order_detail_pdf']) ? $freshOrderRow['order_detail_pdf'] : ''));
+            }
+            if ($pdfPath === '') {
+                echo json_encode(array('success' => false, 'message' => 'Please upload the Order Detail PDF first.'));
+                exit;
+            }
+
+            $preparedUpdates = shopeeOrderDetailPdfPrepareFinalUpdates($finance_connect, $freshOrderRow, $finalValues, $pdfPath);
+            $fieldUpdates = isset($preparedUpdates['updates']) && is_array($preparedUpdates['updates']) ? $preparedUpdates['updates'] : array();
+            $historyChanges = isset($preparedUpdates['history_changes']) && is_array($preparedUpdates['history_changes']) ? $preparedUpdates['history_changes'] : array();
+            $validationError = isset($preparedUpdates['validation_error']) ? trim((string) $preparedUpdates['validation_error']) : '';
+            $fieldErrors = isset($preparedUpdates['field_errors']) && is_array($preparedUpdates['field_errors']) ? $preparedUpdates['field_errors'] : array();
+            if ($validationError !== '') {
+                echo json_encode(array('success' => false, 'message' => $validationError, 'field_errors' => $fieldErrors));
+                exit;
+            }
+        } else {
+            $historyChanges = array();
+            $sorWriteVerifyAuditLog(
+                'Shopee verify workflow direct verified',
+                '',
+                'Order status update to Verify',
+                USER_NAME . " used direct verified for Shopee order #" . (int) $dataID . "."
+            );
+        }
+
+        $transitionResult = shopeeOmsExecuteTransition($connect, $finance_connect, (int) $dataID, 'V', array(
+            'actor_user_id' => USER_ID,
+            'actor_user_group_id' => USER_GROUP,
+            'source_page' => $pageTitle,
+            'remark' => 'Order Status Update to Verify',
+            'field_updates' => $fieldUpdates,
+            'platform' => 'shopee',
+        ));
+
+        if (empty($transitionResult['success'])) {
+            echo json_encode(array(
+                'success' => false,
+                'message' => (string) (isset($transitionResult['message']) ? $transitionResult['message'] : 'Unable to update order status.'),
+            ));
+            exit;
+        }
+
+        if (!empty($historyChanges)) {
+            shopeeOmsLogOrderEditHistory(
+                $finance_connect,
+                (int) $dataID,
+                isset($freshOrderRow['orderID']) ? $freshOrderRow['orderID'] : '',
+                $historyChanges,
+                USER_ID,
+                USER_GROUP,
+                $pageTitle
+            );
+
+            $changePairs = array();
+            $oldValuePairs = array();
+            foreach ($historyChanges as $historyChange) {
+                $fieldLabel = isset($historyChange['field_label']) ? (string) $historyChange['field_label'] : (string) $historyChange['field_name'];
+                $oldValuePairs[] = $fieldLabel . ': ' . (isset($historyChange['old_value']) ? (string) $historyChange['old_value'] : '');
+                $changePairs[] = $fieldLabel . ': ' . (isset($historyChange['old_value']) ? (string) $historyChange['old_value'] : '') . ' -> ' . (isset($historyChange['new_value']) ? (string) $historyChange['new_value'] : '');
+            }
+            if (!empty($changePairs)) {
+                $sorWriteVerifyAuditLog(
+                    'Shopee verify workflow field value changes',
+                    implode("\n", $oldValuePairs),
+                    implode("\n", $changePairs),
+                    USER_NAME . " updated Shopee order detail values during verify workflow for order #" . (int) $dataID . "."
+                );
+            }
+        }
+
+        $sorLogOmsTransitionAudit($transitionResult);
+
+        echo json_encode(array(
+            'success' => true,
+            'message' => $verifyAction === 'direct_verified'
+                ? 'Order verified successfully.'
+                : 'Order Detail PDF values saved and order verified successfully.',
+            'redirect_url' => $verifyRedirectUrl !== '' ? $verifyRedirectUrl : (string) $redirect_page,
+        ));
+        exit;
+    }
+
+    echo json_encode(array('success' => false, 'message' => 'Invalid verify action.'));
+    exit;
+};
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $sorIsAjaxRequest && trim((string) post('sor_verify_order_action')) !== '') {
+    $sorHandleVerifyWorkflowRequest();
+}
+
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
     $scr_username = trim((string) $_POST['scr_username']);
     $scr_pic_name = trim((string) $_POST['scr_pic']);
@@ -266,6 +597,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
 }
 
 if ($pendingStatusUpdate !== '' && !$sorShouldSaveBeforeStatusUpdate) {
+    if ($pendingStatusUpdate === 'PR' && $sorConfirmReceiveWithFollowUp) {
+        $sorHandleConfirmReceiveWithFollowUp();
+    }
     $sorHandleStatusTransition($pendingStatusUpdate);
 }
 
@@ -1094,6 +1428,9 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
             if ($action === 'updRecord' && $sorShouldSaveBeforeStatusUpdate) {
                 if ($sorTriggerStatusTransitionAfterSave) {
                     unset($_SESSION['tempValConfirmBox']);
+                    if ($pendingStatusUpdate === 'PR' && $sorConfirmReceiveWithFollowUp) {
+                        $sorHandleConfirmReceiveWithFollowUp();
+                    }
                     $sorHandleStatusTransition($pendingStatusUpdate);
                 }
 
@@ -1345,6 +1682,36 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
         .shopee-airbill-preview-media {
             width: 100%;
             max-width: 520px;
+        }
+
+        #sorVerifyOrderModal .modal-footer .btn,
+        #sorVerifyOrderModal .modal-header .btn,
+        #sorVerifyOrderModal .modal-body .btn {
+            text-transform: none !important;
+        }
+
+        .shopee-verify-method-card {
+            border: 1px solid #d9e2ef;
+            border-radius: 14px;
+            background: #fff;
+            padding: 20px 22px;
+            width: 100%;
+            text-align: left;
+            transition: border-color .2s ease, box-shadow .2s ease, transform .2s ease;
+        }
+
+        .shopee-verify-method-card:hover {
+            transform: translateY(-1px);
+        }
+
+        .shopee-verify-method-card-success {
+            border-color: #31b45a;
+            box-shadow: 0 0 0 2px rgba(49, 180, 90, 0.08);
+        }
+
+        .shopee-verify-method-card-primary {
+            border-color: #2f6fdd;
+            box-shadow: 0 0 0 2px rgba(47, 111, 221, 0.08);
         }
 
         .shopee-airbill-preview-media img,
@@ -2222,7 +2589,25 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                     <textarea class="form-control" name="sor_remark" id="sor_remark" rows="3" <?php if ($act == '')
                         echo 'disabled' ?>><?php if (isset($dataExisted) && isset($row['remark']))
                         echo $row['remark'] ?></textarea>
+                    <?php
+                    $sorOrderDetailPdfPath = isset($row['order_detail_pdf']) ? trim((string) $row['order_detail_pdf']) : '';
+                    $sorOrderDetailPdfUrl = $sorOrderDetailPdfPath !== '' ? shopeeOmsBuildAirbillAttachmentUrl($sorOrderDetailPdfPath) : '';
+                    $sorOrderDetailPdfExt = $sorOrderDetailPdfUrl !== ''
+                        ? strtolower(pathinfo((string) parse_url($sorOrderDetailPdfUrl, PHP_URL_PATH), PATHINFO_EXTENSION))
+                        : '';
+                    ?>
                     <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
+                    <div class="mt-3">
+                        <label class="form-label form_lbl">Order Detail PDF</label>
+                        <input class="form-control" type="text" readonly value="<?= htmlspecialchars($sorOrderDetailPdfPath, ENT_QUOTES, 'UTF-8') ?>">
+                        <?php if ($sorOrderDetailPdfUrl !== '' && $sorOrderDetailPdfExt === 'pdf') { ?>
+                            <div class="shopee-airbill-preview-media mt-3">
+                                <iframe src="<?= htmlspecialchars($sorOrderDetailPdfUrl, ENT_QUOTES, 'UTF-8') ?>" title="Order Detail PDF Preview"></iframe>
+                            </div>
+                        <?php } else { ?>
+                            <div class="text-muted mt-2">No Order Detail PDF uploaded.</div>
+                        <?php } ?>
+                    </div>
                     </div>
                 <?php
                 if(isset($row['order_status'])){
@@ -2418,9 +2803,20 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                             if ($statusCode === 'P' && $canMoveToPack) {
                                 echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" value="TP" formnovalidate>MOVE TO TO PACK</button>';
                             } else if ($statusCode === 'WR' && $canConfirmReceive) {
-                                echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" value="PR" formnovalidate>CONFIRM PARCEL RECEIVED</button>';
+                                echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2 sor-confirm-receive-trigger" type="button"
+                                    data-order-code="' . htmlspecialchars((string) (isset($sorFollowUpModalContext['order_no']) ? $sorFollowUpModalContext['order_no'] : ''), ENT_QUOTES, 'UTF-8') . '"
+                                    data-customer-name="' . htmlspecialchars((string) (isset($sorFollowUpModalContext['customer_name']) ? $sorFollowUpModalContext['customer_name'] : ''), ENT_QUOTES, 'UTF-8') . '"
+                                    data-customer-username="' . htmlspecialchars((string) (isset($sorFollowUpModalContext['customer_username']) ? $sorFollowUpModalContext['customer_username'] : ''), ENT_QUOTES, 'UTF-8') . '"
+                                    data-package-name="' . htmlspecialchars((string) (isset($sorFollowUpModalContext['package_name']) ? $sorFollowUpModalContext['package_name'] : ''), ENT_QUOTES, 'UTF-8') . '"
+                                    data-received-date="' . htmlspecialchars((string) (isset($sorFollowUpModalContext['received_date']) ? $sorFollowUpModalContext['received_date'] : customerFollowUpNowDate()), ENT_QUOTES, 'UTF-8') . '"
+                                    data-purchase-count="' . (int) (isset($sorFollowUpModalContext['purchase_count_snapshot']) ? $sorFollowUpModalContext['purchase_count_snapshot'] : 0) . '"
+                                    data-customer-type="' . htmlspecialchars((string) (isset($sorFollowUpModalContext['customer_type']) ? $sorFollowUpModalContext['customer_type'] : 'new'), ENT_QUOTES, 'UTF-8') . '"
+                                    data-contact-no="' . htmlspecialchars((string) (isset($sorFollowUpModalContext['contact_no']) ? $sorFollowUpModalContext['contact_no'] : ''), ENT_QUOTES, 'UTF-8') . '"
+                                    data-max-date="' . htmlspecialchars((string) (isset($sorFollowUpModalContext['max_date']) ? $sorFollowUpModalContext['max_date'] : ''), ENT_QUOTES, 'UTF-8') . '"
+                                    data-rule-label="' . htmlspecialchars((string) (isset($sorFollowUpModalContext['rule_label']) ? $sorFollowUpModalContext['rule_label'] : ''), ENT_QUOTES, 'UTF-8') . '"
+                                    data-block-message="' . htmlspecialchars((string) (isset($sorFollowUpModalContext['block_message']) ? $sorFollowUpModalContext['block_message'] : ''), ENT_QUOTES, 'UTF-8') . '">CONFIRM PARCEL RECEIVED</button>';
                             } else if ($statusCode === 'WAFC' && $canVerify) {
-                                echo '<button class="btn btn-lg btn-rounded btn-success mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" value="V" formnovalidate>MOVE TO VERIFY</button>';
+                                echo '<button type="button" class="btn btn-lg btn-rounded btn-success mx-2 mb-2 submitBtn p-2 sor-verify-order-trigger">VERIFIED</button>';
                             } else if ($statusCode === 'V' && $canComplete) {
                                 echo '<button class="btn btn-lg btn-rounded btn-success mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" value="C" formnovalidate>FINALIZE COMPLETE</button>';
                             }
@@ -2440,6 +2836,152 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                             break;
                     }
                     ?>
+                    <div class="modal fade" id="sorFollowUpModal" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title" id="sorFollowUpModalTitle">Customer Follow-Up</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body text-start">
+                                    <input type="hidden" name="shopee_order_follow_up_csrf" value="<?= htmlspecialchars((string) $_SESSION['shopee_order_follow_up_csrf'], ENT_QUOTES, 'UTF-8') ?>">
+                                    <input type="hidden" name="confirmReceiveFollowUpBtn" id="sor_confirm_receive_follow_up_flag" value="">
+
+                                    <div style="background:#f8f9fa;border:1px solid #e9ecef;border-radius:10px;padding:12px 14px;margin-bottom:14px;">
+                                        <div class="d-flex justify-content-between gap-3 mb-1"><span class="text-muted">Order ID</span><span id="sor_follow_up_order_code_text"></span></div>
+                                        <div class="d-flex justify-content-between gap-3 mb-1"><span class="text-muted">Customer</span><span id="sor_follow_up_customer_text"></span></div>
+                                        <div class="d-flex justify-content-between gap-3 mb-1"><span class="text-muted">Package</span><span id="sor_follow_up_package_text"></span></div>
+                                        <div class="d-flex justify-content-between gap-3 mb-1"><span class="text-muted">Received Date</span><span id="sor_follow_up_received_date_text"></span></div>
+                                        <div class="d-flex justify-content-between gap-3"><span class="text-muted">Customer Type</span><span id="sor_follow_up_customer_type_text"></span></div>
+                                    </div>
+
+                                    <div class="mb-3">
+                                        <label class="form-label" for="sor_follow_up_attachment">Screenshot / Attachment</label>
+                                        <input type="file" class="form-control" id="sor_follow_up_attachment" name="follow_up_attachment">
+                                        <div id="sor_follow_up_attachment_preview_wrap" class="shopee-airbill-preview-media" style="display:none;">
+                                            <img id="sor_follow_up_attachment_preview_img" alt="Follow-Up Attachment Preview">
+                                        </div>
+                                        <div class="text-muted small mt-2 d-none" id="sor_follow_up_attachment_preview_note">Preview is available for image files only.</div>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label" for="sor_follow_up_message_shortcut_id">Message Shortcut</label>
+                                        <select class="form-select" id="sor_follow_up_message_shortcut_id" name="follow_up_message_shortcut_id">
+                                            <option value="">Select Message Shortcut</option>
+                                            <?php foreach ($sorFollowUpShortcutOptions as $shortcutRow) {
+                                                $shortcutId = isset($shortcutRow['id']) ? (int) $shortcutRow['id'] : 0;
+                                                if ($shortcutId <= 0) {
+                                                    continue;
+                                                }
+                                                $shortcutLabel = trim((string) (isset($shortcutRow['shortcuts_tag']) ? $shortcutRow['shortcuts_tag'] : ''));
+                                                ?>
+                                                <option value="<?= $shortcutId ?>"><?= htmlspecialchars($shortcutLabel !== '' ? $shortcutLabel : ('Shortcut #' . $shortcutId), ENT_QUOTES, 'UTF-8') ?></option>
+                                            <?php } ?>
+                                        </select>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label" for="sor_follow_up_next_date">Next Follow-Up Date</label>
+                                        <input type="date" class="form-control" id="sor_follow_up_next_date" name="follow_up_next_follow_up_date">
+                                        <small class="text-muted" id="sor_follow_up_rule_hint"></small>
+                                    </div>
+                                    <div class="mb-3">
+                                        <label class="form-label">WhatsApp / Contact Number</label>
+                                        <div id="sor_follow_up_contact_display_wrap" class="d-none align-items-center justify-content-between gap-2" style="padding:0.625rem 0.75rem;border:1px solid #dee2e6;border-radius:0.375rem;background:#f8f9fa;">
+                                            <div id="sor_follow_up_contact_display_text"></div>
+                                            <button type="button" class="btn btn-link p-0 text-decoration-none" id="sor_follow_up_contact_edit_btn" title="Edit Contact Number">
+                                                <i class="fa-solid fa-pen-to-square"></i>
+                                            </button>
+                                        </div>
+                                        <div id="sor_follow_up_contact_input_wrap">
+                                            <input type="text" class="form-control" id="sor_follow_up_contact_no" name="follow_up_contact_no" placeholder="Enter Contact Number">
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+                                    <button type="submit" class="btn btn-primary" id="sor_follow_up_submit_btn" name="updateStatusBtn" value="PR" style="text-transform: none !important;">Submit & Confirm Received</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal fade" id="sorVerifyOrderModal" tabindex="-1" aria-hidden="true">
+                        <div class="modal-dialog modal-xl modal-dialog-scrollable">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Verify Order</h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                </div>
+                                <div class="modal-body text-start">
+                                    <input type="hidden" id="sor_verify_order_csrf" value="<?= htmlspecialchars((string) $_SESSION['shopee_order_verify_pdf_csrf'], ENT_QUOTES, 'UTF-8') ?>">
+                                    <input type="hidden" id="sor_verify_pdf_path" value="<?= isset($row['order_detail_pdf']) ? htmlspecialchars((string) $row['order_detail_pdf'], ENT_QUOTES, 'UTF-8') : '' ?>">
+
+                                    <div id="sorVerifyOrderChoiceView">
+                                        <div class="border rounded-3 p-3 bg-light mb-4">Choose verification method</div>
+                                        <div class="d-grid gap-3">
+                                            <button type="button" class="shopee-verify-method-card shopee-verify-method-card-success" id="sor_direct_verified_choice_btn">
+                                                <div class="fw-bold fs-5 text-success mb-1">VERIFIED</div>
+                                                <div class="text-muted">Mark this order as verified without uploading a PDF.</div>
+                                            </button>
+                                            <button type="button" class="shopee-verify-method-card shopee-verify-method-card-primary" id="sor_upload_pdf_choice_btn">
+                                                <div class="fw-bold fs-5 text-primary mb-1">UPLOAD PDF TO VERIFIED</div>
+                                                <div class="text-muted">Upload a Shopee Order Detail PDF and verify by comparing details.</div>
+                                            </button>
+                                        </div>
+                                    </div>
+
+                                    <div class="row g-4 d-none" id="sorVerifyOrderPdfView">
+                                        <div class="col-lg-4">
+                                            <div class="border rounded-3 p-3 bg-light h-100">
+                                                <h6 class="mb-3">Upload PDF</h6>
+                                                <div class="mb-3">
+                                                    <label class="form-label" for="sor_order_detail_pdf">Shopee Order Detail PDF</label>
+                                                    <input type="file" class="form-control" id="sor_order_detail_pdf" accept=".pdf,application/pdf">
+                                                    <small class="text-muted d-block mt-2" id="sor_order_detail_pdf_status">Only PDF file is allowed.</small>
+                                                </div>
+                                                <div class="d-grid gap-2">
+                                                    <button type="button" class="btn btn-outline-primary" id="sor_compare_pdf_btn">Upload PDF & Compare</button>
+                                                    <button type="button" class="btn btn-outline-secondary d-none" id="sor_reload_pdf_btn">Reload PDF to Verified</button>
+                                                </div>
+                                                <div class="mt-3">
+                                                    <label class="form-label">Saved PDF Path</label>
+                                                    <input type="text" class="form-control" id="sor_order_detail_pdf_path_display" readonly value="<?= isset($row['order_detail_pdf']) ? htmlspecialchars((string) $row['order_detail_pdf'], ENT_QUOTES, 'UTF-8') : '' ?>">
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div class="col-lg-8">
+                                            <div class="border rounded-3 p-3 h-100">
+                                                <div class="d-flex justify-content-between align-items-center gap-2 mb-3">
+                                                    <h6 class="mb-0">Comparison Result</h6>
+                                                    <span class="badge bg-light text-dark border" id="sor_verify_compare_badge">No PDF loaded</span>
+                                                </div>
+                                                <div id="sor_verify_compare_message" class="alert alert-light border">Upload the Shopee Order Detail PDF first, then review only the different fields before verifying.</div>
+                                                <div class="table-responsive d-none" id="sor_verify_compare_table_wrap">
+                                                    <table class="table table-bordered align-middle">
+                                                        <thead>
+                                                            <tr>
+                                                                <th>Field Name</th>
+                                                                <th>Current Value</th>
+                                                                <th>PDF Value</th>
+                                                                <th>Editable Final Value</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody id="sor_verify_compare_rows"></tbody>
+                                                    </table>
+                                                </div>
+                                                <div id="sor_verify_pdf_preview_empty" class="alert alert-light border mb-0">No Order Detail PDF uploaded.</div>
+                                                <div id="sor_verify_pdf_preview_wrap" class="shopee-airbill-preview-media d-none">
+                                                    <iframe id="sor_verify_pdf_preview_iframe" src="" title="Order Detail PDF Preview"></iframe>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-outline-secondary d-none" id="sor_verify_back_btn">Back</button>
+                                    <button type="button" class="btn btn-success d-none" id="sor_update_to_verified_btn" disabled>Save Edited Info and Update to Verified</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <input type="hidden" name="return_type" id="return_type" value="">
                     <input type="hidden" name="return_remark" id="return_remark" value="">
                     <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn" id="actionBtn" formnovalidate
@@ -2577,6 +3119,568 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
             });
         }
 
+        function bindShopeeOrderReqVerifyModal() {
+            var triggerButton = document.querySelector('.sor-verify-order-trigger');
+            var modalElement = document.getElementById('sorVerifyOrderModal');
+            if (!triggerButton || !modalElement || typeof bootstrap === 'undefined' || !bootstrap.Modal) {
+                return;
+            }
+
+            var modalInstance = bootstrap.Modal.getOrCreateInstance(modalElement);
+            var csrfField = document.getElementById('sor_verify_order_csrf');
+            var choiceView = document.getElementById('sorVerifyOrderChoiceView');
+            var pdfView = document.getElementById('sorVerifyOrderPdfView');
+            var fileInput = document.getElementById('sor_order_detail_pdf');
+            var statusNode = document.getElementById('sor_order_detail_pdf_status');
+            var directChoiceBtn = document.getElementById('sor_direct_verified_choice_btn');
+            var uploadChoiceBtn = document.getElementById('sor_upload_pdf_choice_btn');
+            var compareBtn = document.getElementById('sor_compare_pdf_btn');
+            var reloadBtn = document.getElementById('sor_reload_pdf_btn');
+            var backBtn = document.getElementById('sor_verify_back_btn');
+            var updateBtn = document.getElementById('sor_update_to_verified_btn');
+            var compareBadge = document.getElementById('sor_verify_compare_badge');
+            var compareMessage = document.getElementById('sor_verify_compare_message');
+            var compareTableWrap = document.getElementById('sor_verify_compare_table_wrap');
+            var compareRows = document.getElementById('sor_verify_compare_rows');
+            var pdfPathField = document.getElementById('sor_verify_pdf_path');
+            var pdfPathDisplay = document.getElementById('sor_order_detail_pdf_path_display');
+            var previewWrap = document.getElementById('sor_verify_pdf_preview_wrap');
+            var previewIframe = document.getElementById('sor_verify_pdf_preview_iframe');
+            var previewEmpty = document.getElementById('sor_verify_pdf_preview_empty');
+
+            var latestComparisonRows = [];
+            var localPreviewUrl = '';
+            var canFinalizeVerify = false;
+
+            function setStatus(message, isError) {
+                if (!statusNode) {
+                    return;
+                }
+                statusNode.textContent = message || '';
+                statusNode.classList.toggle('text-danger', !!isError);
+                statusNode.classList.toggle('text-muted', !isError);
+            }
+
+            function setBusyState(isBusy) {
+                [directChoiceBtn, uploadChoiceBtn, compareBtn, reloadBtn, backBtn].forEach(function (button) {
+                    if (!button) {
+                        return;
+                    }
+                    button.disabled = !!isBusy;
+                });
+                if (updateBtn) {
+                    updateBtn.disabled = !!isBusy || !canFinalizeVerify;
+                }
+            }
+
+            function resetLocalPreviewUrl() {
+                if (localPreviewUrl) {
+                    try {
+                        URL.revokeObjectURL(localPreviewUrl);
+                    } catch (error) {
+                    }
+                    localPreviewUrl = '';
+                }
+            }
+
+            function showChoiceView() {
+                if (choiceView) {
+                    choiceView.classList.remove('d-none');
+                }
+                if (pdfView) {
+                    pdfView.classList.add('d-none');
+                }
+                if (backBtn) {
+                    backBtn.classList.add('d-none');
+                }
+                if (updateBtn) {
+                    updateBtn.classList.add('d-none');
+                }
+            }
+
+            function showPdfView() {
+                if (choiceView) {
+                    choiceView.classList.add('d-none');
+                }
+                if (pdfView) {
+                    pdfView.classList.remove('d-none');
+                }
+                if (backBtn) {
+                    backBtn.classList.remove('d-none');
+                }
+                if (updateBtn) {
+                    updateBtn.classList.remove('d-none');
+                }
+            }
+
+            function resetComparisonState() {
+                latestComparisonRows = [];
+                canFinalizeVerify = false;
+                resetLocalPreviewUrl();
+                if (compareRows) {
+                    compareRows.innerHTML = '';
+                }
+                if (compareTableWrap) {
+                    compareTableWrap.classList.add('d-none');
+                }
+                if (compareMessage) {
+                    compareMessage.className = 'alert alert-light border';
+                    compareMessage.textContent = 'Upload the Shopee Order Detail PDF first, then review only the different fields before verifying.';
+                }
+                if (compareBadge) {
+                    compareBadge.textContent = 'No PDF loaded';
+                }
+                if (updateBtn) {
+                    updateBtn.disabled = true;
+                }
+                if (reloadBtn) {
+                    reloadBtn.classList.add('d-none');
+                }
+            }
+
+            function updatePdfPreview(pdfUrl) {
+                if (!previewWrap || !previewIframe || !previewEmpty) {
+                    return;
+                }
+
+                if (pdfUrl) {
+                    previewIframe.src = pdfUrl;
+                    previewWrap.classList.remove('d-none');
+                    previewEmpty.classList.add('d-none');
+                } else {
+                    previewIframe.removeAttribute('src');
+                    previewWrap.classList.add('d-none');
+                    previewEmpty.classList.remove('d-none');
+                }
+            }
+
+            function renderFinalInput(row) {
+                var wrapper = document.createElement('div');
+                var inputType = row.input_type || 'text';
+                if (inputType === 'select') {
+                    var select = document.createElement('select');
+                    select.className = 'form-select sor-verify-final-value';
+                    select.setAttribute('data-field-name', row.field_name);
+                    var options = row.options || {};
+                    Object.keys(options).forEach(function (optionKey) {
+                        var option = document.createElement('option');
+                        option.value = optionKey;
+                        option.textContent = options[optionKey];
+                        if (String(row.final_value) === String(optionKey)) {
+                            option.selected = true;
+                        }
+                        select.appendChild(option);
+                    });
+                    wrapper.appendChild(select);
+                    return wrapper;
+                }
+
+                var input = document.createElement('input');
+                input.type = (inputType === 'number' || inputType === 'date' || inputType === 'time') ? inputType : 'text';
+                input.step = inputType === 'number' ? '0.01' : '';
+                input.className = 'form-control sor-verify-final-value';
+                input.setAttribute('data-field-name', row.field_name);
+                input.value = row.final_value || '';
+                wrapper.appendChild(input);
+                return wrapper;
+            }
+
+            function renderComparisonRows(rows) {
+                latestComparisonRows = Array.isArray(rows) ? rows : [];
+                if (!compareRows || !compareTableWrap || !compareMessage || !compareBadge) {
+                    return;
+                }
+
+                compareRows.innerHTML = '';
+                if (!latestComparisonRows.length) {
+                    compareTableWrap.classList.add('d-none');
+                    compareMessage.className = 'alert alert-success border';
+                    compareMessage.textContent = 'No different fields were found. You can continue with Save Edited Info and Update to Verified.';
+                    compareBadge.textContent = 'No differences';
+                    canFinalizeVerify = true;
+                    if (updateBtn) {
+                        updateBtn.disabled = false;
+                    }
+                    return;
+                }
+
+                latestComparisonRows.forEach(function (row) {
+                    var tr = document.createElement('tr');
+
+                    var fieldTd = document.createElement('td');
+                    fieldTd.textContent = row.field_label || row.field_name || '';
+                    tr.appendChild(fieldTd);
+
+                    var currentTd = document.createElement('td');
+                    currentTd.textContent = row.current_value || '';
+                    tr.appendChild(currentTd);
+
+                    var pdfTd = document.createElement('td');
+                    pdfTd.textContent = row.pdf_value || '';
+                    tr.appendChild(pdfTd);
+
+                    var finalTd = document.createElement('td');
+                    finalTd.appendChild(renderFinalInput(row));
+                    tr.appendChild(finalTd);
+
+                    compareRows.appendChild(tr);
+                });
+
+                compareTableWrap.classList.remove('d-none');
+                compareMessage.className = 'alert alert-warning border';
+                compareMessage.textContent = 'Only the different fields are shown below. Please confirm the final values before verifying.';
+                compareBadge.textContent = latestComparisonRows.length + ' difference' + (latestComparisonRows.length > 1 ? 's' : '');
+                canFinalizeVerify = true;
+                if (updateBtn) {
+                    updateBtn.disabled = false;
+                }
+            }
+
+            function collectFinalValues() {
+                var values = {};
+                modalElement.querySelectorAll('.sor-verify-final-value').forEach(function (field) {
+                    values[field.getAttribute('data-field-name') || ''] = field.value;
+                });
+                return values;
+            }
+
+            function sendVerifyRequest(actionName, formData) {
+                return fetch(window.location.href, {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'same-origin',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                }).then(function (response) {
+                    return response.json();
+                });
+            }
+
+            function extractPdfClientText(file) {
+                if (!file || typeof pdfjsLib === 'undefined') {
+                    return Promise.resolve('');
+                }
+
+                pdfjsLib.GlobalWorkerOptions.workerSrc = '../finance/header/js/pdf.worker.min.js';
+                return file.arrayBuffer().then(function (buffer) {
+                    return pdfjsLib.getDocument({ data: buffer }).promise;
+                }).then(function (pdfDoc) {
+                    var pagePromises = [];
+                    for (var pageNumber = 1; pageNumber <= pdfDoc.numPages; pageNumber++) {
+                        pagePromises.push(
+                            pdfDoc.getPage(pageNumber).then(function (page) {
+                                return page.getTextContent().then(function (textContent) {
+                                    return textContent.items.map(function (item) {
+                                        return String(item.str || '').trim();
+                                    }).filter(Boolean).join(' ');
+                                });
+                            })
+                        );
+                    }
+                    return Promise.all(pagePromises).then(function (pages) {
+                        return pages.join("\n");
+                    });
+                }).catch(function () {
+                    return '';
+                });
+            }
+
+            function handleVerifySuccess(result) {
+                modalInstance.hide();
+                showShopeeOrderReqActionPopup(result && result.message ? result.message : 'Order verified successfully.', function () {
+                    if (result && result.redirect_url) {
+                        window.location.replace(result.redirect_url);
+                    }
+                });
+            }
+
+            triggerButton.addEventListener('click', function () {
+                resetComparisonState();
+                setStatus('Only PDF file is allowed.', false);
+                if (fileInput) {
+                    fileInput.value = '';
+                }
+                if (pdfPathField && pdfPathDisplay) {
+                    pdfPathDisplay.value = pdfPathField.value || '';
+                    updatePdfPreview('');
+                } else {
+                    updatePdfPreview('');
+                }
+                showChoiceView();
+                modalInstance.show();
+            });
+
+            if (uploadChoiceBtn) {
+                uploadChoiceBtn.addEventListener('click', function () {
+                    showPdfView();
+                });
+            }
+
+            if (backBtn) {
+                backBtn.addEventListener('click', function () {
+                    showChoiceView();
+                });
+            }
+
+            compareBtn.addEventListener('click', function () {
+                var selectedFile = fileInput && fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+                if (!selectedFile) {
+                    setStatus('Please choose the Shopee Order Detail PDF first.', true);
+                    return;
+                }
+                if (!/\.pdf$/i.test(String(selectedFile.name || ''))) {
+                    setStatus('Only PDF file is allowed.', true);
+                    return;
+                }
+
+                setBusyState(true);
+                setStatus('Extracting PDF text and comparing...', false);
+                extractPdfClientText(selectedFile).then(function (clientPdfText) {
+                    var formData = new FormData();
+                    formData.append('sor_verify_order_action', 'compare_pdf');
+                    formData.append('shopee_order_verify_pdf_csrf', csrfField ? csrfField.value : '');
+                    formData.append('sor_order_detail_pdf_client_text', clientPdfText || '');
+                    formData.append('sor_order_detail_pdf', selectedFile);
+
+                    return sendVerifyRequest('compare_pdf', formData);
+                }).then(function (result) {
+                    setBusyState(false);
+                    if (!result || !result.success) {
+                        setStatus(result && result.message ? result.message : 'Failed to compare the uploaded PDF.', true);
+                        return;
+                    }
+
+                    setStatus(result.message || 'PDF compared successfully.', false);
+                    resetLocalPreviewUrl();
+                    localPreviewUrl = URL.createObjectURL(selectedFile);
+                    updatePdfPreview(localPreviewUrl);
+                    renderComparisonRows(result.comparison_rows || []);
+                    if (reloadBtn) {
+                        reloadBtn.classList.remove('d-none');
+                    }
+                }).catch(function () {
+                    setBusyState(false);
+                    setStatus('Failed to compare the uploaded PDF.', true);
+                });
+            });
+
+            if (reloadBtn) {
+                reloadBtn.addEventListener('click', function () {
+                    compareBtn.click();
+                });
+            }
+
+            directChoiceBtn.addEventListener('click', function () {
+                if (!window.confirm('Are you sure you want to verify this order?')) {
+                    return;
+                }
+                setBusyState(true);
+                var formData = new FormData();
+                formData.append('sor_verify_order_action', 'direct_verified');
+                formData.append('shopee_order_verify_pdf_csrf', csrfField ? csrfField.value : '');
+
+                sendVerifyRequest('direct_verified', formData).then(function (result) {
+                    setBusyState(false);
+                    if (!result || !result.success) {
+                        setStatus(result && result.message ? result.message : 'Failed to verify the order.', true);
+                        return;
+                    }
+                    handleVerifySuccess(result);
+                }).catch(function () {
+                    setBusyState(false);
+                    setStatus('Failed to verify the order.', true);
+                });
+            });
+
+            updateBtn.addEventListener('click', function () {
+                if (!(fileInput && fileInput.files && fileInput.files[0]) && (!pdfPathField || !pdfPathField.value)) {
+                    setStatus('Please upload the Order Detail PDF first.', true);
+                    return;
+                }
+
+                setBusyState(true);
+                var formData = new FormData();
+                formData.append('sor_verify_order_action', 'finalize_pdf_verified');
+                formData.append('shopee_order_verify_pdf_csrf', csrfField ? csrfField.value : '');
+                formData.append('sor_verify_pdf_path', pdfPathField.value || '');
+                formData.append('sor_verify_final_values', JSON.stringify(collectFinalValues()));
+                if (fileInput && fileInput.files && fileInput.files[0]) {
+                    formData.append('sor_order_detail_pdf', fileInput.files[0]);
+                }
+
+                sendVerifyRequest('finalize_pdf_verified', formData).then(function (result) {
+                    setBusyState(false);
+                    if (!result || !result.success) {
+                        setStatus(result && result.message ? result.message : 'Failed to update and verify the order.', true);
+                        return;
+                    }
+                    handleVerifySuccess(result);
+                }).catch(function () {
+                    setBusyState(false);
+                    setStatus('Failed to update and verify the order.', true);
+                });
+            });
+
+            modalElement.addEventListener('hidden.bs.modal', function () {
+                setBusyState(false);
+                resetLocalPreviewUrl();
+                updatePdfPreview('');
+                showChoiceView();
+            });
+        }
+
+        function bindShopeeOrderReqFollowUpModal() {
+            var form = document.getElementById('FORForm');
+            var triggerButton = document.querySelector('.sor-confirm-receive-trigger');
+            var modalElement = document.getElementById('sorFollowUpModal');
+            var followUpFlag = document.getElementById('sor_confirm_receive_follow_up_flag');
+            if (!form || !triggerButton || !modalElement || !followUpFlag) {
+                return;
+            }
+
+            var modalInstance = typeof bootstrap !== 'undefined' && bootstrap.Modal
+                ? bootstrap.Modal.getOrCreateInstance(modalElement)
+                : null;
+            var attachmentInput = document.getElementById('sor_follow_up_attachment');
+            var attachmentPreviewWrap = document.getElementById('sor_follow_up_attachment_preview_wrap');
+            var attachmentPreviewImage = document.getElementById('sor_follow_up_attachment_preview_img');
+            var attachmentPreviewNote = document.getElementById('sor_follow_up_attachment_preview_note');
+            var shortcutInput = document.getElementById('sor_follow_up_message_shortcut_id');
+            var nextDateInput = document.getElementById('sor_follow_up_next_date');
+            var ruleHint = document.getElementById('sor_follow_up_rule_hint');
+            var contactDisplayWrap = document.getElementById('sor_follow_up_contact_display_wrap');
+            var contactDisplayText = document.getElementById('sor_follow_up_contact_display_text');
+            var contactInputWrap = document.getElementById('sor_follow_up_contact_input_wrap');
+            var contactInput = document.getElementById('sor_follow_up_contact_no');
+            var contactEditBtn = document.getElementById('sor_follow_up_contact_edit_btn');
+            var submitBtn = document.getElementById('sor_follow_up_submit_btn');
+            var currentAttachmentPreviewUrl = null;
+
+            var clearAttachmentPreview = function () {
+                if (currentAttachmentPreviewUrl) {
+                    URL.revokeObjectURL(currentAttachmentPreviewUrl);
+                    currentAttachmentPreviewUrl = null;
+                }
+                if (attachmentPreviewImage) {
+                    attachmentPreviewImage.removeAttribute('src');
+                }
+                if (attachmentPreviewWrap) {
+                    attachmentPreviewWrap.style.display = 'none';
+                }
+                if (attachmentPreviewNote) {
+                    attachmentPreviewNote.classList.add('d-none');
+                }
+            };
+
+            if (attachmentInput && attachmentPreviewWrap && attachmentPreviewImage && attachmentPreviewNote) {
+                attachmentInput.addEventListener('change', function () {
+                    var file = attachmentInput.files && attachmentInput.files[0] ? attachmentInput.files[0] : null;
+                    if (!file) {
+                        clearAttachmentPreview();
+                        return;
+                    }
+
+                    if (currentAttachmentPreviewUrl) {
+                        URL.revokeObjectURL(currentAttachmentPreviewUrl);
+                        currentAttachmentPreviewUrl = null;
+                    }
+
+                    if (file.type.indexOf('image/') === 0) {
+                        currentAttachmentPreviewUrl = URL.createObjectURL(file);
+                        attachmentPreviewImage.src = currentAttachmentPreviewUrl;
+                        attachmentPreviewWrap.style.display = 'block';
+                        attachmentPreviewNote.classList.add('d-none');
+                        return;
+                    }
+
+                    attachmentPreviewImage.removeAttribute('src');
+                    attachmentPreviewWrap.style.display = 'none';
+                    attachmentPreviewNote.classList.remove('d-none');
+                });
+
+                window.addEventListener('beforeunload', clearAttachmentPreview);
+            }
+
+            triggerButton.addEventListener('click', function () {
+                var blockMessage = triggerButton.getAttribute('data-block-message') || '';
+                if (blockMessage) {
+                    window.alert(blockMessage);
+                    return;
+                }
+
+                followUpFlag.value = '';
+                document.getElementById('sorFollowUpModalTitle').textContent = 'Customer Follow-Up - ' + (triggerButton.getAttribute('data-order-code') || '');
+                document.getElementById('sor_follow_up_order_code_text').textContent = triggerButton.getAttribute('data-order-code') || '-';
+                document.getElementById('sor_follow_up_customer_text').textContent = triggerButton.getAttribute('data-customer-username') || triggerButton.getAttribute('data-customer-name') || '-';
+                document.getElementById('sor_follow_up_package_text').textContent = triggerButton.getAttribute('data-package-name') || '-';
+                document.getElementById('sor_follow_up_received_date_text').textContent = triggerButton.getAttribute('data-received-date') || '';
+                document.getElementById('sor_follow_up_customer_type_text').textContent =
+                    (triggerButton.getAttribute('data-customer-type') || 'new') === 'return'
+                        ? 'Return Customer (' + (triggerButton.getAttribute('data-purchase-count') || '0') + ' previous purchase)'
+                        : 'New Customer';
+
+                if (attachmentInput) {
+                    attachmentInput.value = '';
+                    attachmentInput.required = true;
+                }
+                clearAttachmentPreview();
+                if (shortcutInput) {
+                    shortcutInput.value = '';
+                    shortcutInput.required = true;
+                }
+                if (nextDateInput) {
+                    nextDateInput.value = '';
+                    nextDateInput.max = triggerButton.getAttribute('data-max-date') || '';
+                    nextDateInput.required = true;
+                }
+                if (ruleHint) {
+                    ruleHint.textContent = triggerButton.getAttribute('data-rule-label') || '';
+                }
+
+                var contactNo = triggerButton.getAttribute('data-contact-no') || '';
+                if (contactInput) {
+                    contactInput.value = contactNo;
+                }
+                if (contactNo) {
+                    contactDisplayText.textContent = contactNo;
+                    contactDisplayWrap.classList.remove('d-none');
+                    contactDisplayWrap.classList.add('d-flex');
+                    contactInputWrap.classList.add('d-none');
+                } else {
+                    contactDisplayWrap.classList.add('d-none');
+                    contactDisplayWrap.classList.remove('d-flex');
+                    contactInputWrap.classList.remove('d-none');
+                }
+
+                if (modalInstance) {
+                    modalInstance.show();
+                }
+            });
+
+            if (contactEditBtn) {
+                contactEditBtn.addEventListener('click', function () {
+                    contactDisplayWrap.classList.add('d-none');
+                    contactDisplayWrap.classList.remove('d-flex');
+                    contactInputWrap.classList.remove('d-none');
+                    if (contactInput) {
+                        contactInput.focus();
+                    }
+                });
+            }
+
+            if (submitBtn) {
+                submitBtn.addEventListener('click', function () {
+                    followUpFlag.value = '1';
+                });
+            }
+
+            modalElement.addEventListener('hidden.bs.modal', function () {
+                followUpFlag.value = '';
+                clearAttachmentPreview();
+            });
+        }
+
         function toggleAirbillFields() {
             var updateAirbill = document.getElementById('sor_update_airbill');
             var updateAirbillToggle = document.getElementById('sor_update_airbill_toggle');
@@ -2626,7 +3730,9 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
 
         document.addEventListener('DOMContentLoaded', function () {
             toggleAirbillFields();
+            bindShopeeOrderReqFollowUpModal();
             bindShopeeOrderReqStatusButtons();
+            bindShopeeOrderReqVerifyModal();
 
             var airbillFileInput = document.getElementById('sor_airbill_attachment');
             var airbillPreviewWrap = document.getElementById('sor_airbill_attachment_preview_wrap');

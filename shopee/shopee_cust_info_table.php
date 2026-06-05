@@ -43,7 +43,20 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
 <script>
     preloader(300);
     $(document).ready(() => {
-        createSortingTable('shopee_cust_info_table');
+        createSortingTable('shopee_cust_info_table', { searching: true });
+        initCustomerRecordTableFilters({
+            tableId: 'shopee_cust_info_table',
+            storageKey: 'shopee_customer_record_filters',
+            panelStorageKey: 'shopee_customer_record_filter_panel_open',
+            filters: [
+                { key: 'customer_label', label: 'Customer Label', attr: 'customer_label', type: 'select', placeholder: 'All Customer Labels' },
+                { key: 'customer_tag', label: 'Tag', attr: 'customer_tag', type: 'select', placeholder: 'All Tags' },
+                { key: 'country', label: 'Country', attr: 'country', type: 'select', placeholder: 'All Countries' },
+                { key: 'brand', label: 'Brand', attr: 'brand', type: 'select', placeholder: 'All Brands' },
+                { key: 'series', label: 'Series', attr: 'series', type: 'select', placeholder: 'All Series' },
+                { key: 'sales_person', label: 'Sales Person In Charge', attr: 'sales_person', type: 'select', placeholder: 'All Sales Persons' }
+            ]
+        });
     });
 </script>
 
@@ -108,6 +121,8 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
                             
                             foreach ($tableRows as $row) {
                                 if (isset($row['buyer_username'], $row['id']) && !empty($row['buyer_username'])) {
+                                    $customerLabelMeta = isset($customerLabelMap[(int) $row['id']]) ? $customerLabelMap[(int) $row['id']] : array();
+                                    $customerTagRows = isset($customerTagMap[(int) $row['id']]) ? $customerTagMap[(int) $row['id']] : array();
 
                                     $picName = $countryName = $brandName = $seriesName = '';
 
@@ -185,9 +200,19 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
                                             $seriesName = $seriesValue;
                                         }
                                     }
+
+                                    $filterAttributes = customerRecordBuildFilterDataAttributes(array(
+                                        'customer_name' => isset($row['buyer_username']) ? $row['buyer_username'] : '',
+                                        'customer_label' => customerRecordExtractLabelNames($customerLabelMeta),
+                                        'customer_tag' => customerRecordExtractTagNames($customerTagRows),
+                                        'sales_person' => $picName,
+                                        'country' => $countryName,
+                                        'brand' => $brandName,
+                                        'series' => $seriesName,
+                                    ));
                                     ?>
 
-                                    <tr>
+                                    <tr <?= $filterAttributes ?>>
                                         <th class="hideColumn" scope="row"><?= htmlspecialchars($row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                         <th scope="row"><?= htmlspecialchars($num++, ENT_QUOTES, 'UTF-8') ?></th>
                                         <td scope="row" class="btn-container">
@@ -209,8 +234,8 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
                                                 title="<?= htmlspecialchars($urbanismAction['title'], ENT_QUOTES, 'UTF-8') ?>"
                                                 <?= $urbanismAction['disabled'] ? 'onclick="return false;" aria-disabled="true"' : '' ?>><i class="<?= $urbanismAction['icon_class'] ?>"></i></a>
                                         </td>
-                                        <td scope="row"><?= customerLabelRenderNameCell(isset($row['buyer_username']) ? $row['buyer_username'] : '', isset($customerLabelMap[(int) $row['id']]) ? $customerLabelMap[(int) $row['id']] : array()) ?></td>
-                                        <td scope="row"><?= customerLabelRenderSummaryCell(isset($customerLabelMap[(int) $row['id']]) ? $customerLabelMap[(int) $row['id']] : array(), isset($customerTagMap[(int) $row['id']]) ? $customerTagMap[(int) $row['id']] : array()) ?></td>
+                                        <td scope="row"><?= customerLabelRenderNameCell(isset($row['buyer_username']) ? $row['buyer_username'] : '', $customerLabelMeta) ?></td>
+                                        <td scope="row"><?= customerLabelRenderSummaryCell($customerLabelMeta, $customerTagRows) ?></td>
                                         <td scope="row"><?= htmlspecialchars($picName, ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row"><?= htmlspecialchars($countryName, ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row"><?= htmlspecialchars($brandName, ENT_QUOTES, 'UTF-8') ?></td>

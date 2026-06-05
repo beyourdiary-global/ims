@@ -17,7 +17,47 @@ $num = 1;   // numbering
 $redirect_page = $SITEURL . '/tag.php';
 $deleteRedirectPage = $SITEURL . '/tag_table.php';
 
-$result = getData('*', '', '', $tblName, $connect);
+$result = getData('*', "status = 'A'", '', $tblName, $connect);
+
+$tagCustomerCountMap = array();
+$platformDisplayMap = array(
+    'shopee' => 'Shopee',
+    'lazada' => 'Lazada',
+    'facebook' => 'Facebook',
+    'website' => 'Website',
+    'customer_info' => 'Customer Info',
+);
+$assignmentCountSql = "SELECT
+    tag_id,
+    LOWER(TRIM(platform)) AS platform,
+    COUNT(DISTINCT CONCAT(platform, ':', customer_id)) AS platform_customer_count
+    FROM `" . CUS_TAG_ASSIGNMENT . "`
+    WHERE status = 'A'
+    GROUP BY tag_id, LOWER(TRIM(platform))";
+$countResult = mysqli_query($connect, $assignmentCountSql);
+
+if ($countResult instanceof mysqli_result) {
+    while ($countRow = $countResult->fetch_assoc()) {
+        $tagId = isset($countRow['tag_id']) ? (int) $countRow['tag_id'] : 0;
+        $platformKey = isset($countRow['platform']) ? (string) $countRow['platform'] : '';
+        $platformCount = isset($countRow['platform_customer_count']) ? (int) $countRow['platform_customer_count'] : 0;
+
+        if ($tagId <= 0 || !isset($platformDisplayMap[$platformKey])) {
+            continue;
+        }
+
+        if (!isset($tagCustomerCountMap[$tagId])) {
+            $tagCustomerCountMap[$tagId] = array(
+                'total' => 0,
+                'platforms' => array_fill_keys(array_keys($platformDisplayMap), 0),
+            );
+        }
+
+        $tagCustomerCountMap[$tagId]['platforms'][$platformKey] = $platformCount;
+        $tagCustomerCountMap[$tagId]['total'] += $platformCount;
+    }
+    $countResult->free();
+}
 
 // if (!$result) {
 //     echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
@@ -94,6 +134,7 @@ $result = getData('*', '', '', $tblName, $connect);
                                 <th scope="col" width="60px">S/N</th>
                                 <th scope="col" id="action_col" width="100px">Action</th>
                                 <th scope="col">Name</th>
+                                <th scope="col">Total Assigned Customers</th>
                                 <th scope="col">Remark</th>
                             </tr>
                         </thead>
@@ -102,6 +143,19 @@ $result = getData('*', '', '', $tblName, $connect);
                             <?php
                             while ($row = $result->fetch_assoc()) {
                                 if (isset($row['name'], $row['id']) && !empty($row['name'])) { ?>
+                                    <?php
+                                    $tagId = (int) $row['id'];
+                                    $assignedCustomerCountData = isset($tagCustomerCountMap[$tagId]) ? $tagCustomerCountMap[$tagId] : array(
+                                        'total' => 0,
+                                        'platforms' => array_fill_keys(array_keys($platformDisplayMap), 0),
+                                    );
+                                    $assignedCustomerCount = isset($assignedCustomerCountData['total']) ? (int) $assignedCustomerCountData['total'] : 0;
+                                    $platformBreakdownParts = array();
+                                    foreach ($platformDisplayMap as $platformKey => $platformLabel) {
+                                        $platformBreakdownParts[] = $platformLabel . ': ' . (int) $assignedCustomerCountData['platforms'][$platformKey];
+                                    }
+                                    $platformBreakdownText = implode(' | ', $platformBreakdownParts);
+                                    ?>
                                     <tr>
                                         <th class="hideColumn" scope="row"><?= (int) $row['id'] ?></th>
                                         <th scope="row"><?= (int) $num++; ?></th>
@@ -111,6 +165,10 @@ $result = getData('*', '', '', $tblName, $connect);
                                             <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
                                         </td>
                                         <td scope="row"><?= htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td scope="row">
+                                            <?= (int) $assignedCustomerCount ?><br>
+                                            <?= htmlspecialchars($platformBreakdownText, ENT_QUOTES, 'UTF-8') ?>
+                                        </td>
                                         <td scope="row"><?php if (isset($row['remark']))
                                             echo htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') ?></td>
                                         </tr>
@@ -126,6 +184,7 @@ $result = getData('*', '', '', $tblName, $connect);
                                 <th scope="col" width="60px">S/N</th>
                                 <th scope="col" id="action_col" width="100px">Action</th>
                                 <th scope="col">Name</th>
+                                <th scope="col">Total Assigned Customers</th>
                                 <th scope="col">Remark</th>
                             </tr>
                         </tfoot>

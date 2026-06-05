@@ -246,6 +246,7 @@ $menuList = array(
             array('Facebook Customer', 'mdi mdi-deal-outline', $SITEURL . '/fb_cust_deals_table.php', '75'),
             array('Website Customer', 'mdi mdi-deal-outline', $SITEURL . '/website_customer_record_table.php', '84'),
             array('Whatsapp Customer', 'mdi mdi-deal-outline', $SITEURL . '/customerInfoTable.php', '38'),
+            array('Customer Follow-Up', 'mdi mdi-account-clock-outline', $SITEURL . '/customer_follow_up_list.php', '151'),
             array('Customer Daily Report', 'mdi mdi-file-chart-outline', $SITEURL . '/customer_daily_report.php', '150'),
             array(
                 'Setting',
@@ -262,7 +263,7 @@ $menuList = array(
                 'pin' => array('29', '142', '143', '144', '35'),
             ),
         ),
-        'pin' => array('85', '91', '75', '84', '38', '150', '29', '142', '143', '144', '35')
+        'pin' => array('85', '91', '75', '84', '38', '150', '151', '29', '142', '143', '144', '35')
     ),
     array(
         'Order',
