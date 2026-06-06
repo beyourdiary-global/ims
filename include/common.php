@@ -6118,13 +6118,15 @@ if (!empty($summary['package_lines']) && is_array($summary['package_lines'])) {
             }
         }
 
+        $orderFieldLabel = $platform === 'shopee' ? 'Shopee OID' : $platformLabel . ' Order ID';
+        $customerFieldLabel = $platform === 'shopee' ? 'Shopee Buyer Username' : $platformLabel . ' Customer';
+
         $lines = array();
 
         $lines[] = '【' . ($warehouseName !== '' ? $warehouseName : 'Warehouse Name') . '】';
-        $lines[] = $platformLabel . ' Order ID: ' . ($orderCode !== '' ? $orderCode : '-');
+        $lines[] = $orderFieldLabel . ': ' . ($orderCode !== '' ? $orderCode : '-');
         $lines[] = '';
-        $lines[] = $platformLabel . ' Customer: ' . ($customerName !== '' ? $customerName : '-');
-        $lines[] = '';
+        $lines[] = $customerFieldLabel . ': ' . ($customerName !== '' ? $customerName : '-');
         $lines[] = '';
 
         if (count($packageLines) > 1) {
