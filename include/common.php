@@ -6121,10 +6121,10 @@ if (!empty($summary['package_lines']) && is_array($summary['package_lines'])) {
         $lines = array();
 
         $lines[] = '【' . ($warehouseName !== '' ? $warehouseName : 'Warehouse Name') . '】';
-        $lines[] = 'Shopee OID: ' . $orderCode;
+        $lines[] = $platformLabel . ' Order ID: ' . ($orderCode !== '' ? $orderCode : '-');
         $lines[] = '';
-
-        $lines[] = 'Shopee Buyer Username: ' . ($customerName !== '' ? $customerName : '-');
+        $lines[] = $platformLabel . ' Customer: ' . ($customerName !== '' ? $customerName : '-');
+        $lines[] = '';
         $lines[] = '';
 
         if (count($packageLines) > 1) {
