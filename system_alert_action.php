@@ -6,16 +6,32 @@ include_once 'include/common_variable.php';
 include_once ROOT . '/include/system_alert_common.php';
 
 if (!function_exists('systemAlertActionRedirect')) {
-    function systemAlertActionRedirect($targetUrl)
-    {
-        $targetUrl = trim((string) $targetUrl);
-        if ($targetUrl === '') {
-            $targetUrl = defined('SITEURL') ? rtrim((string) SITEURL, '/') . '/dashboard.php' : 'dashboard.php';
-        }
+function systemAlertActionRedirect($targetUrl)
+{
+    $defaultUrl = defined('SITEURL') ? rtrim((string) SITEURL, '/') . '/dashboard.php' : 'dashboard.php';
 
-        echo '<script>location.replace(' . json_encode($targetUrl) . ');</script>';
-        exit;
+    $targetUrl = trim((string) $targetUrl);
+    if ($targetUrl === '') {
+        $targetUrl = $defaultUrl;
     }
+
+    $parsed = @parse_url($targetUrl);
+    $scheme = is_array($parsed) && isset($parsed['scheme']) ? strtolower((string) $parsed['scheme']) : '';
+    $host = is_array($parsed) && isset($parsed['host']) ? strtolower((string) $parsed['host']) : '';
+    $siteHost = defined('SITEURL') ? strtolower((string) parse_url((string) SITEURL, PHP_URL_HOST)) : '';
+
+    if (
+        $parsed === false
+        || strpos($targetUrl, '//') === 0
+        || ($scheme !== '' && !in_array($scheme, array('http', 'https'), true))
+        || ($host !== '' && ($siteHost === '' || strcasecmp($host, $siteHost) !== 0))
+    ) {
+        $targetUrl = $defaultUrl;
+    }
+
+    echo '<script>location.replace(' . json_encode($targetUrl) . ');</script>';
+    exit;
+}
 }
 
 if (!function_exists('systemAlertActionMarkFollowUpNotificationRead')) {
