@@ -1652,8 +1652,59 @@ td.btn-container.mobile-action-open-left .mobile-action-menu {
   max-width: 100%;
 }
 
+.customer-label-item {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+}
+
 .customer-label-summary-wrap .customer-tag-table-badge-group {
   margin-top: 0;
+}
+
+.js-customer-label-wrap {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .35rem;
+  max-width: 100%;
+}
+
+.customer-label-toggle-btn {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #0d6efd;
+  font: inherit;
+  line-height: inherit;
+  text-decoration: underline;
+}
+
+.customer-label-toggle-btn:hover,
+.customer-label-toggle-btn:focus {
+  color: #0a58ca;
+}
+
+.customer-record-filter-panel {
+  margin-bottom: 1rem;
+}
+
+.customer-record-filter-label {
+  margin-bottom: 0.35rem;
+}
+
+.filter-reset {
+  height: 38px;
+  max-width: 100px;
+  width: 100%;
+  font-size: 16px;
+  line-height: 1.2;
+  padding: 6px 12px;
+  border-radius: 20px;
+  text-align: center;
+  display: block;
+  align-items: center;
+  align-content: center;
 }
 
 .customer-tag-title-badge-group {

@@ -97,22 +97,53 @@ if ($isStockBalanceView) {
 
     $stockRows = array();
     $grandTotalPrice = 0.00;
+    if (function_exists('siEnsureStockOutBatchUsageTable')) {
+        $sobuReady = function_exists('session_status') && session_status() === PHP_SESSION_ACTIVE && !empty($_SESSION['sobu_ready']);
+        if (!$sobuReady && siEnsureStockOutBatchUsageTable($finance_connect) && function_exists('session_status') && session_status() === PHP_SESSION_ACTIVE) {
+            $_SESSION['sobu_ready'] = 1;
+        }
+    }
     $stockSql = "SELECT
                     i.product_id,
-                    SUM(i.product_quantity) AS total_quantity,
+                    SUM(
+                        GREATEST(
+                            CAST(IFNULL(i.product_quantity, 0) AS SIGNED) - IFNULL(u.used_qty, 0),
+                            0
+                        )
+                    ) AS total_quantity,
                     MAX(
-                        TIMESTAMP(
-                            COALESCE(i.update_date, o.update_date, i.create_date, o.create_date),
-                            COALESCE(i.update_time, o.update_time, i.create_time, o.create_time)
+                        GREATEST(
+                            IFNULL(
+                                TIMESTAMP(
+                                    COALESCE(i.update_date, o.update_date, i.create_date, o.create_date),
+                                    COALESCE(i.update_time, o.update_time, i.create_time, o.create_time)
+                                ),
+                                '1000-01-01 00:00:00'
+                            ),
+                            IFNULL(u.last_used_at, '1000-01-01 00:00:00')
                         )
                     ) AS last_updated_at
                 FROM `stock_in_order` o
                 INNER JOIN `stock_in_order_item` i ON i.stock_in_order_id = o.id AND i.status='A'
+                LEFT JOIN (
+                    SELECT
+                        stock_in_item_id,
+                        SUM(used_quantity) AS used_qty,
+                        MAX(TIMESTAMP(create_date, create_time)) AS last_used_at
+                    FROM `" . STOCK_OUT_BATCH_USAGE . "`
+                    WHERE status='A'
+                    GROUP BY stock_in_item_id
+                ) u ON u.stock_in_item_id = i.id
                 WHERE o.status='A'
                   AND o.warehouse_id='" . $warehouseId . "'
                   AND COALESCE(NULLIF(TRIM(o.stock_type), ''), 'Stock In') <> 'Stock Out'
                 GROUP BY i.product_id
-                HAVING SUM(i.product_quantity) > 0
+                HAVING SUM(
+                    GREATEST(
+                        CAST(IFNULL(i.product_quantity, 0) AS SIGNED) - IFNULL(u.used_qty, 0),
+                        0
+                    )
+                ) > 0
                 ORDER BY i.product_id ASC";
     $stockRst = mysqli_query($finance_connect, $stockSql);
     if ($stockRst) {

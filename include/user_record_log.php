@@ -178,6 +178,49 @@ if (!function_exists('urlGetUserRecordLogUploadWebDir')) {
     }
 }
 
+if (!function_exists('urlEncodeAttachmentPathForUrl')) {
+    function urlEncodeAttachmentPathForUrl($path)
+    {
+        $path = trim(str_replace('\\', '/', (string) $path), '/');
+        if ($path === '') {
+            return '';
+        }
+
+        $segments = array_values(array_filter(explode('/', $path), 'strlen'));
+        if (empty($segments)) {
+            return '';
+        }
+
+        return implode('/', array_map('rawurlencode', $segments));
+    }
+}
+
+if (!function_exists('urlBuildUserRecordLogAttachmentUrl')) {
+    function urlBuildUserRecordLogAttachmentUrl($attachmentValue, $uploadWebDir = '')
+    {
+        $attachmentValue = trim(str_replace('\\', '/', (string) $attachmentValue));
+        if ($attachmentValue === '' || !defined('SITEURL')) {
+            return '';
+        }
+
+        if (preg_match('#^https?://#i', $attachmentValue)) {
+            return $attachmentValue;
+        }
+
+        $normalizedPath = ltrim($attachmentValue, '/');
+        if (strpos($normalizedPath, '/') === false) {
+            $normalizedPath = trim((string) $uploadWebDir, '/\\') . '/' . $normalizedPath;
+        }
+
+        $encodedPath = urlEncodeAttachmentPathForUrl($normalizedPath);
+        if ($encodedPath === '') {
+            return '';
+        }
+
+        return rtrim((string) SITEURL, '/') . '/' . $encodedPath;
+    }
+}
+
 if (!function_exists('urlEnsureUserRecordLogUploadDirectory')) {
     function urlEnsureUserRecordLogUploadDirectory()
     {
@@ -423,8 +466,10 @@ if (!function_exists('urlBuildListHtml')) {
 
             $attachmentButtonHtml = '';
             if ($attachment !== '') {
-                $href = rtrim((string) $GLOBALS['SITEURL'], '/') . '/' . ltrim($uploadWebDir, '/') . rawurlencode($attachment);
-                $attachmentButtonHtml = '<button type="button" class="btn btn-sm btn-rounded btn-outline-primary url-view-attachment-btn" data-url="' . htmlspecialchars($href, ENT_QUOTES, 'UTF-8') . '" data-file="' . htmlspecialchars((string) $attachment, ENT_QUOTES, 'UTF-8') . '">View Attachment</button>';
+                $href = urlBuildUserRecordLogAttachmentUrl($attachment, $uploadWebDir);
+                if ($href !== '') {
+                    $attachmentButtonHtml = '<button type="button" class="btn btn-sm btn-rounded btn-outline-primary url-view-attachment-btn" data-url="' . htmlspecialchars($href, ENT_QUOTES, 'UTF-8') . '" data-file="' . htmlspecialchars((string) $attachment, ENT_QUOTES, 'UTF-8') . '">View Attachment</button>';
+                }
             }
 
             $rowClass = ($count % 2 === 1) ? ' url-row-odd' : ' url-row-even';

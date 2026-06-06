@@ -36,13 +36,27 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
 
 <script>
     $(document).ready(() => {
-        createSortingTable('web_cust_deals');
+        createSortingTable('web_cust_deals', { searching: true });
+        initCustomerRecordTableFilters({
+            tableId: 'web_cust_deals',
+            storageKey: 'website_customer_record_filters',
+            panelStorageKey: 'website_customer_record_filter_panel_open',
+            filters: [
+                { key: 'customer_label', label: 'Customer Label', attr: 'customer_label', type: 'select', placeholder: 'All Customer Labels' },
+                { key: 'customer_tag', label: 'Tag', attr: 'customer_tag', type: 'select', placeholder: 'All Tags' },
+                { key: 'country', label: 'Country', attr: 'country', type: 'select', placeholder: 'All Countries' },
+                { key: 'brand', label: 'Brand', attr: 'brand', type: 'select', placeholder: 'All Brands' },
+                { key: 'series', label: 'Series', attr: 'series', type: 'select', placeholder: 'All Series' },
+                { key: 'sales_person', label: 'Sales Person In Charge', attr: 'sales_person', type: 'select', placeholder: 'All Sales Persons' }
+            ]
+        });
     });
 </script>
 
 
 <style>
-    .btn {
+    #addBtn,
+    .btn-container .btn {
         padding: 0.2rem 0.5rem;
         font-size: 0.75rem;
         margin: 3px;
@@ -119,6 +133,8 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
                     </thead>
                     <tbody>
                         <?php foreach ($tableRows as $row) {
+                            $customerLabelMeta = isset($customerLabelMap[(int) $row['id']]) ? $customerLabelMap[(int) $row['id']] : array();
+                            $customerTagRows = isset($customerTagMap[(int) $row['id']]) ? $customerTagMap[(int) $row['id']] : array();
                             $pic = $country = $brand = $series = '';
                             $q1 = getData('name', "id='" . $row['sales_pic'] . "'", '', USR_USER, $connect);
                             if ($q1) {
@@ -139,9 +155,24 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
                                 $series = $q4->fetch_assoc();
                             }
 
+                            $picName = isset($pic['name']) ? $pic['name'] : (isset($row['sales_pic']) ? (string) $row['sales_pic'] : '');
+                            $countryName = isset($country['nicename']) ? $country['nicename'] : (isset($row['country']) ? (string) $row['country'] : '');
+                            $brandName = isset($brand['name']) ? $brand['name'] : (isset($row['brand']) ? (string) $row['brand'] : '');
+                            $seriesName = isset($series['name']) ? $series['name'] : (isset($row['series']) ? (string) $row['series'] : '');
+                            $filterAttributes = customerRecordBuildFilterDataAttributes(array(
+                                'customer_id' => isset($row['cust_id']) ? $row['cust_id'] : '',
+                                'customer_name' => isset($row['name']) ? $row['name'] : '',
+                                'customer_label' => customerRecordExtractLabelNames($customerLabelMeta),
+                                'customer_tag' => customerRecordExtractTagNames($customerTagRows),
+                                'sales_person' => $picName,
+                                'country' => $countryName,
+                                'brand' => $brandName,
+                                'series' => $seriesName,
+                            ));
+
                             ?>
 
-                            <tr>
+                            <tr <?= $filterAttributes ?>>
                                 <th class="hideColumn" scope="row">
                                     <?= $row['id'] ?>
                                 </th>
@@ -173,10 +204,10 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
                                 </td>
 
                                 <td scope="row" class="customer-name-label-cell">
-                                    <?= customerLabelRenderNameCell(isset($row['name']) ? $row['name'] : '', isset($customerLabelMap[(int) $row['id']]) ? $customerLabelMap[(int) $row['id']] : array()) ?>
+                                    <?= customerLabelRenderNameCell(isset($row['name']) ? $row['name'] : '', $customerLabelMeta) ?>
                                 </td>
 
-                                <td scope="row"><?= customerLabelRenderSummaryCell(isset($customerLabelMap[(int) $row['id']]) ? $customerLabelMap[(int) $row['id']] : array(), isset($customerTagMap[(int) $row['id']]) ? $customerTagMap[(int) $row['id']] : array()) ?></td>
+                                <td scope="row"><?= customerLabelRenderSummaryCell($customerLabelMeta, $customerTagRows) ?></td>
 
                                 <td scope="row">
                                     <?= $row['contact'] ?>
@@ -190,15 +221,15 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
                                     <?= $row['cust_birthday'] ?>
                                 </td>
 
-                                <td scope="row"><?= isset($pic['name']) ? $pic['name'] : '' ?></td>
+                                <td scope="row"><?= $picName ?></td>
 
                                 <td scope="row">
-                                    <?= isset($country['nicename']) ? $country['nicename'] : '' ?>
+                                    <?= $countryName ?>
                                 </td>
 
-                                <td scope="row"><?= isset($brand['name']) ? $brand['name'] : '' ?></td>
+                                <td scope="row"><?= $brandName ?></td>
 
-                                <td scope="row"><?= isset($series['name']) ? $series['name'] : '' ?></td>
+                                <td scope="row"><?= $seriesName ?></td>
 
                                 <td scope="row">
                                     <?= $row['ship_rec_name'] ?>

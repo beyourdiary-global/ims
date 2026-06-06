@@ -138,6 +138,44 @@ function alterColumnToTextIfVarchar($conn, $dbName, $tableName, $columnName)
     }
 }
 
+function ensureVarcharColumnLengthAtLeast($conn, $dbName, $tableName, $columnName, $minLength = 255, $defaultValue = '')
+{
+    $safeDb = $conn->real_escape_string($dbName);
+    $safeTable = $conn->real_escape_string($tableName);
+    $safeColumn = $conn->real_escape_string($columnName);
+    $qualifiedTable = "`" . str_replace('`', '``', $dbName) . "`.`" . str_replace('`', '``', $tableName) . "`";
+    $rst = $conn->query("SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE, COLUMN_DEFAULT
+        FROM information_schema.columns
+        WHERE table_schema='$safeDb' AND table_name='$safeTable' AND column_name='$safeColumn'
+        LIMIT 1");
+
+    if (!$rst || $rst->num_rows === 0) {
+        echo "<p style='color:orange;'>Column `$columnName` not found in `$tableName` to verify length.</p>";
+        return;
+    }
+
+    $row = $rst->fetch_assoc();
+    if ($row) {
+        $row = array_change_key_case($row, CASE_LOWER);
+    }
+
+    $dataType = isset($row['data_type']) ? strtolower((string) $row['data_type']) : '';
+    $currentLength = isset($row['character_maximum_length']) ? (int) $row['character_maximum_length'] : 0;
+    $isNullable = isset($row['is_nullable']) ? strtoupper((string) $row['is_nullable']) === 'YES' : false;
+    $defaultSql = $defaultValue === null ? 'DEFAULT NULL' : "NOT NULL DEFAULT '" . $conn->real_escape_string((string) $defaultValue) . "'";
+
+    if ($dataType !== 'varchar' || $currentLength < (int) $minLength || $isNullable) {
+        $alterSql = "ALTER TABLE " . $qualifiedTable . " MODIFY COLUMN `" . str_replace('`', '``', $columnName) . "` VARCHAR(" . (int) $minLength . ") " . $defaultSql;
+        if ($conn->query($alterSql)) {
+            echo "<p style='color:blue;'>Verified `$tableName`.`$columnName` supports VARCHAR(" . (int) $minLength . ").</p>";
+        } else {
+            echo "<p style='color:red;'>Failed updating `$tableName`.`$columnName` length: " . $conn->error . "</p>";
+        }
+    } else {
+        echo "<p style='color:green;'>Verified `$tableName`.`$columnName` already supports VARCHAR(" . (int) $currentLength . ").</p>";
+    }
+}
+
 function indexExists($conn, $dbName, $tableName, $indexName)
 {
     $safeDb = $conn->real_escape_string($dbName);
@@ -473,6 +511,46 @@ if ($conn->select_db($db_fin)) {
 
 addColumnIfMissing($conn, $db_fin, 'stock_in_order', 'stock_type', "ALTER TABLE `stock_in_order` ADD COLUMN `stock_type` VARCHAR(20) NOT NULL DEFAULT 'Stock In' AFTER `attachment`");
 
+$createStockOutBatchUsageTableSql = "CREATE TABLE IF NOT EXISTS `stock_out_batch_usage` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `stock_out_order_id` INT NOT NULL,
+    `stock_out_item_id` INT NOT NULL,
+    `stock_in_order_id` INT NOT NULL,
+    `stock_in_item_id` INT NOT NULL,
+    `product_id` INT NOT NULL DEFAULT 0,
+    `package_id` INT NOT NULL DEFAULT 0,
+    `used_quantity` INT NOT NULL DEFAULT 0,
+    `create_by` VARCHAR(30) DEFAULT NULL,
+    `create_date` DATE DEFAULT NULL,
+    `create_time` TIME DEFAULT NULL,
+    `status` CHAR(1) NOT NULL DEFAULT 'A',
+    KEY `idx_sobu_stock_out_order_item` (`stock_out_order_id`, `stock_out_item_id`, `status`),
+    KEY `idx_sobu_stock_in_order_item` (`stock_in_order_id`, `stock_in_item_id`, `status`),
+    KEY `idx_sobu_product_package_status` (`product_id`, `package_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+if ($conn->query($createStockOutBatchUsageTableSql)) {
+    echo "<p style='color:blue;'>Table `stock_out_batch_usage` is ready.</p>";
+} else {
+    echo "<p style='color:red;'>Error creating `stock_out_batch_usage`: " . $conn->error . "</p>";
+}
+
+migrationEnsureColumn($conn, $db_fin, 'stock_out_batch_usage', 'stock_out_order_id', "ALTER TABLE `stock_out_batch_usage` ADD COLUMN `stock_out_order_id` INT NOT NULL AFTER `id`", "Verified `stock_out_batch_usage` includes `stock_out_order_id`.");
+migrationEnsureColumn($conn, $db_fin, 'stock_out_batch_usage', 'stock_out_item_id', "ALTER TABLE `stock_out_batch_usage` ADD COLUMN `stock_out_item_id` INT NOT NULL AFTER `stock_out_order_id`", "Verified `stock_out_batch_usage` includes `stock_out_item_id`.");
+migrationEnsureColumn($conn, $db_fin, 'stock_out_batch_usage', 'stock_in_order_id', "ALTER TABLE `stock_out_batch_usage` ADD COLUMN `stock_in_order_id` INT NOT NULL AFTER `stock_out_item_id`", "Verified `stock_out_batch_usage` includes `stock_in_order_id`.");
+migrationEnsureColumn($conn, $db_fin, 'stock_out_batch_usage', 'stock_in_item_id', "ALTER TABLE `stock_out_batch_usage` ADD COLUMN `stock_in_item_id` INT NOT NULL AFTER `stock_in_order_id`", "Verified `stock_out_batch_usage` includes `stock_in_item_id`.");
+migrationEnsureColumn($conn, $db_fin, 'stock_out_batch_usage', 'product_id', "ALTER TABLE `stock_out_batch_usage` ADD COLUMN `product_id` INT NOT NULL DEFAULT 0 AFTER `stock_in_item_id`", "Verified `stock_out_batch_usage` includes `product_id`.");
+migrationEnsureColumn($conn, $db_fin, 'stock_out_batch_usage', 'package_id', "ALTER TABLE `stock_out_batch_usage` ADD COLUMN `package_id` INT NOT NULL DEFAULT 0 AFTER `product_id`", "Verified `stock_out_batch_usage` includes `package_id`.");
+migrationEnsureColumn($conn, $db_fin, 'stock_out_batch_usage', 'used_quantity', "ALTER TABLE `stock_out_batch_usage` ADD COLUMN `used_quantity` INT NOT NULL DEFAULT 0 AFTER `package_id`", "Verified `stock_out_batch_usage` includes `used_quantity`.");
+migrationEnsureColumn($conn, $db_fin, 'stock_out_batch_usage', 'create_by', "ALTER TABLE `stock_out_batch_usage` ADD COLUMN `create_by` VARCHAR(30) DEFAULT NULL AFTER `used_quantity`", "Verified `stock_out_batch_usage` includes `create_by`.");
+migrationEnsureColumn($conn, $db_fin, 'stock_out_batch_usage', 'create_date', "ALTER TABLE `stock_out_batch_usage` ADD COLUMN `create_date` DATE DEFAULT NULL AFTER `create_by`", "Verified `stock_out_batch_usage` includes `create_date`.");
+migrationEnsureColumn($conn, $db_fin, 'stock_out_batch_usage', 'create_time', "ALTER TABLE `stock_out_batch_usage` ADD COLUMN `create_time` TIME DEFAULT NULL AFTER `create_date`", "Verified `stock_out_batch_usage` includes `create_time`.");
+migrationEnsureColumn($conn, $db_fin, 'stock_out_batch_usage', 'status', "ALTER TABLE `stock_out_batch_usage` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A' AFTER `create_time`", "Verified `stock_out_batch_usage` includes `status`.");
+
+migrationEnsureIndex($conn, $db_fin, 'stock_out_batch_usage', 'idx_sobu_stock_out_order_item', "ALTER TABLE `stock_out_batch_usage` ADD INDEX `idx_sobu_stock_out_order_item` (`stock_out_order_id`, `stock_out_item_id`, `status`)", "Verified `stock_out_batch_usage` stock out lookup index.");
+migrationEnsureIndex($conn, $db_fin, 'stock_out_batch_usage', 'idx_sobu_stock_in_order_item', "ALTER TABLE `stock_out_batch_usage` ADD INDEX `idx_sobu_stock_in_order_item` (`stock_in_order_id`, `stock_in_item_id`, `status`)", "Verified `stock_out_batch_usage` stock in lookup index.");
+migrationEnsureIndex($conn, $db_fin, 'stock_out_batch_usage', 'idx_sobu_product_package_status', "ALTER TABLE `stock_out_batch_usage` ADD INDEX `idx_sobu_product_package_status` (`product_id`, `package_id`, `status`)", "Verified `stock_out_batch_usage` product/package lookup index.");
+
 // // Ensure Stock In item supports CSV products and quantities.
 // alterColumnToVarcharIfInt($conn, $db_fin, 'stock_in_order_item', 'product_id', 100);
 // alterColumnToVarcharIfInt($conn, $db_fin, 'stock_in_order_item', 'product_quantity', 255);
@@ -627,7 +705,7 @@ addColumnIfMissing($conn, $db_fin, 'stock_in_order', 'stock_type', "ALTER TABLE 
     $createTokenSettingTableSql = "CREATE TABLE IF NOT EXISTS `" . $safeCmsDb . "`.`token_setting` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `name` VARCHAR(255) NOT NULL,
-    `page_used` VARCHAR(100) NOT NULL,
+    `page_used` VARCHAR(255) NOT NULL,
     `bot_token` VARCHAR(255) NOT NULL,
     `chat_id` VARCHAR(100) DEFAULT '',
     `remark` TEXT DEFAULT NULL,
@@ -666,7 +744,8 @@ addColumnIfMissing($conn, $db_fin, 'stock_in_order', 'stock_type', "ALTER TABLE 
 //     }
 
 // addColumnIfMissing($conn, $db_cms, 'token_setting', 'chat_id', "ALTER TABLE `" . $safeCmsDb . "`.`token_setting` ADD COLUMN `chat_id` VARCHAR(100) DEFAULT '' AFTER `bot_token`");
-    addColumnIfMissing($conn, $db_cms, 'token_setting', 'page_used', "ALTER TABLE `" . $safeCmsDb . "`.`token_setting` ADD COLUMN `page_used` VARCHAR(100) NOT NULL DEFAULT '' AFTER `name`");
+    addColumnIfMissing($conn, $db_cms, 'token_setting', 'page_used', "ALTER TABLE `" . $safeCmsDb . "`.`token_setting` ADD COLUMN `page_used` VARCHAR(255) NOT NULL DEFAULT '' AFTER `name`");
+    ensureVarcharColumnLengthAtLeast($conn, $db_cms, 'token_setting', 'page_used', 255, '');
 
 //     addColumnIfMissing($conn, $db_cms, 'user', 'main_report_supervisor', "ALTER TABLE `user` ADD COLUMN `main_report_supervisor` INT DEFAULT NULL AFTER `access_id`");
 //     addColumnIfMissing($conn, $db_cms, 'user', 'second_report_supervisor', "ALTER TABLE `user` ADD COLUMN `second_report_supervisor` INT DEFAULT NULL AFTER `main_report_supervisor`");
@@ -1085,6 +1164,335 @@ function migrationUpsertSetting($conn, $dbName, $tableName, $settingKey, $settin
 
     return $conn->query($sql);
 }
+
+$customerFollowUpTable = defined('CUSTOMER_FOLLOW_UP') ? CUSTOMER_FOLLOW_UP : 'customer_follow_up';
+$customerFollowUpRoundTable = defined('CUSTOMER_FOLLOW_UP_ROUND') ? CUSTOMER_FOLLOW_UP_ROUND : 'customer_follow_up_round';
+$customerFollowUpActionLogTable = defined('CUSTOMER_FOLLOW_UP_ACTION_LOG') ? CUSTOMER_FOLLOW_UP_ACTION_LOG : 'customer_follow_up_action_log';
+$customerFollowUpNotificationTable = defined('CUSTOMER_FOLLOW_UP_NOTIFICATION') ? CUSTOMER_FOLLOW_UP_NOTIFICATION : 'customer_follow_up_notification';
+
+$createCustomerFollowUpSql = "CREATE TABLE IF NOT EXISTS `{$db_cms}`.`{$customerFollowUpTable}` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `platform` VARCHAR(30) NOT NULL DEFAULT '',
+    `order_id` INT NOT NULL DEFAULT 0,
+    `order_no` VARCHAR(120) DEFAULT NULL,
+    `customer_id` INT NOT NULL DEFAULT 0,
+    `customer_name` VARCHAR(150) DEFAULT NULL,
+    `customer_username` VARCHAR(150) DEFAULT NULL,
+    `package_name` VARCHAR(255) DEFAULT NULL,
+    `received_date` DATE DEFAULT NULL,
+    `customer_type` VARCHAR(20) NOT NULL DEFAULT '',
+    `purchase_count_snapshot` INT NOT NULL DEFAULT 0,
+    `current_round_no` TINYINT NOT NULL DEFAULT 1,
+    `current_status` VARCHAR(30) NOT NULL DEFAULT '',
+    `contact_no` VARCHAR(30) DEFAULT NULL,
+    `assigned_user_id` INT DEFAULT NULL,
+    `follow_up_started` CHAR(1) NOT NULL DEFAULT 'N',
+    `lost_tag_added` CHAR(1) NOT NULL DEFAULT 'N',
+    `lost_tag_id` INT DEFAULT NULL,
+    `remark` TEXT DEFAULT NULL,
+    `create_by` VARCHAR(30) DEFAULT NULL,
+    `create_date` DATE DEFAULT NULL,
+    `create_time` TIME DEFAULT NULL,
+    `update_by` VARCHAR(30) DEFAULT NULL,
+    `update_date` DATE DEFAULT NULL,
+    `update_time` TIME DEFAULT NULL,
+    `status` CHAR(1) NOT NULL DEFAULT 'A',
+    PRIMARY KEY (`id`),
+    KEY `idx_cfu_platform_customer` (`platform`, `customer_id`, `status`),
+    KEY `idx_cfu_order_id` (`order_id`, `status`),
+    KEY `idx_cfu_assigned_user` (`assigned_user_id`, `status`),
+    KEY `idx_cfu_current_status` (`current_status`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+if ($conn->query($createCustomerFollowUpSql)) {
+    echo "<p style='color:green;'>Verified `{$customerFollowUpTable}` is ready in `{$db_cms}`.</p>";
+} else {
+    echo "<p style='color:red;'>Failed creating `{$customerFollowUpTable}`: " . $conn->error . "</p>";
+}
+
+$customerFollowUpColumns = array(
+    'platform' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `platform` VARCHAR(30) NOT NULL DEFAULT '' AFTER `id`",
+    'order_id' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `order_id` INT NOT NULL DEFAULT 0 AFTER `platform`",
+    'order_no' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `order_no` VARCHAR(120) DEFAULT NULL AFTER `order_id`",
+    'customer_id' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `customer_id` INT NOT NULL DEFAULT 0 AFTER `order_no`",
+    'customer_name' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `customer_name` VARCHAR(150) DEFAULT NULL AFTER `customer_id`",
+    'customer_username' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `customer_username` VARCHAR(150) DEFAULT NULL AFTER `customer_name`",
+    'package_name' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `package_name` VARCHAR(255) DEFAULT NULL AFTER `customer_username`",
+    'received_date' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `received_date` DATE DEFAULT NULL AFTER `package_name`",
+    'customer_type' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `customer_type` VARCHAR(20) NOT NULL DEFAULT '' AFTER `received_date`",
+    'purchase_count_snapshot' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `purchase_count_snapshot` INT NOT NULL DEFAULT 0 AFTER `customer_type`",
+    'current_round_no' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `current_round_no` TINYINT NOT NULL DEFAULT 1 AFTER `purchase_count_snapshot`",
+    'current_status' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `current_status` VARCHAR(30) NOT NULL DEFAULT '' AFTER `current_round_no`",
+    'contact_no' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `contact_no` VARCHAR(30) DEFAULT NULL AFTER `current_status`",
+    'assigned_user_id' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `assigned_user_id` INT DEFAULT NULL AFTER `contact_no`",
+    'follow_up_started' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `follow_up_started` CHAR(1) NOT NULL DEFAULT 'N' AFTER `assigned_user_id`",
+    'lost_tag_added' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `lost_tag_added` CHAR(1) NOT NULL DEFAULT 'N' AFTER `follow_up_started`",
+    'lost_tag_id' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `lost_tag_id` INT DEFAULT NULL AFTER `lost_tag_added`",
+    'remark' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `remark` TEXT DEFAULT NULL AFTER `lost_tag_id`",
+    'create_by' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `create_by` VARCHAR(30) DEFAULT NULL AFTER `remark`",
+    'create_date' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `create_date` DATE DEFAULT NULL AFTER `create_by`",
+    'create_time' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `create_time` TIME DEFAULT NULL AFTER `create_date`",
+    'update_by' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `update_by` VARCHAR(30) DEFAULT NULL AFTER `create_time`",
+    'update_date' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `update_date` DATE DEFAULT NULL AFTER `update_by`",
+    'update_time' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `update_time` TIME DEFAULT NULL AFTER `update_date`",
+    'status' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A' AFTER `update_time`",
+);
+
+foreach ($customerFollowUpColumns as $columnName => $alterSql) {
+    migrationEnsureColumn($conn, $db_cms, $customerFollowUpTable, $columnName, $alterSql, "Verified `{$customerFollowUpTable}` includes `{$columnName}`.");
+}
+
+migrationEnsureIndex($conn, $db_cms, $customerFollowUpTable, 'idx_cfu_platform_customer', "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD INDEX `idx_cfu_platform_customer` (`platform`, `customer_id`, `status`)", "Verified `{$customerFollowUpTable}` platform/customer lookup index.");
+migrationEnsureIndex($conn, $db_cms, $customerFollowUpTable, 'idx_cfu_order_id', "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD INDEX `idx_cfu_order_id` (`order_id`, `status`)", "Verified `{$customerFollowUpTable}` order lookup index.");
+migrationEnsureIndex($conn, $db_cms, $customerFollowUpTable, 'idx_cfu_assigned_user', "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD INDEX `idx_cfu_assigned_user` (`assigned_user_id`, `status`)", "Verified `{$customerFollowUpTable}` assigned user lookup index.");
+migrationEnsureIndex($conn, $db_cms, $customerFollowUpTable, 'idx_cfu_current_status', "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD INDEX `idx_cfu_current_status` (`current_status`, `status`)", "Verified `{$customerFollowUpTable}` status lookup index.");
+
+$createCustomerFollowUpRoundSql = "CREATE TABLE IF NOT EXISTS `{$db_cms}`.`{$customerFollowUpRoundTable}` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `follow_up_id` INT NOT NULL DEFAULT 0,
+    `round_no` TINYINT NOT NULL DEFAULT 1,
+    `stage_no` TINYINT NOT NULL DEFAULT 1,
+    `next_follow_up_date` DATE DEFAULT NULL,
+    `previous_follow_up_date` DATE DEFAULT NULL,
+    `attachment` VARCHAR(255) DEFAULT NULL,
+    `message_shortcut_id` INT DEFAULT NULL,
+    `message_shortcut_text` TEXT DEFAULT NULL,
+    `contact_no` VARCHAR(30) DEFAULT NULL,
+    `approval_status` VARCHAR(20) NOT NULL DEFAULT 'pending',
+    `reject_reason` TEXT DEFAULT NULL,
+    `postpone_status` VARCHAR(20) NOT NULL DEFAULT 'none',
+    `postpone_reason` TEXT DEFAULT NULL,
+    `postpone_reject_reason` TEXT DEFAULT NULL,
+    `delay_reason` TEXT DEFAULT NULL,
+    `missed_original_date` DATE DEFAULT NULL,
+    `completed_date` DATE DEFAULT NULL,
+    `round_status` VARCHAR(30) NOT NULL DEFAULT '',
+    `create_by` VARCHAR(30) DEFAULT NULL,
+    `create_date` DATE DEFAULT NULL,
+    `create_time` TIME DEFAULT NULL,
+    `approved_by` VARCHAR(30) DEFAULT NULL,
+    `approved_date` DATE DEFAULT NULL,
+    `approved_time` TIME DEFAULT NULL,
+    `update_by` VARCHAR(30) DEFAULT NULL,
+    `update_date` DATE DEFAULT NULL,
+    `update_time` TIME DEFAULT NULL,
+    `status` CHAR(1) NOT NULL DEFAULT 'A',
+    PRIMARY KEY (`id`),
+    KEY `idx_cfur_follow_up_id` (`follow_up_id`, `status`),
+    KEY `idx_cfur_round_lookup` (`follow_up_id`, `round_no`, `status`),
+    KEY `idx_cfur_next_follow_up_date` (`next_follow_up_date`, `status`),
+    KEY `idx_cfur_approval_status` (`approval_status`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+if ($conn->query($createCustomerFollowUpRoundSql)) {
+    echo "<p style='color:green;'>Verified `{$customerFollowUpRoundTable}` is ready in `{$db_cms}`.</p>";
+} else {
+    echo "<p style='color:red;'>Failed creating `{$customerFollowUpRoundTable}`: " . $conn->error . "</p>";
+}
+
+$customerFollowUpRoundColumns = array(
+    'follow_up_id' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `follow_up_id` INT NOT NULL DEFAULT 0 AFTER `id`",
+    'round_no' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `round_no` TINYINT NOT NULL DEFAULT 1 AFTER `follow_up_id`",
+    'stage_no' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `stage_no` TINYINT NOT NULL DEFAULT 1 AFTER `round_no`",
+    'next_follow_up_date' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `next_follow_up_date` DATE DEFAULT NULL AFTER `stage_no`",
+    'previous_follow_up_date' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `previous_follow_up_date` DATE DEFAULT NULL AFTER `next_follow_up_date`",
+    'attachment' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `attachment` VARCHAR(255) DEFAULT NULL AFTER `previous_follow_up_date`",
+    'message_shortcut_id' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `message_shortcut_id` INT DEFAULT NULL AFTER `attachment`",
+    'message_shortcut_text' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `message_shortcut_text` TEXT DEFAULT NULL AFTER `message_shortcut_id`",
+    'contact_no' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `contact_no` VARCHAR(30) DEFAULT NULL AFTER `message_shortcut_text`",
+    'approval_status' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `approval_status` VARCHAR(20) NOT NULL DEFAULT 'pending' AFTER `contact_no`",
+    'reject_reason' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `reject_reason` TEXT DEFAULT NULL AFTER `approval_status`",
+    'postpone_status' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `postpone_status` VARCHAR(20) NOT NULL DEFAULT 'none' AFTER `reject_reason`",
+    'postpone_reason' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `postpone_reason` TEXT DEFAULT NULL AFTER `postpone_status`",
+    'postpone_reject_reason' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `postpone_reject_reason` TEXT DEFAULT NULL AFTER `postpone_reason`",
+    'delay_reason' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `delay_reason` TEXT DEFAULT NULL AFTER `postpone_reject_reason`",
+    'missed_original_date' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `missed_original_date` DATE DEFAULT NULL AFTER `delay_reason`",
+    'completed_date' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `completed_date` DATE DEFAULT NULL AFTER `missed_original_date`",
+    'round_status' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `round_status` VARCHAR(30) NOT NULL DEFAULT '' AFTER `completed_date`",
+    'create_by' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `create_by` VARCHAR(30) DEFAULT NULL AFTER `round_status`",
+    'create_date' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `create_date` DATE DEFAULT NULL AFTER `create_by`",
+    'create_time' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `create_time` TIME DEFAULT NULL AFTER `create_date`",
+    'approved_by' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `approved_by` VARCHAR(30) DEFAULT NULL AFTER `create_time`",
+    'approved_date' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `approved_date` DATE DEFAULT NULL AFTER `approved_by`",
+    'approved_time' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `approved_time` TIME DEFAULT NULL AFTER `approved_date`",
+    'update_by' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `update_by` VARCHAR(30) DEFAULT NULL AFTER `approved_time`",
+    'update_date' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `update_date` DATE DEFAULT NULL AFTER `update_by`",
+    'update_time' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `update_time` TIME DEFAULT NULL AFTER `update_date`",
+    'status' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A' AFTER `update_time`",
+);
+
+foreach ($customerFollowUpRoundColumns as $columnName => $alterSql) {
+    migrationEnsureColumn($conn, $db_cms, $customerFollowUpRoundTable, $columnName, $alterSql, "Verified `{$customerFollowUpRoundTable}` includes `{$columnName}`.");
+}
+
+migrationEnsureIndex($conn, $db_cms, $customerFollowUpRoundTable, 'idx_cfur_follow_up_id', "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD INDEX `idx_cfur_follow_up_id` (`follow_up_id`, `status`)", "Verified `{$customerFollowUpRoundTable}` follow-up lookup index.");
+migrationEnsureIndex($conn, $db_cms, $customerFollowUpRoundTable, 'idx_cfur_round_lookup', "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD INDEX `idx_cfur_round_lookup` (`follow_up_id`, `round_no`, `status`)", "Verified `{$customerFollowUpRoundTable}` follow-up round lookup index.");
+migrationEnsureIndex($conn, $db_cms, $customerFollowUpRoundTable, 'idx_cfur_next_follow_up_date', "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD INDEX `idx_cfur_next_follow_up_date` (`next_follow_up_date`, `status`)", "Verified `{$customerFollowUpRoundTable}` next follow-up date index.");
+migrationEnsureIndex($conn, $db_cms, $customerFollowUpRoundTable, 'idx_cfur_approval_status', "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD INDEX `idx_cfur_approval_status` (`approval_status`, `status`)", "Verified `{$customerFollowUpRoundTable}` approval status index.");
+
+$createCustomerFollowUpActionLogSql = "CREATE TABLE IF NOT EXISTS `{$db_cms}`.`{$customerFollowUpActionLogTable}` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `follow_up_id` INT NOT NULL DEFAULT 0,
+    `round_id` INT DEFAULT NULL,
+    `action_type` VARCHAR(50) NOT NULL DEFAULT '',
+    `action_by` VARCHAR(30) DEFAULT NULL,
+    `action_date` DATE DEFAULT NULL,
+    `action_time` TIME DEFAULT NULL,
+    `old_value` LONGTEXT DEFAULT NULL,
+    `new_value` LONGTEXT DEFAULT NULL,
+    `remark` TEXT DEFAULT NULL,
+    `status` CHAR(1) NOT NULL DEFAULT 'A',
+    PRIMARY KEY (`id`),
+    KEY `idx_cfual_follow_up_id` (`follow_up_id`, `status`),
+    KEY `idx_cfual_round_id` (`round_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+if ($conn->query($createCustomerFollowUpActionLogSql)) {
+    echo "<p style='color:green;'>Verified `{$customerFollowUpActionLogTable}` is ready in `{$db_cms}`.</p>";
+} else {
+    echo "<p style='color:red;'>Failed creating `{$customerFollowUpActionLogTable}`: " . $conn->error . "</p>";
+}
+
+$customerFollowUpActionLogColumns = array(
+    'follow_up_id' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpActionLogTable}` ADD COLUMN `follow_up_id` INT NOT NULL DEFAULT 0 AFTER `id`",
+    'round_id' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpActionLogTable}` ADD COLUMN `round_id` INT DEFAULT NULL AFTER `follow_up_id`",
+    'action_type' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpActionLogTable}` ADD COLUMN `action_type` VARCHAR(50) NOT NULL DEFAULT '' AFTER `round_id`",
+    'action_by' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpActionLogTable}` ADD COLUMN `action_by` VARCHAR(30) DEFAULT NULL AFTER `action_type`",
+    'action_date' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpActionLogTable}` ADD COLUMN `action_date` DATE DEFAULT NULL AFTER `action_by`",
+    'action_time' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpActionLogTable}` ADD COLUMN `action_time` TIME DEFAULT NULL AFTER `action_date`",
+    'old_value' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpActionLogTable}` ADD COLUMN `old_value` LONGTEXT DEFAULT NULL AFTER `action_time`",
+    'new_value' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpActionLogTable}` ADD COLUMN `new_value` LONGTEXT DEFAULT NULL AFTER `old_value`",
+    'remark' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpActionLogTable}` ADD COLUMN `remark` TEXT DEFAULT NULL AFTER `new_value`",
+    'status' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpActionLogTable}` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A' AFTER `remark`",
+);
+
+foreach ($customerFollowUpActionLogColumns as $columnName => $alterSql) {
+    migrationEnsureColumn($conn, $db_cms, $customerFollowUpActionLogTable, $columnName, $alterSql, "Verified `{$customerFollowUpActionLogTable}` includes `{$columnName}`.");
+}
+
+migrationEnsureIndex($conn, $db_cms, $customerFollowUpActionLogTable, 'idx_cfual_follow_up_id', "ALTER TABLE `{$db_cms}`.`{$customerFollowUpActionLogTable}` ADD INDEX `idx_cfual_follow_up_id` (`follow_up_id`, `status`)", "Verified `{$customerFollowUpActionLogTable}` follow-up action index.");
+migrationEnsureIndex($conn, $db_cms, $customerFollowUpActionLogTable, 'idx_cfual_round_id', "ALTER TABLE `{$db_cms}`.`{$customerFollowUpActionLogTable}` ADD INDEX `idx_cfual_round_id` (`round_id`, `status`)", "Verified `{$customerFollowUpActionLogTable}` round action index.");
+
+$createCustomerFollowUpNotificationSql = "CREATE TABLE IF NOT EXISTS `{$db_cms}`.`{$customerFollowUpNotificationTable}` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `follow_up_id` INT NOT NULL DEFAULT 0,
+    `round_id` INT DEFAULT NULL,
+    `notify_user_id` INT NOT NULL DEFAULT 0,
+    `notify_role` VARCHAR(20) DEFAULT NULL,
+    `notification_type` VARCHAR(50) NOT NULL DEFAULT '',
+    `title` VARCHAR(255) DEFAULT NULL,
+    `message` TEXT DEFAULT NULL,
+    `is_read` CHAR(1) NOT NULL DEFAULT 'N',
+    `read_date` DATE DEFAULT NULL,
+    `read_time` TIME DEFAULT NULL,
+    `create_date` DATE DEFAULT NULL,
+    `create_time` TIME DEFAULT NULL,
+    `status` CHAR(1) NOT NULL DEFAULT 'A',
+    PRIMARY KEY (`id`),
+    KEY `idx_cfun_follow_up_id` (`follow_up_id`, `status`),
+    KEY `idx_cfun_round_id` (`round_id`, `status`),
+    KEY `idx_cfun_notify_user_read` (`notify_user_id`, `is_read`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+if ($conn->query($createCustomerFollowUpNotificationSql)) {
+    echo "<p style='color:green;'>Verified `{$customerFollowUpNotificationTable}` is ready in `{$db_cms}`.</p>";
+} else {
+    echo "<p style='color:red;'>Failed creating `{$customerFollowUpNotificationTable}`: " . $conn->error . "</p>";
+}
+
+$customerFollowUpNotificationColumns = array(
+    'follow_up_id' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpNotificationTable}` ADD COLUMN `follow_up_id` INT NOT NULL DEFAULT 0 AFTER `id`",
+    'round_id' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpNotificationTable}` ADD COLUMN `round_id` INT DEFAULT NULL AFTER `follow_up_id`",
+    'notify_user_id' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpNotificationTable}` ADD COLUMN `notify_user_id` INT NOT NULL DEFAULT 0 AFTER `round_id`",
+    'notify_role' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpNotificationTable}` ADD COLUMN `notify_role` VARCHAR(20) DEFAULT NULL AFTER `notify_user_id`",
+    'notification_type' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpNotificationTable}` ADD COLUMN `notification_type` VARCHAR(50) NOT NULL DEFAULT '' AFTER `notify_role`",
+    'title' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpNotificationTable}` ADD COLUMN `title` VARCHAR(255) DEFAULT NULL AFTER `notification_type`",
+    'message' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpNotificationTable}` ADD COLUMN `message` TEXT DEFAULT NULL AFTER `title`",
+    'is_read' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpNotificationTable}` ADD COLUMN `is_read` CHAR(1) NOT NULL DEFAULT 'N' AFTER `message`",
+    'read_date' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpNotificationTable}` ADD COLUMN `read_date` DATE DEFAULT NULL AFTER `is_read`",
+    'read_time' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpNotificationTable}` ADD COLUMN `read_time` TIME DEFAULT NULL AFTER `read_date`",
+    'create_date' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpNotificationTable}` ADD COLUMN `create_date` DATE DEFAULT NULL AFTER `read_time`",
+    'create_time' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpNotificationTable}` ADD COLUMN `create_time` TIME DEFAULT NULL AFTER `create_date`",
+    'status' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpNotificationTable}` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A' AFTER `create_time`",
+);
+
+foreach ($customerFollowUpNotificationColumns as $columnName => $alterSql) {
+    migrationEnsureColumn($conn, $db_cms, $customerFollowUpNotificationTable, $columnName, $alterSql, "Verified `{$customerFollowUpNotificationTable}` includes `{$columnName}`.");
+}
+
+migrationEnsureIndex($conn, $db_cms, $customerFollowUpNotificationTable, 'idx_cfun_follow_up_id', "ALTER TABLE `{$db_cms}`.`{$customerFollowUpNotificationTable}` ADD INDEX `idx_cfun_follow_up_id` (`follow_up_id`, `status`)", "Verified `{$customerFollowUpNotificationTable}` follow-up notification index.");
+migrationEnsureIndex($conn, $db_cms, $customerFollowUpNotificationTable, 'idx_cfun_round_id', "ALTER TABLE `{$db_cms}`.`{$customerFollowUpNotificationTable}` ADD INDEX `idx_cfun_round_id` (`round_id`, `status`)", "Verified `{$customerFollowUpNotificationTable}` round notification index.");
+migrationEnsureIndex($conn, $db_cms, $customerFollowUpNotificationTable, 'idx_cfun_notify_user_read', "ALTER TABLE `{$db_cms}`.`{$customerFollowUpNotificationTable}` ADD INDEX `idx_cfun_notify_user_read` (`notify_user_id`, `is_read`, `status`)", "Verified `{$customerFollowUpNotificationTable}` user read-state notification index.");
+
+$systemAlertMessageTable = defined('SYSTEM_ALERT_MESSAGE') ? SYSTEM_ALERT_MESSAGE : 'system_alert_message';
+$createSystemAlertMessageSql = "CREATE TABLE IF NOT EXISTS `{$db_cms}`.`{$systemAlertMessageTable}` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `module_key` VARCHAR(80) NOT NULL DEFAULT '',
+    `notification_type` VARCHAR(80) NOT NULL DEFAULT '',
+    `target_user_id` INT DEFAULT NULL,
+    `target_user_group_id` INT DEFAULT NULL,
+    `title` VARCHAR(255) DEFAULT NULL,
+    `message` TEXT DEFAULT NULL,
+    `action_url` VARCHAR(255) DEFAULT NULL,
+    `action_label` VARCHAR(120) DEFAULT NULL,
+    `related_table` VARCHAR(120) DEFAULT NULL,
+    `related_id` INT DEFAULT NULL,
+    `related_platform` VARCHAR(30) DEFAULT NULL,
+    `is_read` CHAR(1) NOT NULL DEFAULT 'N',
+    `read_date` DATE DEFAULT NULL,
+    `read_time` TIME DEFAULT NULL,
+    `display_date` DATE DEFAULT NULL,
+    `expire_date` DATE DEFAULT NULL,
+    `create_by` VARCHAR(30) DEFAULT NULL,
+    `create_date` DATE DEFAULT NULL,
+    `create_time` TIME DEFAULT NULL,
+    `status` CHAR(1) NOT NULL DEFAULT 'A',
+    PRIMARY KEY (`id`),
+    KEY `idx_sam_target_user_read_status` (`target_user_id`, `is_read`, `status`),
+    KEY `idx_sam_module_status` (`module_key`, `status`),
+    KEY `idx_sam_display_date` (`display_date`),
+    KEY `idx_sam_related_record` (`related_table`, `related_id`),
+    KEY `idx_sam_notification_type` (`notification_type`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+if ($conn->query($createSystemAlertMessageSql)) {
+    echo "<p style='color:green;'>Verified `{$systemAlertMessageTable}` is ready in `{$db_cms}`.</p>";
+} else {
+    echo "<p style='color:red;'>Failed creating `{$systemAlertMessageTable}`: " . $conn->error . "</p>";
+}
+
+$systemAlertMessageColumns = array(
+    'module_key' => "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD COLUMN `module_key` VARCHAR(80) NOT NULL DEFAULT '' AFTER `id`",
+    'notification_type' => "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD COLUMN `notification_type` VARCHAR(80) NOT NULL DEFAULT '' AFTER `module_key`",
+    'target_user_id' => "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD COLUMN `target_user_id` INT DEFAULT NULL AFTER `notification_type`",
+    'target_user_group_id' => "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD COLUMN `target_user_group_id` INT DEFAULT NULL AFTER `target_user_id`",
+    'title' => "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD COLUMN `title` VARCHAR(255) DEFAULT NULL AFTER `target_user_group_id`",
+    'message' => "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD COLUMN `message` TEXT DEFAULT NULL AFTER `title`",
+    'action_url' => "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD COLUMN `action_url` VARCHAR(255) DEFAULT NULL AFTER `message`",
+    'action_label' => "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD COLUMN `action_label` VARCHAR(120) DEFAULT NULL AFTER `action_url`",
+    'related_table' => "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD COLUMN `related_table` VARCHAR(120) DEFAULT NULL AFTER `action_label`",
+    'related_id' => "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD COLUMN `related_id` INT DEFAULT NULL AFTER `related_table`",
+    'related_platform' => "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD COLUMN `related_platform` VARCHAR(30) DEFAULT NULL AFTER `related_id`",
+    'is_read' => "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD COLUMN `is_read` CHAR(1) NOT NULL DEFAULT 'N' AFTER `related_platform`",
+    'read_date' => "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD COLUMN `read_date` DATE DEFAULT NULL AFTER `is_read`",
+    'read_time' => "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD COLUMN `read_time` TIME DEFAULT NULL AFTER `read_date`",
+    'display_date' => "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD COLUMN `display_date` DATE DEFAULT NULL AFTER `read_time`",
+    'expire_date' => "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD COLUMN `expire_date` DATE DEFAULT NULL AFTER `display_date`",
+    'create_by' => "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD COLUMN `create_by` VARCHAR(30) DEFAULT NULL AFTER `expire_date`",
+    'create_date' => "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD COLUMN `create_date` DATE DEFAULT NULL AFTER `create_by`",
+    'create_time' => "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD COLUMN `create_time` TIME DEFAULT NULL AFTER `create_date`",
+    'status' => "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A' AFTER `create_time`",
+);
+
+foreach ($systemAlertMessageColumns as $columnName => $alterSql) {
+    migrationEnsureColumn($conn, $db_cms, $systemAlertMessageTable, $columnName, $alterSql, "Verified `{$systemAlertMessageTable}` includes `{$columnName}`.");
+}
+
+migrationEnsureIndex($conn, $db_cms, $systemAlertMessageTable, 'idx_sam_target_user_read_status', "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD INDEX `idx_sam_target_user_read_status` (`target_user_id`, `is_read`, `status`)", "Verified `{$systemAlertMessageTable}` target user read-state index.");
+migrationEnsureIndex($conn, $db_cms, $systemAlertMessageTable, 'idx_sam_module_status', "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD INDEX `idx_sam_module_status` (`module_key`, `status`)", "Verified `{$systemAlertMessageTable}` module index.");
+migrationEnsureIndex($conn, $db_cms, $systemAlertMessageTable, 'idx_sam_display_date', "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD INDEX `idx_sam_display_date` (`display_date`)", "Verified `{$systemAlertMessageTable}` display date index.");
+migrationEnsureIndex($conn, $db_cms, $systemAlertMessageTable, 'idx_sam_related_record', "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD INDEX `idx_sam_related_record` (`related_table`, `related_id`)", "Verified `{$systemAlertMessageTable}` related record index.");
+migrationEnsureIndex($conn, $db_cms, $systemAlertMessageTable, 'idx_sam_notification_type', "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD INDEX `idx_sam_notification_type` (`notification_type`)", "Verified `{$systemAlertMessageTable}` notification type index.");
 
 function removePinAccessIds($pinList, $removeIds = array(7, 8))
 {
@@ -2149,19 +2557,48 @@ if ($conn->select_db($db_cms)) {
         (143, 'Customer Repeat', '1,2,3,4', 'Customer repeat management', '1', CURDATE(), CURTIME(), 'A'),
         (144, 'Message Shortcuts', '1,2,3,4', 'Message shortcuts management', '1', CURDATE(), CURTIME(), 'A'),
         (145, 'Label', '1,2,3,4', 'Product label management', '1', CURDATE(), CURTIME(), 'A'),
-        (146, 'Shopee Waiting To Pack', '1', 'Shopee warehouse scan flow', '1', CURDATE(), CURTIME(), 'A'),
-        (147, 'Shopee Arrival Management', '1,2,3,4', 'Shopee arrival management workflow', '1', CURDATE(), CURTIME(), 'A'),
-        (148, 'Shopee Daily Flow Report', '1', 'Shopee daily flow reporting', '1', CURDATE(), CURTIME(), 'A'),
-        (149, 'Shopee Flow Setting', '1,2,3,4', 'Shopee flow setting management', '1', CURDATE(), CURTIME(), 'A')
+        (146, 'Waiting To Pack', '1', 'OMS warehouse scan flow', '1', CURDATE(), CURTIME(), 'A'),
+        (147, 'Arrival Management', '1,2,3,4', 'OMS arrival management workflow', '1', CURDATE(), CURTIME(), 'A'),
+        (148, 'Daily Flow Report', '1', 'OMS daily flow reporting', '1', CURDATE(), CURTIME(), 'A'),
+        (149, 'Flow Setting', '1,2,3,4', 'OMS flow setting management', '1', CURDATE(), CURTIME(), 'A'),
+        (150, 'Customer Daily Report', '1', 'Customer daily edit activity reporting', '1', CURDATE(), CURTIME(), 'A'),
+        (151, 'Customer Follow-Up', '1,11,12', 'Customer follow-up approval and log access', '1', CURDATE(), CURTIME(), 'A')
         ON DUPLICATE KEY UPDATE
             `name` = VALUES(`name`),
             `pins` = VALUES(`pins`),
             `remark` = VALUES(`remark`),
             `status` = 'A'";
     if ($conn->query($taskPinGroupSql)) {
-        echo "<p style='color:green;'>Verified pin groups 136-149 for task, customer, product label, and Shopee OMS page management.</p>";
+        echo "<p style='color:green;'>Verified pin groups 136-151 for task, customer, product label, and OMS page management.</p>";
     } else {
-        echo "<p style='color:red;'>Failed creating pin groups 136-149: " . $conn->error . "</p>";
+        echo "<p style='color:red;'>Failed creating pin groups 136-151: " . $conn->error . "</p>";
+    }
+
+    $omsPagePinGroupUpdateSql = "UPDATE `pin_group`
+        SET `name` = CASE `id`
+                WHEN 146 THEN 'Waiting To Pack'
+                WHEN 147 THEN 'Arrival Management'
+                WHEN 148 THEN 'Daily Flow Report'
+                WHEN 149 THEN 'Flow Setting'
+                WHEN 150 THEN 'Customer Daily Report'
+                WHEN 151 THEN 'Customer Follow-Up'
+                ELSE `name`
+            END,
+            `remark` = CASE `id`
+                WHEN 146 THEN 'OMS warehouse scan flow'
+                WHEN 147 THEN 'OMS arrival management workflow'
+                WHEN 148 THEN 'OMS daily flow reporting'
+                WHEN 149 THEN 'OMS flow setting management'
+                WHEN 150 THEN 'Customer daily edit activity reporting'
+                WHEN 151 THEN 'Customer follow-up approval and log access'
+                ELSE `remark`
+            END,
+            `status` = 'A'
+        WHERE `id` IN (146,147,148,149,150,151)";
+    if ($conn->query($omsPagePinGroupUpdateSql)) {
+        echo "<p style='color:green;'>Verified pin group names for Waiting To Pack, Arrival Management, Daily Flow Report, Flow Setting, Customer Daily Report, and Customer Follow-Up.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed updating OMS pin group names: " . $conn->error . "</p>";
     }
 
     foreach (array(1, 2, 3) as $groupId) {
@@ -2189,6 +2626,7 @@ if ($conn->select_db($db_cms)) {
             $updatedPins = addAccessToPinBlock($updatedPins, 146, array(1));
             $updatedPins = addAccessToPinBlock($updatedPins, 147, array(1, 2, 3, 4));
             $updatedPins = addAccessToPinBlock($updatedPins, 148, array(1));
+            $updatedPins = addAccessToPinBlock($updatedPins, 150, array(1));
         }
 
         if ($groupId === 1) {
@@ -2245,6 +2683,39 @@ if ($conn->select_db($db_cms)) {
         } else {
             echo "<p style='color:green;'>Verified Message Shortcuts pin access already exists for `user_group` id " . (int) $groupId . ".</p>";
         }
+    }
+
+    $customerFollowUpGroupResult = $conn->query("SELECT `id`, `pins` FROM `user_group`");
+    if ($customerFollowUpGroupResult) {
+        while ($customerFollowUpGroupRow = $customerFollowUpGroupResult->fetch_assoc()) {
+            $groupId = isset($customerFollowUpGroupRow['id']) ? (int) $customerFollowUpGroupRow['id'] : 0;
+            if ($groupId <= 0) {
+                continue;
+            }
+
+            $currentPins = isset($customerFollowUpGroupRow['pins']) ? (string) $customerFollowUpGroupRow['pins'] : '';
+
+            if (in_array($groupId, array(1, 2), true)) {
+                // Admin groups keep full Customer Follow-Up access: View + Approve + Reject.
+                $updatedPins = addAccessToPinBlock($currentPins, 151, array(1, 11, 12));
+            } else {
+                // Other user groups only get View access.
+                $updatedPins = addAccessToPinBlock($currentPins, 151, array(1));
+            }
+
+            if ($updatedPins !== $currentPins) {
+                $safePins = $conn->real_escape_string($updatedPins);
+                if ($conn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . $groupId)) {
+                    echo "<p style='color:green;'>Verified Customer Follow-Up pin access for `user_group` id " . $groupId . ".</p>";
+                } else {
+                    echo "<p style='color:red;'>Failed updating Customer Follow-Up pin access for `user_group` id " . $groupId . ": " . $conn->error . "</p>";
+                }
+            } else {
+                echo "<p style='color:green;'>Verified Customer Follow-Up pin access already matches `user_group` id " . $groupId . ".</p>";
+            }
+        }
+    } else {
+        echo "<p style='color:red;'>Failed reading `user_group` for Customer Follow-Up pin assignment: " . $conn->error . "</p>";
     }
 } else {
     echo "<p style='color:red;'>Failed selecting CMS database for task management migration.</p>";
@@ -2385,6 +2856,7 @@ if ($conn->select_db($db_fin)) {
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `order_id` INT NOT NULL,
         `order_code` VARCHAR(120) DEFAULT NULL,
+        `platform` VARCHAR(30) DEFAULT NULL,
         `from_status` VARCHAR(50) DEFAULT NULL,
         `to_status` VARCHAR(50) DEFAULT NULL,
         `transition_action` VARCHAR(120) DEFAULT NULL,
@@ -2398,6 +2870,7 @@ if ($conn->select_db($db_fin)) {
         `create_time` TIME DEFAULT NULL,
         `status` CHAR(1) NOT NULL DEFAULT 'A',
         KEY `idx_oms_transition_order` (`order_id`, `status`),
+        KEY `idx_oms_transition_platform` (`platform`, `status`),
         KEY `idx_oms_transition_status` (`from_status`, `to_status`, `status`),
         KEY `idx_oms_transition_date` (`transition_at`),
         KEY `idx_oms_transition_group` (`user_group_id`, `status`),
@@ -2413,6 +2886,7 @@ if ($conn->select_db($db_fin)) {
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `order_id` INT NOT NULL,
         `order_code` VARCHAR(120) DEFAULT NULL,
+        `platform` VARCHAR(30) DEFAULT NULL,
         `field_name` VARCHAR(120) NOT NULL,
         `field_label` VARCHAR(160) DEFAULT NULL,
         `old_value` LONGTEXT DEFAULT NULL,
@@ -2425,6 +2899,7 @@ if ($conn->select_db($db_fin)) {
         `create_time` TIME DEFAULT NULL,
         `status` CHAR(1) NOT NULL DEFAULT 'A',
         KEY `idx_oms_edit_history_order` (`order_id`, `status`),
+        KEY `idx_oms_edit_history_platform` (`platform`, `status`),
         KEY `idx_oms_edit_history_date` (`change_at`),
         KEY `idx_oms_edit_history_field` (`field_name`, `status`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
@@ -2438,6 +2913,7 @@ if ($conn->select_db($db_fin)) {
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `order_id` INT NOT NULL,
         `order_code` VARCHAR(120) DEFAULT NULL,
+        `platform` VARCHAR(30) DEFAULT NULL,
         `status_before` VARCHAR(50) DEFAULT NULL,
         `status_after` VARCHAR(50) DEFAULT NULL,
         `return_type` VARCHAR(40) DEFAULT NULL,
@@ -2451,6 +2927,7 @@ if ($conn->select_db($db_fin)) {
         `create_time` TIME DEFAULT NULL,
         `status` CHAR(1) NOT NULL DEFAULT 'A',
         KEY `idx_oms_return_order` (`order_id`, `status`),
+        KEY `idx_oms_return_platform` (`platform`, `status`),
         KEY `idx_oms_return_date` (`action_at`),
         KEY `idx_oms_return_type` (`return_type`, `status`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
@@ -2464,6 +2941,7 @@ if ($conn->select_db($db_fin)) {
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `order_id` INT NOT NULL,
         `order_code` VARCHAR(120) DEFAULT NULL,
+        `platform` VARCHAR(30) DEFAULT NULL,
         `token` VARCHAR(190) NOT NULL,
         `token_type` VARCHAR(30) NOT NULL DEFAULT 'stock_out',
         `customer_name` VARCHAR(200) DEFAULT NULL,
@@ -2485,6 +2963,7 @@ if ($conn->select_db($db_fin)) {
         `status` CHAR(1) NOT NULL DEFAULT 'A',
         UNIQUE KEY `uq_oms_warehouse_token` (`token`),
         KEY `idx_oms_warehouse_order` (`order_id`, `status`),
+        KEY `idx_oms_warehouse_platform` (`platform`, `status`),
         KEY `idx_oms_warehouse_used` (`used_at`),
         KEY `idx_oms_warehouse_code` (`order_code`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
@@ -2500,6 +2979,7 @@ if ($conn->select_db($db_fin)) {
     dropColumnIfExists($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'customer_name', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` DROP COLUMN `customer_name`");
     migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'customer_address', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `customer_address` TEXT DEFAULT NULL AFTER `buyer`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `customer_address`.");
     migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'package_qty_json', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `package_qty_json` LONGTEXT DEFAULT NULL AFTER `package`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `package_qty_json`.");
+    migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'order_detail_pdf', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `order_detail_pdf` VARCHAR(255) DEFAULT NULL AFTER `airbill_attachment`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `order_detail_pdf`.");
     migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'latest_transition_at', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `latest_transition_at` DATETIME DEFAULT NULL AFTER `estimated_received_date_assigned_time`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `latest_transition_at`.");
     migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'warehouse_scan_at', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `warehouse_scan_at` DATETIME DEFAULT NULL AFTER `latest_transition_at`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `warehouse_scan_at`.");
     migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'warehouse_scan_by', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `warehouse_scan_by` VARCHAR(30) DEFAULT NULL AFTER `warehouse_scan_at`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `warehouse_scan_by`.");
@@ -2512,8 +2992,45 @@ if ($conn->select_db($db_fin)) {
     migrationEnsureIndex($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'idx_shopee_order_airbill', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD INDEX `idx_shopee_order_airbill` (`airbill_no`)", "Verified `" . SHOPEE_SG_ORDER_REQ . "` airbill index.");
     migrationEnsureIndex($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'idx_shopee_order_transition_at', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD INDEX `idx_shopee_order_transition_at` (`latest_transition_at`)", "Verified `" . SHOPEE_SG_ORDER_REQ . "` transition timestamp index.");
 
+    migrationEnsureColumn($conn, $db_fin, ORDER_STATUS_TRANSITION_LOG, 'platform', "ALTER TABLE `" . ORDER_STATUS_TRANSITION_LOG . "` ADD COLUMN `platform` VARCHAR(30) DEFAULT NULL AFTER `order_code`", "Verified `" . ORDER_STATUS_TRANSITION_LOG . "` includes `platform`.");
+    migrationEnsureColumn($conn, $db_fin, ORDER_EDIT_HISTORY, 'platform', "ALTER TABLE `" . ORDER_EDIT_HISTORY . "` ADD COLUMN `platform` VARCHAR(30) DEFAULT NULL AFTER `order_code`", "Verified `" . ORDER_EDIT_HISTORY . "` includes `platform`.");
+    migrationEnsureColumn($conn, $db_fin, ORDER_RETURN_LOG, 'platform', "ALTER TABLE `" . ORDER_RETURN_LOG . "` ADD COLUMN `platform` VARCHAR(30) DEFAULT NULL AFTER `order_code`", "Verified `" . ORDER_RETURN_LOG . "` includes `platform`.");
+    migrationEnsureColumn($conn, $db_fin, ORDER_WAREHOUSE_SCAN_TOKEN, 'platform', "ALTER TABLE `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` ADD COLUMN `platform` VARCHAR(30) DEFAULT NULL AFTER `order_code`", "Verified `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` includes `platform`.");
+
+    migrationEnsureIndex($conn, $db_fin, ORDER_STATUS_TRANSITION_LOG, 'idx_oms_transition_platform', "ALTER TABLE `" . ORDER_STATUS_TRANSITION_LOG . "` ADD INDEX `idx_oms_transition_platform` (`platform`, `status`)", "Verified `" . ORDER_STATUS_TRANSITION_LOG . "` platform index.");
+    migrationEnsureIndex($conn, $db_fin, ORDER_EDIT_HISTORY, 'idx_oms_edit_history_platform', "ALTER TABLE `" . ORDER_EDIT_HISTORY . "` ADD INDEX `idx_oms_edit_history_platform` (`platform`, `status`)", "Verified `" . ORDER_EDIT_HISTORY . "` platform index.");
+    migrationEnsureIndex($conn, $db_fin, ORDER_RETURN_LOG, 'idx_oms_return_platform', "ALTER TABLE `" . ORDER_RETURN_LOG . "` ADD INDEX `idx_oms_return_platform` (`platform`, `status`)", "Verified `" . ORDER_RETURN_LOG . "` platform index.");
+    migrationEnsureIndex($conn, $db_fin, ORDER_WAREHOUSE_SCAN_TOKEN, 'idx_oms_warehouse_platform', "ALTER TABLE `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` ADD INDEX `idx_oms_warehouse_platform` (`platform`, `status`)", "Verified `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` platform index.");
+
+    migrationEnsureColumn($conn, $db_fin, FB_ORDER_REQ, 'airbill_no', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD COLUMN `airbill_no` VARCHAR(150) DEFAULT NULL AFTER `order_status`", "Verified `" . FB_ORDER_REQ . "` includes `airbill_no`.");
+    migrationEnsureColumn($conn, $db_fin, FB_ORDER_REQ, 'airbill_attachment', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD COLUMN `airbill_attachment` TEXT DEFAULT NULL AFTER `airbill_no`", "Verified `" . FB_ORDER_REQ . "` includes `airbill_attachment`.");
+    migrationEnsureColumn($conn, $db_fin, FB_ORDER_REQ, 'stock_out_warehouse_id', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD COLUMN `stock_out_warehouse_id` INT DEFAULT NULL AFTER `airbill_attachment`", "Verified `" . FB_ORDER_REQ . "` includes `stock_out_warehouse_id`.");
+    migrationEnsureColumn($conn, $db_fin, FB_ORDER_REQ, 'delay_remark', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD COLUMN `delay_remark` TEXT DEFAULT NULL AFTER `stock_out_warehouse_id`", "Verified `" . FB_ORDER_REQ . "` includes `delay_remark`.");
+    migrationEnsureIndex($conn, $db_fin, FB_ORDER_REQ, 'idx_fb_order_status', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD INDEX `idx_fb_order_status` (`order_status`)", "Verified `" . FB_ORDER_REQ . "` status index.");
+    migrationEnsureIndex($conn, $db_fin, FB_ORDER_REQ, 'idx_fb_order_airbill', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD INDEX `idx_fb_order_airbill` (`airbill_no`)", "Verified `" . FB_ORDER_REQ . "` airbill index.");
+
+    migrationEnsureColumn($conn, $db_fin, WEB_ORDER_REQ, 'airbill_no', "ALTER TABLE `" . WEB_ORDER_REQ . "` ADD COLUMN `airbill_no` VARCHAR(150) DEFAULT NULL AFTER `order_status`", "Verified `" . WEB_ORDER_REQ . "` includes `airbill_no`.");
+    migrationEnsureColumn($conn, $db_fin, WEB_ORDER_REQ, 'airbill_attachment', "ALTER TABLE `" . WEB_ORDER_REQ . "` ADD COLUMN `airbill_attachment` TEXT DEFAULT NULL AFTER `airbill_no`", "Verified `" . WEB_ORDER_REQ . "` includes `airbill_attachment`.");
+    migrationEnsureColumn($conn, $db_fin, WEB_ORDER_REQ, 'stock_out_warehouse_id', "ALTER TABLE `" . WEB_ORDER_REQ . "` ADD COLUMN `stock_out_warehouse_id` INT DEFAULT NULL AFTER `airbill_attachment`", "Verified `" . WEB_ORDER_REQ . "` includes `stock_out_warehouse_id`.");
+    migrationEnsureColumn($conn, $db_fin, WEB_ORDER_REQ, 'delay_remark', "ALTER TABLE `" . WEB_ORDER_REQ . "` ADD COLUMN `delay_remark` TEXT DEFAULT NULL AFTER `stock_out_warehouse_id`", "Verified `" . WEB_ORDER_REQ . "` includes `delay_remark`.");
+    migrationEnsureIndex($conn, $db_fin, WEB_ORDER_REQ, 'idx_web_order_status', "ALTER TABLE `" . WEB_ORDER_REQ . "` ADD INDEX `idx_web_order_status` (`order_status`)", "Verified `" . WEB_ORDER_REQ . "` status index.");
+    migrationEnsureIndex($conn, $db_fin, WEB_ORDER_REQ, 'idx_web_order_code', "ALTER TABLE `" . WEB_ORDER_REQ . "` ADD INDEX `idx_web_order_code` (`order_id`)", "Verified `" . WEB_ORDER_REQ . "` order code index.");
+    migrationEnsureIndex($conn, $db_fin, WEB_ORDER_REQ, 'idx_web_order_airbill', "ALTER TABLE `" . WEB_ORDER_REQ . "` ADD INDEX `idx_web_order_airbill` (`airbill_no`)", "Verified `" . WEB_ORDER_REQ . "` airbill index.");
+
 } else {
     echo "<p style='color:red;'>Failed selecting finance database for OMS migration.</p>";
+}
+
+if ($conn->select_db($db_cms)) {
+    migrationEnsureColumn($conn, $db_cms, LAZADA_ORDER_REQ, 'airbill_no', "ALTER TABLE `" . LAZADA_ORDER_REQ . "` ADD COLUMN `airbill_no` VARCHAR(150) DEFAULT NULL AFTER `order_status`", "Verified `" . LAZADA_ORDER_REQ . "` includes `airbill_no`.");
+    migrationEnsureColumn($conn, $db_cms, LAZADA_ORDER_REQ, 'airbill_attachment', "ALTER TABLE `" . LAZADA_ORDER_REQ . "` ADD COLUMN `airbill_attachment` TEXT DEFAULT NULL AFTER `airbill_no`", "Verified `" . LAZADA_ORDER_REQ . "` includes `airbill_attachment`.");
+    migrationEnsureColumn($conn, $db_cms, LAZADA_ORDER_REQ, 'stock_out_warehouse_id', "ALTER TABLE `" . LAZADA_ORDER_REQ . "` ADD COLUMN `stock_out_warehouse_id` INT DEFAULT NULL AFTER `airbill_attachment`", "Verified `" . LAZADA_ORDER_REQ . "` includes `stock_out_warehouse_id`.");
+    migrationEnsureColumn($conn, $db_cms, LAZADA_ORDER_REQ, 'delay_remark', "ALTER TABLE `" . LAZADA_ORDER_REQ . "` ADD COLUMN `delay_remark` TEXT DEFAULT NULL AFTER `stock_out_warehouse_id`", "Verified `" . LAZADA_ORDER_REQ . "` includes `delay_remark`.");
+    migrationEnsureIndex($conn, $db_cms, LAZADA_ORDER_REQ, 'idx_lazada_order_status', "ALTER TABLE `" . LAZADA_ORDER_REQ . "` ADD INDEX `idx_lazada_order_status` (`order_status`)", "Verified `" . LAZADA_ORDER_REQ . "` status index.");
+    migrationEnsureIndex($conn, $db_cms, LAZADA_ORDER_REQ, 'idx_lazada_order_code', "ALTER TABLE `" . LAZADA_ORDER_REQ . "` ADD INDEX `idx_lazada_order_code` (`oder_number`)", "Verified `" . LAZADA_ORDER_REQ . "` order code index.");
+    migrationEnsureIndex($conn, $db_cms, LAZADA_ORDER_REQ, 'idx_lazada_order_airbill', "ALTER TABLE `" . LAZADA_ORDER_REQ . "` ADD INDEX `idx_lazada_order_airbill` (`airbill_no`)", "Verified `" . LAZADA_ORDER_REQ . "` airbill index.");
+} else {
+    echo "<p style='color:red;'>Failed selecting CMS database for Lazada OMS migration.</p>";
 }
 
 // if ($conn->select_db($db_cms)) {

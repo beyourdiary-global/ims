@@ -1336,7 +1336,10 @@ function createSortingTable(tableid, options) {
 
   let table = new DataTable("#" + tableid, {
     paging: $("#" + tableid + " tbody tr").length > 10,
-    searching: $("#" + tableid + " tbody tr").length > 10,
+    searching:
+      typeof options.searching === "boolean"
+        ? options.searching
+        : $("#" + tableid + " tbody tr").length > 10,
     /* info: false, */
     order: options.order || [[1, "asc"]], // 0 = db id column; 1 = numbering column
     /* responsive: true, */
@@ -1346,6 +1349,410 @@ function createSortingTable(tableid, options) {
   });
 
   return table;
+}
+
+function normalizeCustomerRecordFilterValue(value) {
+  return String(value == null ? "" : value)
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+}
+
+function splitCustomerRecordFilterValues(rawValue) {
+  var values = [];
+  var uniqueMap = {};
+  var sourceValue = String(rawValue == null ? "" : rawValue);
+
+  sourceValue.split("||").forEach(function (value) {
+    var trimmedValue = String(value == null ? "" : value)
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (trimmedValue === "" || uniqueMap[trimmedValue]) {
+      return;
+    }
+
+    uniqueMap[trimmedValue] = true;
+    values.push(trimmedValue);
+  });
+
+  return values;
+}
+
+function getCustomerRecordRowFilterValues(rowNode, attrName) {
+  if (!rowNode) {
+    return [];
+  }
+
+  return splitCustomerRecordFilterValues(
+    rowNode.getAttribute("data-filter-" + attrName) || "",
+  );
+}
+
+function getCustomerRecordRowFilterNormalizedValues(rowNode, attrName) {
+  return getCustomerRecordRowFilterValues(rowNode, attrName).map(function (value) {
+    return normalizeCustomerRecordFilterValue(value);
+  });
+}
+
+function getCustomerRecordFilterRowNode(settings, dataIndex, tableApi) {
+  if (
+    settings &&
+    settings.aoData &&
+    typeof dataIndex === "number" &&
+    settings.aoData[dataIndex] &&
+    settings.aoData[dataIndex].nTr
+  ) {
+    return settings.aoData[dataIndex].nTr;
+  }
+
+  if (tableApi && typeof tableApi.row === "function") {
+    var rowApi = tableApi.row(dataIndex);
+    if (rowApi && typeof rowApi.node === "function") {
+      return rowApi.node();
+    }
+  }
+
+  return null;
+}
+
+function getCustomerRecordFilterSourceRows(tableElement, tableApi) {
+  var rowNodes = [];
+
+  if (tableApi && typeof tableApi.rows === "function") {
+    var apiNodes = tableApi.rows().nodes();
+
+    if (apiNodes) {
+      if (typeof apiNodes.toArray === "function") {
+        rowNodes = apiNodes.toArray().filter(function (rowNode) {
+          return !!rowNode;
+        });
+      } else if (typeof apiNodes.each === "function") {
+        apiNodes.each(function (rowNode) {
+          if (rowNode) {
+            rowNodes.push(rowNode);
+          }
+        });
+      } else if (typeof apiNodes.length === "number") {
+        rowNodes = Array.prototype.slice
+          .call(apiNodes)
+          .filter(function (rowNode) {
+            return !!rowNode;
+          });
+      }
+    }
+  }
+
+  if (!rowNodes.length && tableElement) {
+    rowNodes = Array.prototype.slice.call(
+      tableElement.querySelectorAll("tbody tr"),
+    );
+  }
+
+  return rowNodes;
+}
+
+function readCustomerRecordFilterStorage(storageKey) {
+  if (!storageKey) {
+    return {};
+  }
+
+  try {
+    var rawValue = localStorage.getItem(storageKey);
+    if (!rawValue) {
+      return {};
+    }
+
+    var parsedValue = JSON.parse(rawValue);
+    return parsedValue && typeof parsedValue === "object" ? parsedValue : {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function initCustomerRecordTableFilters(config) {
+  if (
+    typeof window.jQuery === "undefined" ||
+    !$.fn ||
+    !$.fn.DataTable ||
+    !config ||
+    !config.tableId
+  ) {
+    return null;
+  }
+
+  var tableElement = document.getElementById(config.tableId);
+  if (!tableElement || !$.fn.DataTable.isDataTable(tableElement)) {
+    return null;
+  }
+
+  var $tableElement = $(tableElement);
+  var tableApi = $tableElement.DataTable();
+  var wrapper = $("#" + config.tableId + "_wrapper");
+
+  if (!wrapper.length) {
+    wrapper = $tableElement.closest(".dataTables_wrapper, .dt-container");
+  }
+
+  if (!wrapper.length) {
+    return null;
+  }
+
+  var fields = Array.isArray(config.filters) ? config.filters : [];
+  if (!fields.length) {
+    return null;
+  }
+
+  var storageKey = config.storageKey || "";
+  var panelStorageKey = config.panelStorageKey || "";
+  var activeFilters = readCustomerRecordFilterStorage(storageKey);
+  var tableSearchFn = tableElement.__customerRecordFilterSearch || null;
+
+  if (!tableSearchFn) {
+    tableSearchFn = function (settings, rowData, dataIndex) {
+      if (!settings || settings.nTable !== tableElement) {
+        return true;
+      }
+
+      var rowNode = getCustomerRecordFilterRowNode(settings, dataIndex, tableApi);
+      if (!rowNode) {
+        return true;
+      }
+
+      for (var i = 0; i < fields.length; i++) {
+        var field = fields[i];
+        var filterValue = normalizeCustomerRecordFilterValue(activeFilters[field.key]);
+
+        if (!filterValue) {
+          continue;
+        }
+
+        var rowValues = getCustomerRecordRowFilterNormalizedValues(rowNode, field.attr);
+
+        if (field.type === "text") {
+          var textMatched = rowValues.some(function (rowValue) {
+            return rowValue.indexOf(filterValue) !== -1;
+          });
+
+          if (!textMatched) {
+            return false;
+          }
+
+          continue;
+        }
+
+        if (rowValues.indexOf(filterValue) === -1) {
+          return false;
+        }
+      }
+
+      return true;
+    };
+
+    tableElement.__customerRecordFilterSearch = tableSearchFn;
+    $.fn.dataTable.ext.search.push(tableSearchFn);
+  }
+
+  var toolbarRow = wrapper.parent().find(
+    ".customer-record-filter-toolbar-row[data-table-id='" + config.tableId + "']",
+  );
+  if (!toolbarRow.length) {
+    toolbarRow = $('<div class="col-md-12 mb-3 customer-record-filter-toolbar-row"></div>');
+    toolbarRow.attr("data-table-id", config.tableId);
+    wrapper.before(toolbarRow);
+  }
+
+  var toolbar = toolbarRow.find(".customer-record-filter-toolbar");
+  if (!toolbar.length) {
+    toolbar = $('<div class="customer-record-filter-toolbar"></div>');
+    toolbar.attr("data-table-id", config.tableId);
+    toolbarRow.append(toolbar);
+  }
+
+  var filterButton = toolbar.find(".customer-record-filter-toggle");
+  if (!filterButton.length) {
+    filterButton = $(
+      '<button type="button" class="btn btn-info customer-record-filter-toggle">Show/Hide Filters</button>',
+    );
+    toolbar.append(filterButton);
+  }
+
+  var panel = wrapper.find(
+    ".customer-record-filter-panel[data-table-id='" + config.tableId + "']",
+  );
+
+  if (!panel.length) {
+    panel = $(
+      '<div class="row mb-3 customer-record-filter-panel" data-table-id="' +
+        config.tableId +
+        '" style="display: none;"></div>',
+    );
+
+    toolbarRow.after(panel);
+  }
+  panel.empty();
+
+  var fieldNodes = {};
+
+  fields.forEach(function (field) {
+    var columnClass = field.columnClass || "col-md-3";
+    var fieldWrap = $('<div class="' + columnClass + '"></div>');
+    var labelNode = $(
+      '<label class="form-label customer-record-filter-label" for="' +
+        config.tableId +
+        "_" +
+        field.key +
+        '">' +
+        "Filter by " +
+        field.label +
+        "</label>",
+    );
+
+    var inputNode;
+    if (field.type === "text") {
+      inputNode = $(
+        '<input type="text" class="form-control customer-record-filter-input" id="' +
+          config.tableId +
+          "_" +
+          field.key +
+          '" placeholder="' +
+          (field.placeholder || "") +
+          '">',
+      );
+    } else {
+      inputNode = $(
+        '<select class="form-select customer-record-filter-input" id="' +
+          config.tableId +
+          "_" +
+          field.key +
+          '"></select>',
+      );
+
+      inputNode.append(
+        $("<option></option>")
+          .attr("value", "")
+          .text(field.placeholder || "All"),
+      );
+
+      var optionValues = {};
+      getCustomerRecordFilterSourceRows(tableElement, tableApi).forEach(function (rowNode) {
+        getCustomerRecordRowFilterValues(rowNode, field.attr).forEach(function (value) {
+          optionValues[value] = true;
+        });
+      });
+
+      Object.keys(optionValues)
+        .sort(function (leftValue, rightValue) {
+          return leftValue.localeCompare(rightValue);
+        })
+        .forEach(function (value) {
+          inputNode.append(
+            $("<option></option>")
+              .attr("value", value)
+              .text(value),
+          );
+        });
+    }
+
+    if (Object.prototype.hasOwnProperty.call(activeFilters, field.key)) {
+      inputNode.val(activeFilters[field.key]);
+    }
+
+    fieldWrap.append(labelNode);
+    fieldWrap.append(inputNode);
+    panel.append(fieldWrap);
+
+    fieldNodes[field.key] = inputNode;
+
+    inputNode.off("change.customerRecordFilter").on("change.customerRecordFilter", function () {
+      applyFilters();
+    });
+  });
+
+  var resetWrap = $('<div class="col-md-2"></div>');
+  resetWrap.append('<label class="form-label d-block invisible">Reset</label>');
+  var resetButton = $(
+    '<a href="#" class="btn btn-outline-danger filter-reset customer-record-filter-reset">Reset</a>',
+  );
+  resetWrap.append(resetButton);
+  panel.append(resetWrap);
+
+  var setPanelOpenState = function (shouldOpen) {
+    panel.toggleClass("is-open", shouldOpen);
+    panel.css("display", shouldOpen ? "flex" : "none");
+    filterButton.toggleClass("active", shouldOpen);
+
+    if (panelStorageKey) {
+      localStorage.setItem(panelStorageKey, shouldOpen ? "1" : "0");
+    }
+  };
+
+  var getCurrentFieldValues = function () {
+    var values = {};
+
+    fields.forEach(function (field) {
+      values[field.key] = fieldNodes[field.key] ? fieldNodes[field.key].val() : "";
+    });
+
+    return values;
+  };
+
+  var saveActiveFilters = function () {
+    activeFilters = getCurrentFieldValues();
+
+    if (storageKey) {
+      localStorage.setItem(storageKey, JSON.stringify(activeFilters));
+    }
+  };
+
+  var applyFilters = function () {
+    saveActiveFilters();
+    setPanelOpenState(true);
+    tableApi.draw(false);
+  };
+
+  var resetFilters = function () {
+    activeFilters = {};
+
+    fields.forEach(function (field) {
+      if (fieldNodes[field.key]) {
+        fieldNodes[field.key].val("");
+      }
+    });
+
+    if (storageKey) {
+      localStorage.removeItem(storageKey);
+    }
+
+    setPanelOpenState(true);
+    tableApi.draw(false);
+  };
+
+  filterButton.off("click.customerRecordFilter").on("click.customerRecordFilter", function () {
+    setPanelOpenState(!panel.hasClass("is-open"));
+  });
+
+  panel
+    .find(".customer-record-filter-reset")
+    .off("click.customerRecordFilter")
+    .on("click.customerRecordFilter", function (event) {
+      event.preventDefault();
+      resetFilters();
+    });
+
+  if (panelStorageKey) {
+    setPanelOpenState(localStorage.getItem(panelStorageKey) === "1");
+  } else {
+    setPanelOpenState(false);
+  }
+
+  tableApi.draw(false);
+
+  return {
+    apply: applyFilters,
+    reset: resetFilters,
+    table: tableApi,
+  };
 }
 
 function createSortingMyLeaveTransactionTable(tableid) {
@@ -1572,7 +1979,7 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
   }
 
   if (act !== "ErrMO") {
-    localStorage.clear();
+    clearLocalStoragePreservingCustomerRecordFilters();
   }
 
   var message = "";
@@ -2174,12 +2581,76 @@ function setCookie(cname, cvalue, exMins) {
   document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
 }
 
+function toggleCustomerLabelVisibility(toggleButton) {
+  if (!toggleButton) {
+    return;
+  }
+
+  var labelWrap = toggleButton.closest(".js-customer-label-wrap");
+  if (!labelWrap) {
+    return;
+  }
+
+  var extraLabels = labelWrap.querySelectorAll(".customer-label-extra");
+  var isExpanded = labelWrap.getAttribute("data-expanded") === "1";
+
+  for (var i = 0; i < extraLabels.length; i++) {
+    extraLabels[i].classList.toggle("d-none", isExpanded);
+  }
+
+  labelWrap.setAttribute("data-expanded", isExpanded ? "0" : "1");
+  toggleButton.textContent = isExpanded ? "Show More" : "Show Less";
+}
+
+document.addEventListener("click", function (event) {
+  var toggleButton = event.target.closest(".js-toggle-customer-labels");
+  if (!toggleButton) {
+    return;
+  }
+
+  event.preventDefault();
+  toggleCustomerLabelVisibility(toggleButton);
+});
+
+function getCustomerRecordFilterStorageSnapshot() {
+  var preservedEntries = {};
+
+  for (var i = 0; i < localStorage.length; i++) {
+    var key = localStorage.key(i);
+    if (!key) {
+      continue;
+    }
+
+    if (/_filters$/.test(key) || /_filter_panel_open$/.test(key)) {
+      preservedEntries[key] = localStorage.getItem(key);
+    }
+  }
+
+  return preservedEntries;
+}
+
+function restoreCustomerRecordFilterStorageSnapshot(entries) {
+  if (!entries) {
+    return;
+  }
+
+  Object.keys(entries).forEach(function (key) {
+    localStorage.setItem(key, entries[key]);
+  });
+}
+
+function clearLocalStoragePreservingCustomerRecordFilters() {
+  var preservedEntries = getCustomerRecordFilterStorageSnapshot();
+  localStorage.clear();
+  restoreCustomerRecordFilterStorageSnapshot(preservedEntries);
+}
+
 function checkCurrentPage(page, action) {
   var previousPage = localStorage.getItem("page");
   var perviousAction = localStorage.getItem("action");
 
   if (previousPage != page || perviousAction != action) {
-    localStorage.clear();
+    clearLocalStoragePreservingCustomerRecordFilters();
     localStorage.setItem("page", page);
     localStorage.setItem("action", action);
   }

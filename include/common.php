@@ -1582,6 +1582,1100 @@ if (!function_exists('customerLabelGetPlatformConfigs')) {
     }
 }
 
+if (!function_exists('customerDailyReportGetPlatformConfigs')) {
+    function customerDailyReportGetPlatformConfigs()
+    {
+        return array(
+            'shopee' => array(
+                'platform' => 'shopee',
+                'label' => 'Shopee',
+                'page_title' => 'Shopee Customer Record',
+                'table' => SHOPEE_CUST_INFO,
+                'db' => 'finance',
+                'record_url' => '/shopee/shopee_cust_info.php',
+                'display_fields' => array('buyer_username'),
+            ),
+            'lazada' => array(
+                'platform' => 'lazada',
+                'label' => 'Lazada',
+                'page_title' => 'Lazada Customer Record (Deals)',
+                'table' => LAZADA_CUST_RCD,
+                'db' => 'cms',
+                'record_url' => '/lazada_cust_rcd.php',
+                'display_fields' => array('name'),
+            ),
+            'facebook' => array(
+                'platform' => 'facebook',
+                'label' => 'Facebook',
+                'page_title' => 'Facebook Customer Record (Deals)',
+                'table' => FB_CUST_DEALS,
+                'db' => 'cms',
+                'record_url' => '/fb_cust_deals.php',
+                'display_fields' => array('name'),
+            ),
+            'website' => array(
+                'platform' => 'website',
+                'label' => 'Website',
+                'page_title' => 'Website Customer Record (Deals)',
+                'table' => WEB_CUST_RCD,
+                'db' => 'cms',
+                'record_url' => '/website_customer_record.php',
+                'display_fields' => array('name'),
+            ),
+            'customer_info' => array(
+                'platform' => 'customer_info',
+                'label' => 'Customer Info',
+                'page_title' => 'Customer Info',
+                'table' => CUS_INFO,
+                'db' => 'cms',
+                'record_url' => '/customerInfo.php',
+                'display_fields' => array('name', 'last_name'),
+            ),
+        );
+    }
+}
+
+if (!function_exists('customerDailyReportNormalizePlatformKey')) {
+    function customerDailyReportNormalizePlatformKey($platformKey, $allowAll = false)
+    {
+        $platformKey = strtolower(trim((string) $platformKey));
+        if ($allowAll && $platformKey === 'all') {
+            return 'all';
+        }
+
+        $platformConfigs = customerDailyReportGetPlatformConfigs();
+        return isset($platformConfigs[$platformKey]) ? $platformKey : '';
+    }
+}
+
+if (!function_exists('customerDailyReportResolveDbConnect')) {
+    function customerDailyReportResolveDbConnect($connect, $financeConnect, $dbKey)
+    {
+        return $dbKey === 'finance' ? $financeConnect : $connect;
+    }
+}
+
+if (!function_exists('customerDailyReportGetPlatformConfigByTable')) {
+    function customerDailyReportGetPlatformConfigByTable($tableName)
+    {
+        $tableName = trim((string) $tableName);
+        foreach (customerDailyReportGetPlatformConfigs() as $platformConfig) {
+            if (isset($platformConfig['table']) && (string) $platformConfig['table'] === $tableName) {
+                return $platformConfig;
+            }
+        }
+
+        return array();
+    }
+}
+
+if (!function_exists('customerDailyReportGetSupportedTables')) {
+    function customerDailyReportGetSupportedTables()
+    {
+        $tables = array();
+        foreach (customerDailyReportGetPlatformConfigs() as $platformConfig) {
+            if (!empty($platformConfig['table'])) {
+                $tables[] = (string) $platformConfig['table'];
+            }
+        }
+
+        return $tables;
+    }
+}
+
+if (!function_exists('customerDailyReportExtractRecordId')) {
+    function customerDailyReportExtractRecordId($auditRow)
+    {
+        if (!is_array($auditRow)) {
+            return 0;
+        }
+
+        $actionMessage = html_entity_decode(strip_tags((string) ($auditRow['action_message'] ?? '')), ENT_QUOTES, 'UTF-8');
+        if (preg_match('/\bID\s*=\s*(\d+)\b/i', $actionMessage, $matches)) {
+            return (int) $matches[1];
+        }
+
+        $queryRecord = (string) ($auditRow['query_record'] ?? '');
+        if (preg_match('/\bWHERE\s+id\s*=\s*\'?(\d+)\'?/i', $queryRecord, $matches)) {
+            return (int) $matches[1];
+        }
+
+        if (preg_match('/\bid\s*=\s*\'?(\d+)\'?/i', $queryRecord, $matches)) {
+            return (int) $matches[1];
+        }
+
+        return 0;
+    }
+}
+
+if (!function_exists('customerDailyReportBuildChangeSummary')) {
+    function customerDailyReportBuildChangeSummary($fieldName, $oldValue, $newValue)
+    {
+        $fieldName = trim((string) $fieldName);
+        $oldValue = normalizeAuditLogValue($oldValue);
+        $newValue = normalizeAuditLogValue($newValue);
+
+        if ($oldValue === 'Empty Value' && $newValue !== 'Empty Value') {
+            return $fieldName . ' set to "' . $newValue . '"';
+        }
+
+        if ($newValue === 'Empty Value') {
+            return $fieldName . ' cleared from "' . $oldValue . '"';
+        }
+
+        return $fieldName . ' changed from "' . $oldValue . '" to "' . $newValue . '"';
+    }
+}
+
+if (!function_exists('customerDailyReportGetFieldLabelMap')) {
+    function customerDailyReportGetFieldLabelMap($platformKey)
+    {
+        $platformKey = customerDailyReportNormalizePlatformKey($platformKey);
+        $fieldMaps = array(
+            'shopee' => array(
+                'buyer_username' => 'Shopee Buyer Username',
+                'pic' => 'Sales Person In Charge',
+                'country' => 'Country',
+                'brand' => 'Brand',
+                'series' => 'Series',
+                'contact_no' => 'Whatsapp / Contact Number',
+                'remark' => 'Remark',
+            ),
+            'lazada' => array(
+                'lcr_id' => 'Customer ID',
+                'name' => 'Name',
+                'email' => 'Email',
+                'phone' => 'Phone',
+                'pic' => 'Sales Person In Charge',
+                'country' => 'Country',
+                'brand' => 'Brand',
+                'series' => 'Series',
+                'shipping receiver name' => 'Receiver Name',
+                'shipping receiver contact' => 'Receiver Contact',
+                'shipping receiver address' => 'Receiver Address',
+                'remark' => 'Remark',
+            ),
+            'facebook' => array(
+                'name' => 'Name',
+                'fb link' => 'Facebook Link',
+                'facebook link' => 'Facebook Link',
+                'contact' => 'Contact',
+                'pic' => 'Sales Person In Charge',
+                'country' => 'Country',
+                'brand' => 'Brand',
+                'series' => 'Series',
+                'fb_page' => 'Facebook Page',
+                'fb page' => 'Facebook Page',
+                'channel' => 'Channel',
+                'shipping receiver name' => 'Receiver Name',
+                'shipping receiver contact' => 'Receiver Contact',
+                'shipping receiver address' => 'Receiver Address',
+                'remark' => 'Remark',
+            ),
+            'website' => array(
+                'cust_id' => 'Customer ID',
+                'name' => 'Name',
+                'contact' => 'Contact',
+                'cust_email' => 'Customer Email',
+                'cust_birthday' => 'Customer Birthday',
+                'pic' => 'Sales Person In Charge',
+                'country' => 'Country',
+                'brand' => 'Brand',
+                'series' => 'Series',
+                'shipping receiver name' => 'Receiver Name',
+                'shipping receiver contact' => 'Receiver Contact',
+                'shipping receiver address' => 'Receiver Address',
+                'remark' => 'Remark',
+            ),
+            'customer_info' => array(
+                'name' => 'First Name',
+                'last_name' => 'Last Name',
+                'gender' => 'Gender',
+                'email' => 'Email',
+                'birthday' => 'Birthday',
+                'phone_country' => 'Phone Code',
+                'phone_number' => 'Phone Number',
+                'shipping_name' => 'Shipping First Name',
+                'shipping_last_name' => 'Shipping Last Name',
+                'shipping_contact_number' => 'Shipping Contact Number',
+                'shipping_company' => 'Company',
+                'shipping_address_1' => 'Address 1',
+                'shipping_address_2' => 'Address 2',
+                'shipping_country_region' => 'Country/Region',
+                'shipping_city' => 'City',
+                'shipping_state_province' => 'State/Province',
+                'shipping_zip_code' => 'Zip Code',
+                'default_segmentation' => 'Current Segmentation',
+                'tags' => 'Tag',
+                'person_in_charges' => 'Person In Charges',
+            ),
+        );
+
+        return isset($fieldMaps[$platformKey]) ? $fieldMaps[$platformKey] : array();
+    }
+}
+
+if (!function_exists('customerDailyReportNormalizeFieldKey')) {
+    function customerDailyReportNormalizeFieldKey($fieldName)
+    {
+        $fieldName = trim(html_entity_decode(strip_tags((string) $fieldName), ENT_QUOTES, 'UTF-8'));
+        $fieldName = preg_replace('/\s+/', ' ', $fieldName);
+        return strtolower(trim((string) $fieldName));
+    }
+}
+
+if (!function_exists('customerDailyReportLooksLikeIdNoise')) {
+    function customerDailyReportLooksLikeIdNoise($fieldName)
+    {
+        $normalizedField = customerDailyReportNormalizeFieldKey($fieldName);
+        if ($normalizedField === '') {
+            return true;
+        }
+
+        if (strpos($normalizedField, 'id =') !== false || strpos($normalizedField, '[') !== false || strpos($normalizedField, ']') !== false) {
+            return true;
+        }
+
+        return false;
+    }
+}
+
+if (!function_exists('customerDailyReportHumanizeFieldLabel')) {
+    function customerDailyReportHumanizeFieldLabel($fieldName)
+    {
+        $fieldName = trim((string) $fieldName);
+        $fieldName = str_replace(array('_', '-'), ' ', $fieldName);
+        $fieldName = preg_replace('/\s+/', ' ', $fieldName);
+        return ucwords(strtolower(trim((string) $fieldName)));
+    }
+}
+
+if (!function_exists('customerDailyReportGetDeleteFieldLabel')) {
+    function customerDailyReportGetDeleteFieldLabel($platformKey)
+    {
+        return customerDailyReportGetPrimaryCustomerFieldLabel($platformKey);
+    }
+}
+
+if (!function_exists('customerDailyReportGetPrimaryCustomerFieldLabel')) {
+    function customerDailyReportGetPrimaryCustomerFieldLabel($platformKey)
+    {
+        $platformKey = customerDailyReportNormalizePlatformKey($platformKey);
+        $fieldLabelMap = array(
+            'shopee' => 'Shopee Buyer Username',
+            'lazada' => 'Customer Name',
+            'facebook' => 'Customer Name',
+            'website' => 'Customer Name',
+            'customer_info' => 'First Name',
+        );
+
+        return isset($fieldLabelMap[$platformKey]) ? $fieldLabelMap[$platformKey] : 'Customer Name';
+    }
+}
+
+if (!function_exists('customerDailyReportResolveLookupValueById')) {
+    function customerDailyReportResolveLookupValueById($dbConnect, $tableName, $rawValue, $displayField = 'name', $altDisplayField = '')
+    {
+        $rawValue = trim((string) $rawValue);
+        if ($rawValue === '' || !($dbConnect instanceof mysqli) || $tableName === '') {
+            return $rawValue;
+        }
+
+        $valueParts = array_map('trim', explode(',', $rawValue));
+        $resolvedParts = array();
+        foreach ($valueParts as $valuePart) {
+            if ($valuePart === '' || strcasecmp($valuePart, 'Empty Value') === 0) {
+                $resolvedParts[] = $valuePart;
+                continue;
+            }
+
+            $resolvedValue = $valuePart;
+            if (preg_match('/^\d+$/', $valuePart)) {
+                $result = getData('*', "id = '" . mysqli_real_escape_string($dbConnect, $valuePart) . "'", 'LIMIT 1', $tableName, $dbConnect);
+                if ($result && $result->num_rows > 0) {
+                    $row = $result->fetch_assoc();
+                    if (isset($row[$displayField]) && trim((string) $row[$displayField]) !== '') {
+                        $resolvedValue = trim((string) $row[$displayField]);
+                    } else if ($altDisplayField !== '' && isset($row[$altDisplayField]) && trim((string) $row[$altDisplayField]) !== '') {
+                        $resolvedValue = trim((string) $row[$altDisplayField]);
+                    }
+                }
+            }
+
+            $resolvedParts[] = $resolvedValue;
+        }
+
+        return implode(', ', $resolvedParts);
+    }
+}
+
+if (!function_exists('customerDailyReportFormatPhoneCodeValue')) {
+    function customerDailyReportFormatPhoneCodeValue($value)
+    {
+        $value = trim((string) $value);
+        if ($value === '' || strcasecmp($value, 'Empty Value') === 0) {
+            return $value;
+        }
+
+        return strpos($value, '+') === 0 ? $value : ('+' . ltrim($value, '+'));
+    }
+}
+
+if (!function_exists('customerDailyReportResolveFieldValue')) {
+    function customerDailyReportResolveFieldValue($connect, $financeConnect, $platformKey, $fieldName, $fieldValue)
+    {
+        $platformKey = customerDailyReportNormalizePlatformKey($platformKey);
+        $fieldKey = customerDailyReportNormalizeFieldKey($fieldName);
+        $fieldValue = normalizeAuditLogValue($fieldValue);
+        if ($fieldValue === 'Empty Value') {
+            return $fieldValue;
+        }
+
+        switch ($fieldKey) {
+            case 'pic':
+            case 'sales_pic':
+            case 'person_in_charges':
+                return customerDailyReportResolveLookupValueById($connect, USR_USER, $fieldValue, 'name', 'username');
+
+            case 'country':
+            case 'shipping_country_region':
+                return customerDailyReportResolveLookupValueById($connect, COUNTRIES, $fieldValue, 'nicename', 'name');
+
+            case 'phone_country':
+                return customerDailyReportFormatPhoneCodeValue(customerDailyReportResolveLookupValueById($connect, COUNTRIES, $fieldValue, 'phonecode', 'nicename'));
+
+            case 'brand':
+                return customerDailyReportResolveLookupValueById($connect, BRAND, $fieldValue, 'name');
+
+            case 'series':
+                return customerDailyReportResolveLookupValueById($connect, BRD_SERIES, $fieldValue, 'name');
+
+            case 'fb_page':
+            case 'fb page':
+                return customerDailyReportResolveLookupValueById($financeConnect, FB_PAGE_ACC, $fieldValue, 'name');
+
+            case 'channel':
+                return customerDailyReportResolveLookupValueById($financeConnect, CHANEL_SC_MD, $fieldValue, 'name');
+
+            case 'default_segmentation':
+                return customerDailyReportResolveLookupValueById($connect, CUR_SEGMENTATION, $fieldValue, 'name');
+
+            case 'tags':
+                return customerDailyReportResolveLookupValueById($connect, TAG, $fieldValue, 'name');
+        }
+
+        return $fieldValue;
+    }
+}
+
+if (!function_exists('customerDailyReportGetFieldLabel')) {
+    function customerDailyReportGetFieldLabel($platformKey, $fieldName)
+    {
+        $fieldKey = customerDailyReportNormalizeFieldKey($fieldName);
+        $fieldLabelMap = customerDailyReportGetFieldLabelMap($platformKey);
+        if (isset($fieldLabelMap[$fieldKey]) && trim((string) $fieldLabelMap[$fieldKey]) !== '') {
+            return trim((string) $fieldLabelMap[$fieldKey]);
+        }
+
+        return customerDailyReportHumanizeFieldLabel($fieldName);
+    }
+}
+
+if (!function_exists('customerDailyReportNormalizeParsedAuditValue')) {
+    function customerDailyReportNormalizeParsedAuditValue($value)
+    {
+        $value = sanitizeAuditMessageValue(html_entity_decode(strip_tags((string) $value), ENT_QUOTES, 'UTF-8'));
+
+        if (strlen($value) >= 2) {
+            $firstChar = substr($value, 0, 1);
+            $lastChar = substr($value, -1);
+            if (($firstChar === "'" && $lastChar === "'") || ($firstChar === '"' && $lastChar === '"')) {
+                $value = substr($value, 1, -1);
+            }
+        }
+
+        return normalizeAuditLogValue($value);
+    }
+}
+
+if (!function_exists('customerDailyReportShouldSkipAuditField')) {
+    function customerDailyReportShouldSkipAuditField($fieldName)
+    {
+        $fieldKey = customerDailyReportNormalizeFieldKey($fieldName);
+        return in_array($fieldKey, array(
+            'id',
+            'status',
+            'create_by',
+            'create_date',
+            'create_time',
+            'update_by',
+            'update_date',
+            'update_time',
+            'delete_by',
+            'delete_date',
+            'delete_time',
+        ), true);
+    }
+}
+
+if (!function_exists('customerDailyReportSplitSqlCsv')) {
+    function customerDailyReportSplitSqlCsv($segment)
+    {
+        $parts = preg_split("/,(?=(?:[^']*'[^']*')*[^']*$)/", (string) $segment);
+        return is_array($parts) ? $parts : array();
+    }
+}
+
+if (!function_exists('customerDailyReportParseInsertQueryDetails')) {
+    function customerDailyReportParseInsertQueryDetails($connect, $financeConnect, $platformKey, $queryRecord)
+    {
+        $details = array();
+        $queryRecord = trim((string) $queryRecord);
+        if ($queryRecord === '') {
+            return $details;
+        }
+
+        if (!preg_match('/INSERT\s+INTO\s+.+?\((.*?)\)\s*VALUES\s*\((.*?)\)/is', $queryRecord, $matches)) {
+            return $details;
+        }
+
+        $columns = customerDailyReportSplitSqlCsv($matches[1] ?? '');
+        $values = customerDailyReportSplitSqlCsv($matches[2] ?? '');
+        $pairCount = min(count($columns), count($values));
+
+        for ($i = 0; $i < $pairCount; $i++) {
+            $fieldName = trim((string) ($columns[$i] ?? ''));
+            $fieldName = trim($fieldName, "` \t\n\r\0\x0B");
+            if ($fieldName === '' || customerDailyReportShouldSkipAuditField($fieldName) || customerDailyReportLooksLikeIdNoise($fieldName)) {
+                continue;
+            }
+
+            $rawValue = trim((string) ($values[$i] ?? ''));
+            $rawValue = trim($rawValue, " \t\n\r\0\x0B");
+            if (preg_match('/^(curdate\(\)|curtime\(\)|now\(\))$/i', $rawValue)) {
+                continue;
+            }
+
+            $newValue = customerDailyReportNormalizeParsedAuditValue($rawValue);
+            $newValue = normalizeAuditLogValue(customerDailyReportResolveFieldValue($connect, $financeConnect, $platformKey, $fieldName, $newValue));
+
+            $details[] = array(
+                'field_name' => customerDailyReportGetFieldLabel($platformKey, $fieldName),
+                'old_value' => 'Empty Value',
+                'new_value' => $newValue,
+                'change_summary' => customerDailyReportBuildChangeSummary(customerDailyReportGetFieldLabel($platformKey, $fieldName), 'Empty Value', $newValue),
+            );
+        }
+
+        return $details;
+    }
+}
+
+if (!function_exists('customerDailyReportParseChangeDetails')) {
+    function customerDailyReportParseChangeDetails($connect, $financeConnect, $auditRow)
+    {
+        $details = array();
+        if (!is_array($auditRow)) {
+            return $details;
+        }
+
+        $platformConfig = customerDailyReportGetPlatformConfigByTable(isset($auditRow['query_table']) ? $auditRow['query_table'] : '');
+        $platformKey = isset($platformConfig['platform']) ? (string) $platformConfig['platform'] : '';
+        $logAction = isset($auditRow['log_action']) ? (int) $auditRow['log_action'] : 0;
+        $isAddAction = $logAction === (int) get_allowed_audit_actions('add');
+        $actionMessage = (string) ($auditRow['action_message'] ?? '');
+        $pattern = "/\\[\\s*<b>\\s*([^\\[\\]]*?)\\s*<\\/b>\\s*:\\s*<b>(.*?)<\\/b>(?:\\s*to\\s*<b>(.*?)<\\/b>)?\\s*\\]/is";
+
+        if (preg_match_all($pattern, $actionMessage, $matches, PREG_SET_ORDER)) {
+            foreach ($matches as $match) {
+                $fieldName = trim(html_entity_decode(strip_tags((string) ($match[1] ?? '')), ENT_QUOTES, 'UTF-8'));
+                if (customerDailyReportLooksLikeIdNoise($fieldName)) {
+                    continue;
+                }
+
+                if ($isAddAction) {
+                    $oldValue = 'Empty Value';
+                    $newValue = customerDailyReportNormalizeParsedAuditValue($match[2] ?? '');
+                } else {
+                    $oldValue = customerDailyReportNormalizeParsedAuditValue($match[2] ?? '');
+                    $newValue = array_key_exists(3, $match)
+                        ? customerDailyReportNormalizeParsedAuditValue($match[3])
+                        : 'Empty Value';
+                }
+
+                $oldValue = normalizeAuditLogValue(customerDailyReportResolveFieldValue($connect, $financeConnect, $platformKey, $fieldName, $oldValue));
+                $newValue = normalizeAuditLogValue(customerDailyReportResolveFieldValue($connect, $financeConnect, $platformKey, $fieldName, $newValue));
+
+                if ($fieldName === '') {
+                    continue;
+                }
+
+                $details[] = array(
+                    'field_name' => customerDailyReportGetFieldLabel($platformKey, $fieldName),
+                    'old_value' => $oldValue,
+                    'new_value' => $newValue,
+                    'change_summary' => customerDailyReportBuildChangeSummary(customerDailyReportGetFieldLabel($platformKey, $fieldName), $oldValue, $newValue),
+                );
+            }
+        }
+
+        if (!empty($details)) {
+            return $details;
+        }
+
+        if ($isAddAction) {
+            $details = customerDailyReportParseInsertQueryDetails($connect, $financeConnect, $platformKey, $auditRow['query_record'] ?? '');
+            if (!empty($details)) {
+                return $details;
+            }
+        }
+
+        $fallbackOldValue = $isAddAction
+            ? 'Empty Value'
+            : normalizeAuditLogValue($auditRow['old_value'] ?? '');
+        $fallbackNewValue = $isAddAction
+            ? normalizeAuditLogValue($auditRow['new_value'] ?? '')
+            : normalizeAuditLogValue($auditRow['changes'] ?? '');
+        return array(
+            array(
+                'field_name' => 'Audit Log',
+                'old_value' => $fallbackOldValue,
+                'new_value' => $fallbackNewValue,
+                'change_summary' => 'See audit log message for the full field breakdown.',
+            ),
+        );
+    }
+}
+
+if (!function_exists('customerDailyReportLoadUserNameMap')) {
+    function customerDailyReportLoadUserNameMap($connect, $userIds)
+    {
+        $userNameMap = array();
+        if (!($connect instanceof mysqli) || !is_array($userIds)) {
+            return $userNameMap;
+        }
+
+        $safeIds = array();
+        foreach ($userIds as $userId) {
+            $userId = (int) $userId;
+            if ($userId > 0) {
+                $safeIds[$userId] = $userId;
+            }
+        }
+
+        if (empty($safeIds)) {
+            return $userNameMap;
+        }
+
+        $query = "SELECT `id`, `username` FROM `" . USR_USER . "` WHERE `id` IN (" . implode(',', $safeIds) . ")";
+        $result = mysqli_query($connect, $query);
+        if (!$result) {
+            return $userNameMap;
+        }
+
+        while ($row = mysqli_fetch_assoc($result)) {
+            $userId = isset($row['id']) ? (int) $row['id'] : 0;
+            if ($userId <= 0) {
+                continue;
+            }
+
+            $userNameMap[$userId] = isset($row['username']) && trim((string) $row['username']) !== ''
+                ? trim((string) $row['username'])
+                : ('User #' . $userId);
+        }
+
+        return $userNameMap;
+    }
+}
+
+if (!function_exists('customerDailyReportLoadUserMetaMap')) {
+    function customerDailyReportLoadUserMetaMap($connect, $userIds)
+    {
+        $userMetaMap = array();
+        if (!($connect instanceof mysqli) || !is_array($userIds)) {
+            return $userMetaMap;
+        }
+
+        $safeIds = array();
+        foreach ($userIds as $userId) {
+            $userId = (int) $userId;
+            if ($userId > 0) {
+                $safeIds[$userId] = $userId;
+            }
+        }
+
+        if (empty($safeIds)) {
+            return $userMetaMap;
+        }
+
+        $query = "SELECT `id`, `name`, `username`, `access_id` FROM `" . USR_USER . "` WHERE `id` IN (" . implode(',', $safeIds) . ")";
+        $result = mysqli_query($connect, $query);
+        if (!$result) {
+            return $userMetaMap;
+        }
+
+        $groupIds = array();
+        while ($row = mysqli_fetch_assoc($result)) {
+            $userId = isset($row['id']) ? (int) $row['id'] : 0;
+            if ($userId <= 0) {
+                continue;
+            }
+
+            $accessId = isset($row['access_id']) ? (int) $row['access_id'] : 0;
+            if ($accessId > 0) {
+                $groupIds[$accessId] = $accessId;
+            }
+
+            $displayName = '';
+            if (isset($row['name']) && trim((string) $row['name']) !== '') {
+                $displayName = trim((string) $row['name']);
+            } else if (isset($row['username']) && trim((string) $row['username']) !== '') {
+                $displayName = trim((string) $row['username']);
+            } else {
+                $displayName = 'User #' . $userId;
+            }
+
+            $userMetaMap[$userId] = array(
+                'display_name' => $displayName,
+                'username' => isset($row['username']) ? trim((string) $row['username']) : '',
+                'access_id' => $accessId,
+                'group_name' => '',
+                'group_badge_html' => '',
+            );
+        }
+
+        if (!empty($groupIds)) {
+            $groupQuery = "SELECT `id`, `name`, `badge_color`, `badge_icon_class` FROM `" . USR_GRP . "` WHERE `id` IN (" . implode(',', $groupIds) . ")";
+            $groupResult = mysqli_query($connect, $groupQuery);
+            if ($groupResult) {
+                $groupMetaMap = array();
+                while ($groupRow = mysqli_fetch_assoc($groupResult)) {
+                    $groupId = isset($groupRow['id']) ? (int) $groupRow['id'] : 0;
+                    if ($groupId > 0) {
+                        $groupMetaMap[$groupId] = array(
+                            'name' => isset($groupRow['name']) ? (string) $groupRow['name'] : '',
+                            'badge_color' => isset($groupRow['badge_color']) ? (string) $groupRow['badge_color'] : '',
+                            'badge_icon_class' => isset($groupRow['badge_icon_class']) ? (string) $groupRow['badge_icon_class'] : '',
+                        );
+                    }
+                }
+
+                foreach ($userMetaMap as $userId => $userMeta) {
+                    $groupId = isset($userMeta['access_id']) ? (int) $userMeta['access_id'] : 0;
+                    if ($groupId <= 0 || !isset($groupMetaMap[$groupId])) {
+                        continue;
+                    }
+
+                    $groupMeta = $groupMetaMap[$groupId];
+                    $userMetaMap[$userId]['group_name'] = isset($groupMeta['name']) ? (string) $groupMeta['name'] : '';
+                    $userMetaMap[$userId]['group_badge_html'] = shopeeOmsRenderUserGroupBadge($connect, $groupId);
+                }
+            }
+        }
+
+        return $userMetaMap;
+    }
+}
+
+if (!function_exists('customerDailyReportGetDisplayNameFromRow')) {
+    function customerDailyReportGetDisplayNameFromRow($row, $displayFields)
+    {
+        if (!is_array($row) || !is_array($displayFields)) {
+            return '';
+        }
+
+        $parts = array();
+        foreach ($displayFields as $fieldName) {
+            $fieldName = (string) $fieldName;
+            if (!isset($row[$fieldName])) {
+                continue;
+            }
+
+            $fieldValue = trim((string) $row[$fieldName]);
+            if ($fieldValue !== '') {
+                $parts[] = $fieldValue;
+            }
+        }
+
+        return trim(implode(' ', $parts));
+    }
+}
+
+if (!function_exists('customerDailyReportGetCustomerMeta')) {
+    function customerDailyReportGetCustomerMeta($connect, $financeConnect, $platformKey, $recordId)
+    {
+        static $customerMetaCache = array();
+
+        $recordId = (int) $recordId;
+        $platformKey = customerDailyReportNormalizePlatformKey($platformKey);
+        $cacheKey = $platformKey . ':' . $recordId;
+        if (isset($customerMetaCache[$cacheKey])) {
+            return $customerMetaCache[$cacheKey];
+        }
+
+        $meta = array(
+            'display_name' => $recordId > 0 ? ('Record #' . $recordId) : 'Unknown Record',
+            'record_url' => '',
+        );
+
+        $platformConfigs = customerDailyReportGetPlatformConfigs();
+        if ($platformKey === '' || !isset($platformConfigs[$platformKey])) {
+            $customerMetaCache[$cacheKey] = $meta;
+            return $meta;
+        }
+
+        $platformConfig = $platformConfigs[$platformKey];
+        if ($recordId > 0) {
+            $meta['record_url'] = rtrim((string) $GLOBALS['SITEURL'], '/') . (string) $platformConfig['record_url'] . '?id=' . $recordId;
+        }
+
+        $dbConnect = customerDailyReportResolveDbConnect($connect, $financeConnect, $platformConfig['db'] ?? 'cms');
+        if (!($dbConnect instanceof mysqli) || $recordId <= 0) {
+            $customerMetaCache[$cacheKey] = $meta;
+            return $meta;
+        }
+
+        $tableName = isset($platformConfig['table']) ? (string) $platformConfig['table'] : '';
+        if ($tableName === '') {
+            $customerMetaCache[$cacheKey] = $meta;
+            return $meta;
+        }
+
+        $result = getData('*', "id = '" . $recordId . "'", 'LIMIT 1', $tableName, $dbConnect);
+        if ($result && $result->num_rows > 0) {
+            $row = $result->fetch_assoc();
+            $displayName = customerDailyReportGetDisplayNameFromRow($row, $platformConfig['display_fields'] ?? array());
+            if ($displayName !== '') {
+                $meta['display_name'] = $displayName;
+            }
+        }
+
+        $customerMetaCache[$cacheKey] = $meta;
+        return $meta;
+    }
+}
+
+if (!function_exists('shopeeOmsGetOrderSourceConfigs')) {
+    function shopeeOmsGetOrderSourceConfigs()
+    {
+        return array(
+            'shopee' => array(
+                'platform' => 'shopee',
+                'label' => 'Shopee',
+                'table' => SHOPEE_SG_ORDER_REQ,
+                'db' => 'finance',
+                'db_name' => dbFinance,
+                'order_code_field' => 'orderID',
+                'customer_name_field' => 'buyer',
+                'customer_label_mode' => 'shopee_buyer',
+                'address_field' => 'customer_address',
+                'package_field' => 'package',
+                'package_qty_json_field' => 'package_qty_json',
+                'airbill_no_field' => 'airbill_no',
+                'airbill_attachment_field' => 'airbill_attachment',
+                'warehouse_field' => 'stock_out_warehouse_id',
+                'delay_remark_field' => 'delay_remark',
+                'date_field' => 'date',
+                'fallback_code_prefix' => 'SHP',
+                'view_url' => '/shopee/shopee_order_req.php',
+                'info_url' => '/shopee/shopee_order_request_info.php',
+                'attachment_page_name' => 'shopee_order_request',
+            ),
+            'lazada' => array(
+                'platform' => 'lazada',
+                'label' => 'Lazada',
+                'table' => LAZADA_ORDER_REQ,
+                'db' => 'cms',
+                'db_name' => dbname,
+                'order_code_field' => 'oder_number',
+                'customer_name_field' => 'cust_name',
+                'address_field' => 'ship_rec_address',
+                'package_field' => 'pkg',
+                'package_qty_json_field' => '',
+                'airbill_no_field' => 'airbill_no',
+                'airbill_attachment_field' => 'airbill_attachment',
+                'warehouse_field' => 'stock_out_warehouse_id',
+                'delay_remark_field' => 'delay_remark',
+                'date_field' => 'create_date',
+                'fallback_code_prefix' => 'LAZ',
+                'view_url' => '/lazada_order_req.php',
+                'info_url' => '/lazada_order_request_info.php',
+                'attachment_page_name' => 'lazada_order_request',
+            ),
+            'facebook' => array(
+                'platform' => 'facebook',
+                'label' => 'Facebook',
+                'table' => FB_ORDER_REQ,
+                'db' => 'finance',
+                'db_name' => dbFinance,
+                'order_code_field' => '',
+                'customer_name_field' => 'name',
+                'address_field' => 'ship_rec_add',
+                'package_field' => 'package',
+                'package_qty_json_field' => '',
+                'airbill_no_field' => 'airbill_no',
+                'airbill_attachment_field' => 'airbill_attachment',
+                'warehouse_field' => 'stock_out_warehouse_id',
+                'delay_remark_field' => 'delay_remark',
+                'date_field' => 'create_date',
+                'fallback_code_prefix' => 'FB',
+                'view_url' => '/finance/fb_order_req.php',
+                'info_url' => '/finance/fb_order_request_info.php',
+                'attachment_page_name' => 'fb_order_request',
+            ),
+            'website' => array(
+                'platform' => 'website',
+                'label' => 'Website',
+                'table' => WEB_ORDER_REQ,
+                'db' => 'finance',
+                'db_name' => dbFinance,
+                'order_code_field' => 'order_id',
+                'customer_name_field' => 'cust_name',
+                'address_field' => 'shipping_address',
+                'package_field' => 'pkg',
+                'package_qty_json_field' => '',
+                'airbill_no_field' => 'airbill_no',
+                'airbill_attachment_field' => 'airbill_attachment',
+                'warehouse_field' => 'stock_out_warehouse_id',
+                'delay_remark_field' => 'delay_remark',
+                'date_field' => 'create_date',
+                'fallback_code_prefix' => 'WEB',
+                'view_url' => '/finance/website_order_request.php',
+                'info_url' => '/finance/website_order_request_info.php',
+                'attachment_page_name' => 'website_order_request',
+            ),
+        );
+    }
+}
+
+if (!function_exists('shopeeOmsNormalizePlatformKey')) {
+    function shopeeOmsNormalizePlatformKey($platform, $allowAll = false)
+    {
+        $platform = strtolower(trim((string) $platform));
+        if ($allowAll && $platform === 'all') {
+            return 'all';
+        }
+
+        $configs = shopeeOmsGetOrderSourceConfigs();
+        return isset($configs[$platform]) ? $platform : '';
+    }
+}
+
+if (!function_exists('shopeeOmsGetOrderSourceConfig')) {
+    function shopeeOmsGetOrderSourceConfig($platform)
+    {
+        $platform = shopeeOmsNormalizePlatformKey($platform);
+        $configs = shopeeOmsGetOrderSourceConfigs();
+        return $platform !== '' && isset($configs[$platform]) ? $configs[$platform] : array();
+    }
+}
+
+if (!function_exists('shopeeOmsResolvePlatformFromTableName')) {
+    function shopeeOmsResolvePlatformFromTableName($tableName)
+    {
+        $tableName = trim((string) $tableName);
+        if ($tableName === '') {
+            return '';
+        }
+
+        foreach (shopeeOmsGetOrderSourceConfigs() as $platform => $config) {
+            if (isset($config['table']) && (string) $config['table'] === $tableName) {
+                return $platform;
+            }
+        }
+
+        return '';
+    }
+}
+
+if (!function_exists('shopeeOmsResolveOrderSourceConfig')) {
+    function shopeeOmsResolveOrderSourceConfig($source = null, $fallbackPlatform = 'shopee')
+    {
+        if (is_array($source) && !empty($source['platform'])) {
+            return shopeeOmsGetOrderSourceConfig($source['platform']);
+        }
+
+        $sourceValue = trim((string) $source);
+        if ($sourceValue !== '') {
+            $platform = shopeeOmsNormalizePlatformKey($sourceValue);
+            if ($platform !== '') {
+                return shopeeOmsGetOrderSourceConfig($platform);
+            }
+
+            $platform = shopeeOmsResolvePlatformFromTableName($sourceValue);
+            if ($platform !== '') {
+                return shopeeOmsGetOrderSourceConfig($platform);
+            }
+        }
+
+        return shopeeOmsGetOrderSourceConfig($fallbackPlatform);
+    }
+}
+
+if (!function_exists('shopeeOmsGetOrderSourceDbConnection')) {
+    function shopeeOmsGetOrderSourceDbConnection($cmsConnect, $financeConnect, $sourceConfig)
+    {
+        $sourceConfig = is_array($sourceConfig) ? $sourceConfig : array();
+        $dbKey = isset($sourceConfig['db']) ? (string) $sourceConfig['db'] : 'finance';
+        return $dbKey === 'cms' ? $cmsConnect : $financeConnect;
+    }
+}
+
+if (!function_exists('shopeeOmsBuildQualifiedTableName')) {
+    function shopeeOmsBuildQualifiedTableName($sourceConfig)
+    {
+        $sourceConfig = is_array($sourceConfig) ? $sourceConfig : array();
+        $dbName = isset($sourceConfig['db_name']) ? trim((string) $sourceConfig['db_name']) : '';
+        $tableName = isset($sourceConfig['table']) ? trim((string) $sourceConfig['table']) : '';
+        if ($dbName === '' || $tableName === '') {
+            return '';
+        }
+
+        return '`' . str_replace('`', '``', $dbName) . '`.`' . str_replace('`', '``', $tableName) . '`';
+    }
+}
+
+if (!function_exists('shopeeOmsAttachOrderSourceMeta')) {
+    function shopeeOmsAttachOrderSourceMeta($row, $platform, $sourceConfig = null)
+    {
+        $row = is_array($row) ? $row : array();
+        $sourceConfig = shopeeOmsResolveOrderSourceConfig($sourceConfig ?: $platform, $platform ?: 'shopee');
+        $platform = isset($sourceConfig['platform']) ? (string) $sourceConfig['platform'] : shopeeOmsNormalizePlatformKey($platform);
+        if ($platform === '') {
+            $platform = 'shopee';
+            $sourceConfig = shopeeOmsGetOrderSourceConfig($platform);
+        }
+
+        $row['__oms_platform'] = $platform;
+        $row['__oms_platform_label'] = isset($sourceConfig['label']) ? (string) $sourceConfig['label'] : ucfirst($platform);
+        $row['__oms_table'] = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : '';
+        $row['__oms_db'] = isset($sourceConfig['db']) ? (string) $sourceConfig['db'] : '';
+        return $row;
+    }
+}
+
+if (!function_exists('shopeeOmsGetOrderSourcePlatform')) {
+    function shopeeOmsGetOrderSourcePlatform($row, $fallbackPlatform = 'shopee')
+    {
+        if (is_array($row) && !empty($row['__oms_platform'])) {
+            $platform = shopeeOmsNormalizePlatformKey($row['__oms_platform']);
+            if ($platform !== '') {
+                return $platform;
+            }
+        }
+
+        return shopeeOmsNormalizePlatformKey($fallbackPlatform) ?: 'shopee';
+    }
+}
+
+if (!function_exists('shopeeOmsTableHasColumn')) {
+    function shopeeOmsTableHasColumn($connect, $dbName, $tableName, $columnName)
+    {
+        static $cache = array();
+
+        $dbName = trim((string) $dbName);
+        $tableName = trim((string) $tableName);
+        $columnName = trim((string) $columnName);
+        if (!($connect instanceof mysqli) || $dbName === '' || $tableName === '' || $columnName === '') {
+            return false;
+        }
+
+        $cacheKey = $dbName . '|' . $tableName . '|' . $columnName;
+        if (array_key_exists($cacheKey, $cache)) {
+            return $cache[$cacheKey];
+        }
+
+        $safeDbName = mysqli_real_escape_string($connect, $dbName);
+        $safeTableName = mysqli_real_escape_string($connect, $tableName);
+        $safeColumnName = mysqli_real_escape_string($connect, $columnName);
+        $sql = "SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = '" . $safeDbName . "'
+              AND table_name = '" . $safeTableName . "'
+              AND column_name = '" . $safeColumnName . "'
+            LIMIT 1";
+        $result = mysqli_query($connect, $sql);
+        $cache[$cacheKey] = ($result instanceof mysqli_result && mysqli_num_rows($result) > 0);
+        return $cache[$cacheKey];
+    }
+}
+
+if (!function_exists('shopeeOmsSourceHasColumn')) {
+    function shopeeOmsSourceHasColumn($cmsConnect, $financeConnect, $sourceConfig, $columnName)
+    {
+        $sourceConfig = is_array($sourceConfig) ? $sourceConfig : array();
+        $tableName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : '';
+        $dbName = isset($sourceConfig['db_name']) ? (string) $sourceConfig['db_name'] : '';
+        $conn = shopeeOmsGetOrderSourceDbConnection($cmsConnect, $financeConnect, $sourceConfig);
+        return shopeeOmsTableHasColumn($conn, $dbName, $tableName, $columnName);
+    }
+}
+
+if (!function_exists('shopeeOmsGetOrderCodeValue')) {
+    function shopeeOmsGetOrderCodeValue($orderRow, $source = 'shopee')
+    {
+        $orderRow = is_array($orderRow) ? $orderRow : array();
+        $sourceConfig = shopeeOmsResolveOrderSourceConfig($source, shopeeOmsGetOrderSourcePlatform($orderRow, 'shopee'));
+        $fieldName = isset($sourceConfig['order_code_field']) ? trim((string) $sourceConfig['order_code_field']) : '';
+        $orderCode = $fieldName !== '' && isset($orderRow[$fieldName]) ? trim((string) $orderRow[$fieldName]) : '';
+        if ($orderCode !== '') {
+            return $orderCode;
+        }
+
+        $fallbackPrefix = isset($sourceConfig['fallback_code_prefix']) ? trim((string) $sourceConfig['fallback_code_prefix']) : 'OMS';
+        return $fallbackPrefix . '-' . (int) (isset($orderRow['id']) ? $orderRow['id'] : 0);
+    }
+}
+
+if (!function_exists('shopeeOmsGetOrderSourceViewUrl')) {
+    function shopeeOmsGetOrderSourceViewUrl($source, $orderId)
+    {
+        $sourceConfig = shopeeOmsResolveOrderSourceConfig($source);
+        $viewUrl = isset($sourceConfig['view_url']) ? trim((string) $sourceConfig['view_url']) : '';
+        if ($viewUrl === '' || !defined('SITEURL')) {
+            return '';
+        }
+
+        return rtrim((string) SITEURL, '/') . $viewUrl . '?id=' . (int) $orderId;
+    }
+}
+
+if (!function_exists('shopeeOmsGetOrderSourceInfoUrl')) {
+    function shopeeOmsGetOrderSourceInfoUrl($source, $orderId)
+    {
+        $sourceConfig = shopeeOmsResolveOrderSourceConfig($source);
+        $infoUrl = isset($sourceConfig['info_url']) ? trim((string) $sourceConfig['info_url']) : '';
+        if ($infoUrl === '' || !defined('SITEURL')) {
+            return '';
+        }
+
+        return rtrim((string) SITEURL, '/') . $infoUrl . '?id=' . (int) $orderId;
+    }
+}
+
+if (!function_exists('shopeeOmsGetOrderCustomerNameText')) {
+    function shopeeOmsGetOrderCustomerNameText($cmsConnect, $financeConnect, $orderRow, $source = 'shopee')
+    {
+        $orderRow = is_array($orderRow) ? $orderRow : array();
+        $sourceConfig = shopeeOmsResolveOrderSourceConfig($source, shopeeOmsGetOrderSourcePlatform($orderRow, 'shopee'));
+        $platform = isset($sourceConfig['platform']) ? (string) $sourceConfig['platform'] : 'shopee';
+        $fieldName = isset($sourceConfig['customer_name_field']) ? (string) $sourceConfig['customer_name_field'] : '';
+        $customerName = $fieldName !== '' && isset($orderRow[$fieldName]) ? trim((string) $orderRow[$fieldName]) : '';
+
+        if ($platform === 'shopee' && $customerName !== '' && ctype_digit($customerName)) {
+            $buyerRst = getData('buyer_username', "id='" . (int) $customerName . "'", 'LIMIT 1', SHOPEE_CUST_INFO, $financeConnect);
+            if ($buyerRst && $buyerRst->num_rows > 0) {
+                $buyerRow = $buyerRst->fetch_assoc();
+                if (isset($buyerRow['buyer_username']) && trim((string) $buyerRow['buyer_username']) !== '') {
+                    $customerName = trim((string) $buyerRow['buyer_username']);
+                }
+            }
+        }
+
+        return $customerName;
+    }
+}
+
 if (!function_exists('customerLabelGetPlatformConfig')) {
     function customerLabelGetPlatformConfig($platform)
     {
@@ -1828,17 +2922,39 @@ if (!function_exists('customerLabelResolvePackageRows')) {
         }
 
         $fieldName = $platform === 'facebook' ? 'package' : 'pkg';
-        $packageIds = customerLabelSplitCsv(isset($orderRow[$fieldName]) ? $orderRow[$fieldName] : '');
         $rows = array();
-        foreach ($packageIds as $packageIdRaw) {
-            $packageId = (int) $packageIdRaw;
-            if ($packageId <= 0) {
+        $packageIds = array();
+        foreach (customerLabelSplitCsv(isset($orderRow[$fieldName]) ? $orderRow[$fieldName] : '') as $packageIdRaw) {
+            $packageIdRaw = trim((string) $packageIdRaw);
+            if ($packageIdRaw === '') {
                 continue;
             }
-            $rows[] = array(
-                'package_id' => $packageId,
-                'qty' => 1,
-            );
+
+            if (ctype_digit($packageIdRaw) && (int) $packageIdRaw > 0) {
+                $packageId = (int) $packageIdRaw;
+                $packageIds[] = $packageId;
+                $rows[] = array(
+                    'package_id' => $packageId,
+                    'package_name' => '',
+                    'qty' => 1,
+                );
+            } else {
+                $rows[] = array(
+                    'package_id' => 0,
+                    'package_name' => $packageIdRaw,
+                    'qty' => 1,
+                );
+            }
+        }
+
+        if (!empty($packageIds) && function_exists('shopeeOmsGetPackageNameMap')) {
+            $packageNameMap = shopeeOmsGetPackageNameMap($connect, $packageIds);
+            foreach ($rows as $idx => $row) {
+                $packageId = isset($row['package_id']) ? (int) $row['package_id'] : 0;
+                if ($packageId > 0 && empty($rows[$idx]['package_name']) && isset($packageNameMap[$packageId])) {
+                    $rows[$idx]['package_name'] = (string) $packageNameMap[$packageId];
+                }
+            }
         }
 
         return $rows;
@@ -2787,6 +3903,44 @@ if (!function_exists('customerLabelRenderBadge')) {
     }
 }
 
+if (!function_exists('customerLabelRenderCollapsibleBadgeGroup')) {
+    function customerLabelRenderCollapsibleBadgeGroup($items, $wrapperClass = 'customer-label-summary-wrap', $visibleCount = 10)
+    {
+        $items = array_values(array_filter((array) $items, function ($item) {
+            return trim((string) $item) !== '';
+        }));
+
+        if (empty($items)) {
+            return '';
+        }
+
+        $visibleCount = (int) $visibleCount;
+        if ($visibleCount <= 0) {
+            $visibleCount = 10;
+        }
+
+        $wrapperClasses = trim((string) $wrapperClass) . ' js-customer-label-wrap';
+        $html = '<span class="' . htmlspecialchars($wrapperClasses, ENT_QUOTES, 'UTF-8') . '" data-expanded="0">';
+
+        foreach ($items as $index => $itemHtml) {
+            $itemClasses = 'customer-label-item';
+            if ($index >= $visibleCount) {
+                $itemClasses .= ' customer-label-extra d-none';
+            }
+
+            $html .= '<span class="' . htmlspecialchars($itemClasses, ENT_QUOTES, 'UTF-8') . '">' . $itemHtml . '</span>';
+        }
+
+        if (count($items) > $visibleCount) {
+            $html .= '<button type="button" class="customer-label-toggle-btn js-toggle-customer-labels">Show More</button>';
+        }
+
+        $html .= '</span>';
+
+        return $html;
+    }
+}
+
 if (!function_exists('customerLabelRenderNameCell')) {
     function customerLabelRenderNameCell($displayName, $customerLabelMeta)
     {
@@ -2808,12 +3962,76 @@ if (!function_exists('customerLabelRenderSummaryCell')) {
         if (isset($customerLabelMeta['repeat'])) {
             $parts[] = customerLabelRenderBadge($customerLabelMeta['repeat']);
         }
-        $tagBadgeHtml = customerTagRenderBadges($customerTagRows, 'customer-tag-table-badge-group', 'customer-tag-table-badge');
-        if ($tagBadgeHtml !== '') {
-            $parts[] = $tagBadgeHtml;
+        $parts = array_merge($parts, customerTagRenderBadgeItems($customerTagRows, 'customer-tag-table-badge'));
+
+        return customerLabelRenderCollapsibleBadgeGroup($parts, 'customer-label-summary-wrap');
+    }
+}
+
+if (!function_exists('customerRecordNormalizeFilterValues')) {
+    function customerRecordNormalizeFilterValues($values)
+    {
+        $normalizedValues = array();
+
+        foreach ((array) $values as $value) {
+            $value = trim(html_entity_decode(strip_tags((string) $value), ENT_QUOTES, 'UTF-8'));
+            if ($value === '' || in_array($value, $normalizedValues, true)) {
+                continue;
+            }
+
+            $normalizedValues[] = $value;
         }
 
-        return empty($parts) ? '' : '<span class="customer-label-summary-wrap">' . implode('', $parts) . '</span>';
+        return $normalizedValues;
+    }
+}
+
+if (!function_exists('customerRecordExtractLabelNames')) {
+    function customerRecordExtractLabelNames($customerLabelMeta)
+    {
+        $labelNames = array();
+
+        foreach (array('segmentation', 'level', 'repeat') as $labelType) {
+            if (isset($customerLabelMeta[$labelType]['name'])) {
+                $labelNames[] = $customerLabelMeta[$labelType]['name'];
+            }
+        }
+
+        return customerRecordNormalizeFilterValues($labelNames);
+    }
+}
+
+if (!function_exists('customerRecordExtractTagNames')) {
+    function customerRecordExtractTagNames($customerTagRows)
+    {
+        $tagNames = array();
+
+        foreach ((array) $customerTagRows as $tagRow) {
+            if (isset($tagRow['name'])) {
+                $tagNames[] = $tagRow['name'];
+            }
+        }
+
+        return customerRecordNormalizeFilterValues($tagNames);
+    }
+}
+
+if (!function_exists('customerRecordBuildFilterDataAttributes')) {
+    function customerRecordBuildFilterDataAttributes($filters)
+    {
+        $attributes = array();
+
+        foreach ((array) $filters as $key => $value) {
+            $safeKey = preg_replace('/[^a-z0-9_-]+/i', '-', (string) $key);
+            if ($safeKey === '') {
+                continue;
+            }
+
+            $values = customerRecordNormalizeFilterValues(is_array($value) ? $value : array($value));
+            $attributes[] = 'data-filter-' . $safeKey . '="' . htmlspecialchars(implode('||', $values), ENT_QUOTES, 'UTF-8') . '"';
+        }
+
+        return implode(' ', $attributes);
     }
 }
 
@@ -3116,8 +4334,11 @@ if (!function_exists('shopeeOmsGetMarketplaceStatusLabel')) {
     function shopeeOmsGetMarketplaceStatusLabel($status)
     {
         $statusCode = shopeeOmsNormalizeStatusCode($status);
-        if ($statusCode === 'P' || $statusCode === 'TP') {
-            return 'Processing';
+        if ($statusCode === 'P') {
+            return 'To Ship';
+        }
+        if ($statusCode === 'TP') {
+            return 'To Pack';
         }
 
         return shopeeOmsGetStatusLabel($statusCode);
@@ -3535,17 +4756,19 @@ if (!function_exists('shopeeOmsHasTransitionPermission')) {
 }
 
 if (!function_exists('shopeeOmsLoadOrder')) {
-    function shopeeOmsLoadOrder($connect, $orderId)
+    function shopeeOmsLoadOrder($connect, $orderId, $source = 'shopee')
     {
         $orderId = (int) $orderId;
         if ($orderId <= 0 || !($connect instanceof mysqli)) {
             return array();
         }
 
-        $sql = "SELECT * FROM `" . SHOPEE_SG_ORDER_REQ . "` WHERE id = " . $orderId . " LIMIT 1";
+        $sourceConfig = shopeeOmsResolveOrderSourceConfig($source);
+        $tableName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
+        $sql = "SELECT * FROM `" . $tableName . "` WHERE id = " . $orderId . " LIMIT 1";
         $result = mysqli_query($connect, $sql);
         if ($result && mysqli_num_rows($result) > 0) {
-            return (array) mysqli_fetch_assoc($result);
+            return shopeeOmsAttachOrderSourceMeta((array) mysqli_fetch_assoc($result), isset($sourceConfig['platform']) ? $sourceConfig['platform'] : 'shopee', $sourceConfig);
         }
 
         return array();
@@ -3553,18 +4776,114 @@ if (!function_exists('shopeeOmsLoadOrder')) {
 }
 
 if (!function_exists('shopeeOmsLoadOrderByCode')) {
-    function shopeeOmsLoadOrderByCode($connect, $orderCode)
+    function shopeeOmsLoadOrderByCode($connect, $orderCode, $source = 'shopee')
     {
         $orderCode = trim((string) $orderCode);
         if ($orderCode === '' || !($connect instanceof mysqli)) {
             return array();
         }
 
+        $sourceConfig = shopeeOmsResolveOrderSourceConfig($source);
+        $tableName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
+        $fieldName = isset($sourceConfig['order_code_field']) ? trim((string) $sourceConfig['order_code_field']) : '';
         $safeOrderCode = mysqli_real_escape_string($connect, $orderCode);
-        $sql = "SELECT * FROM `" . SHOPEE_SG_ORDER_REQ . "` WHERE orderID = '" . $safeOrderCode . "' LIMIT 1";
+        if ($fieldName !== '') {
+            $sql = "SELECT * FROM `" . $tableName . "` WHERE `" . $fieldName . "` = '" . $safeOrderCode . "' LIMIT 1";
+        } else {
+            $platform = isset($sourceConfig['platform']) ? (string) $sourceConfig['platform'] : 'shopee';
+            $prefix = strtoupper(trim((string) (isset($sourceConfig['fallback_code_prefix']) ? $sourceConfig['fallback_code_prefix'] : '')));
+            $numericId = 0;
+            if (preg_match('/^' . preg_quote($prefix, '/') . '\-(\d+)$/i', $orderCode, $matches)) {
+                $numericId = (int) $matches[1];
+            } else if ($platform === 'facebook' && preg_match('/^FB ORDER \#(\d+)$/i', $orderCode, $matches)) {
+                $numericId = (int) $matches[1];
+            } else if (ctype_digit($orderCode)) {
+                $numericId = (int) $orderCode;
+            }
+
+            if ($numericId <= 0) {
+                return array();
+            }
+
+            $sql = "SELECT * FROM `" . $tableName . "` WHERE id = " . $numericId . " LIMIT 1";
+        }
         $result = mysqli_query($connect, $sql);
         if ($result && mysqli_num_rows($result) > 0) {
-            return (array) mysqli_fetch_assoc($result);
+            return shopeeOmsAttachOrderSourceMeta((array) mysqli_fetch_assoc($result), isset($sourceConfig['platform']) ? $sourceConfig['platform'] : 'shopee', $sourceConfig);
+        }
+
+        return array();
+    }
+}
+
+if (!function_exists('shopeeOmsLoadOrderByCodeAnyPlatform')) {
+    function shopeeOmsLoadOrderByCodeAnyPlatform($cmsConnect, $financeConnect, $orderCode, $platform = '')
+    {
+        $orderCode = trim((string) $orderCode);
+        if ($orderCode === '') {
+            return array();
+        }
+
+        $platform = shopeeOmsNormalizePlatformKey($platform);
+        $sourceConfigs = shopeeOmsGetOrderSourceConfigs();
+        foreach ($sourceConfigs as $sourcePlatform => $sourceConfig) {
+            if ($platform !== '' && $platform !== $sourcePlatform) {
+                continue;
+            }
+
+            $conn = shopeeOmsGetOrderSourceDbConnection($cmsConnect, $financeConnect, $sourceConfig);
+            $orderRow = shopeeOmsLoadOrderByCode($conn, $orderCode, $sourceConfig);
+            if (!empty($orderRow)) {
+                return $orderRow;
+            }
+        }
+
+        return array();
+    }
+}
+
+if (!function_exists('shopeeOmsResolveOrderSourceConfigFromTokenRow')) {
+    function shopeeOmsResolveOrderSourceConfigFromTokenRow($cmsConnect, $financeConnect, $tokenRow, $fallbackPlatform = 'shopee')
+    {
+        $fallbackPlatform = shopeeOmsNormalizePlatformKey($fallbackPlatform) ?: 'shopee';
+        $platform = shopeeOmsNormalizePlatformKey(isset($tokenRow['platform']) ? $tokenRow['platform'] : '');
+        if ($platform !== '') {
+            return shopeeOmsResolveOrderSourceConfig($platform, $fallbackPlatform);
+        }
+
+        $orderCode = trim((string) (isset($tokenRow['order_code']) ? $tokenRow['order_code'] : ''));
+        if ($orderCode !== '') {
+            $orderRow = shopeeOmsLoadOrderByCodeAnyPlatform($cmsConnect, $financeConnect, $orderCode);
+            if (!empty($orderRow)) {
+                return shopeeOmsResolveOrderSourceConfig(shopeeOmsGetOrderSourcePlatform($orderRow, $fallbackPlatform), $fallbackPlatform);
+            }
+        }
+
+        return shopeeOmsResolveOrderSourceConfig($fallbackPlatform, $fallbackPlatform);
+    }
+}
+
+if (!function_exists('shopeeOmsLoadOrderFromTokenRow')) {
+    function shopeeOmsLoadOrderFromTokenRow($cmsConnect, $financeConnect, $tokenRow, &$resolvedSourceConfig = null, $fallbackPlatform = 'shopee')
+    {
+        $resolvedSourceConfig = shopeeOmsResolveOrderSourceConfigFromTokenRow($cmsConnect, $financeConnect, $tokenRow, $fallbackPlatform);
+        $orderConnect = shopeeOmsGetOrderSourceDbConnection($cmsConnect, $financeConnect, $resolvedSourceConfig);
+        $orderId = isset($tokenRow['order_id']) ? (int) $tokenRow['order_id'] : 0;
+        if ($orderId > 0) {
+            $orderRow = shopeeOmsLoadOrder($orderConnect, $orderId, $resolvedSourceConfig);
+            if (!empty($orderRow)) {
+                return $orderRow;
+            }
+        }
+
+        $orderCode = trim((string) (isset($tokenRow['order_code']) ? $tokenRow['order_code'] : ''));
+        if ($orderCode !== '') {
+            $platform = isset($resolvedSourceConfig['platform']) ? (string) $resolvedSourceConfig['platform'] : '';
+            $orderRow = shopeeOmsLoadOrderByCodeAnyPlatform($cmsConnect, $financeConnect, $orderCode, $platform);
+            if (!empty($orderRow)) {
+                $resolvedSourceConfig = shopeeOmsResolveOrderSourceConfig(shopeeOmsGetOrderSourcePlatform($orderRow, $fallbackPlatform), $fallbackPlatform);
+                return $orderRow;
+            }
         }
 
         return array();
@@ -3842,11 +5161,26 @@ if (!function_exists('shopeeOmsGetPackageNameMap')) {
 if (!function_exists('shopeeOmsResolveOrderPackageRows')) {
     function shopeeOmsResolveOrderPackageRows($connect, $orderRow)
     {
+        return shopeeOmsResolveOrderPackageRowsBySource($connect, $orderRow, 'shopee');
+    }
+}
+
+if (!function_exists('shopeeOmsResolveOrderPackageRowsBySource')) {
+    function shopeeOmsResolveOrderPackageRowsBySource($connect, $orderRow, $source = 'shopee')
+    {
         if (!is_array($orderRow)) {
             return array();
         }
 
-        $snapshotRows = shopeeOmsDecodePackageQtySnapshot(isset($orderRow['package_qty_json']) ? $orderRow['package_qty_json'] : '');
+        $sourceConfig = shopeeOmsResolveOrderSourceConfig($source, shopeeOmsGetOrderSourcePlatform($orderRow, 'shopee'));
+        $platform = isset($sourceConfig['platform']) ? (string) $sourceConfig['platform'] : 'shopee';
+        if ($platform !== 'shopee') {
+            return customerLabelResolvePackageRows($connect, $platform, $orderRow);
+        }
+
+        $packageQtyJsonField = isset($sourceConfig['package_qty_json_field']) ? (string) $sourceConfig['package_qty_json_field'] : 'package_qty_json';
+        $packageField = isset($sourceConfig['package_field']) ? (string) $sourceConfig['package_field'] : 'package';
+        $snapshotRows = shopeeOmsDecodePackageQtySnapshot(isset($orderRow[$packageQtyJsonField]) ? $orderRow[$packageQtyJsonField] : '');
         if (!empty($snapshotRows)) {
             $packageIds = array();
             foreach ($snapshotRows as $snapshotRow) {
@@ -3865,7 +5199,7 @@ if (!function_exists('shopeeOmsResolveOrderPackageRows')) {
         }
 
         $rows = array();
-        $packageIds = array_filter(array_map('trim', explode(',', (string) (isset($orderRow['package']) ? $orderRow['package'] : ''))), 'strlen');
+        $packageIds = array_filter(array_map('trim', explode(',', (string) (isset($orderRow[$packageField]) ? $orderRow[$packageField] : ''))), 'strlen');
         $packageNameMap = shopeeOmsGetPackageNameMap($connect, $packageIds);
         foreach ($packageIds as $packageIdRaw) {
             $packageId = (int) $packageIdRaw;
@@ -3887,7 +5221,16 @@ if (!function_exists('shopeeOmsResolveOrderPackageRows')) {
 if (!function_exists('shopeeOmsBuildOrderProductSummary')) {
     function shopeeOmsBuildOrderProductSummary($connect, $orderRow)
     {
-        $packageRows = shopeeOmsResolveOrderPackageRows($connect, $orderRow);
+        return shopeeOmsBuildOrderProductSummaryBySource($connect, $orderRow, 'shopee');
+    }
+}
+
+if (!function_exists('shopeeOmsBuildOrderProductSummaryBySource')) {
+    function shopeeOmsBuildOrderProductSummaryBySource($connect, $orderRow, $source = 'shopee')
+    {
+        $sourceConfig = shopeeOmsResolveOrderSourceConfig($source, shopeeOmsGetOrderSourcePlatform($orderRow, 'shopee'));
+        $platform = isset($sourceConfig['platform']) ? (string) $sourceConfig['platform'] : 'shopee';
+        $packageRows = shopeeOmsResolveOrderPackageRowsBySource($connect, $orderRow, $sourceConfig);
         $packageSummary = array();
         $productQtyMap = array();
         $packageIds = array();
@@ -3923,18 +5266,20 @@ if (!function_exists('shopeeOmsBuildOrderProductSummary')) {
             }
         }
 
-        $missingPackageIds = array();
-        foreach ($packageIds as $packageId) {
-            if (!isset($packageProductMap[$packageId]) || trim((string) $packageProductMap[$packageId]['product']) === '') {
-                $missingPackageIds[$packageId] = $packageId;
+        if ($platform === 'shopee') {
+            $missingPackageIds = array();
+            foreach ($packageIds as $packageId) {
+                if (!isset($packageProductMap[$packageId]) || trim((string) $packageProductMap[$packageId]['product']) === '') {
+                    $missingPackageIds[$packageId] = $packageId;
+                }
             }
-        }
 
-        if (!empty($missingPackageIds)) {
-            $packageSnapshotMap = shopeeOmsGetPackageSnapshotMap($missingPackageIds);
-            foreach ($missingPackageIds as $packageId) {
-                if (isset($packageSnapshotMap[$packageId])) {
-                    $packageProductMap[$packageId] = $packageSnapshotMap[$packageId];
+            if (!empty($missingPackageIds)) {
+                $packageSnapshotMap = shopeeOmsGetPackageSnapshotMap($missingPackageIds);
+                foreach ($missingPackageIds as $packageId) {
+                    if (isset($packageSnapshotMap[$packageId])) {
+                        $packageProductMap[$packageId] = $packageSnapshotMap[$packageId];
+                    }
                 }
             }
         }
@@ -3975,33 +5320,51 @@ if (!function_exists('shopeeOmsBuildOrderProductSummary')) {
             }
         }
 
-        $missingProductIds = array();
-        foreach (array_keys($productQtyMap) as $productId) {
-            $productId = (int) $productId;
-            if ($productId > 0 && (!isset($productNameMap[$productId]) || trim((string) $productNameMap[$productId]) === '')) {
-                $missingProductIds[$productId] = $productId;
+        if ($platform === 'shopee') {
+            $missingProductIds = array();
+            foreach (array_keys($productQtyMap) as $productId) {
+                $productId = (int) $productId;
+                if ($productId > 0 && (!isset($productNameMap[$productId]) || trim((string) $productNameMap[$productId]) === '')) {
+                    $missingProductIds[$productId] = $productId;
+                }
             }
-        }
 
-        if (!empty($missingProductIds)) {
-            $productSnapshotNameMap = shopeeOmsGetProductSnapshotNameMap($missingProductIds);
-            foreach ($missingProductIds as $productId) {
-                if (isset($productSnapshotNameMap[$productId]) && trim((string) $productSnapshotNameMap[$productId]) !== '') {
-                    $productNameMap[$productId] = (string) $productSnapshotNameMap[$productId];
+            if (!empty($missingProductIds)) {
+                $productSnapshotNameMap = shopeeOmsGetProductSnapshotNameMap($missingProductIds);
+                foreach ($missingProductIds as $productId) {
+                    if (isset($productSnapshotNameMap[$productId]) && trim((string) $productSnapshotNameMap[$productId]) !== '') {
+                        $productNameMap[$productId] = (string) $productSnapshotNameMap[$productId];
+                    }
                 }
             }
         }
 
         $productSummary = array();
+        $productSummaryRows = array();
         foreach ($productQtyMap as $productId => $qty) {
-            $productSummary[] = (isset($productNameMap[$productId]) ? $productNameMap[$productId] : ('Product #' . $productId)) . ' x' . (int) $qty;
+            $productLabel = (isset($productNameMap[$productId]) ? $productNameMap[$productId] : ('Product #' . $productId)) . ' x' . (int) $qty . ' boxes';
+            $productSummary[] = $productLabel;
+            $productSummaryRows[] = array(
+                'product_id' => (int) $productId,
+                'label' => $productLabel,
+            );
+        }
+
+        $packageSummaryRows = array();
+        foreach ($packageRows as $idx => $packageRow) {
+            $packageSummaryRows[] = array(
+                'package_id' => isset($packageRow['package_id']) ? (int) $packageRow['package_id'] : 0,
+                'label' => isset($packageSummary[$idx]) ? (string) $packageSummary[$idx] : '',
+            );
         }
 
         return array(
             'package_rows' => $packageRows,
             'package_summary' => implode(', ', $packageSummary),
             'package_lines' => $packageSummary,
+            'package_summary_rows' => $packageSummaryRows,
             'product_lines' => $productSummary,
+            'product_summary_rows' => $productSummaryRows,
             'product_qty_map' => $productQtyMap,
             'bundle_name' => implode(', ', $packageSummary),
         );
@@ -4503,6 +5866,135 @@ if (!function_exists('shopeeOmsDetectFileMimeType')) {
     }
 }
 
+if (!function_exists('shopeeOmsGetTokenSettingPageOptions')) {
+    function shopeeOmsGetTokenSettingPageOptions()
+    {
+        return array(
+            'Shopee Order Request' => 'Shopee Order Request',
+            'Stock Order Request' => 'Stock Order Request',
+            'Lazada Order Request' => 'Lazada Order Request',
+            'Facebook Order Request' => 'Facebook Order Request',
+            'Website Order Request' => 'Website Order Request',
+        );
+    }
+}
+
+if (!function_exists('shopeeOmsNormalizeTokenSettingPageValues')) {
+    function shopeeOmsNormalizeTokenSettingPageValues($pageValues, $allowedOptions = null)
+    {
+        $allowedOptions = is_array($allowedOptions) ? $allowedOptions : shopeeOmsGetTokenSettingPageOptions();
+        $rawValues = array();
+
+        if (is_array($pageValues)) {
+            $rawValues = $pageValues;
+        } else {
+            $pageValues = str_replace(array("\r", "\n"), ',', (string) $pageValues);
+            $rawValues = explode(',', (string) $pageValues);
+        }
+
+        $selectedSet = array();
+        $extraValues = array();
+        foreach ($rawValues as $rawValue) {
+            $value = trim((string) $rawValue);
+            if ($value === '' || isset($selectedSet[$value])) {
+                continue;
+            }
+            $selectedSet[$value] = true;
+            if (!array_key_exists($value, $allowedOptions)) {
+                $extraValues[] = $value;
+            }
+        }
+
+        $normalized = array();
+        foreach ($allowedOptions as $optionValue => $optionLabel) {
+            if (isset($selectedSet[$optionValue])) {
+                $normalized[] = (string) $optionValue;
+            }
+        }
+
+        foreach ($extraValues as $extraValue) {
+            $normalized[] = (string) $extraValue;
+        }
+
+        return $normalized;
+    }
+}
+
+if (!function_exists('shopeeOmsGetTokenSettingPageDisplayText')) {
+    function shopeeOmsGetTokenSettingPageDisplayText($pageValues, $separator = ', ')
+    {
+        $options = shopeeOmsGetTokenSettingPageOptions();
+        $normalizedValues = shopeeOmsNormalizeTokenSettingPageValues($pageValues, $options);
+        if (empty($normalizedValues)) {
+            return '';
+        }
+
+        $labels = array();
+        foreach ($normalizedValues as $normalizedValue) {
+            $labels[] = isset($options[$normalizedValue]) ? (string) $options[$normalizedValue] : (string) $normalizedValue;
+        }
+
+        return implode($separator, $labels);
+    }
+}
+
+if (!function_exists('shopeeOmsTokenSettingRowUsesPage')) {
+    function shopeeOmsTokenSettingRowUsesPage($tokenRow, $pageName)
+    {
+        if (!is_array($tokenRow)) {
+            return false;
+        }
+
+        $pageName = trim((string) $pageName);
+        if ($pageName === '') {
+            return false;
+        }
+
+        $pageValues = shopeeOmsNormalizeTokenSettingPageValues(isset($tokenRow['page_used']) ? $tokenRow['page_used'] : '');
+        return in_array($pageName, $pageValues, true);
+    }
+}
+
+if (!function_exists('shopeeOmsFindTokenSettingPageConflicts')) {
+    function shopeeOmsFindTokenSettingPageConflicts($connect, $pageValues, $excludeId = 0)
+    {
+        $conflicts = array();
+        if (!($connect instanceof mysqli)) {
+            return $conflicts;
+        }
+
+        $selectedPages = shopeeOmsNormalizeTokenSettingPageValues($pageValues);
+        if (empty($selectedPages)) {
+            return $conflicts;
+        }
+
+        $excludeId = (int) $excludeId;
+        $sql = "SELECT id, name, page_used FROM `" . TOKEN_SETT . "` WHERE status='A'";
+        if ($excludeId > 0) {
+            $sql .= " AND id <> '" . $excludeId . "'";
+        }
+        $sql .= " ORDER BY id DESC";
+        $rst = mysqli_query($connect, $sql);
+        if (!$rst) {
+            return $conflicts;
+        }
+
+        while ($row = mysqli_fetch_assoc($rst)) {
+            $rowPages = shopeeOmsNormalizeTokenSettingPageValues(isset($row['page_used']) ? $row['page_used'] : '');
+            $overlap = array_values(array_intersect($selectedPages, $rowPages));
+            if (!empty($overlap)) {
+                $conflicts[] = array(
+                    'id' => isset($row['id']) ? (int) $row['id'] : 0,
+                    'name' => isset($row['name']) ? (string) $row['name'] : '',
+                    'pages' => $overlap,
+                );
+            }
+        }
+
+        return $conflicts;
+    }
+}
+
 if (!function_exists('shopeeOmsFindPreferredTokenSetting')) {
     function shopeeOmsFindPreferredTokenSetting($connect, $pageName = '')
     {
@@ -4512,10 +6004,13 @@ if (!function_exists('shopeeOmsFindPreferredTokenSetting')) {
 
         $pageName = trim((string) $pageName);
         if ($pageName !== '' && function_exists('shopeeOmsIsTokenSettingPageFieldAvailable') && shopeeOmsIsTokenSettingPageFieldAvailable($connect)) {
-            $safePageName = mysqli_real_escape_string($connect, $pageName);
-            $result = mysqli_query($connect, "SELECT * FROM `" . TOKEN_SETT . "` WHERE status = 'A' AND page_used = '" . $safePageName . "' ORDER BY id DESC LIMIT 1");
-            if ($result && mysqli_num_rows($result) > 0) {
-                return (array) mysqli_fetch_assoc($result);
+            $result = mysqli_query($connect, "SELECT * FROM `" . TOKEN_SETT . "` WHERE status = 'A' ORDER BY id DESC");
+            if ($result) {
+                while ($row = mysqli_fetch_assoc($result)) {
+                    if (shopeeOmsTokenSettingRowUsesPage($row, $pageName)) {
+                        return (array) $row;
+                    }
+                }
             }
         }
 
@@ -4533,16 +6028,6 @@ if (!function_exists('shopeeOmsFindPreferredTokenSetting')) {
         }
 
         return array();
-    }
-}
-
-if (!function_exists('shopeeOmsGetTokenSettingPageOptions')) {
-    function shopeeOmsGetTokenSettingPageOptions()
-    {
-        return array(
-            'Shopee Order Request' => 'Shopee Order Request',
-            'Stock Order Request' => 'Stock Order Request',
-        );
     }
 }
 
@@ -4588,38 +6073,97 @@ if (!function_exists('shopeeOmsResolveChatIdFromTokenRow')) {
 }
 
 if (!function_exists('shopeeOmsBuildWarehouseMessage')) {
-    function shopeeOmsBuildWarehouseMessage($orderRow, $tokenValue, $connect, $buyerConnect = null)
+    function shopeeOmsBuildWarehouseMessage($orderRow, $tokenValue, $connect, $buyerConnect = null, $source = 'shopee')
     {
-        $summary = shopeeOmsBuildOrderProductSummary($connect, $orderRow);
+        $sourceConfig = shopeeOmsResolveOrderSourceConfig($source, shopeeOmsGetOrderSourcePlatform($orderRow, 'shopee'));
+        $platform = isset($sourceConfig['platform']) ? (string) $sourceConfig['platform'] : 'shopee';
+        $platformLabel = isset($sourceConfig['label']) ? (string) $sourceConfig['label'] : ucfirst($platform);
+        $summary = shopeeOmsBuildOrderProductSummaryBySource($connect, $orderRow, $sourceConfig);
         if (!($buyerConnect instanceof mysqli)) {
             $buyerConnect = $connect;
         }
-        $customerName = trim((string) (isset($orderRow['buyer']) ? $orderRow['buyer'] : ''));
-        if ($customerName !== '' && ctype_digit($customerName)) {
-            $buyerRst = getData('buyer_username', "id='" . (int) $customerName . "'", 'LIMIT 1', SHOPEE_CUST_INFO, $buyerConnect);
-            if ($buyerRst && $buyerRst->num_rows > 0) {
-                $buyerRow = $buyerRst->fetch_assoc();
-                if (isset($buyerRow['buyer_username']) && trim((string) $buyerRow['buyer_username']) !== '') {
-                    $customerName = trim((string) $buyerRow['buyer_username']);
+        $customerName = shopeeOmsGetOrderCustomerNameText($connect, $buyerConnect, $orderRow, $sourceConfig);
+        $link = rtrim((string) SITEURL, '/') . '/warehouse_stock_in_scan.php?t=' . rawurlencode((string) $tokenValue);
+        $orderCode = shopeeOmsGetOrderCodeValue($orderRow, $sourceConfig);
+        $addressField = isset($sourceConfig['address_field']) ? (string) $sourceConfig['address_field'] : 'customer_address';
+        $airbillField = isset($sourceConfig['airbill_no_field']) ? (string) $sourceConfig['airbill_no_field'] : 'airbill_no';
+        $airbillAttachmentField = isset($sourceConfig['airbill_attachment_field']) ? (string) $sourceConfig['airbill_attachment_field'] : 'airbill_attachment';
+        $airbillText = trim((string) (isset($orderRow[$airbillField]) ? $orderRow[$airbillField] : ''));
+        $airbillAttachment = trim((string) (isset($orderRow[$airbillAttachmentField]) ? $orderRow[$airbillAttachmentField] : ''));
+        $customerAddress = trim((string) (isset($orderRow[$addressField]) ? $orderRow[$addressField] : ''));
+
+        $warehouseName = '';
+        if (function_exists('shopeeOmsResolveStockOutWarehouseId') && function_exists('shopeeOmsResolveWarehouseNameById')) {
+            $warehouseId = shopeeOmsResolveStockOutWarehouseId($connect, $orderRow);
+            $warehouseName = shopeeOmsResolveWarehouseNameById($connect, $warehouseId);
+        }
+
+        $packageLines = array();
+if (!empty($summary['package_lines']) && is_array($summary['package_lines'])) {
+    foreach ($summary['package_lines'] as $packageLine) {
+        $packageLine = trim((string) $packageLine);
+        if ($packageLine !== '') {
+            $packageLines[] = $packageLine;
+        }
+    }
+}
+
+        $productLines = array();
+        if (!empty($summary['product_lines']) && is_array($summary['product_lines'])) {
+            foreach ($summary['product_lines'] as $productLine) {
+                $productLine = trim((string) $productLine);
+                if ($productLine !== '') {
+                    $productLines[] = $productLine;
                 }
             }
         }
-        $link = rtrim((string) SITEURL, '/') . '/warehouse_stock_in_scan.php?t=' . rawurlencode((string) $tokenValue);
-        $airbillText = trim((string) (isset($orderRow['airbill_no']) ? $orderRow['airbill_no'] : ''));
-        $airbillAttachment = trim((string) (isset($orderRow['airbill_attachment']) ? $orderRow['airbill_attachment'] : ''));
+
+        $orderFieldLabel = $platform === 'shopee' ? 'Shopee OID' : $platformLabel . ' Order ID';
+        $customerFieldLabel = $platform === 'shopee' ? 'Shopee Buyer Username' : $platformLabel . ' Customer';
 
         $lines = array();
-        $lines[] = 'Shopee OID: ' . trim((string) (isset($orderRow['orderID']) ? $orderRow['orderID'] : ''));
-        $lines[] = 'Shopee Buyer Username: ' . ($customerName !== '' ? $customerName : '-');
-        $lines[] = 'Package: ' . (!empty($summary['bundle_name']) ? $summary['bundle_name'] : '-');
-        $lines[] = 'Product Details: ' . (!empty($summary['product_lines']) ? implode(', ', $summary['product_lines']) : '-');
+
+        $lines[] = '【' . ($warehouseName !== '' ? $warehouseName : 'Warehouse Name') . '】';
+        $lines[] = $orderFieldLabel . ': ' . ($orderCode !== '' ? $orderCode : '-');
+        $lines[] = '';
+        $lines[] = $customerFieldLabel . ': ' . ($customerName !== '' ? $customerName : '-');
+        $lines[] = '';
+
+        if (count($packageLines) > 1) {
+            $lines[] = 'Package:';
+            foreach ($packageLines as $index => $packageLine) {
+                $lines[] = ($index + 1) . '. ' . $packageLine;
+            }
+        } else {
+            $lines[] = 'Package: ' . (!empty($packageLines) ? $packageLines[0] : '-');
+        }
+
+        $lines[] = '';
+
+        $lines[] = 'Product Details:';
+        $lines[] = '';
+
+        if (!empty($productLines)) {
+            foreach ($productLines as $index => $productLine) {
+                if (count($productLines) > 1) {
+                    $lines[] = ($index + 1) . '. ' . $productLine;
+                } else {
+                    $lines[] = $productLine;
+                }
+            }
+        } else {
+            $lines[] = '-';
+        }
+
         if ($airbillText !== '') {
+            $lines[] = '';
             $lines[] = 'Airbill: ' . $airbillText;
         }
-        if ($airbillAttachment !== '') {
-            $lines[] = 'Airbill Attachment: ' . basename($airbillAttachment);
-        }
-        $lines[] = 'Warehouse Stock-out Link: ' . $link;
+
+        $lines[] = '';
+
+        $lines[] = 'Warehouse Stock-out Link:';
+        $lines[] = $link !== '' ? $link : 'Warehouse Stock-out Already Completed';
 
         return array(
             'link' => $link,
@@ -5141,6 +6685,72 @@ JS;
     }
 }
 
+if (!function_exists('shopeeOmsRenderAirbillAttachmentPreviewScript')) {
+    function shopeeOmsRenderAirbillAttachmentPreviewScript()
+    {
+        return <<<'JS'
+if (!window.shopeeOmsAirbillAttachmentPreview) {
+    window.shopeeOmsAirbillAttachmentPreview = (function () {
+        function bind(config) {
+            config = config || {};
+            var fileInput = document.querySelector(config.fileInputSelector || '');
+            var previewWrap = document.querySelector(config.previewWrapSelector || '');
+            if (!fileInput || !previewWrap) {
+                return false;
+            }
+
+            var currentPreviewUrl = null;
+
+            function clearPreviewObjectUrl() {
+                if (currentPreviewUrl) {
+                    URL.revokeObjectURL(currentPreviewUrl);
+                    currentPreviewUrl = null;
+                }
+            }
+
+            function hidePreview() {
+                clearPreviewObjectUrl();
+                previewWrap.innerHTML = '';
+                previewWrap.style.display = 'none';
+            }
+
+            fileInput.addEventListener('change', function () {
+                var file = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+                if (!file) {
+                    hidePreview();
+                    return;
+                }
+
+                clearPreviewObjectUrl();
+                currentPreviewUrl = URL.createObjectURL(file);
+                var fileName = String(file.name || '').toLowerCase();
+
+                previewWrap.style.display = 'block';
+
+                if ((file.type || '').indexOf('image/') === 0) {
+                    previewWrap.innerHTML =
+                        '<img src="' + currentPreviewUrl + '" alt="Airbill Attachment Preview">';
+                } else if (file.type === 'application/pdf' || fileName.endsWith('.pdf')) {
+                    previewWrap.innerHTML =
+                        '<iframe src="' + currentPreviewUrl + '" title="Airbill Attachment Preview"></iframe>';
+                } else {
+                    hidePreview();
+                }
+            });
+
+            window.addEventListener('beforeunload', clearPreviewObjectUrl);
+            return true;
+        }
+
+        return {
+            bind: bind
+        };
+    })();
+}
+JS;
+    }
+}
+
 if (!function_exists('shopeeOmsGetClientIp')) {
     function shopeeOmsGetClientIp()
     {
@@ -5309,7 +6919,7 @@ if (!function_exists('shopeeOmsAuditLog')) {
 }
 
 if (!function_exists('shopeeOmsCreateWarehouseToken')) {
-    function shopeeOmsCreateWarehouseToken($cmsConnect, $financeConnect, $orderRow, $actorUserId = '')
+    function shopeeOmsCreateWarehouseToken($cmsConnect, $financeConnect, $orderRow, $actorUserId = '', $source = 'shopee')
     {
         if (!is_array($orderRow) || !($financeConnect instanceof mysqli)) {
             return array(
@@ -5326,12 +6936,23 @@ if (!function_exists('shopeeOmsCreateWarehouseToken')) {
             );
         }
 
+        $sourceConfig = shopeeOmsResolveOrderSourceConfig($source, shopeeOmsGetOrderSourcePlatform($orderRow, 'shopee'));
+        $platform = isset($sourceConfig['platform']) ? (string) $sourceConfig['platform'] : 'shopee';
+        $tokenTableHasPlatform = shopeeOmsTableHasColumn($financeConnect, dbFinance, ORDER_WAREHOUSE_SCAN_TOKEN, 'platform');
         $safeOrderId = (int) $orderId;
-        $existingSql = "SELECT * FROM `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` WHERE order_id = " . $safeOrderId . " AND token_type = 'stock_out' AND status = 'A' ORDER BY id DESC LIMIT 1";
+        $existingConditions = array(
+            "order_id = " . $safeOrderId,
+            "token_type = 'stock_out'",
+            "status = 'A'",
+        );
+        if ($tokenTableHasPlatform) {
+            $existingConditions[] = "platform = '" . mysqli_real_escape_string($financeConnect, $platform) . "'";
+        }
+        $existingSql = "SELECT * FROM `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` WHERE " . implode(' AND ', $existingConditions) . " ORDER BY id DESC LIMIT 1";
         $existingResult = mysqli_query($financeConnect, $existingSql);
         if ($existingResult && mysqli_num_rows($existingResult) > 0) {
             $existingRow = mysqli_fetch_assoc($existingResult);
-            $messageInfo = shopeeOmsBuildWarehouseMessage($orderRow, isset($existingRow['token']) ? $existingRow['token'] : '', $cmsConnect, $financeConnect);
+            $messageInfo = shopeeOmsBuildWarehouseMessage($orderRow, isset($existingRow['token']) ? $existingRow['token'] : '', $cmsConnect, $financeConnect, $sourceConfig);
             return array(
                 'success' => true,
                 'message' => 'Warehouse token already exists.',
@@ -5348,21 +6969,31 @@ if (!function_exists('shopeeOmsCreateWarehouseToken')) {
             $tokenValue = md5(uniqid((string) $orderId, true) . microtime(true));
         }
 
-        $messageInfo = shopeeOmsBuildWarehouseMessage($orderRow, $tokenValue, $cmsConnect, $financeConnect);
+        $messageInfo = shopeeOmsBuildWarehouseMessage($orderRow, $tokenValue, $cmsConnect, $financeConnect, $sourceConfig);
         $actorUserId = trim((string) $actorUserId) !== '' ? trim((string) $actorUserId) : 'SYSTEM';
-        $safeOrderCode = mysqli_real_escape_string($financeConnect, (string) (isset($orderRow['orderID']) ? $orderRow['orderID'] : ''));
+        $safeOrderCode = mysqli_real_escape_string($financeConnect, shopeeOmsGetOrderCodeValue($orderRow, $sourceConfig));
         $safeToken = mysqli_real_escape_string($financeConnect, $tokenValue);
         $safeCustomerName = mysqli_real_escape_string($financeConnect, (string) (isset($messageInfo['buyer_username']) ? $messageInfo['buyer_username'] : ''));
-        $safeCustomerAddress = mysqli_real_escape_string($financeConnect, (string) (isset($orderRow['customer_address']) ? $orderRow['customer_address'] : ''));
+        $addressField = isset($sourceConfig['address_field']) ? (string) $sourceConfig['address_field'] : 'customer_address';
+        $airbillAttachmentField = isset($sourceConfig['airbill_attachment_field']) ? (string) $sourceConfig['airbill_attachment_field'] : 'airbill_attachment';
+        $safeCustomerAddress = mysqli_real_escape_string($financeConnect, (string) (isset($orderRow[$addressField]) ? $orderRow[$addressField] : ''));
         $safePackageSummary = mysqli_real_escape_string($financeConnect, (string) $messageInfo['package_summary']);
         $safeProductSummary = mysqli_real_escape_string($financeConnect, (string) $messageInfo['product_summary']);
-        $safeAirbillAttachment = mysqli_real_escape_string($financeConnect, (string) (isset($orderRow['airbill_attachment']) ? $orderRow['airbill_attachment'] : ''));
+        $safeAirbillAttachment = mysqli_real_escape_string($financeConnect, (string) (isset($orderRow[$airbillAttachmentField]) ? $orderRow[$airbillAttachmentField] : ''));
         $safePayload = mysqli_real_escape_string($financeConnect, (string) $messageInfo['text']);
         $safeActor = mysqli_real_escape_string($financeConnect, $actorUserId);
+        $insertColumns = array('order_id', 'order_code', 'token', 'token_type', 'customer_name', 'customer_address', 'package_summary', 'product_summary', 'airbill_attachment', 'payload_text');
+        $insertValues = array((string) $safeOrderId, "'" . $safeOrderCode . "'", "'" . $safeToken . "'", "'stock_out'", "'" . $safeCustomerName . "'", "'" . $safeCustomerAddress . "'", "'" . $safePackageSummary . "'", "'" . $safeProductSummary . "'", "'" . $safeAirbillAttachment . "'", "'" . $safePayload . "'");
+        if ($tokenTableHasPlatform) {
+            $insertColumns[] = 'platform';
+            $insertValues[] = "'" . mysqli_real_escape_string($financeConnect, $platform) . "'";
+        }
+        $insertColumns = array_merge($insertColumns, array('create_by', 'create_date', 'create_time', 'status'));
+        $insertValues = array_merge($insertValues, array("'" . $safeActor . "'", 'CURDATE()', 'CURTIME()', "'A'"));
         $insertSql = "INSERT INTO `" . ORDER_WAREHOUSE_SCAN_TOKEN . "`
-            (`order_id`, `order_code`, `token`, `token_type`, `customer_name`, `customer_address`, `package_summary`, `product_summary`, `airbill_attachment`, `payload_text`, `create_by`, `create_date`, `create_time`, `status`)
+            (`" . implode('`, `', $insertColumns) . "`)
             VALUES
-            (" . $safeOrderId . ", '" . $safeOrderCode . "', '" . $safeToken . "', 'stock_out', '" . $safeCustomerName . "', '" . $safeCustomerAddress . "', '" . $safePackageSummary . "', '" . $safeProductSummary . "', '" . $safeAirbillAttachment . "', '" . $safePayload . "', '" . $safeActor . "', CURDATE(), CURTIME(), 'A')";
+            (" . implode(', ', $insertValues) . ")";
 
         if (!mysqli_query($financeConnect, $insertSql)) {
             return array(
@@ -5377,7 +7008,8 @@ if (!function_exists('shopeeOmsCreateWarehouseToken')) {
             'token_row' => array(
                 'id' => mysqli_insert_id($financeConnect),
                 'order_id' => $orderId,
-                'order_code' => isset($orderRow['orderID']) ? $orderRow['orderID'] : '',
+                'order_code' => shopeeOmsGetOrderCodeValue($orderRow, $sourceConfig),
+                'platform' => $platform,
                 'token' => $tokenValue,
             ),
             'notification' => $messageInfo,
@@ -5600,13 +7232,45 @@ if (!function_exists('shopeeOmsLogTransition')) {
         $safeRemark = mysqli_real_escape_string($connect, (string) (isset($data['remark']) ? $data['remark'] : ''));
         $safeSourcePage = mysqli_real_escape_string($connect, (string) (isset($data['source_page']) ? $data['source_page'] : ''));
         $safeRelatedRef = mysqli_real_escape_string($connect, (string) (isset($data['related_token_scan_id']) ? $data['related_token_scan_id'] : ''));
+        $platform = shopeeOmsNormalizePlatformKey(isset($data['platform']) ? $data['platform'] : '') ?: 'shopee';
+        $tableHasPlatform = shopeeOmsTableHasColumn($connect, dbFinance, ORDER_STATUS_TRANSITION_LOG, 'platform');
+        $insertColumns = array('order_id', 'order_code', 'from_status', 'to_status', 'transition_action', 'user_id', 'user_group_id', 'remark', 'source_page', 'related_token_scan_id');
+        $insertValues = array((string) $orderId, "'" . $safeOrderCode . "'", "'" . $safeFromStatus . "'", "'" . $safeToStatus . "'", "'" . $safeAction . "'", "'" . $safeUserId . "'", (string) $userGroupId, "'" . $safeRemark . "'", "'" . $safeSourcePage . "'", "'" . $safeRelatedRef . "'");
+        if ($tableHasPlatform) {
+            $insertColumns[] = 'platform';
+            $insertValues[] = "'" . mysqli_real_escape_string($connect, $platform) . "'";
+        }
+        $insertColumns = array_merge($insertColumns, array('transition_at', 'create_date', 'create_time', 'status'));
+        $insertValues = array_merge($insertValues, array('NOW()', 'CURDATE()', 'CURTIME()', "'A'"));
 
         $sql = "INSERT INTO `" . ORDER_STATUS_TRANSITION_LOG . "`
-            (`order_id`, `order_code`, `from_status`, `to_status`, `transition_action`, `user_id`, `user_group_id`, `remark`, `source_page`, `related_token_scan_id`, `transition_at`, `create_date`, `create_time`, `status`)
+            (`" . implode('`, `', $insertColumns) . "`)
             VALUES
-            (" . $orderId . ", '" . $safeOrderCode . "', '" . $safeFromStatus . "', '" . $safeToStatus . "', '" . $safeAction . "', '" . $safeUserId . "', " . $userGroupId . ", '" . $safeRemark . "', '" . $safeSourcePage . "', '" . $safeRelatedRef . "', NOW(), CURDATE(), CURTIME(), 'A')";
+            (" . implode(', ', $insertValues) . ")";
 
         return (bool) mysqli_query($connect, $sql);
+    }
+}
+
+if (!function_exists('shopeeOmsBuildLogPlatformCondition')) {
+    function shopeeOmsBuildLogPlatformCondition($connect, $platform, $alias = 'l')
+    {
+        $platform = shopeeOmsNormalizePlatformKey($platform) ?: 'shopee';
+        $alias = preg_replace('/[^A-Za-z0-9_]/', '', (string) $alias);
+        if ($alias === '') {
+            $alias = 'l';
+        }
+
+        if (!shopeeOmsTableHasColumn($connect, dbFinance, ORDER_STATUS_TRANSITION_LOG, 'platform')) {
+            return $platform === 'shopee' ? '' : '1 = 0';
+        }
+
+        $qualifiedColumn = $alias . '.platform';
+        if ($platform === 'shopee') {
+            return "(" . $qualifiedColumn . " = 'shopee' OR " . $qualifiedColumn . " = '' OR " . $qualifiedColumn . " IS NULL)";
+        }
+
+        return $qualifiedColumn . " = '" . mysqli_real_escape_string($connect, $platform) . "'";
     }
 }
 
@@ -5616,6 +7280,15 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
         $orderId = (int) $orderId;
         $targetStatus = shopeeOmsNormalizeStatusCode($targetStatus);
         $options = is_array($options) ? $options : array();
+        $resolvedSource = isset($options['platform']) ? $options['platform'] : (isset($options['table_name']) ? $options['table_name'] : 'shopee');
+        if (isset($options['order_row']) && is_array($options['order_row']) && !empty($options['order_row']['__oms_platform'])) {
+            $resolvedSource = $options['order_row']['__oms_platform'];
+        }
+        $sourceConfig = shopeeOmsResolveOrderSourceConfig($resolvedSource, 'shopee');
+        $platform = isset($sourceConfig['platform']) ? (string) $sourceConfig['platform'] : 'shopee';
+        $tableName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
+        $tableDbName = isset($sourceConfig['db_name']) ? (string) $sourceConfig['db_name'] : dbFinance;
+        $orderConnect = shopeeOmsGetOrderSourceDbConnection($cmsConnect, $financeConnect, $sourceConfig);
         $actorUserId = trim((string) (isset($options['actor_user_id']) ? $options['actor_user_id'] : (defined('USER_ID') ? USER_ID : 'SYSTEM')));
         if ($actorUserId === '') {
             $actorUserId = 'SYSTEM';
@@ -5637,7 +7310,7 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
             return array('success' => false, 'message' => 'Invalid target status.');
         }
 
-        $orderRow = shopeeOmsLoadOrder($financeConnect, $orderId);
+        $orderRow = shopeeOmsLoadOrder($orderConnect, $orderId, $sourceConfig);
         if (empty($orderRow)) {
             return array('success' => false, 'message' => 'Order not found.');
         }
@@ -5662,22 +7335,30 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
             return array('success' => false, 'message' => 'You are not allowed to perform this status transition.');
         }
 
-        $effectiveAirbill = isset($fieldUpdates['airbill_no']) ? (string) $fieldUpdates['airbill_no'] : (isset($orderRow['airbill_no']) ? $orderRow['airbill_no'] : '');
+        $airbillField = isset($sourceConfig['airbill_no_field']) && trim((string) $sourceConfig['airbill_no_field']) !== ''
+            ? (string) $sourceConfig['airbill_no_field']
+            : 'airbill_no';
+        $effectiveAirbill = isset($fieldUpdates[$airbillField]) ? (string) $fieldUpdates[$airbillField] : (isset($orderRow[$airbillField]) ? $orderRow[$airbillField] : '');
         $airbillValidation = shopeeOmsValidateInitialStatusAndAirbill($targetStatus, $effectiveAirbill);
         if (!$airbillValidation['valid']) {
             return array('success' => false, 'message' => $airbillValidation['message']);
         }
 
-        $safeActorUserId = mysqli_real_escape_string($financeConnect, $actorUserId);
+        $safeActorUserId = mysqli_real_escape_string($orderConnect, $actorUserId);
         $assignments = array(
-            "order_status = '" . mysqli_real_escape_string($financeConnect, $targetStatus) . "'",
+            "order_status = '" . mysqli_real_escape_string($orderConnect, $targetStatus) . "'",
             "update_by = '" . $safeActorUserId . "'",
             "update_date = CURDATE()",
-            "update_time = CURTIME()",
-            "latest_transition_at = NOW()"
+            "update_time = CURTIME()"
         );
+        if (shopeeOmsTableHasColumn($orderConnect, $tableDbName, $tableName, 'latest_transition_at')) {
+            $assignments[] = "latest_transition_at = NOW()";
+        }
         foreach ($fieldUpdates as $fieldName => $fieldValue) {
             if (!preg_match('/^[A-Za-z0-9_]+$/', (string) $fieldName)) {
+                continue;
+            }
+            if (!shopeeOmsTableHasColumn($orderConnect, $tableDbName, $tableName, $fieldName)) {
                 continue;
             }
 
@@ -5686,13 +7367,13 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
             } else if (is_int($fieldValue) || is_float($fieldValue)) {
                 $assignments[] = "`" . $fieldName . "` = " . $fieldValue;
             } else {
-                $assignments[] = "`" . $fieldName . "` = '" . mysqli_real_escape_string($financeConnect, (string) $fieldValue) . "'";
+                $assignments[] = "`" . $fieldName . "` = '" . mysqli_real_escape_string($orderConnect, (string) $fieldValue) . "'";
             }
         }
 
-        $updateSql = "UPDATE `" . SHOPEE_SG_ORDER_REQ . "` SET " . implode(', ', $assignments) . " WHERE id = " . $orderId . " LIMIT 1";
-        if (!mysqli_query($financeConnect, $updateSql)) {
-            if ($targetStatus === 'TP' && trim((string) (isset($orderRow['airbill_no']) ? $orderRow['airbill_no'] : '')) === '') {
+        $updateSql = "UPDATE `" . $tableName . "` SET " . implode(', ', $assignments) . " WHERE id = " . $orderId . " LIMIT 1";
+        if (!mysqli_query($orderConnect, $updateSql)) {
+            if ($targetStatus === 'TP' && trim((string) (isset($orderRow[$airbillField]) ? $orderRow[$airbillField] : '')) === '') {
                 return array('success' => false, 'message' => 'Airbill is required when Order Status is To Pack.');
             }
 
@@ -5701,7 +7382,7 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
 
         shopeeOmsLogTransition($financeConnect, array(
             'order_id' => $orderId,
-            'order_code' => isset($orderRow['orderID']) ? $orderRow['orderID'] : '',
+            'order_code' => shopeeOmsGetOrderCodeValue($orderRow, $sourceConfig),
             'from_status' => $fromStatus,
             'to_status' => $targetStatus,
             'transition_action' => $actionName,
@@ -5710,16 +7391,19 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
             'remark' => $remark,
             'source_page' => $sourcePage,
             'related_token_scan_id' => $relatedRef,
+            'platform' => $platform,
         ));
 
         $stepAResult = array();
         if ($targetStatus === 'TP') {
-            $freshOrderRow = shopeeOmsLoadOrder($financeConnect, $orderId);
-            $tokenResult = shopeeOmsCreateWarehouseToken($cmsConnect, $financeConnect, $freshOrderRow, $actorUserId);
+            $freshOrderRow = shopeeOmsLoadOrder($orderConnect, $orderId, $sourceConfig);
+            $tokenResult = shopeeOmsCreateWarehouseToken($cmsConnect, $financeConnect, $freshOrderRow, $actorUserId, $sourceConfig);
             if (!empty($tokenResult['success']) && !empty($tokenResult['token_row']) && !empty($tokenResult['notification'])) {
                 $notifyResult = shopeeOmsSendWarehouseNotification($cmsConnect, $financeConnect, $tokenResult['token_row'], $tokenResult['notification'], $sourcePage);
                 if (!empty($notifyResult['sent'])) {
-                    mysqli_query($financeConnect, "UPDATE `" . SHOPEE_SG_ORDER_REQ . "` SET `step_a_sent_at` = NOW() WHERE id = " . $orderId . " LIMIT 1");
+                    if (shopeeOmsTableHasColumn($orderConnect, $tableDbName, $tableName, 'step_a_sent_at')) {
+                        mysqli_query($orderConnect, "UPDATE `" . $tableName . "` SET `step_a_sent_at` = NOW() WHERE id = " . $orderId . " LIMIT 1");
+                    }
                 }
                 $stepAResult = array(
                     'token_result' => $tokenResult,
@@ -5739,6 +7423,7 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
                 'skip_permission' => true,
                 'allow_auto_follow_up' => false,
                 'related_token_scan_id' => $relatedRef,
+                'platform' => $platform,
             ));
         }
 
@@ -5757,23 +7442,19 @@ if (!function_exists('shopeeOmsAssignEstimatedReceivedDate')) {
     function shopeeOmsAssignEstimatedReceivedDate($connect, $tableName, $orderId, $date, $currentUserId)
     {
         $tableName = trim((string) $tableName);
-        if ($tableName !== SHOPEE_SG_ORDER_REQ) {
-            return array(
-                'success' => false,
-                'message' => 'Estimated date assignment is only supported for Shopee OMS orders.',
-            );
-        }
+        $sourceConfig = shopeeOmsResolveOrderSourceConfig($tableName, 'shopee');
+        $platform = isset($sourceConfig['platform']) ? (string) $sourceConfig['platform'] : 'shopee';
 
         global $finance_connect;
-        $financeDb = $connect instanceof mysqli ? $connect : $finance_connect;
-        if (!($financeDb instanceof mysqli)) {
+        $orderDb = $connect instanceof mysqli ? $connect : $finance_connect;
+        if (!($orderDb instanceof mysqli)) {
             return array(
                 'success' => false,
-                'message' => 'Unable to connect to Shopee OMS order table.',
+                'message' => 'Unable to connect to OMS order table.',
             );
         }
 
-        $orderRow = shopeeOmsLoadOrder($financeDb, $orderId);
+        $orderRow = shopeeOmsLoadOrder($orderDb, $orderId, $sourceConfig);
         if (empty($orderRow)) {
             return array(
                 'success' => false,
@@ -5806,7 +7487,7 @@ if (!function_exists('shopeeOmsAssignEstimatedReceivedDate')) {
         );
 
         if ($currentStatus === 'WAERD') {
-            $result = shopeeOmsExecuteTransition($GLOBALS['connect'], $financeDb, $orderId, 'WR', array(
+            $result = shopeeOmsExecuteTransition($GLOBALS['connect'], $finance_connect, $orderId, 'WR', array(
                 'actor_user_id' => $safeCurrentUserId,
                 'actor_user_group_id' => defined('USER_GROUP') ? (int) USER_GROUP : 0,
                 'source_page' => 'Arrival Management',
@@ -5814,6 +7495,7 @@ if (!function_exists('shopeeOmsAssignEstimatedReceivedDate')) {
                 'action' => 'assign_estimated_received_date',
                 'field_updates' => $fieldUpdates,
                 'allow_auto_follow_up' => false,
+                'platform' => $platform,
             ));
             if (!empty($result['success'])) {
                 $result['date'] = $validation['normalized_date'];
@@ -5821,24 +7503,42 @@ if (!function_exists('shopeeOmsAssignEstimatedReceivedDate')) {
             return $result;
         }
 
-        $safeDate = mysqli_real_escape_string($financeDb, $validation['normalized_date']);
-        $safeUser = mysqli_real_escape_string($financeDb, $safeCurrentUserId);
-        $updateSql = "UPDATE `" . SHOPEE_SG_ORDER_REQ . "`
-            SET `estimated_received_date` = '" . $safeDate . "',
-                `estimated_received_date_assigned_by` = '" . $safeUser . "',
-                `estimated_received_date_assigned_date` = CURDATE(),
-                `estimated_received_date_assigned_time` = CURTIME(),
-                `update_by` = '" . $safeUser . "',
-                `update_date` = CURDATE(),
-                `update_time` = CURTIME()
+        $safeUser = mysqli_real_escape_string($orderDb, $safeCurrentUserId);
+        $assignments = array(
+            "`estimated_received_date` = '" . mysqli_real_escape_string($orderDb, $validation['normalized_date']) . "'",
+            "`estimated_received_date_assigned_by` = '" . $safeUser . "'",
+            "`estimated_received_date_assigned_date` = CURDATE()",
+            "`estimated_received_date_assigned_time` = CURTIME()",
+            "`update_by` = '" . $safeUser . "'",
+            "`update_date` = CURDATE()",
+            "`update_time` = CURTIME()",
+        );
+        if (shopeeOmsTableHasColumn($orderDb, isset($sourceConfig['db_name']) ? $sourceConfig['db_name'] : dbFinance, isset($sourceConfig['table']) ? $sourceConfig['table'] : $tableName, 'latest_transition_at')) {
+            $assignments[] = "`latest_transition_at` = NOW()";
+        }
+        $updateSql = "UPDATE `" . (isset($sourceConfig['table']) ? $sourceConfig['table'] : $tableName) . "`
+            SET " . implode(",\n                ", $assignments) . "
             WHERE id = " . (int) $orderId . "
             LIMIT 1";
-        if (!mysqli_query($financeDb, $updateSql)) {
+        if (!mysqli_query($orderDb, $updateSql)) {
             return array(
                 'success' => false,
                 'message' => 'Unable to update Estimated Received Date.',
             );
         }
+
+        shopeeOmsLogTransition($finance_connect, array(
+            'order_id' => (int) $orderId,
+            'order_code' => shopeeOmsGetOrderCodeValue($orderRow, $sourceConfig),
+            'from_status' => $currentStatus,
+            'to_status' => $currentStatus,
+            'transition_action' => 'assign_estimated_received_date',
+            'user_id' => $safeCurrentUserId,
+            'user_group_id' => defined('USER_GROUP') ? (int) USER_GROUP : 0,
+            'remark' => 'Estimated Received Date assigned: ' . $validation['normalized_date'],
+            'source_page' => 'Arrival Management',
+            'platform' => $platform,
+        ));
 
         return array(
             'success' => true,
@@ -5996,7 +7696,7 @@ if (!function_exists('shopeeOmsDetectOrderChanges')) {
 }
 
 if (!function_exists('shopeeOmsLogOrderEditHistory')) {
-    function shopeeOmsLogOrderEditHistory($financeConnect, $orderId, $orderCode, $changes, $userId, $userGroupId, $sourcePage = 'Shopee Order Request')
+    function shopeeOmsLogOrderEditHistory($financeConnect, $orderId, $orderCode, $changes, $userId, $userGroupId, $sourcePage = 'Shopee Order Request', $platform = 'shopee')
     {
         if (!($financeConnect instanceof mysqli) || empty($changes) || !is_array($changes)) {
             return false;
@@ -6005,15 +7705,25 @@ if (!function_exists('shopeeOmsLogOrderEditHistory')) {
         $safeUserId = mysqli_real_escape_string($financeConnect, trim((string) $userId) !== '' ? trim((string) $userId) : 'SYSTEM');
         $safeOrderCode = mysqli_real_escape_string($financeConnect, (string) $orderCode);
         $safeSourcePage = mysqli_real_escape_string($financeConnect, (string) $sourcePage);
+        $tableHasPlatform = shopeeOmsTableHasColumn($financeConnect, dbFinance, ORDER_EDIT_HISTORY, 'platform');
+        $safePlatform = mysqli_real_escape_string($financeConnect, shopeeOmsNormalizePlatformKey($platform) ?: 'shopee');
         foreach ($changes as $changeRow) {
             $safeFieldName = mysqli_real_escape_string($financeConnect, (string) (isset($changeRow['field_name']) ? $changeRow['field_name'] : ''));
             $safeFieldLabel = mysqli_real_escape_string($financeConnect, (string) (isset($changeRow['field_label']) ? $changeRow['field_label'] : ''));
             $safeOldValue = mysqli_real_escape_string($financeConnect, (string) (isset($changeRow['old_value']) ? $changeRow['old_value'] : ''));
             $safeNewValue = mysqli_real_escape_string($financeConnect, (string) (isset($changeRow['new_value']) ? $changeRow['new_value'] : ''));
+            $insertColumns = array('order_id', 'order_code', 'field_name', 'field_label', 'old_value', 'new_value', 'user_id', 'user_group_id', 'source_page');
+            $insertValues = array((string) ((int) $orderId), "'" . $safeOrderCode . "'", "'" . $safeFieldName . "'", "'" . $safeFieldLabel . "'", "'" . $safeOldValue . "'", "'" . $safeNewValue . "'", "'" . $safeUserId . "'", (string) ((int) $userGroupId), "'" . $safeSourcePage . "'");
+            if ($tableHasPlatform) {
+                $insertColumns[] = 'platform';
+                $insertValues[] = "'" . $safePlatform . "'";
+            }
+            $insertColumns = array_merge($insertColumns, array('change_at', 'create_date', 'create_time', 'status'));
+            $insertValues = array_merge($insertValues, array('NOW()', 'CURDATE()', 'CURTIME()', "'A'"));
             $sql = "INSERT INTO `" . ORDER_EDIT_HISTORY . "`
-                (`order_id`, `order_code`, `field_name`, `field_label`, `old_value`, `new_value`, `user_id`, `user_group_id`, `source_page`, `change_at`, `create_date`, `create_time`, `status`)
+                (`" . implode('`, `', $insertColumns) . "`)
                 VALUES
-                (" . (int) $orderId . ", '" . $safeOrderCode . "', '" . $safeFieldName . "', '" . $safeFieldLabel . "', '" . $safeOldValue . "', '" . $safeNewValue . "', '" . $safeUserId . "', " . (int) $userGroupId . ", '" . $safeSourcePage . "', NOW(), CURDATE(), CURTIME(), 'A')";
+                (" . implode(', ', $insertValues) . ")";
             mysqli_query($financeConnect, $sql);
         }
 
@@ -6022,14 +7732,26 @@ if (!function_exists('shopeeOmsLogOrderEditHistory')) {
 }
 
 if (!function_exists('shopeeOmsFetchEditHistory')) {
-    function shopeeOmsFetchEditHistory($financeConnect, $orderId)
+    function shopeeOmsFetchEditHistory($financeConnect, $orderId, $platform = 'shopee')
     {
         $rows = array();
         if (!($financeConnect instanceof mysqli) || (int) $orderId <= 0) {
             return $rows;
         }
 
-        $sql = "SELECT * FROM `" . ORDER_EDIT_HISTORY . "` WHERE order_id = " . (int) $orderId . " AND status = 'A' ORDER BY change_at DESC, id DESC";
+        $conditions = array(
+            "order_id = " . (int) $orderId,
+            "status = 'A'",
+        );
+        if (shopeeOmsTableHasColumn($financeConnect, dbFinance, ORDER_EDIT_HISTORY, 'platform')) {
+            $safePlatform = mysqli_real_escape_string($financeConnect, shopeeOmsNormalizePlatformKey($platform) ?: 'shopee');
+            if ($safePlatform === 'shopee') {
+                $conditions[] = "(platform = '" . $safePlatform . "' OR platform = '' OR platform IS NULL)";
+            } else {
+                $conditions[] = "platform = '" . $safePlatform . "'";
+            }
+        }
+        $sql = "SELECT * FROM `" . ORDER_EDIT_HISTORY . "` WHERE " . implode(' AND ', $conditions) . " ORDER BY change_at DESC, id DESC";
         $result = mysqli_query($financeConnect, $sql);
         if ($result) {
             while ($row = mysqli_fetch_assoc($result)) {
@@ -6042,14 +7764,26 @@ if (!function_exists('shopeeOmsFetchEditHistory')) {
 }
 
 if (!function_exists('shopeeOmsFetchTransitionHistory')) {
-    function shopeeOmsFetchTransitionHistory($financeConnect, $orderId)
+    function shopeeOmsFetchTransitionHistory($financeConnect, $orderId, $platform = 'shopee')
     {
         $rows = array();
         if (!($financeConnect instanceof mysqli) || (int) $orderId <= 0) {
             return $rows;
         }
 
-        $sql = "SELECT * FROM `" . ORDER_STATUS_TRANSITION_LOG . "` WHERE order_id = " . (int) $orderId . " AND status = 'A' ORDER BY transition_at DESC, id DESC";
+        $conditions = array(
+            "order_id = " . (int) $orderId,
+            "status = 'A'",
+        );
+        if (shopeeOmsTableHasColumn($financeConnect, dbFinance, ORDER_STATUS_TRANSITION_LOG, 'platform')) {
+            $safePlatform = mysqli_real_escape_string($financeConnect, shopeeOmsNormalizePlatformKey($platform) ?: 'shopee');
+            if ($safePlatform === 'shopee') {
+                $conditions[] = "(platform = '" . $safePlatform . "' OR platform = '' OR platform IS NULL)";
+            } else {
+                $conditions[] = "platform = '" . $safePlatform . "'";
+            }
+        }
+        $sql = "SELECT * FROM `" . ORDER_STATUS_TRANSITION_LOG . "` WHERE " . implode(' AND ', $conditions) . " ORDER BY transition_at DESC, id DESC";
         $result = mysqli_query($financeConnect, $sql);
         if ($result) {
             while ($row = mysqli_fetch_assoc($result)) {
@@ -6104,7 +7838,7 @@ if (!function_exists('shopeeOmsRenderUserGroupBadge')) {
 }
 
 if (!function_exists('shopeeOmsGetDailyFlowReport')) {
-    function shopeeOmsGetDailyFlowReport($cmsConnect, $financeConnect, $dateFrom, $dateTo, $fromStatus = '', $toStatus = '', $orderCode = '', $warehouseId = 0)
+    function shopeeOmsGetDailyFlowReport($cmsConnect, $financeConnect, $dateFrom, $dateTo, $fromStatus = '', $toStatus = '', $orderCode = '', $warehouseId = 0, $platform = '', $exactDate = '', $monthFilter = '', $yearFilter = '', $actorUserId = 0)
     {
         $summary = array();
         $details = array();
@@ -6114,71 +7848,124 @@ if (!function_exists('shopeeOmsGetDailyFlowReport')) {
 
         $dateFrom = trim((string) $dateFrom);
         $dateTo = trim((string) $dateTo);
-        if ($dateFrom === '') {
-            $dateFrom = date('Y-m-d');
-        }
-        if ($dateTo === '') {
-            $dateTo = date('Y-m-d');
-        }
+        $exactDate = preg_match('/^\d{4}-\d{2}-\d{2}$/', trim((string) $exactDate)) ? trim((string) $exactDate) : '';
+        $monthFilter = preg_match('/^(0[1-9]|1[0-2])$/', trim((string) $monthFilter)) ? trim((string) $monthFilter) : '';
+        $yearFilter = preg_match('/^\d{4}$/', trim((string) $yearFilter)) ? trim((string) $yearFilter) : '';
 
+        $platform = shopeeOmsNormalizePlatformKey($platform);
         $warehouseId = shopeeOmsNormalizeWarehouseId($warehouseId);
+        $actorUserId = (int) $actorUserId;
         $defaultWarehouseId = $cmsConnect instanceof mysqli ? shopeeOmsGetDefaultWarehouseId($cmsConnect) : 0;
-        $conditions = array();
-        $conditions[] = "l.status = 'A'";
-        $conditions[] = "DATE(l.transition_at) >= '" . mysqli_real_escape_string($financeConnect, $dateFrom) . "'";
-        $conditions[] = "DATE(l.transition_at) <= '" . mysqli_real_escape_string($financeConnect, $dateTo) . "'";
-        if (trim((string) $fromStatus) !== '') {
-            $conditions[] = "l.from_status = '" . mysqli_real_escape_string($financeConnect, shopeeOmsNormalizeStatusCode($fromStatus)) . "'";
-        }
-        if (trim((string) $toStatus) !== '') {
-            $conditions[] = "l.to_status = '" . mysqli_real_escape_string($financeConnect, shopeeOmsNormalizeStatusCode($toStatus)) . "'";
-        }
-        if (trim((string) $orderCode) !== '') {
-            $safeOrderCode = mysqli_real_escape_string($financeConnect, trim((string) $orderCode));
-            $conditions[] = "l.order_code LIKE '%" . $safeOrderCode . "%'";
-        }
-        if ($warehouseId > 0) {
-            $conditions[] = "COALESCE(NULLIF(o.stock_out_warehouse_id, 0), " . (int) $defaultWarehouseId . ") = " . $warehouseId;
-        }
-
-        $whereSql = implode(' AND ', $conditions);
-        $logFromSql = "`" . ORDER_STATUS_TRANSITION_LOG . "` l
-            LEFT JOIN `" . SHOPEE_SG_ORDER_REQ . "` o ON o.id = l.order_id";
-        $summarySql = "SELECT l.from_status, l.to_status, COUNT(*) AS total_count, MAX(l.transition_at) AS last_transition_time
-            FROM " . $logFromSql . "
-            WHERE " . $whereSql . "
-            GROUP BY l.from_status, l.to_status
-            ORDER BY total_count DESC, l.from_status ASC, l.to_status ASC";
-        $summaryResult = mysqli_query($financeConnect, $summarySql);
-        if ($summaryResult) {
-            while ($row = mysqli_fetch_assoc($summaryResult)) {
-                $transitionKey = shopeeOmsBuildTransitionKey(isset($row['from_status']) ? $row['from_status'] : '', isset($row['to_status']) ? $row['to_status'] : '');
-                $summary[] = array(
-                    'transition_key' => $transitionKey,
-                    'from_status' => isset($row['from_status']) ? (string) $row['from_status'] : '',
-                    'to_status' => isset($row['to_status']) ? (string) $row['to_status'] : '',
-                    'from_label' => shopeeOmsGetStatusLabel(isset($row['from_status']) ? $row['from_status'] : ''),
-                    'to_label' => shopeeOmsGetStatusLabel(isset($row['to_status']) ? $row['to_status'] : ''),
-                    'total_count' => isset($row['total_count']) ? (int) $row['total_count'] : 0,
-                    'last_transition_time' => isset($row['last_transition_time']) ? (string) $row['last_transition_time'] : '',
-                );
+        foreach (shopeeOmsGetOrderSourceConfigs() as $sourcePlatform => $sourceConfig) {
+            if ($platform !== '' && $platform !== $sourcePlatform) {
+                continue;
             }
-        }
 
-        $detailSql = "SELECT l.id, l.order_id, l.order_code, l.from_status, l.to_status, l.transition_action, l.user_id, l.user_group_id, l.transition_at, l.remark
-            FROM " . $logFromSql . "
-            WHERE " . $whereSql . "
-            ORDER BY l.transition_at DESC, l.id DESC";
-        $detailResult = mysqli_query($financeConnect, $detailSql);
-        if ($detailResult) {
-            while ($row = mysqli_fetch_assoc($detailResult)) {
-                $transitionKey = shopeeOmsBuildTransitionKey(isset($row['from_status']) ? $row['from_status'] : '', isset($row['to_status']) ? $row['to_status'] : '');
-                if (!isset($details[$transitionKey])) {
-                    $details[$transitionKey] = array();
+            $qualifiedOrderTable = shopeeOmsBuildQualifiedTableName($sourceConfig);
+            if ($qualifiedOrderTable === '') {
+                continue;
+            }
+
+            $conditions = array();
+            $conditions[] = "l.status = 'A'";
+            if ($actorUserId > 0) {
+                $conditions[] = "l.user_id = " . $actorUserId;
+            }
+            if ($exactDate !== '') {
+                $conditions[] = "DATE(l.transition_at) = '" . mysqli_real_escape_string($financeConnect, $exactDate) . "'";
+            } else {
+                if ($dateFrom !== '') {
+                    $conditions[] = "DATE(l.transition_at) >= '" . mysqli_real_escape_string($financeConnect, $dateFrom) . "'";
                 }
-                $details[$transitionKey][] = $row;
+                if ($dateTo !== '') {
+                    $conditions[] = "DATE(l.transition_at) <= '" . mysqli_real_escape_string($financeConnect, $dateTo) . "'";
+                }
+                if ($monthFilter !== '') {
+                    $conditions[] = "MONTH(DATE(l.transition_at)) = '" . mysqli_real_escape_string($financeConnect, $monthFilter) . "'";
+                }
+                if ($yearFilter !== '') {
+                    $conditions[] = "YEAR(DATE(l.transition_at)) = '" . mysqli_real_escape_string($financeConnect, $yearFilter) . "'";
+                }
+            }
+            $platformCondition = shopeeOmsBuildLogPlatformCondition($financeConnect, $sourcePlatform, 'l');
+            if ($platformCondition !== '') {
+                $conditions[] = $platformCondition;
+            }
+            if (trim((string) $fromStatus) !== '') {
+                $conditions[] = "l.from_status = '" . mysqli_real_escape_string($financeConnect, shopeeOmsNormalizeStatusCode($fromStatus)) . "'";
+            }
+            if (trim((string) $toStatus) !== '') {
+                $conditions[] = "l.to_status = '" . mysqli_real_escape_string($financeConnect, shopeeOmsNormalizeStatusCode($toStatus)) . "'";
+            }
+            if (trim((string) $orderCode) !== '') {
+                $safeOrderCode = mysqli_real_escape_string($financeConnect, trim((string) $orderCode));
+                $conditions[] = "l.order_code LIKE '%" . $safeOrderCode . "%'";
+            }
+            if ($warehouseId > 0) {
+                $warehouseField = isset($sourceConfig['warehouse_field']) && trim((string) $sourceConfig['warehouse_field']) !== ''
+                    ? trim((string) $sourceConfig['warehouse_field'])
+                    : 'stock_out_warehouse_id';
+                $conditions[] = "COALESCE(NULLIF(o.`" . $warehouseField . "`, 0), " . (int) $defaultWarehouseId . ") = " . $warehouseId;
+            }
+
+            $whereSql = implode(' AND ', $conditions);
+            $logFromSql = "`" . ORDER_STATUS_TRANSITION_LOG . "` l
+                LEFT JOIN " . $qualifiedOrderTable . " o ON o.id = l.order_id";
+            $summarySql = "SELECT l.from_status, l.to_status, COUNT(*) AS total_count, MAX(l.transition_at) AS last_transition_time
+                FROM " . $logFromSql . "
+                WHERE " . $whereSql . "
+                GROUP BY l.from_status, l.to_status
+                ORDER BY total_count DESC, l.from_status ASC, l.to_status ASC";
+            $summaryResult = mysqli_query($financeConnect, $summarySql);
+            if ($summaryResult) {
+                while ($row = mysqli_fetch_assoc($summaryResult)) {
+                    $transitionKey = $sourcePlatform . '__' . shopeeOmsBuildTransitionKey(isset($row['from_status']) ? $row['from_status'] : '', isset($row['to_status']) ? $row['to_status'] : '');
+                    $summary[] = array(
+                        'transition_key' => $transitionKey,
+                        'platform' => $sourcePlatform,
+                        'platform_label' => isset($sourceConfig['label']) ? (string) $sourceConfig['label'] : ucfirst($sourcePlatform),
+                        'from_status' => isset($row['from_status']) ? (string) $row['from_status'] : '',
+                        'to_status' => isset($row['to_status']) ? (string) $row['to_status'] : '',
+                        'from_label' => shopeeOmsGetStatusLabel(isset($row['from_status']) ? $row['from_status'] : ''),
+                        'to_label' => shopeeOmsGetStatusLabel(isset($row['to_status']) ? $row['to_status'] : ''),
+                        'total_count' => isset($row['total_count']) ? (int) $row['total_count'] : 0,
+                        'last_transition_time' => isset($row['last_transition_time']) ? (string) $row['last_transition_time'] : '',
+                    );
+                }
+            }
+
+            $detailSql = "SELECT l.id, l.order_id, l.order_code, l.from_status, l.to_status, l.transition_action, l.user_id, l.user_group_id, l.transition_at, l.remark
+                FROM " . $logFromSql . "
+                WHERE " . $whereSql . "
+                ORDER BY l.transition_at DESC, l.id DESC";
+            $detailResult = mysqli_query($financeConnect, $detailSql);
+            if ($detailResult) {
+                while ($row = mysqli_fetch_assoc($detailResult)) {
+                    $transitionKey = $sourcePlatform . '__' . shopeeOmsBuildTransitionKey(isset($row['from_status']) ? $row['from_status'] : '', isset($row['to_status']) ? $row['to_status'] : '');
+                    if (!isset($details[$transitionKey])) {
+                        $details[$transitionKey] = array();
+                    }
+                    $row['platform'] = $sourcePlatform;
+                    $row['platform_label'] = isset($sourceConfig['label']) ? (string) $sourceConfig['label'] : ucfirst($sourcePlatform);
+                    $row['order_view_url'] = shopeeOmsGetOrderSourceViewUrl($sourceConfig, isset($row['order_id']) ? (int) $row['order_id'] : 0);
+                    $details[$transitionKey][] = $row;
+                }
             }
         }
+
+        usort($summary, function ($a, $b) {
+            $countDiff = (int) ($b['total_count'] ?? 0) <=> (int) ($a['total_count'] ?? 0);
+            if ($countDiff !== 0) {
+                return $countDiff;
+            }
+
+            $platformCompare = strcmp((string) ($a['platform_label'] ?? ''), (string) ($b['platform_label'] ?? ''));
+            if ($platformCompare !== 0) {
+                return $platformCompare;
+            }
+
+            return strcmp((string) ($a['transition_key'] ?? ''), (string) ($b['transition_key'] ?? ''));
+        });
 
         return array(
             'summary' => $summary,
@@ -6188,21 +7975,50 @@ if (!function_exists('shopeeOmsGetDailyFlowReport')) {
 }
 
 if (!function_exists('shopeeOmsRunOverduePostponedAutoMove')) {
-    function shopeeOmsRunOverduePostponedAutoMove($cmsConnect, $financeConnect)
+    function shopeeOmsRunOverduePostponedAutoMove($cmsConnect, $financeConnect, $platform = '')
     {
-        if (!($financeConnect instanceof mysqli)) {
+        if (!($cmsConnect instanceof mysqli) || !($financeConnect instanceof mysqli)) {
             return 0;
         }
 
         $movedCount = 0;
         $todayYmd = date('Y-m-d');
-        $sql = "SELECT id, delay_remark, estimated_received_date
-            FROM `" . SHOPEE_SG_ORDER_REQ . "`
-            WHERE status = 'A'
-              AND order_status IN ('WR', 'AED', 'Waiting Receive', 'Assigned Estimate Date')";
-        $result = mysqli_query($financeConnect, $sql);
-        if ($result) {
+        $platform = shopeeOmsNormalizePlatformKey($platform);
+        foreach (shopeeOmsGetOrderSourceConfigs() as $sourcePlatform => $sourceConfig) {
+            if ($platform !== '' && $platform !== $sourcePlatform) {
+                continue;
+            }
+
+            $orderConnect = shopeeOmsGetOrderSourceDbConnection($cmsConnect, $financeConnect, $sourceConfig);
+            if (!($orderConnect instanceof mysqli)) {
+                continue;
+            }
+
+            $tableName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : '';
+            $delayRemarkField = isset($sourceConfig['delay_remark_field']) && trim((string) $sourceConfig['delay_remark_field']) !== ''
+                ? trim((string) $sourceConfig['delay_remark_field'])
+                : 'delay_remark';
+            $statusCondition = shopeeOmsBuildOrderStatusInCondition($orderConnect, 'order_status', array('WR'));
+            if ($tableName === '' || $statusCondition === '') {
+                continue;
+            }
+
+            $selectFields = array('id', 'estimated_received_date');
+            if (shopeeOmsTableHasColumn($orderConnect, isset($sourceConfig['db_name']) ? $sourceConfig['db_name'] : dbFinance, $tableName, $delayRemarkField)) {
+                $selectFields[] = $delayRemarkField;
+            }
+
+            $sql = "SELECT " . implode(', ', $selectFields) . "
+                FROM `" . $tableName . "`
+                WHERE status = 'A'
+                  AND " . $statusCondition;
+            $result = mysqli_query($orderConnect, $sql);
+            if (!$result) {
+                continue;
+            }
+
             while ($row = mysqli_fetch_assoc($result)) {
+                $row = shopeeOmsAttachOrderSourceMeta((array) $row, $sourcePlatform, $sourceConfig);
                 $estimatedReceivedDate = trim((string) (isset($row['estimated_received_date']) ? $row['estimated_received_date'] : ''));
                 if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $estimatedReceivedDate)) {
                     continue;
@@ -6211,7 +8027,7 @@ if (!function_exists('shopeeOmsRunOverduePostponedAutoMove')) {
                     continue;
                 }
 
-                $delayRemark = trim((string) (isset($row['delay_remark']) ? $row['delay_remark'] : ''));
+                $delayRemark = trim((string) (isset($row[$delayRemarkField]) ? $row[$delayRemarkField] : ''));
                 if ($delayRemark === '') {
                     $delayRemark = 'Auto postponed: estimated received date passed without Confirm Received action.';
                 }
@@ -6225,8 +8041,9 @@ if (!function_exists('shopeeOmsRunOverduePostponedAutoMove')) {
                     'skip_permission' => true,
                     'allow_auto_follow_up' => false,
                     'field_updates' => array(
-                        'delay_remark' => $delayRemark,
+                        $delayRemarkField => $delayRemark,
                     ),
+                    'platform' => $sourcePlatform,
                 ));
                 if (!empty($transitionResult['success'])) {
                     $movedCount++;
@@ -6252,19 +8069,60 @@ if (!function_exists('shopeeOmsEnsureRealtimePostponedSync')) {
 }
 
 if (!function_exists('shopeeOmsRunFourteenDayAutoMove')) {
-    function shopeeOmsRunFourteenDayAutoMove($cmsConnect, $financeConnect)
+    function shopeeOmsRunFourteenDayAutoMove($cmsConnect, $financeConnect, $platform = '')
     {
-        if (!($financeConnect instanceof mysqli)) {
+        if (!($cmsConnect instanceof mysqli) || !($financeConnect instanceof mysqli)) {
             return 0;
         }
 
         $movedCount = 0;
-        $sql = "SELECT id FROM `" . SHOPEE_SG_ORDER_REQ . "`
-            WHERE status = 'A'
-              AND order_status IN ('PR', 'Parcel Received')
-              AND COALESCE(latest_transition_at, CONCAT(update_date, ' ', update_time), CONCAT(create_date, ' ', create_time)) <= DATE_SUB(NOW(), INTERVAL 14 DAY)";
-        $result = mysqli_query($financeConnect, $sql);
-        if ($result) {
+        $platform = shopeeOmsNormalizePlatformKey($platform);
+        foreach (shopeeOmsGetOrderSourceConfigs() as $sourcePlatform => $sourceConfig) {
+            if ($platform !== '' && $platform !== $sourcePlatform) {
+                continue;
+            }
+
+            $qualifiedOrderTable = shopeeOmsBuildQualifiedTableName($sourceConfig);
+            if ($qualifiedOrderTable === '') {
+                continue;
+            }
+
+            $platformCondition = shopeeOmsBuildLogPlatformCondition($financeConnect, $sourcePlatform, 'l');
+            $transitionWhere = "l.status = 'A' AND l.to_status IN ('PR', 'Parcel Received')";
+            if ($platformCondition !== '') {
+                $transitionWhere .= " AND " . $platformCondition;
+            }
+
+            $latestTransitionExprParts = array("t.last_transition_at");
+            if (shopeeOmsSourceHasColumn($cmsConnect, $financeConnect, $sourceConfig, 'latest_transition_at')) {
+                $latestTransitionExprParts[] = "o.latest_transition_at";
+            }
+            $latestTransitionExprParts[] = "CONCAT(o.update_date, ' ', o.update_time')";
+            $latestTransitionExprParts[] = "CONCAT(o.create_date, ' ', o.create_time')";
+            $latestTransitionExpr = "COALESCE(" . implode(', ', $latestTransitionExprParts) . ")";
+            $statusCondition = shopeeOmsBuildOrderStatusInCondition($financeConnect, 'order_status', array('PR'));
+            if ($statusCondition !== '') {
+                $statusCondition = preg_replace('/\border_status\b/', 'o.order_status', $statusCondition);
+            }
+            if ($statusCondition === '') {
+                continue;
+            }
+            $sql = "SELECT o.id
+                FROM " . $qualifiedOrderTable . " o
+                LEFT JOIN (
+                    SELECT l.order_id, MAX(l.transition_at) AS last_transition_at
+                    FROM `" . ORDER_STATUS_TRANSITION_LOG . "` l
+                    WHERE " . $transitionWhere . "
+                    GROUP BY l.order_id
+                ) t ON t.order_id = o.id
+                WHERE o.status = 'A'
+                  AND " . $statusCondition . "
+                  AND " . $latestTransitionExpr . " <= DATE_SUB(NOW(), INTERVAL 14 DAY)";
+            $result = mysqli_query($financeConnect, $sql);
+            if (!$result) {
+                continue;
+            }
+
             while ($row = mysqli_fetch_assoc($result)) {
                 $transitionResult = shopeeOmsExecuteTransition($cmsConnect, $financeConnect, (int) $row['id'], 'WAFC', array(
                     'actor_user_id' => 'SYSTEM',
@@ -6274,6 +8132,7 @@ if (!function_exists('shopeeOmsRunFourteenDayAutoMove')) {
                     'action' => 'auto_14_day_final_check',
                     'skip_permission' => true,
                     'allow_auto_follow_up' => false,
+                    'platform' => $sourcePlatform,
                 ));
                 if (!empty($transitionResult['success'])) {
                     $movedCount++;
@@ -6292,7 +8151,8 @@ if (!function_exists('shopeeOmsDeductInventoryForOrder')) {
             return array('success' => false, 'message' => 'Unable to connect to warehouse inventory.');
         }
 
-        $productSummary = shopeeOmsBuildOrderProductSummary($cmsConnect, $orderRow);
+        $sourceConfig = shopeeOmsResolveOrderSourceConfig(shopeeOmsGetOrderSourcePlatform($orderRow, 'shopee'));
+        $productSummary = shopeeOmsBuildOrderProductSummaryBySource($cmsConnect, $orderRow, $sourceConfig);
         $productQtyMap = isset($productSummary['product_qty_map']) && is_array($productSummary['product_qty_map']) ? $productSummary['product_qty_map'] : array();
         if (empty($productQtyMap)) {
             return array('success' => false, 'message' => 'No product item found for this order package.');
@@ -6301,10 +8161,7 @@ if (!function_exists('shopeeOmsDeductInventoryForOrder')) {
         $defaultWarehouseId = shopeeOmsGetDefaultWarehouseId($cmsConnect);
         $warehouseId = shopeeOmsResolveStockOutWarehouseId($cmsConnect, $orderRow, $defaultWarehouseId);
         $warehouseName = shopeeOmsResolveWarehouseNameById($cmsConnect, $warehouseId, $defaultWarehouseId);
-        $orderCode = trim((string) (isset($orderRow['orderID']) ? $orderRow['orderID'] : ''));
-        if ($orderCode === '') {
-            $orderCode = 'OMS-' . (int) (isset($orderRow['id']) ? $orderRow['id'] : 0);
-        }
+        $orderCode = shopeeOmsGetOrderCodeValue($orderRow, $sourceConfig);
         $attachmentValue = siAttachmentEncodeList($attachments);
 
         $productNameMap = array();
@@ -6327,9 +8184,13 @@ if (!function_exists('shopeeOmsDeductInventoryForOrder')) {
             }
         }
 
+        if (!siEnsureStockOutBatchUsageTable($financeConnect)) {
+            return array('success' => false, 'message' => 'Failed to prepare stock out batch usage table.');
+        }
+
         mysqli_begin_transaction($financeConnect);
         try {
-            $updatedItemIds = array();
+            $allocationsByProduct = array();
             foreach ($productQtyMap as $productId => $qty) {
                 $productId = (int) $productId;
                 $qty = (int) $qty;
@@ -6337,71 +8198,19 @@ if (!function_exists('shopeeOmsDeductInventoryForOrder')) {
                     continue;
                 }
 
-                $selectSql = "SELECT i.id, i.product_quantity, i.stock_in_order_id
-                    FROM `stock_in_order_item` i
-                    INNER JOIN `stock_in_order` o ON o.id = i.stock_in_order_id
-                    WHERE i.status = 'A'
-                      AND o.status = 'A'
-                      AND COALESCE(NULLIF(TRIM(o.stock_type), ''), 'Stock In') <> 'Stock Out'
-                      AND i.product_id = " . $productId . "
-                      AND i.product_quantity > 0";
-                if ($warehouseId > 0) {
-                    $selectSql .= " AND o.warehouse_id = " . $warehouseId;
-                }
-                $selectSql .= " ORDER BY o.stock_in_date ASC, o.id ASC, i.id ASC";
-
-                $selectResult = mysqli_query($financeConnect, $selectSql);
-                $stockRows = array();
-                $availableQty = 0;
-                if ($selectResult) {
-                    while ($row = mysqli_fetch_assoc($selectResult)) {
-                        $itemId = isset($row['id']) ? (int) $row['id'] : 0;
-                        $itemQty = isset($row['product_quantity']) ? (int) $row['product_quantity'] : 0;
-                        if ($itemId > 0 && $itemQty > 0) {
-                            $stockRows[] = array(
-                                'id' => $itemId,
-                                'qty' => $itemQty,
-                            );
-                            $availableQty += $itemQty;
-                        }
-                    }
-                }
-
-                if ($availableQty < $qty) {
-                    $productLabel = isset($productNameMap[$productId]) && $productNameMap[$productId] !== ''
-                        ? $productNameMap[$productId]
-                        : ('product #' . $productId);
-                    $warehouseLabel = $warehouseName !== '' ? ($warehouseName) : '';
-                    throw new Exception($warehouseLabel . ' not enough warehouse stock for ' . $productLabel . '.');
-                }
-
-                $safeActor = mysqli_real_escape_string($financeConnect, $actorUserId);
-                $remainingQty = $qty;
-                foreach ($stockRows as $stockRow) {
-                    if ($remainingQty <= 0) {
-                        break;
-                    }
-
-                    $itemId = (int) $stockRow['id'];
-                    $currentQty = (int) $stockRow['qty'];
-                    $deductQty = min($remainingQty, $currentQty);
-                    $newQty = $currentQty - $deductQty;
-
-                    $updateSql = "UPDATE `stock_in_order_item`
-                        SET `product_quantity` = " . $newQty . ",
-                            `update_by` = '" . $safeActor . "',
-                            `update_date` = CURDATE(),
-                            `update_time` = CURTIME()
-                        WHERE id = " . $itemId . "
-                          AND status = 'A'
-                        LIMIT 1";
-                    if (!mysqli_query($financeConnect, $updateSql)) {
-                        throw new Exception('Failed to deduct warehouse stock.');
-                    }
-
-                    $updatedItemIds[] = $itemId;
-                    $remainingQty -= $deductQty;
-                }
+                $productLabel = isset($productNameMap[$productId]) && $productNameMap[$productId] !== ''
+                    ? $productNameMap[$productId]
+                    : ('product #' . $productId);
+                $allocationsByProduct[$productId] = siAllocateStockOutQuantityAcrossFifoBatches(
+                    $financeConnect,
+                    $warehouseId,
+                    $productId,
+                    $qty,
+                    0,
+                    0,
+                    $productLabel,
+                    $warehouseName
+                );
             }
 
             $safeActor = mysqli_real_escape_string($financeConnect, $actorUserId);
@@ -6430,13 +8239,22 @@ if (!function_exists('shopeeOmsDeductInventoryForOrder')) {
                 if (!mysqli_query($financeConnect, $insertItemSql)) {
                     throw new Exception('Failed to save stock out item.');
                 }
+
+                $stockOutItemId = (int) mysqli_insert_id($financeConnect);
+                siInsertStockOutBatchUsageRows(
+                    $financeConnect,
+                    $stockOutOrderId,
+                    $stockOutItemId,
+                    isset($allocationsByProduct[$productId]) ? $allocationsByProduct[$productId] : array(),
+                    $actorUserId
+                );
             }
 
             mysqli_commit($financeConnect);
             return array(
                 'success' => true,
                 'message' => 'Warehouse inventory deducted successfully.',
-                'item_ids' => $updatedItemIds,
+                'item_ids' => array_keys($allocationsByProduct),
                 'product_qty_map' => $productQtyMap,
                 'stock_out_order_id' => $stockOutOrderId,
             );
@@ -6458,7 +8276,7 @@ if (!function_exists('shopeeOmsFinalizeInitialShippedOrder')) {
             return array('success' => false, 'message' => 'Unable to process initial Shipped status.');
         }
 
-        $orderRow = shopeeOmsLoadOrder($financeConnect, $orderId);
+        $orderRow = shopeeOmsLoadOrder($financeConnect, $orderId, 'shopee');
         if (empty($orderRow)) {
             return array('success' => false, 'message' => 'Order not found.');
         }
@@ -6500,8 +8318,12 @@ if (!function_exists('shopeeOmsBulkMoveCurrentShippedOrdersToWaerd')) {
     {
         $options = is_array($options) ? $options : array();
         $skipPermission = !empty($options['skip_permission']);
+        $sourceConfig = shopeeOmsResolveOrderSourceConfig(isset($options['platform']) ? $options['platform'] : 'shopee');
+        $platform = isset($sourceConfig['platform']) ? (string) $sourceConfig['platform'] : 'shopee';
+        $orderConnect = shopeeOmsGetOrderSourceDbConnection($cmsConnect, $financeConnect, $sourceConfig);
+        $tableName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
 
-        if (!($cmsConnect instanceof mysqli) || !($financeConnect instanceof mysqli)) {
+        if (!($cmsConnect instanceof mysqli) || !($orderConnect instanceof mysqli)) {
             return array(
                 'success' => false,
                 'message' => 'Unable to bulk update Shipped orders.',
@@ -6512,7 +8334,7 @@ if (!function_exists('shopeeOmsBulkMoveCurrentShippedOrdersToWaerd')) {
             );
         }
 
-        $statusCondition = shopeeOmsBuildOrderStatusFilterCondition($financeConnect, 'order_status', 'SP');
+        $statusCondition = shopeeOmsBuildOrderStatusFilterCondition($orderConnect, 'order_status', 'SP');
         if ($statusCondition === '') {
             return array(
                 'success' => false,
@@ -6524,8 +8346,11 @@ if (!function_exists('shopeeOmsBulkMoveCurrentShippedOrdersToWaerd')) {
             );
         }
 
-        $sql = "SELECT id, orderID, order_status FROM `" . SHOPEE_SG_ORDER_REQ . "` WHERE status = 'A' AND " . $statusCondition . " ORDER BY id ASC";
-        $result = mysqli_query($financeConnect, $sql);
+        $orderCodeField = isset($sourceConfig['order_code_field']) && trim((string) $sourceConfig['order_code_field']) !== ''
+            ? '`' . $sourceConfig['order_code_field'] . '` AS order_code'
+            : "CONCAT('" . mysqli_real_escape_string($orderConnect, strtoupper((string) (isset($sourceConfig['fallback_code_prefix']) ? $sourceConfig['fallback_code_prefix'] : 'OMS'))) . "-', id) AS order_code";
+        $sql = "SELECT id, " . $orderCodeField . ", order_status FROM `" . $tableName . "` WHERE status = 'A' AND " . $statusCondition . " ORDER BY id ASC";
+        $result = mysqli_query($orderConnect, $sql);
         if (!$result) {
             return array(
                 'success' => false,
@@ -6571,11 +8396,12 @@ if (!function_exists('shopeeOmsBulkMoveCurrentShippedOrdersToWaerd')) {
                 'action' => 'bulk_post_ship_sync',
                 'skip_permission' => $skipPermission,
                 'allow_auto_follow_up' => false,
+                'platform' => $platform,
             ));
 
             $transitionResults[] = array(
                 'order_id' => $orderId,
-                'order_code' => isset($orderRow['orderID']) ? (string) $orderRow['orderID'] : '',
+                'order_code' => isset($orderRow['order_code']) ? (string) $orderRow['order_code'] : '',
                 'old_status' => isset($orderRow['order_status']) ? (string) $orderRow['order_status'] : '',
                 'result' => $transitionResult,
             );
@@ -6614,16 +8440,14 @@ if (!function_exists('shopeeOmsRestockInventoryForOrder')) {
             return array('success' => false, 'message' => 'Unable to connect to warehouse inventory.');
         }
 
-        $productSummary = shopeeOmsBuildOrderProductSummary($cmsConnect, $orderRow);
+        $sourceConfig = shopeeOmsResolveOrderSourceConfig(shopeeOmsGetOrderSourcePlatform($orderRow, 'shopee'));
+        $productSummary = shopeeOmsBuildOrderProductSummaryBySource($cmsConnect, $orderRow, $sourceConfig);
         $productQtyMap = isset($productSummary['product_qty_map']) && is_array($productSummary['product_qty_map']) ? $productSummary['product_qty_map'] : array();
         if (empty($productQtyMap)) {
             return array('success' => false, 'message' => 'No product item found for this order package.');
         }
 
-        $orderCode = trim((string) (isset($orderRow['orderID']) ? $orderRow['orderID'] : ''));
-        if ($orderCode === '') {
-            $orderCode = 'OMS-' . (int) (isset($orderRow['id']) ? $orderRow['id'] : 0);
-        }
+        $orderCode = shopeeOmsGetOrderCodeValue($orderRow, $sourceConfig);
 
         $warehouseId = shopeeOmsResolveStockOutWarehouseId($cmsConnect, $orderRow, shopeeOmsGetDefaultWarehouseId($cmsConnect));
         $safeActor = mysqli_real_escape_string($financeConnect, trim((string) $actorUserId) !== '' ? trim((string) $actorUserId) : 'SYSTEM');
@@ -6690,10 +8514,12 @@ if (!function_exists('shopeeOmsProcessWarehouseScanByToken')) {
             return array('success' => false, 'message' => 'This warehouse stock-out scan link has already been used.');
         }
 
-        $orderRow = shopeeOmsLoadOrder($financeConnect, isset($tokenRow['order_id']) ? (int) $tokenRow['order_id'] : 0);
+        $sourceConfig = null;
+        $orderRow = shopeeOmsLoadOrderFromTokenRow($cmsConnect, $financeConnect, $tokenRow, $sourceConfig, 'shopee');
         if (empty($orderRow)) {
             return array('success' => false, 'message' => 'Order linked to this scan token was not found.');
         }
+        $tokenPlatform = isset($sourceConfig['platform']) ? (string) $sourceConfig['platform'] : shopeeOmsGetOrderSourcePlatform($orderRow, 'shopee');
 
         if (shopeeOmsNormalizeStatusCode(isset($orderRow['order_status']) ? $orderRow['order_status'] : '') !== 'TP') {
             return array('success' => false, 'message' => 'This order is no longer waiting for warehouse stock-out.');
@@ -6724,6 +8550,7 @@ if (!function_exists('shopeeOmsProcessWarehouseScanByToken')) {
                 'warehouse_scan_ref' => $tokenValue,
             ),
             'related_token_scan_id' => $tokenValue,
+            'platform' => $tokenPlatform,
         ));
         if (is_array($transitionResult)) {
             $transitionResult['stock_out_order_id'] = isset($deductResult['stock_out_order_id']) ? (int) $deductResult['stock_out_order_id'] : 0;
@@ -7675,6 +9502,602 @@ if (!function_exists('siBuildProductQtyMap')) {
             $map[$productId] += $qty;
         }
         return $map;
+    }
+}
+
+if (!function_exists('siTableExistsByName')) {
+    function siTableExistsByName($connect, $tableName)
+    {
+        $tableName = trim((string) $tableName);
+        if (!($connect instanceof mysqli) || $tableName === '') {
+            return false;
+        }
+
+        $sql = "SHOW TABLES LIKE '" . mysqli_real_escape_string($connect, $tableName) . "'";
+        $result = mysqli_query($connect, $sql);
+        return ($result instanceof mysqli_result && mysqli_num_rows($result) > 0);
+    }
+}
+
+if (!function_exists('siColumnExistsByName')) {
+    function siColumnExistsByName($connect, $tableName, $columnName)
+    {
+        $tableName = trim((string) $tableName);
+        $columnName = trim((string) $columnName);
+        if (!($connect instanceof mysqli) || $tableName === '' || $columnName === '') {
+            return false;
+        }
+
+        $sql = "SHOW COLUMNS FROM `" . str_replace('`', '``', $tableName) . "` LIKE '" . mysqli_real_escape_string($connect, $columnName) . "'";
+        $result = mysqli_query($connect, $sql);
+        return ($result instanceof mysqli_result && mysqli_num_rows($result) > 0);
+    }
+}
+
+if (!function_exists('siIndexExistsByName')) {
+    function siIndexExistsByName($connect, $tableName, $indexName)
+    {
+        $tableName = trim((string) $tableName);
+        $indexName = trim((string) $indexName);
+        if (!($connect instanceof mysqli) || $tableName === '' || $indexName === '') {
+            return false;
+        }
+
+        $sql = "SHOW INDEX FROM `" . str_replace('`', '``', $tableName) . "` WHERE Key_name = '" . mysqli_real_escape_string($connect, $indexName) . "'";
+        $result = mysqli_query($connect, $sql);
+        return ($result instanceof mysqli_result && mysqli_num_rows($result) > 0);
+    }
+}
+
+if (!function_exists('siEnsureStockOutBatchUsageTable')) {
+    function siEnsureStockOutBatchUsageTable($financeConnect)
+    {
+        static $ready = array();
+
+        if (!($financeConnect instanceof mysqli)) {
+            return false;
+        }
+
+        $dbName = '';
+        $dbResult = mysqli_query($financeConnect, "SELECT DATABASE() AS db_name");
+        if ($dbResult && ($dbRow = mysqli_fetch_assoc($dbResult))) {
+            $dbName = isset($dbRow['db_name']) ? (string) $dbRow['db_name'] : '';
+        }
+        $cacheKey = $dbName !== '' ? $dbName : 'default';
+        if (isset($ready[$cacheKey]) && $ready[$cacheKey] === true) {
+            return true;
+        }
+
+        $tableName = STOCK_OUT_BATCH_USAGE;
+        $createSql = "CREATE TABLE IF NOT EXISTS `" . $tableName . "` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `stock_out_order_id` INT NOT NULL,
+            `stock_out_item_id` INT NOT NULL,
+            `stock_in_order_id` INT NOT NULL,
+            `stock_in_item_id` INT NOT NULL,
+            `product_id` INT NOT NULL DEFAULT 0,
+            `package_id` INT NOT NULL DEFAULT 0,
+            `used_quantity` INT NOT NULL DEFAULT 0,
+            `create_by` VARCHAR(30) DEFAULT NULL,
+            `create_date` DATE DEFAULT NULL,
+            `create_time` TIME DEFAULT NULL,
+            `status` CHAR(1) NOT NULL DEFAULT 'A',
+            KEY `idx_sobu_stock_out_order_item` (`stock_out_order_id`, `stock_out_item_id`, `status`),
+            KEY `idx_sobu_stock_in_order_item` (`stock_in_order_id`, `stock_in_item_id`, `status`),
+            KEY `idx_sobu_product_package_status` (`product_id`, `package_id`, `status`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+        if (!mysqli_query($financeConnect, $createSql)) {
+            return false;
+        }
+
+        $columnSqlMap = array(
+            'stock_out_order_id' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `stock_out_order_id` INT NOT NULL AFTER `id`",
+            'stock_out_item_id' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `stock_out_item_id` INT NOT NULL AFTER `stock_out_order_id`",
+            'stock_in_order_id' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `stock_in_order_id` INT NOT NULL AFTER `stock_out_item_id`",
+            'stock_in_item_id' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `stock_in_item_id` INT NOT NULL AFTER `stock_in_order_id`",
+            'product_id' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `product_id` INT NOT NULL DEFAULT 0 AFTER `stock_in_item_id`",
+            'package_id' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `package_id` INT NOT NULL DEFAULT 0 AFTER `product_id`",
+            'used_quantity' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `used_quantity` INT NOT NULL DEFAULT 0 AFTER `package_id`",
+            'create_by' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `create_by` VARCHAR(30) DEFAULT NULL AFTER `used_quantity`",
+            'create_date' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `create_date` DATE DEFAULT NULL AFTER `create_by`",
+            'create_time' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `create_time` TIME DEFAULT NULL AFTER `create_date`",
+            'status' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A' AFTER `create_time`",
+        );
+
+        foreach ($columnSqlMap as $columnName => $alterSql) {
+            if (!siColumnExistsByName($financeConnect, $tableName, $columnName)) {
+                if (!mysqli_query($financeConnect, $alterSql)) {
+                    return false;
+                }
+            }
+        }
+
+        $indexSqlMap = array(
+            'idx_sobu_stock_out_order_item' => "ALTER TABLE `" . $tableName . "` ADD INDEX `idx_sobu_stock_out_order_item` (`stock_out_order_id`, `stock_out_item_id`, `status`)",
+            'idx_sobu_stock_in_order_item' => "ALTER TABLE `" . $tableName . "` ADD INDEX `idx_sobu_stock_in_order_item` (`stock_in_order_id`, `stock_in_item_id`, `status`)",
+            'idx_sobu_product_package_status' => "ALTER TABLE `" . $tableName . "` ADD INDEX `idx_sobu_product_package_status` (`product_id`, `package_id`, `status`)",
+        );
+
+        foreach ($indexSqlMap as $indexName => $alterSql) {
+            if (!siIndexExistsByName($financeConnect, $tableName, $indexName)) {
+                if (!mysqli_query($financeConnect, $alterSql)) {
+                    return false;
+                }
+            }
+        }
+
+        $ready[$cacheKey] = true;
+        return true;
+    }
+}
+
+if (!function_exists('siLoadUserNameMap')) {
+    function siLoadUserNameMap($connect)
+    {
+        $map = array();
+        if (!($connect instanceof mysqli)) {
+            return $map;
+        }
+
+        $result = mysqli_query($connect, "SELECT id, name FROM `" . USR_USER . "` WHERE status='A'");
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $userId = isset($row['id']) ? trim((string) $row['id']) : '';
+                if ($userId !== '') {
+                    $map[$userId] = isset($row['name']) ? (string) $row['name'] : $userId;
+                }
+            }
+        }
+
+        return $map;
+    }
+}
+
+if (!function_exists('siBuildProductQtyLines')) {
+    function siBuildProductQtyLines($items, $productNameMap = array())
+    {
+        $grouped = array();
+
+        foreach ((array) $items as $item) {
+            $productId = isset($item['product_id']) ? (int) $item['product_id'] : 0;
+            $packageId = isset($item['package_id']) ? (int) $item['package_id'] : 0;
+            $qty = isset($item['qty']) ? (int) $item['qty'] : (isset($item['product_quantity']) ? (int) $item['product_quantity'] : 0);
+            if ($productId <= 0 || $qty <= 0) {
+                continue;
+            }
+
+            $key = $productId . '|' . $packageId;
+            if (!isset($grouped[$key])) {
+                $grouped[$key] = array(
+                    'product_id' => $productId,
+                    'package_id' => $packageId,
+                    'qty' => 0,
+                );
+            }
+            $grouped[$key]['qty'] += $qty;
+        }
+
+        $lines = array();
+        foreach ($grouped as $row) {
+            $productId = (int) $row['product_id'];
+            $label = isset($productNameMap[$productId]) && trim((string) $productNameMap[$productId]) !== ''
+                ? (string) $productNameMap[$productId]
+                : ('Product #' . $productId);
+            $lines[] = $label . ' x ' . (int) $row['qty'];
+        }
+
+        return $lines;
+    }
+}
+
+if (!function_exists('siFetchFlatRows')) {
+    function siFetchFlatRows($financeConnect, $orderTable, $itemTable, $stockTypeFilter = '')
+    {
+        $rows = array();
+        $stockTypeFilter = trim((string) $stockTypeFilter);
+        $whereSql = "WHERE o.status='A'";
+        if (strcasecmp($stockTypeFilter, 'Stock Out') === 0) {
+            $whereSql .= " AND COALESCE(NULLIF(TRIM(o.stock_type), ''), 'Stock In') = 'Stock Out'";
+        } else if (strcasecmp($stockTypeFilter, 'Stock In') === 0) {
+            $whereSql .= " AND COALESCE(NULLIF(TRIM(o.stock_type), ''), 'Stock In') <> 'Stock Out'";
+        }
+
+        $sql = "SELECT
+                    o.id AS order_id,
+                    i.id AS item_id,
+                    o.warehouse_id,
+                    o.order_number,
+                    o.stock_in_date,
+                    o.attachment,
+                    COALESCE(NULLIF(TRIM(o.stock_type), ''), 'Stock In') AS stock_type,
+                    o.create_by,
+                    o.create_date,
+                    o.create_time,
+                    o.update_by,
+                    o.update_date,
+                    o.update_time,
+                    i.product_id,
+                    i.package_id,
+                    i.product_quantity
+                FROM `" . $orderTable . "` o
+                INNER JOIN `" . $itemTable . "` i ON i.stock_in_order_id=o.id AND i.status='A'
+                " . $whereSql . "
+                ORDER BY o.id DESC, i.id ASC";
+        $rst = mysqli_query($financeConnect, $sql);
+        if ($rst) {
+            while ($r = mysqli_fetch_assoc($rst)) {
+                $productRaw = isset($r['product_id']) ? trim((string) $r['product_id']) : '';
+                $qtyRaw = isset($r['product_quantity']) ? trim((string) $r['product_quantity']) : '';
+                $productParts = array_map('trim', explode(',', $productRaw));
+                $qtyParts = array_map('trim', explode(',', $qtyRaw));
+                $max = max(count($productParts), count($qtyParts));
+
+                if ($max <= 1) {
+                    $rows[] = array(
+                        'order_id' => (int) $r['order_id'],
+                        'item_id' => (int) $r['item_id'],
+                        'warehouse_id' => (int) $r['warehouse_id'],
+                        'order_number' => (string) $r['order_number'],
+                        'stock_in_date' => (string) $r['stock_in_date'],
+                        'attachment' => (string) (isset($r['attachment']) ? $r['attachment'] : ''),
+                        'stock_type' => siNormalizeStockType(isset($r['stock_type']) ? $r['stock_type'] : ''),
+                        'create_by' => isset($r['create_by']) ? (string) $r['create_by'] : '',
+                        'create_date' => isset($r['create_date']) ? (string) $r['create_date'] : '',
+                        'create_time' => isset($r['create_time']) ? (string) $r['create_time'] : '',
+                        'update_by' => isset($r['update_by']) ? (string) $r['update_by'] : '',
+                        'update_date' => isset($r['update_date']) ? (string) $r['update_date'] : '',
+                        'update_time' => isset($r['update_time']) ? (string) $r['update_time'] : '',
+                        'product_id' => (int) $productRaw,
+                        'package_id' => (int) $r['package_id'],
+                        'product_quantity' => (int) $qtyRaw,
+                    );
+                    continue;
+                }
+
+                for ($idx = 0; $idx < $max; $idx++) {
+                    $pid = isset($productParts[$idx]) ? (int) $productParts[$idx] : 0;
+                    $qty = isset($qtyParts[$idx]) ? (int) $qtyParts[$idx] : 0;
+                    if ($pid <= 0 && $qty <= 0) {
+                        continue;
+                    }
+                    $rows[] = array(
+                        'order_id' => (int) $r['order_id'],
+                        'item_id' => (int) $r['item_id'],
+                        'warehouse_id' => (int) $r['warehouse_id'],
+                        'order_number' => (string) $r['order_number'],
+                        'stock_in_date' => (string) $r['stock_in_date'],
+                        'attachment' => (string) (isset($r['attachment']) ? $r['attachment'] : ''),
+                        'stock_type' => siNormalizeStockType(isset($r['stock_type']) ? $r['stock_type'] : ''),
+                        'create_by' => isset($r['create_by']) ? (string) $r['create_by'] : '',
+                        'create_date' => isset($r['create_date']) ? (string) $r['create_date'] : '',
+                        'create_time' => isset($r['create_time']) ? (string) $r['create_time'] : '',
+                        'update_by' => isset($r['update_by']) ? (string) $r['update_by'] : '',
+                        'update_date' => isset($r['update_date']) ? (string) $r['update_date'] : '',
+                        'update_time' => isset($r['update_time']) ? (string) $r['update_time'] : '',
+                        'product_id' => $pid,
+                        'package_id' => (int) $r['package_id'],
+                        'product_quantity' => $qty,
+                    );
+                }
+            }
+        }
+        return $rows;
+    }
+}
+
+if (!function_exists('siGetStockOutUsageRowsByOrderIds')) {
+    function siGetStockOutUsageRowsByOrderIds($financeConnect, $orderIds = array(), $usageTable = '')
+    {
+        $rows = array();
+        if (!($financeConnect instanceof mysqli) || empty($orderIds) || !siEnsureStockOutBatchUsageTable($financeConnect)) {
+            return $rows;
+        }
+
+        $usageTable = trim((string) $usageTable);
+        if ($usageTable === '') {
+            $usageTable = STOCK_OUT_BATCH_USAGE;
+        }
+
+        $cleanIds = array();
+        foreach ((array) $orderIds as $orderId) {
+            $orderId = (int) $orderId;
+            if ($orderId > 0) {
+                $cleanIds[$orderId] = $orderId;
+            }
+        }
+
+        if (empty($cleanIds)) {
+            return $rows;
+        }
+
+        $sql = "SELECT
+                    u.id,
+                    u.stock_out_order_id,
+                    u.stock_out_item_id,
+                    u.stock_in_order_id,
+                    u.stock_in_item_id,
+                    u.product_id,
+                    u.package_id,
+                    u.used_quantity,
+                    u.create_by,
+                    u.create_date,
+                    u.create_time,
+                    u.status,
+                    o.order_number AS stock_in_order_number,
+                    o.stock_in_date AS stock_in_order_date
+                FROM `" . $usageTable . "` u
+                INNER JOIN `stock_in_order` o ON o.id = u.stock_in_order_id
+                WHERE u.status='A'
+                  AND u.stock_out_order_id IN (" . implode(',', $cleanIds) . ")
+                ORDER BY u.stock_out_order_id ASC, u.stock_out_item_id ASC, o.stock_in_date ASC, u.stock_in_order_id ASC, u.stock_in_item_id ASC";
+        $result = mysqli_query($financeConnect, $sql);
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $rows[] = $row;
+            }
+        }
+
+        return $rows;
+    }
+}
+
+if (!function_exists('siGetStockInUsedQtyMap')) {
+    function siGetStockInUsedQtyMap($financeConnect, $stockInOrderId)
+    {
+        $map = array();
+        $stockInOrderId = (int) $stockInOrderId;
+        if ($stockInOrderId <= 0 || !($financeConnect instanceof mysqli) || !siEnsureStockOutBatchUsageTable($financeConnect)) {
+            return $map;
+        }
+
+        $sql = "SELECT stock_in_item_id, SUM(used_quantity) AS used_qty
+            FROM `" . STOCK_OUT_BATCH_USAGE . "`
+            WHERE stock_in_order_id = " . $stockInOrderId . "
+              AND status='A'
+            GROUP BY stock_in_item_id";
+        $result = mysqli_query($financeConnect, $sql);
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $itemId = isset($row['stock_in_item_id']) ? (int) $row['stock_in_item_id'] : 0;
+                if ($itemId > 0) {
+                    $map[$itemId] = isset($row['used_qty']) ? (int) $row['used_qty'] : 0;
+                }
+            }
+        }
+
+        return $map;
+    }
+}
+
+if (!function_exists('siGetAvailableFifoStockInBatches')) {
+    function siGetAvailableFifoStockInBatches($financeConnect, $warehouseId, $productId, $packageId = 0, $excludeStockOutOrderId = 0)
+    {
+        $batches = array();
+        $warehouseId = (int) $warehouseId;
+        $productId = (int) $productId;
+        $packageId = (int) $packageId;
+        $excludeStockOutOrderId = (int) $excludeStockOutOrderId;
+
+        if (!($financeConnect instanceof mysqli) || $productId <= 0 || !siEnsureStockOutBatchUsageTable($financeConnect)) {
+            return $batches;
+        }
+
+        $usedQtyExpr = $excludeStockOutOrderId > 0
+            ? "SUM(CASE WHEN u.stock_out_order_id <> " . $excludeStockOutOrderId . " THEN u.used_quantity ELSE 0 END)"
+            : "SUM(u.used_quantity)";
+
+        $sql = "SELECT
+                    i.id AS stock_in_item_id,
+                    i.stock_in_order_id,
+                    o.order_number,
+                    o.stock_in_date,
+                    i.product_id,
+                    i.package_id,
+                    CAST(IFNULL(i.product_quantity, 0) AS SIGNED) AS original_quantity,
+                    IFNULL(" . $usedQtyExpr . ", 0) AS used_quantity
+                FROM `stock_in_order_item` i
+                INNER JOIN `stock_in_order` o ON o.id = i.stock_in_order_id
+                LEFT JOIN `" . STOCK_OUT_BATCH_USAGE . "` u
+                    ON u.stock_in_item_id = i.id
+                   AND u.status = 'A'
+                WHERE i.status='A'
+                  AND o.status='A'
+                  AND COALESCE(NULLIF(TRIM(o.stock_type), ''), 'Stock In') <> 'Stock Out'
+                  AND i.product_id = " . $productId;
+        if ($warehouseId > 0) {
+            $sql .= " AND o.warehouse_id = " . $warehouseId;
+        }
+        if ($packageId > 0) {
+            $sql .= " AND i.package_id = " . $packageId;
+        }
+        $sql .= " GROUP BY i.id, i.stock_in_order_id, o.order_number, o.stock_in_date, i.product_id, i.package_id, i.product_quantity
+                  HAVING (CAST(IFNULL(i.product_quantity, 0) AS SIGNED) - IFNULL(" . $usedQtyExpr . ", 0)) > 0
+                  ORDER BY o.stock_in_date ASC, o.id ASC, i.id ASC";
+
+        $result = mysqli_query($financeConnect, $sql);
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $originalQty = isset($row['original_quantity']) ? (int) $row['original_quantity'] : 0;
+                $usedQty = isset($row['used_quantity']) ? (int) $row['used_quantity'] : 0;
+                $availableQty = $originalQty - $usedQty;
+                if ($availableQty <= 0) {
+                    continue;
+                }
+
+                $row['available_quantity'] = $availableQty;
+                $batches[] = $row;
+            }
+        }
+
+        return $batches;
+    }
+}
+
+if (!function_exists('siAllocateStockOutQuantityAcrossFifoBatches')) {
+    function siAllocateStockOutQuantityAcrossFifoBatches($financeConnect, $warehouseId, $productId, $requiredQty, $packageId = 0, $excludeStockOutOrderId = 0, $productLabel = '', $warehouseLabel = '')
+    {
+        $warehouseId = (int) $warehouseId;
+        $productId = (int) $productId;
+        $requiredQty = (int) $requiredQty;
+        $packageId = (int) $packageId;
+        $excludeStockOutOrderId = (int) $excludeStockOutOrderId;
+
+        if ($productId <= 0 || $requiredQty <= 0) {
+            return array();
+        }
+
+        $batches = siGetAvailableFifoStockInBatches($financeConnect, $warehouseId, $productId, $packageId, $excludeStockOutOrderId);
+        $availableQty = 0;
+        foreach ($batches as $batch) {
+            $availableQty += isset($batch['available_quantity']) ? (int) $batch['available_quantity'] : 0;
+        }
+
+        if ($availableQty < $requiredQty) {
+            $message = ($warehouseLabel !== '' ? $warehouseLabel . ' ' : '') . 'not enough warehouse stock';
+            if ($productLabel !== '') {
+                $message .= ' for ' . $productLabel;
+            } else {
+                $message .= ' for product #' . $productId;
+            }
+            $message .= '.';
+            throw new Exception($message);
+        }
+
+        $allocations = array();
+        $remainingQty = $requiredQty;
+        foreach ($batches as $batch) {
+            if ($remainingQty <= 0) {
+                break;
+            }
+
+            $availableBatchQty = isset($batch['available_quantity']) ? (int) $batch['available_quantity'] : 0;
+            if ($availableBatchQty <= 0) {
+                continue;
+            }
+
+            $usedQty = min($remainingQty, $availableBatchQty);
+            $allocations[] = array(
+                'stock_in_order_id' => isset($batch['stock_in_order_id']) ? (int) $batch['stock_in_order_id'] : 0,
+                'stock_in_item_id' => isset($batch['stock_in_item_id']) ? (int) $batch['stock_in_item_id'] : 0,
+                'stock_in_order_number' => isset($batch['order_number']) ? (string) $batch['order_number'] : '',
+                'stock_in_date' => isset($batch['stock_in_date']) ? (string) $batch['stock_in_date'] : '',
+                'product_id' => $productId,
+                'package_id' => $packageId,
+                'used_quantity' => $usedQty,
+            );
+            $remainingQty -= $usedQty;
+        }
+
+        if ($remainingQty > 0) {
+            throw new Exception('Unable to allocate stock out quantity across FIFO batches.');
+        }
+
+        return $allocations;
+    }
+}
+
+if (!function_exists('siInsertStockOutBatchUsageRows')) {
+    function siInsertStockOutBatchUsageRows($financeConnect, $stockOutOrderId, $stockOutItemId, $allocations, $actorUserId = 'SYSTEM')
+    {
+        $stockOutOrderId = (int) $stockOutOrderId;
+        $stockOutItemId = (int) $stockOutItemId;
+        $actorUserId = trim((string) $actorUserId) !== '' ? trim((string) $actorUserId) : 'SYSTEM';
+
+        if ($stockOutOrderId <= 0 || $stockOutItemId <= 0 || !($financeConnect instanceof mysqli) || !siEnsureStockOutBatchUsageTable($financeConnect)) {
+            throw new Exception('Failed to prepare stock out batch usage.');
+        }
+
+        $safeActor = mysqli_real_escape_string($financeConnect, $actorUserId);
+        foreach ((array) $allocations as $allocation) {
+            $stockInOrderId = isset($allocation['stock_in_order_id']) ? (int) $allocation['stock_in_order_id'] : 0;
+            $stockInItemId = isset($allocation['stock_in_item_id']) ? (int) $allocation['stock_in_item_id'] : 0;
+            $productId = isset($allocation['product_id']) ? (int) $allocation['product_id'] : 0;
+            $packageId = isset($allocation['package_id']) ? (int) $allocation['package_id'] : 0;
+            $usedQty = isset($allocation['used_quantity']) ? (int) $allocation['used_quantity'] : 0;
+            if ($stockInOrderId <= 0 || $stockInItemId <= 0 || $productId <= 0 || $usedQty <= 0) {
+                continue;
+            }
+
+            $insertSql = "INSERT INTO `" . STOCK_OUT_BATCH_USAGE . "`
+                (`stock_out_order_id`, `stock_out_item_id`, `stock_in_order_id`, `stock_in_item_id`, `product_id`, `package_id`, `used_quantity`, `create_by`, `create_date`, `create_time`, `status`)
+                VALUES
+                (" . $stockOutOrderId . ", " . $stockOutItemId . ", " . $stockInOrderId . ", " . $stockInItemId . ", " . $productId . ", " . $packageId . ", " . $usedQty . ", '" . $safeActor . "', CURDATE(), CURTIME(), 'A')";
+            if (!mysqli_query($financeConnect, $insertSql)) {
+                throw new Exception('Failed to save stock out batch usage.');
+            }
+        }
+    }
+}
+
+if (!function_exists('siDeactivateStockOutBatchUsageRowsByOrder')) {
+    function siDeactivateStockOutBatchUsageRowsByOrder($financeConnect, $stockOutOrderId)
+    {
+        $stockOutOrderId = (int) $stockOutOrderId;
+        if ($stockOutOrderId <= 0 || !($financeConnect instanceof mysqli) || !siEnsureStockOutBatchUsageTable($financeConnect)) {
+            return false;
+        }
+
+        return (bool) mysqli_query(
+            $financeConnect,
+            "UPDATE `" . STOCK_OUT_BATCH_USAGE . "` SET status='D' WHERE stock_out_order_id = " . $stockOutOrderId . " AND status='A'"
+        );
+    }
+}
+
+if (!function_exists('siBuildSourceOrderLinkMap')) {
+    function siBuildSourceOrderLinkMap($cmsConnect, $financeConnect, $orderNumbers)
+    {
+        $map = array();
+        $seen = array();
+
+        foreach ((array) $orderNumbers as $orderNumber) {
+            $orderNumber = trim((string) $orderNumber);
+            if ($orderNumber === '' || isset($seen[$orderNumber])) {
+                continue;
+            }
+            $seen[$orderNumber] = true;
+
+            $orderRow = shopeeOmsLoadOrderByCodeAnyPlatform($cmsConnect, $financeConnect, $orderNumber);
+            if (!empty($orderRow)) {
+                $platform = shopeeOmsGetOrderSourcePlatform($orderRow);
+                $sourceOrderId = isset($orderRow['id']) ? (int) $orderRow['id'] : 0;
+                $map[$orderNumber] = array(
+                    'url' => $sourceOrderId > 0 ? shopeeOmsGetOrderSourceViewUrl($platform, $sourceOrderId) : '',
+                    'platform' => $platform,
+                    'platform_label' => isset($orderRow['__oms_platform_label']) ? (string) $orderRow['__oms_platform_label'] : ucfirst($platform),
+                    'order_id' => $sourceOrderId,
+                );
+                continue;
+            }
+
+            $map[$orderNumber] = array(
+                'url' => '',
+                'platform' => '',
+                'platform_label' => '',
+                'order_id' => 0,
+            );
+        }
+
+        return $map;
+    }
+}
+
+if (!function_exists('siBuildStockOutBatchUsageLine')) {
+    function siBuildStockOutBatchUsageLine($usageRow, $productNameMap = array())
+    {
+        $stockInOrderNumber = trim((string) (isset($usageRow['stock_in_order_number']) ? $usageRow['stock_in_order_number'] : ''));
+        $stockInOrderId = isset($usageRow['stock_in_order_id']) ? (int) $usageRow['stock_in_order_id'] : 0;
+        $productId = isset($usageRow['product_id']) ? (int) $usageRow['product_id'] : 0;
+        $usedQty = isset($usageRow['used_quantity']) ? (int) $usageRow['used_quantity'] : 0;
+        $stockInDate = trim((string) (isset($usageRow['stock_in_order_date']) ? $usageRow['stock_in_order_date'] : (isset($usageRow['stock_in_date']) ? $usageRow['stock_in_date'] : '')));
+
+        $label = $stockInOrderNumber !== '' ? $stockInOrderNumber : (string) $stockInOrderId;
+        $productName = isset($productNameMap[$productId]) && trim((string) $productNameMap[$productId]) !== ''
+            ? (string) $productNameMap[$productId]
+            : ('Product #' . $productId);
+
+        return 'Stock In #' . $label . ' / ' . $stockInDate . ' / ' . $productName . ' x ' . $usedQty;
     }
 }
 

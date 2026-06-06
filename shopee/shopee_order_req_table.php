@@ -5,6 +5,7 @@ $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+include_once ROOT . '/include/shopee_order_verify_modal_ui.php';
 
 $processingPageName = getPinGroupNameById($connect, 128);
 $verifyPageName = getPinGroupNameById($connect, 129);
@@ -23,13 +24,13 @@ $pinAccess = checkPin($connect, $allOrdersPageName);
 if (!is_array($pinAccess) || count($pinAccess) === 0) {
     $verifyAccess = checkPin($connect, $verifyPageName);
     if (is_array($verifyAccess) && count($verifyAccess) > 0) {
-        echo "<script>location.replace('shopee_arrival_management.php');</script>";
+        echo "<script>location.replace('../finance/arrival_management.php');</script>";
         exit;
     }
 
     $processingAccess = checkPin($connect, $processingPageName);
     if (is_array($processingAccess) && count($processingAccess) > 0) {
-        echo "<script>location.replace('shopee_waiting_to_pack.php');</script>";
+        echo "<script>location.replace('../finance/waiting_to_pack.php');</script>";
         exit;
     }
     echo "<script>alert('You do not have permission to view Shopee All Orders.'); location.replace('../dashboard.php');</script>";
@@ -42,6 +43,9 @@ $_SESSION['delChk'] = '';
 
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+if (empty($_SESSION['shopee_order_verify_pdf_csrf'])) {
+    $_SESSION['shopee_order_verify_pdf_csrf'] = bin2hex(random_bytes(32));
 }
 
 shopeeOmsEnsureRealtimePostponedSync($connect, $finance_connect);
@@ -136,6 +140,26 @@ if (isset($_GET['complete_id'])) {
         'remark' => 'Completed from all orders list.',
     ));
     echo "<script>alert('" . addslashes(isset($completeResult['message']) ? $completeResult['message'] : 'Unable to complete order.') . "'); location.replace('shopee_order_req_table.php');</script>";
+    exit;
+}
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['move_to_pack_id'])) {
+    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
+        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('shopee_order_req_table.php');</script>";
+        exit;
+    }
+
+    $orderId = intval($_POST['move_to_pack_id']);
+    $moveToPackResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'TP', array(
+        'actor_user_id' => USER_ID,
+        'actor_user_group_id' => USER_GROUP,
+        'source_page' => $pageTitle,
+        'remark' => 'Moved to To Pack from all orders list.',
+        'action' => 'move_to_pack',
+        'platform' => 'shopee',
+    ));
+    echo '<script>alert(' . json_encode((string) (isset($moveToPackResult['message']) ? $moveToPackResult['message'] : 'Unable to move order to To Pack.'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . '); location.replace(' . json_encode('shopee_order_req_table.php', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ');</script>';
     exit;
 }
 
@@ -708,14 +732,24 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                                 <?php
                                 $statusCode = shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '');
                                 $canAssignThisOrder = $canAssignEstimatedReceivedDate && shopeeOmsPassesAssignmentScope($connect, $row, USER_ID, USER_GROUP);
+                                $canMoveToPackThisOrder = shopeeOmsHasTransitionPermission($connect, $statusCode, 'TP', USER_GROUP, $row, USER_ID);
                                 $canVerifyThisOrder = shopeeOmsHasTransitionPermission($connect, $statusCode, 'V', USER_GROUP, $row, USER_ID);
                                 $canCompleteThisOrder = shopeeOmsHasTransitionPermission($connect, $statusCode, 'C', USER_GROUP, $row, USER_ID);
                                 $estimatedDateRange = function_exists('shopeeOmsGetEstimatedReceivedDateRange')
                                     ? shopeeOmsGetEstimatedReceivedDateRange($row)
                                     : array('min_date' => $estimatedDateMin, 'max_date' => $estimatedDateMax);
                                 ?>
+                                <?php if ($statusCode === 'P' && $canMoveToPackThisOrder) { ?>
+                                 <form method="post" class="d-inline" onsubmit="return confirm('Move this order to To Pack?')">
+                                     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
+                                     <input type="hidden" name="move_to_pack_id" value="<?= (int) $row['id'] ?>">
+                                     <button type="submit" class="btn btn-sm btn-rounded btn-info" title="Move to To Pack">
+                                         <i class="fas fa-box-open"></i>
+                                     </button>
+                                 </form>
+                                <?php } ?>
                                 <?php if ($statusCode === 'TP') { ?>
-                                 <a class="btn btn-sm btn-rounded btn-primary" href="<?= $SITEURL . '/shopee/shopee_order_request_info.php?id=' . (int) $row['id'] ?>" title="Open QR Info">
+                                 <a class="btn btn-sm btn-rounded btn-primary" href="<?= htmlspecialchars((string) shopeeOmsGetOrderSourceInfoUrl('shopee', (int) $row['id']), ENT_QUOTES, 'UTF-8') ?>" title="Open QR Info">
                                      <i class="fa-solid fa-qrcode"></i>
                                  </a>
                                 <?php } ?>
@@ -730,7 +764,13 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                                      title="Assign Estimate Received Date"><i class="fa-solid fa-calendar-days"></i></button>
                                 <?php } ?>
                                 <?php if ($statusCode === 'WAFC' && $canVerifyThisOrder) { ?>
-                                 <a href="?verify_id=<?= $row['id'] ?>" class="btn btn-sm btn-success btn-verified" onclick="return confirm('Mark this order as verified?')">Verified</a>
+                                 <button
+                                     type="button"
+                                     class="btn btn-sm btn-success btn-verified sor-verify-order-trigger"
+                                     data-order-id="<?= (int) $row['id'] ?>"
+                                     data-order-code="<?= htmlspecialchars((string) (isset($row['orderID']) ? $row['orderID'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                     data-existing-pdf-path="<?= htmlspecialchars((string) (isset($row['order_detail_pdf']) ? $row['order_detail_pdf'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                 >Verified</button>
                                 <?php } ?>
                                 <?php if ($statusCode === 'V' && $canCompleteThisOrder) { ?>
                                  <a href="?complete_id=<?= $row['id'] ?>" class="btn btn-sm btn-dark btn-verified" onclick="return confirm('Mark this order as complete?')">Complete</a>
@@ -844,10 +884,25 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
             </form>
         </div>
     </div>
+    <?php
+    shopeeOrderDetailPdfRenderVerifyModal(array(
+        'modal_id' => 'sorVerifyOrderModal',
+        'csrf_token' => isset($_SESSION['shopee_order_verify_pdf_csrf']) ? $_SESSION['shopee_order_verify_pdf_csrf'] : '',
+    ));
+    ?>
 </body>
 <script>
     dropdownMenuDispFix();
     datatableAlignment('shopee_order_req_table');
     keepDataTableControlsVisible('shopee_order_req_table');
 </script>
+<?php
+shopeeOrderDetailPdfRenderVerifyModalScript(array(
+    'modal_id' => 'sorVerifyOrderModal',
+    'trigger_selector' => '.sor-verify-order-trigger',
+    'endpoint_template' => '../shopee/shopee_order_req.php?id=__ORDER_ID__&act=E',
+    'redirect_url' => rtrim((string) $SITEURL, '/') . '/shopee/shopee_order_req_table.php',
+    'site_url' => rtrim((string) $SITEURL, '/'),
+));
+?>
 </html>

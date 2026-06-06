@@ -21,7 +21,7 @@ $pageAction = getPageAction($act);
 
 $redirect_page = $SITEURL . '/fb_cust_deals_table.php';
 $redirectLink = ("<script>location.href = '$redirect_page';</script>");
-$clearLocalStorage = '<script>localStorage.clear();</script>';
+$clearLocalStorage = '<script>clearLocalStoragePreservingCustomerRecordFilters();</script>';
 
 // to display data to input
 if ($dataID) { //edit/remove/view

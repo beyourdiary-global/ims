@@ -4,6 +4,7 @@ $currentPagePin = 38;
 
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
+include_once ROOT . '/include/customer_tag.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = CUS_INFO;
@@ -18,6 +19,20 @@ $redirect_page = $SITEURL . '/customerInfo.php';
 $deleteRedirectPage = $SITEURL . '/customerInfoTable.php';
 
 $result = getData('*', '', '', $tblName, $connect);
+$tableRows = array();
+if ($result instanceof mysqli_result) {
+    while ($row = $result->fetch_assoc()) {
+        $tableRows[] = $row;
+    }
+}
+
+$customerIds = array();
+foreach ($tableRows as $row) {
+    if (isset($row['id'])) {
+        $customerIds[] = (int) $row['id'];
+    }
+}
+$customerTagMap = customerTagGetCustomerTagMap($connect, 'customer_info', $customerIds);
 
 // if (!$result) {
 //     echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
@@ -35,7 +50,19 @@ $result = getData('*', '', '', $tblName, $connect);
     preloader(300);
 
     $(document).ready(() => {
-        createSortingTable('table');
+        createSortingTable('table', { searching: true });
+        initCustomerRecordTableFilters({
+            tableId: 'table',
+            storageKey: 'customer_info_filters',
+            panelStorageKey: 'customer_info_filter_panel_open',
+            filters: [
+                { key: 'customer_label', label: 'Customer Label', attr: 'customer_label', type: 'select', placeholder: 'All Customer Labels' },
+                { key: 'customer_tag', label: 'Tag', attr: 'customer_tag', type: 'select', placeholder: 'All Tags' },
+                { key: 'country', label: 'Country', attr: 'country', type: 'select', placeholder: 'All Countries' },
+                { key: 'sales_person', label: 'Sales Person In Charge', attr: 'sales_person', type: 'select', placeholder: 'All Sales Persons' },
+                { key: 'gender', label: 'Gender', attr: 'gender', type: 'select', placeholder: 'All Genders' }
+            ]
+        });
     });
 </script>
 
@@ -81,9 +108,14 @@ $result = getData('*', '', '', $tblName, $connect);
                     </div>
                 </div>
                 <?php
-                if (!$result) {
+                if (!($result instanceof mysqli_result)) {
+                    echo '<div class="text-center"><h4>No Result!</h4></div>';
+                } else if (empty($tableRows)) {
                     echo '<div class="text-center"><h4>No Result!</h4></div>';
                 } else {
+                    $segmentationCache = array();
+                    $countryCache = array();
+                    $personInChargeCache = array();
                     ?>
                     <table class="table table-striped" id="table">
                         <thead>
@@ -101,9 +133,81 @@ $result = getData('*', '', '', $tblName, $connect);
 
                         <tbody>
                             <?php
-                            while ($row = $result->fetch_assoc()) {
+                            foreach ($tableRows as $row) {
                                 if (isset($row['name'], $row['id']) && !empty($row['name'])) { ?>
-                                    <tr>
+                                    <?php
+                                    $customerFullName = trim((string) (($row['name'] ?? '') . ' ' . ($row['last_name'] ?? '')));
+
+                                    $customerLabelName = '';
+                                    $segmentationValue = isset($row['default_segmentation']) ? trim((string) $row['default_segmentation']) : '';
+                                    if ($segmentationValue !== '') {
+                                        if (isset($segmentationCache[$segmentationValue])) {
+                                            $customerLabelName = $segmentationCache[$segmentationValue];
+                                        } else {
+                                            $segmentationRst = getData('name', "id='" . mysqli_real_escape_string($connect, $segmentationValue) . "'", 'LIMIT 1', CUR_SEGMENTATION, $connect);
+                                            if ($segmentationRst && $segmentationRst->num_rows > 0) {
+                                                $customerLabelName = $segmentationRst->fetch_assoc()['name'];
+                                            } else {
+                                                $customerLabelName = $segmentationValue;
+                                            }
+                                            $segmentationCache[$segmentationValue] = $customerLabelName;
+                                        }
+                                    }
+
+                                    $customerTagRows = isset($customerTagMap[(int) $row['id']]) ? $customerTagMap[(int) $row['id']] : array();
+                                    $customerTagNames = customerRecordExtractTagNames($customerTagRows);
+                                    $tagValue = isset($row['tags']) ? trim((string) $row['tags']) : '';
+                                    if (empty($customerTagNames) && $tagValue !== '') {
+                                        $tagRst = getData('name', "id='" . mysqli_real_escape_string($connect, $tagValue) . "'", 'LIMIT 1', TAG, $connect);
+                                        if ($tagRst && $tagRst->num_rows > 0) {
+                                            $customerTagNames = customerRecordNormalizeFilterValues(array($tagRst->fetch_assoc()['name']));
+                                        } else {
+                                            $customerTagNames = customerRecordNormalizeFilterValues(array($tagValue));
+                                        }
+                                    }
+
+                                    $countryName = '';
+                                    $countryValue = isset($row['shipping_country_region']) ? trim((string) $row['shipping_country_region']) : '';
+                                    if ($countryValue !== '') {
+                                        if (isset($countryCache[$countryValue])) {
+                                            $countryName = $countryCache[$countryValue];
+                                        } else {
+                                            $countryRst = getData('nicename', "id='" . mysqli_real_escape_string($connect, $countryValue) . "'", 'LIMIT 1', COUNTRIES, $connect);
+                                            if ($countryRst && $countryRst->num_rows > 0) {
+                                                $countryName = $countryRst->fetch_assoc()['nicename'];
+                                            } else {
+                                                $countryName = $countryValue;
+                                            }
+                                            $countryCache[$countryValue] = $countryName;
+                                        }
+                                    }
+
+                                    $personInChargeName = '';
+                                    $personInChargeValue = isset($row['person_in_charges']) ? trim((string) $row['person_in_charges']) : '';
+                                    if ($personInChargeValue !== '') {
+                                        if (isset($personInChargeCache[$personInChargeValue])) {
+                                            $personInChargeName = $personInChargeCache[$personInChargeValue];
+                                        } else {
+                                            $personInChargeRst = getData('name', "id='" . mysqli_real_escape_string($connect, $personInChargeValue) . "'", 'LIMIT 1', USR_USER, $connect);
+                                            if ($personInChargeRst && $personInChargeRst->num_rows > 0) {
+                                                $personInChargeName = $personInChargeRst->fetch_assoc()['name'];
+                                            } else {
+                                                $personInChargeName = $personInChargeValue;
+                                            }
+                                            $personInChargeCache[$personInChargeValue] = $personInChargeName;
+                                        }
+                                    }
+
+                                    $filterAttributes = customerRecordBuildFilterDataAttributes(array(
+                                        'customer_name' => $customerFullName,
+                                        'customer_label' => $customerLabelName,
+                                        'customer_tag' => $customerTagNames,
+                                        'country' => $countryName,
+                                        'sales_person' => $personInChargeName,
+                                        'gender' => isset($row['gender']) ? $row['gender'] : '',
+                                    ));
+                                    ?>
+                                    <tr <?= $filterAttributes ?>>
                                         <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
                                         <th scope="row"><?= $num++; ?></th>
                                         <td scope="row" class="btn-container">
@@ -111,7 +215,6 @@ $result = getData('*', '', '', $tblName, $connect);
                                             <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
                                             <?php renderDeleteButton($pinAccess, $row['id'], $row['last_name'], $row['email'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
                                             <?php
-                                            $customerFullName = trim((string) (($row['name'] ?? '') . ' ' . ($row['last_name'] ?? '')));
                                             $urbanismAction = getUrbanismMemberActionData(
                                                 $connect,
                                                 '',

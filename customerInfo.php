@@ -17,7 +17,7 @@ $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 //Page Redirect Link , Clean LocalStorage , Error Alert Msg 
 $redirect_page = $SITEURL . '/customerInfoTable.php';
 $redirectLink = ("<script>location.href = '$redirect_page';</script>");
-$clearLocalStorage = '<script>localStorage.clear();</script>';
+$clearLocalStorage = '<script>clearLocalStoragePreservingCustomerRecordFilters();</script>';
 
 //Check a current page pin is exist or not
 $pageAction = getPageAction($act);

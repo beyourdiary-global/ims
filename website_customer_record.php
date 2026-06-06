@@ -20,7 +20,7 @@ $pageAction = getPageAction($act);
 
 $redirect_page = $SITEURL . '/website_customer_record_table.php';
 $redirectLink = ("<script>location.href = '$redirect_page';</script>");
-$clearLocalStorage = '<script>localStorage.clear();</script>';
+$clearLocalStorage = '<script>clearLocalStoragePreservingCustomerRecordFilters();</script>';
 
 // to display data to input
 if ($dataID) { //edit/remove/view

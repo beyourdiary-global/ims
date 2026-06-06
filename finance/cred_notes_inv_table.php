@@ -16,6 +16,7 @@ $num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/finance/cred_notes_inv.php';
 $result = getData('*', '', '', $tblName, $finance_connect);
+$hasRows = $result instanceof mysqli_result && $result->num_rows > 0;
 
 if (post('pay_status_option')) {
     $inv_id = post('inv_id');
@@ -85,7 +86,9 @@ if (post('pay_status_option')) {
     preloader(300);
 
     $(document).ready(() => {
-        createSortingTable('cred_notes_inv_table');
+        if ($('#cred_notes_inv_table').length) {
+            createSortingTable('cred_notes_inv_table');
+        }
     });
 </script>
 
@@ -124,6 +127,7 @@ if (post('pay_status_option')) {
                     </div>
                 </div>
 
+                <?php if ($hasRows) { ?>
                 <table class="table table-striped" id="cred_notes_inv_table">
                     <thead>
                         <tr>
@@ -260,6 +264,9 @@ if (post('pay_status_option')) {
                         </tr>
                     </tfoot>
                 </table>
+                <?php } else { ?>
+                    <div class="text-center"><h4>No Result!</h4></div>
+                <?php } ?>
             </div>
         </div>
     </div>
@@ -273,7 +280,9 @@ if (post('pay_status_option')) {
     checkCurrentPage(page, action);
     dropdownMenuDispFix();
     setButtonColor();
-    datatableAlignment('cred_notes_inv_table');
+    if ($('#cred_notes_inv_table').length) {
+        datatableAlignment('cred_notes_inv_table');
+    }
 
     var pendingElem = $('#pendingOption');
     var paidElem = $('#paidOption');
