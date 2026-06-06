@@ -352,11 +352,11 @@ if (!function_exists('shopeeOrderDetailPdfRenderVerifyModalScript')) {
                             tr.appendChild(fieldTd);
 
                             var currentTd = document.createElement('td');
-                            currentTd.textContent = row.current_value || '';
+                            currentTd.textContent = row.current_value == null ? '' : String(row.current_value);
                             tr.appendChild(currentTd);
 
                             var pdfTd = document.createElement('td');
-                            pdfTd.textContent = row.pdf_value || '';
+                            pdfTd.textContent = row.pdf_value == null ? '' : String(row.pdf_value);
                             tr.appendChild(pdfTd);
 
                             var finalTd = document.createElement('td');
