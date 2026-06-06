@@ -37,13 +37,29 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
 
 <script>
     $(document).ready(() => {
-        createSortingTable('fb_cust_deals');
+        createSortingTable('fb_cust_deals', { searching: true });
+        initCustomerRecordTableFilters({
+            tableId: 'fb_cust_deals',
+            storageKey: 'facebook_customer_record_filters',
+            panelStorageKey: 'facebook_customer_record_filter_panel_open',
+            filters: [
+                { key: 'customer_label', label: 'Customer Label', attr: 'customer_label', type: 'select', placeholder: 'All Customer Labels' },
+                { key: 'customer_tag', label: 'Tag', attr: 'customer_tag', type: 'select', placeholder: 'All Tags' },
+                { key: 'country', label: 'Country', attr: 'country', type: 'select', placeholder: 'All Countries' },
+                { key: 'brand', label: 'Brand', attr: 'brand', type: 'select', placeholder: 'All Brands' },
+                { key: 'series', label: 'Series', attr: 'series', type: 'select', placeholder: 'All Series' },
+                { key: 'sales_person', label: 'Sales Person In Charge', attr: 'sales_person', type: 'select', placeholder: 'All Sales Persons' },
+                { key: 'facebook_page', label: 'Facebook Page', attr: 'facebook_page', type: 'select', placeholder: 'All Facebook Pages' },
+                { key: 'channel', label: 'Channel', attr: 'channel', type: 'select', placeholder: 'All Channels' }
+            ]
+        });
     });
 </script>
 
 
 <style>
-    .btn {
+    #addBtn,
+    .btn-container .btn {
         padding: 0.2rem 0.5rem;
         font-size: 0.75rem;
         margin: 3px;
@@ -115,36 +131,56 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
                     </thead>
                     <tbody>
                         <?php foreach ($tableRows as $row) {
+                            $customerLabelMeta = isset($customerLabelMap[(int) $row['id']]) ? $customerLabelMap[(int) $row['id']] : array();
+                            $customerTagRows = isset($customerTagMap[(int) $row['id']]) ? $customerTagMap[(int) $row['id']] : array();
                             $pic_name = $country_name = $brand_name = $series_name = $fb_page_name = $channel_name = '';
 
                             $q1 = getData('name', "id='" . $row['sales_pic'] . "'", '', USR_USER, $connect);
                             $pic = $q1 ? $q1->fetch_assoc() : null;
                             if ($pic) $pic_name = $pic['name'];
+                            else $pic_name = isset($row['sales_pic']) ? (string) $row['sales_pic'] : '';
 
                             $q2 = getData('nicename', "id='" . $row['country'] . "'", '', COUNTRIES, $connect);
                             $country = $q2 ? $q2->fetch_assoc() : null;
                             if ($country) $country_name = $country['nicename'];
+                            else $country_name = isset($row['country']) ? (string) $row['country'] : '';
 
                             $q3 = getData('name', "id='" . $row['brand'] . "'", '', BRAND, $connect);
                             $brand = $q3 ? $q3->fetch_assoc() : null;
                             if ($brand) $brand_name = $brand['name'];
+                            else $brand_name = isset($row['brand']) ? (string) $row['brand'] : '';
 
                             $q4 = getData('name', "id='" . $row['series'] . "'", '', BRD_SERIES, $connect);
                             $series = $q4 ? $q4->fetch_assoc() : null;
                             if ($series) $series_name = $series['name'];
+                            else $series_name = isset($row['series']) ? (string) $row['series'] : '';
 
                             //fb page
                             $q6 = getData('name', "id='" . $row['fb_page'] . "'", '', FB_PAGE_ACC, $finance_connect);
                             $fb_page = $q6 ? $q6->fetch_assoc() : null;
                             if ($fb_page) $fb_page_name = $fb_page['name'];
+                            else $fb_page_name = isset($row['fb_page']) ? (string) $row['fb_page'] : '';
 
                             //channel
                             $q7 = getData('name', "id='" . $row['channel'] . "'", '', CHANEL_SC_MD, $finance_connect);
                             $channel = $q7 ? $q7->fetch_assoc() : null;
                             if ($channel) $channel_name = $channel['name'];
+                            else $channel_name = isset($row['channel']) ? (string) $row['channel'] : '';
+
+                            $filterAttributes = customerRecordBuildFilterDataAttributes(array(
+                                'customer_name' => isset($row['name']) ? $row['name'] : '',
+                                'customer_label' => customerRecordExtractLabelNames($customerLabelMeta),
+                                'customer_tag' => customerRecordExtractTagNames($customerTagRows),
+                                'sales_person' => $pic_name,
+                                'country' => $country_name,
+                                'brand' => $brand_name,
+                                'series' => $series_name,
+                                'facebook_page' => $fb_page_name,
+                                'channel' => $channel_name,
+                            ));
                             ?>
 
-                            <tr>
+                            <tr <?= $filterAttributes ?>>
                                 <th class="hideColumn" scope="row">
                                     <?= $row['id'] ?>
                                 </th>
@@ -174,9 +210,9 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
                         </td>
 
                                 <td scope="row">
-                                    <?= customerLabelRenderNameCell(isset($row['name']) ? $row['name'] : '', isset($customerLabelMap[(int) $row['id']]) ? $customerLabelMap[(int) $row['id']] : array()) ?>
+                                    <?= customerLabelRenderNameCell(isset($row['name']) ? $row['name'] : '', $customerLabelMeta) ?>
                                 </td>
-                                <td scope="row"><?= customerLabelRenderSummaryCell(isset($customerLabelMap[(int) $row['id']]) ? $customerLabelMap[(int) $row['id']] : array(), isset($customerTagMap[(int) $row['id']]) ? $customerTagMap[(int) $row['id']] : array()) ?></td>
+                                <td scope="row"><?= customerLabelRenderSummaryCell($customerLabelMeta, $customerTagRows) ?></td>
                                 <td scope="row">
                                     <?= $row['fb_link'] ?>
                                 </td>

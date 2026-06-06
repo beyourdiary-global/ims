@@ -5,6 +5,7 @@ $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+include_once ROOT . '/include/shopee_order_verify_modal_ui.php';
 
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
@@ -35,6 +36,9 @@ $_SESSION['delChk'] = '';
 
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+if (empty($_SESSION['shopee_order_verify_pdf_csrf'])) {
+    $_SESSION['shopee_order_verify_pdf_csrf'] = bin2hex(random_bytes(32));
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET') {
@@ -723,11 +727,13 @@ if ($result instanceof mysqli_result) {
                                 ?>
 
                                 <?php if (in_array($statusCode, array('OC', 'WAFC'), true) && $canVerifyAction && $canVerifyThisOrder) { ?>
-                                <form method="post" class="d-inline" onsubmit="return confirm('Mark this order as verified?')">
-                                    <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
-                                    <input type="hidden" name="verify_id" value="<?= (int) $row['id'] ?>">
-                                    <button type="submit" class="btn btn-sm btn-success btn-verified">Verified</button>
-                                </form>
+                                <button
+                                    type="button"
+                                    class="btn btn-sm btn-success btn-verified sor-verify-order-trigger"
+                                    data-order-id="<?= (int) $row['id'] ?>"
+                                    data-order-code="<?= htmlspecialchars((string) (isset($row['orderID']) ? $row['orderID'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                    data-existing-pdf-path="<?= htmlspecialchars((string) (isset($row['order_detail_pdf']) ? $row['order_detail_pdf'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                >Verified</button>
                                 <?php } ?>
                                 <?php if (in_array($statusCode, array('SP', 'WAERD', 'WR', 'PR', 'WAFC', 'V', 'C'), true)) { ?>
                                  <form method="post" class="d-inline" onsubmit="return confirm('Mark this order as Return?')">
@@ -830,10 +836,25 @@ if ($result instanceof mysqli_result) {
             </form>
         </div>
     </div>
+    <?php
+    shopeeOrderDetailPdfRenderVerifyModal(array(
+        'modal_id' => 'sorVerifyOrderModal',
+        'csrf_token' => isset($_SESSION['shopee_order_verify_pdf_csrf']) ? $_SESSION['shopee_order_verify_pdf_csrf'] : '',
+    ));
+    ?>
 </body>
 <script>
     dropdownMenuDispFix();
     datatableAlignment('shopee_order_req_table');
     keepDataTableControlsVisible('shopee_order_req_table');
 </script>
+<?php
+shopeeOrderDetailPdfRenderVerifyModalScript(array(
+    'modal_id' => 'sorVerifyOrderModal',
+    'trigger_selector' => '.sor-verify-order-trigger',
+    'endpoint_template' => '../shopee/shopee_order_req.php?id=__ORDER_ID__&act=E',
+    'redirect_url' => rtrim((string) $SITEURL, '/') . '/shopee/shopee_verify.php',
+    'site_url' => rtrim((string) $SITEURL, '/'),
+));
+?>
 </html>

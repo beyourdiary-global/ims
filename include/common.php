@@ -3903,6 +3903,44 @@ if (!function_exists('customerLabelRenderBadge')) {
     }
 }
 
+if (!function_exists('customerLabelRenderCollapsibleBadgeGroup')) {
+    function customerLabelRenderCollapsibleBadgeGroup($items, $wrapperClass = 'customer-label-summary-wrap', $visibleCount = 10)
+    {
+        $items = array_values(array_filter((array) $items, function ($item) {
+            return trim((string) $item) !== '';
+        }));
+
+        if (empty($items)) {
+            return '';
+        }
+
+        $visibleCount = (int) $visibleCount;
+        if ($visibleCount <= 0) {
+            $visibleCount = 10;
+        }
+
+        $wrapperClasses = trim((string) $wrapperClass) . ' js-customer-label-wrap';
+        $html = '<span class="' . htmlspecialchars($wrapperClasses, ENT_QUOTES, 'UTF-8') . '" data-expanded="0">';
+
+        foreach ($items as $index => $itemHtml) {
+            $itemClasses = 'customer-label-item';
+            if ($index >= $visibleCount) {
+                $itemClasses .= ' customer-label-extra d-none';
+            }
+
+            $html .= '<span class="' . htmlspecialchars($itemClasses, ENT_QUOTES, 'UTF-8') . '">' . $itemHtml . '</span>';
+        }
+
+        if (count($items) > $visibleCount) {
+            $html .= '<button type="button" class="customer-label-toggle-btn js-toggle-customer-labels">Show More</button>';
+        }
+
+        $html .= '</span>';
+
+        return $html;
+    }
+}
+
 if (!function_exists('customerLabelRenderNameCell')) {
     function customerLabelRenderNameCell($displayName, $customerLabelMeta)
     {
@@ -3924,12 +3962,76 @@ if (!function_exists('customerLabelRenderSummaryCell')) {
         if (isset($customerLabelMeta['repeat'])) {
             $parts[] = customerLabelRenderBadge($customerLabelMeta['repeat']);
         }
-        $tagBadgeHtml = customerTagRenderBadges($customerTagRows, 'customer-tag-table-badge-group', 'customer-tag-table-badge');
-        if ($tagBadgeHtml !== '') {
-            $parts[] = $tagBadgeHtml;
+        $parts = array_merge($parts, customerTagRenderBadgeItems($customerTagRows, 'customer-tag-table-badge'));
+
+        return customerLabelRenderCollapsibleBadgeGroup($parts, 'customer-label-summary-wrap');
+    }
+}
+
+if (!function_exists('customerRecordNormalizeFilterValues')) {
+    function customerRecordNormalizeFilterValues($values)
+    {
+        $normalizedValues = array();
+
+        foreach ((array) $values as $value) {
+            $value = trim(html_entity_decode(strip_tags((string) $value), ENT_QUOTES, 'UTF-8'));
+            if ($value === '' || in_array($value, $normalizedValues, true)) {
+                continue;
+            }
+
+            $normalizedValues[] = $value;
         }
 
-        return empty($parts) ? '' : '<span class="customer-label-summary-wrap">' . implode('', $parts) . '</span>';
+        return $normalizedValues;
+    }
+}
+
+if (!function_exists('customerRecordExtractLabelNames')) {
+    function customerRecordExtractLabelNames($customerLabelMeta)
+    {
+        $labelNames = array();
+
+        foreach (array('segmentation', 'level', 'repeat') as $labelType) {
+            if (isset($customerLabelMeta[$labelType]['name'])) {
+                $labelNames[] = $customerLabelMeta[$labelType]['name'];
+            }
+        }
+
+        return customerRecordNormalizeFilterValues($labelNames);
+    }
+}
+
+if (!function_exists('customerRecordExtractTagNames')) {
+    function customerRecordExtractTagNames($customerTagRows)
+    {
+        $tagNames = array();
+
+        foreach ((array) $customerTagRows as $tagRow) {
+            if (isset($tagRow['name'])) {
+                $tagNames[] = $tagRow['name'];
+            }
+        }
+
+        return customerRecordNormalizeFilterValues($tagNames);
+    }
+}
+
+if (!function_exists('customerRecordBuildFilterDataAttributes')) {
+    function customerRecordBuildFilterDataAttributes($filters)
+    {
+        $attributes = array();
+
+        foreach ((array) $filters as $key => $value) {
+            $safeKey = preg_replace('/[^a-z0-9_-]+/i', '-', (string) $key);
+            if ($safeKey === '') {
+                continue;
+            }
+
+            $values = customerRecordNormalizeFilterValues(is_array($value) ? $value : array($value));
+            $attributes[] = 'data-filter-' . $safeKey . '="' . htmlspecialchars(implode('||', $values), ENT_QUOTES, 'UTF-8') . '"';
+        }
+
+        return implode(' ', $attributes);
     }
 }
 
@@ -5240,7 +5342,7 @@ if (!function_exists('shopeeOmsBuildOrderProductSummaryBySource')) {
         $productSummary = array();
         $productSummaryRows = array();
         foreach ($productQtyMap as $productId => $qty) {
-            $productLabel = (isset($productNameMap[$productId]) ? $productNameMap[$productId] : ('Product #' . $productId)) . ' x' . (int) $qty;
+            $productLabel = (isset($productNameMap[$productId]) ? $productNameMap[$productId] : ('Product #' . $productId)) . ' x' . (int) $qty . ' boxes';
             $productSummary[] = $productLabel;
             $productSummaryRows[] = array(
                 'product_id' => (int) $productId,
@@ -5990,21 +6092,78 @@ if (!function_exists('shopeeOmsBuildWarehouseMessage')) {
         $airbillAttachment = trim((string) (isset($orderRow[$airbillAttachmentField]) ? $orderRow[$airbillAttachmentField] : ''));
         $customerAddress = trim((string) (isset($orderRow[$addressField]) ? $orderRow[$addressField] : ''));
 
-        $lines = array();
-        $lines[] = $platformLabel . ' Order ID: ' . ($orderCode !== '' ? $orderCode : '-');
-        $lines[] = $platformLabel . ' Customer: ' . ($customerName !== '' ? $customerName : '-');
-        if ($customerAddress !== '') {
-            $lines[] = 'Address: ' . $customerAddress;
+        $warehouseName = '';
+        if (function_exists('shopeeOmsResolveStockOutWarehouseId') && function_exists('shopeeOmsResolveWarehouseNameById')) {
+            $warehouseId = shopeeOmsResolveStockOutWarehouseId($connect, $orderRow);
+            $warehouseName = shopeeOmsResolveWarehouseNameById($connect, $warehouseId);
         }
-        $lines[] = 'Package: ' . (!empty($summary['bundle_name']) ? $summary['bundle_name'] : '-');
-        $lines[] = 'Product Details: ' . (!empty($summary['product_lines']) ? implode(', ', $summary['product_lines']) : '-');
+
+        $packageLines = array();
+if (!empty($summary['package_lines']) && is_array($summary['package_lines'])) {
+    foreach ($summary['package_lines'] as $packageLine) {
+        $packageLine = trim((string) $packageLine);
+        if ($packageLine !== '') {
+            $packageLines[] = $packageLine;
+        }
+    }
+}
+
+        $productLines = array();
+        if (!empty($summary['product_lines']) && is_array($summary['product_lines'])) {
+            foreach ($summary['product_lines'] as $productLine) {
+                $productLine = trim((string) $productLine);
+                if ($productLine !== '') {
+                    $productLines[] = $productLine;
+                }
+            }
+        }
+
+        $orderFieldLabel = $platform === 'shopee' ? 'Shopee OID' : $platformLabel . ' Order ID';
+        $customerFieldLabel = $platform === 'shopee' ? 'Shopee Buyer Username' : $platformLabel . ' Customer';
+
+        $lines = array();
+
+        $lines[] = '【' . ($warehouseName !== '' ? $warehouseName : 'Warehouse Name') . '】';
+        $lines[] = $orderFieldLabel . ': ' . ($orderCode !== '' ? $orderCode : '-');
+        $lines[] = '';
+        $lines[] = $customerFieldLabel . ': ' . ($customerName !== '' ? $customerName : '-');
+        $lines[] = '';
+
+        if (count($packageLines) > 1) {
+            $lines[] = 'Package:';
+            foreach ($packageLines as $index => $packageLine) {
+                $lines[] = ($index + 1) . '. ' . $packageLine;
+            }
+        } else {
+            $lines[] = 'Package: ' . (!empty($packageLines) ? $packageLines[0] : '-');
+        }
+
+        $lines[] = '';
+
+        $lines[] = 'Product Details:';
+        $lines[] = '';
+
+        if (!empty($productLines)) {
+            foreach ($productLines as $index => $productLine) {
+                if (count($productLines) > 1) {
+                    $lines[] = ($index + 1) . '. ' . $productLine;
+                } else {
+                    $lines[] = $productLine;
+                }
+            }
+        } else {
+            $lines[] = '-';
+        }
+
         if ($airbillText !== '') {
+            $lines[] = '';
             $lines[] = 'Airbill: ' . $airbillText;
         }
-        if ($airbillAttachment !== '') {
-            $lines[] = 'Airbill Attachment: ' . basename($airbillAttachment);
-        }
-        $lines[] = 'Warehouse Stock-out Link: ' . $link;
+
+        $lines[] = '';
+
+        $lines[] = 'Warehouse Stock-out Link:';
+        $lines[] = $link !== '' ? $link : 'Warehouse Stock-out Already Completed';
 
         return array(
             'link' => $link,
@@ -7679,7 +7838,7 @@ if (!function_exists('shopeeOmsRenderUserGroupBadge')) {
 }
 
 if (!function_exists('shopeeOmsGetDailyFlowReport')) {
-    function shopeeOmsGetDailyFlowReport($cmsConnect, $financeConnect, $dateFrom, $dateTo, $fromStatus = '', $toStatus = '', $orderCode = '', $warehouseId = 0, $platform = '', $exactDate = '', $monthFilter = '', $yearFilter = '')
+    function shopeeOmsGetDailyFlowReport($cmsConnect, $financeConnect, $dateFrom, $dateTo, $fromStatus = '', $toStatus = '', $orderCode = '', $warehouseId = 0, $platform = '', $exactDate = '', $monthFilter = '', $yearFilter = '', $actorUserId = 0)
     {
         $summary = array();
         $details = array();
@@ -7695,6 +7854,7 @@ if (!function_exists('shopeeOmsGetDailyFlowReport')) {
 
         $platform = shopeeOmsNormalizePlatformKey($platform);
         $warehouseId = shopeeOmsNormalizeWarehouseId($warehouseId);
+        $actorUserId = (int) $actorUserId;
         $defaultWarehouseId = $cmsConnect instanceof mysqli ? shopeeOmsGetDefaultWarehouseId($cmsConnect) : 0;
         foreach (shopeeOmsGetOrderSourceConfigs() as $sourcePlatform => $sourceConfig) {
             if ($platform !== '' && $platform !== $sourcePlatform) {
@@ -7708,6 +7868,9 @@ if (!function_exists('shopeeOmsGetDailyFlowReport')) {
 
             $conditions = array();
             $conditions[] = "l.status = 'A'";
+            if ($actorUserId > 0) {
+                $conditions[] = "l.user_id = " . $actorUserId;
+            }
             if ($exactDate !== '') {
                 $conditions[] = "DATE(l.transition_at) = '" . mysqli_real_escape_string($financeConnect, $exactDate) . "'";
             } else {

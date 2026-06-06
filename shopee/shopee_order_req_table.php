@@ -5,6 +5,7 @@ $isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+include_once ROOT . '/include/shopee_order_verify_modal_ui.php';
 
 $processingPageName = getPinGroupNameById($connect, 128);
 $verifyPageName = getPinGroupNameById($connect, 129);
@@ -42,6 +43,9 @@ $_SESSION['delChk'] = '';
 
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+if (empty($_SESSION['shopee_order_verify_pdf_csrf'])) {
+    $_SESSION['shopee_order_verify_pdf_csrf'] = bin2hex(random_bytes(32));
 }
 
 shopeeOmsEnsureRealtimePostponedSync($connect, $finance_connect);
@@ -760,7 +764,13 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                                      title="Assign Estimate Received Date"><i class="fa-solid fa-calendar-days"></i></button>
                                 <?php } ?>
                                 <?php if ($statusCode === 'WAFC' && $canVerifyThisOrder) { ?>
-                                 <a href="?verify_id=<?= $row['id'] ?>" class="btn btn-sm btn-success btn-verified" onclick="return confirm('Mark this order as verified?')">Verified</a>
+                                 <button
+                                     type="button"
+                                     class="btn btn-sm btn-success btn-verified sor-verify-order-trigger"
+                                     data-order-id="<?= (int) $row['id'] ?>"
+                                     data-order-code="<?= htmlspecialchars((string) (isset($row['orderID']) ? $row['orderID'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                     data-existing-pdf-path="<?= htmlspecialchars((string) (isset($row['order_detail_pdf']) ? $row['order_detail_pdf'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                 >Verified</button>
                                 <?php } ?>
                                 <?php if ($statusCode === 'V' && $canCompleteThisOrder) { ?>
                                  <a href="?complete_id=<?= $row['id'] ?>" class="btn btn-sm btn-dark btn-verified" onclick="return confirm('Mark this order as complete?')">Complete</a>
@@ -874,10 +884,25 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
             </form>
         </div>
     </div>
+    <?php
+    shopeeOrderDetailPdfRenderVerifyModal(array(
+        'modal_id' => 'sorVerifyOrderModal',
+        'csrf_token' => isset($_SESSION['shopee_order_verify_pdf_csrf']) ? $_SESSION['shopee_order_verify_pdf_csrf'] : '',
+    ));
+    ?>
 </body>
 <script>
     dropdownMenuDispFix();
     datatableAlignment('shopee_order_req_table');
     keepDataTableControlsVisible('shopee_order_req_table');
 </script>
+<?php
+shopeeOrderDetailPdfRenderVerifyModalScript(array(
+    'modal_id' => 'sorVerifyOrderModal',
+    'trigger_selector' => '.sor-verify-order-trigger',
+    'endpoint_template' => '../shopee/shopee_order_req.php?id=__ORDER_ID__&act=E',
+    'redirect_url' => rtrim((string) $SITEURL, '/') . '/shopee/shopee_order_req_table.php',
+    'site_url' => rtrim((string) $SITEURL, '/'),
+));
+?>
 </html>

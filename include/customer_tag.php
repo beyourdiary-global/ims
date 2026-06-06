@@ -479,11 +479,7 @@ if (!function_exists('customerTagRenderBadges')) {
     function customerTagRenderBadges($tagRows, $wrapperClass = 'customer-tag-badge-group', $badgeClass = 'customer-tag-badge')
     {
         $items = customerTagRenderBadgeItems($tagRows, $badgeClass);
-        if (empty($items)) {
-            return '';
-        }
-
-        return '<span class="' . htmlspecialchars((string) $wrapperClass, ENT_QUOTES, 'UTF-8') . '">' . implode('', $items) . '</span>';
+        return customerLabelRenderCollapsibleBadgeGroup($items, $wrapperClass);
     }
 }
 

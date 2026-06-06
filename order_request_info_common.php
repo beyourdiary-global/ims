@@ -178,6 +178,16 @@ if ($airbillAttachmentUrl === '' && $airbillAttachment !== '') {
 $airbillAttachmentExt = $airbillAttachmentUrl !== ''
     ? strtolower(pathinfo((string) parse_url($airbillAttachmentUrl, PHP_URL_PATH), PATHINFO_EXTENSION))
     : '';
+$orderDetailPdf = '';
+$orderDetailPdfUrl = '';
+$orderDetailPdfExt = '';
+if ($platform === 'shopee' && shopeeOmsTableHasColumn($orderConnect, dbFinance, SHOPEE_SG_ORDER_REQ, 'order_detail_pdf')) {
+    $orderDetailPdf = trim((string) (isset($requestRow['order_detail_pdf']) ? $requestRow['order_detail_pdf'] : ''));
+    $orderDetailPdfUrl = $orderDetailPdf !== '' ? shopeeOmsBuildAirbillAttachmentUrl($orderDetailPdf) : '';
+    $orderDetailPdfExt = $orderDetailPdfUrl !== ''
+        ? strtolower(pathinfo((string) parse_url($orderDetailPdfUrl, PHP_URL_PATH), PATHINFO_EXTENSION))
+        : '';
+}
 $customerFieldLabel = $platform === 'shopee' ? 'Shopee Buyer Username' : $platformLabel . ' Customer';
 ?>
 <!DOCTYPE html>
@@ -304,6 +314,19 @@ $customerFieldLabel = $platform === 'shopee' ? 'Shopee Buyer Username' : $platfo
                                     </div>
                                 <?php } ?>
                             </div>
+                            <?php if ($platform === 'shopee') { ?>
+                                <div class="mb-3">
+                                    <label class="form-label form_lbl">Order Detail PDF</label>
+                                    <input class="form-control" type="text" readonly value="<?= htmlspecialchars($orderDetailPdf, ENT_QUOTES, 'UTF-8') ?>">
+                                    <?php if ($orderDetailPdfUrl !== '' && $orderDetailPdfExt === 'pdf') { ?>
+                                        <div class="attachment-preview-media">
+                                            <iframe src="<?= htmlspecialchars($orderDetailPdfUrl, ENT_QUOTES, 'UTF-8') ?>" title="Order Detail PDF Preview"></iframe>
+                                        </div>
+                                    <?php } else { ?>
+                                        <div class="text-muted mt-2">No Order Detail PDF uploaded.</div>
+                                    <?php } ?>
+                                </div>
+                            <?php } ?>
                             <div class="mb-3">
                                 <label class="form-label form_lbl">Current Status</label>
                                 <input class="form-control" type="text" readonly value="<?= htmlspecialchars($currentStatus, ENT_QUOTES, 'UTF-8') ?>">

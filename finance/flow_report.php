@@ -34,6 +34,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
 $selectedMonth = isset($_GET['month']) ? trim((string) $_GET['month']) : date('m');
 $selectedYear = isset($_GET['year']) ? trim((string) $_GET['year']) : date('Y');
 $selectedDate = trim((string) input('date'));
+$selectedUserId = (int) input('user_id');
 $currentYear = date('Y');
 $selectedMonth = ($selectedMonth === '' || preg_match('/^(0[1-9]|1[0-2])$/', $selectedMonth)) ? $selectedMonth : date('m');
 $selectedYear = ($selectedYear === '' || preg_match('/^\d{4}$/', $selectedYear)) ? $selectedYear : $currentYear;
@@ -55,6 +56,23 @@ $toStatus = trim((string) input('to_status'));
 $orderCode = trim((string) input('order_id'));
 $stockOutWarehouseId = shopeeOmsNormalizeWarehouseId(input('stock_out_warehouse_id'));
 $flowReportWarehouseRows = shopeeOmsLoadActiveWarehouses($connect);
+$flowReportUserRows = array();
+$flowReportUserNameMap = array();
+$flowReportUserResult = mysqli_query($connect, "SELECT `id`, COALESCE(NULLIF(TRIM(`name`), ''), `username`) AS `display_name` FROM `" . USR_USER . "` WHERE `status` = 'A' ORDER BY `display_name` ASC");
+if ($flowReportUserResult) {
+    while ($flowReportUserRow = mysqli_fetch_assoc($flowReportUserResult)) {
+        $flowReportUserId = isset($flowReportUserRow['id']) ? (int) $flowReportUserRow['id'] : 0;
+        if ($flowReportUserId <= 0) {
+            continue;
+        }
+
+        $flowReportUserRows[] = $flowReportUserRow;
+        $flowReportUserNameMap[$flowReportUserId] = isset($flowReportUserRow['display_name']) ? (string) $flowReportUserRow['display_name'] : ('User #' . $flowReportUserId);
+    }
+}
+if ($selectedUserId > 0 && !isset($flowReportUserNameMap[$selectedUserId])) {
+    $selectedUserId = 0;
+}
 
 $platformTabs = array('all' => 'All');
 foreach (shopeeOmsGetOrderSourceConfigs() as $platformKey => $platformConfig) {
@@ -67,10 +85,13 @@ if ($activePlatform === '') {
     $activePlatform = 'all';
 }
 
-$reportData = shopeeOmsGetDailyFlowReport($connect, $finance_connect, $dateFrom, $dateTo, $fromStatus, $toStatus, $orderCode, $stockOutWarehouseId, '', $selectedDate, $selectedMonth, $selectedYear);
+$reportData = shopeeOmsGetDailyFlowReport($connect, $finance_connect, $dateFrom, $dateTo, $fromStatus, $toStatus, $orderCode, $stockOutWarehouseId, '', $selectedDate, $selectedMonth, $selectedYear, $selectedUserId);
 $summaryRows = isset($reportData['summary']) ? $reportData['summary'] : array();
 $detailRows = isset($reportData['details']) ? $reportData['details'] : array();
 $statusOptions = shopeeOmsGetEditableStatusOptions();
+$selectedUserLabel = $selectedUserId > 0 && isset($flowReportUserNameMap[$selectedUserId])
+    ? $flowReportUserNameMap[$selectedUserId]
+    : '';
 
 $summaryRowsByPlatform = array('all' => $summaryRows);
 $detailRowsByPlatform = array('all' => $detailRows);
@@ -309,7 +330,9 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
             <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
                 <div>
                     <h2 class="mb-1"><?= htmlspecialchars($displayPageTitle) ?></h2>
-                    <div class="shopee-flow-report-subtitle">Status transition summary for the selected date range across all supported platforms.</div>
+                    <div class="shopee-flow-report-subtitle">
+                        Status transition summary for the selected date range across all supported platforms<?= $selectedUserLabel !== '' ? ' for ' . htmlspecialchars($selectedUserLabel) : '' ?>.
+                    </div>
                 </div>
             </div>
 
@@ -378,6 +401,16 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
                                     <?php foreach ($flowReportWarehouseRows as $warehouseRow) { ?>
                                         <?php $warehouseId = isset($warehouseRow['id']) ? (int) $warehouseRow['id'] : 0; ?>
                                         <option value="<?= $warehouseId ?>" <?= $stockOutWarehouseId === $warehouseId ? 'selected' : '' ?>><?= htmlspecialchars((string) $warehouseRow['name']) ?></option>
+                                    <?php } ?>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="form-label" for="flow_report_user_id">User</label>
+                                <select class="form-select" id="flow_report_user_id" name="user_id">
+                                    <option value="">All</option>
+                                    <?php foreach ($flowReportUserRows as $flowReportUserRow) { ?>
+                                        <?php $flowReportFilterUserId = isset($flowReportUserRow['id']) ? (int) $flowReportUserRow['id'] : 0; ?>
+                                        <option value="<?= $flowReportFilterUserId ?>" <?= $selectedUserId === $flowReportFilterUserId ? 'selected' : '' ?>><?= htmlspecialchars((string) (isset($flowReportUserRow['display_name']) ? $flowReportUserRow['display_name'] : ('User #' . $flowReportFilterUserId))) ?></option>
                                     <?php } ?>
                                 </select>
                             </div>
