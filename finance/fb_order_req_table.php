@@ -89,7 +89,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('moveToPackBtn')) {
         'platform' => 'facebook',
     ));
 
-    echo "<script>alert('" . addslashes(isset($moveToPackResult['message']) ? $moveToPackResult['message'] : 'Unable to move order to To Pack.') . "'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
+    echo '<script>alert(' . json_encode((string) (isset($moveToPackResult['message']) ? $moveToPackResult['message'] : 'Unable to move order to To Pack.'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . '); location.replace(' . json_encode((string) $currentTableRedirect, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ');</script>';
     exit;
 }
 
