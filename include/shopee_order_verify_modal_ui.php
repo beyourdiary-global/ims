@@ -72,11 +72,11 @@ if (!function_exists('shopeeOrderDetailPdfRenderVerifyModal')) {
                             <div class="border rounded-3 p-3 bg-light mb-4">Choose verification method</div>
                             <div class="d-grid gap-3">
                                 <button type="button" class="shopee-verify-method-card shopee-verify-method-card-success" id="<?= htmlspecialchars($modalId, ENT_QUOTES, 'UTF-8') ?>DirectChoiceBtn">
-                                    <div class="fw-bold fs-5 text-success mb-1">VERIFIED</div>
+                                    <div class="fw-bold fs-5 text-success mb-1">Verified</div>
                                     <div class="text-muted">Mark this order as verified without uploading a PDF.</div>
                                 </button>
                                 <button type="button" class="shopee-verify-method-card shopee-verify-method-card-primary" id="<?= htmlspecialchars($modalId, ENT_QUOTES, 'UTF-8') ?>UploadChoiceBtn">
-                                    <div class="fw-bold fs-5 text-primary mb-1">UPLOAD PDF TO VERIFIED</div>
+                                    <div class="fw-bold fs-5 text-primary mb-1">Upload Pdf to Verified</div>
                                     <div class="text-muted">Upload a Shopee Order Detail PDF and verify by comparing details.</div>
                                 </button>
                             </div>

@@ -146,6 +146,51 @@
             min-width: 340px;
             max-width: 380px;
             padding: 0;
+            border-radius: 14px;
+            overflow: hidden;
+        }
+
+        @media (max-width: 768px) {
+            .topnav-mobile-actions {
+                display: flex !important;
+                align-items: center;
+                justify-content: flex-end;
+                gap: 0.1rem;
+                margin-left: auto;
+                padding-right: 0.75rem;
+                min-width: 96px;
+                flex-shrink: 0;
+            }
+
+            .topnav-mobile-actions .dropdown {
+                flex: 0 0 44px;
+            }
+
+            .topnav-mobile-actions .nav-link {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 44px;
+                height: 44px;
+                padding: 0;
+                color: #fff;
+            }
+
+            .topnav-mobile-actions .dropdown-menu {
+                z-index: 1065;
+            }
+
+            .topnav-mobile-actions .system-alert-dropdown {
+                position: fixed !important;
+                top: 58px !important;
+                left: 50% !important;
+                right: auto !important;
+                transform: translateX(-50%) !important;
+                width: min(380px, 92vw);
+                min-width: 300px;
+                max-width: 92vw;
+                margin-top: 0 !important;
+            }
         }
 
         .system-alert-dropdown-header {
@@ -166,6 +211,7 @@
         .system-alert-mark-all {
             font-size: 0.8rem;
             text-decoration: none;
+            text-transform: none !important;
         }
 
         .system-alert-list {
@@ -199,18 +245,27 @@
             font-weight: 600;
             color: #212529;
             margin-bottom: 0.2rem;
+            flex: 1 1 0;
+            min-width: 0;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         .system-alert-item-message {
             font-size: 0.82rem;
             color: #6c757d;
             line-height: 1.35;
+            white-space: normal;
+            overflow-wrap: anywhere;
+            word-break: break-word;
         }
 
         .system-alert-item-meta {
             display: flex;
-            align-items: center;
+            align-items: flex-start;
             justify-content: space-between;
+            flex-wrap: wrap;
             gap: 0.75rem;
             margin-bottom: 0.2rem;
         }
@@ -218,7 +273,8 @@
         .system-alert-item-time {
             font-size: 0.72rem;
             color: #6c757d;
-            white-space: nowrap;
+            white-space: normal;
+            flex: 0 1 auto;
         }
 
         .system-alert-unread-dot {
@@ -241,12 +297,15 @@
             border-top: 1px solid #e9ecef;
             background: #fff;
             text-align: center;
+            border-bottom-left-radius: 14px;
+            border-bottom-right-radius: 14px;
         }
 
         .system-alert-view-all {
             font-size: 0.82rem;
             text-decoration: none;
             font-weight: 500;
+            text-transform: none !important;
         }
 
         .system-alert-modal-status-pill {
@@ -304,6 +363,11 @@
 
         .system-alert-modal-action-group .btn {
             white-space: nowrap;
+            text-transform: none !important;
+        }
+
+        #allNotificationModal .modal-footer .btn {
+            text-transform: none !important;
         }
 
         @media (max-width: 767.98px) {
@@ -468,7 +532,7 @@
             </div>
 
             <!-- Toggle button -->
-            <div class="navbar-toggler pe-4 d-md-none align-items-center gap-2">
+            <div class="topnav-mobile-actions d-md-none">
                 <div class="dropdown">
                     <button class="nav-link system-alert-bell-link" type="button" id="navbarTogglerAlertDropdown"
                         role="button" data-bs-toggle="dropdown" aria-expanded="false">
@@ -519,7 +583,7 @@
                     </div>
                 </div>
                 <div class="dropdown">
-                    <button class="nav-link d-flex align-items-center" href="#" id="navbarTogglerMenuAvatar"
+                    <button class="nav-link d-flex align-items-center" type="button" id="navbarTogglerMenuAvatar"
                         role="button" data-bs-toggle="dropdown" aria-expanded="false">
                         <i class="fas fa-ellipsis-vertical fa-lg"></i>
                     </button>
@@ -618,7 +682,7 @@
                                             <div class="d-flex flex-wrap gap-2 system-alert-modal-action-group">
                                                 <a href="<?= htmlspecialchars($menuAlertOpenLink, ENT_QUOTES, 'UTF-8') ?>" class="btn btn-sm btn-primary">Open</a>
                                                 <?php if ($menuAlertIsUnread) { ?>
-                                                    <a href="<?= htmlspecialchars($menuAlertMarkReadLink, ENT_QUOTES, 'UTF-8') ?>" class="btn btn-sm btn-outline-secondary">Mark as Read</a>
+                                                    <a href="<?= htmlspecialchars($menuAlertMarkReadLink, ENT_QUOTES, 'UTF-8') ?>" class="btn btn-sm btn-outline-secondary">Mark As Read</a>
                                                 <?php } ?>
                                             </div>
                                         </td>
@@ -724,6 +788,37 @@
         return html;
     }
 
+    function systemAlertCaptureDropdownScroll(menuElement) {
+        if (!menuElement) {
+            return null;
+        }
+
+        var listElement = menuElement.querySelector('.system-alert-list');
+        if (!listElement) {
+            return null;
+        }
+
+        return {
+            isOpen: menuElement.classList.contains('show'),
+            scrollTop: listElement.scrollTop,
+            scrollLeft: listElement.scrollLeft
+        };
+    }
+
+    function systemAlertRestoreDropdownScroll(menuElement, scrollState) {
+        if (!menuElement || !scrollState || !scrollState.isOpen) {
+            return;
+        }
+
+        var listElement = menuElement.querySelector('.system-alert-list');
+        if (!listElement) {
+            return;
+        }
+
+        listElement.scrollTop = scrollState.scrollTop;
+        listElement.scrollLeft = scrollState.scrollLeft;
+    }
+
     function systemAlertApplyLivePayload(payload) {
         var unreadCount = Number(payload && payload.unread_count ? payload.unread_count : 0);
         var desktopBadgeSlot = document.getElementById('systemAlertDesktopBadgeSlot');
@@ -741,10 +836,18 @@
             mobileBadgeSlot.innerHTML = systemAlertRenderBadge(unreadCount);
         }
         if (desktopDropdownMenu) {
-            desktopDropdownMenu.innerHTML = dropdownHtml;
+            if (desktopDropdownMenu.innerHTML !== dropdownHtml) {
+                var desktopScrollState = systemAlertCaptureDropdownScroll(desktopDropdownMenu);
+                desktopDropdownMenu.innerHTML = dropdownHtml;
+                systemAlertRestoreDropdownScroll(desktopDropdownMenu, desktopScrollState);
+            }
         }
         if (mobileDropdownMenu) {
-            mobileDropdownMenu.innerHTML = dropdownHtml;
+            if (mobileDropdownMenu.innerHTML !== dropdownHtml) {
+                var mobileScrollState = systemAlertCaptureDropdownScroll(mobileDropdownMenu);
+                mobileDropdownMenu.innerHTML = dropdownHtml;
+                systemAlertRestoreDropdownScroll(mobileDropdownMenu, mobileScrollState);
+            }
         }
 
         if (unreadCount > systemAlertPreviousUnreadCount) {
