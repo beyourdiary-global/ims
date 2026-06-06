@@ -30,7 +30,7 @@ $platformDisplayMap = array(
 $assignmentCountSql = "SELECT
     tag_id,
     LOWER(TRIM(platform)) AS platform,
-    COUNT(DISTINCT CONCAT(platform, ':', customer_id)) AS platform_customer_count
+    COUNT(DISTINCT CONCAT(LOWER(TRIM(platform)), ':', customer_id)) AS platform_customer_count
     FROM `" . CUS_TAG_ASSIGNMENT . "`
     WHERE status = 'A'
     GROUP BY tag_id, LOWER(TRIM(platform))";
