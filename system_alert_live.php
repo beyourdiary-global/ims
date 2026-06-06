@@ -58,10 +58,17 @@ if ($currentUrl === '') {
         : ((defined('SITEURL') ? rtrim((string) SITEURL, '/') : '') . '/dashboard.php');
 }
 
-if (function_exists('systemAlertGenerateForUser')) {
-    systemAlertGenerateForUser($connect, isset($finance_connect) ? $finance_connect : $connect, $userId);
-} else if (function_exists('systemAlertSyncFollowUpNotificationsForUser')) {
-    systemAlertSyncFollowUpNotificationsForUser($connect, $userId);
+$nowTs = time();
+$lastSyncTs = isset($_SESSION['system_alert_last_sync_ts']) ? (int) $_SESSION['system_alert_last_sync_ts'] : 0;
+
+if ($lastSyncTs <= 0 || ($nowTs - $lastSyncTs) >= 60) {
+    $_SESSION['system_alert_last_sync_ts'] = $nowTs;
+
+    if (function_exists('systemAlertGenerateForUser')) {
+        systemAlertGenerateForUser($connect, isset($finance_connect) ? $finance_connect : $connect, $userId);
+    } else if (function_exists('systemAlertSyncFollowUpNotificationsForUser')) {
+        systemAlertSyncFollowUpNotificationsForUser($connect, $userId);
+    }
 }
 
 $unreadCount = function_exists('systemAlertGetUnreadCount') ? (int) systemAlertGetUnreadCount($connect, $userId) : 0;
