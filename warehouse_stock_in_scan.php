@@ -322,10 +322,14 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
 
         $omsSourceConfig = is_array($omsSourceConfig) ? $omsSourceConfig : array();
         $omsSummary = !empty($omsOrderRow) ? shopeeOmsBuildOrderProductSummaryBySource($connect, $omsOrderRow, $omsSourceConfig) : array();
-        $omsPackagePinAccess = checkPinByGroupId($connect, 21);
-        $omsProductPinAccess = checkPinByGroupId($connect, 20);
-        $omsCanEditPackage = isActionAllowed('Edit', $omsPackagePinAccess);
-        $omsCanEditProduct = isActionAllowed('Edit', $omsProductPinAccess);
+        $omsCanEditPackage = false;
+        $omsCanEditProduct = false;
+        if (defined('USER_ID') && USER_ID !== '') {
+            $omsPackagePinAccess = checkPinByGroupId($connect, 21);
+            $omsProductPinAccess = checkPinByGroupId($connect, 20);
+            $omsCanEditPackage = isActionAllowed('Edit', $omsPackagePinAccess);
+            $omsCanEditProduct = isActionAllowed('Edit', $omsProductPinAccess);
+        }
         $omsDefaultWarehouseId = shopeeOmsGetDefaultWarehouseId($connect);
         $omsStockOutWarehouseName = !empty($omsOrderRow)
             ? shopeeOmsResolveStockOutWarehouseName($connect, $omsOrderRow, $omsDefaultWarehouseId)
