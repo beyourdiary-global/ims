@@ -6527,8 +6527,9 @@ if (!function_exists('shopeeOmsExtractPdfRawStrings')) {
         if (preg_match_all('/\((?:\\\\.|[^\\\\()])*\)/s', $rawPdfContent, $matches)) {
             foreach ((array) $matches[0] as $match) {
                 $match = substr((string) $match, 1, -1);
-                $match = preg_replace_callback('/\\\\([0-7]{1,3})/', function ($groups) {
-                    return chr(octdec($groups[1]));
+                $match = preg_replace_callback('/\\([0-7]{1,3})/', function ($groups) {
+                    $code = octdec($groups[1]) & 0xFF;
+                    return chr($code);
                 }, (string) $match);
                 $match = str_replace(array('\n', '\r', '\t', '\(', '\)', '\\\\'), array("\n", "\n", ' ', '(', ')', '\\'), (string) $match);
                 $match = shopeeOmsNormalizePdfDeliveryText($match);
