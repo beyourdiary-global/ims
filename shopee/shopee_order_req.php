@@ -3860,7 +3860,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                     customerNameSelector: '#sor_customer_name',
                     customerAddressSelector: '#sor_customer_address',
                     statusSelector: '#sor_airbill_extract_status',
-                    localStorageKey: 'shopee_airbill_delivery_info_<?= (int) $dataID ?>',
+                    localStorageKey: <?= (int) $dataID > 0 ? "'shopee_airbill_delivery_info_" . (int) $dataID . "'" : "''" ?>,
                     workerSrc: '../finance/header/js/pdf.worker.min.js',
                     errorClass: 'is-error'
                 });
