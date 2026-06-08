@@ -2067,6 +2067,27 @@ if (!window.shopeeOmsAirbillPdfAutofill || !window.shopeeOmsAirbillPdfAutofill._
                 return true;
             }
 
+            if (config.localStorageKey) {
+                try {
+                    var storedDeliveryInfo = JSON.parse(localStorage.getItem(config.localStorageKey) || 'null');
+                    if (storedDeliveryInfo) {
+                        if (airbillNo && !String(airbillNo.value || '').trim() && String(storedDeliveryInfo.airbillNo || '').trim()) {
+                            airbillNo.value = String(storedDeliveryInfo.airbillNo || '').trim();
+                            dispatchInputEvent(airbillNo);
+                        }
+                        if (customerName && !String(customerName.value || '').trim() && String(storedDeliveryInfo.customerName || '').trim()) {
+                            customerName.value = String(storedDeliveryInfo.customerName || '').trim();
+                            dispatchInputEvent(customerName);
+                        }
+                        if (customerAddress && !String(customerAddress.value || '').trim() && String(storedDeliveryInfo.customerAddress || '').trim()) {
+                            customerAddress.value = String(storedDeliveryInfo.customerAddress || '').trim();
+                            dispatchInputEvent(customerAddress);
+                        }
+                    }
+                } catch (error) {
+                }
+            }
+
             function readFileAsArrayBuffer(file) {
                 return new Promise(function (resolve, reject) {
                     var reader = new FileReader();
