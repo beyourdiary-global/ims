@@ -6982,7 +6982,7 @@ if (!window.shopeeOmsAirbillPdfAutofill) {
                     return;
                 }
 
-                setStatus('Extracting airbill number, customer name and address from PDF...', false);
+                setStatus(customerName ? 'Extracting airbill number, customer name and address from PDF...' : 'Extracting airbill number and address from PDF...', false);
 
                 loadPdfPageTextItems(selectedFile).then(function (pdfData) {
                     var extractedData = extractShopeeAirbillDataFromPdfItems(
