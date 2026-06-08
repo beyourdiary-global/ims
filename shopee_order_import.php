@@ -5281,7 +5281,7 @@ JS;
                                         </div>
                                         <div class="col-12 col-md-6">
                                             <label class="form-label" for="airbill_attachment">Airbill Attachment<span class="requireRed">*</span></label>
-                                            <input class="form-control" type="file" id="airbill_attachment" name="airbill_attachment" accept=".png,.jpg,.jpeg,.pdf,image/*,application/pdf">
+                                            <input class="form-control" type="file" id="airbill_attachment" name="airbill_attachment" accept=".png,.jpg,.jpeg,.pdf,application/pdf,image/png,image/jpeg">
                                             <small id="airbill_extract_status" class="d-block mt-1 text-muted"></small>
                                             <?php if (!empty($previewData['airbill_attachment'])) { ?>
                                                 <small class="text-danger d-block mt-1">Current Attachment: <?= htmlspecialchars($previewData['airbill_attachment']) ?></small>
