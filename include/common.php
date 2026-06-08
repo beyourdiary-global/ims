@@ -6625,6 +6625,12 @@ if (!function_exists('shopeeOmsExtractAirbillDeliveryInfoFromAttachment')) {
             return array('customer_name' => '', 'customer_address' => '');
         }
 
+        $maxBytes = 5 * 1024 * 1024;
+        $fileSize = @filesize($attachmentFsPath);
+        if ($fileSize !== false && $fileSize > $maxBytes) {
+            return array('customer_name' => '', 'customer_address' => '');
+        }
+
         $rawPdfContent = @file_get_contents($attachmentFsPath);
         if ($rawPdfContent === false || (string) $rawPdfContent === '') {
             return array('customer_name' => '', 'customer_address' => '');
