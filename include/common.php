@@ -7008,10 +7008,20 @@ if (!window.shopeeOmsAirbillPdfAutofill) {
                     if (extractedData.airbillNo !== '' || extractedData.customerName !== '' || extractedData.customerAddress !== '') {
                         setStatus('Airbill PDF extracted successfully.', false);
                     } else {
-                        setStatus('Unable to detect the airbill number, customer name or address from this PDF. Please fill them manually.', true);
+                        setStatus(
+                            customerName
+                                ? 'Unable to detect the airbill number, customer name or address from this PDF. Please fill them manually.'
+                                : 'Unable to detect the airbill number or address from this PDF. Please fill them manually.',
+                            true
+                        );
                     }
                 }).catch(function () {
-                    setStatus('Unable to read this PDF. Please fill the airbill number, customer name and address manually.', true);
+                    setStatus(
+                        customerName
+                            ? 'Unable to read this PDF. Please fill the airbill number, customer name and address manually.'
+                            : 'Unable to read this PDF. Please fill the airbill number and address manually.',
+                        true
+                    );
                 });
             });
 
