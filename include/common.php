@@ -6072,6 +6072,27 @@ if (!function_exists('shopeeOmsResolveChatIdFromTokenRow')) {
     }
 }
 
+if (!function_exists('shopeeOmsResolveWarehouseNotificationTokenPage')) {
+    function shopeeOmsResolveWarehouseNotificationTokenPage($sourcePage, $tokenRow = array(), $notificationInfo = array())
+    {
+        $sourcePage = trim((string) $sourcePage);
+        $platform = '';
+
+        if (is_array($notificationInfo) && isset($notificationInfo['platform'])) {
+            $platform = shopeeOmsNormalizePlatformKey($notificationInfo['platform']);
+        }
+        if ($platform === '' && is_array($tokenRow) && isset($tokenRow['platform'])) {
+            $platform = shopeeOmsNormalizePlatformKey($tokenRow['platform']);
+        }
+
+        if ($platform === 'shopee') {
+            return 'Shopee Order Request';
+        }
+
+        return $sourcePage;
+    }
+}
+
 if (!function_exists('shopeeOmsBuildWarehouseMessage')) {
     function shopeeOmsBuildWarehouseMessage($orderRow, $tokenValue, $connect, $buyerConnect = null, $source = 'shopee')
     {
@@ -6091,6 +6112,23 @@ if (!function_exists('shopeeOmsBuildWarehouseMessage')) {
         $airbillText = trim((string) (isset($orderRow[$airbillField]) ? $orderRow[$airbillField] : ''));
         $airbillAttachment = trim((string) (isset($orderRow[$airbillAttachmentField]) ? $orderRow[$airbillAttachmentField] : ''));
         $customerAddress = trim((string) (isset($orderRow[$addressField]) ? $orderRow[$addressField] : ''));
+        $deliveryInfo = $platform === 'shopee' ? shopeeOmsExtractAirbillDeliveryInfoFromAttachment($airbillAttachment) : array();
+        $rememberedDeliveryInfo = shopeeOmsGetRememberedWarehouseDeliveryInfo($platform, isset($orderRow['id']) ? $orderRow['id'] : 0);
+        $deliveryCustomerName = isset($orderRow['customer_name']) ? trim((string) $orderRow['customer_name']) : '';
+        // Intentionally avoid reading from $_POST here to keep message generation deterministic.
+        if ($deliveryCustomerName === '' && isset($rememberedDeliveryInfo['customer_name'])) {
+            $deliveryCustomerName = trim((string) $rememberedDeliveryInfo['customer_name']);
+        }
+        if ($deliveryCustomerName === '') {
+            $deliveryCustomerName = trim((string) (isset($deliveryInfo['customer_name']) ? $deliveryInfo['customer_name'] : ''));
+        }
+        $deliveryCustomerAddress = $customerAddress;
+        if ($deliveryCustomerAddress === '' && isset($rememberedDeliveryInfo['customer_address'])) {
+            $deliveryCustomerAddress = trim((string) $rememberedDeliveryInfo['customer_address']);
+        }
+        if ($deliveryCustomerAddress === '') {
+            $deliveryCustomerAddress = trim((string) (isset($deliveryInfo['customer_address']) ? $deliveryInfo['customer_address'] : ''));
+        }
 
         $warehouseName = '';
         if (function_exists('shopeeOmsResolveStockOutWarehouseId') && function_exists('shopeeOmsResolveWarehouseNameById')) {
@@ -6124,8 +6162,10 @@ if (!empty($summary['package_lines']) && is_array($summary['package_lines'])) {
         $lines = array();
 
         $lines[] = '【' . ($warehouseName !== '' ? $warehouseName : 'Warehouse Name') . '】';
-        $lines[] = $orderFieldLabel . ': ' . ($orderCode !== '' ? $orderCode : '-');
-        $lines[] = '';
+        if ($platform !== 'shopee') {
+            $lines[] = $orderFieldLabel . ': ' . ($orderCode !== '' ? $orderCode : '-');
+            $lines[] = '';
+        }
         $lines[] = $customerFieldLabel . ': ' . ($customerName !== '' ? $customerName : '-');
         $lines[] = '';
 
@@ -6155,7 +6195,16 @@ if (!empty($summary['package_lines']) && is_array($summary['package_lines'])) {
             $lines[] = '-';
         }
 
-        if ($airbillText !== '') {
+        if ($platform === 'shopee') {
+            $lines[] = '';
+            $lines[] = '[Delivery Info]';
+            $lines[] = '';
+            $lines[] = $orderFieldLabel . ': ' . ($orderCode !== '' ? $orderCode : '-');
+            $lines[] = '';
+            $lines[] = 'Customer Name: ' . ($deliveryCustomerName !== '' ? $deliveryCustomerName : '-');
+            $lines[] = '';
+            $lines[] = 'Customer Address: ' . ($deliveryCustomerAddress !== '' ? $deliveryCustomerAddress : '-');
+        } else if ($airbillText !== '') {
             $lines[] = '';
             $lines[] = 'Airbill: ' . $airbillText;
         }
@@ -6169,6 +6218,9 @@ if (!empty($summary['package_lines']) && is_array($summary['package_lines'])) {
             'link' => $link,
             'text' => implode("\n", $lines),
             'buyer_username' => $customerName,
+            'customer_name' => $platform === 'shopee' ? $deliveryCustomerName : $customerName,
+            'customer_address' => $platform === 'shopee' ? $deliveryCustomerAddress : $customerAddress,
+            'platform' => $platform,
             'package_summary' => isset($summary['package_summary']) ? $summary['package_summary'] : '',
             'product_summary' => !empty($summary['product_lines']) ? implode(', ', $summary['product_lines']) : '',
             'bundle_name' => isset($summary['bundle_name']) ? $summary['bundle_name'] : '',
@@ -6401,6 +6453,193 @@ if (!function_exists('shopeeOmsBuildAirbillAttachmentUrl')) {
     }
 }
 
+if (!function_exists('shopeeOmsRememberWarehouseDeliveryInfo')) {
+    function shopeeOmsRememberWarehouseDeliveryInfo($platform, $orderId, $deliveryInfo = array())
+    {
+        $platform = shopeeOmsNormalizePlatformKey($platform);
+        $orderId = (int) $orderId;
+        if ($platform === '' || $orderId <= 0 || !is_array($deliveryInfo)) {
+            return;
+        }
+
+        if (!isset($_SESSION['shopee_oms_warehouse_delivery_info']) || !is_array($_SESSION['shopee_oms_warehouse_delivery_info'])) {
+            $_SESSION['shopee_oms_warehouse_delivery_info'] = array();
+        }
+        if (!isset($_SESSION['shopee_oms_warehouse_delivery_info'][$platform]) || !is_array($_SESSION['shopee_oms_warehouse_delivery_info'][$platform])) {
+            $_SESSION['shopee_oms_warehouse_delivery_info'][$platform] = array();
+        }
+
+        $currentInfo = isset($_SESSION['shopee_oms_warehouse_delivery_info'][$platform][$orderId]) && is_array($_SESSION['shopee_oms_warehouse_delivery_info'][$platform][$orderId])
+            ? $_SESSION['shopee_oms_warehouse_delivery_info'][$platform][$orderId]
+            : array();
+
+        foreach (array('customer_name', 'customer_address') as $fieldName) {
+            $fieldValue = isset($deliveryInfo[$fieldName]) ? trim((string) $deliveryInfo[$fieldName]) : '';
+            if ($fieldValue !== '') {
+                $currentInfo[$fieldName] = $fieldValue;
+            }
+        }
+
+        if (!empty($currentInfo)) {
+            $currentInfo['updated_at'] = date('c');
+            $_SESSION['shopee_oms_warehouse_delivery_info'][$platform][$orderId] = $currentInfo;
+        }
+    }
+}
+
+if (!function_exists('shopeeOmsGetRememberedWarehouseDeliveryInfo')) {
+    function shopeeOmsGetRememberedWarehouseDeliveryInfo($platform, $orderId)
+    {
+        $platform = shopeeOmsNormalizePlatformKey($platform);
+        $orderId = (int) $orderId;
+        if ($platform === '' || $orderId <= 0) {
+            return array();
+        }
+
+        if (!isset($_SESSION['shopee_oms_warehouse_delivery_info'][$platform][$orderId]) || !is_array($_SESSION['shopee_oms_warehouse_delivery_info'][$platform][$orderId])) {
+            return array();
+        }
+
+        return $_SESSION['shopee_oms_warehouse_delivery_info'][$platform][$orderId];
+    }
+}
+
+if (!function_exists('shopeeOmsNormalizePdfDeliveryText')) {
+    function shopeeOmsNormalizePdfDeliveryText($text)
+    {
+        $text = html_entity_decode((string) $text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = preg_replace("/\r\n|\r/u", "\n", (string) $text);
+        $text = preg_replace("/[ \t]+/u", ' ', (string) $text);
+        $text = preg_replace("/\n{2,}/u", "\n", (string) $text);
+        return trim((string) $text);
+    }
+}
+
+if (!function_exists('shopeeOmsExtractPdfRawStrings')) {
+    function shopeeOmsExtractPdfRawStrings($rawPdfContent)
+    {
+        $rawPdfContent = (string) $rawPdfContent;
+        if ($rawPdfContent === '') {
+            return '';
+        }
+
+        $parts = array();
+        if (preg_match_all('/\((?:\\\\.|[^\\\\()])*\)/s', $rawPdfContent, $matches)) {
+            foreach ((array) $matches[0] as $match) {
+                $match = substr((string) $match, 1, -1);
+                $match = preg_replace_callback('/\\([0-7]{1,3})/', function ($groups) {
+                    $code = octdec($groups[1]) & 0xFF;
+                    return chr($code);
+                }, (string) $match);
+                $match = str_replace(array('\n', '\r', '\t', '\(', '\)', '\\\\'), array("\n", "\n", ' ', '(', ')', '\\'), (string) $match);
+                $match = shopeeOmsNormalizePdfDeliveryText($match);
+                if ($match !== '') {
+                    $parts[] = $match;
+                }
+            }
+        }
+
+        return trim(implode("\n", array_unique($parts)));
+    }
+}
+
+if (!function_exists('shopeeOmsNormalizeDeliveryFieldValue')) {
+    function shopeeOmsNormalizeDeliveryFieldValue($value, $collapseLines = true)
+    {
+        $value = shopeeOmsNormalizePdfDeliveryText($value);
+        if ($collapseLines) {
+            $value = preg_replace('/\s*\n\s*/u', ', ', (string) $value);
+        }
+        $value = preg_replace('/\s*,\s*/u', ', ', (string) $value);
+        $value = preg_replace('/,\s*,+/u', ', ', (string) $value);
+        return trim((string) $value, " ,\t\n\r\0\x0B");
+    }
+}
+
+if (!function_exists('shopeeOmsExtractAirbillDeliveryInfoFromText')) {
+    function shopeeOmsExtractAirbillDeliveryInfoFromText($sourceText)
+    {
+        $sourceText = shopeeOmsNormalizePdfDeliveryText($sourceText);
+        if ($sourceText === '') {
+            return array('customer_name' => '', 'customer_address' => '');
+        }
+
+        $recipientSection = '';
+        if (preg_match_all('/Recipient\s+Details(?:\s*\([^)]+\))?\s*(.*?)(?=(?:Sender\s+Details|Order\s+Details|Scan\s+QR|Join\s+us\s+as\s+couriers|Join\s+us\s+as\s+couriers\s+or\s+sorters|$))/isu', $sourceText, $sectionMatches) && !empty($sectionMatches[1])) {
+            foreach ((array) $sectionMatches[1] as $sectionMatch) {
+                $sectionMatch = trim((string) $sectionMatch);
+                if ($sectionMatch !== '') {
+                    $recipientSection = $sectionMatch;
+                }
+            }
+        }
+        if ($recipientSection === '') {
+            $recipientSection = $sourceText;
+        }
+
+        $extractLastMatch = function ($pattern, $text) {
+            $value = '';
+            if (preg_match_all($pattern, $text, $matches) && !empty($matches[1])) {
+                foreach ((array) $matches[1] as $match) {
+                    $match = trim((string) $match);
+                    if ($match !== '') {
+                        $value = $match;
+                    }
+                }
+            }
+            return $value;
+        };
+
+        $customerName = $extractLastMatch('/\bName\s*:\s*(.+?)(?=\b(?:Phone|Address|Postcode)\s*:|$)/isu', $recipientSection);
+        $customerAddress = $extractLastMatch('/\bAddress\s*:\s*(.+?)(?=\b(?:Phone|Postcode|Name)\s*:|$)/isu', $recipientSection);
+        $postcode = $extractLastMatch('/\bPostcode\s*:\s*([A-Za-z0-9\- ]{3,20})/iu', $recipientSection);
+
+        $customerName = shopeeOmsNormalizeDeliveryFieldValue($customerName);
+        $customerAddress = shopeeOmsNormalizeDeliveryFieldValue($customerAddress);
+        $postcode = shopeeOmsNormalizeDeliveryFieldValue($postcode);
+
+        if ($customerAddress !== '' && $postcode !== '') {
+            $addressCompare = preg_replace('/\s+/u', '', strtolower($customerAddress));
+            $postcodeCompare = preg_replace('/\s+/u', '', strtolower($postcode));
+            if ($addressCompare !== '' && $postcodeCompare !== '' && strpos($addressCompare, $postcodeCompare) === false) {
+                $customerAddress .= ', ' . $postcode;
+            }
+        }
+
+        return array(
+            'customer_name' => $customerName,
+            'customer_address' => $customerAddress,
+        );
+    }
+}
+
+if (!function_exists('shopeeOmsExtractAirbillDeliveryInfoFromAttachment')) {
+    function shopeeOmsExtractAirbillDeliveryInfoFromAttachment($attachmentValue)
+    {
+        $attachmentFsPath = shopeeOmsResolveAirbillAttachmentFsPath($attachmentValue);
+        if ($attachmentFsPath === '' || !is_file($attachmentFsPath) || !is_readable($attachmentFsPath)) {
+            return array('customer_name' => '', 'customer_address' => '');
+        }
+
+        if (strtolower((string) pathinfo($attachmentFsPath, PATHINFO_EXTENSION)) !== 'pdf') {
+            return array('customer_name' => '', 'customer_address' => '');
+        }
+
+        $maxBytes = 5 * 1024 * 1024;
+        $fileSize = @filesize($attachmentFsPath);
+        if ($fileSize !== false && $fileSize > $maxBytes) {
+            return array('customer_name' => '', 'customer_address' => '');
+        }
+
+        $rawPdfContent = @file_get_contents($attachmentFsPath);
+        if ($rawPdfContent === false || (string) $rawPdfContent === '') {
+            return array('customer_name' => '', 'customer_address' => '');
+        }
+
+        return shopeeOmsExtractAirbillDeliveryInfoFromText(shopeeOmsExtractPdfRawStrings($rawPdfContent));
+    }
+}
+
 if (!function_exists('shopeeOmsRenderAirbillPdfAutofillScript')) {
     function shopeeOmsRenderAirbillPdfAutofillScript()
     {
@@ -6506,10 +6745,63 @@ if (!window.shopeeOmsAirbillPdfAutofill) {
             return candidates.length > 0 ? candidates[0].text : '';
         }
 
+        function findRecipientSectionHeader(items, pageWidth) {
+            var headers = items
+                .filter(function (item) {
+                    var text = normalizePdfTextItem(item).toUpperCase();
+                    return text.indexOf('RECIPIENT DETAILS') === 0 && getPdfTextItemX(item) <= (pageWidth * 0.3);
+                })
+                .sort(function (a, b) {
+                    return getPdfTextItemY(b) - getPdfTextItemY(a);
+                });
+
+            return headers.length > 0 ? headers[0] : null;
+        }
+
+        function extractRecipientNameFromPdfItems(items, pageWidth) {
+            var recipientHeader = findRecipientSectionHeader(items, pageWidth);
+            var nameLabels = items
+                .filter(function (item) {
+                    return normalizePdfTextItem(item) === 'Name:' && getPdfTextItemX(item) <= (pageWidth * 0.2);
+                })
+                .filter(function (item) {
+                    return !recipientHeader || getPdfTextItemY(item) < getPdfTextItemY(recipientHeader) - 2;
+                })
+                .sort(function (a, b) {
+                    return getPdfTextItemY(b) - getPdfTextItemY(a);
+                });
+
+            if (nameLabels.length === 0) {
+                return '';
+            }
+
+            var recipientNameLabel = nameLabels[0];
+            var minX = getPdfTextItemX(recipientNameLabel) + Number(recipientNameLabel.width || 0) - 1;
+            var lineY = getPdfTextItemY(recipientNameLabel);
+            var maxX = pageWidth * 0.62;
+            var nameItems = items.filter(function (item) {
+                var text = normalizePdfTextItem(item);
+                if (text === '' || text === 'Name:' || text === 'Address:' || text === 'Phone:' || text === 'Postcode:') {
+                    return false;
+                }
+
+                return getPdfTextItemX(item) >= minX &&
+                    getPdfTextItemX(item) <= maxX &&
+                    Math.abs(getPdfTextItemY(item) - lineY) <= 3;
+            });
+
+            var nameLines = groupPdfItemsIntoLines(nameItems);
+            return nameLines.length > 0 ? nameLines[0].trim() : '';
+        }
+
         function extractRecipientAddressFromPdfItems(items, pageWidth) {
+            var recipientHeader = findRecipientSectionHeader(items, pageWidth);
             var addressLabels = items
                 .filter(function (item) {
                     return normalizePdfTextItem(item) === 'Address:' && getPdfTextItemX(item) <= (pageWidth * 0.2);
+                })
+                .filter(function (item) {
+                    return !recipientHeader || getPdfTextItemY(item) < getPdfTextItemY(recipientHeader) - 2;
                 })
                 .sort(function (a, b) {
                     return getPdfTextItemY(b) - getPdfTextItemY(a);
@@ -6551,6 +6843,7 @@ if (!window.shopeeOmsAirbillPdfAutofill) {
         function extractShopeeAirbillDataFromPdfItems(items, pageWidth, pageHeight) {
             return {
                 airbillNo: extractAirbillCodeFromPdfItems(items, pageHeight),
+                customerName: extractRecipientNameFromPdfItems(items, pageWidth),
                 customerAddress: extractRecipientAddressFromPdfItems(items, pageWidth)
             };
         }
@@ -6571,10 +6864,40 @@ if (!window.shopeeOmsAirbillPdfAutofill) {
             config = config || {};
             var fileInput = document.querySelector(config.fileInputSelector || '');
             var airbillNo = document.querySelector(config.airbillNoSelector || '');
+            var customerName = document.querySelector(config.customerNameSelector || '');
             var customerAddress = document.querySelector(config.customerAddressSelector || '');
             var statusNode = document.querySelector(config.statusSelector || '');
+            var localStorageKey = String(config.localStorageKey || '').trim();
             if (!fileInput || !airbillNo || !customerAddress || !statusNode) {
                 return false;
+            }
+
+            function readStoredDeliveryInfo() {
+                if (localStorageKey === '' || typeof window.localStorage === 'undefined') {
+                    return null;
+                }
+
+                try {
+                    var raw = window.localStorage.getItem(localStorageKey);
+                    return raw ? JSON.parse(raw) : null;
+                } catch (error) {
+                    return null;
+                }
+            }
+
+            function writeStoredDeliveryInfo() {
+                if (localStorageKey === '' || typeof window.localStorage === 'undefined') {
+                    return;
+                }
+
+                try {
+                    window.localStorage.setItem(localStorageKey, JSON.stringify({
+                        airbillNo: airbillNo ? String(airbillNo.value || '') : '',
+                        customerName: customerName ? String(customerName.value || '') : '',
+                        customerAddress: customerAddress ? String(customerAddress.value || '') : ''
+                    }));
+                } catch (error) {
+                }
             }
 
             function setStatus(message, isError) {
@@ -6598,6 +6921,22 @@ if (!window.shopeeOmsAirbillPdfAutofill) {
 
             if (fileInput.dataset.airbillPdfAutofillBound === '1') {
                 return true;
+            }
+
+            var storedDeliveryInfo = readStoredDeliveryInfo();
+            if (storedDeliveryInfo) {
+                if (airbillNo && !String(airbillNo.value || '').trim() && String(storedDeliveryInfo.airbillNo || '').trim()) {
+                    airbillNo.value = String(storedDeliveryInfo.airbillNo || '').trim();
+                    dispatchInputEvent(airbillNo);
+                }
+                if (customerName && !String(customerName.value || '').trim() && String(storedDeliveryInfo.customerName || '').trim()) {
+                    customerName.value = String(storedDeliveryInfo.customerName || '').trim();
+                    dispatchInputEvent(customerName);
+                }
+                if (customerAddress && !String(customerAddress.value || '').trim() && String(storedDeliveryInfo.customerAddress || '').trim()) {
+                    customerAddress.value = String(storedDeliveryInfo.customerAddress || '').trim();
+                    dispatchInputEvent(customerAddress);
+                }
             }
 
             function readFileAsArrayBuffer(file) {
@@ -6643,7 +6982,7 @@ if (!window.shopeeOmsAirbillPdfAutofill) {
                     return;
                 }
 
-                setStatus('Extracting airbill number and address from PDF...', false);
+                setStatus(customerName ? 'Extracting airbill number, customer name and address from PDF...' : 'Extracting airbill number and address from PDF...', false);
 
                 loadPdfPageTextItems(selectedFile).then(function (pdfData) {
                     var extractedData = extractShopeeAirbillDataFromPdfItems(
@@ -6656,18 +6995,33 @@ if (!window.shopeeOmsAirbillPdfAutofill) {
                         airbillNo.value = extractedData.airbillNo;
                         dispatchInputEvent(airbillNo);
                     }
+                    if (customerName && extractedData.customerName !== '') {
+                        customerName.value = extractedData.customerName;
+                        dispatchInputEvent(customerName);
+                    }
                     if (extractedData.customerAddress !== '') {
                         customerAddress.value = extractedData.customerAddress;
                         dispatchInputEvent(customerAddress);
                     }
+                    writeStoredDeliveryInfo();
 
-                    if (extractedData.airbillNo !== '' || extractedData.customerAddress !== '') {
+                    if (extractedData.airbillNo !== '' || extractedData.customerName !== '' || extractedData.customerAddress !== '') {
                         setStatus('Airbill PDF extracted successfully.', false);
                     } else {
-                        setStatus('Unable to detect the airbill number or address from this PDF. Please fill them manually.', true);
+                        setStatus(
+                            customerName
+                                ? 'Unable to detect the airbill number, customer name or address from this PDF. Please fill them manually.'
+                                : 'Unable to detect the airbill number or address from this PDF. Please fill them manually.',
+                            true
+                        );
                     }
                 }).catch(function () {
-                    setStatus('Unable to read this PDF. Please fill the airbill number and address manually.', true);
+                    setStatus(
+                        customerName
+                            ? 'Unable to read this PDF. Please fill the airbill number, customer name and address manually.'
+                            : 'Unable to read this PDF. Please fill the airbill number and address manually.',
+                        true
+                    );
                 });
             });
 
@@ -6973,10 +7327,10 @@ if (!function_exists('shopeeOmsCreateWarehouseToken')) {
         $actorUserId = trim((string) $actorUserId) !== '' ? trim((string) $actorUserId) : 'SYSTEM';
         $safeOrderCode = mysqli_real_escape_string($financeConnect, shopeeOmsGetOrderCodeValue($orderRow, $sourceConfig));
         $safeToken = mysqli_real_escape_string($financeConnect, $tokenValue);
-        $safeCustomerName = mysqli_real_escape_string($financeConnect, (string) (isset($messageInfo['buyer_username']) ? $messageInfo['buyer_username'] : ''));
+        $safeCustomerName = mysqli_real_escape_string($financeConnect, (string) (isset($messageInfo['customer_name']) ? $messageInfo['customer_name'] : (isset($messageInfo['buyer_username']) ? $messageInfo['buyer_username'] : '')));
         $addressField = isset($sourceConfig['address_field']) ? (string) $sourceConfig['address_field'] : 'customer_address';
         $airbillAttachmentField = isset($sourceConfig['airbill_attachment_field']) ? (string) $sourceConfig['airbill_attachment_field'] : 'airbill_attachment';
-        $safeCustomerAddress = mysqli_real_escape_string($financeConnect, (string) (isset($orderRow[$addressField]) ? $orderRow[$addressField] : ''));
+        $safeCustomerAddress = mysqli_real_escape_string($financeConnect, (string) (isset($messageInfo['customer_address']) ? $messageInfo['customer_address'] : (isset($orderRow[$addressField]) ? $orderRow[$addressField] : '')));
         $safePackageSummary = mysqli_real_escape_string($financeConnect, (string) $messageInfo['package_summary']);
         $safeProductSummary = mysqli_real_escape_string($financeConnect, (string) $messageInfo['product_summary']);
         $safeAirbillAttachment = mysqli_real_escape_string($financeConnect, (string) (isset($orderRow[$airbillAttachmentField]) ? $orderRow[$airbillAttachmentField] : ''));
@@ -7033,10 +7387,11 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
                 ? $sourcePage
                 : (isset($notificationInfo['source_page']) ? $notificationInfo['source_page'] : '')
         ));
-        $tokenSetting = shopeeOmsFindPreferredTokenSetting($cmsConnect, $sourcePage);
+        $tokenSettingPage = shopeeOmsResolveWarehouseNotificationTokenPage($sourcePage, $tokenRow, $notificationInfo);
+        $tokenSetting = shopeeOmsFindPreferredTokenSetting($cmsConnect, $tokenSettingPage);
         if (empty($tokenSetting)) {
-            $tokenNotSetMessage = $sourcePage !== ''
-                ? 'Token not set yet, please set the Telegram token for ' . $sourcePage . '.'
+            $tokenNotSetMessage = $tokenSettingPage !== ''
+                ? 'Token not set yet, please set the Telegram token for ' . $tokenSettingPage . '.'
                 : 'Token not set yet, please set the Telegram token in Token Setting.';
             return array(
                 'success' => true,
@@ -7594,7 +7949,7 @@ if (!function_exists('shopeeOmsGetImportantEditableFields')) {
     {
         return array(
             'orderID' => 'Order ID',
-            'customer_name' => 'Shopee Buyer Username',
+            'customer_name' => 'Customer Name',
             'customer_phone' => 'Customer Phone',
             'customer_address' => 'Customer Address',
             'package' => 'Package',

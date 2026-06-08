@@ -1116,6 +1116,41 @@ function migrationEnsureColumn($conn, $dbName, $tableName, $columnName, $alterSq
     }
 }
 
+function migrationEnsureColumnAfter($conn, $dbName, $tableName, $columnName, $afterColumnName, $modifySql, $successMessage)
+{
+    $safeDb = $conn->real_escape_string($dbName);
+    $safeTable = $conn->real_escape_string($tableName);
+    $safeColumn = $conn->real_escape_string($columnName);
+    $safeAfterColumn = $conn->real_escape_string($afterColumnName);
+    $sql = "SELECT c.ORDINAL_POSITION AS column_position, a.ORDINAL_POSITION AS after_position
+        FROM information_schema.columns c
+        LEFT JOIN information_schema.columns a
+            ON a.table_schema = c.table_schema
+            AND a.table_name = c.table_name
+            AND a.column_name = '$safeAfterColumn'
+        WHERE c.table_schema = '$safeDb'
+            AND c.table_name = '$safeTable'
+            AND c.column_name = '$safeColumn'
+        LIMIT 1";
+    $rst = $conn->query($sql);
+
+    if (!$rst || $rst->num_rows === 0) {
+        return;
+    }
+
+    $row = $rst->fetch_assoc();
+    $columnPosition = isset($row['column_position']) ? (int) $row['column_position'] : 0;
+    $afterPosition = isset($row['after_position']) ? (int) $row['after_position'] : 0;
+
+    if ($columnPosition !== ($afterPosition + 1)) {
+        if ($conn->query($modifySql)) {
+            echo "<p style='color:blue;'>" . $successMessage . "</p>";
+        } else {
+            echo "<p style='color:red;'>Failed repositioning `" . $tableName . "`.`" . $columnName . "`: " . $conn->error . "</p>";
+        }
+    }
+}
+
 function migrationEnsureIndex($conn, $dbName, $tableName, $indexName, $alterSql, $successMessage)
 {
     if (!migrationIndexExists($conn, $dbName, $tableName, $indexName)) {
@@ -2976,8 +3011,9 @@ if ($conn->select_db($db_fin)) {
     migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'airbill_no', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `airbill_no` VARCHAR(150) DEFAULT NULL AFTER `barcode_slot`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `airbill_no`.");
     migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'airbill_attachment', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `airbill_attachment` TEXT DEFAULT NULL AFTER `airbill_no`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `airbill_attachment`.");
     migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'stock_out_warehouse_id', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `stock_out_warehouse_id` INT DEFAULT NULL AFTER `airbill_attachment`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `stock_out_warehouse_id`.");
-    dropColumnIfExists($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'customer_name', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` DROP COLUMN `customer_name`");
-    migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'customer_address', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `customer_address` TEXT DEFAULT NULL AFTER `buyer`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `customer_address`.");
+    migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'customer_name', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `customer_name` VARCHAR(200) DEFAULT NULL AFTER `buyer`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `customer_name`.");
+    migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'customer_address', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `customer_address` TEXT DEFAULT NULL AFTER `customer_name`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `customer_address`.");
+    migrationEnsureColumnAfter($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'customer_address', 'customer_name', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` MODIFY COLUMN `customer_address` TEXT NULL AFTER `customer_name`", "Updated `" . SHOPEE_SG_ORDER_REQ . "`.`customer_address` to follow `customer_name`.");
     migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'package_qty_json', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `package_qty_json` LONGTEXT DEFAULT NULL AFTER `package`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `package_qty_json`.");
     migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'order_detail_pdf', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `order_detail_pdf` VARCHAR(255) DEFAULT NULL AFTER `airbill_attachment`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `order_detail_pdf`.");
     migrationEnsureColumn($conn, $db_fin, SHOPEE_SG_ORDER_REQ, 'latest_transition_at', "ALTER TABLE `" . SHOPEE_SG_ORDER_REQ . "` ADD COLUMN `latest_transition_at` DATETIME DEFAULT NULL AFTER `estimated_received_date_assigned_time`", "Verified `" . SHOPEE_SG_ORDER_REQ . "` includes `latest_transition_at`.");
