@@ -6115,14 +6115,7 @@ if (!function_exists('shopeeOmsBuildWarehouseMessage')) {
         $deliveryInfo = $platform === 'shopee' ? shopeeOmsExtractAirbillDeliveryInfoFromAttachment($airbillAttachment) : array();
         $rememberedDeliveryInfo = shopeeOmsGetRememberedWarehouseDeliveryInfo($platform, isset($orderRow['id']) ? $orderRow['id'] : 0);
         $deliveryCustomerName = isset($orderRow['customer_name']) ? trim((string) $orderRow['customer_name']) : '';
-        if ($deliveryCustomerName === '') {
-            foreach (array('warehouse_customer_name', 'sor_customer_name') as $requestFieldName) {
-                if (isset($_POST[$requestFieldName]) && trim((string) $_POST[$requestFieldName]) !== '') {
-                    $deliveryCustomerName = trim((string) $_POST[$requestFieldName]);
-                    break;
-                }
-            }
-        }
+        // Intentionally avoid reading from $_POST here to keep message generation deterministic.
         if ($deliveryCustomerName === '' && isset($rememberedDeliveryInfo['customer_name'])) {
             $deliveryCustomerName = trim((string) $rememberedDeliveryInfo['customer_name']);
         }
