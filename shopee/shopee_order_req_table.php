@@ -151,6 +151,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['move_to_pack_
     }
 
     $orderId = intval($_POST['move_to_pack_id']);
+    $warehouseCustomerName = trim((string) postSpaceFilter('warehouse_customer_name'));
+    if ($warehouseCustomerName !== '') {
+        shopeeOmsRememberWarehouseDeliveryInfo('shopee', $orderId, array(
+            'customer_name' => $warehouseCustomerName,
+        ));
+    }
     $moveToPackResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'TP', array(
         'actor_user_id' => USER_ID,
         'actor_user_group_id' => USER_GROUP,
@@ -740,9 +746,10 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                                     : array('min_date' => $estimatedDateMin, 'max_date' => $estimatedDateMax);
                                 ?>
                                 <?php if ($statusCode === 'P' && $canMoveToPackThisOrder) { ?>
-                                 <form method="post" class="d-inline" onsubmit="return confirm('Move this order to To Pack?')">
+                                 <form method="post" class="d-inline shopee-move-to-pack-form" data-order-id="<?= (int) $row['id'] ?>" onsubmit="return confirm('Move this order to To Pack?')">
                                      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
                                      <input type="hidden" name="move_to_pack_id" value="<?= (int) $row['id'] ?>">
+                                     <input type="hidden" name="warehouse_customer_name" value="">
                                      <button type="submit" class="btn btn-sm btn-rounded btn-info" title="Move to To Pack">
                                          <i class="fas fa-box-open"></i>
                                      </button>
@@ -895,6 +902,34 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
     dropdownMenuDispFix();
     datatableAlignment('shopee_order_req_table');
     keepDataTableControlsVisible('shopee_order_req_table');
+
+    (function bindShopeeMoveToPackCustomerName() {
+        var moveForms = document.querySelectorAll('.shopee-move-to-pack-form');
+        if (!moveForms.length) {
+            return;
+        }
+
+        moveForms.forEach(function (form) {
+            var orderId = String(form.getAttribute('data-order-id') || '').trim();
+            var customerNameField = form.querySelector('input[name="warehouse_customer_name"]');
+            if (!orderId || !customerNameField || typeof window.localStorage === 'undefined') {
+                return;
+            }
+
+            try {
+                var rawData = window.localStorage.getItem('shopee_airbill_delivery_info_' + orderId);
+                if (!rawData) {
+                    return;
+                }
+
+                var parsedData = JSON.parse(rawData);
+                if (parsedData && typeof parsedData.customerName === 'string' && parsedData.customerName.trim() !== '') {
+                    customerNameField.value = parsedData.customerName.trim();
+                }
+            } catch (error) {
+            }
+        });
+    })();
 </script>
 <?php
 shopeeOrderDetailPdfRenderVerifyModalScript(array(

@@ -14,6 +14,7 @@ include_once ROOT . '/include/customer_follow_up_common.php';
 include_once ROOT . '/include/shopee_order_detail_pdf_common.php';
 
 $tblName = SHOPEE_SG_ORDER_REQ;
+$sorCustomerNameColumnExists = shopeeOmsTableHasColumn($finance_connect, dbFinance, $tblName, 'customer_name');
 
 if (empty($_SESSION['shopee_order_follow_up_csrf'])) {
     $_SESSION['shopee_order_follow_up_csrf'] = bin2hex(random_bytes(32));
@@ -35,7 +36,31 @@ if (in_array('130', GlobalPin)) {
     $redirect_page = $SITEURL . '/shopee/shopee_verify.php';
 }
 $redirectLink = ("<script>location.replace('$redirect_page');</script>");
-$clearLocalStorage = '<script>localStorage.clear();</script>';
+$clearLocalStorage = <<<'HTML'
+<script>
+(function () {
+    try {
+        if (typeof window.localStorage === 'undefined') {
+            return;
+        }
+
+        var preservedValues = {};
+        for (var i = 0; i < window.localStorage.length; i++) {
+            var storageKey = window.localStorage.key(i);
+            if (storageKey && storageKey.indexOf('shopee_airbill_delivery_info_') === 0) {
+                preservedValues[storageKey] = window.localStorage.getItem(storageKey);
+            }
+        }
+
+        window.localStorage.clear();
+        Object.keys(preservedValues).forEach(function (storageKey) {
+            window.localStorage.setItem(storageKey, preservedValues[storageKey]);
+        });
+    } catch (error) {
+    }
+})();
+</script>
+HTML;
 $sorStatusOptions = function_exists('shopeeOmsGetEditableStatusOptions') ? shopeeOmsGetEditableStatusOptions() : array('P' => 'To Ship', 'TP' => 'To Pack', 'SP' => 'Shipped', 'WAERD' => 'Waiting Assign Estimate Received Date');
 $sorAirbillAttachmentPath = img_server . 'shopee_airbill_attachment/';
 $sorAirbillAttachmentUrl = rtrim((string) $SITEURL, '/') . '/' . trim((string) $sorAirbillAttachmentPath, '/\\') . '/';
@@ -265,6 +290,13 @@ if ($dataID) { //edit/remove/view
     if ($rst != false && $rst->num_rows > 0) {
         $dataExisted = 1;
         $row = $rst->fetch_assoc();
+        $rememberedDeliveryInfo = shopeeOmsGetRememberedWarehouseDeliveryInfo('shopee', (int) $dataID);
+        if ((!isset($sor_customer_name) || trim((string) $sor_customer_name) === '') && isset($rememberedDeliveryInfo['customer_name'])) {
+            $sor_customer_name = trim((string) $rememberedDeliveryInfo['customer_name']);
+        }
+        if ((!isset($sor_customer_address) || trim((string) $sor_customer_address) === '') && isset($rememberedDeliveryInfo['customer_address'])) {
+            $sor_customer_address = trim((string) $rememberedDeliveryInfo['customer_address']);
+        }
     } else {
         // If $rst is false or no data found ($act==null)
         $errorExist = 1;
@@ -768,7 +800,14 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
         $sor_update_airbill = 'yes';
     }
     $sor_airbill = postSpaceFilter('sor_airbill');
+    $sor_customer_name = postSpaceFilter('sor_customer_name');
     $sor_customer_address = postSpaceFilter('sor_customer_address');
+    if ((int) $dataID > 0 && ($sor_customer_name !== '' || $sor_customer_address !== '')) {
+        shopeeOmsRememberWarehouseDeliveryInfo('shopee', (int) $dataID, array(
+            'customer_name' => $sor_customer_name,
+            'customer_address' => $sor_customer_address,
+        ));
+    }
     $sor_airbill_attachment = null;
     if (isset($_FILES["sor_airbill_attachment"]) && $_FILES["sor_airbill_attachment"]["size"] != 0) {
         $sor_airbill_attachment = $_FILES["sor_airbill_attachment"]["name"];
@@ -808,10 +847,12 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                 if ($action === 'updRecord') {
                     $sor_airbill = isset($row['airbill_no']) ? (string) $row['airbill_no'] : '';
                     $sor_airbill_attachment = isset($row['airbill_attachment']) ? (string) $row['airbill_attachment'] : '';
+                    $sor_customer_name = $sorCustomerNameColumnExists && isset($row['customer_name']) ? (string) $row['customer_name'] : '';
                     $sor_customer_address = isset($row['customer_address']) ? (string) $row['customer_address'] : '';
                 } else {
                     $sor_airbill = '';
                     $sor_airbill_attachment = '';
+                    $sor_customer_name = '';
                     $sor_customer_address = '';
                 }
             }
@@ -1036,6 +1077,10 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                         array_push($newvalarr, $effectiveAirbill);
                         array_push($datafield, 'airbill_no');
                     }
+                    if ($sorCustomerNameColumnExists && $sor_customer_name !== '') {
+                        array_push($newvalarr, $sor_customer_name);
+                        array_push($datafield, 'customer_name');
+                    }
                     if ($sor_customer_address !== '') {
                         array_push($newvalarr, $sor_customer_address);
                         array_push($datafield, 'customer_address');
@@ -1065,9 +1110,12 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                     $safeStockOutWarehouseId = (int) $sor_stock_out_warehouse_id;
                     $safeAirbill = mysqli_real_escape_string($finance_connect, $effectiveAirbill);
                     $safeAirbillAttachment = mysqli_real_escape_string($finance_connect, $sor_airbill_attachment);
+                    $safeCustomerName = mysqli_real_escape_string($finance_connect, $sor_customer_name);
                     $safeCustomerAddress = mysqli_real_escape_string($finance_connect, $sor_customer_address);
+                    $customerNameColumnSql = $sorCustomerNameColumnExists ? 'customer_name,' : '';
+                    $customerNameValueSql = $sorCustomerNameColumnExists ? ("'$safeCustomerName',") : '';
 
-                    $query = "INSERT INTO " . $tblName . " (shopee_acc,currency,orderID,date,time,package,package_qty_json,brand,buyer,buyer_pay_meth,pic,customer_address,price,voucher,act_shipping_fee,service_fee,trans_fee,ams_fee,fees,final_amt,airbill_no,airbill_attachment,stock_out_warehouse_id,remark,order_status,latest_transition_at,create_by,create_date,create_time) VALUES ('$safeSorAcc','$safeSorCurr','$safeSorOrder','$safeSorDate','$safeSorTime','$safeSorPkg','$safePackageQtySnapshotJson','$safeSorBrand','$safeSorUser','$safeSorPay','$safeSorPic','$safeCustomerAddress','$safeSorPrice','$safeSorVoucher','$safeSorShipping','$safeSorServ','$safeSorTrans','$safeSorAms','$safeSorFees','$safeSorFinal','$safeAirbill','$safeAirbillAttachment'," . $safeStockOutWarehouseId . ",'$safeSorRemark','$safeSorStatus',NOW(),'" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . " (shopee_acc,currency,orderID,date,time,package,package_qty_json,brand,buyer,buyer_pay_meth,pic," . $customerNameColumnSql . "customer_address,price,voucher,act_shipping_fee,service_fee,trans_fee,ams_fee,fees,final_amt,airbill_no,airbill_attachment,stock_out_warehouse_id,remark,order_status,latest_transition_at,create_by,create_date,create_time) VALUES ('$safeSorAcc','$safeSorCurr','$safeSorOrder','$safeSorDate','$safeSorTime','$safeSorPkg','$safePackageQtySnapshotJson','$safeSorBrand','$safeSorUser','$safeSorPay','$safeSorPic'," . $customerNameValueSql . "'$safeCustomerAddress','$safeSorPrice','$safeSorVoucher','$safeSorShipping','$safeSorServ','$safeSorTrans','$safeSorAms','$safeSorFees','$safeSorFinal','$safeAirbill','$safeAirbillAttachment'," . $safeStockOutWarehouseId . ",'$safeSorRemark','$safeSorStatus',NOW(),'" . USER_ID . "',curdate(),curtime())";
                     $returnData = mysqli_query($finance_connect, $query);
                     if (!$returnData) {
                         throw new Exception('Database Error: ' . mysqli_error($finance_connect));
@@ -1075,6 +1123,10 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
 
                     if ($returnData) {
                         $dataID = (int) mysqli_insert_id($finance_connect);
+                        shopeeOmsRememberWarehouseDeliveryInfo('shopee', $dataID, array(
+                            'customer_name' => $sor_customer_name,
+                            'customer_address' => $sor_customer_address,
+                        ));
                         shopeeOmsLogTransition($finance_connect, array(
                             'order_id' => $dataID,
                             'order_code' => $sor_order,
@@ -1089,6 +1141,9 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
 
                         if ($sor_order_status === 'TP') {
                             $freshOrderRow = shopeeOmsLoadOrder($finance_connect, $dataID);
+                            if ($sor_customer_name !== '') {
+                                $freshOrderRow['customer_name'] = $sor_customer_name;
+                            }
                             $tokenResult = shopeeOmsCreateWarehouseToken($connect, $finance_connect, $freshOrderRow, USER_ID);
                             if (!empty($tokenResult['success']) && !empty($tokenResult['token_row']) && !empty($tokenResult['notification'])) {
                                 $notifyResult = shopeeOmsSendWarehouseNotification($connect, $finance_connect, $tokenResult['token_row'], $tokenResult['notification'], $pageTitle);
@@ -1264,6 +1319,12 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                         array_push($datafield, 'airbill_attachment');
                     }
 
+                    if ($sorCustomerNameColumnExists && (string) (isset($row['customer_name']) ? $row['customer_name'] : '') !== (string) $sor_customer_name) {
+                        array_push($oldvalarr, trim((string) (isset($row['customer_name']) ? $row['customer_name'] : '')) !== '' ? $row['customer_name'] : 'Empty Value');
+                        array_push($chgvalarr, trim((string) $sor_customer_name) !== '' ? $sor_customer_name : 'Empty Value');
+                        array_push($datafield, 'customer_name');
+                    }
+
                     if ((string) (isset($row['customer_address']) ? $row['customer_address'] : '') !== (string) $sor_customer_address) {
                         array_push($oldvalarr, trim((string) (isset($row['customer_address']) ? $row['customer_address'] : '')) !== '' ? $row['customer_address'] : 'Empty Value');
                         array_push($chgvalarr, trim((string) $sor_customer_address) !== '' ? $sor_customer_address : 'Empty Value');
@@ -1304,6 +1365,9 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                         $query .= "buyer = '$sor_user', ";
                         $query .= "buyer_pay_meth = '$sor_pay', ";
                         $query .= "pic = '$sor_pic', ";
+                        if ($sorCustomerNameColumnExists) {
+                            $query .= "customer_name = '" . mysqli_real_escape_string($finance_connect, $sor_customer_name) . "', ";
+                        }
                         $query .= "customer_address = '" . mysqli_real_escape_string($finance_connect, $sor_customer_address) . "', ";
                         $query .= "price = '$sor_price', ";
                         $query .= "voucher = '$sor_voucher', ";
@@ -1341,6 +1405,9 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                                 'delay_remark' => isset($row['delay_remark']) ? $row['delay_remark'] : '',
                                 'order_status' => isset($row['order_status']) ? $row['order_status'] : '',
                             );
+                            if ($sorCustomerNameColumnExists) {
+                                $newValuesForHistory['customer_name'] = $sor_customer_name;
+                            }
                             $orderChanges = shopeeOmsDetectOrderChanges($connect, $row, $newValuesForHistory);
                             shopeeOmsLogOrderEditHistory($finance_connect, (int) $dataID, $sor_order, $orderChanges, USER_ID, USER_GROUP, $pageTitle);
                         } else {
@@ -2230,6 +2297,13 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                                 <?php } ?>
 
                                 <input type="hidden" name="sor_airbill_attachment_value" id="sor_airbill_attachment_value" value="<?php if (isset($row['airbill_attachment'])) echo htmlspecialchars($row['airbill_attachment'], ENT_QUOTES, 'UTF-8'); ?>">
+                                <input type="hidden" name="sor_customer_name" id="sor_customer_name" value="<?php
+                                    if (isset($sor_customer_name)) {
+                                        echo htmlspecialchars($sor_customer_name, ENT_QUOTES, 'UTF-8');
+                                    } else if ($sorCustomerNameColumnExists && isset($row['customer_name'])) {
+                                        echo htmlspecialchars((string) $row['customer_name'], ENT_QUOTES, 'UTF-8');
+                                    }
+                                ?>">
                             </div>
                         </div>
                     </div>
@@ -3783,8 +3857,10 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                 window.shopeeOmsAirbillPdfAutofill.bind({
                     fileInputSelector: '#sor_airbill_attachment',
                     airbillNoSelector: '#sor_airbill',
+                    customerNameSelector: '#sor_customer_name',
                     customerAddressSelector: '#sor_customer_address',
                     statusSelector: '#sor_airbill_extract_status',
+                    localStorageKey: 'shopee_airbill_delivery_info_<?= (int) $dataID ?>',
                     workerSrc: '../finance/header/js/pdf.worker.min.js',
                     errorClass: 'is-error'
                 });
