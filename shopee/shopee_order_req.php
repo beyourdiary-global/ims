@@ -2164,11 +2164,12 @@ if (!window.shopeeOmsAirbillPdfAutofill || !window.shopeeOmsAirbillPdfAutofill._
                         dispatchInputEvent(customerAddress);
                     }
 
-                    if (config.localStorageKey && (extractedData.customerName !== '' || extractedData.customerAddress !== '')) {
+                    if (config.localStorageKey && (extractedData.airbillNo !== '' || extractedData.customerName !== '' || extractedData.customerAddress !== '')) {
                         try {
                             localStorage.setItem(config.localStorageKey, JSON.stringify({
-                                customer_name: extractedData.customerName || '',
-                                customer_address: extractedData.customerAddress || ''
+                                airbillNo: extractedData.airbillNo || '',
+                                customerName: extractedData.customerName || '',
+                                customerAddress: extractedData.customerAddress || ''
                             }));
                         } catch (error) {
                         }
