@@ -35,7 +35,7 @@ if (!function_exists('systemAlertGetModuleConfigs')) {
             'shopee_waiting_to_pack' => array(
                 'pin_group_id' => 128,
                 'title' => 'Shopee Waiting To Pack',
-                'path' => '/shopee/shopee_processing_order.php',
+                'path' => '/finance/waiting_to_pack.php',
                 'action_label' => 'View Orders',
             ),
             'shopee_arrival_management' => array(
@@ -83,6 +83,25 @@ if (!function_exists('systemAlertBuildActionUrl')) {
         }
 
         return $url;
+    }
+}
+
+if (!function_exists('systemAlertResolveRowActionUrl')) {
+    function systemAlertResolveRowActionUrl($alertRow)
+    {
+        $actionUrl = trim((string) (isset($alertRow['action_url']) ? $alertRow['action_url'] : ''));
+        $moduleKey = trim((string) (isset($alertRow['module_key']) ? $alertRow['module_key'] : ''));
+        $relatedTable = trim((string) (isset($alertRow['related_table']) ? $alertRow['related_table'] : ''));
+
+        // Module notice alerts should always follow the current module route.
+        if ($moduleKey !== '' && $relatedTable === 'module_notice') {
+            $configs = systemAlertGetModuleConfigs();
+            if (isset($configs[$moduleKey])) {
+                return systemAlertBuildActionUrl($moduleKey);
+            }
+        }
+
+        return $actionUrl;
     }
 }
 
