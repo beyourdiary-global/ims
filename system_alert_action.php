@@ -122,5 +122,7 @@ if (
     systemAlertActionMarkFollowUpNotificationRead($connect, (int) $alertRow['related_id'], $userId);
 }
 
-$targetUrl = trim((string) (isset($alertRow['action_url']) ? $alertRow['action_url'] : ''));
+$targetUrl = function_exists('systemAlertResolveRowActionUrl')
+    ? systemAlertResolveRowActionUrl($alertRow)
+    : trim((string) (isset($alertRow['action_url']) ? $alertRow['action_url'] : ''));
 systemAlertActionRedirect($targetUrl !== '' ? $targetUrl : $fallbackUrl);
