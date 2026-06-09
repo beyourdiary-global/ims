@@ -204,9 +204,7 @@ $sourceOrderLinkMap = siBuildSourceOrderLinkMap($connect, $finance_connect, arra
                                 $orderPlatform = isset($orderLinkMeta['platform']) ? (string) $orderLinkMeta['platform'] : '';
                                 $sourceOrderId = isset($orderLinkMeta['order_id']) ? (int) $orderLinkMeta['order_id'] : 0;
                                 if ($orderPlatform !== '' && $sourceOrderId > 0) {
-                                    $orderViewUrl = (string) shopeeOmsGetOrderSourceViewUrl($orderPlatform, $sourceOrderId, array(
-                                        'return_url' => $stockListCurrentPageUrl,
-                                    ));
+                                    $orderViewUrl = (string) shopeeOmsGetOrderSourceViewUrl($orderPlatform, $sourceOrderId, array());
                                 }
                                 ?>
                                 <tr>

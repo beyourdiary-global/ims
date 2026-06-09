@@ -186,6 +186,45 @@ if (!function_exists('commonResolvePaymentMethodName')) {
     }
 }
 
+if (!function_exists('commonSafeBackUrl')) {
+    function commonSafeBackUrl($url, $fallback)
+    {
+        $url = trim((string) $url);
+
+        if ($url === '') {
+            return $fallback;
+        }
+
+        // Block dangerous / external-like URL
+        if (preg_match('/^(javascript|data|vbscript):/i', $url) || strpos($url, '//') === 0) {
+            return $fallback;
+        }
+
+        // Allow relative URL
+        if (strpos($url, '/') === 0) {
+            return $url;
+        }
+
+        // Allow same-domain absolute URL
+        $siteHost = defined('SITEURL') ? parse_url(SITEURL, PHP_URL_HOST) : '';
+        $urlHost = parse_url($url, PHP_URL_HOST);
+
+        return ($siteHost && $urlHost && strtolower($siteHost) === strtolower($urlHost))
+            ? $url
+            : $fallback;
+    }
+}
+
+if (!function_exists('commonResolveBackUrl')) {
+    function commonResolveBackUrl($fallbackUrl)
+    {
+        $fallbackUrl = trim((string) $fallbackUrl);
+        $referer = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : '';
+
+        return commonSafeBackUrl($referer, $fallbackUrl);
+    }
+}
+
 function redirect($addr, $alert = '')
 {
 	global $siteOrlocalMode;
@@ -2628,94 +2667,19 @@ if (!function_exists('shopeeOmsGetOrderCodeValue')) {
 }
 
 if (!function_exists('shopeeOmsGetOrderSourceViewUrl')) {
-    function shopeeOmsGetOrderSourceViewUrl($source, $orderId, $params = array())
+    function shopeeOmsGetOrderSourceViewUrl($source, $orderId)
     {
         $sourceConfig = shopeeOmsResolveOrderSourceConfig($source);
         $viewUrl = isset($sourceConfig['view_url']) ? trim((string) $sourceConfig['view_url']) : '';
+
         if ($viewUrl === '' || !defined('SITEURL')) {
             return '';
         }
 
-        $url = rtrim((string) SITEURL, '/') . $viewUrl . '?id=' . (int) $orderId;
-        return shopeeOmsAppendQueryParams($url, $params);
+        return rtrim((string) SITEURL, '/') . $viewUrl . '?id=' . (int) $orderId;
     }
 }
 
-if (!function_exists('shopeeOmsAppendQueryParams')) {
-    function shopeeOmsAppendQueryParams($url, $params = array())
-    {
-        $url = trim((string) $url);
-        if ($url === '') {
-            return '';
-        }
-
-        $params = array_filter((array) $params, function ($value) {
-            return $value !== null && $value !== '';
-        });
-        if (empty($params)) {
-            return $url;
-        }
-
-        $queryString = http_build_query($params);
-        if ($queryString === '') {
-            return $url;
-        }
-
-        return $url . (strpos($url, '?') === false ? '?' : '&') . $queryString;
-    }
-}
-
-if (!function_exists('shopeeOmsGetCurrentPageUrl')) {
-    function shopeeOmsGetCurrentPageUrl()
-    {
-        if (!defined('SITEURL')) {
-            return '';
-        }
-
-        $requestUri = isset($_SERVER['REQUEST_URI']) ? trim((string) $_SERVER['REQUEST_URI']) : '';
-        if ($requestUri === '') {
-            return rtrim((string) SITEURL, '/');
-        }
-
-        return rtrim((string) SITEURL, '/') . (strpos($requestUri, '/') === 0 ? $requestUri : ('/' . ltrim($requestUri, '/')));
-    }
-}
-
-if (!function_exists('shopeeOmsResolveReturnUrl')) {
-    function shopeeOmsResolveReturnUrl($candidateUrl, $fallbackUrl = '')
-    {
-        $siteUrl = defined('SITEURL') ? rtrim((string) SITEURL, '/') : '';
-        $fallbackUrl = trim((string) $fallbackUrl);
-        if ($fallbackUrl === '' && $siteUrl !== '') {
-            $fallbackUrl = $siteUrl . '/dashboard.php';
-        }
-
-        $candidateUrl = trim((string) $candidateUrl);
-        if ($candidateUrl === '') {
-            return $fallbackUrl;
-        }
-
-        if ($siteUrl !== '' && strpos($candidateUrl, '/') === 0) {
-            $candidateUrl = $siteUrl . $candidateUrl;
-        }
-
-        $parsedCandidate = @parse_url($candidateUrl);
-        $siteHost = $siteUrl !== '' ? strtolower((string) parse_url($siteUrl, PHP_URL_HOST)) : '';
-        $scheme = is_array($parsedCandidate) && isset($parsedCandidate['scheme']) ? strtolower((string) $parsedCandidate['scheme']) : '';
-        $host = is_array($parsedCandidate) && isset($parsedCandidate['host']) ? strtolower((string) $parsedCandidate['host']) : '';
-
-        if (
-            $parsedCandidate === false
-            || strpos($candidateUrl, '//') === 0
-            || ($scheme !== '' && !in_array($scheme, array('http', 'https'), true))
-            || ($host !== '' && ($siteHost === '' || strcasecmp($host, $siteHost) !== 0))
-        ) {
-            return $fallbackUrl;
-        }
-
-        return $candidateUrl;
-    }
-}
 
 if (!function_exists('shopeeOmsGetOrderSourceInfoUrl')) {
     function shopeeOmsGetOrderSourceInfoUrl($source, $orderId)

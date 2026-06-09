@@ -14,19 +14,11 @@ $pageAction = getPageAction($act);
 
 
 $redirect_page = $SITEURL . '/lazada_order_req_table.php';
-$requestedReturnUrl = '';
-if (isset($_POST['return_url']) && !is_array($_POST['return_url'])) {
-    $requestedReturnUrl = (string) $_POST['return_url'];
-} else if (isset($_GET['return_url']) && !is_array($_GET['return_url'])) {
-    $requestedReturnUrl = (string) $_GET['return_url'];
-} else if (isset($_SERVER['HTTP_REFERER']) && !is_array($_SERVER['HTTP_REFERER'])) {
-    $requestedReturnUrl = (string) $_SERVER['HTTP_REFERER'];
-}
-$back_redirect_page = function_exists('shopeeOmsResolveReturnUrl')
-    ? shopeeOmsResolveReturnUrl($requestedReturnUrl, $redirect_page)
-    : $redirect_page;
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
-$backRedirectLink = '<script>location.replace(' . json_encode((string) $back_redirect_page) . ');</script>';
+$back_redirect_page = commonResolveBackUrl($redirect_page);
+$redirectLink = '<script>location.href=' . json_encode($redirect_page) . ';</script>';
+$backRedirectLink = '<script>location.replace(' . json_encode($back_redirect_page) . ');</script>';
+$back_redirect_page = commonResolveBackUrl($redirect_page);
+$backRedirectLink = '<script>location.replace(' . json_encode($back_redirect_page) . ');</script>';
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 $pendingStatusUpdate = shopeeOmsNormalizeStatusCode(post('updateStatusBtn'));
 $lorShouldSaveBeforeStatusUpdate = $pendingStatusUpdate !== '' && $act === 'E';
@@ -651,10 +643,6 @@ if (post('actionBtn') || $lorShouldSaveBeforeStatusUpdate) {
                 exit;
             }
 
-            break;
-
-        case 'back':
-            echo $clearLocalStorage . ' ' . $backRedirectLink;
             break;
     }
 }
@@ -1850,9 +1838,8 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                             }
                         }
                         ?>
-                        <input type="hidden" name="return_url" value="<?= htmlspecialchars((string) $back_redirect_page, ENT_QUOTES, 'UTF-8') ?>">
-                        <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn"
-                            id="actionBtn" value="back">Back</button>
+                            <button type="button" class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn" id="actionBtn"
+                                onclick="if (window.history.length > 1) { window.history.back(); } else { location.href = <?= htmlspecialchars(json_encode($redirect_page), ENT_QUOTES, 'UTF-8') ?>; }">Back</button>
                     </div>
                 </form>
             </div>
