@@ -15,7 +15,19 @@ $pageAction = getPageAction($act);
 
 
 $redirect_page = $SITEURL . '/finance/website_order_request_table.php';
+$requestedReturnUrl = '';
+if (isset($_POST['return_url']) && !is_array($_POST['return_url'])) {
+    $requestedReturnUrl = (string) $_POST['return_url'];
+} else if (isset($_GET['return_url']) && !is_array($_GET['return_url'])) {
+    $requestedReturnUrl = (string) $_GET['return_url'];
+} else if (isset($_SERVER['HTTP_REFERER']) && !is_array($_SERVER['HTTP_REFERER'])) {
+    $requestedReturnUrl = (string) $_SERVER['HTTP_REFERER'];
+}
+$back_redirect_page = function_exists('shopeeOmsResolveReturnUrl')
+    ? shopeeOmsResolveReturnUrl($requestedReturnUrl, $redirect_page)
+    : $redirect_page;
 $redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$backRedirectLink = '<script>location.replace(' . json_encode((string) $back_redirect_page) . ');</script>';
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 $pendingStatusUpdate = shopeeOmsNormalizeStatusCode(post('updateStatusBtn'));
 $worShouldSaveBeforeStatusUpdate = $pendingStatusUpdate !== '' && $act === 'E';
@@ -716,7 +728,7 @@ if (post('actionBtn') || $worShouldSaveBeforeStatusUpdate) {
             break;
 
         case 'back':
-            echo $clearLocalStorage . ' ' . $redirectLink;
+            echo $clearLocalStorage . ' ' . $backRedirectLink;
             break;
     }
 }
@@ -930,7 +942,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
         <input type="hidden" name="id" value="<?php echo $dataID; ?>">
     </form>
     <div class="d-flex flex-column my-3 ms-3">
-        <p><a href="<?= $redirect_page ?>">
+        <p><a href="<?= htmlspecialchars((string) $back_redirect_page, ENT_QUOTES, 'UTF-8') ?>">
                 <?= $pageTitle ?>
             </a> <i class="fa-solid fa-chevron-right fa-xs"></i>
             <?php
@@ -1669,6 +1681,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                         }
                     }
                     ?>
+                    <input type="hidden" name="return_url" value="<?= htmlspecialchars((string) $back_redirect_page, ENT_QUOTES, 'UTF-8') ?>">
                     <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn" id="actionBtn"
                         value="back">Back</button>
                 </div>

@@ -26,6 +26,9 @@ list($warehouseNameMap, $warehouseNameToId) = siBuildNameMaps($warehouses);
 list($productNameMap, $productNameToId) = siBuildNameMaps($products);
 
 $stockOutRows = siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTable, 'Stock Out');
+$stockListCurrentPageUrl = function_exists('shopeeOmsGetCurrentPageUrl')
+    ? shopeeOmsGetCurrentPageUrl()
+    : (rtrim((string) $SITEURL, '/') . (isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '/stock_list_table.php'));
 $orderIds = array();
 $orderNumbers = array();
 $groupedRows = array();
@@ -198,6 +201,13 @@ $sourceOrderLinkMap = siBuildSourceOrderLinkMap($connect, $finance_connect, arra
                                 $orderNumber = isset($row['order_number']) ? (string) $row['order_number'] : '';
                                 $orderLinkMeta = isset($sourceOrderLinkMap[$orderNumber]) ? $sourceOrderLinkMap[$orderNumber] : array('url' => '');
                                 $orderViewUrl = isset($orderLinkMeta['url']) ? trim((string) $orderLinkMeta['url']) : '';
+                                $orderPlatform = isset($orderLinkMeta['platform']) ? (string) $orderLinkMeta['platform'] : '';
+                                $sourceOrderId = isset($orderLinkMeta['order_id']) ? (int) $orderLinkMeta['order_id'] : 0;
+                                if ($orderPlatform !== '' && $sourceOrderId > 0) {
+                                    $orderViewUrl = (string) shopeeOmsGetOrderSourceViewUrl($orderPlatform, $sourceOrderId, array(
+                                        'return_url' => $stockListCurrentPageUrl,
+                                    ));
+                                }
                                 ?>
                                 <tr>
                                     <td class="hideColumn"><?= (int) $row['order_id'] ?></td>

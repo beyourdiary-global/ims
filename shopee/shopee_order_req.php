@@ -35,7 +35,19 @@ if (in_array('130', GlobalPin)) {
 } else if (in_array('129', GlobalPin)) {
     $redirect_page = $SITEURL . '/shopee/shopee_verify.php';
 }
+$requestedReturnUrl = '';
+if (isset($_POST['return_url']) && !is_array($_POST['return_url'])) {
+    $requestedReturnUrl = (string) $_POST['return_url'];
+} else if (isset($_GET['return_url']) && !is_array($_GET['return_url'])) {
+    $requestedReturnUrl = (string) $_GET['return_url'];
+} else if (isset($_SERVER['HTTP_REFERER']) && !is_array($_SERVER['HTTP_REFERER'])) {
+    $requestedReturnUrl = (string) $_SERVER['HTTP_REFERER'];
+}
+$back_redirect_page = function_exists('shopeeOmsResolveReturnUrl')
+    ? shopeeOmsResolveReturnUrl($requestedReturnUrl, $redirect_page)
+    : $redirect_page;
 $redirectLink = ("<script>location.replace('$redirect_page');</script>");
+$backRedirectLink = '<script>location.replace(' . json_encode((string) $back_redirect_page) . ');</script>';
 $clearLocalStorage = <<<'HTML'
 <script>
 (function () {
@@ -1535,7 +1547,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
             break;
 
         case 'back':
-            echo $clearLocalStorage . ' ' . $redirectLink;
+            echo $clearLocalStorage . ' ' . $backRedirectLink;
             break;
     }
 }
@@ -2405,7 +2417,7 @@ JS;
 
 <body>
     <div id="shopeeOrderReqBreadcrumbWrap" class="d-flex flex-column my-3 ms-3">
-        <p><a href="<?= $redirect_page ?>">
+        <p><a href="<?= htmlspecialchars((string) $back_redirect_page, ENT_QUOTES, 'UTF-8') ?>">
                 <?= $pageTitle ?>
             </a> <i class="fa-solid fa-chevron-right fa-xs"></i>
             <?php
@@ -3635,6 +3647,7 @@ JS;
                     </div>
                     <input type="hidden" name="return_type" id="return_type" value="">
                     <input type="hidden" name="return_remark" id="return_remark" value="">
+                    <input type="hidden" name="return_url" value="<?= htmlspecialchars((string) $back_redirect_page, ENT_QUOTES, 'UTF-8') ?>">
                     <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn" id="actionBtn" formnovalidate
                         value="back">Back</button>
                 </div>
