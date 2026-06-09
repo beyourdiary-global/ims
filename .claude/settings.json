@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git --version)",
+      "Bash(git config *)",
+      "Bash(chmod +x .githooks/pre-commit)",
+      "Bash(echo \"hooksPath set to: $\\(git config core.hooksPath\\)\")",
+      "Bash(git add *)",
+      "Bash(bash .githooks/pre-commit)",
+      "Bash(echo \"hook exit code = $?\")",
+      "Bash(git reset *)",
+      "Bash(echo \"exit=$?\")"
+    ]
+  }
+}
