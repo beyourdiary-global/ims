@@ -2559,6 +2559,103 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Failed removing pin 26 (Create Project): " . $conn->error . "</p>";
     }
 
+    $orderWarehouseTransferLogTable = defined('ORDER_WAREHOUSE_TRANSFER_LOG') ? ORDER_WAREHOUSE_TRANSFER_LOG : 'order_warehouse_transfer_log';
+    $createOrderWarehouseTransferLogSql = "CREATE TABLE IF NOT EXISTS `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `platform` VARCHAR(30) NOT NULL,
+        `order_table` VARCHAR(120) NOT NULL,
+        `order_id` INT NOT NULL,
+        `order_code` VARCHAR(150) NOT NULL,
+        `old_warehouse_id` INT NOT NULL,
+        `new_warehouse_id` INT NOT NULL,
+        `product_qty_json` LONGTEXT DEFAULT NULL,
+        `old_batch_usage_json` LONGTEXT DEFAULT NULL,
+        `new_batch_usage_json` LONGTEXT DEFAULT NULL,
+        `idempotency_key` VARCHAR(64) DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_owtl_order_lookup` (`platform`, `order_id`, `status`),
+        KEY `idx_owtl_order_code` (`order_code`, `status`),
+        KEY `idx_owtl_warehouse` (`old_warehouse_id`, `new_warehouse_id`, `status`),
+        UNIQUE KEY `uniq_owtl_idempotency` (`idempotency_key`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    if ($conn->query($createOrderWarehouseTransferLogSql)) {
+        echo "<p style='color:green;'>Verified table `" . $orderWarehouseTransferLogTable . "` for warehouse transfer logs.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . $orderWarehouseTransferLogTable . "`: " . $conn->error . "</p>";
+    }
+
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'platform', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `platform` VARCHAR(30) NOT NULL AFTER `id`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `platform`.");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'order_table', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `order_table` VARCHAR(120) NOT NULL AFTER `platform`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `order_table`.");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'order_id', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `order_id` INT NOT NULL AFTER `order_table`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `order_id`.");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'order_code', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `order_code` VARCHAR(150) NOT NULL AFTER `order_id`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `order_code`.");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'old_warehouse_id', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `old_warehouse_id` INT NOT NULL AFTER `order_code`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `old_warehouse_id`.");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'new_warehouse_id', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `new_warehouse_id` INT NOT NULL AFTER `old_warehouse_id`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `new_warehouse_id`.");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'product_qty_json', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `product_qty_json` LONGTEXT DEFAULT NULL AFTER `new_warehouse_id`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `product_qty_json`.");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'old_batch_usage_json', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `old_batch_usage_json` LONGTEXT DEFAULT NULL AFTER `product_qty_json`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `old_batch_usage_json`.");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'new_batch_usage_json', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `new_batch_usage_json` LONGTEXT DEFAULT NULL AFTER `old_batch_usage_json`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `new_batch_usage_json`.");
+    dropColumnIfExists($conn, $db_fin, $orderWarehouseTransferLogTable, 'transfer_note', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` DROP COLUMN `transfer_note`");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'idempotency_key', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `idempotency_key` VARCHAR(64) DEFAULT NULL AFTER `new_batch_usage_json`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `idempotency_key`.");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'create_by', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `create_by` VARCHAR(30) DEFAULT NULL AFTER `idempotency_key`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `create_by`.");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'create_date', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `create_date` DATE DEFAULT NULL AFTER `create_by`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `create_date`.");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'create_time', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `create_time` TIME DEFAULT NULL AFTER `create_date`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `create_time`.");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'status', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A' AFTER `create_time`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `status`.");
+
+    migrationEnsureIndex($conn, $db_fin, $orderWarehouseTransferLogTable, 'idx_owtl_order_lookup', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD INDEX `idx_owtl_order_lookup` (`platform`, `order_id`, `status`)", "Verified `" . $orderWarehouseTransferLogTable . "` order lookup index.");
+    migrationEnsureIndex($conn, $db_fin, $orderWarehouseTransferLogTable, 'idx_owtl_order_code', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD INDEX `idx_owtl_order_code` (`order_code`, `status`)", "Verified `" . $orderWarehouseTransferLogTable . "` order code index.");
+    migrationEnsureIndex($conn, $db_fin, $orderWarehouseTransferLogTable, 'idx_owtl_warehouse', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD INDEX `idx_owtl_warehouse` (`old_warehouse_id`, `new_warehouse_id`, `status`)", "Verified `" . $orderWarehouseTransferLogTable . "` warehouse index.");
+    migrationEnsureIndex($conn, $db_fin, $orderWarehouseTransferLogTable, 'uniq_owtl_idempotency', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD UNIQUE INDEX `uniq_owtl_idempotency` (`idempotency_key`)", "Verified `" . $orderWarehouseTransferLogTable . "` idempotency index.");
+
+    $transferPinSql = "INSERT INTO `pin` (`id`, `name`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+        (26, 'Transfer', 'Warehouse transfer action', '1', CURDATE(), CURTIME(), 'A')
+        ON DUPLICATE KEY UPDATE
+            `name` = VALUES(`name`),
+            `remark` = VALUES(`remark`),
+            `status` = 'A'";
+    if ($conn->query($transferPinSql)) {
+        echo "<p style='color:green;'>Verified pin 26 for Transfer.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed verifying pin 26 for Transfer: " . $conn->error . "</p>";
+    }
+
+    $orderWarehouseTransferPinGroupSql = "INSERT INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+        (152, 'Order Warehouse Transfer', '1,26', 'Warehouse transfer search and action', '1', CURDATE(), CURTIME(), 'A')
+        ON DUPLICATE KEY UPDATE
+            `name` = VALUES(`name`),
+            `pins` = VALUES(`pins`),
+            `remark` = VALUES(`remark`),
+            `status` = 'A'";
+    if ($conn->query($orderWarehouseTransferPinGroupSql)) {
+        echo "<p style='color:green;'>Verified pin group 152 for Order Warehouse Transfer.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed verifying pin group 152: " . $conn->error . "</p>";
+    }
+
+    foreach (array(1, 2) as $groupId) {
+        $userGroupResult = $conn->query("SELECT `pins` FROM `user_group` WHERE `id` = " . (int) $groupId . " LIMIT 1");
+        if (!$userGroupResult || $userGroupResult->num_rows === 0) {
+            echo "<p style='color:orange;'>`user_group` id " . (int) $groupId . " not found. Skipped Order Warehouse Transfer pin assignment.</p>";
+            continue;
+        }
+
+        $userGroupRow = $userGroupResult->fetch_assoc();
+        $currentPins = isset($userGroupRow['pins']) ? (string) $userGroupRow['pins'] : '';
+        $updatedPins = addAccessToPinBlock($currentPins, 152, array(1, 26));
+
+        if ($updatedPins !== $currentPins) {
+            $safePins = $conn->real_escape_string($updatedPins);
+            if ($conn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $groupId)) {
+                echo "<p style='color:green;'>Verified Order Warehouse Transfer pin access for `user_group` id " . (int) $groupId . ".</p>";
+            } else {
+                echo "<p style='color:red;'>Failed updating Order Warehouse Transfer pin access for `user_group` id " . (int) $groupId . ": " . $conn->error . "</p>";
+            }
+        } else {
+            echo "<p style='color:green;'>Verified Order Warehouse Transfer pin access already exists for `user_group` id " . (int) $groupId . ".</p>";
+        }
+    }
+
     $createLabelSql = "CREATE TABLE IF NOT EXISTS `" . LABEL . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `name` VARCHAR(120) NOT NULL,
