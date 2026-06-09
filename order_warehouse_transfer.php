@@ -421,7 +421,7 @@ $transferLogRows = owtGetTransferLogRows($connect, $finance_connect);
                     <h2 class="mb-0"><?= owtEsc($pageTitle) ?></h2>
                 </div>
 
-                <form class="row g-3 owt-search-form" method="post" action="<?= $SITEURL ?>/order_warehouse_transfer_process.php">
+                <form class="row g-3 owt-search-form" method="post" action="<?= $SITEURL ?>/order_warehouse_transfer_process.php" id="owtSearchForm" novalidate>
                     <input type="hidden" name="action" value="search_order">
                     <input type="hidden" name="search_csrf" value="<?= owtEsc($_SESSION['order_warehouse_transfer_search_csrf']) ?>">
 
@@ -429,8 +429,9 @@ $transferLogRows = owtGetTransferLogRows($connect, $finance_connect);
                         <label class="form-label form_lbl" for="order_code">Order Number</label>
                         <input class="form-control" type="text" name="order_code" id="order_code" value="<?= owtEsc($searchOrderCode) ?>" placeholder="Enter Order Number" required>
                         <div class="owt-field-message">
+                            <span class="text-danger d-none" id="owtOrderCodeRequiredMsg">Order Number is required!</span>
                             <?php if ($searchNoResult) { ?>
-                                <span class="text-danger">No order found.</span>
+                                <span class="text-danger" id="owtOrderCodeNoResultMsg">No order found.</span>
                             <?php } ?>
                         </div>
                     </div>
@@ -623,65 +624,16 @@ $transferLogRows = owtGetTransferLogRows($connect, $finance_connect);
     </div>
 </div>
 
-<script>
-    var page = <?= json_encode($pageTitle) ?>;
-    checkCurrentPage(page, '');
-    dropdownMenuDispFix();
-    setButtonColor();
-
-    $(document).ready(function () {
-        if ($.fn.DataTable) {
-            $('#owtTransferLogTable').DataTable({
-                pageLength: 10,
-                order: [[6, 'desc']]
-            });
-        }
-
-        var shouldOpenSearchModal = <?= json_encode($shouldOpenSearchModal) ?>;
-        var modalElement = document.getElementById('owtSearchResultModal');
-
-        function owtCleanupModalState() {
-            $('.modal-backdrop').remove();
-            $('body').removeClass('modal-open').css({
-                'overflow': '',
-                'padding-right': ''
-            });
-
-            if (modalElement) {
-                modalElement.style.pointerEvents = '';
-            }
-        }
-
-        $('#owtSearchResultModal').off('hidden.bs.modal').on('hidden.bs.modal', function () {
-            owtCleanupModalState();
-        });
-
-        if (shouldOpenSearchModal && modalElement) {
-            modalElement.style.pointerEvents = '';
-
-            if (typeof bootstrap !== 'undefined' && bootstrap.Modal) {
-                var searchModal = bootstrap.Modal.getOrCreateInstance(modalElement);
-                searchModal.show();
-            } else if ($.fn.modal) {
-                $('#owtSearchResultModal').modal('show');
-            }
-        } else {
-            owtCleanupModalState();
-        }        
-
-        var flashPopupMessage = <?= json_encode($flashPopupMessage) ?>;
-        var flashPopupAct = <?= json_encode($flashPopupAct) ?>;
-        var flashPopupPage = <?= json_encode($flashPopupPage) ?>;
-        var flashPopupReturnUrl = <?= json_encode($SITEURL . '/order_warehouse_transfer.php') ?>;
-
-        if (flashPopupMessage !== '' && flashPopupAct !== '') {
-            if (flashPopupAct === 'E') {
-                confirmationDialog('', 'Warehouse transfer successful', '', '', flashPopupReturnUrl, 'ErrMO');
-            } else {
-                confirmationDialog('', flashPopupMessage, '', '', flashPopupReturnUrl, 'ErrMO');
-            }
-        }
-    });
-</script>
 </body>
+
+<script>
+    window.orderWarehouseTransferConfig = {
+        pageTitle: <?= json_encode($pageTitle) ?>,
+        shouldOpenSearchModal: <?= json_encode($shouldOpenSearchModal) ?>,
+        flashPopupMessage: <?= json_encode($flashPopupMessage) ?>,
+        flashPopupAct: <?= json_encode($flashPopupAct) ?>,
+        flashPopupReturnUrl: <?= json_encode($SITEURL . '/order_warehouse_transfer.php') ?>
+    };
+</script>
+<script src="<?= $SITEURL ?>/js/order_warehouse_transfer.js"></script>
 </html>
