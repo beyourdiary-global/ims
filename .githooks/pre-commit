@@ -1,0 +1,102 @@
+#!/usr/bin/env bash
+#
+# IMS pre-commit hook — duplication & hardcode guard
+# Rules: COMMIT_CHECKLIST.md , CODE_DUPLICATION_REPORT.md
+#
+# Enable (run once per clone): git config core.hooksPath .githooks
+# Bypass once (not recommended): git commit --no-verify
+#
+set -u
+
+RED='\033[0;31m'; YEL='\033[0;33m'; GRN='\033[0;32m'; NC='\033[0m'
+BLOCK=0   # 0 = pass, 1 = block commit
+
+# Only look at staged code files for this commit; exclude third-party libs / config / docs
+mapfile -t FILES < <(git diff --cached --name-only --diff-filter=ACM \
+  | grep -E '\.(php|js|html)$' \
+  | grep -v '^header/' \
+  | grep -v '^\.githooks/' || true)
+
+# These files are the legitimate home for constants/domains; skip them in the hardcode check
+is_config_file() {
+  case "$1" in
+    init.php|include/common_variable.php|include/connection.php) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+echo "──────── IMS pre-commit check ────────"
+
+if [ ${#FILES[@]} -eq 0 ]; then
+  echo "No code changes, skipping."; exit 0
+fi
+
+# Get the added lines (starting with +, excluding the +++ header) of a file
+added_lines() { git diff --cached -U0 -- "$1" | grep -E '^\+' | grep -vE '^\+\+\+'; }
+
+# ── 1) Secrets / passwords / tokens (hard block) ──────────────
+echo ""; echo "[1/4] Checking for secrets / passwords / tokens ..."
+SECRET_RE='(password|passwd|pwd|secret|api[_-]?key|auth[_-]?key|access[_-]?token)[[:space:]]*[=:].{4,}|bot[0-9]{6,}:[A-Za-z0-9_-]+|Byd1234'
+for f in "${FILES[@]}"; do
+  hits="$(added_lines "$f" | grep -inE "$SECRET_RE" || true)"
+  if [ -n "$hits" ]; then
+    echo -e "${RED}  ✗ $f looks like a hardcoded secret/password:${NC}"
+    echo "$hits" | sed 's/^/      /'
+    BLOCK=1
+  fi
+done
+[ $BLOCK -eq 0 ] && echo -e "${GRN}  OK${NC}"
+
+# ── 2) Hardcoded domains / localhost (hard block, except init.php etc.) ──
+echo ""; echo "[2/4] Checking for hardcoded domains / localhost ..."
+DOMAIN_RE='https?://(uatcms?|cms)?\.?beyourdiary|localhost/cms'
+dom_block=0
+for f in "${FILES[@]}"; do
+  is_config_file "$f" && continue
+  hits="$(added_lines "$f" | grep -inE "$DOMAIN_RE" || true)"
+  if [ -n "$hits" ]; then
+    echo -e "${RED}  ✗ $f hardcodes a domain (use the SITEURL constant instead):${NC}"
+    echo "$hits" | sed 's/^/      /'
+    BLOCK=1; dom_block=1
+  fi
+done
+[ $dom_block -eq 0 ] && echo -e "${GRN}  OK${NC}"
+
+# ── 3) New functions that already exist in the shared library (warning, no block) ──
+echo ""; echo "[3/4] Checking for duplicate function definitions ..."
+dup_warn=0
+declare -A seen
+for f in "${FILES[@]}"; do
+  while IFS= read -r fn; do
+    [ -z "$fn" ] && continue
+    [ -n "${seen[$fn]:-}" ] && continue
+    seen[$fn]=1
+    cnt=$(grep -rlnE "function[[:space:]]+$fn\b" --include=*.php --include=*.js . 2>/dev/null \
+          | grep -v '^\./header/' | wc -l | tr -d ' ')
+    if [ "${cnt:-0}" -gt 1 ]; then
+      echo -e "${YEL}  ⚠ $fn() appears in $cnt files — should you use the shared version in include/common.php or js/common.fun.js?${NC}"
+      dup_warn=1
+    fi
+  done < <(added_lines "$f" | grep -oE 'function[[:space:]]+[a-zA-Z_][a-zA-Z0-9_]*' | sed -E 's/function[[:space:]]+//' | sort -u)
+done
+[ $dup_warn -eq 0 ] && echo -e "${GRN}  OK${NC}"
+
+# ── 4) Known copy-pasted blocks: deleteDir/addDirToZip (warning) ──────
+echo ""; echo "[4/4] Checking for known duplicated blocks ..."
+copy_warn=0
+for f in "${FILES[@]}"; do
+  if added_lines "$f" | grep -qE 'function (deleteDir|addDirToZip)\b'; then
+    echo -e "${YEL}  ⚠ $f introduces deleteDir/addDirToZip again — these belong in include/common.php${NC}"
+    copy_warn=1
+  fi
+done
+[ $copy_warn -eq 0 ] && echo -e "${GRN}  OK${NC}"
+
+echo ""; echo "──────────────────────────────────────"
+if [ $BLOCK -ne 0 ]; then
+  echo -e "${RED}Commit blocked: please fix the ✗ issues above.${NC}"
+  echo -e "Bypass if truly needed (not recommended): ${YEL}git commit --no-verify${NC}"
+  exit 1
+fi
+echo -e "${GRN}Checks passed ✓${NC}  (review ⚠ warnings yourself, see COMMIT_CHECKLIST.md)"
+exit 0
