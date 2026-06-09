@@ -186,6 +186,45 @@ if (!function_exists('commonResolvePaymentMethodName')) {
     }
 }
 
+if (!function_exists('commonSafeBackUrl')) {
+    function commonSafeBackUrl($url, $fallback)
+    {
+        $url = trim((string) $url);
+
+        if ($url === '') {
+            return $fallback;
+        }
+
+        // Block dangerous / external-like URL
+        if (preg_match('/^(javascript|data|vbscript):/i', $url) || strpos($url, '//') === 0) {
+            return $fallback;
+        }
+
+        // Allow relative URL
+        if (strpos($url, '/') === 0) {
+            return $url;
+        }
+
+        // Allow same-domain absolute URL
+        $siteHost = defined('SITEURL') ? parse_url(SITEURL, PHP_URL_HOST) : '';
+        $urlHost = parse_url($url, PHP_URL_HOST);
+
+        return ($siteHost && $urlHost && strtolower($siteHost) === strtolower($urlHost))
+            ? $url
+            : $fallback;
+    }
+}
+
+if (!function_exists('commonResolveBackUrl')) {
+    function commonResolveBackUrl($fallbackUrl)
+    {
+        $fallbackUrl = trim((string) $fallbackUrl);
+        $referer = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : '';
+
+        return commonSafeBackUrl($referer, $fallbackUrl);
+    }
+}
+
 function redirect($addr, $alert = '')
 {
 	global $siteOrlocalMode;
@@ -2632,6 +2671,7 @@ if (!function_exists('shopeeOmsGetOrderSourceViewUrl')) {
     {
         $sourceConfig = shopeeOmsResolveOrderSourceConfig($source);
         $viewUrl = isset($sourceConfig['view_url']) ? trim((string) $sourceConfig['view_url']) : '';
+
         if ($viewUrl === '' || !defined('SITEURL')) {
             return '';
         }
@@ -2639,6 +2679,7 @@ if (!function_exists('shopeeOmsGetOrderSourceViewUrl')) {
         return rtrim((string) SITEURL, '/') . $viewUrl . '?id=' . (int) $orderId;
     }
 }
+
 
 if (!function_exists('shopeeOmsGetOrderSourceInfoUrl')) {
     function shopeeOmsGetOrderSourceInfoUrl($source, $orderId)

@@ -15,7 +15,8 @@ $pageAction = getPageAction($act);
 
 
 $redirect_page = $SITEURL . '/finance/website_order_request_table.php';
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$back_redirect_page = commonResolveBackUrl($redirect_page);
+$redirectLink = '<script>location.href=' . json_encode($redirect_page) . ';</script>';
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 $pendingStatusUpdate = shopeeOmsNormalizeStatusCode(post('updateStatusBtn'));
 $worShouldSaveBeforeStatusUpdate = $pendingStatusUpdate !== '' && $act === 'E';
@@ -714,10 +715,6 @@ if (post('actionBtn') || $worShouldSaveBeforeStatusUpdate) {
             }
 
             break;
-
-        case 'back':
-            echo $clearLocalStorage . ' ' . $redirectLink;
-            break;
     }
 }
 
@@ -930,7 +927,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
         <input type="hidden" name="id" value="<?php echo $dataID; ?>">
     </form>
     <div class="d-flex flex-column my-3 ms-3">
-        <p><a href="<?= $redirect_page ?>">
+        <p><a href="<?= htmlspecialchars((string) $back_redirect_page, ENT_QUOTES, 'UTF-8') ?>">
                 <?= $pageTitle ?>
             </a> <i class="fa-solid fa-chevron-right fa-xs"></i>
             <?php
@@ -1669,8 +1666,8 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                         }
                     }
                     ?>
-                    <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn" id="actionBtn"
-                        value="back">Back</button>
+                    <button type="button" class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn" id="actionBtn"
+                        onclick="if (window.history.length > 1) { window.history.back(); } else { location.href = <?= htmlspecialchars(json_encode($redirect_page), ENT_QUOTES, 'UTF-8') ?>; }">Back</button>
                 </div>
             </form>
         </div>
