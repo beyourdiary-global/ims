@@ -122,9 +122,7 @@
             confirmationDialog('', ['Warehouse transfer successful'], '', '', flashPopupReturnUrl, 'ErrMO');
             return;
         }
-
-        confirmationDialog('', flashPopupMessage, '', '', flashPopupReturnUrl, 'ErrMO');
-    }
+        confirmationDialog('', [flashPopupMessage], '', '', flashPopupReturnUrl, 'ErrMO');
 
         function initSearchFormValidation() {
         const searchForm = document.getElementById('owtSearchForm');
