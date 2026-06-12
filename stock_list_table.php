@@ -222,7 +222,7 @@ $transferLogRow = isset($transferLogMap[$transferMapKey]) ? $transferLogMap[$tra
                                         $transferWarehouseName = isset($warehouseNameMap[$transferWarehouseId]) ? $warehouseNameMap[$transferWarehouseId] : ('Warehouse #' . $transferWarehouseId);
                                         $transferDate = trim((string) (isset($transferLogRow['create_date']) ? $transferLogRow['create_date'] : ''));
                                         $usageLinkRows[] = array(
-                                            'label' => 'The Stock already transfer to ' . $transferWarehouseName,
+                                            'label' => 'Stock has already been transferred to ' . $transferWarehouseName,
                                             'url' => '',
                                         );
                                         $usageDateLines[] = $transferDate !== '' ? ('Stock Transfer Date: ' . $transferDate) : 'Stock Transfer Date: -';
