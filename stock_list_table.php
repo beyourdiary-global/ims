@@ -88,8 +88,9 @@ if (!empty($orderNumbers) && !empty($warehouseIds)) {
         $safeOrderCodes[] = "'" . mysqli_real_escape_string($finance_connect, (string) $orderNumber) . "'";
     }
 
+    $transferLogTable = defined('ORDER_WAREHOUSE_TRANSFER_LOG') ? ORDER_WAREHOUSE_TRANSFER_LOG : 'order_warehouse_transfer_log';
     $transferLogSql = "SELECT order_code, old_warehouse_id, new_warehouse_id, create_date, create_time
-        FROM `order_warehouse_transfer_log`
+        FROM `" . str_replace('`', '``', $transferLogTable) . "`
         WHERE status = 'A'
           AND order_code IN (" . implode(',', $safeOrderCodes) . ")
           AND old_warehouse_id IN (" . implode(',', array_values($warehouseIds)) . ")
