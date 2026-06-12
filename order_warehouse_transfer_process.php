@@ -433,7 +433,7 @@ if (!function_exists('owtpProcessTransfer')) {
             }
 
             $platformLabel = isset($sourceConfig['label']) ? (string) $sourceConfig['label'] : ucfirst($platform);
-            $auditMessage = USER_NAME . ' transferred ' . $platformLabel . ' order ' . $orderCode . ' warehouse from ' . $oldWarehouseName . ' to ' . $newWarehouseName . '.';
+            $auditMessage = htmlspecialchars(USER_NAME . ' transferred ' . $platformLabel . ' order ' . $orderCode . ' warehouse from ' . $oldWarehouseName . ' to ' . $newWarehouseName . '.', ENT_QUOTES, 'UTF-8');
             owtpInsertAuditLogRecord($txnConnect, $auditMessage, isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : '', $orderUpdateSql, $oldWarehouseName, $newWarehouseName);
 
             mysqli_commit($txnConnect);
