@@ -3991,6 +3991,22 @@ if (!function_exists('customerLabelRenderNameCell')) {
     }
 }
 
+if (!function_exists('customerLabelRenderInlineSegmentationBadge')) {
+    function customerLabelRenderInlineSegmentationBadge($customerLabelMeta, $wrapperClass = 'customer-inline-segmentation-badge')
+    {
+        if (!isset($customerLabelMeta['segmentation'])) {
+            return '';
+        }
+
+        $badgeHtml = customerLabelRenderBadge($customerLabelMeta['segmentation']);
+        if ($badgeHtml === '') {
+            return '';
+        }
+
+        return '<span class="' . htmlspecialchars(trim((string) $wrapperClass), ENT_QUOTES, 'UTF-8') . '">' . $badgeHtml . '</span>';
+    }
+}
+
 // Customer tag helpers moved to include/customer_tag.php.
 
 if (!function_exists('customerLabelRenderSummaryCell')) {
@@ -4006,6 +4022,29 @@ if (!function_exists('customerLabelRenderSummaryCell')) {
         $parts = array_merge($parts, customerTagRenderBadgeItems($customerTagRows, 'customer-tag-table-badge'));
 
         return customerLabelRenderCollapsibleBadgeGroup($parts, 'customer-label-summary-wrap');
+    }
+}
+
+if (!function_exists('customerLabelRenderPageHeader')) {
+    function customerLabelRenderPageHeader($customerLabelMeta)
+    {
+        $parts = array();
+
+        if (isset($customerLabelMeta['level'])) {
+            $parts[] = customerLabelRenderBadge($customerLabelMeta['level']);
+        }
+
+        if (isset($customerLabelMeta['repeat'])) {
+            $parts[] = customerLabelRenderBadge($customerLabelMeta['repeat']);
+        }
+
+        if (empty($parts)) {
+            return '';
+        }
+
+        return '<div class="customer-label-page-header mt-2">' .
+            customerLabelRenderCollapsibleBadgeGroup($parts, 'customer-label-page-header-badges') .
+            '</div>';
     }
 }
 

@@ -1607,9 +1607,11 @@ td.btn-container.mobile-action-open-left .mobile-action-menu {
 
 .customer-tag-title-wrap {
   display: inline-flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   flex-wrap: wrap;
   gap: .75rem;
+  max-width: 100%;
 }
 
 .customer-label-badge {
@@ -1662,11 +1664,46 @@ td.btn-container.mobile-action-open-left .mobile-action-menu {
   margin-top: 0;
 }
 
+.customer-label-page-header {
+  display: flex;
+  max-width: 100%;
+}
+
+.customer-label-page-header-badges {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: .35rem;
+  max-width: 100%;
+}
+
 .js-customer-label-wrap {
   display: inline-flex;
   align-items: center;
   flex-wrap: wrap;
   gap: .35rem;
+  max-width: 100%;
+}
+
+.customer-field-with-label {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  min-width: 0;
+}
+
+.customer-field-with-label .form-control {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.customer-inline-segmentation-badge {
+  flex: 0 1 180px;
+  min-width: 0;
+  max-width: 180px;
+}
+
+.customer-inline-segmentation-badge .customer-label-badge {
   max-width: 100%;
 }
 
@@ -1683,6 +1720,17 @@ td.btn-container.mobile-action-open-left .mobile-action-menu {
 .customer-label-toggle-btn:hover,
 .customer-label-toggle-btn:focus {
   color: #0a58ca;
+}
+
+@media (max-width: 575.98px) {
+  .customer-field-with-label {
+    flex-wrap: wrap;
+  }
+
+  .customer-inline-segmentation-badge {
+    flex-basis: auto;
+    max-width: 100%;
+  }
 }
 
 .customer-record-filter-panel {
