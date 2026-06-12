@@ -119,7 +119,7 @@
         }
 
         if (flashPopupAct === 'E') {
-            confirmationDialog('', 'Warehouse transfer successful', '', '', flashPopupReturnUrl, 'ErrMO');
+            confirmationDialog('', ['Warehouse transfer successful'], '', '', flashPopupReturnUrl, 'ErrMO');
             return;
         }
 
