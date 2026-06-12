@@ -89,12 +89,12 @@ if ($dataID) { //edit/remove/view
     }
 }
 
-$scrSegmentationBadgeHtml = '';
+$shopeeCustomerLabelMeta = array();
+$shopeeCustomerLabelDisplayHtml = '';
 if (isset($dataExisted) && !empty($dataID) && $act !== 'I' && isset($row['id']) && (int) $row['id'] > 0) {
-    $scrCustomerLabelMap = customerLabelGetCustomerLabelMap($connect, 'shopee', array((int) $row['id']));
-    if (isset($scrCustomerLabelMap[(int) $row['id']]['segmentation'])) {
-        $scrSegmentationBadgeHtml = customerLabelRenderBadge($scrCustomerLabelMap[(int) $row['id']]['segmentation']);
-    }
+    $shopeeCustomerLabelMap = customerLabelGetCustomerLabelMap($connect, 'shopee', array((int) $row['id']));
+    $shopeeCustomerLabelMeta = isset($shopeeCustomerLabelMap[(int) $row['id']]) ? $shopeeCustomerLabelMap[(int) $row['id']] : array();
+    $shopeeCustomerLabelDisplayHtml = customerLabelRenderPageHeader($shopeeCustomerLabelMeta);
 }
 
 if (!($dataID) && !($act)) {
@@ -471,6 +471,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                             </h2>
                             <?php echo customerTagRenderManageButton($shopeeCustomerTagPlatform, $shopeeCustomerTagCustomerId, isActionAllowed('Edit', $pinAccess) && $act !== 'I'); ?>
                         </div>
+                        <?php echo $shopeeCustomerLabelDisplayHtml; ?>
                     </div>
 
                     <div id="err_msg" class="mb-3">
@@ -485,7 +486,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                             <div class="col-md-4 mb-3">
                                 <label class="form-label form_lbl" id="scr_username_lbl" for="scr_username">Shopee Buyer
                                     Username<span class="requireRed">*</span></label>
-                                <div class="d-flex align-items-center gap-2 flex-nowrap">
+                                <div class="customer-field-with-label">
                                     <input class="form-control" type="text" name="scr_username" id="scr_username" value="<?php
                                     if (isset($dataExisted) && isset($row['buyer_username']) && !isset($scr_username)) {
                                         echo $row['buyer_username'];
@@ -495,9 +496,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                         echo '';
                                     } ?>" <?php if ($act == '')
                                          echo 'disabled' ?>>
-                                    <?php if ($scrSegmentationBadgeHtml !== '') { ?>
-                                        <div class="d-inline-flex align-items-center flex-nowrap"><?= $scrSegmentationBadgeHtml ?></div>
-                                    <?php } ?>
+                                    <?php echo customerLabelRenderInlineSegmentationBadge($shopeeCustomerLabelMeta); ?>
                                 </div>
 
                                 <?php if (isset($username_err)) { ?>

@@ -93,6 +93,14 @@ $websiteCustomerTagState = customerTagHandlePost($connect, $websiteCustomerTagPl
 $websiteCustomerActiveTags = $websiteCustomerFreshAddPage ? array() : customerTagGetDisplayTags($connect, $websiteCustomerTagPlatform, $websiteCustomerTagCustomerId, $websiteCustomerTagDraftToken);
 $websiteCustomerDraftTagIds = customerTagExtractTagIds($websiteCustomerActiveTags);
 
+$websiteCustomerLabelMeta = array();
+$websiteCustomerLabelDisplayHtml = '';
+if (isset($dataExisted) && !empty($dataID) && $act !== 'I' && isset($row['id']) && (int) $row['id'] > 0) {
+    $websiteCustomerLabelMap = customerLabelGetCustomerLabelMap($connect, 'website', array((int) $row['id']));
+    $websiteCustomerLabelMeta = isset($websiteCustomerLabelMap[(int) $row['id']]) ? $websiteCustomerLabelMap[(int) $row['id']] : array();
+    $websiteCustomerLabelDisplayHtml = customerLabelRenderPageHeader($websiteCustomerLabelMeta);
+}
+
 $series_list_result = getData('*', '', '', BRD_SERIES, $connect);
 
 if (post('actionBtn')) {
@@ -465,6 +473,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                             </h2>
                             <?php echo customerTagRenderManageButton($websiteCustomerTagPlatform, $websiteCustomerTagCustomerId, isActionAllowed('Edit', $pinAccess) && $act !== 'I'); ?>
                         </div>
+                        <?php echo $websiteCustomerLabelDisplayHtml; ?>
                     </div>
 
                     <div id="err_msg" class="mb-3">
@@ -496,13 +505,16 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 
         <div class="col-md-4 mb-3">
             <label class="form-label form_lbl" id="wcr_name_lbl" for="wcr_name">Name<span class="requireRed">*</span></label>
-            <input class="form-control" type="text" name="wcr_name" id="wcr_name" value="<?php
-            if (isset($dataExisted) && isset($row['name']) && !isset($wcr_name)) {
-                echo $row['name'];
-            } else if (isset($wcr_name)) {
-                echo $wcr_name;
-            }
-            ?>" <?php if ($act == '') echo 'disabled' ?>>
+            <div class="customer-field-with-label">
+                <input class="form-control" type="text" name="wcr_name" id="wcr_name" value="<?php
+                if (isset($dataExisted) && isset($row['name']) && !isset($wcr_name)) {
+                    echo $row['name'];
+                } else if (isset($wcr_name)) {
+                    echo $wcr_name;
+                }
+                ?>" <?php if ($act == '') echo 'disabled' ?>>
+                <?php echo customerLabelRenderInlineSegmentationBadge($websiteCustomerLabelMeta); ?>
+            </div>
             <?php if (isset($name_err)) { ?>
                 <div id="err_msg">
                     <span class="mt-n1">

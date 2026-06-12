@@ -93,6 +93,14 @@ $lazadaCustomerTagState = customerTagHandlePost($connect, $lazadaCustomerTagPlat
 $lazadaCustomerActiveTags = $lazadaCustomerFreshAddPage ? array() : customerTagGetDisplayTags($connect, $lazadaCustomerTagPlatform, $lazadaCustomerTagCustomerId, $lazadaCustomerTagDraftToken);
 $lazadaCustomerDraftTagIds = customerTagExtractTagIds($lazadaCustomerActiveTags);
 
+$lazadaCustomerLabelMeta = array();
+$lazadaCustomerLabelDisplayHtml = '';
+if (isset($dataExisted) && !empty($dataID) && $act !== 'I' && isset($row['id']) && (int) $row['id'] > 0) {
+    $lazadaCustomerLabelMap = customerLabelGetCustomerLabelMap($connect, 'lazada', array((int) $row['id']));
+    $lazadaCustomerLabelMeta = isset($lazadaCustomerLabelMap[(int) $row['id']]) ? $lazadaCustomerLabelMap[(int) $row['id']] : array();
+    $lazadaCustomerLabelDisplayHtml = customerLabelRenderPageHeader($lazadaCustomerLabelMeta);
+}
+
 $series_list_result = getData('*', '', '', BRD_SERIES, $connect);
 
 if (post('actionBtn')) {
@@ -446,6 +454,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                             </h2>
                             <?php echo customerTagRenderManageButton($lazadaCustomerTagPlatform, $lazadaCustomerTagCustomerId, isActionAllowed('Edit', $pinAccess) && $act !== 'I'); ?>
                         </div>
+                        <?php echo $lazadaCustomerLabelDisplayHtml; ?>
                     </div>
 
                     <div id="err_msg" class="mb-3">
@@ -480,7 +489,10 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
             if (isset($row['name']))
             $echoVal = $row['name'];
             ?>
-            <input class="form-control" type="text" name="lcr_name" id="lcr_name" value="<?php echo !empty($echoVal) ? $row['name'] : '' ?>" <?php if ($act == '')echo 'disabled' ?>>       
+            <div class="customer-field-with-label">
+                <input class="form-control" type="text" name="lcr_name" id="lcr_name" value="<?php echo !empty($echoVal) ? $row['name'] : '' ?>" <?php if ($act == '')echo 'disabled' ?>>
+                <?php echo customerLabelRenderInlineSegmentationBadge($lazadaCustomerLabelMeta); ?>
+            </div>
             <?php if (isset($name_err)) { ?>
                 <div id="err_msg">
                     <span class="mt-n1"><?php echo $name_err; ?></span>
