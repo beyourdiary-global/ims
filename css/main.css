@@ -1707,6 +1707,24 @@ td.btn-container.mobile-action-open-left .mobile-action-menu {
   align-content: center;
 }
 
+.campaign-title-badge-wrap {
+  margin-bottom: 1rem;
+}
+
+.campaign-title-badge {
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 0.55rem 0.85rem;
+  border-radius: 0.55rem;
+}
+
+.campaign-page-back-actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+  margin-bottom: 24px;
+}
+
 .customer-tag-title-badge-group {
   display: inline-flex;
   align-items: center;
@@ -2052,4 +2070,3 @@ td.btn-container.mobile-action-open-left .mobile-action-menu {
   padding-top: 4px;
   line-height: 20px;
 }
-

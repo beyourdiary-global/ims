@@ -1342,6 +1342,7 @@ function createSortingTable(tableid, options) {
         : $("#" + tableid + " tbody tr").length > 10,
     /* info: false, */
     order: options.order || [[1, "asc"]], // 0 = db id column; 1 = numbering column
+    orderFixed: options.orderFixed || null,
     /* responsive: true, */
     lengthMenu: getDefaultDataTableLengthMenu(),
     autoWidth: false,
@@ -1924,6 +1925,27 @@ function previewImage(input, output) {
 }
 
 async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
+  function cleanupConfirmationModal(modalInstance, modalNode) {
+    try {
+      if (modalInstance) {
+        modalInstance.hide();
+        modalInstance.dispose();
+      }
+    } catch (error) {}
+
+    document.querySelectorAll(".modal-backdrop").forEach((backdrop) => {
+      backdrop.remove();
+    });
+
+    if (modalNode && modalNode.remove) {
+      modalNode.remove();
+    }
+
+    document.body.classList.remove("modal-open");
+    document.body.style.removeProperty("overflow");
+    document.body.style.removeProperty("padding-right");
+  }
+
   switch (act) {
     case "I":
       var title = "Successful Insert " + pagename;
@@ -2050,8 +2072,7 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
         else if (e.target.id == "acceptBtn") bool = true;
         else return;
         document.body.removeEventListener("click", response);
-        document.body.querySelector(".modal-backdrop").remove();
-        modalElem.remove();
+        cleanupConfirmationModal(myModal, modalElem);
         resolve(bool);
       }
     });
@@ -2079,8 +2100,7 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
 
             var myTimeout = setTimeout(() => {
               document.body.removeEventListener("click", response);
-              document.body.querySelector(".modal-backdrop").remove();
-              modelResult.remove();
+              cleanupConfirmationModal(myModal2, modelResult);
               resolve(true);
               location.reload();
             }, 5000);
@@ -2095,8 +2115,7 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
               } else return;
 
               document.body.removeEventListener("click", response);
-              document.body.querySelector(".modal-backdrop").remove();
-              modelResult.remove();
+              cleanupConfirmationModal(myModal2, modelResult);
               resolve(bool);
               location.reload();
             }
@@ -2126,8 +2145,7 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
 
       var myTimeout = setTimeout(() => {
         document.body.removeEventListener("click", response);
-        document.body.querySelector(".modal-backdrop").remove();
-        modelResult.remove();
+        cleanupConfirmationModal(myModal2, modelResult);
         resolve(true);
         window.location.href = pathreturn;
       }, 5000);
@@ -2142,7 +2160,7 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
         } else return;
 
         document.body.removeEventListener("click", response);
-        document.body.querySelector(".modal-backdrop").remove();
+        cleanupConfirmationModal(myModal2, modelResult);
         resolve(bool);
         window.location.href = pathreturn;
       }
