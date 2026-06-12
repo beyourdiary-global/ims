@@ -799,7 +799,7 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
                             <div>
                                 <label class="form-label" for="arrival_month">Month</label>
                                 <select class="form-select" id="arrival_month" name="month">
-                                    <option value="">Select Month</option>
+                                    <option value="">All</option>
                                     <?php for ($monthNumber = 1; $monthNumber <= 12; $monthNumber++) { ?>
                                         <?php
                                         $monthValue = str_pad((string) $monthNumber, 2, '0', STR_PAD_LEFT);
@@ -812,7 +812,7 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
                             <div>
                                 <label class="form-label" for="arrival_year">Year</label>
                                 <select class="form-select" id="arrival_year" name="year">
-                                    <option value="">Select Year</option>
+                                    <option value="">All</option>
                                     <?php for ($yearValue = (int) $currentYear; $yearValue >= ((int) $currentYear - 5); $yearValue--) { ?>
                                         <option value="<?= htmlspecialchars((string) $yearValue) ?>" <?= (string) $yearValue === $selectedYear ? 'selected' : '' ?>><?= htmlspecialchars((string) $yearValue) ?></option>
                                     <?php } ?>
