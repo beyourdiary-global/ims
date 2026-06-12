@@ -1342,7 +1342,7 @@ function createSortingTable(tableid, options) {
         : $("#" + tableid + " tbody tr").length > 10,
     /* info: false, */
     order: options.order || [[1, "asc"]], // 0 = db id column; 1 = numbering column
-    orderFixed: options.orderFixed || {},
+    orderFixed: options.orderFixed || null,
     /* responsive: true, */
     lengthMenu: getDefaultDataTableLengthMenu(),
     autoWidth: false,
