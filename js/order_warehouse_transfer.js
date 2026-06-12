@@ -124,7 +124,7 @@
         }
         confirmationDialog('', [flashPopupMessage], '', '', flashPopupReturnUrl, 'ErrMO');
 
-        function initSearchFormValidation() {
+    function initSearchFormValidation() {
         const searchForm = document.getElementById('owtSearchForm');
         const orderCodeInput = document.getElementById('order_code');
         const requiredMessage = document.getElementById('owtOrderCodeRequiredMsg');
