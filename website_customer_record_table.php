@@ -41,6 +41,9 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
             tableId: 'web_cust_deals',
             storageKey: 'website_customer_record_filters',
             panelStorageKey: 'website_customer_record_filter_panel_open',
+            deferApply: true,
+            selectFieldsMultiple: true,
+            scopePaths: ['website_customer_record_table.php', 'website_customer_record.php'],
             filters: [
                 { key: 'customer_label', label: 'Customer Label', attr: 'customer_label', type: 'select', placeholder: 'All Customer Labels' },
                 { key: 'customer_tag', label: 'Tag', attr: 'customer_tag', type: 'select', placeholder: 'All Tags' },

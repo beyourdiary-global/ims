@@ -1471,6 +1471,169 @@ function readCustomerRecordFilterStorage(storageKey) {
   }
 }
 
+function normalizeCustomerRecordFilterValuesList(values) {
+  var normalizedValues = [];
+  var uniqueMap = {};
+
+  (Array.isArray(values) ? values : [values]).forEach(function (value) {
+    var trimmedValue = String(value == null ? "" : value)
+      .replace(/\s+/g, " ")
+      .trim();
+
+    if (trimmedValue === "" || uniqueMap[trimmedValue]) {
+      return;
+    }
+
+    uniqueMap[trimmedValue] = true;
+    normalizedValues.push(trimmedValue);
+  });
+
+  return normalizedValues;
+}
+
+function normalizeCustomerRecordFieldStoredValue(field, rawValue) {
+  if (field && field.multiple) {
+    if (Array.isArray(rawValue)) {
+      return normalizeCustomerRecordFilterValuesList(rawValue);
+    }
+
+    return normalizeCustomerRecordFilterValuesList(
+      splitCustomerRecordFilterValues(rawValue),
+    );
+  }
+
+  return String(rawValue == null ? "" : rawValue)
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cloneCustomerRecordFilterState(fields, rawState) {
+  var normalizedState = {};
+  var sourceState =
+    rawState && typeof rawState === "object" ? rawState : {};
+
+  fields.forEach(function (field) {
+    normalizedState[field.key] = normalizeCustomerRecordFieldStoredValue(
+      field,
+      sourceState[field.key],
+    );
+  });
+
+  return normalizedState;
+}
+
+function customerRecordFilterStateHasValues(fields, filterState) {
+  return fields.some(function (field) {
+    var fieldValue = filterState ? filterState[field.key] : "";
+
+    if (field.multiple) {
+      return Array.isArray(fieldValue) && fieldValue.length > 0;
+    }
+
+    return normalizeCustomerRecordFilterValue(fieldValue) !== "";
+  });
+}
+
+function getCustomerRecordSelectedNormalizedValues(selectedValues) {
+  return normalizeCustomerRecordFilterValuesList(selectedValues).map(function (
+    value,
+  ) {
+    return normalizeCustomerRecordFilterValue(value);
+  });
+}
+
+function customerRecordRowMatchesSelectedValues(rowNode, attrName, selectedValues) {
+  var normalizedSelections =
+    getCustomerRecordSelectedNormalizedValues(selectedValues);
+
+  if (!normalizedSelections.length) {
+    return true;
+  }
+
+  var rowValues = getCustomerRecordRowFilterNormalizedValues(rowNode, attrName);
+  return normalizedSelections.some(function (selectedValue) {
+    return rowValues.indexOf(selectedValue) !== -1;
+  });
+}
+
+function normalizeCustomerRecordFilterPath(path) {
+  return String(path == null ? "" : path)
+    .split("?")[0]
+    .replace(/\\/g, "/")
+    .replace(/\/+/g, "/")
+    .replace(/\/$/, "")
+    .toLowerCase();
+}
+
+function customerRecordFilterPathMatches(expectedPath, actualPath) {
+  var normalizedExpected = normalizeCustomerRecordFilterPath(expectedPath);
+  var normalizedActual = normalizeCustomerRecordFilterPath(actualPath);
+
+  if (!normalizedExpected || !normalizedActual) {
+    return false;
+  }
+
+  if (normalizedExpected === normalizedActual) {
+    return true;
+  }
+
+  if (normalizedActual.slice(-normalizedExpected.length) !== normalizedExpected) {
+    return false;
+  }
+
+  var boundaryIndex = normalizedActual.length - normalizedExpected.length - 1;
+  return boundaryIndex < 0 || normalizedActual.charAt(boundaryIndex) === "/";
+}
+
+function getCustomerRecordReferrerPath() {
+  if (!document.referrer) {
+    return "";
+  }
+
+  try {
+    var parser = document.createElement("a");
+    parser.href = document.referrer;
+    return normalizeCustomerRecordFilterPath(parser.pathname || "");
+  } catch (error) {
+    return "";
+  }
+}
+
+function shouldResetCustomerRecordFilterState(config) {
+  var scopePaths = Array.isArray(config && config.scopePaths)
+    ? config.scopePaths
+    : [];
+
+  if (!scopePaths.length) {
+    return false;
+  }
+
+  var referrerPath = getCustomerRecordReferrerPath();
+  if (!referrerPath) {
+    return false;
+  }
+
+  var allowedPaths = scopePaths
+    .map(normalizeCustomerRecordFilterPath)
+    .filter(function (path) {
+      return path !== "";
+    });
+  var currentPath = normalizeCustomerRecordFilterPath(window.location.pathname);
+
+  if (
+    currentPath !== "" &&
+    !allowedPaths.some(function (path) {
+      return customerRecordFilterPathMatches(path, currentPath);
+    })
+  ) {
+    allowedPaths.push(currentPath);
+  }
+
+  return !allowedPaths.some(function (path) {
+    return customerRecordFilterPathMatches(path, referrerPath);
+  });
+}
+
 function initCustomerRecordTableFilters(config) {
   if (
     typeof window.jQuery === "undefined" ||
@@ -1504,9 +1667,37 @@ function initCustomerRecordTableFilters(config) {
     return null;
   }
 
+  fields = fields.map(function (field) {
+    var normalizedField = field || {};
+    if (
+      normalizedField.type === "select" &&
+      config.selectFieldsMultiple === true &&
+      normalizedField.multiple !== false
+    ) {
+      normalizedField.multiple = true;
+    }
+
+    return normalizedField;
+  });
+
   var storageKey = config.storageKey || "";
   var panelStorageKey = config.panelStorageKey || "";
-  var activeFilters = readCustomerRecordFilterStorage(storageKey);
+  var deferredApply = config.deferApply === true;
+
+  if (shouldResetCustomerRecordFilterState(config)) {
+    if (storageKey) {
+      localStorage.removeItem(storageKey);
+    }
+    if (panelStorageKey) {
+      localStorage.removeItem(panelStorageKey);
+    }
+  }
+
+  var activeFilters = cloneCustomerRecordFilterState(
+    fields,
+    readCustomerRecordFilterStorage(storageKey),
+  );
+  var pendingFilters = cloneCustomerRecordFilterState(fields, activeFilters);
   var tableSearchFn = tableElement.__customerRecordFilterSearch || null;
 
   if (!tableSearchFn) {
@@ -1522,7 +1713,23 @@ function initCustomerRecordTableFilters(config) {
 
       for (var i = 0; i < fields.length; i++) {
         var field = fields[i];
-        var filterValue = normalizeCustomerRecordFilterValue(activeFilters[field.key]);
+        var rawFilterValue = activeFilters[field.key];
+
+        if (field.multiple) {
+          if (
+            !customerRecordRowMatchesSelectedValues(
+              rowNode,
+              field.attr,
+              rawFilterValue,
+            )
+          ) {
+            return false;
+          }
+
+          continue;
+        }
+
+        var filterValue = normalizeCustomerRecordFilterValue(rawFilterValue);
 
         if (!filterValue) {
           continue;
@@ -1594,89 +1801,98 @@ function initCustomerRecordTableFilters(config) {
   panel.empty();
 
   var fieldNodes = {};
+  var searchButton = null;
 
-  fields.forEach(function (field) {
-    var columnClass = field.columnClass || "col-md-3";
-    var fieldWrap = $('<div class="' + columnClass + '"></div>');
-    var labelNode = $(
-      '<label class="form-label customer-record-filter-label" for="' +
-        config.tableId +
-        "_" +
-        field.key +
-        '">' +
-        "Filter by " +
-        field.label +
-        "</label>",
+  var updateDropdownButtonLabel = function (field) {
+    if (!field || !field.multiple || !fieldNodes[field.key]) {
+      return;
+    }
+
+    var fieldNode = fieldNodes[field.key];
+    var selectedValues = normalizeCustomerRecordFilterValuesList(
+      fieldNode.inputs
+        .filter(":checked")
+        .map(function () {
+          return $(this).val();
+        })
+        .get(),
     );
 
-    var inputNode;
-    if (field.type === "text") {
-      inputNode = $(
-        '<input type="text" class="form-control customer-record-filter-input" id="' +
-          config.tableId +
-          "_" +
-          field.key +
-          '" placeholder="' +
-          (field.placeholder || "") +
-          '">',
-      );
+    if (!selectedValues.length) {
+      fieldNode.button.text(field.placeholder || "All");
+    } else if (selectedValues.length === 1) {
+      fieldNode.button.text(selectedValues[0]);
     } else {
-      inputNode = $(
-        '<select class="form-select customer-record-filter-input" id="' +
-          config.tableId +
-          "_" +
-          field.key +
-          '"></select>',
-      );
+      fieldNode.button.text(selectedValues.length + " selected");
+    }
+  };
 
-      inputNode.append(
-        $("<option></option>")
-          .attr("value", "")
-          .text(field.placeholder || "All"),
-      );
+  var getFieldNodeValue = function (field) {
+    var fieldNode = fieldNodes[field.key];
+    if (!fieldNode) {
+      return field.multiple ? [] : "";
+    }
 
-      var optionValues = {};
-      getCustomerRecordFilterSourceRows(tableElement, tableApi).forEach(function (rowNode) {
-        getCustomerRecordRowFilterValues(rowNode, field.attr).forEach(function (value) {
-          optionValues[value] = true;
-        });
+    if (field.multiple) {
+      return normalizeCustomerRecordFilterValuesList(
+        fieldNode.inputs
+          .filter(":checked")
+          .map(function () {
+            return $(this).val();
+          })
+          .get(),
+      );
+    }
+
+    return String(fieldNode.input.val() == null ? "" : fieldNode.input.val());
+  };
+
+  var setFieldNodeValue = function (field, value) {
+    var fieldNode = fieldNodes[field.key];
+    if (!fieldNode) {
+      return;
+    }
+
+    if (field.multiple) {
+      var selectedValues = normalizeCustomerRecordFilterValuesList(value);
+      var selectedMap = {};
+      selectedValues.forEach(function (selectedValue) {
+        selectedMap[selectedValue] = true;
       });
 
-      Object.keys(optionValues)
-        .sort(function (leftValue, rightValue) {
-          return leftValue.localeCompare(rightValue);
-        })
-        .forEach(function (value) {
-          inputNode.append(
-            $("<option></option>")
-              .attr("value", value)
-              .text(value),
-          );
-        });
+      fieldNode.inputs.each(function () {
+        var input = $(this);
+        input.prop("checked", !!selectedMap[String(input.val()).trim()]);
+      });
+
+      updateDropdownButtonLabel(field);
+      return;
     }
 
-    if (Object.prototype.hasOwnProperty.call(activeFilters, field.key)) {
-      inputNode.val(activeFilters[field.key]);
-    }
+    fieldNode.input.val(value || "");
+  };
 
-    fieldWrap.append(labelNode);
-    fieldWrap.append(inputNode);
-    panel.append(fieldWrap);
+  var getCurrentFieldValues = function () {
+    var values = {};
 
-    fieldNodes[field.key] = inputNode;
-
-    inputNode.off("change.customerRecordFilter").on("change.customerRecordFilter", function () {
-      applyFilters();
+    fields.forEach(function (field) {
+      values[field.key] = getFieldNodeValue(field);
     });
-  });
 
-  var resetWrap = $('<div class="col-md-2"></div>');
-  resetWrap.append('<label class="form-label d-block invisible">Reset</label>');
-  var resetButton = $(
-    '<a href="#" class="btn btn-outline-danger filter-reset customer-record-filter-reset">Reset</a>',
-  );
-  resetWrap.append(resetButton);
-  panel.append(resetWrap);
+    return values;
+  };
+
+  var saveActiveFilters = function () {
+    if (!storageKey) {
+      return;
+    }
+
+    if (customerRecordFilterStateHasValues(fields, activeFilters)) {
+      localStorage.setItem(storageKey, JSON.stringify(activeFilters));
+    } else {
+      localStorage.removeItem(storageKey);
+    }
+  };
 
   var setPanelOpenState = function (shouldOpen) {
     panel.toggleClass("is-open", shouldOpen);
@@ -1688,37 +1904,233 @@ function initCustomerRecordTableFilters(config) {
     }
   };
 
-  var getCurrentFieldValues = function () {
-    var values = {};
-
-    fields.forEach(function (field) {
-      values[field.key] = fieldNodes[field.key] ? fieldNodes[field.key].val() : "";
-    });
-
-    return values;
-  };
-
-  var saveActiveFilters = function () {
-    activeFilters = getCurrentFieldValues();
-
-    if (storageKey) {
-      localStorage.setItem(storageKey, JSON.stringify(activeFilters));
-    }
-  };
-
   var applyFilters = function () {
+    activeFilters = cloneCustomerRecordFilterState(fields, getCurrentFieldValues());
+    pendingFilters = cloneCustomerRecordFilterState(fields, activeFilters);
     saveActiveFilters();
     setPanelOpenState(true);
     tableApi.draw(false);
   };
 
+  var syncPendingFiltersFromInputs = function () {
+    pendingFilters = cloneCustomerRecordFilterState(fields, getCurrentFieldValues());
+  };
+
+  var handleFieldValueChange = function (field) {
+    if (field.multiple) {
+      updateDropdownButtonLabel(field);
+    }
+
+    if (deferredApply) {
+      syncPendingFiltersFromInputs();
+      return;
+    }
+
+    applyFilters();
+  };
+
+  fields.forEach(function (field) {
+    var columnClass = field.columnClass || "col-md-3 mb-3";
+    var fieldWrap = $('<div class="' + columnClass + '"></div>');
+    var fieldId = config.tableId + "_" + field.key;
+    var labelNode;
+
+    if (field.type === "text") {
+      labelNode = $(
+        '<label class="form-label customer-record-filter-label" for="' +
+          fieldId +
+          '">' +
+          "Filter by " +
+          field.label +
+          "</label>",
+      );
+
+      var inputNode = $(
+        '<input type="text" class="form-control customer-record-filter-input" id="' +
+          fieldId +
+          '" placeholder="' +
+          (field.placeholder || "") +
+          '">',
+      );
+
+      fieldWrap.append(labelNode);
+      fieldWrap.append(inputNode);
+      panel.append(fieldWrap);
+
+      fieldNodes[field.key] = {
+        input: inputNode,
+      };
+
+      setFieldNodeValue(field, pendingFilters[field.key]);
+      inputNode
+        .off("input.customerRecordFilter change.customerRecordFilter")
+        .on("input.customerRecordFilter change.customerRecordFilter", function () {
+          handleFieldValueChange(field);
+        });
+      return;
+    }
+
+    var optionValues = {};
+    getCustomerRecordFilterSourceRows(tableElement, tableApi).forEach(function (rowNode) {
+      getCustomerRecordRowFilterValues(rowNode, field.attr).forEach(function (value) {
+        optionValues[value] = true;
+      });
+    });
+
+    var sortedOptionValues = Object.keys(optionValues).sort(function (
+      leftValue,
+      rightValue,
+    ) {
+      return leftValue.localeCompare(rightValue);
+    });
+
+    if (field.multiple) {
+      labelNode = $(
+        '<label class="form-label customer-record-filter-label" for="' +
+          fieldId +
+          '">' +
+          "Filter by " +
+          field.label +
+          "</label>",
+      );
+
+      var dropdownWrap = $(
+        '<div class="dropdown customer-record-filter-dropdown"></div>',
+      );
+      var dropdownButton = $(
+        '<button class="customer-record-filter-dropdown-toggle" type="button" id="' +
+          fieldId +
+          '" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false"></button>',
+      );
+      var dropdownMenu = $(
+        '<div class="dropdown-menu" aria-labelledby="' + fieldId + '"></div>',
+      );
+
+      var checkboxNodes = $();
+      sortedOptionValues.forEach(function (value, index) {
+        var checkboxId = fieldId + "_" + index;
+        var checkboxWrap = $('<div class="form-check"></div>');
+        var checkboxNode = $(
+          '<input class="form-check-input customer-record-filter-checkbox" type="checkbox" value="' +
+            $("<div></div>").text(value).html() +
+            '" id="' +
+            checkboxId +
+            '" data-filter-key="' +
+            field.key +
+            '" data-placeholder="' +
+            $("<div></div>").text(field.placeholder || "All").html() +
+            '">',
+        );
+        var checkboxLabel = $(
+          '<label class="form-check-label" for="' +
+            checkboxId +
+            '">' +
+            $("<div></div>").text(value).html() +
+            "</label>",
+        );
+
+        checkboxWrap.append(checkboxNode);
+        checkboxWrap.append(checkboxLabel);
+        dropdownMenu.append(checkboxWrap);
+        checkboxNodes = checkboxNodes.add(checkboxNode);
+      });
+
+      dropdownWrap.append(dropdownButton);
+      dropdownWrap.append(dropdownMenu);
+      fieldWrap.append(labelNode);
+      fieldWrap.append(dropdownWrap);
+      panel.append(fieldWrap);
+
+      fieldNodes[field.key] = {
+        inputs: checkboxNodes,
+        button: dropdownButton,
+      };
+
+      setFieldNodeValue(field, pendingFilters[field.key]);
+      checkboxNodes
+        .off("change.customerRecordFilter")
+        .on("change.customerRecordFilter", function () {
+          handleFieldValueChange(field);
+        });
+
+      return;
+    }
+
+    labelNode = $(
+      '<label class="form-label customer-record-filter-label" for="' +
+        fieldId +
+        '">' +
+        "Filter by " +
+        field.label +
+        "</label>",
+    );
+
+    var selectNode = $(
+      '<select class="form-select customer-record-filter-input" id="' +
+        fieldId +
+        '"></select>',
+    );
+
+    selectNode.append(
+      $("<option></option>")
+        .attr("value", "")
+        .text(field.placeholder || "All"),
+    );
+
+    sortedOptionValues.forEach(function (value) {
+      selectNode.append(
+        $("<option></option>")
+          .attr("value", value)
+          .text(value),
+      );
+    });
+
+    fieldWrap.append(labelNode);
+    fieldWrap.append(selectNode);
+    panel.append(fieldWrap);
+
+    fieldNodes[field.key] = {
+      input: selectNode,
+    };
+
+    setFieldNodeValue(field, pendingFilters[field.key]);
+    selectNode
+      .off("change.customerRecordFilter")
+      .on("change.customerRecordFilter", function () {
+        handleFieldValueChange(field);
+      });
+  });
+
+  if (deferredApply) {
+    var actionWrap = $(
+      '<div class="col-md-3 mb-3 d-flex align-items-end customer-record-filter-action-wrap"></div>',
+    );
+    searchButton = $(
+      '<button class="btn btn-outline-primary filter-reset me-2 customer-record-filter-search" type="button">Search</button>',
+    );
+    var resetButton = $(
+      '<button class="btn btn-outline-danger filter-reset customer-record-filter-reset" type="button">Reset</button>',
+    );
+
+    actionWrap.append(searchButton);
+    actionWrap.append(resetButton);
+    panel.append(actionWrap);
+  } else {
+    var resetWrap = $('<div class="col-md-2 mb-3"></div>');
+    resetWrap.append('<label class="form-label d-block invisible">Reset</label>');
+    var resetButton = $(
+      '<a href="#" class="btn btn-outline-danger filter-reset customer-record-filter-reset">Reset</a>',
+    );
+    resetWrap.append(resetButton);
+    panel.append(resetWrap);
+  }
+
   var resetFilters = function () {
-    activeFilters = {};
+    activeFilters = cloneCustomerRecordFilterState(fields, {});
+    pendingFilters = cloneCustomerRecordFilterState(fields, {});
 
     fields.forEach(function (field) {
-      if (fieldNodes[field.key]) {
-        fieldNodes[field.key].val("");
-      }
+      setFieldNodeValue(field, pendingFilters[field.key]);
     });
 
     if (storageKey) {
@@ -1733,6 +2145,14 @@ function initCustomerRecordTableFilters(config) {
     setPanelOpenState(!panel.hasClass("is-open"));
   });
 
+  if (searchButton) {
+    searchButton
+      .off("click.customerRecordFilter")
+      .on("click.customerRecordFilter", function () {
+        applyFilters();
+      });
+  }
+
   panel
     .find(".customer-record-filter-reset")
     .off("click.customerRecordFilter")
@@ -1746,6 +2166,12 @@ function initCustomerRecordTableFilters(config) {
   } else {
     setPanelOpenState(false);
   }
+
+  fields.forEach(function (field) {
+    if (field.multiple) {
+      updateDropdownButtonLabel(field);
+    }
+  });
 
   tableApi.draw(false);
 

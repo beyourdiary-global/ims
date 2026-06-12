@@ -55,6 +55,9 @@ $customerTagMap = customerTagGetCustomerTagMap($connect, 'customer_info', $custo
             tableId: 'table',
             storageKey: 'customer_info_filters',
             panelStorageKey: 'customer_info_filter_panel_open',
+            deferApply: true,
+            selectFieldsMultiple: true,
+            scopePaths: ['customerInfoTable.php', 'customerInfo.php'],
             filters: [
                 { key: 'customer_label', label: 'Customer Label', attr: 'customer_label', type: 'select', placeholder: 'All Customer Labels' },
                 { key: 'customer_tag', label: 'Tag', attr: 'customer_tag', type: 'select', placeholder: 'All Tags' },

@@ -48,6 +48,9 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
             tableId: 'shopee_cust_info_table',
             storageKey: 'shopee_customer_record_filters',
             panelStorageKey: 'shopee_customer_record_filter_panel_open',
+            deferApply: true,
+            selectFieldsMultiple: true,
+            scopePaths: ['shopee/shopee_cust_info_table.php', 'shopee/shopee_cust_info.php'],
             filters: [
                 { key: 'customer_label', label: 'Customer Label', attr: 'customer_label', type: 'select', placeholder: 'All Customer Labels' },
                 { key: 'customer_tag', label: 'Tag', attr: 'customer_tag', type: 'select', placeholder: 'All Tags' },
