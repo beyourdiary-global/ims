@@ -233,12 +233,30 @@ function campaignAssignCollectOptionValues(&$target, $values)
 
 function campaignAssignCustomerPayload($row)
 {
-    return base64_encode(json_encode($row));
+    $payload = array(
+        'platform' => isset($row['platform']) ? (string) $row['platform'] : '',
+        'customer_id' => isset($row['customer_id']) ? (string) $row['customer_id'] : '',
+        'customer_name' => isset($row['customer_name']) ? (string) $row['customer_name'] : '',
+        'customer_contact' => isset($row['customer_contact']) ? (string) $row['customer_contact'] : '',
+        'customer_label' => isset($row['customer_label']) ? (string) $row['customer_label'] : '',
+        'customer_tags' => isset($row['customer_tags']) ? (string) $row['customer_tags'] : '',
+        'last_order_date' => isset($row['last_order_date']) ? (string) $row['last_order_date'] : '',
+        'total_order' => isset($row['total_order']) ? (int) $row['total_order'] : 0,
+        'total_spent' => isset($row['total_spent']) ? (float) $row['total_spent'] : 0,
+    );
+
+    $json = json_encode($payload);
+    return $json === false ? '' : base64_encode($json);
 }
 
 function campaignAssignDecodePayload($payload)
 {
-    $decoded = json_decode(base64_decode((string) $payload), true);
+    $decodedJson = base64_decode((string) $payload, true);
+    if ($decodedJson === false || $decodedJson === '') {
+        return array();
+    }
+
+    $decoded = json_decode($decodedJson, true);
     return is_array($decoded) ? $decoded : array();
 }
 
