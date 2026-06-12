@@ -465,7 +465,26 @@ function campaignAssignBuildCustomerLookupMap($config)
         return $lookupMap;
     }
 
-    $sql = "SELECT * FROM `" . str_replace('`', '``', $customerTable) . "`";
+    $neededColumns = array_values(array_unique(array_filter(array_merge(
+        (array) ($config['id_cols'] ?? array()),
+        (array) ($config['customer_id_cols'] ?? array()),
+        (array) ($config['name_cols'] ?? array()),
+        (array) ($config['contact_cols'] ?? array())
+    ), function ($column) use ($customerConn, $customerTable) {
+        $column = trim((string) $column);
+        return $column !== '' && campaignColumnExists($customerConn, $customerTable, $column);
+    })));
+
+    if (empty($neededColumns)) {
+        return $lookupMap;
+    }
+
+    $selectColumns = array();
+    foreach ($neededColumns as $column) {
+        $selectColumns[] = "`" . str_replace('`', '``', $column) . "`";
+    }
+
+    $sql = "SELECT " . implode(', ', $selectColumns) . " FROM `" . str_replace('`', '``', $customerTable) . "`";
     if (campaignColumnExists($customerConn, $customerTable, 'status')) {
         $sql .= " WHERE `status`='A'";
     }
@@ -498,13 +517,35 @@ function campaignAssignBuildCustomerLookupMap($config)
     return $lookupMap;
 }
 
-function campaignAssignFetchActiveOrderRows($orderConn, $orderTable)
+function campaignAssignFetchActiveOrderRows($orderConn, $orderTable, $config = array())
 {
     if (!($orderConn instanceof mysqli) || !campaignTableExists($orderConn, $orderTable)) {
         return array();
     }
 
-    $sql = "SELECT * FROM `" . str_replace('`', '``', (string) $orderTable) . "`";
+    $neededColumns = array_values(array_unique(array_filter(array_merge(
+        array('id'),
+        (array) ($config['order_no_cols'] ?? array()),
+        (array) ($config['order_customer_cols'] ?? array()),
+        (array) ($config['order_date_cols'] ?? array()),
+        (array) ($config['order_amount_cols'] ?? array()),
+        (array) ($config['order_package_cols'] ?? array()),
+        (array) ($config['order_brand_cols'] ?? array())
+    ), function ($column) use ($orderConn, $orderTable) {
+        $column = trim((string) $column);
+        return $column !== '' && campaignColumnExists($orderConn, $orderTable, $column);
+    })));
+
+    if (empty($neededColumns)) {
+        return array();
+    }
+
+    $selectColumns = array();
+    foreach ($neededColumns as $column) {
+        $selectColumns[] = "`" . str_replace('`', '``', $column) . "`";
+    }
+
+    $sql = "SELECT " . implode(', ', $selectColumns) . " FROM `" . str_replace('`', '``', (string) $orderTable) . "`";
     if (campaignColumnExists($orderConn, $orderTable, 'status')) {
         $sql .= " WHERE `status`='A'";
     }
@@ -557,7 +598,7 @@ function campaignAssignBuildOrderSummaryMap($config, $connect)
     }
 
     $customerLookupMap = campaignAssignBuildCustomerLookupMap($config);
-    $orderRows = campaignAssignFetchActiveOrderRows($orderConn, $orderTable);
+    $orderRows = campaignAssignFetchActiveOrderRows($orderConn, $orderTable, $config);
 
     foreach ($orderRows as $order) {
         $orderId = campaignAssignRowValue($order, array('id'));
