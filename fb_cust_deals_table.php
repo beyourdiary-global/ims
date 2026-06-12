@@ -42,6 +42,9 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
             tableId: 'fb_cust_deals',
             storageKey: 'facebook_customer_record_filters',
             panelStorageKey: 'facebook_customer_record_filter_panel_open',
+            deferApply: true,
+            selectFieldsMultiple: true,
+            scopePaths: ['fb_cust_deals_table.php', 'fb_cust_deals.php'],
             filters: [
                 { key: 'customer_label', label: 'Customer Label', attr: 'customer_label', type: 'select', placeholder: 'All Customer Labels' },
                 { key: 'customer_tag', label: 'Tag', attr: 'customer_tag', type: 'select', placeholder: 'All Tags' },
