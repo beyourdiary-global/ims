@@ -2873,7 +2873,7 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Failed creating `" . CAMPAIGN_PURCHASE_RECORD . "`: " . $conn->error . "</p>";
     }
 
-    migrationEnsureIndex($conn, $db_cms, CAMPAIGN_PURCHASE_RECORD, 'idx_campaign_purchase_unique_order', "ALTER TABLE `" . CAMPAIGN_PURCHASE_RECORD . "` ADD INDEX `idx_campaign_purchase_unique_order` (`campaign_id`,`campaign_customer_id`,`platform`,`order_id`,`order_no`)", "Verified `" . CAMPAIGN_PURCHASE_RECORD . "` duplicate prevention index.");
+    migrationEnsureIndex($conn, $db_cms, CAMPAIGN_PURCHASE_RECORD, 'idx_campaign_purchase_unique_order', "ALTER TABLE `" . CAMPAIGN_PURCHASE_RECORD . "` ADD UNIQUE KEY `idx_campaign_purchase_unique_order` (`campaign_id`,`campaign_customer_id`,`platform`,`order_id`,`order_no`)", "Verified `" . CAMPAIGN_PURCHASE_RECORD . "` duplicate prevention index.");
 
 
     $createCampaignRuleSettingSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN_RULE_SETTING . "` (
