@@ -1641,6 +1641,52 @@ function addAccessToPinBlock($allPins, $targetPinId, $addIds = array(6))
     return implode('+', $rebuilt);
 }
 
+function setPinBlockAccess($allPins, $targetPinId, $accessIds)
+{
+    $targetPinId = (string) ((int) $targetPinId);
+    $entries = array_filter(array_map('trim', explode('+', (string) $allPins)), 'strlen');
+    $rebuilt = array();
+    $found = false;
+    $accessValues = array();
+
+    foreach ((array) $accessIds as $accessId) {
+        $accessValue = (string) ((int) $accessId);
+        if ($accessValue !== '' && !in_array($accessValue, $accessValues, true)) {
+            $accessValues[] = $accessValue;
+        }
+    }
+
+    $accessList = implode(',', $accessValues);
+
+    foreach ($entries as $entry) {
+        $entry = trim($entry, '[]');
+        $parts = explode(':', $entry, 2);
+
+        if (count($parts) !== 2) {
+            continue;
+        }
+
+        $pinId = trim($parts[0]);
+        if ($pinId === $targetPinId) {
+            if ($found) {
+                continue;
+            }
+
+            $rebuilt[] = '[' . $pinId . ':' . $accessList . ']';
+            $found = true;
+            continue;
+        }
+
+        $rebuilt[] = '[' . $pinId . ':' . trim($parts[1]) . ']';
+    }
+
+    if (!$found) {
+        $rebuilt[] = '[' . $targetPinId . ':' . $accessList . ']';
+    }
+
+    return implode('+', $rebuilt);
+}
+
 function pinBlockHasAccessId($allPins, $targetPinId, $accessId)
 {
     $targetPinId = (string) ((int) $targetPinId);
@@ -2654,6 +2700,281 @@ if ($conn->select_db($db_cms)) {
         } else {
             echo "<p style='color:green;'>Verified Order Warehouse Transfer pin access already exists for `user_group` id " . (int) $groupId . ".</p>";
         }
+    }
+
+    $createCampaignSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `campaign_name` VARCHAR(255),
+        `period_start_date` DATE,
+        `period_end_date` DATE,
+        `rule_setting_id` INT DEFAULT NULL,
+        `description` TEXT DEFAULT NULL,
+        `create_by` VARCHAR(30),
+        `create_date` DATE,
+        `create_time` TIME,
+        `update_by` VARCHAR(30),
+        `update_date` DATE,
+        `update_time` TIME,
+        `status` CHAR(1) DEFAULT 'A'
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createCampaignSql)) {
+        echo "<p style='color:green;'>Verified table `" . CAMPAIGN . "` for Campaign.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . CAMPAIGN . "`: " . $conn->error . "</p>";
+    }
+
+    migrationEnsureIndex($conn, $db_cms, CAMPAIGN, 'idx_campaign_rule_setting', "ALTER TABLE `" . CAMPAIGN . "` ADD INDEX `idx_campaign_rule_setting` (`rule_setting_id`)", "Verified `" . CAMPAIGN . "` rule setting index.");
+
+    $createCampaignPicSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN_PIC . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `campaign_id` INT NOT NULL,
+        `user_id` INT NOT NULL,
+        `create_by` VARCHAR(30),
+        `create_date` DATE,
+        `create_time` TIME,
+        `update_by` VARCHAR(30),
+        `update_date` DATE,
+        `update_time` TIME,
+        `status` CHAR(1) DEFAULT 'A',
+        KEY `idx_campaign_pic_campaign_id` (`campaign_id`),
+        KEY `idx_campaign_pic_user_id` (`user_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createCampaignPicSql)) {
+        echo "<p style='color:green;'>Verified table `" . CAMPAIGN_PIC . "` for Campaign PIC.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . CAMPAIGN_PIC . "`: " . $conn->error . "</p>";
+    }
+
+    $createCampaignCustomerSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN_CUSTOMER . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `campaign_id` INT NOT NULL,
+        `platform` VARCHAR(30),
+        `customer_id` VARCHAR(100),
+        `customer_name` VARCHAR(255),
+        `customer_contact` VARCHAR(100),
+        `customer_label` TEXT DEFAULT NULL,
+        `customer_tags` TEXT DEFAULT NULL,
+        `last_order_date` DATE DEFAULT NULL,
+        `total_order` INT DEFAULT 0,
+        `total_spent` DECIMAL(12,2) DEFAULT 0.00,
+        `assign_source` VARCHAR(50) DEFAULT 'Manual',
+        `purchase_status` VARCHAR(30) DEFAULT 'Pending',
+        `follow_up_status` VARCHAR(30) DEFAULT 'Pending',
+        `create_by` VARCHAR(30),
+        `create_date` DATE,
+        `create_time` TIME,
+        `update_by` VARCHAR(30),
+        `update_date` DATE,
+        `update_time` TIME,
+        `status` CHAR(1) DEFAULT 'A',
+        KEY `idx_campaign_customer_campaign_id` (`campaign_id`),
+        KEY `idx_campaign_customer_platform` (`platform`),
+        KEY `idx_campaign_customer_customer_id` (`customer_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createCampaignCustomerSql)) {
+        echo "<p style='color:green;'>Verified table `" . CAMPAIGN_CUSTOMER . "` for Campaign Customer.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . CAMPAIGN_CUSTOMER . "`: " . $conn->error . "</p>";
+    }
+
+    $createCampaignMessageSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN_MESSAGE . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `campaign_id` INT NOT NULL,
+        `message_shortcut_id` INT DEFAULT NULL,
+        `message_title` VARCHAR(255),
+        `message_preview` TEXT DEFAULT NULL,
+        `follow_up_date` DATE,
+        `sequence_no` INT DEFAULT 1,
+        `remark` TEXT DEFAULT NULL,
+        `create_by` VARCHAR(30),
+        `create_date` DATE,
+        `create_time` TIME,
+        `update_by` VARCHAR(30),
+        `update_date` DATE,
+        `update_time` TIME,
+        `status` CHAR(1) DEFAULT 'A',
+        KEY `idx_campaign_message_campaign_id` (`campaign_id`),
+        KEY `idx_campaign_message_follow_up_date` (`follow_up_date`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createCampaignMessageSql)) {
+        echo "<p style='color:green;'>Verified table `" . CAMPAIGN_MESSAGE . "` for Campaign Message.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . CAMPAIGN_MESSAGE . "`: " . $conn->error . "</p>";
+    }
+
+    $createCampaignFollowUpSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN_FOLLOW_UP . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `campaign_id` INT NOT NULL,
+        `campaign_customer_id` INT NOT NULL,
+        `campaign_message_id` INT NOT NULL,
+        `pic_user_id` INT DEFAULT NULL,
+        `follow_up_date` DATE,
+        `follow_up_status` VARCHAR(30) DEFAULT 'Pending',
+        `screenshot_path` VARCHAR(255) DEFAULT NULL,
+        `remark` TEXT DEFAULT NULL,
+        `label_preview` VARCHAR(255) DEFAULT NULL,
+        `completed_by` VARCHAR(30) DEFAULT NULL,
+        `completed_date` DATE DEFAULT NULL,
+        `completed_time` TIME DEFAULT NULL,
+        `notification_sent` CHAR(1) DEFAULT 'N',
+        `notification_sent_date` DATE DEFAULT NULL,
+        `notification_sent_time` TIME DEFAULT NULL,
+        `create_by` VARCHAR(30),
+        `create_date` DATE,
+        `create_time` TIME,
+        `update_by` VARCHAR(30),
+        `update_date` DATE,
+        `update_time` TIME,
+        `status` CHAR(1) DEFAULT 'A',
+        KEY `idx_campaign_follow_up_campaign_id` (`campaign_id`),
+        KEY `idx_campaign_follow_up_customer_id` (`campaign_customer_id`),
+        KEY `idx_campaign_follow_up_message_id` (`campaign_message_id`),
+        KEY `idx_campaign_follow_up_date` (`follow_up_date`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createCampaignFollowUpSql)) {
+        echo "<p style='color:green;'>Verified table `" . CAMPAIGN_FOLLOW_UP . "` for Campaign Follow-Up.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . CAMPAIGN_FOLLOW_UP . "`: " . $conn->error . "</p>";
+    }
+
+    $createCampaignPurchaseRecordSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN_PURCHASE_RECORD . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `campaign_id` INT NOT NULL,
+        `campaign_customer_id` INT NOT NULL,
+        `platform` VARCHAR(30),
+        `order_id` VARCHAR(100),
+        `order_no` VARCHAR(150),
+        `order_detail` TEXT DEFAULT NULL,
+        `order_status` VARCHAR(100),
+        `order_amount` DECIMAL(12,2) DEFAULT 0.00,
+        `order_date` DATETIME DEFAULT NULL,
+        `package_text` TEXT DEFAULT NULL,
+        `customer_type` VARCHAR(30) DEFAULT NULL,
+        `create_by` VARCHAR(30),
+        `create_date` DATE,
+        `create_time` TIME,
+        `update_by` VARCHAR(30),
+        `update_date` DATE,
+        `update_time` TIME,
+        `status` CHAR(1) DEFAULT 'A',
+        KEY `idx_campaign_purchase_campaign_id` (`campaign_id`),
+        KEY `idx_campaign_purchase_customer_id` (`campaign_customer_id`),
+        KEY `idx_campaign_purchase_platform` (`platform`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createCampaignPurchaseRecordSql)) {
+        echo "<p style='color:green;'>Verified table `" . CAMPAIGN_PURCHASE_RECORD . "` for Campaign Purchase Record.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . CAMPAIGN_PURCHASE_RECORD . "`: " . $conn->error . "</p>";
+    }
+
+    migrationEnsureIndex($conn, $db_cms, CAMPAIGN_PURCHASE_RECORD, 'idx_campaign_purchase_unique_order', "ALTER TABLE `" . CAMPAIGN_PURCHASE_RECORD . "` ADD INDEX `idx_campaign_purchase_unique_order` (`campaign_id`,`campaign_customer_id`,`platform`,`order_id`,`order_no`)", "Verified `" . CAMPAIGN_PURCHASE_RECORD . "` duplicate prevention index.");
+
+
+    $createCampaignRuleSettingSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN_RULE_SETTING . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `rule_name` VARCHAR(255),
+        `generate_schedule` VARCHAR(100),
+        `generate_day` VARCHAR(50) DEFAULT NULL,
+        `campaign_name_template` VARCHAR(255),
+        `campaign_period_rule` VARCHAR(100),
+        `customer_condition_json` MEDIUMTEXT DEFAULT NULL,
+        `default_pic_json` MEDIUMTEXT DEFAULT NULL,
+        `default_message_json` MEDIUMTEXT DEFAULT NULL,
+        `rule_status` VARCHAR(30) DEFAULT 'Active',
+        `last_generated_date` DATE DEFAULT NULL,
+        `last_generated_time` TIME DEFAULT NULL,
+        `remark` TEXT DEFAULT NULL,
+        `create_by` VARCHAR(30),
+        `create_date` DATE,
+        `create_time` TIME,
+        `update_by` VARCHAR(30),
+        `update_date` DATE,
+        `update_time` TIME,
+        `status` CHAR(1) DEFAULT 'A'
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createCampaignRuleSettingSql)) {
+        echo "<p style='color:green;'>Verified table `" . CAMPAIGN_RULE_SETTING . "` for Campaign Rule Setting.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . CAMPAIGN_RULE_SETTING . "`: " . $conn->error . "</p>";
+    }
+
+    $createCampaignRuleGeneratedLogSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN_RULE_GENERATED_LOG . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `rule_setting_id` INT NOT NULL,
+        `campaign_id` INT DEFAULT NULL,
+        `generated_key` VARCHAR(255),
+        `generated_date` DATE,
+        `generated_time` TIME,
+        `remark` TEXT DEFAULT NULL,
+        `create_by` VARCHAR(30),
+        `create_date` DATE,
+        `create_time` TIME,
+        `status` CHAR(1) DEFAULT 'A',
+        KEY `idx_campaign_rule_log_rule_setting` (`rule_setting_id`),
+        KEY `idx_campaign_rule_log_campaign_id` (`campaign_id`),
+        KEY `idx_campaign_rule_log_generated_key` (`generated_key`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createCampaignRuleGeneratedLogSql)) {
+        echo "<p style='color:green;'>Verified table `" . CAMPAIGN_RULE_GENERATED_LOG . "` for Campaign Rule Generated Log.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . CAMPAIGN_RULE_GENERATED_LOG . "`: " . $conn->error . "</p>";
+    }
+
+    migrationEnsureIndex($conn, $db_cms, CAMPAIGN_RULE_GENERATED_LOG, 'idx_campaign_rule_generated_key_unique', "ALTER TABLE `" . CAMPAIGN_RULE_GENERATED_LOG . "` ADD UNIQUE KEY `idx_campaign_rule_generated_key_unique` (`generated_key`)", "Verified `" . CAMPAIGN_RULE_GENERATED_LOG . "` generated key unique index.");
+
+
+    $campaignPinGroupSql = "INSERT INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+        (153, 'Campaign', '1,2,3,4', 'Campaign management', '1', CURDATE(), CURTIME(), 'A'),
+        (154, 'Campaign Rule Setting', '1,2,3,4', 'Campaign auto rule setting', '1', CURDATE(), CURTIME(), 'A')
+        ON DUPLICATE KEY UPDATE
+            `name` = VALUES(`name`),
+            `pins` = VALUES(`pins`),
+            `remark` = VALUES(`remark`),
+            `status` = 'A'";
+    if ($conn->query($campaignPinGroupSql)) {
+        echo "<p style='color:green;'>Verified pin groups 153 Campaign and 154 Campaign Rule Setting.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed verifying Campaign pin groups: " . $conn->error . "</p>";
+    }
+
+    $campaignGroupResult = $conn->query("SELECT `id`, `pins` FROM `user_group`");
+    if ($campaignGroupResult) {
+        while ($campaignGroupRow = $campaignGroupResult->fetch_assoc()) {
+            $groupId = isset($campaignGroupRow['id']) ? (int) $campaignGroupRow['id'] : 0;
+            if ($groupId <= 0) {
+                continue;
+            }
+
+            $currentPins = isset($campaignGroupRow['pins']) ? (string) $campaignGroupRow['pins'] : '';
+            if (in_array($groupId, array(1, 2), true)) {
+                $updatedPins = setPinBlockAccess($currentPins, 153, array(1, 2, 3, 4));
+                $updatedPins = setPinBlockAccess($updatedPins, 154, array(1, 2, 3, 4));
+            } else {
+                $updatedPins = removePinBlockById($currentPins, 153);
+                $updatedPins = removePinBlockById($updatedPins, 154);
+            }
+
+            if ($updatedPins !== $currentPins) {
+                $safePins = $conn->real_escape_string($updatedPins);
+                if ($conn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $groupId)) {
+                    echo "<p style='color:green;'>Verified Campaign pin access for `user_group` id " . (int) $groupId . ".</p>";
+                } else {
+                    echo "<p style='color:red;'>Failed updating Campaign pin access for `user_group` id " . (int) $groupId . ": " . $conn->error . "</p>";
+                }
+            } else {
+                echo "<p style='color:green;'>Verified Campaign pin access already matches `user_group` id " . (int) $groupId . ".</p>";
+            }
+        }
+    } else {
+        echo "<p style='color:red;'>Failed reading `user_group` for Campaign pin assignment: " . $conn->error . "</p>";
     }
 
     $createLabelSql = "CREATE TABLE IF NOT EXISTS `" . LABEL . "` (

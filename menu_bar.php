@@ -248,6 +248,7 @@ $menuList = array(
             array('Whatsapp Customer', 'mdi mdi-deal-outline', $SITEURL . '/customerInfoTable.php', '38'),
             array('Customer Follow-Up', 'mdi mdi-account-clock-outline', $SITEURL . '/customer_follow_up_list.php', '151'),
             array('Customer Daily Report', 'mdi mdi-file-chart-outline', $SITEURL . '/customer_daily_report.php', '150'),
+            array('Campaign', 'mdi mdi-bullhorn-outline', $SITEURL . '/campaign_table.php', '153'),
             array(
                 'Setting',
                 'mdi mdi-cog',
@@ -259,11 +260,12 @@ $menuList = array(
                     array('Customer Repeat', 'mdi mdi-account-group-outline', $SITEURL . '/cus_repeat_table.php', '143'),
                     array('Message Shortcuts', 'mdi mdi-message-text-outline', $SITEURL . '/message_shortcuts_table.php', '144'),
                     array('Tag', 'mdi mdi-account-group-outline', $SITEURL . '/tagTable.php', '35'),
+                    array('Campaign Rule Setting', 'mdi mdi-cog-outline', $SITEURL . '/campaign_rule_setting_table.php', '154'),
                 ),
-                'pin' => array('29', '142', '143', '144', '35'),
+                'pin' => array('29', '142', '143', '144', '35', '154'),
             ),
         ),
-        'pin' => array('85', '91', '75', '84', '38', '150', '151', '29', '142', '143', '144', '35')
+        'pin' => array('85', '91', '75', '84', '38', '150', '151', '153', '29', '142', '143', '144', '35', '154')
     ),
     array(
         'Order',

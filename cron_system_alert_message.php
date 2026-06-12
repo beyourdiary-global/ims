@@ -5,11 +5,15 @@
 
 include_once 'init.php';
 include_once ROOT . '/include/common.php';
+include_once ROOT . '/include/campaign_common.php';
 include_once ROOT . '/include/system_alert_common.php';
 
 $generatedCount = 0;
 $userCount = 0;
+$campaignFollowUpAlertCount = 0;
 $generatedCount += systemAlertGenerateDailyFlowSupervisorAlerts($connect, $finance_connect, date('Y-m-d'));
+$campaignFollowUpAlertCount = systemAlertGenerateCampaignFollowUpAlerts($connect, date('Y-m-d'));
+$generatedCount += $campaignFollowUpAlertCount;
 $sql = "SELECT `id` FROM `" . USR_USER . "` WHERE `status` = 'A' ORDER BY `id` ASC";
 $result = mysqli_query($connect, $sql);
 
@@ -28,4 +32,5 @@ if ($result) {
 header('Content-Type: text/plain; charset=utf-8');
 echo "System alert generation completed.\n";
 echo "Users checked: " . (int) $userCount . "\n";
+echo "Campaign follow-up alerts generated: " . (int) $campaignFollowUpAlertCount . "\n";
 echo "Alerts generated or synced: " . (int) $generatedCount . "\n";
