@@ -495,7 +495,6 @@ switch ($action) {
         }
 
         $_SESSION['order_warehouse_transfer_show_search_modal'] = '1';
-        $_SESSION['order_warehouse_transfer_show_search_modal'] = '1';
         owtpRedirectToPage($orderWarehouseTransferPageUrl, $orderCode, $platform);
         break;
 
