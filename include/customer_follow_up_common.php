@@ -3936,7 +3936,9 @@ if (!function_exists('customerFollowUpSubmitReceivedOrderAndTransition')) {
             'actor_user_id' => $actorUserId,
             'actor_user_group_id' => $actorUserGroupId,
             'source_page' => isset($options['source_page']) ? $options['source_page'] : 'Customer Follow-Up',
-            'remark' => isset($options['transition_remark']) ? $options['transition_remark'] : 'Parcel received confirmed by user.',
+            'remark' => isset($options['transition_remark']) && trim((string) $options['transition_remark']) !== ''
+                ? $options['transition_remark']
+                : shopeeOmsBuildParcelReceivedRemark($connect, $actorUserId, 'user'),
             'platform' => isset($context['platform']) ? $context['platform'] : $platform,
             'allow_auto_follow_up' => false,
         );
