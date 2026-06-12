@@ -1909,3 +1909,147 @@ td.btn-container.mobile-action-open-left .mobile-action-menu {
     justify-content: flex-start;
   }
 }
+
+/*---------------------------------------------------------
+# Order Warehouse Transfer
+---------------------------------------------------------*/
+.owt-card {
+  border: 1px solid #dee2e6;
+  border-radius: 12px;
+  box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.04);
+}
+
+.owt-card + .owt-card {
+  margin-top: 1.25rem;
+}
+
+.owt-field-message {
+  min-height: 24px;
+  padding-top: 4px;
+  font-size: 0.95rem;
+  line-height: 20px;
+}
+
+.owt-detail-label {
+  color: #6c757d;
+  font-size: 0.86rem;
+  text-transform: none;
+}
+
+.owt-detail-value {
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.owt-actions .btn,
+.owt-search-form .btn {
+  text-transform: none !important;
+}
+
+.owt-search-form {
+  align-items: flex-start;
+}
+
+.owt-search-form .form-label {
+  display: block;
+  height: 28px;
+  min-height: 28px;
+  margin: 0 0 8px 0 !important;
+  padding: 0 !important;
+  line-height: 28px;
+}
+
+.owt-search-form .form-control,
+.owt-search-form .form-select {
+  height: 48px;
+}
+
+.owt-search-button-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-start;
+}
+
+.owt-search-button-label {
+  visibility: hidden;
+}
+
+.owt-search-btn {
+  height: 48px !important;
+  min-width: 220px;
+  padding: 0 28px !important;
+  margin: 0 !important;
+  border-radius: 999px !important;
+  background-color: #3f76d3 !important;
+  border-color: #3f76d3 !important;
+  color: #ffffff !important;
+  box-shadow: 0 8px 16px rgba(63, 118, 211, 0.28) !important;
+  font-size: 20px !important;
+  font-weight: 600 !important;
+  line-height: 48px !important;
+  text-align: center;
+  white-space: nowrap;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+}
+
+.owt-normal-case,
+.owt-normal-case.btn,
+.owt-card .btn-outline-primary {
+  text-transform: none !important;
+}
+
+#owtTransferLogTable th,
+#owtTransferLogTable td {
+  vertical-align: middle;
+}
+
+.owt-transfer-record-table {
+  border-collapse: separate !important;
+  border-spacing: 0 0 !important;
+  border: 0 !important;
+}
+
+.owt-transfer-record-table thead th,
+.owt-transfer-record-table tbody td {
+  border-left: 0 !important;
+  border-right: 0 !important;
+  border-top: 0 !important;
+  border-bottom: 1px solid #dee2e6 !important;
+}
+
+.owt-transfer-record-table tbody tr:nth-child(odd) td {
+  background-color: #eeeeee !important;
+}
+
+.owt-transfer-record-table tbody tr:nth-child(even) td {
+  background-color: #ffffff !important;
+}
+
+.owt-transfer-record-table tbody tr:hover td {
+  background-color: #e9ecef !important;
+}
+
+.owt-transfer-warehouse-row {
+  align-items: flex-start !important;
+}
+
+.owt-transfer-warehouse-row .form-label {
+  display: block;
+  min-height: 24px;
+  margin-bottom: 8px;
+  line-height: 24px;
+}
+
+.owt-transfer-warehouse-row .form-control,
+.owt-transfer-warehouse-row .form-select {
+  height: 48px;
+}
+
+.owt-transfer-warehouse-row .owt-field-message {
+  min-height: 24px;
+  padding-top: 4px;
+  line-height: 20px;
+}
+

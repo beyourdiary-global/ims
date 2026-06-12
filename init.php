@@ -274,6 +274,7 @@ define('CRED_INV_PROD', 'cred_inv_products');
 define('DEBIT_NOTES_INV', 'debit_notes_invoice');
 define('DEBIT_INV_PROD', 'debit_inv_products');
 define('LAZADA_ORDER_REQ', 'lazada_order_request');
+define('ORDER_WAREHOUSE_TRANSFER_LOG', 'order_warehouse_transfer_log');
 
 $connect = @mysqli_connect(dbhost, dbuser, dbpwd, dbname);
 $finance_connect = @mysqli_connect(dbhost, dbuser, dbpwd, dbFinance);

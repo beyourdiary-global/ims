@@ -306,6 +306,7 @@ $menuList = array(
             array('Stock Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/finance/stock_order_request_table.php', '126'),
             array('Stock In', 'mdi mdi-tray-arrow-down', $SITEURL . '/warehouse_stock_in_table.php', '125'),
             array('Stock List', 'mdi mdi-package-variant', $SITEURL . '/stock_list_table.php', '120'),
+            array('Order Warehouse Transfer', 'mdi mdi-swap-horizontal', $SITEURL . '/order_warehouse_transfer.php', '152'),
             array('Barcode Generate', 'mdi mdi-barcode', $SITEURL . '/barcode_generator.php', '22'),
             array('Rate Checking', 'mdi mdi-package-variant', $SITEURL . '/rate_checking.php', '17'),
             array(
@@ -319,7 +320,7 @@ $menuList = array(
                 'pin' => array('53'),
             ),
         ),
-        'pin' => array('16', '126', '125', '120', '22', '17', '53')
+        'pin' => array('16', '126', '125', '120', '152', '22', '17', '53')
     ),
     array(
         'Product',
