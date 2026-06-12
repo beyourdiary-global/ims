@@ -213,8 +213,9 @@ if (!empty($orderNumbers) && !empty($warehouseIds)) {
                                         $usageDateLines[] = trim((string) (isset($usageRow['stock_in_order_date']) ? $usageRow['stock_in_order_date'] : ''));
                                     }
                                 } else {
-                                    $transferMapKey = $orderNumber . '|' . (int) $row['warehouse_id'];
-                                    $transferLogRow = isset($transferLogMap[$transferMapKey]) ? $transferLogMap[$transferMapKey] : null;
+$transferOrderNumber = isset($row['order_number']) ? trim((string) $row['order_number']) : '';
+$transferMapKey = $transferOrderNumber . '|' . (int) $row['warehouse_id'];
+$transferLogRow = isset($transferLogMap[$transferMapKey]) ? $transferLogMap[$transferMapKey] : null;
                                     if (is_array($transferLogRow)) {
                                         $transferWarehouseId = isset($transferLogRow['new_warehouse_id']) ? (int) $transferLogRow['new_warehouse_id'] : 0;
                                         $transferWarehouseName = isset($warehouseNameMap[$transferWarehouseId]) ? $warehouseNameMap[$transferWarehouseId] : ('Warehouse #' . $transferWarehouseId);
