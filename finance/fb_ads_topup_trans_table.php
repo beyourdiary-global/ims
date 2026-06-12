@@ -362,8 +362,6 @@ $tblName = FB_ADS_TOPUP;
            
                 $groupOption3 = isset($_GET['timeRange']) ? $_GET['timeRange'] : ''; 
                 $groupOption4 = isset($_GET['timeInterval']) ? $_GET['timeInterval'] : ''; 
-                $groupedRows = [];
-                $counters = 1;
 
                 function generateTableRow($id, &$counters, $accName, $paymentDate, $topupAmt) {
                     echo '<tr onclick="window.location=\'fb_ads_topup_trans_table_summary.php?ids=' . urlencode($id) . '\';" style="cursor:pointer;">';
@@ -385,6 +383,8 @@ $tblName = FB_ADS_TOPUP;
                 }
                 
                 $groupedRows = [];
+                $counters = 1;
+                $totalTopupAmount = 0;
                 while ($row = $result->fetch_assoc()) {
                     $viewActMsg = '';
                     $sql = '';
@@ -395,6 +395,7 @@ $tblName = FB_ADS_TOPUP;
                     $pic = getData('name', "id='" . $row['pic'] . "'", '', USR_USER, $connect);
                     $usr = $pic->fetch_assoc();
                     if ($groupOption === '') {
+                        $totalTopupAmount += (float) (isset($row['topup_amt']) ? $row['topup_amt'] : 0);
                         echo '<tr>
                         <th class="hideColumn" scope="row">' . $row['id'] . '</th>
                         <th class="text-center"><input type="checkbox" class="export" value="' . $row['id'] . '"></th>
@@ -561,8 +562,10 @@ $tblName = FB_ADS_TOPUP;
                         }                      
                         
                     }  else if ($groupOption === 'invoice') {
-                        generateTableRow2($row['id'],$counters, $accName, $paymentDate,  $row['topup_amt']);
-                    }else if ($groupOption === 'metaaccount') {
+                        $totalTopupAmount += (float) (isset($row['topup_amt']) ? $row['topup_amt'] : 0);
+                        generateTableRow2($row['id'], $counters, $accName, $paymentDate, $row['topup_amt']);
+                    } else if ($groupOption === 'metaaccount') {
+                        $totalTopupAmount += (float) (isset($row['topup_amt']) ? $row['topup_amt'] : 0);
                         generateTableRow($row['id'], $counters, $accName, $paymentDate, $row['topup_amt']);
                     }
                     
@@ -617,8 +620,10 @@ $tblName = FB_ADS_TOPUP;
                         echo'<th class="text-center"><input type="checkbox" class="export" value="' . $ids . '"></th>';
                         echo '<th class="hideColumn" scope="row">' . $ids . '</th>'; 
                         echo '<th scope="row">' . $counters++ . '</th>';
+                        $grouptopupamount = (float) (isset($groupedrow['totaltopupamount']) ? $groupedrow['totaltopupamount'] : 0);
+                        $totaltopupamount += $grouptopupamount;
                         echo '<td scope="row">' . $key . '</td>';
-                        echo '<td scope="row">' . number_format($groupedRow['totalTopupAmount'], 2, '.', '') . '</td>';
+                        echo '<td scope="row">' . number_format($groupTopupAmount, 2, '.', '') . '</td>';
                         echo '</tr>';
                     }
                 }    
@@ -630,29 +635,24 @@ $tblName = FB_ADS_TOPUP;
                 <tfoot>
                     <tr>
                     <?php if (!isset($_GET['group'])): ?>
-                    <th class="hideColumn" scope="col">ID</th>
-                    <th class="text-center">
-                        <input type="checkbox" class="exportAll">
-                    </th>
-                        <th scope="col" id="action_col">Action</th>
-                        <th scope="col" width="60px">S/N</th>
-                        <th scope="col">Meta Account</th>
-                        <th scope="col">Transaction ID</th>
-                        <th scope="col">Invoice/Payment Date</th>
-                        <th scope="col">Person In Charge</th>
-                        <th scope="col">Top-up Amount</th>
-                        <th scope="col">Attachment</th>
-                        <th scope="col">Remark</th>
-                        
-                        <?php else: ?>
-                        <th class="hideColumn" scope="col">ID</th>
-                        <th class="text-center">
-                            <input type="checkbox" class="exportAll">
-                        </th>
-                        <th scope="col" width="60px">S/N</th>                       
-                        <th id="group_header" scope="col"><?php echo isset($_GET['group']) && $_GET['group'] == 'metaaccount' ? "Meta Account" : "Invoice/Payment Date"; ?></th>
-                        <th scope="col">Total Top-up Amount</th>
-                        <?php endif; ?>
+                        <th class="hideColumn" scope="col"></th>
+                        <th scope="col"></th>
+                        <th scope="col"></th>
+                        <th scope="col"></th>
+                        <th scope="col"></th>
+                        <th scope="col"></th>
+                        <th scope="col"></th>
+                        <th scope="col" class="text-end">Total</th>
+                        <th scope="col"><?php echo number_format($totalTopupAmount, 2, '.', ''); ?></th>
+                        <th scope="col"></th>
+                        <th scope="col"></th>
+                    <?php else: ?>
+                        <th class="hideColumn" scope="col"></th>
+                        <th scope="col"></th>
+                        <th scope="col"></th>
+                        <th scope="col" class="text-end">Total</th>
+                        <th scope="col"><?php echo number_format($totalTopupAmount, 2, '.', ''); ?></th>
+                    <?php endif; ?>
                     </tr>
                 </tfoot>
             </table>
