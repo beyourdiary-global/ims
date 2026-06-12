@@ -2909,26 +2909,40 @@ JS;
                             <?php
                             unset($echoVal);
                             $buyerDisplayValue = '';
+                            $buyerProfileUrl = '';
                             if (isset($row['buyer']))
                                 $echoVal = $row['buyer'];
 
                             if (isset($echoVal)) {
-                                $user_rst = getData('*', "id = '$echoVal'", '', SHOPEE_CUST_INFO, $finance_connect);
+                                $safeEchoVal = mysqli_real_escape_string($finance_connect, (string) $echoVal);
+                                $user_rst = getData('*', "id = '$safeEchoVal'", 'LIMIT 1', SHOPEE_CUST_INFO, $finance_connect);
                                 $user_row = $user_rst ? $user_rst->fetch_assoc() : [];
                                 if (isset($user_row['buyer_username'])) {
                                     $buyerDisplayValue = $user_row['buyer_username'];
                                 } else {
                                     $buyerDisplayValue = $echoVal;
                                 }
+
+                                if ((int) $echoVal > 0) {
+                                    $buyerProfileUrl = rtrim((string) SITEURL, '/') . '/shopee/shopee_cust_info.php?id=' . (int) $echoVal;
+                                }
                             }
                             ?>
-                            <div class="d-flex align-items-center gap-2 flex-nowrap">
-                                <input class="form-control" type="text" name="sor_user" id="sor_user" <?php if ($act == '')
-                                    echo 'disabled' ?>
-                                        value="<?php echo !empty($echoVal) ? $buyerDisplayValue : '' ?>">
-                            </div>
+                            <?php if ($act == '' && $buyerProfileUrl !== '') { ?>
+                                <div class="form-control-plaintext pt-1">
+                                    <a href="<?php echo htmlspecialchars($buyerProfileUrl, ENT_QUOTES, 'UTF-8'); ?>" target="_blank" rel="noopener" class="fw-bold" style="text-decoration: none !important;">
+                                        <?php echo htmlspecialchars($buyerDisplayValue, ENT_QUOTES, 'UTF-8'); ?>
+                                    </a>
+                                </div>
+                            <?php } else { ?>
+                                <div class="d-flex align-items-center gap-2 flex-nowrap">
+                                    <input class="form-control" type="text" name="sor_user" id="sor_user" <?php if ($act == '')
+                                        echo 'disabled' ?>
+                                            value="<?php echo !empty($echoVal) ? htmlspecialchars($buyerDisplayValue, ENT_QUOTES, 'UTF-8') : '' ?>">
+                                </div>
+                            <?php } ?>
                             <input type="hidden" name="sor_user_hidden" id="sor_user_hidden"
-                                value="<?php echo (isset($row['buyer'])) ? $row['buyer'] : ''; ?>">
+                                value="<?php echo (isset($row['buyer'])) ? htmlspecialchars((string) $row['buyer'], ENT_QUOTES, 'UTF-8') : ''; ?>">
                             <?php if (isset($user_err)) { ?>
                                 <div id="err_msg">
                                     <span class="mt-n1">
