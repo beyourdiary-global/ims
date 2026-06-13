@@ -135,7 +135,7 @@ $result = getData('*', '', '', $tblName, $connect);
                                                 <a class="btn btn-sm btn-rounded btn-primary" href="<?= $stockBalancePage . '?view=stock_balance&id=' . (int) $row['id'] ?>">View Stock Balance</a>
                                             <?php } ?>
                                         </td>
-                                        <td scope="row"><?= $row['name'] ?></td>
+                                        <td scope="row"><?= htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row">
                                             <?php
                                             $telegramTokenSettingId = $warehouseTokenColumnAvailable && isset($row['telegram_token_setting_id'])
