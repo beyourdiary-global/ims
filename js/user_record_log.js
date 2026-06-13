@@ -349,7 +349,7 @@
       }
 
       try {
-        var parsed = JSON.parse(String(rawValue || "[]"));
+        var parsed = JSON.parse(String(rawValue));
         if (!Array.isArray(parsed)) {
           return [];
         }
