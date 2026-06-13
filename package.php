@@ -476,11 +476,6 @@ if (isset($_SESSION['tempValConfirmBox'])) {
         font-size: 16px;
         color: #212529;
     }
-        border: 0;
-        outline: 0;
-        min-width: 160px;
-        flex: 1;
-    }
 </style>
 
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
