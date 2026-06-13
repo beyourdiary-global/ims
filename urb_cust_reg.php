@@ -612,6 +612,7 @@ if ($urbanismOrderFbLink === '' && $urbanismFormName !== '') {
                                         'id' => isset($fbOrderRow['id']) ? (int) $fbOrderRow['id'] : 0,
                                         'order_no' => 'FB-' . (isset($fbOrderRow['id']) ? (int) $fbOrderRow['id'] : 0),
                                         'order_date' => isset($fbOrderRow['create_date']) ? (string) $fbOrderRow['create_date'] : '',
+                                        'received_date' => isset($fbOrderRow['received_date']) ? (string) $fbOrderRow['received_date'] : '',
                                         'package' => commonResolvePackageNamesFromCsv(isset($fbOrderRow['package']) ? $fbOrderRow['package'] : '', $connect),
                                         'buyer_pay_method' => commonResolvePaymentMethodName(isset($fbOrderRow['pay_method']) ? $fbOrderRow['pay_method'] : '', $finance_connect),
                                         'fees' => '0.00',
@@ -639,6 +640,7 @@ if ($urbanismOrderFbLink === '' && $urbanismFormName !== '') {
                                             ? (string) $lazadaOrderRow['oder_number']
                                             : ('LAZADA-' . (isset($lazadaOrderRow['id']) ? (int) $lazadaOrderRow['id'] : 0)),
                                         'order_date' => isset($lazadaOrderRow['create_date']) ? (string) $lazadaOrderRow['create_date'] : '',
+                                        'received_date' => isset($lazadaOrderRow['received_date']) ? (string) $lazadaOrderRow['received_date'] : '',
                                         'package' => commonResolvePackageNamesFromCsv(isset($lazadaOrderRow['pkg']) ? $lazadaOrderRow['pkg'] : '', $connect),
                                         'buyer_pay_method' => commonResolvePaymentMethodName(isset($lazadaOrderRow['pay_meth']) ? $lazadaOrderRow['pay_meth'] : '', $finance_connect),
                                         'fees' => isset($lazadaOrderRow['pay_fee']) ? (string) $lazadaOrderRow['pay_fee'] : '0.00',
@@ -666,6 +668,7 @@ if ($urbanismOrderFbLink === '' && $urbanismFormName !== '') {
                                             ? (string) $websiteOrderRow['order_id']
                                             : ('WEB-' . (isset($websiteOrderRow['id']) ? (int) $websiteOrderRow['id'] : 0)),
                                         'order_date' => isset($websiteOrderRow['create_date']) ? (string) $websiteOrderRow['create_date'] : '',
+                                        'received_date' => isset($websiteOrderRow['received_date']) ? (string) $websiteOrderRow['received_date'] : '',
                                         'package' => commonResolvePackageNamesFromCsv(isset($websiteOrderRow['pkg']) ? $websiteOrderRow['pkg'] : '', $connect),
                                         'buyer_pay_method' => commonResolvePaymentMethodName(isset($websiteOrderRow['pay_method']) ? $websiteOrderRow['pay_method'] : '', $finance_connect),
                                         'fees' => isset($websiteOrderRow['shipping']) ? (string) $websiteOrderRow['shipping'] : '0.00',
@@ -720,6 +723,7 @@ if ($urbanismOrderFbLink === '' && $urbanismFormName !== '') {
                                         'id' => isset($shopeeOrderRow['id']) ? (int) $shopeeOrderRow['id'] : 0,
                                         'order_no' => isset($shopeeOrderRow['orderID']) ? (string) $shopeeOrderRow['orderID'] : ('SHOPEE-' . (isset($shopeeOrderRow['id']) ? (int) $shopeeOrderRow['id'] : 0)),
                                         'order_date' => isset($shopeeOrderRow['date']) ? (string) $shopeeOrderRow['date'] : '',
+                                        'received_date' => isset($shopeeOrderRow['received_date']) ? (string) $shopeeOrderRow['received_date'] : '',
                                         'package' => commonResolvePackageNamesFromCsv(isset($shopeeOrderRow['package']) ? $shopeeOrderRow['package'] : '', $connect),
                                         'buyer_pay_method' => commonResolvePaymentMethodName(isset($shopeeOrderRow['buyer_pay_meth']) ? $shopeeOrderRow['buyer_pay_meth'] : '', $finance_connect),
                                         'fees' => isset($shopeeOrderRow['fees']) ? (string) $shopeeOrderRow['fees'] : '0.00',
@@ -751,7 +755,8 @@ if ($urbanismOrderFbLink === '' && $urbanismFormName !== '') {
                                         <th width="60">S/N</th>
                                         <th width="200">Action</th>
                                         <th>Order ID</th>
-                                        <th>Date</th>
+                                        <th>Purchase Date</th>
+                                        <th>Received Date</th>
                                         <th>Package</th>
                                         <th>Buyer Payment Method</th>
                                         <th>Charges &amp; Fees</th>
@@ -764,6 +769,7 @@ if ($urbanismOrderFbLink === '' && $urbanismFormName !== '') {
                                         foreach ($orderRows as $orderRow) {
                                             $orderNo = isset($orderRow['order_no']) ? $orderRow['order_no'] : '';
                                             $orderDate = isset($orderRow['order_date']) ? $orderRow['order_date'] : '';
+                                            $receivedDate = isset($orderRow['received_date']) ? $orderRow['received_date'] : '';
                                             $orderPackage = isset($orderRow['package']) ? $orderRow['package'] : '';
                                             $buyerPayMethod = isset($orderRow['buyer_pay_method']) ? $orderRow['buyer_pay_method'] : '';
                                             $orderFees = isset($orderRow['fees']) ? $orderRow['fees'] : '0.00';
@@ -781,6 +787,7 @@ if ($urbanismOrderFbLink === '' && $urbanismFormName !== '') {
                                                 </td>
                                                 <td><?= htmlspecialchars((string) $orderNo, ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td><?= htmlspecialchars((string) $orderDate, ENT_QUOTES, 'UTF-8') ?></td>
+                                                <td><?= htmlspecialchars((string) $receivedDate, ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td><?= htmlspecialchars((string) $orderPackage, ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td><?= htmlspecialchars((string) $buyerPayMethod, ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td><?= commonFormatAmountRm($orderFees) ?></td>
@@ -789,13 +796,13 @@ if ($urbanismOrderFbLink === '' && $urbanismFormName !== '') {
                                         <?php }
                                     } else { ?>
                                         <tr>
-                                            <td colspan="8" class="text-center">No order records found.</td>
+                                            <td colspan="9" class="text-center">No order records found.</td>
                                         </tr>
                                     <?php } ?>
                                 </tbody>
                                 <tfoot>
                                     <tr>
-                                        <th colspan="7" class="text-end">Sub-Total (RM)</th>
+                                        <th colspan="8" class="text-end">Sub-Total (RM)</th>
                                         <th><?= commonFormatAmountRm($sumFinalAmount) ?></th>
                                     </tr>
                                 </tfoot>

@@ -534,6 +534,7 @@ if ($tagCollationResult) {
 // alterColumnToVarcharIfInt($conn, $db_fin, 'shopee_sg_order_request', 'brand', 255);
 if ($conn->select_db($db_cms)) {
     addColumnIfMissing($conn, $db_cms, 'lazada_order_request', 'estimated_received_date', "ALTER TABLE `lazada_order_request` ADD COLUMN `estimated_received_date` DATE DEFAULT NULL AFTER `remark`");
+    addColumnIfMissing($conn, $db_cms, 'lazada_order_request', 'received_date', "ALTER TABLE `lazada_order_request` ADD COLUMN `received_date` DATE DEFAULT NULL AFTER `estimated_received_date`");
     addColumnIfMissing($conn, $db_cms, 'lazada_order_request', 'estimated_received_date_assigned_by', "ALTER TABLE `lazada_order_request` ADD COLUMN `estimated_received_date_assigned_by` VARCHAR(30) DEFAULT NULL AFTER `estimated_received_date`");
     addColumnIfMissing($conn, $db_cms, 'lazada_order_request', 'estimated_received_date_assigned_date', "ALTER TABLE `lazada_order_request` ADD COLUMN `estimated_received_date_assigned_date` DATE DEFAULT NULL AFTER `estimated_received_date_assigned_by`");
     addColumnIfMissing($conn, $db_cms, 'lazada_order_request', 'estimated_received_date_assigned_time', "ALTER TABLE `lazada_order_request` ADD COLUMN `estimated_received_date_assigned_time` TIME DEFAULT NULL AFTER `estimated_received_date_assigned_date`");
@@ -543,16 +544,19 @@ if ($conn->select_db($db_cms)) {
 
 if ($conn->select_db($db_fin)) {
     addColumnIfMissing($conn, $db_fin, 'facebook_order_request', 'estimated_received_date', "ALTER TABLE `facebook_order_request` ADD COLUMN `estimated_received_date` DATE DEFAULT NULL AFTER `remark`");
+    addColumnIfMissing($conn, $db_fin, 'facebook_order_request', 'received_date', "ALTER TABLE `facebook_order_request` ADD COLUMN `received_date` DATE DEFAULT NULL AFTER `estimated_received_date`");
     addColumnIfMissing($conn, $db_fin, 'facebook_order_request', 'estimated_received_date_assigned_by', "ALTER TABLE `facebook_order_request` ADD COLUMN `estimated_received_date_assigned_by` VARCHAR(30) DEFAULT NULL AFTER `estimated_received_date`");
     addColumnIfMissing($conn, $db_fin, 'facebook_order_request', 'estimated_received_date_assigned_date', "ALTER TABLE `facebook_order_request` ADD COLUMN `estimated_received_date_assigned_date` DATE DEFAULT NULL AFTER `estimated_received_date_assigned_by`");
     addColumnIfMissing($conn, $db_fin, 'facebook_order_request', 'estimated_received_date_assigned_time', "ALTER TABLE `facebook_order_request` ADD COLUMN `estimated_received_date_assigned_time` TIME DEFAULT NULL AFTER `estimated_received_date_assigned_date`");
 
     addColumnIfMissing($conn, $db_fin, 'website_order_request', 'estimated_received_date', "ALTER TABLE `website_order_request` ADD COLUMN `estimated_received_date` DATE DEFAULT NULL AFTER `remark`");
+    addColumnIfMissing($conn, $db_fin, 'website_order_request', 'received_date', "ALTER TABLE `website_order_request` ADD COLUMN `received_date` DATE DEFAULT NULL AFTER `estimated_received_date`");
     addColumnIfMissing($conn, $db_fin, 'website_order_request', 'estimated_received_date_assigned_by', "ALTER TABLE `website_order_request` ADD COLUMN `estimated_received_date_assigned_by` VARCHAR(30) DEFAULT NULL AFTER `estimated_received_date`");
     addColumnIfMissing($conn, $db_fin, 'website_order_request', 'estimated_received_date_assigned_date', "ALTER TABLE `website_order_request` ADD COLUMN `estimated_received_date_assigned_date` DATE DEFAULT NULL AFTER `estimated_received_date_assigned_by`");
     addColumnIfMissing($conn, $db_fin, 'website_order_request', 'estimated_received_date_assigned_time', "ALTER TABLE `website_order_request` ADD COLUMN `estimated_received_date_assigned_time` TIME DEFAULT NULL AFTER `estimated_received_date_assigned_date`");
 
     addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'estimated_received_date', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `estimated_received_date` DATE DEFAULT NULL AFTER `remark`");
+    addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'received_date', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `received_date` DATE DEFAULT NULL AFTER `estimated_received_date`");
     addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'estimated_received_date_assigned_by', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `estimated_received_date_assigned_by` VARCHAR(30) DEFAULT NULL AFTER `estimated_received_date`");
     addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'estimated_received_date_assigned_date', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `estimated_received_date_assigned_date` DATE DEFAULT NULL AFTER `estimated_received_date_assigned_by`");
     addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'estimated_received_date_assigned_time', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `estimated_received_date_assigned_time` TIME DEFAULT NULL AFTER `estimated_received_date_assigned_date`");

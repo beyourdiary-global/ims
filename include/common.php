@@ -4228,6 +4228,35 @@ if (!function_exists('validateEstimatedReceivedDate')) {
     }
 }
 
+if (!function_exists('validateReceivedDate')) {
+    function validateReceivedDate($date)
+    {
+        $date = trim((string) $date);
+        $result = array(
+            'valid' => false,
+            'message' => '',
+            'normalized_date' => '',
+        );
+
+        if ($date === '') {
+            $result['message'] = 'Received Date is required.';
+            return $result;
+        }
+
+        $parsed = DateTimeImmutable::createFromFormat('Y-m-d', $date);
+        $errors = DateTimeImmutable::getLastErrors();
+        $hasParseErrors = is_array($errors) && (($errors['warning_count'] ?? 0) > 0 || ($errors['error_count'] ?? 0) > 0);
+        if (!($parsed instanceof DateTimeImmutable) || $hasParseErrors || $parsed->format('Y-m-d') !== $date) {
+            $result['message'] = 'Received Date is invalid.';
+            return $result;
+        }
+
+        $result['valid'] = true;
+        $result['normalized_date'] = $parsed->format('Y-m-d');
+        return $result;
+    }
+}
+
 if (!function_exists('shopeeOmsParseEstimatedDateBaseDate')) {
     function shopeeOmsParseEstimatedDateBaseDate($value)
     {
@@ -8274,6 +8303,268 @@ if (!function_exists('shopeeOmsAssignEstimatedReceivedDate')) {
             'old_status' => $currentStatus,
             'new_status' => $currentStatus,
         );
+    }
+}
+
+if (!function_exists('shopeeOmsMoveToWafcWithReceivedDate')) {
+    function shopeeOmsMoveToWafcWithReceivedDate($cmsConnect, $financeConnect, $orderId, $date, $options = array())
+    {
+        $options = is_array($options) ? $options : array();
+        $validation = validateReceivedDate($date);
+        if (!$validation['valid']) {
+            return array(
+                'success' => false,
+                'message' => $validation['message'],
+            );
+        }
+
+        $resolvedSource = isset($options['platform']) ? $options['platform'] : (isset($options['table_name']) ? $options['table_name'] : 'shopee');
+        $sourceConfig = shopeeOmsResolveOrderSourceConfig($resolvedSource, 'shopee');
+        $orderConnect = shopeeOmsGetOrderSourceDbConnection($cmsConnect, $financeConnect, $sourceConfig);
+        $tableName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
+        $dbName = isset($sourceConfig['db_name']) ? (string) $sourceConfig['db_name'] : dbFinance;
+
+        if (!shopeeOmsTableHasColumn($orderConnect, $dbName, $tableName, 'received_date')) {
+            return array(
+                'success' => false,
+                'message' => 'Received Date column is not available yet. Please run insert_table.php first.',
+            );
+        }
+
+        $orderRow = shopeeOmsLoadOrder($orderConnect, $orderId, $sourceConfig);
+        if (empty($orderRow)) {
+            return array(
+                'success' => false,
+                'message' => 'Order not found.',
+            );
+        }
+
+        $currentStatus = shopeeOmsNormalizeStatusCode(isset($orderRow['order_status']) ? $orderRow['order_status'] : '');
+        if ($currentStatus !== 'PR') {
+            return array(
+                'success' => false,
+                'message' => 'Only Parcel Received orders can be moved to Waiting Admin Final Check with a Received Date.',
+            );
+        }
+
+        $fieldUpdates = isset($options['field_updates']) && is_array($options['field_updates']) ? $options['field_updates'] : array();
+        $fieldUpdates['received_date'] = $validation['normalized_date'];
+        $options['field_updates'] = $fieldUpdates;
+        $options['remark'] = 'Moved to Waiting Admin Final Check with received date ' . $validation['normalized_date'] . '.';
+        $options['skip_permission'] = !isset($options['skip_permission']) ? true : !empty($options['skip_permission']);
+        $options['allow_auto_follow_up'] = false;
+        $options['platform'] = isset($sourceConfig['platform']) ? (string) $sourceConfig['platform'] : 'shopee';
+
+        $result = shopeeOmsExecuteTransition($cmsConnect, $financeConnect, $orderId, 'WAFC', $options);
+        if (!empty($result['success'])) {
+            $result['date'] = $validation['normalized_date'];
+        }
+
+        return $result;
+    }
+}
+
+if (!function_exists('shopeeOmsHandleMoveToWafcWithReceivedDatePost')) {
+    function shopeeOmsHandleMoveToWafcWithReceivedDatePost($cmsConnect, $financeConnect, $options = array())
+    {
+        $options = is_array($options) ? $options : array();
+        $buttonName = isset($options['button_name']) && trim((string) $options['button_name']) !== '' ? trim((string) $options['button_name']) : 'move_to_wafc_with_received_date_btn';
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !isset($_POST[$buttonName])) {
+            return false;
+        }
+
+        $redirectUrl = isset($options['redirect_url']) && trim((string) $options['redirect_url']) !== ''
+            ? (string) $options['redirect_url']
+            : (string) ($_SERVER['REQUEST_URI'] ?? '');
+        $csrfFieldName = isset($options['csrf_field_name']) && trim((string) $options['csrf_field_name']) !== '' ? trim((string) $options['csrf_field_name']) : 'csrf_token';
+        $csrfSessionKey = isset($options['csrf_session_key']) && trim((string) $options['csrf_session_key']) !== '' ? trim((string) $options['csrf_session_key']) : 'csrf_token';
+        $submittedToken = isset($_POST[$csrfFieldName]) ? (string) $_POST[$csrfFieldName] : '';
+        $sessionToken = isset($_SESSION[$csrfSessionKey]) ? (string) $_SESSION[$csrfSessionKey] : '';
+
+        if (!hash_equals($sessionToken, $submittedToken)) {
+            echo '<script>alert(' . json_encode('Invalid session token. Please refresh the page and try again.', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . '); location.replace(' . json_encode($redirectUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ');</script>';
+            exit;
+        }
+
+        $orderIdField = isset($options['order_id_field']) && trim((string) $options['order_id_field']) !== '' ? trim((string) $options['order_id_field']) : 'force_wafc_id';
+        $dateField = isset($options['date_field']) && trim((string) $options['date_field']) !== '' ? trim((string) $options['date_field']) : 'received_date';
+        $orderId = isset($_POST[$orderIdField]) ? (int) $_POST[$orderIdField] : 0;
+        $receivedDate = function_exists('postSpaceFilter') ? postSpaceFilter($dateField) : (isset($_POST[$dateField]) ? trim((string) $_POST[$dateField]) : '');
+        $actorUserId = isset($options['actor_user_id']) ? (string) $options['actor_user_id'] : (defined('USER_ID') ? (string) USER_ID : '');
+        $actorUserGroupId = isset($options['actor_user_group_id']) ? (int) $options['actor_user_group_id'] : (defined('USER_GROUP') ? (int) USER_GROUP : 0);
+        $sourcePage = isset($options['source_page']) ? (string) $options['source_page'] : 'Shopee OMS';
+        $platform = isset($options['platform']) ? (string) $options['platform'] : 'shopee';
+
+        $wafcResult = shopeeOmsMoveToWafcWithReceivedDate($cmsConnect, $financeConnect, $orderId, $receivedDate, array(
+            'actor_user_id' => $actorUserId,
+            'actor_user_group_id' => $actorUserGroupId,
+            'source_page' => $sourcePage,
+            'action' => 'manual_force_wafc',
+            'skip_permission' => true,
+            'platform' => $platform,
+        ));
+
+        if (!empty($wafcResult['success'])) {
+            $oldStatus = isset($wafcResult['old_status']) ? (string) $wafcResult['old_status'] : 'PR';
+            $newStatus = isset($wafcResult['new_status']) ? (string) $wafcResult['new_status'] : 'WAFC';
+            $savedReceivedDate = isset($wafcResult['date']) ? (string) $wafcResult['date'] : (string) $receivedDate;
+            $sourceConfig = shopeeOmsResolveOrderSourceConfig($platform, 'shopee');
+            $queryTable = isset($options['query_table']) && trim((string) $options['query_table']) !== ''
+                ? (string) $options['query_table']
+                : (isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ);
+            $auditConnect = isset($options['audit_connect']) && $options['audit_connect'] instanceof mysqli ? $options['audit_connect'] : $cmsConnect;
+            $platformLabel = isset($sourceConfig['platform']) ? ucfirst((string) $sourceConfig['platform']) : 'Shopee';
+            $actorUserName = defined('USER_NAME') ? (string) USER_NAME : 'System User';
+            $logDate = isset($options['cdate']) ? (string) $options['cdate'] : (isset($GLOBALS['cdate']) ? (string) $GLOBALS['cdate'] : date('Y-m-d'));
+            $logTime = isset($options['ctime']) ? (string) $options['ctime'] : (isset($GLOBALS['ctime']) ? (string) $GLOBALS['ctime'] : date('H:i:s'));
+
+            audit_log(array(
+                'log_act' => 'edit',
+                'page' => $sourcePage,
+                'query_rec' => $orderId,
+                'query_table' => $queryTable,
+                'oldval' => 'order_status: ' . $oldStatus,
+                'changes' => 'order_status: ' . $oldStatus . ' -> ' . $newStatus . ', received_date: ' . $savedReceivedDate,
+                'uid' => $actorUserId,
+                'act_msg' => $actorUserName . " moved " . $platformLabel . " order [ <b>ID = " . $orderId . "</b> ] from <b>" . $oldStatus . "</b> to <b>" . $newStatus . "</b> with Received Date <b>" . $savedReceivedDate . "</b>.",
+                'cdate' => $logDate,
+                'ctime' => $logTime,
+                'cby' => $actorUserId,
+                'connect' => $auditConnect,
+            ));
+        }
+
+        echo '<script>alert(' . json_encode((string) (isset($wafcResult['message']) ? $wafcResult['message'] : 'Unable to move order to WAFC.'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . '); location.replace(' . json_encode($redirectUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ');</script>';
+        exit;
+    }
+}
+
+if (!function_exists('shopeeOmsRenderReceivedDateModal')) {
+    function shopeeOmsRenderReceivedDateModal($config = array())
+    {
+        $config = is_array($config) ? $config : array();
+        $modalId = isset($config['modal_id']) && trim((string) $config['modal_id']) !== '' ? trim((string) $config['modal_id']) : 'receivedDateModal';
+        $titleId = isset($config['title_id']) && trim((string) $config['title_id']) !== '' ? trim((string) $config['title_id']) : 'receivedDateTitle';
+        $orderIdInputId = isset($config['order_id_input_id']) && trim((string) $config['order_id_input_id']) !== '' ? trim((string) $config['order_id_input_id']) : 'received_date_order_id';
+        $dateInputId = isset($config['date_input_id']) && trim((string) $config['date_input_id']) !== '' ? trim((string) $config['date_input_id']) : 'received_date';
+        $formAction = isset($config['form_action']) ? (string) $config['form_action'] : '';
+        $csrfToken = isset($config['csrf_token']) ? (string) $config['csrf_token'] : (isset($_SESSION['csrf_token']) ? (string) $_SESSION['csrf_token'] : '');
+        $buttonName = isset($config['button_name']) && trim((string) $config['button_name']) !== '' ? trim((string) $config['button_name']) : 'move_to_wafc_with_received_date_btn';
+        $csrfFieldName = isset($config['csrf_field_name']) && trim((string) $config['csrf_field_name']) !== '' ? trim((string) $config['csrf_field_name']) : 'csrf_token';
+        $orderIdField = isset($config['order_id_field']) && trim((string) $config['order_id_field']) !== '' ? trim((string) $config['order_id_field']) : 'force_wafc_id';
+        $dateField = isset($config['date_field']) && trim((string) $config['date_field']) !== '' ? trim((string) $config['date_field']) : 'received_date';
+        $heading = isset($config['heading']) && trim((string) $config['heading']) !== '' ? trim((string) $config['heading']) : 'Assign Received Date';
+        $fieldLabel = isset($config['field_label']) && trim((string) $config['field_label']) !== '' ? trim((string) $config['field_label']) : 'Received Date';
+        $cancelLabel = isset($config['cancel_label']) && trim((string) $config['cancel_label']) !== '' ? trim((string) $config['cancel_label']) : 'Cancel';
+        $submitLabel = isset($config['submit_label']) && trim((string) $config['submit_label']) !== '' ? trim((string) $config['submit_label']) : 'Save & Move to Waiting Admin Final Check';
+        $wrapperClass = isset($config['wrapper_class']) && trim((string) $config['wrapper_class']) !== '' ? trim((string) $config['wrapper_class']) : 'estimated-date-modal';
+        $dialogClass = isset($config['dialog_class']) && trim((string) $config['dialog_class']) !== '' ? trim((string) $config['dialog_class']) : 'estimated-date-modal__dialog';
+        $actionButtonClass = isset($config['action_button_class']) && trim((string) $config['action_button_class']) !== '' ? trim((string) $config['action_button_class']) : 'estimated-date-modal__action-btn';
+        $closeButtonClass = isset($config['close_button_class']) && trim((string) $config['close_button_class']) !== '' ? trim((string) $config['close_button_class']) : 'estimated-date-modal__close-btn';
+        $wrapperAttributes = isset($config['wrapper_attributes']) && trim((string) $config['wrapper_attributes']) !== '' ? ' ' . trim((string) $config['wrapper_attributes']) : '';
+        $extraHiddenFields = isset($config['extra_hidden_fields']) && is_array($config['extra_hidden_fields']) ? $config['extra_hidden_fields'] : array();
+        ?>
+        <div id="<?= htmlspecialchars($modalId, ENT_QUOTES, 'UTF-8') ?>" class="<?= htmlspecialchars($wrapperClass, ENT_QUOTES, 'UTF-8') ?>" data-received-date-modal="1"<?= $wrapperAttributes ?>>
+            <div class="<?= htmlspecialchars($dialogClass, ENT_QUOTES, 'UTF-8') ?>">
+                <form method="post" action="<?= htmlspecialchars($formAction, ENT_QUOTES, 'UTF-8') ?>">
+                    <div class="d-flex justify-content-between align-items-start mb-3">
+                        <h5 class="mb-0" id="<?= htmlspecialchars($titleId, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($heading, ENT_QUOTES, 'UTF-8') ?></h5>
+                        <button type="button" class="btn btn-sm btn-light px-2 <?= htmlspecialchars($closeButtonClass, ENT_QUOTES, 'UTF-8') ?>" data-received-date-modal-close="1" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                    <input type="hidden" name="<?= htmlspecialchars($csrfFieldName, ENT_QUOTES, 'UTF-8') ?>" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="<?= htmlspecialchars($buttonName, ENT_QUOTES, 'UTF-8') ?>" value="1">
+                    <input type="hidden" name="<?= htmlspecialchars($orderIdField, ENT_QUOTES, 'UTF-8') ?>" id="<?= htmlspecialchars($orderIdInputId, ENT_QUOTES, 'UTF-8') ?>" value="">
+                    <?php foreach ($extraHiddenFields as $fieldName => $fieldValue) { ?>
+                        <input type="hidden" name="<?= htmlspecialchars((string) $fieldName, ENT_QUOTES, 'UTF-8') ?>" value="<?= htmlspecialchars((string) $fieldValue, ENT_QUOTES, 'UTF-8') ?>">
+                    <?php } ?>
+                    <div class="mb-3">
+                        <label class="form-label" for="<?= htmlspecialchars($dateInputId, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($fieldLabel, ENT_QUOTES, 'UTF-8') ?></label>
+                        <input type="date" class="form-control" name="<?= htmlspecialchars($dateField, ENT_QUOTES, 'UTF-8') ?>" id="<?= htmlspecialchars($dateInputId, ENT_QUOTES, 'UTF-8') ?>" required>
+                    </div>
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-outline-secondary <?= htmlspecialchars($actionButtonClass, ENT_QUOTES, 'UTF-8') ?>" data-received-date-modal-close="1"><?= htmlspecialchars($cancelLabel, ENT_QUOTES, 'UTF-8') ?></button>
+                        <button type="submit" class="btn btn-primary <?= htmlspecialchars($actionButtonClass, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($submitLabel, ENT_QUOTES, 'UTF-8') ?></button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        <?php
+    }
+}
+
+if (!function_exists('shopeeOmsRenderReceivedDateModalScript')) {
+    function shopeeOmsRenderReceivedDateModalScript($config = array())
+    {
+        $config = is_array($config) ? $config : array();
+        $modalId = isset($config['modal_id']) && trim((string) $config['modal_id']) !== '' ? trim((string) $config['modal_id']) : 'receivedDateModal';
+        $titleId = isset($config['title_id']) && trim((string) $config['title_id']) !== '' ? trim((string) $config['title_id']) : 'receivedDateTitle';
+        $orderIdInputId = isset($config['order_id_input_id']) && trim((string) $config['order_id_input_id']) !== '' ? trim((string) $config['order_id_input_id']) : 'received_date_order_id';
+        $dateInputId = isset($config['date_input_id']) && trim((string) $config['date_input_id']) !== '' ? trim((string) $config['date_input_id']) : 'received_date';
+        $triggerSelector = isset($config['trigger_selector']) && trim((string) $config['trigger_selector']) !== '' ? trim((string) $config['trigger_selector']) : '.btn-open-received-date-modal';
+        $titlePrefix = isset($config['title_prefix']) ? (string) $config['title_prefix'] : 'Assign Received Date for ';
+        $defaultTitle = isset($config['default_title']) ? (string) $config['default_title'] : 'Assign Received Date';
+        ?>
+        <script>
+            (function () {
+                var modalId = <?= json_encode($modalId, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+                var titleId = <?= json_encode($titleId, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+                var orderIdInputId = <?= json_encode($orderIdInputId, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+                var dateInputId = <?= json_encode($dateInputId, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+                var triggerSelector = <?= json_encode($triggerSelector, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+                var titlePrefix = <?= json_encode($titlePrefix, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+                var defaultTitle = <?= json_encode($defaultTitle, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+
+                function getModal() {
+                    return document.getElementById(modalId);
+                }
+
+                function openModal(orderId, orderCode) {
+                    var modal = getModal();
+                    var title = document.getElementById(titleId);
+                    var orderIdInput = document.getElementById(orderIdInputId);
+                    var dateInput = document.getElementById(dateInputId);
+                    if (!modal || !title || !orderIdInput || !dateInput) {
+                        return;
+                    }
+
+                    title.textContent = orderCode ? (titlePrefix + orderCode) : defaultTitle;
+                    orderIdInput.value = orderId || '';
+                    dateInput.value = '';
+                    modal.classList.add('is-open');
+                }
+
+                function closeModal() {
+                    var modal = getModal();
+                    if (modal) {
+                        modal.classList.remove('is-open');
+                    }
+                }
+
+                document.addEventListener('click', function (event) {
+                    var trigger = event.target.closest(triggerSelector);
+                    if (trigger) {
+                        openModal(trigger.getAttribute('data-order-id') || '', trigger.getAttribute('data-order-code') || '');
+                        return;
+                    }
+
+                    var modal = getModal();
+                    if (!modal) {
+                        return;
+                    }
+
+                    if (event.target === modal) {
+                        closeModal();
+                        return;
+                    }
+
+                    var closeBtn = event.target.closest('[data-received-date-modal-close="1"]');
+                    if (closeBtn && modal.contains(closeBtn)) {
+                        closeModal();
+                    }
+                });
+            })();
+        </script>
+        <?php
     }
 }
 

@@ -117,7 +117,7 @@ if (isset($_GET['complete_id'])) {
     exit;
 }
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['force_wafc_id'])) {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['force_wafc_id']) && !isset($_POST['move_to_wafc_with_received_date_btn'])) {
     $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
         echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
@@ -138,6 +138,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['force_wafc_id
     echo "<script>alert('" . addslashes(isset($wafcResult['message']) ? $wafcResult['message'] : 'Unable to move order to WAFC.') . "'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
     exit;
 }
+
+shopeeOmsHandleMoveToWafcWithReceivedDatePost($connect, $finance_connect, array(
+    'redirect_url' => $currentTableRedirect,
+    'source_page' => $pageTitle,
+    'platform' => 'lazada',
+    'actor_user_id' => USER_ID,
+    'actor_user_group_id' => USER_GROUP,
+    'audit_connect' => $connect,
+    'query_table' => LAZADA_ORDER_REQ,
+));
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['return_id'])) {
     $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
@@ -217,6 +227,7 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
                 $(this).data('maxDate')
             );
         });
+
     });
 </script>
 
@@ -415,11 +426,12 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
                                     <?php } ?>
                                     <?php if (in_array($statusCode, array('SP', 'WAERD', 'WR', 'PD', 'PR', 'WAFC', 'V', 'C'), true)) { ?>
                                         <?php if ($statusCode === 'PR') { ?>
-                                            <form method="post" class="d-inline" onsubmit="return confirm('Move this order to Waiting Admin Final Check now without waiting 14 days?')">
-                                                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
-                                                <input type="hidden" name="force_wafc_id" value="<?= (int) $row['id'] ?>">
-                                                <button type="submit" class="btn btn-sm btn-rounded btn-info" title="Move to WAFC Now"><i class="fas fa-forward"></i></button>
-                                            </form>
+                                            <button
+                                                type="button"
+                                                class="btn btn-sm btn-rounded btn-info btn-open-received-date-modal"
+                                                data-order-id="<?= (int) $row['id'] ?>"
+                                                data-order-code="<?= htmlspecialchars((string) (isset($row['oder_number']) ? $row['oder_number'] : ('Lazada Order #' . (int) $row['id'])), ENT_QUOTES, 'UTF-8') ?>"
+                                                title="Move to WAFC Now"><i class="fas fa-forward"></i></button>
                                         <?php } ?>
                                         <form method="post" class="d-inline" onsubmit="return confirm('Mark this order as Return?')">
                                             <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
@@ -518,6 +530,7 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
             </form>
         </div>
     </div>
+    <?php shopeeOmsRenderReceivedDateModal(array('wrapper_attributes' => 'aria-hidden="true"')); ?>
 
 </body>
 <script>
@@ -537,5 +550,6 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
     */
     datatableAlignment('lazada_order_req');
 </script>
+<?php shopeeOmsRenderReceivedDateModalScript(); ?>
 
 </html>
