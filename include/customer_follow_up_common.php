@@ -1216,6 +1216,128 @@ if (!function_exists('customerFollowUpUpdateCaseRecord')) {
     }
 }
 
+if (!function_exists('customerFollowUpRoundSupportsApprovalComment')) {
+    function customerFollowUpRoundSupportsApprovalComment($connect)
+    {
+        return $connect instanceof mysqli
+            && function_exists('shopeeOmsTableHasColumn')
+            && defined('dbname')
+            && shopeeOmsTableHasColumn($connect, dbname, CUSTOMER_FOLLOW_UP_ROUND, 'approval_comment');
+    }
+}
+
+if (!function_exists('customerFollowUpSanitizeApprovalComment')) {
+    function customerFollowUpSanitizeApprovalComment($comment)
+    {
+        $comment = str_replace(array("\r\n", "\r"), "\n", (string) $comment);
+        $comment = preg_replace('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]+/', '', $comment);
+        $comment = trim((string) $comment);
+
+        if ($comment === '') {
+            return '';
+        }
+
+        if (function_exists('mb_substr')) {
+            return mb_substr($comment, 0, 5000);
+        }
+
+        return substr($comment, 0, 5000);
+    }
+}
+
+if (!function_exists('customerFollowUpBuildApprovalTransitionRemark')) {
+    function customerFollowUpBuildApprovalTransitionRemark($roundRow = array(), $approvalComment = '')
+    {
+        $approvalComment = customerFollowUpSanitizeApprovalComment($approvalComment);
+
+        $roundNo = max(1, (int) (isset($roundRow['round_no']) ? $roundRow['round_no'] : 1));
+        $approvedDate = trim((string) (isset($roundRow['approved_date']) ? $roundRow['approved_date'] : ''));
+        $approvedTime = trim((string) (isset($roundRow['approved_time']) ? $roundRow['approved_time'] : ''));
+        $approvedDateTime = trim($approvedDate . ' ' . $approvedTime);
+        if ($approvedDateTime === '') {
+            $approvedDateTime = trim((string) customerFollowUpNowDate() . ' ' . (string) customerFollowUpNowTime());
+        }
+
+        $remark = 'Follow-up round ' . $roundNo . ' approved on ' . $approvedDateTime . '.';
+        $remark .= "\nComment: " . ($approvalComment !== '' ? $approvalComment : '-');
+
+        return $remark;
+    }
+}
+
+if (!function_exists('customerFollowUpUpdateOrderApprovalTransitionRemark')) {
+    function customerFollowUpUpdateOrderApprovalTransitionRemark($connect, $financeConnect, $followUpRow, $roundRow = array(), $approvalComment = '')
+    {
+        if (!($connect instanceof mysqli) || !($financeConnect instanceof mysqli) || !defined('ORDER_STATUS_TRANSITION_LOG')) {
+            return false;
+        }
+
+        $orderId = isset($followUpRow['order_id']) ? (int) $followUpRow['order_id'] : 0;
+        $platform = customerFollowUpNormalizePlatform(isset($followUpRow['platform']) ? $followUpRow['platform'] : '');
+        if ($orderId <= 0 || $platform === '') {
+            return false;
+        }
+
+        $whereParts = array(
+            "`order_id` = " . $orderId,
+            "`status` = 'A'",
+            "`to_status` = 'PR'",
+            "`source_page` = 'Customer Follow-Up'",
+        );
+
+        $platformCondition = function_exists('shopeeOmsBuildLogPlatformCondition')
+            ? trim((string) shopeeOmsBuildLogPlatformCondition($financeConnect, $platform, 'l'))
+            : '';
+        if ($platformCondition !== '') {
+            $whereParts[] = $platformCondition;
+        }
+
+        $lookupSql = "SELECT `l`.`id`, `l`.`remark`
+                FROM `" . ORDER_STATUS_TRANSITION_LOG . "` l
+                WHERE " . implode(' AND ', $whereParts) . "
+                ORDER BY `l`.`transition_at` DESC, `l`.`id` DESC
+                LIMIT 1";
+        $result = mysqli_query($financeConnect, $lookupSql);
+
+        if (!$result || mysqli_num_rows($result) === 0) {
+            $fallbackWhereParts = array(
+                "`l`.`order_id` = " . $orderId,
+                "`l`.`status` = 'A'",
+            );
+            if ($platformCondition !== '') {
+                $fallbackWhereParts[] = $platformCondition;
+            }
+
+            $fallbackSql = "SELECT `l`.`id`, `l`.`remark`
+                    FROM `" . ORDER_STATUS_TRANSITION_LOG . "` l
+                    WHERE " . implode(' AND ', $fallbackWhereParts) . "
+                    ORDER BY `l`.`transition_at` DESC, `l`.`id` DESC
+                    LIMIT 1";
+            $result = mysqli_query($financeConnect, $fallbackSql);
+        }
+
+        if (!$result || mysqli_num_rows($result) === 0) {
+            return false;
+        }
+
+        $historyRow = mysqli_fetch_assoc($result);
+        $historyId = isset($historyRow['id']) ? (int) $historyRow['id'] : 0;
+        if ($historyId <= 0) {
+            return false;
+        }
+
+        $approvalRemark = customerFollowUpBuildApprovalTransitionRemark($roundRow, $approvalComment);
+        $existingRemark = trim((string) (isset($historyRow['remark']) ? $historyRow['remark'] : ''));
+        $updatedRemark = $existingRemark !== '' ? ($existingRemark . "\n" . $approvalRemark) : $approvalRemark;
+        $updateSql = "UPDATE `" . ORDER_STATUS_TRANSITION_LOG . "`
+                SET `remark` = '" . mysqli_real_escape_string($financeConnect, $updatedRemark) . "'
+                WHERE `id` = " . $historyId . "
+                LIMIT 1";
+
+        return mysqli_query($financeConnect, $updateSql) ? true : false;
+    }
+}
+
 if (!function_exists('customerFollowUpBuildReadableLogMessage')) {
     function customerFollowUpBuildReadableLogMessage($connect, $followUpRow, $roundRow, $actionType, $actionLabel, $newValue = array(), $remark = '', $actorUserId = '', $actionDate = '', $actionTime = '')
     {
@@ -1325,6 +1447,9 @@ if (!function_exists('customerFollowUpBuildReadableLogMessage')) {
 
         if (strtolower($actionType) === 'reject_follow_up') {
             $appendLine($detailLines, 'Reject Reason', $rejectReason);
+        }
+        if (strtolower($actionType) === 'approve_follow_up') {
+            $appendLine($detailLines, 'Comment', $remark);
         }
         if (strtolower($actionType) === 'request_postponement') {
             $appendLine($detailLines, 'Postpone Reason', $postponeReason);
@@ -2086,12 +2211,13 @@ if (!function_exists('customerFollowUpSubmitRound')) {
 }
 
 if (!function_exists('customerFollowUpApproveRound')) {
-    function customerFollowUpApproveRound($connect, $followUpId, $actorUserId, $actorUserGroupId)
+    function customerFollowUpApproveRound($connect, $followUpId, $approvalComment, $actorUserId, $actorUserGroupId, $financeConnect = null)
     {
         if (!customerFollowUpUserHasPinAccess($connect, $actorUserId, 11)) {
             return array('success' => false, 'message' => 'You do not have approval permission for Customer Follow-Up.');
         }
 
+        $approvalComment = customerFollowUpSanitizeApprovalComment($approvalComment);
         $followUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
         $roundRow = customerFollowUpFetchCurrentRound($connect, $followUpId);
         if (empty($followUpRow) || empty($roundRow)) {
@@ -2107,10 +2233,17 @@ if (!function_exists('customerFollowUpApproveRound')) {
             return array('success' => false, 'message' => 'Only Pending Approval round can be approved.');
         }
 
-        mysqli_begin_transaction($connect);
+        $transactionConnections = array($connect);
+        if ($financeConnect instanceof mysqli) {
+            $transactionConnections[] = $financeConnect;
+        }
+
+        if (!customerFollowUpBeginTransactions($transactionConnections)) {
+            return array('success' => false, 'message' => 'Unable to start approval transaction.');
+        }
 
         $oldRoundState = $roundRow;
-        $roundUpdated = customerFollowUpUpdateRoundRecord($connect, (int) $roundRow['id'], array(
+        $roundUpdateFields = array(
             'approval_status' => 'approved',
             'round_status' => 'Approved',
             'approved_by' => (string) $actorUserId,
@@ -2119,7 +2252,12 @@ if (!function_exists('customerFollowUpApproveRound')) {
             'update_by' => (string) $actorUserId,
             'update_date' => customerFollowUpNowDate(),
             'update_time' => customerFollowUpNowTime(),
-        ));
+        );
+        if (customerFollowUpRoundSupportsApprovalComment($connect)) {
+            $roundUpdateFields['approval_comment'] = $approvalComment !== '' ? $approvalComment : null;
+        }
+
+        $roundUpdated = customerFollowUpUpdateRoundRecord($connect, (int) $roundRow['id'], $roundUpdateFields);
         $caseUpdated = customerFollowUpUpdateCaseRecord($connect, $followUpId, array(
             'current_status' => 'Approved',
             'update_by' => (string) $actorUserId,
@@ -2128,7 +2266,7 @@ if (!function_exists('customerFollowUpApproveRound')) {
         ));
 
         if (!$roundUpdated || !$caseUpdated) {
-            mysqli_rollback($connect);
+            customerFollowUpRollbackTransactions($transactionConnections);
             return array('success' => false, 'message' => 'Failed to approve follow-up.');
         }
 
@@ -2141,8 +2279,18 @@ if (!function_exists('customerFollowUpApproveRound')) {
             'approve_follow_up',
             'Approved follow-up',
             $oldRoundState,
-            array('approval_status' => 'approved', 'round_status' => 'Approved')
+            array(
+                'approval_status' => 'approved',
+                'round_status' => 'Approved',
+                'approval_comment' => $approvalComment,
+            ),
+            $approvalComment
         );
+
+        if ($financeConnect instanceof mysqli && !customerFollowUpUpdateOrderApprovalTransitionRemark($connect, $financeConnect, $updatedFollowUpRow, $updatedRoundRow, $approvalComment)) {
+            customerFollowUpRollbackTransactions($transactionConnections);
+            return array('success' => false, 'message' => 'Failed to update the order status transition history remark.');
+        }
 
         customerFollowUpCreateNotificationRow($connect, array(
             'follow_up_id' => $followUpId,
@@ -2154,7 +2302,11 @@ if (!function_exists('customerFollowUpApproveRound')) {
             'message' => 'Follow-up round ' . (int) $updatedRoundRow['round_no'] . ' for order ' . trim((string) (isset($updatedFollowUpRow['order_no']) ? $updatedFollowUpRow['order_no'] : '')) . ' has been approved.',
         ));
 
-        mysqli_commit($connect);
+        if (!customerFollowUpCommitTransactions($transactionConnections)) {
+            customerFollowUpRollbackTransactions($transactionConnections);
+            return array('success' => false, 'message' => 'Failed to finalize follow-up approval.');
+        }
+
         return array('success' => true, 'message' => 'Follow-up approved successfully.');
     }
 }
@@ -3902,7 +4054,7 @@ if (!function_exists('customerFollowUpSubmitReceivedOrderAndTransition')) {
         $approvalStatus = $customerType === 'return' ? 'not_required' : 'pending';
         $roundStatus = $customerType === 'return' ? 'Approved' : 'Pending Approval';
 
-        $roundUpdated = customerFollowUpUpdateRoundRecord($connect, (int) $roundRow['id'], array(
+        $roundUpdateFields = array(
             'next_follow_up_date' => $nextFollowUpDate,
             'attachment' => isset($uploadResult['path']) ? $uploadResult['path'] : '',
             'message_shortcut_id' => $messageShortcutId,
@@ -3917,7 +4069,12 @@ if (!function_exists('customerFollowUpSubmitReceivedOrderAndTransition')) {
             'update_date' => customerFollowUpNowDate(),
             'update_time' => customerFollowUpNowTime(),
             'round_status' => $roundStatus,
-        ));
+        );
+        if (customerFollowUpRoundSupportsApprovalComment($connect)) {
+            $roundUpdateFields['approval_comment'] = null;
+        }
+
+        $roundUpdated = customerFollowUpUpdateRoundRecord($connect, (int) $roundRow['id'], $roundUpdateFields);
         $caseUpdated = customerFollowUpUpdateCaseRecord($connect, $followUpId, array(
             'current_status' => $roundStatus,
             'contact_no' => $contactNo !== '' ? $contactNo : null,
