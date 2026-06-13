@@ -268,7 +268,7 @@ function insertTableEnsureOrderReportPins($cmsConn)
     if ($cmsConn->query($pinGroupSql)) {
         echo "<p style='color:green;'><strong>Order Report pin setup:</strong> Verified pin groups 155-158 for Shopee Report, Facebook Report, Website Report, and Lazada Report.</p>";
     } else {
-        echo "<p style='color:red;'><strong>Order Report pin setup:</strong> Failed creating pin groups 155-158: " . $cmsConn->error . "</p>";
+        echo "<p style='color:red;'><strong>Order Report pin setup:</strong> Failed creating pin groups 155-158: " . htmlspecialchars($cmsConn->error, ENT_QUOTES, 'UTF-8') . "</p>";
     }
 
     foreach (array(1, 2) as $groupId) {
