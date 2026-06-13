@@ -307,6 +307,50 @@ if (!function_exists('orderReportBuildState')) {
     }
 }
 
+if (!function_exists('orderReportBuildStateFromRequest')) {
+    function orderReportBuildStateFromRequest($fallbackState = array())
+    {
+        $today = new DateTimeImmutable('today');
+        $fallbackDate = isset($fallbackState['report_date']) ? (string) $fallbackState['report_date'] : $today->format('Y-m-d');
+        $fallbackMonth = isset($fallbackState['report_month']) ? (string) $fallbackState['report_month'] : $today->format('Y-m');
+        $fallbackYear = isset($fallbackState['report_year']) ? (string) $fallbackState['report_year'] : $today->format('Y');
+
+        return array(
+            'search_requested' => false,
+            'report_type' => orderReportNormalizeReportType(input('report_type')),
+            'report_date' => orderReportValidateDateValue(input('report_date'), $fallbackDate),
+            'report_month' => orderReportValidateMonthValue(input('report_month'), $fallbackMonth),
+            'report_year' => orderReportValidateYearValue(input('report_year'), $fallbackYear),
+            'filters' => array(
+                'package' => array(),
+                'brand' => array(),
+                'warehouse' => array(),
+                'payment' => array(),
+                'customer_label' => array(),
+                'segmentation' => array(),
+                'level' => array(),
+                'repeat' => array(),
+            ),
+        );
+    }
+}
+
+if (!function_exists('orderReportGetPeriodKeyFromState')) {
+    function orderReportGetPeriodKeyFromState($state)
+    {
+        $reportType = isset($state['report_type']) ? orderReportNormalizeReportType($state['report_type']) : 'daily';
+        if ($reportType === 'monthly') {
+            return trim((string) ($state['report_month'] ?? ''));
+        }
+
+        if ($reportType === 'yearly') {
+            return trim((string) ($state['report_year'] ?? ''));
+        }
+
+        return trim((string) ($state['report_date'] ?? ''));
+    }
+}
+
 if (!function_exists('orderReportBuildDateWhereSql')) {
     function orderReportBuildDateWhereSql($conn, $fieldName, $state)
     {
@@ -1234,75 +1278,64 @@ if (!function_exists('orderReportBuildFilterOptionSetsFromRows')) {
     }
 }
 
-if (!function_exists('orderReportBuildOptionSetsByPeriod')) {
-    function orderReportBuildOptionSetsByPeriod($connect, $financeConnect, $platformConfig, $orderConn, $referenceMaps)
+if (!function_exists('orderReportBuildFilterOptionSetsForState')) {
+    function orderReportBuildFilterOptionSetsForState($connect, $financeConnect, $platformConfig, $orderConn, $referenceMaps, $state)
     {
-        $dateField = isset($platformConfig['date_field']) ? trim((string) $platformConfig['date_field']) : '';
-        if ($dateField === '') {
-            return array();
-        }
+        $dateWhereSql = orderReportBuildDateWhereSql($orderConn, isset($platformConfig['date_field']) ? $platformConfig['date_field'] : '', $state);
+        $rows = orderReportFetchRows($orderConn, orderReportBuildBaseQuery($orderConn, $platformConfig['table'], $dateWhereSql));
 
-        $allRows = orderReportFetchRows(
-            $orderConn,
-            orderReportBuildBaseQuery($orderConn, $platformConfig['table'], '1=1')
+        return orderReportBuildFilterOptionSetsFromRows(
+            $connect,
+            $financeConnect,
+            $platformConfig,
+            $rows,
+            $referenceMaps,
+            $orderConn
         );
+    }
+}
 
-        $groupedRows = array(
-            'daily' => array(),
-            'monthly' => array(),
-            'yearly' => array(),
-        );
-
-        foreach ((array) $allRows as $row) {
-            $dateValue = isset($row[$dateField]) ? trim((string) $row[$dateField]) : '';
-            if ($dateValue === '') {
-                continue;
-            }
-
-            $timestamp = strtotime($dateValue);
-            if ($timestamp === false) {
-                continue;
-            }
-
-            $dailyKey = date('Y-m-d', $timestamp);
-            $monthlyKey = date('Y-m', $timestamp);
-            $yearlyKey = date('Y', $timestamp);
-
-            if (!isset($groupedRows['daily'][$dailyKey])) {
-                $groupedRows['daily'][$dailyKey] = array();
-            }
-            if (!isset($groupedRows['monthly'][$monthlyKey])) {
-                $groupedRows['monthly'][$monthlyKey] = array();
-            }
-            if (!isset($groupedRows['yearly'][$yearlyKey])) {
-                $groupedRows['yearly'][$yearlyKey] = array();
-            }
-
-            $groupedRows['daily'][$dailyKey][] = $row;
-            $groupedRows['monthly'][$monthlyKey][] = $row;
-            $groupedRows['yearly'][$yearlyKey][] = $row;
-        }
-
+if (!function_exists('orderReportBuildOptionSetsByPeriod')) {
+    function orderReportBuildOptionSetsByPeriod($connect, $financeConnect, $platformConfig, $orderConn, $referenceMaps, $state, $currentOptionSets = array())
+    {
         $result = array(
             'daily' => array(),
             'monthly' => array(),
             'yearly' => array(),
         );
 
-        foreach ($groupedRows as $reportType => $periodRowsMap) {
-            foreach ($periodRowsMap as $periodKey => $periodRows) {
-                $result[$reportType][$periodKey] = orderReportBuildFilterOptionSetsFromRows(
-                    $connect,
-                    $financeConnect,
-                    $platformConfig,
-                    $periodRows,
-                    $referenceMaps,
-                    $orderConn
-                );
-            }
+        $periodKey = orderReportGetPeriodKeyFromState($state);
+        if ($periodKey === '') {
+            return $result;
         }
 
+        $reportType = isset($state['report_type']) ? orderReportNormalizeReportType($state['report_type']) : 'daily';
+        if (empty($currentOptionSets)) {
+            $currentOptionSets = orderReportBuildFilterOptionSetsForState(
+                $connect,
+                $financeConnect,
+                $platformConfig,
+                $orderConn,
+                $referenceMaps,
+                $state
+            );
+        }
+
+        $result[$reportType][$periodKey] = $currentOptionSets;
+
         return $result;
+    }
+}
+
+if (!function_exists('orderReportBuildOptionSetPayload')) {
+    function orderReportBuildOptionSetPayload($optionSets)
+    {
+        $payload = array();
+        foreach ((array) $optionSets as $filterKey => $filterOptions) {
+            $payload[$filterKey] = orderReportBuildMultiSelectOptionPayload($filterOptions);
+        }
+
+        return $payload;
     }
 }
 
@@ -1316,10 +1349,26 @@ if (!function_exists('orderReportBuildView')) {
 
         $state = orderReportBuildState($platform);
         $orderConn = orderReportGetDbConnection($connect, $financeConnect, isset($platformConfig['db']) ? $platformConfig['db'] : 'finance');
+        $referenceMaps = orderReportBuildReferenceMaps($connect, $financeConnect);
+
+        if (isset($_GET['order_report_option_sets']) && (string) $_GET['order_report_option_sets'] === '1') {
+            $requestState = orderReportBuildStateFromRequest($state);
+            $requestOptionSets = orderReportBuildFilterOptionSetsForState($connect, $financeConnect, $platformConfig, $orderConn, $referenceMaps, $requestState);
+
+            if (!headers_sent()) {
+                header('Content-Type: application/json; charset=UTF-8');
+            }
+
+            echo json_encode(array(
+                'report_type' => isset($requestState['report_type']) ? $requestState['report_type'] : 'daily',
+                'period_key' => orderReportGetPeriodKeyFromState($requestState),
+                'option_sets' => orderReportBuildOptionSetPayload($requestOptionSets),
+            ), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+            exit;
+        }
+
         $dateWhereSql = orderReportBuildDateWhereSql($orderConn, isset($platformConfig['date_field']) ? $platformConfig['date_field'] : '', $state);
         $baseRows = orderReportFetchRows($orderConn, orderReportBuildBaseQuery($orderConn, $platformConfig['table'], $dateWhereSql));
-        $referenceMaps = orderReportBuildReferenceMaps($connect, $financeConnect);
-        $optionSetsByPeriod = orderReportBuildOptionSetsByPeriod($connect, $financeConnect, $platformConfig, $orderConn, $referenceMaps);
         $scalarOptionSets = orderReportBuildOptionSets($connect, $platformConfig, $baseRows, $referenceMaps, $orderConn);
 
         foreach (array('package', 'brand', 'warehouse', 'payment') as $key) {
@@ -1344,6 +1393,8 @@ if (!function_exists('orderReportBuildView')) {
             $state['filters'][$key] = orderReportSanitizeSelections(isset($state['filters'][$key]) ? $state['filters'][$key] : array(), isset($labelOptionSets[$key]) ? $labelOptionSets[$key] : array());
         }
 
+        $combinedOptionSets = array_merge($scalarOptionSets, $labelOptionSets);
+        $optionSetsByPeriod = orderReportBuildOptionSetsByPeriod($connect, $financeConnect, $platformConfig, $orderConn, $referenceMaps, $state, $combinedOptionSets);
         $finalRows = orderReportApplyLabelFilters($resolvedScalarRows, $state['filters']);
 
         usort($finalRows, function ($a, $b) {
@@ -1400,7 +1451,7 @@ if (!function_exists('orderReportBuildView')) {
             'page_title' => $pageTitle,
             'platform_config' => $platformConfig,
             'state' => $state,
-            'option_sets' => array_merge($scalarOptionSets, $labelOptionSets),
+            'option_sets' => $combinedOptionSets,
             'option_sets_by_period' => $optionSetsByPeriod,
             'rows' => $finalRows,
             'totals' => $totals,
@@ -1496,6 +1547,7 @@ if (!function_exists('orderReportRenderPage')) {
             'report_type' => $reportType,
             'table_id' => $tableId,
             'option_sets_by_period' => $runtimeOptionSetsByPeriod,
+            'option_sets_endpoint' => strtok((string) ($_SERVER['REQUEST_URI'] ?? ''), '?'),
         );
 
         $chartPayloadJson = json_encode($chartPayload, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);

@@ -176,82 +176,6 @@ function ensureVarcharColumnLengthAtLeast($conn, $dbName, $tableName, $columnNam
     }
 }
 
-function insertTableParsePinBlocks($rawPins)
-{
-    $blocks = array();
-    foreach (explode('+', (string) $rawPins) as $entry) {
-        $entry = trim($entry);
-        if ($entry === '') {
-            continue;
-        }
-
-        $parts = explode(':', trim($entry, '[]'), 2);
-        if (count($parts) !== 2) {
-            continue;
-        }
-
-        $pinGroupId = trim((string) $parts[0]);
-        if ($pinGroupId === '' || !ctype_digit($pinGroupId)) {
-            continue;
-        }
-
-        $pinIds = array();
-        foreach (explode(',', (string) $parts[1]) as $pinId) {
-            $pinId = trim((string) $pinId);
-            if ($pinId !== '' && ctype_digit($pinId)) {
-                $pinIds[$pinId] = $pinId;
-            }
-        }
-
-        $blocks[$pinGroupId] = array_values($pinIds);
-    }
-
-    return $blocks;
-}
-
-function insertTableBuildPinBlocks($blocks)
-{
-    $parts = array();
-    foreach ((array) $blocks as $pinGroupId => $pinIds) {
-        $pinGroupId = trim((string) $pinGroupId);
-        if ($pinGroupId === '' || !ctype_digit($pinGroupId)) {
-            continue;
-        }
-
-        $normalizedPinIds = array();
-        foreach ((array) $pinIds as $pinId) {
-            $pinId = trim((string) $pinId);
-            if ($pinId !== '' && ctype_digit($pinId)) {
-                $normalizedPinIds[$pinId] = $pinId;
-            }
-        }
-
-        if (!empty($normalizedPinIds)) {
-            $parts[] = '[' . $pinGroupId . ':' . implode(',', array_values($normalizedPinIds)) . ']';
-        }
-    }
-
-    return implode('+', $parts);
-}
-
-function insertTableAddPinBlockAccess($rawPins, $pinGroupId, $pinIds)
-{
-    $blocks = insertTableParsePinBlocks($rawPins);
-    $pinGroupId = (string) ((int) $pinGroupId);
-    if (!isset($blocks[$pinGroupId])) {
-        $blocks[$pinGroupId] = array();
-    }
-
-    foreach ((array) $pinIds as $pinId) {
-        $pinId = trim((string) $pinId);
-        if ($pinId !== '' && ctype_digit($pinId)) {
-            $blocks[$pinGroupId][$pinId] = $pinId;
-        }
-    }
-
-    return insertTableBuildPinBlocks($blocks);
-}
-
 function insertTableEnsureOrderReportPins($cmsConn)
 {
     $pinGroupSql = "INSERT INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
@@ -282,7 +206,7 @@ function insertTableEnsureOrderReportPins($cmsConn)
         $currentPins = isset($userGroupRow['pins']) ? (string) $userGroupRow['pins'] : '';
         $updatedPins = $currentPins;
         foreach (array(155, 156, 157, 158) as $pinGroupId) {
-            $updatedPins = insertTableAddPinBlockAccess($updatedPins, $pinGroupId, array(1));
+            $updatedPins = addAccessToPinBlock($updatedPins, $pinGroupId, array(1));
         }
 
         if ($updatedPins !== $currentPins) {

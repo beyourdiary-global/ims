@@ -375,14 +375,19 @@
     return dateInput ? dateInput.value || "" : "";
   }
 
-  function syncOrderReportFilterOptions(reportType) {
-    var config = window.orderReportPageConfig || {};
-    var optionSetsByPeriod = config.option_sets_by_period || {};
-    var periodKey = getCurrentOrderReportPeriodKey(reportType);
-    var optionSets =
-      optionSetsByPeriod[reportType] && optionSetsByPeriod[reportType][periodKey]
-        ? optionSetsByPeriod[reportType][periodKey]
-        : {};
+  function getCurrentOrderReportPeriodParams(reportType) {
+    return {
+      report_type: reportType || "daily",
+      report_date:
+        (document.getElementById("report_date") || {}).value || "",
+      report_month:
+        (document.getElementById("report_month") || {}).value || "",
+      report_year:
+        (document.getElementById("report_year") || {}).value || "",
+    };
+  }
+
+  function applyOrderReportFilterOptions(optionSets) {
     var filterKeys = [
       "package",
       "brand",
@@ -398,6 +403,105 @@
       var container = document.getElementById("order_report_" + filterKey);
       refreshOrderReportMultiSelect(container, optionSets[filterKey] || []);
     });
+  }
+
+  function fetchOrderReportFilterOptions(reportType, periodKey) {
+    var config = window.orderReportPageConfig || {};
+    var endpoint = config.option_sets_endpoint || "";
+    if (
+      !endpoint ||
+      !periodKey ||
+      typeof window.fetch !== "function" ||
+      typeof window.URL !== "function"
+    ) {
+      return Promise.resolve(null);
+    }
+
+    config.option_sets_by_period = config.option_sets_by_period || {};
+    config.option_sets_by_period[reportType] =
+      config.option_sets_by_period[reportType] || {};
+
+    if (config.option_sets_by_period[reportType][periodKey]) {
+      return Promise.resolve(config.option_sets_by_period[reportType][periodKey]);
+    }
+
+    pageState.optionSetRequests = pageState.optionSetRequests || {};
+    var cacheKey = reportType + ":" + periodKey;
+    if (pageState.optionSetRequests[cacheKey]) {
+      return pageState.optionSetRequests[cacheKey];
+    }
+
+    var params = getCurrentOrderReportPeriodParams(reportType);
+    var url = new URL(endpoint, window.location.origin);
+    url.searchParams.set("order_report_option_sets", "1");
+    Object.keys(params).forEach(function (key) {
+      url.searchParams.set(key, params[key] || "");
+    });
+
+    pageState.optionSetRequests[cacheKey] = window
+      .fetch(url.toString(), {
+        credentials: "same-origin",
+        headers: {
+          "X-Requested-With": "XMLHttpRequest",
+        },
+      })
+      .then(function (response) {
+        if (!response.ok) {
+          throw new Error("Failed to load order report filters.");
+        }
+
+        return response.json();
+      })
+      .then(function (payload) {
+        var payloadReportType = payload && payload.report_type ? payload.report_type : reportType;
+        var payloadPeriodKey = payload && payload.period_key ? payload.period_key : periodKey;
+        var optionSets = payload && payload.option_sets ? payload.option_sets : {};
+
+        config.option_sets_by_period[payloadReportType] =
+          config.option_sets_by_period[payloadReportType] || {};
+        config.option_sets_by_period[payloadReportType][payloadPeriodKey] = optionSets;
+        delete pageState.optionSetRequests[cacheKey];
+        return optionSets;
+      })
+      .catch(function () {
+        delete pageState.optionSetRequests[cacheKey];
+        return null;
+      });
+
+    return pageState.optionSetRequests[cacheKey];
+  }
+
+  function syncOrderReportFilterOptions(reportType) {
+    var config = window.orderReportPageConfig || {};
+    var optionSetsByPeriod = config.option_sets_by_period || {};
+    var periodKey = getCurrentOrderReportPeriodKey(reportType);
+    var optionSets =
+      optionSetsByPeriod[reportType] && optionSetsByPeriod[reportType][periodKey]
+        ? optionSetsByPeriod[reportType][periodKey]
+        : {};
+
+    if (periodKey && Object.keys(optionSets).length === 0) {
+      fetchOrderReportFilterOptions(reportType, periodKey).then(function (
+        loadedOptionSets,
+      ) {
+        var reportTypeInput = document.getElementById("report_type");
+        var currentReportType = reportTypeInput
+          ? reportTypeInput.value || "daily"
+          : "daily";
+        if (
+          currentReportType !== reportType ||
+          getCurrentOrderReportPeriodKey(reportType) !== periodKey ||
+          !loadedOptionSets
+        ) {
+          return;
+        }
+
+        applyOrderReportFilterOptions(loadedOptionSets);
+      });
+      return;
+    }
+
+    applyOrderReportFilterOptions(optionSets);
   }
 
   function initOrderReportMultiSelects() {
