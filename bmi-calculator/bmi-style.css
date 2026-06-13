@@ -1,0 +1,195 @@
+* {
+  box-sizing: border-box;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+body {
+  background: #f2f5f9;
+  margin: 0;
+  padding: 20px;
+}
+
+.container {
+  max-width: 420px;
+  margin: auto;
+  background: #ffffff;
+  padding: 25px;
+  border-radius: 15px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+h1 {
+  text-align: center;
+  margin-bottom: 20px;
+  font-size: 2rem;
+  color: #000;
+}
+
+label {
+  display: block;
+  margin-top: 15px;
+  font-weight: bold;
+  font-size: 0.9rem;
+}
+
+select {
+  width: 100%;
+  padding: 12px;
+  margin-top: 6px;
+  font-size: 16px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  background-color: #fff;
+}
+
+/* Input Group with Units inside */
+.input-group {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-top: 6px;
+}
+
+.input-group input {
+  width: 100%;
+  padding: 12px 60px 12px 12px;
+  font-size: 16px;
+  border-radius: 6px;
+  border: 1px solid #ccc;
+  outline: none;
+}
+
+.input-group input:focus {
+  border-color: #007bff;
+}
+
+/* Standard Unit style inside the input field */
+.unit-label {
+  position: absolute;
+  right: 15px;
+  color: #777;
+  font-size: 1rem;
+  font-weight: normal;
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Button Group Layout */
+.button-group {
+  display: flex;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+button {
+  flex: 1;
+  padding: 14px;
+  font-size: 1rem;
+  font-weight: bold;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+button:active {
+  opacity: 0.8;
+}
+
+.btn-calc {
+  background: #007bff;
+  color: #ffffff;
+  flex: 2; /* Calculate button slightly wider for importance */
+}
+
+.btn-reset {
+  background: #6c757d;
+  color: #ffffff;
+}
+
+.btn-save {
+  background: #198754;
+  color: #ffffff;
+  width: 100%;
+}
+
+.result-actions {
+  display: none;
+  margin-top: 15px;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* Result Box Layout */
+.result {
+  margin-top: 25px;
+  padding: 25px 20px;
+  border-radius: 15px;
+  display: none;
+  text-align: center;
+}
+
+.result-header {
+  font-size: 1.6rem;
+  font-weight: 800;
+  margin-bottom: 5px;
+  text-transform: uppercase;
+}
+
+.result-comparison {
+  font-size: 1.1rem;
+  opacity: 0.8;
+  margin-bottom: 10px;
+}
+
+.result-big-number {
+  font-size: 6rem;
+  font-weight: 900;
+  line-height: 1;
+  margin: 10px 0;
+}
+
+.result-footer {
+  font-size: 1rem;
+  margin-top: 10px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+/* Status Colors */
+.underweight {
+  background: #e3f2fd;
+  color: #0d47a1;
+}
+.normal {
+  background: #e8f5e9;
+  color: #1b5e20;
+}
+.overweight {
+  background: #fff9c4;
+  color: #827717;
+}
+.obese {
+  background: #ffebee;
+  color: #b71c1c;
+}
+
+.error {
+  margin-top: 15px;
+  color: #dc3545;
+  font-weight: bold;
+  text-align: center;
+  min-height: 1.2em;
+}
+
+@media (max-width: 480px) {
+  .container {
+    padding: 20px;
+  }
+  .result-big-number {
+    font-size: 4.5rem;
+  }
+}

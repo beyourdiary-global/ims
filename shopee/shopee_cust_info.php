@@ -89,12 +89,12 @@ if ($dataID) { //edit/remove/view
     }
 }
 
-$scrSegmentationBadgeHtml = '';
+$shopeeCustomerLabelMeta = array();
+$shopeeCustomerLabelDisplayHtml = '';
 if (isset($dataExisted) && !empty($dataID) && $act !== 'I' && isset($row['id']) && (int) $row['id'] > 0) {
-    $scrCustomerLabelMap = customerLabelGetCustomerLabelMap($connect, 'shopee', array((int) $row['id']));
-    if (isset($scrCustomerLabelMap[(int) $row['id']]['segmentation'])) {
-        $scrSegmentationBadgeHtml = customerLabelRenderBadge($scrCustomerLabelMap[(int) $row['id']]['segmentation']);
-    }
+    $shopeeCustomerLabelMap = customerLabelGetCustomerLabelMap($connect, 'shopee', array((int) $row['id']));
+    $shopeeCustomerLabelMeta = isset($shopeeCustomerLabelMap[(int) $row['id']]) ? $shopeeCustomerLabelMap[(int) $row['id']] : array();
+    $shopeeCustomerLabelDisplayHtml = customerLabelRenderPageHeader($shopeeCustomerLabelMeta);
 }
 
 if (!($dataID) && !($act)) {
@@ -471,6 +471,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                             </h2>
                             <?php echo customerTagRenderManageButton($shopeeCustomerTagPlatform, $shopeeCustomerTagCustomerId, isActionAllowed('Edit', $pinAccess) && $act !== 'I'); ?>
                         </div>
+                        <?php echo $shopeeCustomerLabelDisplayHtml; ?>
                     </div>
 
                     <div id="err_msg" class="mb-3">
@@ -485,7 +486,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                             <div class="col-md-4 mb-3">
                                 <label class="form-label form_lbl" id="scr_username_lbl" for="scr_username">Shopee Buyer
                                     Username<span class="requireRed">*</span></label>
-                                <div class="d-flex align-items-center gap-2 flex-nowrap">
+                                <div class="customer-field-with-label">
                                     <input class="form-control" type="text" name="scr_username" id="scr_username" value="<?php
                                     if (isset($dataExisted) && isset($row['buyer_username']) && !isset($scr_username)) {
                                         echo $row['buyer_username'];
@@ -495,9 +496,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                         echo '';
                                     } ?>" <?php if ($act == '')
                                          echo 'disabled' ?>>
-                                    <?php if ($scrSegmentationBadgeHtml !== '') { ?>
-                                        <div class="d-inline-flex align-items-center flex-nowrap"><?= $scrSegmentationBadgeHtml ?></div>
-                                    <?php } ?>
+                                    <?php echo customerLabelRenderInlineSegmentationBadge($shopeeCustomerLabelMeta); ?>
                                 </div>
 
                                 <?php if (isset($username_err)) { ?>
@@ -682,7 +681,8 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                         <th width="60">S/N</th>
                                         <th width="200">Action</th>
                                         <th>Order ID</th>
-                                        <th>Date</th>
+                                        <th>Purchase Date</th>
+                                        <th>Received Date</th>
                                         <th>Package</th>
                                         <th>Buyer Payment Method</th>
                                         <th>Charges & Fees</th>
@@ -710,6 +710,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                             $orderId = isset($orderRow['id']) ? (int) $orderRow['id'] : 0;
                                             $orderNo = isset($orderRow['orderID']) ? $orderRow['orderID'] : '';
                                             $orderDate = isset($orderRow['date']) ? $orderRow['date'] : '';
+                                            $receivedDate = isset($orderRow['received_date']) ? $orderRow['received_date'] : '';
                                             $orderPackage = commonResolvePackageNamesFromCsv(isset($orderRow['package']) ? $orderRow['package'] : '', $connect);
                                             $buyerPayMethodRaw = isset($orderRow['buyer_pay_meth']) ? (string) $orderRow['buyer_pay_meth'] : '';
                                             $buyerPayMethodIds = array_values(array_filter(array_map('trim', explode(',', $buyerPayMethodRaw)), 'strlen'));
@@ -735,6 +736,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                                 </td>
                                                 <td><?= htmlspecialchars((string) $orderNo, ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td><?= htmlspecialchars((string) $orderDate, ENT_QUOTES, 'UTF-8') ?></td>
+                                                <td><?= htmlspecialchars((string) $receivedDate, ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td><?= htmlspecialchars((string) $orderPackage, ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td><?= htmlspecialchars((string) $buyerPayMethod, ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td><?= commonFormatAmountRm($orderFees) ?></td>
@@ -743,15 +745,15 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                         <?php }
                                     } else { ?>
                                         <tr>
-                                            <td colspan="8" class="text-center">No order records found.</td>
+                                            <td colspan="9" class="text-center">No order records found.</td>
                                         </tr>
                                     <?php } ?>
                                 </tbody>
                                 <tfoot>
-                                    <tr>
-                                        <th colspan="7" class="text-end">Sub-Total (RM)</th>
-                                        <th><?= commonFormatAmountRm($sumFinalAmount) ?></th>
-                                    </tr>
+                                        <tr>
+                                            <th colspan="8" class="text-end">Sub-Total (RM)</th>
+                                            <th><?= commonFormatAmountRm($sumFinalAmount) ?></th>
+                                        </tr>
                                 </tfoot>
                             </table>
                         </div>

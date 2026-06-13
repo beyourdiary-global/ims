@@ -221,6 +221,310 @@ if (!function_exists('urlBuildUserRecordLogAttachmentUrl')) {
     }
 }
 
+if (!function_exists('urlUserRecordLogColumnExists')) {
+    function urlUserRecordLogColumnExists($dbConnect, $tableName, $columnName)
+    {
+        static $cache = array();
+
+        if (!($dbConnect instanceof mysqli)) {
+            return false;
+        }
+
+        $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', (string) $tableName);
+        $safeColumn = preg_replace('/[^A-Za-z0-9_]/', '', (string) $columnName);
+        if ($safeTable === '' || $safeColumn === '') {
+            return false;
+        }
+
+        $cacheKey = spl_object_hash($dbConnect) . '|' . $safeTable . '|' . $safeColumn;
+        if (isset($cache[$cacheKey])) {
+            return $cache[$cacheKey];
+        }
+
+        $rst = mysqli_query($dbConnect, "SHOW COLUMNS FROM `" . $safeTable . "` LIKE '" . $safeColumn . "'");
+        $cache[$cacheKey] = ($rst && $rst->num_rows > 0);
+        return $cache[$cacheKey];
+    }
+}
+
+if (!function_exists('urlGetUserRecordLogAttachmentsColumnName')) {
+    function urlGetUserRecordLogAttachmentsColumnName()
+    {
+        return 'attachments';
+    }
+}
+
+if (!function_exists('urlNormalizeUserRecordLogAttachmentList')) {
+    function urlNormalizeUserRecordLogAttachmentList($attachments)
+    {
+        $normalized = array();
+        $seen = array();
+        $values = is_array($attachments) ? $attachments : array($attachments);
+
+        foreach ($values as $value) {
+            $value = trim(str_replace('\\', '/', (string) $value));
+            if ($value === '') {
+                continue;
+            }
+
+            if (!isset($seen[$value])) {
+                $normalized[] = $value;
+                $seen[$value] = true;
+            }
+        }
+
+        return $normalized;
+    }
+}
+
+if (!function_exists('urlDecodeUserRecordLogAttachmentList')) {
+    function urlDecodeUserRecordLogAttachmentList($attachmentValue, $attachmentsValue = '')
+    {
+        $attachments = array();
+        $attachmentsValue = trim((string) $attachmentsValue);
+        if ($attachmentsValue !== '') {
+            $decoded = json_decode($attachmentsValue, true);
+            if (is_array($decoded)) {
+                $attachments = $decoded;
+            }
+        }
+
+        $attachmentValue = trim((string) $attachmentValue);
+        if (empty($attachments) && $attachmentValue !== '') {
+            $decodedAttachment = json_decode($attachmentValue, true);
+            if (is_array($decodedAttachment)) {
+                $attachments = $decodedAttachment;
+            } else {
+                $attachments[] = $attachmentValue;
+            }
+        }
+
+        return urlNormalizeUserRecordLogAttachmentList($attachments);
+    }
+}
+
+if (!function_exists('urlEncodeUserRecordLogAttachmentList')) {
+    function urlEncodeUserRecordLogAttachmentList($attachments)
+    {
+        return json_encode(urlNormalizeUserRecordLogAttachmentList($attachments));
+    }
+}
+
+if (!function_exists('urlEncodeUserRecordLogAttachmentColumnValue')) {
+    function urlEncodeUserRecordLogAttachmentColumnValue($attachments)
+    {
+        $attachments = urlNormalizeUserRecordLogAttachmentList($attachments);
+        if (empty($attachments)) {
+            return '';
+        }
+
+        if (count($attachments) === 1) {
+            return (string) $attachments[0];
+        }
+
+        return json_encode($attachments);
+    }
+}
+
+if (!function_exists('urlGetPrimaryUserRecordLogAttachment')) {
+    function urlGetPrimaryUserRecordLogAttachment($attachments)
+    {
+        $attachments = urlNormalizeUserRecordLogAttachmentList($attachments);
+        return !empty($attachments) ? (string) $attachments[0] : '';
+    }
+}
+
+if (!function_exists('urlUserRecordLogHasAttachments')) {
+    function urlUserRecordLogHasAttachments($attachmentValue, $attachmentsValue = '')
+    {
+        return !empty(urlDecodeUserRecordLogAttachmentList($attachmentValue, $attachmentsValue));
+    }
+}
+
+if (!function_exists('urlGetUserRecordLogAttachmentExtension')) {
+    function urlGetUserRecordLogAttachmentExtension($attachmentPath)
+    {
+        $cleanPath = trim((string) $attachmentPath);
+        if ($cleanPath === '') {
+            return '';
+        }
+
+        return strtolower((string) pathinfo($cleanPath, PATHINFO_EXTENSION));
+    }
+}
+
+if (!function_exists('urlIsImageUserRecordLogAttachment')) {
+    function urlIsImageUserRecordLogAttachment($attachmentPath)
+    {
+        $ext = urlGetUserRecordLogAttachmentExtension($attachmentPath);
+        return in_array($ext, array('png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg'), true);
+    }
+}
+
+if (!function_exists('urlBuildUserRecordLogAttachmentPreviewGrid')) {
+    function urlBuildUserRecordLogAttachmentPreviewGrid($attachments, $uploadWebDir = '')
+    {
+        $attachments = urlNormalizeUserRecordLogAttachmentList($attachments);
+        if (empty($attachments)) {
+            return '';
+        }
+
+        $items = array();
+        foreach ($attachments as $attachment) {
+            $href = urlBuildUserRecordLogAttachmentUrl($attachment, $uploadWebDir);
+            if ($href === '') {
+                continue;
+            }
+
+            $safeHref = htmlspecialchars($href, ENT_QUOTES, 'UTF-8');
+            $safeFile = htmlspecialchars((string) $attachment, ENT_QUOTES, 'UTF-8');
+            $fileLabel = basename(str_replace('\\', '/', (string) $attachment));
+            $safeLabel = htmlspecialchars((string) $fileLabel, ENT_QUOTES, 'UTF-8');
+
+            if (urlIsImageUserRecordLogAttachment($attachment)) {
+                $items[] = '<button type="button" class="url-attachment-thumb url-view-attachment-btn" data-url="' . $safeHref . '" data-file="' . $safeFile . '" aria-label="Preview attachment ' . $safeLabel . '">'
+                    . '<img src="' . $safeHref . '" alt="' . $safeLabel . '">'
+                    . '</button>';
+                continue;
+            }
+
+            $ext = strtoupper(urlGetUserRecordLogAttachmentExtension($attachment));
+            if ($ext === '') {
+                $ext = 'FILE';
+            }
+
+            $items[] = '<button type="button" class="url-attachment-thumb url-attachment-thumb-file url-view-attachment-btn" data-url="' . $safeHref . '" data-file="' . $safeFile . '" aria-label="Preview attachment ' . $safeLabel . '">'
+                . '<span class="url-attachment-file-ext">' . htmlspecialchars($ext, ENT_QUOTES, 'UTF-8') . '</span>'
+                . '<span class="url-attachment-file-name">' . $safeLabel . '</span>'
+                . '</button>';
+        }
+
+        if (empty($items)) {
+            return '';
+        }
+
+        return '<div class="url-attachment-preview-grid">' . implode('', $items) . '</div>';
+    }
+}
+
+if (!function_exists('urlLooksLikeUserRecordLogHtml')) {
+    function urlLooksLikeUserRecordLogHtml($content)
+    {
+        return preg_match('/<\s*(p|br|div|span|strong|b|em|i|u|ul|ol|li|blockquote|h[1-4])\b/i', (string) $content) === 1;
+    }
+}
+
+if (!function_exists('urlSanitizeUserRecordLogHtmlNode')) {
+    function urlSanitizeUserRecordLogHtmlNode($node, $allowedTags)
+    {
+        if (!($node instanceof DOMNode)) {
+            return;
+        }
+
+        $children = array();
+        foreach ($node->childNodes as $childNode) {
+            $children[] = $childNode;
+        }
+
+        foreach ($children as $childNode) {
+            if ($childNode->nodeType === XML_ELEMENT_NODE) {
+                $tagName = strtolower((string) $childNode->nodeName);
+                if (!in_array($tagName, $allowedTags, true)) {
+                    while ($childNode->firstChild) {
+                        $node->insertBefore($childNode->firstChild, $childNode);
+                    }
+                    $node->removeChild($childNode);
+                    continue;
+                }
+
+                while ($childNode->attributes && $childNode->attributes->length > 0) {
+                    $childNode->removeAttributeNode($childNode->attributes->item(0));
+                }
+            }
+
+            urlSanitizeUserRecordLogHtmlNode($childNode, $allowedTags);
+        }
+    }
+}
+
+if (!function_exists('urlSanitizeUserRecordLogHtml')) {
+    function urlSanitizeUserRecordLogHtml($content)
+    {
+        $content = trim((string) $content);
+        if ($content === '') {
+            return '';
+        }
+
+        $allowedTags = array('p', 'br', 'strong', 'b', 'em', 'i', 'u', 'ul', 'ol', 'li', 'blockquote', 'span', 'div', 'h1', 'h2', 'h3', 'h4');
+
+        if (!class_exists('DOMDocument')) {
+            return preg_replace('/\r\n|\r|\n/', '<br>', htmlspecialchars(strip_tags($content), ENT_QUOTES, 'UTF-8'));
+        }
+
+        $previousUseInternalErrors = libxml_use_internal_errors(true);
+        $dom = new DOMDocument('1.0', 'UTF-8');
+        $html = '<!DOCTYPE html><html><body>' . $content . '</body></html>';
+        $dom->loadHTML('<?xml encoding="utf-8" ?>' . $html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+        $body = $dom->getElementsByTagName('body')->item(0);
+
+        if ($body instanceof DOMNode) {
+            urlSanitizeUserRecordLogHtmlNode($body, $allowedTags);
+
+            $sanitized = '';
+            foreach ($body->childNodes as $childNode) {
+                $sanitized .= $dom->saveHTML($childNode);
+            }
+
+            libxml_clear_errors();
+            libxml_use_internal_errors($previousUseInternalErrors);
+            return trim((string) $sanitized);
+        }
+
+        libxml_clear_errors();
+        libxml_use_internal_errors($previousUseInternalErrors);
+        return preg_replace('/\r\n|\r|\n/', '<br>', htmlspecialchars(strip_tags($content), ENT_QUOTES, 'UTF-8'));
+    }
+}
+
+if (!function_exists('urlNormalizeSubmittedUserRecordLogContent')) {
+    function urlNormalizeSubmittedUserRecordLogContent($content)
+    {
+        $content = trim((string) $content);
+        if ($content === '') {
+            return '';
+        }
+
+        if (urlLooksLikeUserRecordLogHtml($content)) {
+            return urlSanitizeUserRecordLogHtml($content);
+        }
+
+        return preg_replace('/\r\n|\r|\n/', '<br>', htmlspecialchars($content, ENT_QUOTES, 'UTF-8'));
+    }
+}
+
+if (!function_exists('urlGetUserRecordLogContentPlainText')) {
+    function urlGetUserRecordLogContentPlainText($content)
+    {
+        return trim(html_entity_decode(strip_tags((string) $content), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+    }
+}
+
+if (!function_exists('urlRenderUserRecordLogContentHtml')) {
+    function urlRenderUserRecordLogContentHtml($content)
+    {
+        $content = (string) $content;
+        if (trim($content) === '') {
+            return '';
+        }
+
+        if (urlLooksLikeUserRecordLogHtml($content)) {
+            return urlSanitizeUserRecordLogHtml($content);
+        }
+
+        return preg_replace('/\r\n|\r|\n/', '<br>', htmlspecialchars($content, ENT_QUOTES, 'UTF-8'));
+    }
+}
+
 if (!function_exists('urlEnsureUserRecordLogUploadDirectory')) {
     function urlEnsureUserRecordLogUploadDirectory()
     {
@@ -441,6 +745,7 @@ if (!function_exists('urlBuildListHtml')) {
             $recordId = isset($row['id']) ? (int) $row['id'] : 0;
             $content = isset($row['content']) ? $row['content'] : '';
             $attachment = isset($row['attachment']) ? $row['attachment'] : '';
+            $attachmentList = urlDecodeUserRecordLogAttachmentList($attachment);
             $createdAt = isset($row['created_at']) ? $row['created_at'] : '';
             $updatedAt = isset($row['updated_at']) ? $row['updated_at'] : '';
             $createdBy = urlGetUserName($connect, isset($row['created_by']) ? $row['created_by'] : '');
@@ -464,13 +769,7 @@ if (!function_exists('urlBuildListHtml')) {
                 $auditMeta .= ' <span class="url-meta-sep">|</span> ' . $updatedMeta;
             }
 
-            $attachmentButtonHtml = '';
-            if ($attachment !== '') {
-                $href = urlBuildUserRecordLogAttachmentUrl($attachment, $uploadWebDir);
-                if ($href !== '') {
-                    $attachmentButtonHtml = '<button type="button" class="btn btn-sm btn-rounded btn-outline-primary url-view-attachment-btn" data-url="' . htmlspecialchars($href, ENT_QUOTES, 'UTF-8') . '" data-file="' . htmlspecialchars((string) $attachment, ENT_QUOTES, 'UTF-8') . '">View Attachment</button>';
-                }
-            }
+            $attachmentPreviewHtml = urlBuildUserRecordLogAttachmentPreviewGrid($attachmentList, $uploadWebDir);
 
             $rowClass = ($count % 2 === 1) ? ' url-row-odd' : ' url-row-even';
             $html .= '<div class="card mb-3 url-log-row' . $rowClass . '">';
@@ -483,13 +782,13 @@ if (!function_exists('urlBuildListHtml')) {
             $html .= '  </div>';
             $html .= '  <div id="url-body-' . $recordId . '" class="card-body">';
             $html .= '    <div class="url-content-row d-flex justify-content-between align-items-start gap-2 flex-wrap">';
-            $html .= '      <div class="mb-0"><strong>Content:</strong><br>' . nl2br(htmlspecialchars((string) $content, ENT_QUOTES, 'UTF-8')) . '</div>';
-            if ($attachmentButtonHtml !== '') {
-                $html .= '      <div class="url-attachment-action ms-auto">' . $attachmentButtonHtml . '</div>';
+            $html .= '      <div class="mb-0 url-log-content-wrap"><strong>Content:</strong><div class="url-log-content mt-2">' . urlRenderUserRecordLogContentHtml($content) . '</div></div>';
+            if ($attachmentPreviewHtml !== '') {
+                $html .= '      <div class="url-attachment-action ms-auto"><div class="url-attachment-title">Attachment</div>' . $attachmentPreviewHtml . '</div>';
             }
             $html .= '    </div>';
-            $html .= '    <input type="hidden" class="url-edit-content" value="' . htmlspecialchars((string) $content, ENT_QUOTES, 'UTF-8') . '">';
-            $html .= '    <input type="hidden" class="url-edit-attachment" value="' . htmlspecialchars((string) $attachment, ENT_QUOTES, 'UTF-8') . '">';
+            $html .= '    <textarea class="url-edit-content d-none">' . htmlspecialchars((string) $content, ENT_QUOTES, 'UTF-8') . '</textarea>';
+            $html .= '    <textarea class="url-edit-attachments d-none">' . htmlspecialchars(urlEncodeUserRecordLogAttachmentList($attachmentList), ENT_QUOTES, 'UTF-8') . '</textarea>';
             $html .= '  </div>';
             $html .= '</div>';
 
@@ -561,28 +860,79 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
         }
 
         $recordId = isset($_POST['record_id']) ? (int) $_POST['record_id'] : 0;
-        $content = isset($_POST['content']) ? trim((string) $_POST['content']) : '';
-        if ($content === '') {
+        $content = urlNormalizeSubmittedUserRecordLogContent(isset($_POST['content']) ? (string) $_POST['content'] : '');
+        if (urlGetUserRecordLogContentPlainText($content) === '') {
             if ($urlIsFallback) {
                 urlFallbackResponse('Content is required.', false, $context['return_url']);
             }
             urlJsonResponse(array('ok' => 0, 'message' => 'Content is required.'));
         }
 
-        $attachmentName = isset($_POST['existing_attachment']) ? trim((string) $_POST['existing_attachment']) : '';
-        if (isset($_FILES['attachment']) && $_FILES['attachment']['error'] === UPLOAD_ERR_OK && $_FILES['attachment']['size'] > 0) {
-            $origName = $_FILES['attachment']['name'];
-            $tmpPath = $_FILES['attachment']['tmp_name'];
-            $fileSize = isset($_FILES['attachment']['size']) ? (int) $_FILES['attachment']['size'] : 0;
-            $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION));
-            $allowed = array('png', 'jpg', 'jpeg', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt');
-            $maxFileSize = 10 * 1024 * 1024;
+        $submittedAttachments = array();
+        if (isset($_POST['existing_attachments'])) {
+            $submittedAttachments = urlDecodeUserRecordLogAttachmentList('', (string) $_POST['existing_attachments']);
+        } else if (isset($_POST['existing_attachment'])) {
+            $submittedAttachments = urlNormalizeUserRecordLogAttachmentList($_POST['existing_attachment']);
+        }
+
+        $uploadedAttachments = array();
+        $allowed = array('png', 'jpg', 'jpeg', 'webp', 'pdf');
+        $maxFileSize = 10 * 1024 * 1024;
+        $mimeByExt = array(
+            'png' => array('image/png'),
+            'jpg' => array('image/jpeg'),
+            'jpeg' => array('image/jpeg'),
+            'webp' => array('image/webp'),
+            'pdf' => array('application/pdf'),
+        );
+
+        $fileEntries = array();
+        if (isset($_FILES['attachment'])) {
+            $fileField = $_FILES['attachment'];
+            $fileNames = isset($fileField['name']) ? $fileField['name'] : array();
+            if (is_array($fileNames)) {
+                $totalFiles = count($fileNames);
+                for ($fileIdx = 0; $fileIdx < $totalFiles; $fileIdx++) {
+                    $fileEntries[] = array(
+                        'name' => isset($fileField['name'][$fileIdx]) ? $fileField['name'][$fileIdx] : '',
+                        'tmp_name' => isset($fileField['tmp_name'][$fileIdx]) ? $fileField['tmp_name'][$fileIdx] : '',
+                        'size' => isset($fileField['size'][$fileIdx]) ? (int) $fileField['size'][$fileIdx] : 0,
+                        'error' => isset($fileField['error'][$fileIdx]) ? (int) $fileField['error'][$fileIdx] : UPLOAD_ERR_NO_FILE,
+                    );
+                }
+            } else {
+                $fileEntries[] = array(
+                    'name' => isset($fileField['name']) ? $fileField['name'] : '',
+                    'tmp_name' => isset($fileField['tmp_name']) ? $fileField['tmp_name'] : '',
+                    'size' => isset($fileField['size']) ? (int) $fileField['size'] : 0,
+                    'error' => isset($fileField['error']) ? (int) $fileField['error'] : UPLOAD_ERR_NO_FILE,
+                );
+            }
+        }
+
+        foreach ($fileEntries as $fileEntry) {
+            $uploadError = isset($fileEntry['error']) ? (int) $fileEntry['error'] : UPLOAD_ERR_NO_FILE;
+            if ($uploadError === UPLOAD_ERR_NO_FILE) {
+                continue;
+            }
+
+            if ($uploadError !== UPLOAD_ERR_OK) {
+                if ($urlIsFallback) {
+                    urlFallbackResponse('Failed to upload attachment.', false, $context['return_url']);
+                }
+                urlJsonResponse(array('ok' => 0, 'message' => 'Failed to upload attachment.'));
+            }
+
+            $origName = isset($fileEntry['name']) ? (string) $fileEntry['name'] : '';
+            $tmpPath = isset($fileEntry['tmp_name']) ? (string) $fileEntry['tmp_name'] : '';
+            $fileSize = isset($fileEntry['size']) ? (int) $fileEntry['size'] : 0;
+            $ext = strtolower((string) pathinfo($origName, PATHINFO_EXTENSION));
 
             if (!in_array($ext, $allowed, true)) {
                 if ($urlIsFallback) {
-                    urlFallbackResponse('Attachment format is not allowed.', false, $context['return_url']);
+                    urlFallbackResponse('Attachment must be png, jpg, jpeg, webp or pdf.', false, $context['return_url']);
                 }
-                urlJsonResponse(array('ok' => 0, 'message' => 'Attachment format is not allowed.'));
+                urlJsonResponse(array('ok' => 0, 'message' => 'Attachment must be png, jpg, jpeg, webp or pdf.'));
             }
             if ($fileSize <= 0 || $fileSize > $maxFileSize) {
                 if ($urlIsFallback) {
@@ -591,17 +941,6 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
                 urlJsonResponse(array('ok' => 0, 'message' => 'Attachment size is invalid or exceeds 10MB.'));
             }
 
-            $mimeByExt = array(
-                'png' => array('image/png'),
-                'jpg' => array('image/jpeg'),
-                'jpeg' => array('image/jpeg'),
-                'pdf' => array('application/pdf'),
-                'txt' => array('text/plain', 'application/octet-stream'),
-                'doc' => array('application/msword', 'application/octet-stream'),
-                'docx' => array('application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/zip'),
-                'xls' => array('application/vnd.ms-excel', 'application/octet-stream'),
-                'xlsx' => array('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip'),
-            );
             if (function_exists('finfo_open')) {
                 $finfo = finfo_open(FILEINFO_MIME_TYPE);
                 $detectedMime = $finfo ? finfo_file($finfo, $tmpPath) : '';
@@ -629,7 +968,7 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
                 urlJsonResponse(array('ok' => 0, 'message' => 'Failed to upload attachment.'));
             }
 
-            $attachmentName = $newName;
+            $uploadedAttachments[] = $newName;
         }
 
         if ($recordId > 0) {
@@ -656,11 +995,28 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
                 urlJsonResponse(array('ok' => 0, 'message' => 'This record can no longer be edited (more than 3 days).'));
             }
 
+            if (isset($_POST['existing_attachments'])) {
+                $attachmentNames = $submittedAttachments;
+            } else {
+                $attachmentNames = urlDecodeUserRecordLogAttachmentList(isset($currentRow['attachment']) ? $currentRow['attachment'] : '');
+            }
+            if (!empty($uploadedAttachments)) {
+                $attachmentNames = urlNormalizeUserRecordLogAttachmentList(array_merge($attachmentNames, $uploadedAttachments));
+            } else {
+                $attachmentNames = urlNormalizeUserRecordLogAttachmentList($attachmentNames);
+            }
+
+            $attachmentValue = urlEncodeUserRecordLogAttachmentColumnValue($attachmentNames);
+            $updateParts = array(
+                "content='" . urlEsc($dbConnect, $content) . "'",
+                "attachment='" . urlEsc($dbConnect, $attachmentValue) . "'",
+            );
+            $updateParts[] = "updated_by='" . urlEsc($dbConnect, USER_ID) . "'";
+            $updateParts[] = "updated_at=NOW()";
+
             $sql = "UPDATE " . $tblName . " SET
-                content='" . urlEsc($dbConnect, $content) . "',
-                attachment='" . urlEsc($dbConnect, $attachmentName) . "',
-                updated_by='" . urlEsc($dbConnect, USER_ID) . "',
-                updated_at=NOW()
+                " . implode(",
+                ", $updateParts) . "
                 WHERE id='" . $recordId . "'";
             $ok = mysqli_query($dbConnect, $sql);
 
@@ -674,10 +1030,10 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
                 $editOld[] = $oldContent;
                 $editNew[] = $content;
             }
-            if ($oldAttachment !== $attachmentName) {
+            if ($oldAttachment !== $attachmentValue) {
                 $editFields[] = 'attachment';
                 $editOld[] = $oldAttachment;
-                $editNew[] = $attachmentName;
+                $editNew[] = $attachmentValue;
             }
 
             $customerAuditValue = $currentCustomerId > 0 ? (string) $currentCustomerId : 'Empty Value';
@@ -721,29 +1077,38 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
             $customerIdSql = "'" . (int) $context['customer_id'] . "'";
         }
 
+        $attachmentNames = urlNormalizeUserRecordLogAttachmentList($uploadedAttachments);
+        $attachmentValue = urlEncodeUserRecordLogAttachmentColumnValue($attachmentNames);
+        $insertColumns = array(
+            $customerColumn,
+            'content',
+            'attachment',
+        );
+        $insertValues = array(
+            $customerIdSql,
+            "'" . urlEsc($dbConnect, $content) . "'",
+            "'" . urlEsc($dbConnect, $attachmentValue) . "'",
+        );
+        $insertColumns = array_merge($insertColumns, array('created_by', 'created_at', 'updated_by', 'updated_at', 'status'));
+        $insertValues = array_merge($insertValues, array(
+            "'" . urlEsc($dbConnect, USER_ID) . "'",
+            'NOW()',
+            "'" . urlEsc($dbConnect, USER_ID) . "'",
+            'NOW()',
+            "'A'",
+        ));
+
         $sql = "INSERT INTO " . $tblName . " (
-        " . $customerColumn . ",
-                content,
-                attachment,
-                created_by,
-                created_at,
-                updated_by,
-                updated_at,
-                status
+                " . implode(",
+                ", $insertColumns) . "
             ) VALUES (
-                " . $customerIdSql . ",
-                '" . urlEsc($dbConnect, $content) . "',
-                '" . urlEsc($dbConnect, $attachmentName) . "',
-                '" . urlEsc($dbConnect, USER_ID) . "',
-                NOW(),
-                '" . urlEsc($dbConnect, USER_ID) . "',
-                NOW(),
-                'A'
+                " . implode(",
+                ", $insertValues) . "
             )";
         $ok = mysqli_query($dbConnect, $sql);
         $newId = (int) $dbConnect->insert_id;
         $addFields = array('content', 'attachment');
-        $addNew = array($content, $attachmentName);
+        $addNew = array($content, $attachmentValue);
         $customerAuditValue = (int) $context['customer_id'] > 0 ? (string) ((int) $context['customer_id']) : 'Empty Value';
         $baseAddActMsg = function_exists('actMsgLog')
             ? actMsgLog($newId, $addFields, $addNew, '', '', $tblName, 'Add', (!empty($ok) ? '' : mysqli_error($dbConnect)))
@@ -806,6 +1171,8 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
             'customerId' => isset($context['customer_id']) ? (int) $context['customer_id'] : 0,
             'customerColumn' => isset($context['customer_column']) ? (string) $context['customer_column'] : '',
             'pathReturn' => $pathReturn,
+            'siteUrl' => rtrim((string) $GLOBALS['SITEURL'], '/'),
+            'uploadWebDir' => trim((string) urlGetUserRecordLogUploadWebDir(), '/'),
             'confirmationPageName' => 'User Record Log',
         );
         $configJson = json_encode($config);
@@ -831,12 +1198,212 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                     width: 100%;
                 }
 
-                .user-record-log-module .url-content-row > div:first-child {
+                .user-record-log-module .url-log-content-wrap {
                     flex: 1 1 260px;
+                    min-width: 0;
+                }
+
+                .user-record-log-module .url-log-content {
+                    line-height: 1.65;
+                    word-break: break-word;
+                }
+
+                .user-record-log-module .url-log-content p:last-child,
+                .user-record-log-module .url-log-content ul:last-child,
+                .user-record-log-module .url-log-content ol:last-child,
+                .user-record-log-module .url-log-content blockquote:last-child,
+                .user-record-log-module .url-log-content h1:last-child,
+                .user-record-log-module .url-log-content h2:last-child,
+                .user-record-log-module .url-log-content h3:last-child,
+                .user-record-log-module .url-log-content h4:last-child {
+                    margin-bottom: 0;
+                }
+
+                .user-record-log-module .url-log-content ul,
+                .user-record-log-module .url-log-content ol {
+                    padding-left: 1.4rem;
+                }
+
+                .user-record-log-module .url-log-content blockquote {
+                    margin: 0 0 1rem;
+                    padding-left: 0.9rem;
+                    border-left: 3px solid #d6d9e0;
+                    color: #566071;
                 }
 
                 .user-record-log-module .url-attachment-action {
-                    flex: 0 0 auto;
+                    flex: 0 0 170px;
+                    width: 170px;
+                    max-width: 100%;
+                }
+
+                .user-record-log-module .url-attachment-title {
+                    font-weight: 600;
+                    font-size: 0.875rem;
+                    margin-bottom: 0.5rem;
+                }
+
+                .user-record-log-module .url-attachment-preview-grid {
+                    display: grid;
+                    grid-template-columns: repeat(2, minmax(0, 1fr));
+                    gap: 8px;
+                }
+
+                .user-record-log-module .url-attachment-thumb {
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    width: 100%;
+                    min-height: 78px;
+                    border: 1px solid #d7dce5;
+                    border-radius: 12px;
+                    background: #ffffff;
+                    overflow: hidden;
+                    cursor: pointer;
+                    padding: 0;
+                    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+                }
+
+                .user-record-log-module .url-attachment-thumb:hover {
+                    transform: translateY(-1px);
+                    border-color: #6f93ff;
+                    box-shadow: 0 8px 18px rgba(37, 74, 158, 0.12);
+                }
+
+                .user-record-log-module .url-attachment-thumb img {
+                    width: 100%;
+                    height: 100%;
+                    max-height: 132px;
+                    object-fit: cover;
+                    display: block;
+                }
+
+                .user-record-log-module .url-attachment-thumb-file {
+                    flex-direction: column;
+                    gap: 6px;
+                    padding: 10px 8px;
+                    text-align: center;
+                }
+
+                .user-record-log-module .url-attachment-file-ext {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    min-width: 48px;
+                    height: 28px;
+                    padding: 0 10px;
+                    border-radius: 999px;
+                    background: #eef4ff;
+                    color: #2756c4;
+                    font-size: 0.75rem;
+                    font-weight: 700;
+                    letter-spacing: 0.04em;
+                }
+
+                .user-record-log-module .url-attachment-file-name {
+                    display: -webkit-box;
+                    -webkit-line-clamp: 2;
+                    -webkit-box-orient: vertical;
+                    overflow: hidden;
+                    font-size: 0.78rem;
+                    line-height: 1.35;
+                    color: #3f4b5d;
+                    word-break: break-word;
+                }
+
+                .user-record-log-module .url-editor-note {
+                    margin-top: 0.5rem;
+                    color: #6d7685;
+                    font-size: 0.82rem;
+                }
+
+                .user-record-log-module .si-attach-wrap {
+                    border: 1px solid #e2e2e2;
+                    border-radius: 8px;
+                    padding: 12px;
+                }
+
+                .user-record-log-module .si-attach-preview {
+                    min-height: 180px;
+                    border: 1px dashed #d0d0d0;
+                    border-radius: 8px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    background: #fafafa;
+                    padding: 10px;
+                }
+
+                .user-record-log-module .si-attach-preview img {
+                    max-width: 100%;
+                    max-height: 260px;
+                    object-fit: contain;
+                }
+
+                .user-record-log-module .si-attachment-input-row {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+
+                .user-record-log-module .si-attachment-input-row .user-record-log-attachment-input {
+                    flex: 1;
+                }
+
+                .user-record-log-module .url-existing-attachment-list {
+                    display: flex;
+                    flex-direction: column;
+                    gap: 6px;
+                }
+
+                .user-record-log-module .url-existing-attachment-item {
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                }
+
+                .user-record-log-module .url-existing-attachment-link {
+                    word-break: break-word;
+                }
+
+                .user-record-log-module .url-remove-existing-attachment-btn {
+                    border: 0;
+                    background: transparent;
+                    color: #d22b2b;
+                    padding: 0;
+                    line-height: 1;
+                    cursor: pointer;
+                }
+
+                .user-record-log-module .url-edit-preview-item {
+                    position: relative;
+                    display: inline-flex;
+                }
+
+                .user-record-log-module .url-edit-preview-open-btn {
+                    width: 120px;
+                    min-height: 120px;
+                }
+
+                .user-record-log-module .url-edit-preview-item img {
+                    cursor: pointer;
+                }
+
+                .user-record-log-module .url-edit-preview-remove-btn {
+                    position: absolute;
+                    top: -8px;
+                    right: -8px;
+                    width: 24px;
+                    height: 24px;
+                    border-radius: 999px;
+                    border: 0;
+                    background: #d22b2b;
+                    color: #ffffff;
+                    font-size: 14px;
+                    line-height: 24px;
+                    text-align: center;
+                    cursor: pointer;
+                    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
                 }
 
                 .user-record-log-module .url-filter-label-nowrap {
@@ -892,8 +1459,23 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                     object-fit: contain;
                 }
 
+                .user-record-log-module .tox-tinymce {
+                    border-radius: 8px;
+                }
+
                 body.url-modal-open {
                     overflow: hidden;
+                }
+
+                @media (max-width: 767.98px) {
+                    .user-record-log-module .url-attachment-action {
+                        flex: 1 1 100%;
+                        width: 100%;
+                    }
+
+                    .user-record-log-module .url-attachment-preview-grid {
+                        grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+                    }
                 }
             </style>
             <?php if ($sectionHeading !== '') { ?>
@@ -914,6 +1496,7 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                         <input type="hidden" name="url_action" value="save">
                         <input type="hidden" name="record_id" id="url_record_id" value="0">
                         <input type="hidden" name="existing_attachment" id="url_existing_attachment" value="">
+                        <input type="hidden" name="existing_attachments" id="url_existing_attachments" value="[]">
                         <input type="hidden" name="customer_id" value="<?php echo isset($context['customer_id']) ? (int) $context['customer_id'] : 0; ?>">
                         <input type="hidden" name="customer_column" value="<?php echo htmlspecialchars(isset($context['customer_column']) ? (string) $context['customer_column'] : '', ENT_QUOTES, 'UTF-8'); ?>">
                         <input type="hidden" name="return_url" value="<?php echo htmlspecialchars($pathReturn, ENT_QUOTES, 'UTF-8'); ?>">
@@ -921,10 +1504,30 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                         <div class="mb-3">
                             <label class="form-label" for="url_content">Content</label>
                             <textarea class="form-control" id="url_content" name="content" rows="4" required></textarea>
+                            <div class="url-editor-note">Supports paragraphs, bold text, emoji, and bullet or numbered lists.</div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label" for="url_attachment">Attachment</label>
-                            <input class="form-control" type="file" id="url_attachment" name="attachment">
+                            <div class="si-attach-wrap">
+                                <div class="row g-3 align-items-start">
+                                    <div class="col-12 col-md-6">
+                                        <div id="url_attachment_inputs">
+                                            <div class="mb-2 si-attachment-input-row">
+                                                <input class="form-control user-record-log-attachment-input" type="file" name="attachment[]" id="url_attachment" accept=".png,.jpg,.jpeg,.webp,.pdf,application/pdf">
+                                                <button class="mt-1 add-user-record-log-attachment-btn" id="action_menu_btn" type="button" title="Add another attachment"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>
+                                            </div>
+                                        </div>
+                                        <small class="text-muted">Click + to add more attachments. Supports image and PDF files.</small>
+                                        <div class="mt-2" id="url_existing_attachment_links"></div>
+                                    </div>
+                                    <div class="col-12 col-md-6">
+                                        <div class="si-attach-preview">
+                                            <div id="url_attachment_img_list" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;"></div>
+                                            <span id="url_attachment_placeholder" class="text-muted">Image / PDF preview</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                         <div class="d-flex gap-2 flex-wrap">
                             <button type="submit" class="btn btn-sm btn-rounded btn-primary" id="url_submit_btn">Save User Log</button>
@@ -1024,6 +1627,7 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
         <script>
             window.__USER_RECORD_LOG_CONFIG = <?php echo $configJson ? $configJson : '{}'; ?>;
         </script>
+        <script src="<?php echo htmlspecialchars(rtrim((string) $GLOBALS['SITEURL'], '/') . '/header/tinymce/tinymce.min.js?v=' . @filemtime(ROOT . '/header/tinymce/tinymce.min.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
         <script src="<?php echo htmlspecialchars(rtrim((string) $GLOBALS['SITEURL'], '/') . '/js/user_record_log.js?v=' . @filemtime(ROOT . '/js/user_record_log.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
         <?php
     }

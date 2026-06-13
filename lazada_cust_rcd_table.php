@@ -41,6 +41,9 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
             tableId: 'lzd_cust_deals',
             storageKey: 'lazada_customer_record_filters',
             panelStorageKey: 'lazada_customer_record_filter_panel_open',
+            deferApply: true,
+            selectFieldsMultiple: true,
+            scopePaths: ['lazada_cust_rcd_table.php', 'lazada_cust_rcd.php'],
             filters: [
                 { key: 'customer_label', label: 'Customer Label', attr: 'customer_label', type: 'select', placeholder: 'All Customer Labels' },
                 { key: 'customer_tag', label: 'Tag', attr: 'customer_tag', type: 'select', placeholder: 'All Tags' },

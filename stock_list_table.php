@@ -31,6 +31,7 @@ $stockListCurrentPageUrl = function_exists('shopeeOmsGetCurrentPageUrl')
     : (rtrim((string) $SITEURL, '/') . (isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '/stock_list_table.php'));
 $orderIds = array();
 $orderNumbers = array();
+$warehouseIds = array();
 $groupedRows = array();
 
 foreach ($stockOutRows as $row) {
@@ -44,11 +45,15 @@ foreach ($stockOutRows as $row) {
     if ($orderNumber !== '') {
         $orderNumbers[$orderNumber] = $orderNumber;
     }
+    $warehouseId = isset($row['warehouse_id']) ? (int) $row['warehouse_id'] : 0;
+    if ($warehouseId > 0) {
+        $warehouseIds[$warehouseId] = $warehouseId;
+    }
 
     if (!isset($groupedRows[$orderId])) {
         $groupedRows[$orderId] = array(
             'order_id' => $orderId,
-            'warehouse_id' => isset($row['warehouse_id']) ? (int) $row['warehouse_id'] : 0,
+            'warehouse_id' => $warehouseId,
             'stock_out_date' => isset($row['stock_in_date']) ? (string) $row['stock_in_date'] : '',
             'order_number' => $orderNumber,
             'create_by' => isset($row['create_by']) ? (string) $row['create_by'] : '',
@@ -76,6 +81,31 @@ foreach ($usageRows as $usageRow) {
 }
 
 $sourceOrderLinkMap = siBuildSourceOrderLinkMap($connect, $finance_connect, array_values($orderNumbers));
+$transferLogMap = array();
+if (!empty($orderNumbers) && !empty($warehouseIds)) {
+    $safeOrderCodes = array();
+    foreach ($orderNumbers as $orderNumber) {
+        $safeOrderCodes[] = "'" . mysqli_real_escape_string($finance_connect, (string) $orderNumber) . "'";
+    }
+
+    $transferLogTable = defined('ORDER_WAREHOUSE_TRANSFER_LOG') ? ORDER_WAREHOUSE_TRANSFER_LOG : 'order_warehouse_transfer_log';
+    $transferLogSql = "SELECT order_code, old_warehouse_id, new_warehouse_id, create_date, create_time
+        FROM `" . str_replace('`', '``', $transferLogTable) . "`
+        WHERE status = 'A'
+          AND order_code IN (" . implode(',', $safeOrderCodes) . ")
+          AND old_warehouse_id IN (" . implode(',', array_values($warehouseIds)) . ")
+        ORDER BY create_date DESC, create_time DESC, id DESC";
+    $transferLogResult = mysqli_query($finance_connect, $transferLogSql);
+    if ($transferLogResult) {
+        while ($transferLogRow = mysqli_fetch_assoc($transferLogResult)) {
+            $mapKey = trim((string) (isset($transferLogRow['order_code']) ? $transferLogRow['order_code'] : '')) . '|' . (int) (isset($transferLogRow['old_warehouse_id']) ? $transferLogRow['old_warehouse_id'] : 0);
+            if ($mapKey === '|' || isset($transferLogMap[$mapKey])) {
+                continue;
+            }
+            $transferLogMap[$mapKey] = $transferLogRow;
+        }
+    }
+}
 ?>
 
 <!DOCTYPE html>
@@ -184,11 +214,25 @@ $sourceOrderLinkMap = siBuildSourceOrderLinkMap($connect, $finance_connect, arra
                                         $usageDateLines[] = trim((string) (isset($usageRow['stock_in_order_date']) ? $usageRow['stock_in_order_date'] : ''));
                                     }
                                 } else {
-                                    $usageLinkRows[] = array(
-                                        'label' => 'Not recorded',
-                                        'url' => '',
-                                    );
-                                    $usageDateLines[] = '-';
+$transferOrderNumber = isset($row['order_number']) ? trim((string) $row['order_number']) : '';
+$transferMapKey = $transferOrderNumber . '|' . (int) $row['warehouse_id'];
+$transferLogRow = isset($transferLogMap[$transferMapKey]) ? $transferLogMap[$transferMapKey] : null;
+                                    if (is_array($transferLogRow)) {
+                                        $transferWarehouseId = isset($transferLogRow['new_warehouse_id']) ? (int) $transferLogRow['new_warehouse_id'] : 0;
+                                        $transferWarehouseName = isset($warehouseNameMap[$transferWarehouseId]) ? $warehouseNameMap[$transferWarehouseId] : ('Warehouse #' . $transferWarehouseId);
+                                        $transferDate = trim((string) (isset($transferLogRow['create_date']) ? $transferLogRow['create_date'] : ''));
+                                        $usageLinkRows[] = array(
+                                            'label' => 'Stock has already been transferred to ' . $transferWarehouseName,
+                                            'url' => '',
+                                        );
+                                        $usageDateLines[] = $transferDate !== '' ? ('Stock Transfer Date: ' . $transferDate) : 'Stock Transfer Date: -';
+                                    } else {
+                                        $usageLinkRows[] = array(
+                                            'label' => 'Not recorded',
+                                            'url' => '',
+                                        );
+                                        $usageDateLines[] = '-';
+                                    }
                                 }
 
                                 $createdByKey = isset($row['create_by']) ? (string) $row['create_by'] : '';

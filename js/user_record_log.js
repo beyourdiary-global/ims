@@ -11,7 +11,6 @@
     var customerId = parseInt(cfg.customerId || "0", 10) || 0;
     var customerColumn = String(cfg.customerColumn || "");
     var pathReturn = cfg.pathReturn || window.location.href;
-    var confirmationPageName = cfg.confirmationPageName || "User Record Log";
 
     var $form = $("#url_form");
     var $alert = $("#url_alert");
@@ -24,16 +23,19 @@
     var $recordId = $("#url_record_id");
     var $content = $("#url_content");
     var $existingAttachment = $("#url_existing_attachment");
+    var $existingAttachments = $("#url_existing_attachments");
     var $submitBtn = $("#url_submit_btn");
     var $cancelEditBtn = $("#url_cancel_edit_btn");
     var $attachmentModal = $("#url_attachment_preview_modal");
     var $attachmentModalClose = $("#url_attachment_modal_close");
     var $attachmentPreviewContent = $("#url_attachment_preview_content");
+    var currentAttachmentObjectUrls = [];
     var currentPage = 1;
     var currentPageSize = parseInt($pageSize.val() || "10", 10) || 10;
     var formFieldIds = [
       "url_record_id",
       "url_existing_attachment",
+      "url_existing_attachments",
       "url_content",
       "url_attachment",
     ];
@@ -88,18 +90,18 @@
           $("body").append(
             '<div class="modal fade" id="url_success_popup_modal" tabindex="-1" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="url_success_popup_title">' +
               '<div class="modal-dialog modal-dialog-centered">' +
-                '<div class="modal-content">' +
-                  '<div class="modal-header">' +
-                    '<h5 class="modal-title" id="url_success_popup_title">Success</h5>' +
-                    '<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>' +
-                  "</div>" +
-                  '<div class="modal-body" id="url_success_popup_message"></div>' +
-                  '<div class="modal-footer">' +
-                    '<button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>' +
-                  "</div>" +
-                "</div>" +
+              '<div class="modal-content">' +
+              '<div class="modal-header">' +
+              '<h5 class="modal-title" id="url_success_popup_title">Success</h5>' +
+              '<button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>' +
               "</div>" +
-            "</div>",
+              '<div class="modal-body" id="url_success_popup_message"></div>' +
+              '<div class="modal-footer">' +
+              '<button type="button" class="btn btn-primary" data-bs-dismiss="modal">OK</button>' +
+              "</div>" +
+              "</div>" +
+              "</div>" +
+              "</div>",
           );
           $modal = $("#url_success_popup_modal");
         }
@@ -131,6 +133,10 @@
       $("body").removeClass("url-modal-open");
     }
 
+    function escHtml(text) {
+      return $("<div>").text(String(text || "")).html();
+    }
+
     function getFileExtension(filePath) {
       var cleanPath = String(filePath || "").split("?")[0].split("#")[0];
       var idx = cleanPath.lastIndexOf(".");
@@ -140,24 +146,52 @@
       return cleanPath.substring(idx + 1).toLowerCase();
     }
 
-    function buildAttachmentPreviewHtml(fileUrl) {
-      var safeUrl = $("<div>").text(String(fileUrl || "")).html();
-      var ext = getFileExtension(fileUrl);
-      var imageExts = {
+    function isImageExtension(ext) {
+      return {
         png: true,
         jpg: true,
         jpeg: true,
-        gif: true,
         webp: true,
-        bmp: true,
-        svg: true,
-      };
+      }[String(ext || "").toLowerCase()] === true;
+    }
 
-      if (imageExts[ext]) {
+    function isPdfExtension(ext) {
+      return String(ext || "").toLowerCase() === "pdf";
+    }
+
+    function buildAttachmentUrl(attachmentPath) {
+      var cleanPath = $.trim(String(attachmentPath || ""));
+      if (!cleanPath) {
+        return "";
+      }
+      if (/^https?:\/\//i.test(cleanPath)) {
+        return cleanPath;
+      }
+      cleanPath = cleanPath.replace(/\\/g, "/").replace(/^\/+/, "");
+      if (cleanPath.indexOf("/") === -1) {
+        var uploadWebDir = String(cfg.uploadWebDir || "")
+          .replace(/^\/+/, "")
+          .replace(/\/+$/, "");
+        if (uploadWebDir) {
+          cleanPath = uploadWebDir + "/" + cleanPath;
+        }
+      }
+      return (
+        String(cfg.siteUrl || "").replace(/\/$/, "") +
+        "/" +
+        cleanPath
+      );
+    }
+
+    function buildAttachmentPreviewHtml(fileUrl, filePath) {
+      var safeUrl = escHtml(fileUrl);
+      var ext = getFileExtension(filePath || fileUrl);
+
+      if (isImageExtension(ext)) {
         return '<img src="' + safeUrl + '" alt="Attachment preview">';
       }
 
-      if (ext === "pdf") {
+      if (isPdfExtension(ext)) {
         return '<iframe src="' + safeUrl + '" title="Attachment PDF preview"></iframe>';
       }
 
@@ -171,23 +205,321 @@
       );
     }
 
-    function openAttachmentModal(fileUrl) {
+    function openAttachmentModal(fileUrl, filePath) {
       if (!$attachmentModal.length || !fileUrl) {
         return;
       }
-      $attachmentPreviewContent.html(buildAttachmentPreviewHtml(fileUrl));
+      $attachmentPreviewContent.html(buildAttachmentPreviewHtml(fileUrl, filePath));
       $attachmentModal.removeClass("d-none");
       $("body").addClass("url-modal-open");
     }
 
+    function clearAttachmentObjectUrls() {
+      if (!currentAttachmentObjectUrls.length) {
+        return;
+      }
+
+      currentAttachmentObjectUrls.forEach(function (objectUrl) {
+        if (objectUrl) {
+          URL.revokeObjectURL(objectUrl);
+        }
+      });
+      currentAttachmentObjectUrls = [];
+    }
+
+    function createAttachmentPreviewTrigger(fileUrl, filePath) {
+      var fileName = String(filePath || "").split(/[\\/]/).pop() || "Attachment";
+      var ext = getFileExtension(filePath || fileUrl);
+      var trigger = document.createElement("button");
+      trigger.type = "button";
+      trigger.className = "url-attachment-thumb url-edit-preview-open-btn";
+      trigger.setAttribute("data-url", fileUrl);
+      trigger.setAttribute("data-file", filePath || fileName);
+      trigger.setAttribute("title", fileName);
+      trigger.setAttribute("aria-label", "Preview attachment " + fileName);
+
+      if (isImageExtension(ext)) {
+        var img = document.createElement("img");
+        img.src = fileUrl;
+        img.alt = fileName;
+        trigger.appendChild(img);
+        return trigger;
+      }
+
+      trigger.classList.add("url-attachment-thumb-file");
+
+      var extTag = document.createElement("span");
+      extTag.className = "url-attachment-file-ext";
+      extTag.textContent = ext ? ext.toUpperCase() : "FILE";
+
+      var nameTag = document.createElement("span");
+      nameTag.className = "url-attachment-file-name";
+      nameTag.textContent = fileName;
+
+      trigger.appendChild(extTag);
+      trigger.appendChild(nameTag);
+      return trigger;
+    }
+
+    function getEditor() {
+      if (!window.tinymce || typeof window.tinymce.get !== "function") {
+        return null;
+      }
+      return window.tinymce.get("url_content");
+    }
+
+    function initEditor() {
+      if (!window.tinymce || typeof window.tinymce.init !== "function") {
+        return;
+      }
+
+      var existingEditor = getEditor();
+      if (existingEditor) {
+        return;
+      }
+
+      window.tinymce.init({
+        selector: "#url_content",
+        base_url: cfg.siteUrl ? cfg.siteUrl + "/header/tinymce" : undefined,
+        license_key: "gpl",
+        menubar: false,
+        branding: false,
+        promotion: false,
+        statusbar: false,
+        height: 280,
+        resize: true,
+        plugins: "lists emoticons autolink paste",
+        toolbar:
+          "undo redo | blocks | bold italic underline | bullist numlist | emoticons | removeformat",
+        browser_spellcheck: true,
+        contextmenu: false,
+        block_formats:
+          "Paragraph=p; Heading 1=h1; Heading 2=h2; Heading 3=h3; Heading 4=h4",
+        forced_root_block: "p",
+        valid_elements:
+          "p,br,strong/b,em/i,u,ul,ol,li,blockquote,span,div,h1,h2,h3,h4",
+        content_style:
+          "body { font-family: Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.6; }",
+        setup: function (editor) {
+          editor.on("init change keyup undo redo setcontent", function () {
+            editor.save();
+          });
+        },
+      });
+    }
+
+    function setEditorContent(content) {
+      var editor = getEditor();
+      var html = String(content || "");
+      if (editor) {
+        editor.setContent(html);
+        editor.save();
+        return;
+      }
+      $content.val(html);
+    }
+
+    function syncEditorToTextarea() {
+      var editor = getEditor();
+      if (editor) {
+        editor.save();
+      }
+    }
+
+    function getEditorPlainText() {
+      var editor = getEditor();
+      if (editor) {
+        return $.trim(editor.getContent({ format: "text" }) || "");
+      }
+      return $.trim($content.val() || "");
+    }
+
+    function focusEditor() {
+      var editor = getEditor();
+      if (editor) {
+        editor.focus();
+        return;
+      }
+      $content.trigger("focus");
+    }
+
+    function parseAttachmentList(rawValue) {
+      if (!rawValue) {
+        return [];
+      }
+
+      try {
+        var parsed = JSON.parse(String(rawValue));
+        if (!Array.isArray(parsed)) {
+          return [];
+        }
+
+        var clean = [];
+        var seen = {};
+        for (var i = 0; i < parsed.length; i++) {
+          var item = $.trim(String(parsed[i] || ""));
+          if (item && !seen[item]) {
+            clean.push(item);
+            seen[item] = true;
+          }
+        }
+        return clean;
+      } catch (err) {
+        return [];
+      }
+    }
+
+    function setExistingAttachments(attachments) {
+      var list = Array.isArray(attachments) ? attachments : [];
+      $existingAttachments.val(JSON.stringify(list));
+      $existingAttachment.val(list.length ? String(list[0]) : "");
+    }
+
+    function removeExistingAttachmentByIndex(index) {
+      var list = parseAttachmentList($existingAttachments.val());
+      if (index < 0 || index >= list.length) {
+        return;
+      }
+
+      list.splice(index, 1);
+      setExistingAttachments(list);
+      renderExistingAttachmentLinks(list);
+      refreshAttachmentPreview(list);
+    }
+
+    function renderExistingAttachmentLinks(attachments) {
+      var $wrap = $("#url_existing_attachment_links");
+      if (!$wrap.length) {
+        return;
+      }
+
+      var list = Array.isArray(attachments) ? attachments : [];
+      if (!list.length) {
+        $wrap.empty();
+        return;
+      }
+
+      var html = '<div class="url-existing-attachment-list">';
+      for (var i = 0; i < list.length; i++) {
+        var href = buildAttachmentUrl(list[i]);
+        if (!href) {
+          continue;
+        }
+        html +=
+          '<div class="url-existing-attachment-item"><a class="url-existing-attachment-link" href="' +
+          escHtml(href) +
+          '" target="_blank">Open attachment ' +
+          (i + 1) +
+          '</a><button type="button" class="url-remove-existing-attachment-btn" data-index="' +
+          i +
+          '" title="Remove attachment"><i class="fa-regular fa-trash-can"></i></button></div>';
+      }
+      html += "</div>";
+      $wrap.html(html);
+    }
+
+    function refreshAttachmentPreview(existingAttachments) {
+      var listWrap = document.getElementById("url_attachment_img_list");
+      var placeholder = document.getElementById("url_attachment_placeholder");
+      if (!listWrap) {
+        return;
+      }
+
+      clearAttachmentObjectUrls();
+      listWrap.innerHTML = "";
+      var hasPreview = false;
+      var existingList = Array.isArray(existingAttachments)
+        ? existingAttachments
+        : parseAttachmentList($existingAttachments.val());
+
+      existingList.forEach(function (attachmentPath, index) {
+        var ext = getFileExtension(attachmentPath);
+        var attachmentUrl = buildAttachmentUrl(attachmentPath);
+        if (!attachmentUrl || (!isImageExtension(ext) && !isPdfExtension(ext))) {
+          return;
+        }
+
+        hasPreview = true;
+        var existingWrap = document.createElement("div");
+        existingWrap.className = "url-edit-preview-item";
+        var previewTrigger = createAttachmentPreviewTrigger(
+          attachmentUrl,
+          attachmentPath,
+        );
+
+        var removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "url-edit-preview-remove-btn";
+        removeBtn.setAttribute("data-index", String(index));
+        removeBtn.setAttribute("title", "Remove attachment");
+        removeBtn.innerHTML = "&times;";
+
+        existingWrap.appendChild(previewTrigger);
+        existingWrap.appendChild(removeBtn);
+        listWrap.appendChild(existingWrap);
+      });
+
+      document
+        .querySelectorAll(".user-record-log-attachment-input")
+        .forEach(function (input) {
+          if (!input.files || input.files.length === 0) {
+            return;
+          }
+
+          Array.prototype.forEach.call(input.files, function (file) {
+            if (!file) {
+              return;
+            }
+
+            var ext = getFileExtension(file.name || "");
+            var fileType = String(file.type || "");
+            var isImage = fileType.indexOf("image/") === 0 || isImageExtension(ext);
+            var isPdf = fileType === "application/pdf" || isPdfExtension(ext);
+            if (!isImage && !isPdf) {
+              return;
+            }
+
+            hasPreview = true;
+            var objectUrl = URL.createObjectURL(file);
+            currentAttachmentObjectUrls.push(objectUrl);
+
+            var uploadWrap = document.createElement("div");
+            uploadWrap.className = "url-edit-preview-item";
+            uploadWrap.appendChild(
+              createAttachmentPreviewTrigger(objectUrl, file.name || ""),
+            );
+            listWrap.appendChild(uploadWrap);
+          });
+        });
+
+      if (placeholder) {
+        placeholder.style.display = hasPreview ? "none" : "inline";
+      }
+    }
+
+    function resetAttachmentInputs() {
+      var wrap = document.getElementById("url_attachment_inputs");
+      if (!wrap) {
+        return;
+      }
+
+      wrap.innerHTML =
+        '<div class="mb-2 si-attachment-input-row">' +
+        '<input class="form-control user-record-log-attachment-input" type="file" name="attachment[]" id="url_attachment" accept=".png,.jpg,.jpeg,.webp,.pdf,application/pdf">' +
+        '<button class="mt-1 add-user-record-log-attachment-btn" id="action_menu_btn" type="button" title="Add another attachment"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>' +
+        "</div>";
+    }
+
     function resetForm() {
       $recordId.val("0");
-      $content.val("");
-      $("#url_attachment").val("");
-      $existingAttachment.val("");
+      setEditorContent("");
+      resetAttachmentInputs();
+      setExistingAttachments([]);
       $submitBtn.text("Save User Log");
       $cancelEditBtn.hide();
       clearStoredFieldValues(formFieldIds);
+      renderExistingAttachmentLinks([]);
+      refreshAttachmentPreview([]);
     }
 
     function resetFilters() {
@@ -399,10 +731,11 @@
 
     function saveRecord() {
       hideAlert();
+      syncEditorToTextarea();
 
-      if (!$.trim($content.val() || "")) {
+      if (!getEditorPlainText()) {
         showAlert("danger", "Content is required.");
-        $content.focus();
+        focusEditor();
         return;
       }
 
@@ -412,12 +745,19 @@
         return;
       }
 
-      var actionType = String($recordId.val() || "0") !== "0" ? "E" : "I";
       var formData = new FormData(formEl);
       formData.set("url_action", "save");
       formData.set("customer_id", String(customerId || 0));
       formData.set("customer_column", customerColumn);
       formData.set("return_url", pathReturn);
+      formData.set(
+        "existing_attachments",
+        String($existingAttachments.val() || "[]"),
+      );
+      formData.set(
+        "existing_attachment",
+        String($existingAttachment.val() || ""),
+      );
 
       setLoading(true);
       $.ajax({
@@ -513,17 +853,101 @@
       $("[id^='url-body-']").hide();
     });
 
+    $(document).on("change", ".user-record-log-attachment-input", function () {
+      refreshAttachmentPreview();
+    });
+
+    $(document).on(
+      "click",
+      ".add-user-record-log-attachment-btn, .remove-user-record-log-attachment-btn",
+      function (e) {
+        var target = e.target;
+        if (!target) {
+          return;
+        }
+
+        var addBtn = target.closest(".add-user-record-log-attachment-btn");
+        var removeBtn = target.closest(
+          ".remove-user-record-log-attachment-btn",
+        );
+        var wrap = document.getElementById("url_attachment_inputs");
+        if (!wrap) {
+          return;
+        }
+
+        if (addBtn) {
+          var row = document.createElement("div");
+          row.className = "mb-2 si-attachment-input-row";
+          row.innerHTML =
+            '<input class="form-control user-record-log-attachment-input" type="file" name="attachment[]" accept=".png,.jpg,.jpeg,.webp,.pdf,application/pdf">' +
+            '<button class="mt-1 remove-user-record-log-attachment-btn" id="action_menu_btn" type="button" title="Remove attachment row"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>';
+          wrap.appendChild(row);
+          return;
+        }
+
+        if (removeBtn) {
+          var rows = wrap.querySelectorAll(".si-attachment-input-row");
+          if (rows.length <= 1) {
+            var onlyInput =
+              rows[0] && rows[0].querySelector(".user-record-log-attachment-input");
+            if (onlyInput) {
+              onlyInput.value = "";
+            }
+          } else {
+            var removeRow = removeBtn.closest(".si-attachment-input-row");
+            if (removeRow) {
+              removeRow.remove();
+            }
+          }
+          refreshAttachmentPreview();
+        }
+      },
+    );
+
+    $(document).on("click", ".url-remove-existing-attachment-btn", function () {
+      var index = parseInt($(this).data("index"), 10);
+      if (isNaN(index)) {
+        return;
+      }
+      removeExistingAttachmentByIndex(index);
+    });
+
+    $(document).on("click", ".url-edit-preview-remove-btn", function (e) {
+      e.preventDefault();
+      e.stopPropagation();
+      var index = parseInt($(this).data("index"), 10);
+      if (isNaN(index)) {
+        return;
+      }
+      removeExistingAttachmentByIndex(index);
+    });
+
+    $(document).on("click", ".url-edit-preview-open-btn", function () {
+      var fileUrl = String($(this).data("url") || "");
+      var filePath = String($(this).data("file") || "");
+      if (!fileUrl) {
+        return;
+      }
+      openAttachmentModal(fileUrl, filePath);
+    });
+
     $list.on("click", ".url-edit-btn", function () {
       var id = String($(this).data("id") || "0");
       var $card = $(this).closest(".card");
+      var contentValue = String($card.find(".url-edit-content").val() || "");
+      var attachmentsValue = String(
+        $card.find(".url-edit-attachments").val() || "[]",
+      );
+      var attachments = parseAttachmentList(attachmentsValue);
 
       $recordId.val(id);
-      $content.val($.trim($card.find(".url-edit-content").val() || ""));
-      $existingAttachment.val(
-        $.trim($card.find(".url-edit-attachment").val() || ""),
-      );
+      setEditorContent(contentValue);
+      resetAttachmentInputs();
+      setExistingAttachments(attachments);
       $submitBtn.text("Save User Log");
       $cancelEditBtn.show();
+      renderExistingAttachmentLinks(attachments);
+      refreshAttachmentPreview(attachments);
 
       if ($form.offset()) {
         $("html, body").animate({ scrollTop: $form.offset().top - 100 }, 250);
@@ -568,7 +992,12 @@
       }
     });
 
+    $(window).on("beforeunload", function () {
+      clearAttachmentObjectUrls();
+    });
+
     clearStoredFieldValues(formFieldIds.concat(filterFieldIds));
+    initEditor();
     resetForm();
     resetFilters();
     loadList();

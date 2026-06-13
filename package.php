@@ -9,6 +9,27 @@ include ROOT.'/include/access.php';
 
 $tblName = PKG;
 
+if (!function_exists('packageNormalizePlatformItemIdCsv')) {
+    function packageNormalizePlatformItemIdCsv($value)
+    {
+        if (is_array($value)) {
+            $value = implode(',', $value);
+        }
+
+        $value = str_replace(array("\r\n", "\r", "\n"), ',', (string) $value);
+        $parts = array_filter(array_map('trim', explode(',', $value)), 'strlen');
+
+        $clean = array();
+        foreach ($parts as $part) {
+            if (!in_array($part, $clean, true)) {
+                $clean[] = $part;
+            }
+        }
+
+        return implode(',', $clean);
+    }
+}
+
 //Current Page Action And Data ID
 $dataID = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
@@ -80,6 +101,7 @@ if (post('actionBtn')) {
 
             $currentDataName = postSpaceFilter('currentDataName');
             $item_code = postSpaceFilter('item_code'); // NEW
+            $platform_item_id = packageNormalizePlatformItemIdCsv(postSpaceFilter('platform_item_id'));
             $item_description = postSpaceFilter('item_description'); // NEW
             $pkg_price = postSpaceFilter('price');
             $cur_unit = postSpaceFilter('cur_unit_hidden');
@@ -157,6 +179,10 @@ if (post('actionBtn')) {
                         array_push($newvalarr, $item_code);
                         array_push($datafield, 'item_code');
                     }
+                    if ($platform_item_id) {
+                        array_push($newvalarr, $platform_item_id);
+                        array_push($datafield, 'platform_item_id');
+                    }
                     if ($item_description) {
                         array_push($newvalarr, $item_description);
                         array_push($datafield, 'item_description');
@@ -204,6 +230,7 @@ if (post('actionBtn')) {
 
                     $safeCurrentDataName = mysqli_real_escape_string($connect, (string) $currentDataName);
                     $safeItemCode = mysqli_real_escape_string($connect, (string) $item_code);
+                    $safePlatformItemId = mysqli_real_escape_string($connect, (string) $platform_item_id);
                     $safeItemDescription = mysqli_real_escape_string($connect, (string) $item_description);
                     $safeBrand = mysqli_real_escape_string($connect, (string) $brand);
                     $safeCost = mysqli_real_escape_string($connect, (string) $cost);
@@ -215,7 +242,7 @@ if (post('actionBtn')) {
                     $safeBarcodeSlotTotal = mysqli_real_escape_string($connect, (string) $barcode_slot_total);
                     $safeDataRemark = mysqli_real_escape_string($connect, (string) $dataRemark);
 
-                    $query = "INSERT INTO " . $tblName . "(name,item_code,item_description,brand,cost,cost_curr,agent_cost,price,currency_unit,product,barcode_slot_total,remark,create_by,create_date,create_time) VALUES ('$safeCurrentDataName','$safeItemCode','$safeItemDescription','$safeBrand','$safeCost', '$safeCostCurr','$safeAgentCost','$safePkgPrice','$safeCurUnit','$safeProdList','$safeBarcodeSlotTotal','$safeDataRemark','" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . "(name,item_code,platform_item_id,item_description,brand,cost,cost_curr,agent_cost,price,currency_unit,product,barcode_slot_total,remark,create_by,create_date,create_time) VALUES ('$safeCurrentDataName','$safeItemCode','$safePlatformItemId','$safeItemDescription','$safeBrand','$safeCost', '$safeCostCurr','$safeAgentCost','$safePkgPrice','$safeCurUnit','$safeProdList','$safeBarcodeSlotTotal','$safeDataRemark','" . USER_ID . "',curdate(),curtime())";
                     $returnData = mysqli_query($connect, $query);
                     if ($returnData) {
                         $dataID = $connect->insert_id;
@@ -235,11 +262,19 @@ if (post('actionBtn')) {
                         array_push($chgvalarr, $currentDataName);
                         array_push($datafield, 'name');
                     }
+
                     if ($row['item_code'] != $item_code) {
                         array_push($oldvalarr, $row['item_code']);
                         array_push($chgvalarr, $item_code);
                         array_push($datafield, 'item_code');
                     }
+
+                    if ((isset($row['platform_item_id']) ? (string) $row['platform_item_id'] : '') != $platform_item_id) {
+                        array_push($oldvalarr, isset($row['platform_item_id']) && $row['platform_item_id'] != '' ? $row['platform_item_id'] : 'Empty Value');
+                        array_push($chgvalarr, $platform_item_id != '' ? $platform_item_id : 'Empty Value');
+                        array_push($datafield, 'platform_item_id');
+                    }
+
                     if ($row['item_description'] != $item_description) {
                         array_push($oldvalarr, $row['item_description']);
                         array_push($chgvalarr, $item_description);
@@ -270,11 +305,7 @@ if (post('actionBtn')) {
                         array_push($datafield, 'agent cost');
                     }
 
-                    if ($row['agent_cost_err'] != $agent_cost_err) {
-                        array_push($oldvalarr, $row['agent_cost_err']);
-                        array_push($chgvalarr, $agent_cost_err);
-                        array_push($datafield, 'cost_curr');
-                    }
+
 
                     if ($row['price'] != $pkg_price) {
                         array_push($oldvalarr, $row['price']);
@@ -311,6 +342,7 @@ if (post('actionBtn')) {
                     if ($oldvalarr && $chgvalarr) {
                         $safeCurrentDataName = mysqli_real_escape_string($connect, (string) $currentDataName);
                         $safeItemCode = mysqli_real_escape_string($connect, (string) $item_code);
+                        $safePlatformItemId = mysqli_real_escape_string($connect, (string) $platform_item_id);
                         $safeItemDescription = mysqli_real_escape_string($connect, (string) $item_description);
                         $safeBrand = mysqli_real_escape_string($connect, (string) $brand);
                         $safeCost = mysqli_real_escape_string($connect, (string) $cost);
@@ -323,7 +355,7 @@ if (post('actionBtn')) {
                         $safeDataRemark = mysqli_real_escape_string($connect, (string) $dataRemark);
                         $safeDataId = (int) $dataID;
 
-                        $query = "UPDATE " . $tblName . " SET name ='$safeCurrentDataName', item_code='$safeItemCode', item_description='$safeItemDescription', brand='$safeBrand',cost='$safeCost',cost_curr='$safeCostCurr',agent_cost='$safeAgentCost',price ='$safePkgPrice', currency_unit ='$safeCurUnit', product ='$safeProdList', barcode_slot_total ='$safeBarcodeSlotTotal', remark ='$safeDataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$safeDataId'";
+                        $query = "UPDATE " . $tblName . " SET name ='$safeCurrentDataName', item_code='$safeItemCode', platform_item_id='$safePlatformItemId', item_description='$safeItemDescription', brand='$safeBrand',cost='$safeCost',cost_curr='$safeCostCurr',agent_cost='$safeAgentCost',price ='$safePkgPrice', currency_unit ='$safeCurUnit', product ='$safeProdList', barcode_slot_total ='$safeBarcodeSlotTotal', remark ='$safeDataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$safeDataId'";
                         $returnData = mysqli_query($connect, $query);
                         if (!$returnData) {
                             $errorMsg = mysqli_error($connect);
@@ -389,6 +421,63 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 <html>
 
 <head>
+<style>
+    .platform-item-id-wrapper {
+        min-height: 38px;
+        border: 1px solid #ced4da;
+        border-radius: 0.375rem;
+        padding: 4px 6px;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+        align-items: center;
+        background-color: #fff;
+    }
+
+    .platform-item-id-wrapper.readonly {
+        background-color: #e9ecef;
+    }
+
+    .platform-item-id-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+
+    .platform-item-id-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 5px;
+        border: 1px solid #d0d7de;
+        border-radius: 16px;
+        padding: 3px 8px;
+        background-color: #f8f9fa;
+        font-size: 0.875rem;
+    }
+
+    .platform-item-id-remove {
+        border: 0;
+        background: #999;
+        color: #fff;
+        border-radius: 50%;
+        width: 18px;
+        height: 18px;
+        line-height: 16px;
+        padding: 0;
+        font-size: 12px;
+    }
+
+    .platform-item-id-input {
+        border: 0;
+        outline: 0;
+        min-width: 160px;
+        flex: 1;
+        font-weight: normal !important;
+        font-size: 16px;
+        color: #212529;
+    }
+</style>
+
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
     <link rel="stylesheet" href="./css/package.css">
 </head>
@@ -435,6 +524,21 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                         <input class="form-control" type="text" name="item_code" id="item_code" 
                                             value="<?php echo isset($_POST['item_code']) ? htmlspecialchars($_POST['item_code']) : ((isset($row['item_code'])) ? htmlspecialchars($row['item_code']) : ''); ?>" 
                                             <?php if ($act == '') echo 'readonly' ?> required autocomplete="off">
+                                    </div>
+                                </div>
+
+                                <div class="col-12 col-md-4">
+                                    <div class="form-group mb-3">
+                                        <label class="form-label form_lbl" id="platform_item_id_lbl" for="platform_item_id_input">Platform Item ID</label>
+                                        <div class="platform-item-id-wrapper<?php echo ($act == '') ? ' readonly' : ''; ?>" id="platform_item_id_wrapper">
+                                            <div class="platform-item-id-tags" id="platform_item_id_tags"></div>
+                                            <?php if ($act != '') { ?>
+                                                <input class="platform-item-id-input" type="text" id="platform_item_id_input" autocomplete="off">
+                                            <?php } ?>
+                                        </div>
+                                        <input type="hidden" name="platform_item_id" id="platform_item_id"
+                                            value="<?php echo isset($_POST['platform_item_id']) ? htmlspecialchars($_POST['platform_item_id']) : ((isset($row['platform_item_id'])) ? htmlspecialchars($row['platform_item_id']) : ''); ?>">
+                                        <small class="text-muted">Press Enter to add another platform item ID.</small>
                                     </div>
                                 </div>
 

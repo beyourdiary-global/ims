@@ -165,6 +165,58 @@ if (!function_exists('customerFollowUpPagePlatformLabel')) {
     }
 }
 
+if (!function_exists('customerFollowUpPageBuildOrderViewUrl')) {
+    function customerFollowUpPageBuildOrderViewUrl($platform, $orderId)
+    {
+        $platform = customerFollowUpNormalizePlatform($platform);
+        $orderId = (int) $orderId;
+        if ($platform === '' || $orderId <= 0 || !function_exists('shopeeOmsGetOrderSourceViewUrl')) {
+            return '';
+        }
+
+        return (string) shopeeOmsGetOrderSourceViewUrl($platform, $orderId);
+    }
+}
+
+if (!function_exists('customerFollowUpPageBuildCustomerDetailUrl')) {
+    function customerFollowUpPageBuildCustomerDetailUrl($connect, $financeConnect, $platform, $customerId)
+    {
+        $platform = customerFollowUpNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        if ($platform === '' || $customerId <= 0 || !function_exists('customerDailyReportGetCustomerMeta')) {
+            return '';
+        }
+
+        $customerMeta = customerDailyReportGetCustomerMeta($connect, $financeConnect, $platform, $customerId);
+        return trim((string) (isset($customerMeta['record_url']) ? $customerMeta['record_url'] : ''));
+    }
+}
+
+if (!function_exists('customerFollowUpPageRenderCustomerTagLabelCell')) {
+    function customerFollowUpPageRenderCustomerTagLabelCell($customerLabelMeta, $customerTagRows)
+    {
+        $badgeItems = array();
+
+        foreach (array('segmentation', 'level', 'repeat') as $labelType) {
+            if (isset($customerLabelMeta[$labelType]) && function_exists('customerLabelRenderBadge')) {
+                $badgeItems[] = customerLabelRenderBadge($customerLabelMeta[$labelType]);
+            }
+        }
+
+        if (function_exists('customerTagRenderBadgeItems')) {
+            $badgeItems = array_merge($badgeItems, customerTagRenderBadgeItems($customerTagRows, 'customer-tag-table-badge'));
+        }
+
+        if (empty($badgeItems)) {
+            return '-';
+        }
+
+        return function_exists('customerLabelRenderCollapsibleBadgeGroup')
+            ? customerLabelRenderCollapsibleBadgeGroup($badgeItems, 'customer-label-summary-wrap')
+            : implode(' ', $badgeItems);
+    }
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
     audit_log(array(
         'log_act' => 'View',
@@ -225,7 +277,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 $result = array('success' => false, 'message' => 'You do not have approval permission for Customer Follow-Up.');
                 break;
             }
-            $result = customerFollowUpApproveRound($connect, $followUpId, USER_ID, USER_GROUP);
+            $result = customerFollowUpApproveRound(
+                $connect,
+                $followUpId,
+                isset($_POST['approval_comment']) ? $_POST['approval_comment'] : '',
+                USER_ID,
+                USER_GROUP,
+                isset($finance_connect) ? $finance_connect : null
+            );
             break;
 
         case 'reject_follow_up':
@@ -382,6 +441,33 @@ if ($canViewLogsPermission) {
             $actionLogMap[$followUpId] = customerFollowUpFetchActionLogRows($connect, $followUpId, 20);
         }
     }
+}
+
+$customerIdsByPlatform = array();
+foreach ($rows as $row) {
+    $rowPlatform = customerFollowUpNormalizePlatform(isset($row['platform']) ? $row['platform'] : '');
+    $rowCustomerId = isset($row['customer_id']) ? (int) $row['customer_id'] : 0;
+    if ($rowPlatform === '' || $rowCustomerId <= 0) {
+        continue;
+    }
+
+    if (!isset($customerIdsByPlatform[$rowPlatform])) {
+        $customerIdsByPlatform[$rowPlatform] = array();
+    }
+
+    $customerIdsByPlatform[$rowPlatform][$rowCustomerId] = $rowCustomerId;
+}
+
+$customerLabelMapByPlatform = array();
+$customerTagMapByPlatform = array();
+foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
+    $platformCustomerIds = array_values($customerIdMap);
+    $customerLabelMapByPlatform[$rowPlatform] = function_exists('customerLabelGetCustomerLabelMap')
+        ? (array) customerLabelGetCustomerLabelMap($connect, $rowPlatform, $platformCustomerIds)
+        : array();
+    $customerTagMapByPlatform[$rowPlatform] = function_exists('customerTagGetCustomerTagMap')
+        ? (array) customerTagGetCustomerTagMap($connect, $rowPlatform, $platformCustomerIds)
+        : array();
 }
 ?>
 <!DOCTYPE html>
@@ -672,6 +758,17 @@ if ($canViewLogsPermission) {
             margin-top: 0.25rem;
         }
 
+        .customer-follow-up-page .customer-follow-up-record-link {
+            color: inherit;
+            text-decoration: none;
+        }
+
+        .customer-follow-up-page .customer-follow-up-record-link:hover,
+        .customer-follow-up-page .customer-follow-up-record-link:focus {
+            color: #0d6efd;
+            text-decoration: none;
+        }
+
         .customer-follow-up-page .log-table td,
         .customer-follow-up-page .log-table th {
             font-size: 0.82rem;
@@ -845,6 +942,7 @@ if ($canViewLogsPermission) {
                                             <th class="action-col">Actions</th>
                                             <th>Order ID</th>
                                             <th>Username</th>
+                                            <th>Customer Tag / Label</th>
                                             <th>Package</th>
                                             <th>Received Date</th>
                                             <th>Next Follow-Up Date</th>
@@ -878,6 +976,14 @@ if ($canViewLogsPermission) {
                                             $postponeReason = trim((string) (isset($row['postpone_reason']) ? $row['postpone_reason'] : ''));
                                             $postponeRejectReason = trim((string) (isset($row['postpone_reject_reason']) ? $row['postpone_reject_reason'] : ''));
                                             $logRows = isset($actionLogMap[$followUpId]) ? $actionLogMap[$followUpId] : array();
+                                            $rowPlatform = customerFollowUpNormalizePlatform(isset($row['platform']) ? $row['platform'] : '');
+                                            $rowCustomerId = isset($row['customer_id']) ? (int) $row['customer_id'] : 0;
+                                            $customerLabelMeta = isset($customerLabelMapByPlatform[$rowPlatform][$rowCustomerId]) ? $customerLabelMapByPlatform[$rowPlatform][$rowCustomerId] : array();
+                                            $customerTagRows = isset($customerTagMapByPlatform[$rowPlatform][$rowCustomerId]) ? $customerTagMapByPlatform[$rowPlatform][$rowCustomerId] : array();
+                                            $orderViewUrl = customerFollowUpPageBuildOrderViewUrl($rowPlatform, isset($row['order_id']) ? (int) $row['order_id'] : 0);
+                                            $customerDetailUrl = customerFollowUpPageBuildCustomerDetailUrl($connect, isset($finance_connect) ? $finance_connect : null, $rowPlatform, $rowCustomerId);
+                                            $orderDisplayValue = (string) (isset($row['order_no']) && $row['order_no'] !== '' ? $row['order_no'] : $row['order_id']);
+                                            $customerUsername = (string) (isset($row['customer_username']) ? $row['customer_username'] : '');
 
                                             $canManageOwnCase = customerFollowUpCanUserManageCase($row, USER_ID, USER_GROUP, $connect);
                                             $canSubmit = $canManageOwnCase
@@ -970,12 +1076,18 @@ if ($canViewLogsPermission) {
                                                     <?php } ?>
 
                                                     <?php if ($canApprove) { ?>
-                                                        <form method="post" class="d-inline customer-follow-up-action-form" data-confirm-message="Approve this follow-up?">
-                                                            <input type="hidden" name="customer_follow_up_csrf" value="<?= htmlspecialchars((string) $_SESSION['customer_follow_up_csrf'], ENT_QUOTES, 'UTF-8') ?>">
-                                                            <input type="hidden" name="cfu_action" value="approve_follow_up">
-                                                            <input type="hidden" name="follow_up_id" value="<?= $followUpId ?>">
-                                                            <button type="submit" class="btn btn-sm btn-rounded btn-success" title="Approve Follow-Up" aria-label="Approve Follow-Up"><i class="fa-solid fa-circle-check"></i></button>
-                                                        </form>
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-sm btn-rounded btn-success"
+                                                            title="Approve Follow-Up"
+                                                            aria-label="Approve Follow-Up"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#approveFollowUpModal"
+                                                            data-follow-up-id="<?= $followUpId ?>"
+                                                            data-round-no="<?= $roundNo ?>"
+                                                            data-order-no="<?= htmlspecialchars($orderDisplayValue, ENT_QUOTES, 'UTF-8') ?>">
+                                                            <i class="fa-solid fa-circle-check"></i>
+                                                        </button>
                                                     <?php } ?>
 
                                                     <?php if ($canReject) { ?>
@@ -1063,13 +1175,26 @@ if ($canViewLogsPermission) {
                                                     </div>
                                                 </td>
                                                 <td>
-                                                    <div class="fw-semibold"><?= htmlspecialchars((string) (isset($row['order_no']) && $row['order_no'] !== '' ? $row['order_no'] : $row['order_id']), ENT_QUOTES, 'UTF-8') ?></div>
+                                                    <div class="fw-semibold">
+                                                        <?php if ($orderViewUrl !== '') { ?>
+                                                            <a class="customer-follow-up-record-link" href="<?= htmlspecialchars($orderViewUrl, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($orderDisplayValue, ENT_QUOTES, 'UTF-8') ?></a>
+                                                        <?php } else { ?>
+                                                            <?= htmlspecialchars($orderDisplayValue, ENT_QUOTES, 'UTF-8') ?>
+                                                        <?php } ?>
+                                                    </div>
                                                     <div class="text-muted small"><?= htmlspecialchars(customerFollowUpPagePlatformLabel(isset($row['platform']) ? $row['platform'] : ''), ENT_QUOTES, 'UTF-8') ?></div>
                                                 </td>
                                                 <td>
-                                                    <div class="fw-semibold"><?= htmlspecialchars((string) (isset($row['customer_username']) ? $row['customer_username'] : ''), ENT_QUOTES, 'UTF-8') ?></div>
+                                                    <div class="fw-semibold">
+                                                        <?php if ($customerDetailUrl !== '' && $customerUsername !== '') { ?>
+                                                            <a class="customer-follow-up-record-link" href="<?= htmlspecialchars($customerDetailUrl, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($customerUsername, ENT_QUOTES, 'UTF-8') ?></a>
+                                                        <?php } else { ?>
+                                                            <?= htmlspecialchars($customerUsername, ENT_QUOTES, 'UTF-8') ?>
+                                                        <?php } ?>
+                                                    </div>
                                                     <div class="text-muted small"><?= htmlspecialchars($customerType === 'return' ? 'Return' : 'New', ENT_QUOTES, 'UTF-8') ?></div>
                                                 </td>
+                                                <td><?= customerFollowUpPageRenderCustomerTagLabelCell($customerLabelMeta, $customerTagRows) ?></td>
                                                 <td><?= htmlspecialchars((string) (isset($row['package_name']) ? $row['package_name'] : ''), ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td><?= htmlspecialchars((string) (isset($row['received_date']) ? $row['received_date'] : ''), ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td>
@@ -1104,6 +1229,7 @@ if ($canViewLogsPermission) {
                                             <th class="action-col">Actions</th>
                                             <th>Order ID</th>
                                             <th>Username</th>
+                                            <th>Customer Tag / Label</th>
                                             <th>Package</th>
                                             <th>Received Date</th>
                                             <th>Next Follow-Up Date</th>
@@ -1344,6 +1470,33 @@ if ($canViewLogsPermission) {
                     <div class="modal-footer">
                         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" style="text-transform: none !important;">Cancel</button>
                         <button type="submit" class="btn btn-danger" style="text-transform: none !important;">Reject</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="approveFollowUpModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="post" class="customer-follow-up-action-form">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="approveFollowUpModalTitle">Approve Follow-Up</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" name="customer_follow_up_csrf" value="<?= htmlspecialchars((string) $_SESSION['customer_follow_up_csrf'], ENT_QUOTES, 'UTF-8') ?>">
+                        <input type="hidden" name="cfu_action" value="approve_follow_up">
+                        <input type="hidden" name="follow_up_id" id="approve_follow_up_id" value="">
+                        <div class="mb-2 text-muted small" id="approve_follow_up_context_text"></div>
+                        <div class="mb-3">
+                            <label class="form-label" for="approval_comment">Comment</label>
+                            <textarea class="form-control" id="approval_comment" name="approval_comment" rows="4"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" style="text-transform: none !important;">Cancel</button>
+                        <button type="submit" class="btn btn-success" style="text-transform: none !important;">Approve</button>
                     </div>
                 </form>
             </div>
@@ -1955,6 +2108,22 @@ if ($canViewLogsPermission) {
                         rejectReasonWrap.classList.add('d-none');
                     }
                 }
+            });
+        }
+
+        var approveFollowUpModal = document.getElementById('approveFollowUpModal');
+        if (approveFollowUpModal) {
+            approveFollowUpModal.addEventListener('show.bs.modal', function (event) {
+                var button = event.relatedTarget;
+                var orderNo = button ? (button.getAttribute('data-order-no') || '') : '';
+                var roundNo = button ? (button.getAttribute('data-round-no') || '') : '';
+
+                document.getElementById('approve_follow_up_id').value = button ? (button.getAttribute('data-follow-up-id') || '') : '';
+                document.getElementById('approval_comment').value = '';
+                document.getElementById('approveFollowUpModalTitle').textContent = 'Approve Follow-Up';
+                document.getElementById('approve_follow_up_context_text').textContent = orderNo !== ''
+                    ? ('Order ID: ' + orderNo + (roundNo !== '' ? (' | Round ' + roundNo) : ''))
+                    : (roundNo !== '' ? ('Round ' + roundNo) : '');
             });
         }
 

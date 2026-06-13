@@ -380,6 +380,66 @@ function sat_is_in_interval($paymentDate, $interval, $dateFilter, $start, $end)
 
     return true;
 }
+
+function sat_get_time_report_bucket($paymentDate, $interval)
+{
+    $paymentTs = strtotime((string) $paymentDate);
+    if ($paymentTs === false) {
+        return null;
+    }
+
+    $paymentDayTs = strtotime(date('Y-m-d', $paymentTs));
+
+    if ($interval === 'weekly') {
+        return array(
+            'key' => date('Y-m-d', $paymentDayTs),
+            'label' => date('Y-m-d', $paymentDayTs),
+            'sort_ts' => $paymentDayTs
+        );
+    }
+
+    if ($interval === 'monthly') {
+        $monthStartTs = strtotime(date('Y-m-01', $paymentDayTs));
+        $monthEndTs = strtotime(date('Y-m-t', $paymentDayTs));
+        $dayOfMonth = (int) date('j', $paymentDayTs);
+        $weekIndex = (int) floor(($dayOfMonth - 1) / 7) + 1;
+        $bucketStartTs = strtotime('+' . (($weekIndex - 1) * 7) . ' days', $monthStartTs);
+        $bucketEndTs = min($monthEndTs, strtotime('+6 days', $bucketStartTs));
+
+        return array(
+            'key' => date('Y-m', $paymentDayTs) . '-W' . $weekIndex,
+            'label' => date('Y-m', $paymentDayTs) . ' Week ' . $weekIndex . ' (' . date('Y-m-d', $bucketStartTs) . ' to ' . date('Y-m-d', $bucketEndTs) . ')',
+            'sort_ts' => $bucketStartTs
+        );
+    }
+
+    if ($interval === 'yearly') {
+        $monthStartTs = strtotime(date('Y-m-01', $paymentDayTs));
+
+        return array(
+            'key' => date('Y-m', $paymentDayTs),
+            'label' => date('F Y', $monthStartTs),
+            'sort_ts' => $monthStartTs
+        );
+    }
+
+    return null;
+}
+
+$isTimeReportMode = ($groupOption === '' && in_array($timeInterval, array('weekly', 'monthly', 'yearly'), true));
+$timeReportColumnLabel = 'Report Period';
+if ($timeInterval === 'weekly') {
+    $timeReportColumnLabel = 'Date';
+} elseif ($timeInterval === 'monthly') {
+    $timeReportColumnLabel = 'Week';
+} elseif ($timeInterval === 'yearly') {
+    $timeReportColumnLabel = 'Month';
+}
+
+$tableColumnTargets = array(0, 1, 3);
+if ($isTimeReportMode || $groupOption !== '') {
+    $tableColumnTargets = array(0, 1);
+}
 ?>
 
 <!DOCTYPE html>
@@ -468,7 +528,17 @@ function sat_is_in_interval($paymentDate, $interval, $dateFilter, $start, $end)
             <table class="table table-striped w-100" id="shopee_ads_topup_trans_table" style="width:100%">
                 <thead>
                     <tr>
-                    <?php if (!isset($_GET['group'])): ?>
+                    <?php if ($isTimeReportMode): ?>
+                        <th class="hideColumn" scope="col">ID</th>
+                        <th class="text-center">
+                            <input type="checkbox" class="exportAll" disabled>
+                        </th>
+                        <th scope="col" width="60px">S/N</th>
+                        <th scope="col"><?= htmlspecialchars($timeReportColumnLabel, ENT_QUOTES, 'UTF-8') ?></th>
+                        <th scope="col">Total Top-up Amount</th>
+                        <th scope="col">Total Subtotal</th>
+                        <th scope="col">Total GST (%)</th>
+                    <?php elseif ($groupOption === ''): ?>
                         <th class="hideColumn" scope="col">ID</th>
                         <th class="text-center">
                             <input type="checkbox" class="exportAll">
@@ -510,55 +580,82 @@ function sat_is_in_interval($paymentDate, $interval, $dateFilter, $start, $end)
                 <tbody>
                     <?php
                     $groupedRows = array();
+                    $timeReportRows = array();
 
                     if ($result && $result->num_rows > 0) {
                     while ($row = $result->fetch_assoc()) {
-                        $viewActMsg = '';
-                        $sql = '';
-                        if (isset($row['orderID'], $row['id']) && !empty($row['orderID'])) {
-                            $paymentDate = isset($row['payment_date']) ? $row['payment_date'] : '';
-                            if (!sat_is_in_interval($paymentDate, $timeInterval, $dateFilter, $rangeStart, $rangeEnd)) {
+                        if (!isset($row['orderID'], $row['id']) || empty($row['orderID'])) {
+                            continue;
+                        }
+
+                        $paymentDate = isset($row['payment_date']) ? $row['payment_date'] : '';
+                        if (!sat_is_in_interval($paymentDate, $timeInterval, $dateFilter, $rangeStart, $rangeEnd)) {
+                            continue;
+                        }
+
+                        $topupAmount = (float) (isset($row['topup_amt']) ? $row['topup_amt'] : 0);
+                        $subtotalAmount = (float) (isset($row['subtotal']) ? $row['subtotal'] : 0);
+                        $gstAmount = (float) (isset($row['gst']) ? $row['gst'] : 0);
+
+                        $totalTopupAmount += $topupAmount;
+                        $totalSubtotal += $subtotalAmount;
+                        $totalGST += $gstAmount;
+
+                        if ($isTimeReportMode) {
+                            $bucket = sat_get_time_report_bucket($paymentDate, $timeInterval);
+                            if ($bucket === null) {
                                 continue;
                             }
 
-                            $q1 = getData('*', "id='" . $row['shopee_acc'] . "'", 'LIMIT 1', SHOPEE_ACC, $finance_connect);
-                            $shopee_acc = $q1->fetch_assoc();
-                            $q2 = getData('unit', "id='" . $row['currency'] . "'", 'LIMIT 1', CUR_UNIT, $connect);
-                            $currs = $q2->fetch_assoc();
-                            $q3 = getData('name', "id='" . $row['pay_meth'] . "'", 'LIMIT 1', FIN_PAY_METH, $finance_connect);
-                            $pay = $q3->fetch_assoc();
-
-                            $shopee = isset($shopee_acc['name']) ? $shopee_acc['name'] : '';
-                            $curr = isset($currs['unit']) ? $currs['unit'] : '';
-                            $method = isset($pay['name']) ? $pay['name'] : '';
-
-                            if ($groupOption !== '') {
-                                $groupKey = '';
-                                if ($groupOption === 'shopee') {
-                                    $groupKey = $shopee;
-                                } else if ($groupOption === 'currency') {
-                                    $groupKey = $curr;
-                                } else if ($groupOption === 'method') {
-                                    $groupKey = $method;
-                                }
-
-                                if ($groupKey === '') {
-                                    $groupKey = 'N/A';
-                                }
-
-                                if (!isset($groupedRows[$groupKey])) {
-                                    $groupedRows[$groupKey] = 0;
-                                }
-                                $groupedRows[$groupKey] += (float) (isset($row['topup_amt']) ? $row['topup_amt'] : 0);
+                            if (!isset($timeReportRows[$bucket['key']])) {
+                                $timeReportRows[$bucket['key']] = array(
+                                    'label' => $bucket['label'],
+                                    'sort_ts' => $bucket['sort_ts'],
+                                    'topup' => 0,
+                                    'subtotal' => 0,
+                                    'gst' => 0
+                                );
                             }
+
+                            $timeReportRows[$bucket['key']]['topup'] += $topupAmount;
+                            $timeReportRows[$bucket['key']]['subtotal'] += $subtotalAmount;
+                            $timeReportRows[$bucket['key']]['gst'] += $gstAmount;
+                            continue;
                         }
 
-                        // Add to totals
-                        $totalTopupAmount += isset($row['topup_amt']) ? $row['topup_amt'] : 0;
-                        $totalSubtotal += isset($row['subtotal']) ? $row['subtotal'] : 0;
-                        $totalGST += isset($row['gst']) ? $row['gst'] : 0;
+                        $q1 = getData('*', "id='" . $row['shopee_acc'] . "'", 'LIMIT 1', SHOPEE_ACC, $finance_connect);
+                        $shopee_acc = $q1->fetch_assoc();
+                        $q2 = getData('unit', "id='" . $row['currency'] . "'", 'LIMIT 1', CUR_UNIT, $connect);
+                        $currs = $q2->fetch_assoc();
+                        $q3 = getData('name', "id='" . $row['pay_meth'] . "'", 'LIMIT 1', FIN_PAY_METH, $finance_connect);
+                        $pay = $q3->fetch_assoc();
 
-                        if ($groupOption == '') {
+                        $shopee = isset($shopee_acc['name']) ? $shopee_acc['name'] : '';
+                        $curr = isset($currs['unit']) ? $currs['unit'] : '';
+                        $method = isset($pay['name']) ? $pay['name'] : '';
+
+                        if ($groupOption !== '') {
+                            $groupKey = '';
+                            if ($groupOption === 'shopee') {
+                                $groupKey = $shopee;
+                            } else if ($groupOption === 'currency') {
+                                $groupKey = $curr;
+                            } else if ($groupOption === 'method') {
+                                $groupKey = $method;
+                            }
+
+                            if ($groupKey === '') {
+                                $groupKey = 'N/A';
+                            }
+
+                            if (!isset($groupedRows[$groupKey])) {
+                                $groupedRows[$groupKey] = 0;
+                            }
+                            $groupedRows[$groupKey] += $topupAmount;
+                            continue;
+                        }
+
+                        if ($groupOption === '') {
                             echo '<tr>
                             <th class="hideColumn" scope="row">' . $row['id'] . '</th>
                             <th class="text-center"><input type="checkbox" class="export" value="'  . $row['id'] . '"></th>
@@ -585,7 +682,28 @@ function sat_is_in_interval($paymentDate, $interval, $dateFilter, $start, $end)
                     }
                     }
 
-                    if ($groupOption !== '') {
+                    if ($isTimeReportMode) {
+                        uasort($timeReportRows, function ($a, $b) {
+                            if ($a['sort_ts'] === $b['sort_ts']) {
+                                return strcmp($a['label'], $b['label']);
+                            }
+
+                            return ($a['sort_ts'] < $b['sort_ts']) ? -1 : 1;
+                        });
+
+                        $num = 1;
+                        foreach ($timeReportRows as $summaryRow) {
+                            echo '<tr>
+                            <th class="hideColumn" scope="row">0</th>
+                            <th class="text-center"><input type="checkbox" class="export" value="" disabled></th>
+                            <th scope="row">' . $num++ . '</th>
+                            <td scope="row">' . htmlspecialchars((string) $summaryRow['label'], ENT_QUOTES, 'UTF-8') . '</td>
+                            <td scope="row">' . number_format((float) $summaryRow['topup'], 2, '.', '') . '</td>
+                            <td scope="row">' . number_format((float) $summaryRow['subtotal'], 2, '.', '') . '</td>
+                            <td scope="row">' . number_format((float) $summaryRow['gst'], 2, '.', '') . '</td>
+                            </tr>';
+                        }
+                    } elseif ($groupOption !== '') {
                         $num = 1;
                         foreach ($groupedRows as $groupName => $groupTotal) {
                             echo '<tr>
@@ -601,7 +719,15 @@ function sat_is_in_interval($paymentDate, $interval, $dateFilter, $start, $end)
                 </tbody>
                 <tfoot>
                 <tr>
-                    <?php if ($groupOption == ''): ?>
+                    <?php if ($isTimeReportMode): ?>
+                    <th class="hideColumn" scope="row">0</th>
+                    <th class="text-center"></th>
+                    <th scope="row"></th>
+                    <th class="text-end">Total:</th>
+                    <th><?php echo number_format($totalTopupAmount, 2, '.', ''); ?></th>
+                    <th><?php echo number_format($totalSubtotal, 2, '.', ''); ?></th>
+                    <th><?php echo number_format($totalGST, 2, '.', ''); ?></th>
+                    <?php elseif ($groupOption == ''): ?>
                     <th colspan="8" class="text-end">Total:</th>
                     <th><?php echo number_format($totalTopupAmount, 2, '.', ''); ?></th>
                     <th><?php echo number_format($totalSubtotal, 2, '.', ''); ?></th>
@@ -625,6 +751,17 @@ function sat_is_in_interval($paymentDate, $interval, $dateFilter, $start, $end)
 
 <script>
 <?php include "../js/shopee_ads_topup_trans_table.js" ?>
+
+    window.shopeeAdsTableConfig = {
+        order: <?= json_encode(array(array(2, 'asc'))) ?>,
+        columnDefs: [
+            {
+                orderable: false,
+                searchable: false,
+                targets: <?= json_encode($tableColumnTargets) ?>
+            }
+        ]
+    };
 
     window.shopeeAdsTableFilters = {
         timeInterval: <?= json_encode($timeInterval) ?>,

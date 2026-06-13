@@ -49,14 +49,15 @@ function captureAndExport(tblName) {
 
 $(document).ready(function ($) {
   var filterState = window.shopeeAdsTableFilters || {};
+  var tableConfig = window.shopeeAdsTableConfig || {};
 
   var table = new DataTable("#shopee_ads_topup_trans_table", {
     paging: $("#shopee_ads_topup_trans_table tbody tr").length > 10,
     searching: $("#shopee_ads_topup_trans_table tbody tr").length > 10,
     autoWidth: false,
-    order: [[2, "asc"]],
+    order: tableConfig.order || [[2, "asc"]],
     lengthMenu: [10, 25, 50, 100],
-    columnDefs: [
+    columnDefs: tableConfig.columnDefs || [
       {
         orderable: false,
         searchable: false,

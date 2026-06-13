@@ -74,7 +74,7 @@ $canBulkSyncShippedOrders = function_exists('shopeeOmsHasTransitionPermission')
     : false;
 $estimatedDateToday = new DateTimeImmutable('today');
 $estimatedDateMin = $estimatedDateToday->modify('+1 day')->format('Y-m-d');
-$estimatedDateMax = $estimatedDateToday->modify('+1 month')->format('Y-m-d');
+$estimatedDateMax = $estimatedDateToday->modify('+7 days')->format('Y-m-d');
 
 $num = $default_currency_id = 1; 
 if (
@@ -200,6 +200,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['verify_id']))
     echo "<script>alert('" . addslashes(isset($verifyResult['message']) ? $verifyResult['message'] : 'Unable to verify order.') . "'); location.replace('shopee_verify.php');</script>";
     exit;
 }
+
+shopeeOmsHandleMoveToWafcWithReceivedDatePost($connect, $finance_connect, array(
+    'redirect_url' => 'shopee_verify.php',
+    'source_page' => $pageTitle,
+    'platform' => 'shopee',
+    'actor_user_id' => USER_ID,
+    'actor_user_group_id' => USER_GROUP,
+    'audit_connect' => $connect,
+    'query_table' => SHOPEE_SG_ORDER_REQ,
+));
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['return_id'])) {
     $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
@@ -373,6 +383,7 @@ if ($result instanceof mysqli_result) {
                 $(this).data('maxDate')
             );
         });
+
     });
 </script>
 <body>
@@ -735,6 +746,16 @@ if ($result instanceof mysqli_result) {
                                     data-existing-pdf-path="<?= htmlspecialchars((string) (isset($row['order_detail_pdf']) ? $row['order_detail_pdf'] : ''), ENT_QUOTES, 'UTF-8') ?>"
                                 >Verified</button>
                                 <?php } ?>
+                                <?php if ($statusCode === 'PR') { ?>
+                                <button
+                                    type="button"
+                                    class="btn btn-sm btn-rounded btn-info btn-open-received-date-modal"
+                                    data-order-id="<?= (int) $row['id'] ?>"
+                                    data-order-code="<?= htmlspecialchars((string) ($row['orderID'] ?? ''), ENT_QUOTES, 'UTF-8') ?>"
+                                    title="Move to WAFC Now">
+                                     <i class="fas fa-forward"></i>
+                                </button>
+                                <?php } ?>
                                 <?php if (in_array($statusCode, array('SP', 'WAERD', 'WR', 'PR', 'WAFC', 'V', 'C'), true)) { ?>
                                  <form method="post" class="d-inline" onsubmit="return confirm('Mark this order as Return?')">
                                      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
@@ -836,6 +857,7 @@ if ($result instanceof mysqli_result) {
             </form>
         </div>
     </div>
+    <?php shopeeOmsRenderReceivedDateModal(); ?>
     <?php
     shopeeOrderDetailPdfRenderVerifyModal(array(
         'modal_id' => 'sorVerifyOrderModal',
@@ -848,6 +870,7 @@ if ($result instanceof mysqli_result) {
     datatableAlignment('shopee_order_req_table');
     keepDataTableControlsVisible('shopee_order_req_table');
 </script>
+<?php shopeeOmsRenderReceivedDateModalScript(); ?>
 <?php
 shopeeOrderDetailPdfRenderVerifyModalScript(array(
     'modal_id' => 'sorVerifyOrderModal',

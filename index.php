@@ -127,6 +127,14 @@ include "header.php";
                     </div>
                 </div>
             </form>
+
+            <div class="row d-flex justify-content-center">
+                <div class="col-12 d-flex justify-content-end">
+                    <a href="<?php echo $SITEURL; ?>/bmi-calculator/bmi.php">
+                        BMI Calculator <i class="fas fa-calculator" style="margin-left: 6px;"></i>
+                    </a>
+                </div>
+            </div>
         </div>
     </div>
 

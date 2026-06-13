@@ -176,6 +176,59 @@ function ensureVarcharColumnLengthAtLeast($conn, $dbName, $tableName, $columnNam
     }
 }
 
+function insertTableEnsureOrderReportPins($cmsConn)
+{
+    $pinGroupSql = "INSERT INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+        (155, 'Shopee Report', '1', 'Shopee order report view access', '1', CURDATE(), CURTIME(), 'A'),
+        (156, 'Facebook Report', '1', 'Facebook order report view access', '1', CURDATE(), CURTIME(), 'A'),
+        (157, 'Website Report', '1', 'Website order report view access', '1', CURDATE(), CURTIME(), 'A'),
+        (158, 'Lazada Report', '1', 'Lazada order report view access', '1', CURDATE(), CURTIME(), 'A')
+        ON DUPLICATE KEY UPDATE
+            `name` = VALUES(`name`),
+            `pins` = VALUES(`pins`),
+            `remark` = VALUES(`remark`),
+            `status` = 'A'";
+
+    if ($cmsConn->query($pinGroupSql)) {
+        echo "<p style='color:green;'><strong>Order Report pin setup:</strong> Verified pin groups 155-158 for Shopee Report, Facebook Report, Website Report, and Lazada Report.</p>";
+    } else {
+        echo "<p style='color:red;'><strong>Order Report pin setup:</strong> Failed creating pin groups 155-158: " . htmlspecialchars($cmsConn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+    }
+
+    foreach (array(1, 2) as $groupId) {
+        $userGroupResult = $cmsConn->query("SELECT `pins` FROM `user_group` WHERE `id` = " . (int) $groupId . " LIMIT 1");
+        if (!$userGroupResult || $userGroupResult->num_rows === 0) {
+            echo "<p style='color:orange;'>Order Report pin setup skipped `user_group` id " . (int) $groupId . " because the group was not found.</p>";
+            continue;
+        }
+
+        $userGroupRow = $userGroupResult->fetch_assoc();
+        $currentPins = isset($userGroupRow['pins']) ? (string) $userGroupRow['pins'] : '';
+        $updatedPins = $currentPins;
+        foreach (array(155, 156, 157, 158) as $pinGroupId) {
+            $updatedPins = addAccessToPinBlock($updatedPins, $pinGroupId, array(1));
+        }
+
+        if ($updatedPins !== $currentPins) {
+            $safePins = $cmsConn->real_escape_string($updatedPins);
+            if ($cmsConn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $groupId)) {
+                echo "<p style='color:green;'>Order Report pin setup granted View access for pin groups 155-158 to `user_group` id " . (int) $groupId . ".</p>";
+            } else {
+                echo "<p style='color:red;'>Order Report pin setup failed updating `user_group` id " . (int) $groupId . ": " . htmlspecialchars($cmsConn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+            }
+        } else {
+            echo "<p style='color:green;'>Order Report pin setup verified View access already exists for `user_group` id " . (int) $groupId . ".</p>";
+        }
+    }
+}
+
+$cmsConn = new mysqli($dbhost, $dbUser, $dbpwd, $db_cms, $dbport);
+if ($cmsConn->connect_error) {
+    echo "<p style='color:red;'><strong>Order Report pin setup:</strong> Failed connecting to CMS database `" . htmlspecialchars($db_cms, ENT_QUOTES, 'UTF-8') . "`: " . htmlspecialchars($cmsConn->connect_error, ENT_QUOTES, 'UTF-8') . "</p>";
+} else {
+    insertTableEnsureOrderReportPins($cmsConn);
+}
+
 function indexExists($conn, $dbName, $tableName, $indexName)
 {
     $safeDb = $conn->real_escape_string($dbName);
@@ -481,6 +534,7 @@ if ($tagCollationResult) {
 // alterColumnToVarcharIfInt($conn, $db_fin, 'shopee_sg_order_request', 'brand', 255);
 if ($conn->select_db($db_cms)) {
     addColumnIfMissing($conn, $db_cms, 'lazada_order_request', 'estimated_received_date', "ALTER TABLE `lazada_order_request` ADD COLUMN `estimated_received_date` DATE DEFAULT NULL AFTER `remark`");
+    addColumnIfMissing($conn, $db_cms, 'lazada_order_request', 'received_date', "ALTER TABLE `lazada_order_request` ADD COLUMN `received_date` DATE DEFAULT NULL AFTER `estimated_received_date`");
     addColumnIfMissing($conn, $db_cms, 'lazada_order_request', 'estimated_received_date_assigned_by', "ALTER TABLE `lazada_order_request` ADD COLUMN `estimated_received_date_assigned_by` VARCHAR(30) DEFAULT NULL AFTER `estimated_received_date`");
     addColumnIfMissing($conn, $db_cms, 'lazada_order_request', 'estimated_received_date_assigned_date', "ALTER TABLE `lazada_order_request` ADD COLUMN `estimated_received_date_assigned_date` DATE DEFAULT NULL AFTER `estimated_received_date_assigned_by`");
     addColumnIfMissing($conn, $db_cms, 'lazada_order_request', 'estimated_received_date_assigned_time', "ALTER TABLE `lazada_order_request` ADD COLUMN `estimated_received_date_assigned_time` TIME DEFAULT NULL AFTER `estimated_received_date_assigned_date`");
@@ -490,16 +544,19 @@ if ($conn->select_db($db_cms)) {
 
 if ($conn->select_db($db_fin)) {
     addColumnIfMissing($conn, $db_fin, 'facebook_order_request', 'estimated_received_date', "ALTER TABLE `facebook_order_request` ADD COLUMN `estimated_received_date` DATE DEFAULT NULL AFTER `remark`");
+    addColumnIfMissing($conn, $db_fin, 'facebook_order_request', 'received_date', "ALTER TABLE `facebook_order_request` ADD COLUMN `received_date` DATE DEFAULT NULL AFTER `estimated_received_date`");
     addColumnIfMissing($conn, $db_fin, 'facebook_order_request', 'estimated_received_date_assigned_by', "ALTER TABLE `facebook_order_request` ADD COLUMN `estimated_received_date_assigned_by` VARCHAR(30) DEFAULT NULL AFTER `estimated_received_date`");
     addColumnIfMissing($conn, $db_fin, 'facebook_order_request', 'estimated_received_date_assigned_date', "ALTER TABLE `facebook_order_request` ADD COLUMN `estimated_received_date_assigned_date` DATE DEFAULT NULL AFTER `estimated_received_date_assigned_by`");
     addColumnIfMissing($conn, $db_fin, 'facebook_order_request', 'estimated_received_date_assigned_time', "ALTER TABLE `facebook_order_request` ADD COLUMN `estimated_received_date_assigned_time` TIME DEFAULT NULL AFTER `estimated_received_date_assigned_date`");
 
     addColumnIfMissing($conn, $db_fin, 'website_order_request', 'estimated_received_date', "ALTER TABLE `website_order_request` ADD COLUMN `estimated_received_date` DATE DEFAULT NULL AFTER `remark`");
+    addColumnIfMissing($conn, $db_fin, 'website_order_request', 'received_date', "ALTER TABLE `website_order_request` ADD COLUMN `received_date` DATE DEFAULT NULL AFTER `estimated_received_date`");
     addColumnIfMissing($conn, $db_fin, 'website_order_request', 'estimated_received_date_assigned_by', "ALTER TABLE `website_order_request` ADD COLUMN `estimated_received_date_assigned_by` VARCHAR(30) DEFAULT NULL AFTER `estimated_received_date`");
     addColumnIfMissing($conn, $db_fin, 'website_order_request', 'estimated_received_date_assigned_date', "ALTER TABLE `website_order_request` ADD COLUMN `estimated_received_date_assigned_date` DATE DEFAULT NULL AFTER `estimated_received_date_assigned_by`");
     addColumnIfMissing($conn, $db_fin, 'website_order_request', 'estimated_received_date_assigned_time', "ALTER TABLE `website_order_request` ADD COLUMN `estimated_received_date_assigned_time` TIME DEFAULT NULL AFTER `estimated_received_date_assigned_date`");
 
     addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'estimated_received_date', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `estimated_received_date` DATE DEFAULT NULL AFTER `remark`");
+    addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'received_date', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `received_date` DATE DEFAULT NULL AFTER `estimated_received_date`");
     addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'estimated_received_date_assigned_by', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `estimated_received_date_assigned_by` VARCHAR(30) DEFAULT NULL AFTER `estimated_received_date`");
     addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'estimated_received_date_assigned_date', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `estimated_received_date_assigned_date` DATE DEFAULT NULL AFTER `estimated_received_date_assigned_by`");
     addColumnIfMissing($conn, $db_fin, 'shopee_sg_order_request', 'estimated_received_date_assigned_time', "ALTER TABLE `shopee_sg_order_request` ADD COLUMN `estimated_received_date_assigned_time` TIME DEFAULT NULL AFTER `estimated_received_date_assigned_date`");
@@ -746,6 +803,16 @@ migrationEnsureIndex($conn, $db_fin, 'stock_out_batch_usage', 'idx_sobu_product_
 // addColumnIfMissing($conn, $db_cms, 'token_setting', 'chat_id', "ALTER TABLE `" . $safeCmsDb . "`.`token_setting` ADD COLUMN `chat_id` VARCHAR(100) DEFAULT '' AFTER `bot_token`");
     addColumnIfMissing($conn, $db_cms, 'token_setting', 'page_used', "ALTER TABLE `" . $safeCmsDb . "`.`token_setting` ADD COLUMN `page_used` VARCHAR(255) NOT NULL DEFAULT '' AFTER `name`");
     ensureVarcharColumnLengthAtLeast($conn, $db_cms, 'token_setting', 'page_used', 255, '');
+    addColumnIfMissing($conn, $db_cms, WHSE, 'telegram_token_setting_id', "ALTER TABLE `" . $safeCmsDb . "`.`" . WHSE . "` ADD COLUMN `telegram_token_setting_id` INT DEFAULT NULL AFTER `name`");
+    if (!indexExists($conn, $db_cms, WHSE, 'idx_warehouse_telegram_token_setting_id')) {
+        if ($conn->query("ALTER TABLE `" . $safeCmsDb . "`.`" . WHSE . "` ADD INDEX `idx_warehouse_telegram_token_setting_id` (`telegram_token_setting_id`)")) {
+            echo "<p style='color:blue;'>Added index `idx_warehouse_telegram_token_setting_id` to `" . WHSE . "`.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed adding index `idx_warehouse_telegram_token_setting_id` to `" . WHSE . "`: " . $conn->error . "</p>";
+        }
+    } else {
+        echo "<p style='color:green;'>Verified index `idx_warehouse_telegram_token_setting_id` already exists in `" . WHSE . "`.</p>";
+    }
 
 //     addColumnIfMissing($conn, $db_cms, 'user', 'main_report_supervisor', "ALTER TABLE `user` ADD COLUMN `main_report_supervisor` INT DEFAULT NULL AFTER `access_id`");
 //     addColumnIfMissing($conn, $db_cms, 'user', 'second_report_supervisor', "ALTER TABLE `user` ADD COLUMN `second_report_supervisor` INT DEFAULT NULL AFTER `main_report_supervisor`");
@@ -1294,6 +1361,7 @@ $createCustomerFollowUpRoundSql = "CREATE TABLE IF NOT EXISTS `{$db_cms}`.`{$cus
     `message_shortcut_text` TEXT DEFAULT NULL,
     `contact_no` VARCHAR(30) DEFAULT NULL,
     `approval_status` VARCHAR(20) NOT NULL DEFAULT 'pending',
+    `approval_comment` TEXT DEFAULT NULL,
     `reject_reason` TEXT DEFAULT NULL,
     `postpone_status` VARCHAR(20) NOT NULL DEFAULT 'none',
     `postpone_reason` TEXT DEFAULT NULL,
@@ -1336,7 +1404,8 @@ $customerFollowUpRoundColumns = array(
     'message_shortcut_text' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `message_shortcut_text` TEXT DEFAULT NULL AFTER `message_shortcut_id`",
     'contact_no' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `contact_no` VARCHAR(30) DEFAULT NULL AFTER `message_shortcut_text`",
     'approval_status' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `approval_status` VARCHAR(20) NOT NULL DEFAULT 'pending' AFTER `contact_no`",
-    'reject_reason' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `reject_reason` TEXT DEFAULT NULL AFTER `approval_status`",
+    'approval_comment' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `approval_comment` TEXT DEFAULT NULL AFTER `approval_status`",
+    'reject_reason' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `reject_reason` TEXT DEFAULT NULL AFTER `approval_comment`",
     'postpone_status' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `postpone_status` VARCHAR(20) NOT NULL DEFAULT 'none' AFTER `reject_reason`",
     'postpone_reason' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `postpone_reason` TEXT DEFAULT NULL AFTER `postpone_status`",
     'postpone_reject_reason' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `postpone_reject_reason` TEXT DEFAULT NULL AFTER `postpone_reason`",
@@ -1641,6 +1710,52 @@ function addAccessToPinBlock($allPins, $targetPinId, $addIds = array(6))
     return implode('+', $rebuilt);
 }
 
+function setPinBlockAccess($allPins, $targetPinId, $accessIds)
+{
+    $targetPinId = (string) ((int) $targetPinId);
+    $entries = array_filter(array_map('trim', explode('+', (string) $allPins)), 'strlen');
+    $rebuilt = array();
+    $found = false;
+    $accessValues = array();
+
+    foreach ((array) $accessIds as $accessId) {
+        $accessValue = (string) ((int) $accessId);
+        if ($accessValue !== '' && !in_array($accessValue, $accessValues, true)) {
+            $accessValues[] = $accessValue;
+        }
+    }
+
+    $accessList = implode(',', $accessValues);
+
+    foreach ($entries as $entry) {
+        $entry = trim($entry, '[]');
+        $parts = explode(':', $entry, 2);
+
+        if (count($parts) !== 2) {
+            continue;
+        }
+
+        $pinId = trim($parts[0]);
+        if ($pinId === $targetPinId) {
+            if ($found) {
+                continue;
+            }
+
+            $rebuilt[] = '[' . $pinId . ':' . $accessList . ']';
+            $found = true;
+            continue;
+        }
+
+        $rebuilt[] = '[' . $pinId . ':' . trim($parts[1]) . ']';
+    }
+
+    if (!$found) {
+        $rebuilt[] = '[' . $targetPinId . ':' . $accessList . ']';
+    }
+
+    return implode('+', $rebuilt);
+}
+
 function pinBlockHasAccessId($allPins, $targetPinId, $accessId)
 {
     $targetPinId = (string) ((int) $targetPinId);
@@ -1687,6 +1802,7 @@ function pinBlockHasAccessId($allPins, $targetPinId, $accessId)
 //         `urbanism_member_id` INT DEFAULT NULL,
 //         `content` TEXT NOT NULL,
 //         `attachment` VARCHAR(255) DEFAULT NULL,
+//         `attachments` TEXT DEFAULT NULL,
 //         `created_by` VARCHAR(30) DEFAULT NULL,
 //         `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
 //         `updated_by` VARCHAR(30) DEFAULT NULL,
@@ -1754,12 +1870,26 @@ function pinBlockHasAccessId($allPins, $targetPinId, $accessId)
 //             echo "<p style='color:red;'>Failed migrating legacy `cust_id` values into `shopee_cust_id` in `" . USER_RECORD_LOG . "`: " . $conn->error . "</p>";
 //         }
 //     }
-
+//
 // } else {
 //     echo "<p style='color:red;'>Failed selecting CMS database for user record log migration.</p>";
 // }
 
 if ($conn->select_db($db_cms)) {
+    if (migrationTableExists($conn, $db_cms, USER_RECORD_LOG)) {
+        if (migrationColumnExists($conn, $db_cms, USER_RECORD_LOG, 'attachment')) {
+            if ($conn->query("ALTER TABLE `" . USER_RECORD_LOG . "` MODIFY COLUMN `attachment` TEXT DEFAULT NULL")) {
+                echo "<p style='color:green;'>Verified column `attachment` in `" . USER_RECORD_LOG . "` supports multiple attachments in CMS database.</p>";
+            } else {
+                echo "<p style='color:red;'>Failed updating `attachment` column in `" . USER_RECORD_LOG . "` in CMS database: " . $conn->error . "</p>";
+            }
+        } else {
+            echo "<p style='color:orange;'>Skipped `attachment` column update because column `attachment` was not found in `" . USER_RECORD_LOG . "`.</p>";
+        }
+    } else {
+        echo "<p style='color:orange;'>Skipped `attachment` column update because `" . USER_RECORD_LOG . "` was not found in CMS database `" . $db_cms . "`.</p>";
+    }
+
     $createTaskProjectSql = "CREATE TABLE IF NOT EXISTS `" . TASK_PROJECT . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `name` VARCHAR(180) NOT NULL,
@@ -2559,6 +2689,378 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Failed removing pin 26 (Create Project): " . $conn->error . "</p>";
     }
 
+    $orderWarehouseTransferLogTable = defined('ORDER_WAREHOUSE_TRANSFER_LOG') ? ORDER_WAREHOUSE_TRANSFER_LOG : 'order_warehouse_transfer_log';
+    $createOrderWarehouseTransferLogSql = "CREATE TABLE IF NOT EXISTS `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `platform` VARCHAR(30) NOT NULL,
+        `order_table` VARCHAR(120) NOT NULL,
+        `order_id` INT NOT NULL,
+        `order_code` VARCHAR(150) NOT NULL,
+        `old_warehouse_id` INT NOT NULL,
+        `new_warehouse_id` INT NOT NULL,
+        `product_qty_json` LONGTEXT DEFAULT NULL,
+        `old_batch_usage_json` LONGTEXT DEFAULT NULL,
+        `new_batch_usage_json` LONGTEXT DEFAULT NULL,
+        `idempotency_key` VARCHAR(64) DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_owtl_order_lookup` (`platform`, `order_id`, `status`),
+        KEY `idx_owtl_order_code` (`order_code`, `status`),
+        KEY `idx_owtl_warehouse` (`old_warehouse_id`, `new_warehouse_id`, `status`),
+        UNIQUE KEY `uniq_owtl_idempotency` (`idempotency_key`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    if ($conn->query($createOrderWarehouseTransferLogSql)) {
+        echo "<p style='color:green;'>Verified table `" . $orderWarehouseTransferLogTable . "` for warehouse transfer logs.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . $orderWarehouseTransferLogTable . "`: " . $conn->error . "</p>";
+    }
+
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'platform', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `platform` VARCHAR(30) NOT NULL AFTER `id`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `platform`.");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'order_table', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `order_table` VARCHAR(120) NOT NULL AFTER `platform`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `order_table`.");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'order_id', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `order_id` INT NOT NULL AFTER `order_table`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `order_id`.");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'order_code', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `order_code` VARCHAR(150) NOT NULL AFTER `order_id`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `order_code`.");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'old_warehouse_id', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `old_warehouse_id` INT NOT NULL AFTER `order_code`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `old_warehouse_id`.");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'new_warehouse_id', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `new_warehouse_id` INT NOT NULL AFTER `old_warehouse_id`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `new_warehouse_id`.");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'product_qty_json', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `product_qty_json` LONGTEXT DEFAULT NULL AFTER `new_warehouse_id`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `product_qty_json`.");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'old_batch_usage_json', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `old_batch_usage_json` LONGTEXT DEFAULT NULL AFTER `product_qty_json`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `old_batch_usage_json`.");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'new_batch_usage_json', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `new_batch_usage_json` LONGTEXT DEFAULT NULL AFTER `old_batch_usage_json`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `new_batch_usage_json`.");
+    dropColumnIfExists($conn, $db_fin, $orderWarehouseTransferLogTable, 'transfer_note', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` DROP COLUMN `transfer_note`");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'idempotency_key', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `idempotency_key` VARCHAR(64) DEFAULT NULL AFTER `new_batch_usage_json`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `idempotency_key`.");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'create_by', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `create_by` VARCHAR(30) DEFAULT NULL AFTER `idempotency_key`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `create_by`.");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'create_date', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `create_date` DATE DEFAULT NULL AFTER `create_by`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `create_date`.");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'create_time', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `create_time` TIME DEFAULT NULL AFTER `create_date`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `create_time`.");
+    migrationEnsureColumn($conn, $db_fin, $orderWarehouseTransferLogTable, 'status', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A' AFTER `create_time`", "Verified `" . $orderWarehouseTransferLogTable . "` includes `status`.");
+
+    migrationEnsureIndex($conn, $db_fin, $orderWarehouseTransferLogTable, 'idx_owtl_order_lookup', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD INDEX `idx_owtl_order_lookup` (`platform`, `order_id`, `status`)", "Verified `" . $orderWarehouseTransferLogTable . "` order lookup index.");
+    migrationEnsureIndex($conn, $db_fin, $orderWarehouseTransferLogTable, 'idx_owtl_order_code', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD INDEX `idx_owtl_order_code` (`order_code`, `status`)", "Verified `" . $orderWarehouseTransferLogTable . "` order code index.");
+    migrationEnsureIndex($conn, $db_fin, $orderWarehouseTransferLogTable, 'idx_owtl_warehouse', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD INDEX `idx_owtl_warehouse` (`old_warehouse_id`, `new_warehouse_id`, `status`)", "Verified `" . $orderWarehouseTransferLogTable . "` warehouse index.");
+    migrationEnsureIndex($conn, $db_fin, $orderWarehouseTransferLogTable, 'uniq_owtl_idempotency', "ALTER TABLE `" . $db_fin . "`.`" . $orderWarehouseTransferLogTable . "` ADD UNIQUE INDEX `uniq_owtl_idempotency` (`idempotency_key`)", "Verified `" . $orderWarehouseTransferLogTable . "` idempotency index.");
+
+    $transferPinSql = "INSERT INTO `pin` (`id`, `name`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+        (26, 'Transfer', 'Warehouse transfer action', '1', CURDATE(), CURTIME(), 'A')
+        ON DUPLICATE KEY UPDATE
+            `name` = VALUES(`name`),
+            `remark` = VALUES(`remark`),
+            `status` = 'A'";
+    if ($conn->query($transferPinSql)) {
+        echo "<p style='color:green;'>Verified pin 26 for Transfer.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed verifying pin 26 for Transfer: " . $conn->error . "</p>";
+    }
+
+    $orderWarehouseTransferPinGroupSql = "INSERT INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+        (152, 'Order Warehouse Transfer', '1,26', 'Warehouse transfer search and action', '1', CURDATE(), CURTIME(), 'A')
+        ON DUPLICATE KEY UPDATE
+            `name` = VALUES(`name`),
+            `pins` = VALUES(`pins`),
+            `remark` = VALUES(`remark`),
+            `status` = 'A'";
+    if ($conn->query($orderWarehouseTransferPinGroupSql)) {
+        echo "<p style='color:green;'>Verified pin group 152 for Order Warehouse Transfer.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed verifying pin group 152: " . $conn->error . "</p>";
+    }
+
+    foreach (array(1, 2) as $groupId) {
+        $userGroupResult = $conn->query("SELECT `pins` FROM `user_group` WHERE `id` = " . (int) $groupId . " LIMIT 1");
+        if (!$userGroupResult || $userGroupResult->num_rows === 0) {
+            echo "<p style='color:orange;'>`user_group` id " . (int) $groupId . " not found. Skipped Order Warehouse Transfer pin assignment.</p>";
+            continue;
+        }
+
+        $userGroupRow = $userGroupResult->fetch_assoc();
+        $currentPins = isset($userGroupRow['pins']) ? (string) $userGroupRow['pins'] : '';
+        $updatedPins = addAccessToPinBlock($currentPins, 152, array(1, 26));
+
+        if ($updatedPins !== $currentPins) {
+            $safePins = $conn->real_escape_string($updatedPins);
+            if ($conn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $groupId)) {
+                echo "<p style='color:green;'>Verified Order Warehouse Transfer pin access for `user_group` id " . (int) $groupId . ".</p>";
+            } else {
+                echo "<p style='color:red;'>Failed updating Order Warehouse Transfer pin access for `user_group` id " . (int) $groupId . ": " . $conn->error . "</p>";
+            }
+        } else {
+            echo "<p style='color:green;'>Verified Order Warehouse Transfer pin access already exists for `user_group` id " . (int) $groupId . ".</p>";
+        }
+    }
+
+    $createCampaignSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `campaign_name` VARCHAR(255),
+        `period_start_date` DATE,
+        `period_end_date` DATE,
+        `rule_setting_id` INT DEFAULT NULL,
+        `description` TEXT DEFAULT NULL,
+        `create_by` VARCHAR(30),
+        `create_date` DATE,
+        `create_time` TIME,
+        `update_by` VARCHAR(30),
+        `update_date` DATE,
+        `update_time` TIME,
+        `status` CHAR(1) DEFAULT 'A'
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createCampaignSql)) {
+        echo "<p style='color:green;'>Verified table `" . CAMPAIGN . "` for Campaign.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . CAMPAIGN . "`: " . $conn->error . "</p>";
+    }
+
+    migrationEnsureIndex($conn, $db_cms, CAMPAIGN, 'idx_campaign_rule_setting', "ALTER TABLE `" . CAMPAIGN . "` ADD INDEX `idx_campaign_rule_setting` (`rule_setting_id`)", "Verified `" . CAMPAIGN . "` rule setting index.");
+
+    $createCampaignPicSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN_PIC . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `campaign_id` INT NOT NULL,
+        `user_id` INT NOT NULL,
+        `create_by` VARCHAR(30),
+        `create_date` DATE,
+        `create_time` TIME,
+        `update_by` VARCHAR(30),
+        `update_date` DATE,
+        `update_time` TIME,
+        `status` CHAR(1) DEFAULT 'A',
+        KEY `idx_campaign_pic_campaign_id` (`campaign_id`),
+        KEY `idx_campaign_pic_user_id` (`user_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createCampaignPicSql)) {
+        echo "<p style='color:green;'>Verified table `" . CAMPAIGN_PIC . "` for Campaign PIC.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . CAMPAIGN_PIC . "`: " . $conn->error . "</p>";
+    }
+
+    $createCampaignCustomerSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN_CUSTOMER . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `campaign_id` INT NOT NULL,
+        `platform` VARCHAR(30),
+        `customer_id` VARCHAR(100),
+        `customer_name` VARCHAR(255),
+        `customer_contact` VARCHAR(100),
+        `customer_label` TEXT DEFAULT NULL,
+        `customer_tags` TEXT DEFAULT NULL,
+        `last_order_date` DATE DEFAULT NULL,
+        `total_order` INT DEFAULT 0,
+        `total_spent` DECIMAL(12,2) DEFAULT 0.00,
+        `assign_source` VARCHAR(50) DEFAULT 'Manual',
+        `purchase_status` VARCHAR(30) DEFAULT 'Pending',
+        `follow_up_status` VARCHAR(30) DEFAULT 'Pending',
+        `create_by` VARCHAR(30),
+        `create_date` DATE,
+        `create_time` TIME,
+        `update_by` VARCHAR(30),
+        `update_date` DATE,
+        `update_time` TIME,
+        `status` CHAR(1) DEFAULT 'A',
+        KEY `idx_campaign_customer_campaign_id` (`campaign_id`),
+        KEY `idx_campaign_customer_platform` (`platform`),
+        KEY `idx_campaign_customer_customer_id` (`customer_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createCampaignCustomerSql)) {
+        echo "<p style='color:green;'>Verified table `" . CAMPAIGN_CUSTOMER . "` for Campaign Customer.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . CAMPAIGN_CUSTOMER . "`: " . $conn->error . "</p>";
+    }
+
+    $createCampaignMessageSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN_MESSAGE . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `campaign_id` INT NOT NULL,
+        `message_shortcut_id` INT DEFAULT NULL,
+        `message_title` VARCHAR(255),
+        `message_preview` TEXT DEFAULT NULL,
+        `follow_up_date` DATE,
+        `sequence_no` INT DEFAULT 1,
+        `remark` TEXT DEFAULT NULL,
+        `create_by` VARCHAR(30),
+        `create_date` DATE,
+        `create_time` TIME,
+        `update_by` VARCHAR(30),
+        `update_date` DATE,
+        `update_time` TIME,
+        `status` CHAR(1) DEFAULT 'A',
+        KEY `idx_campaign_message_campaign_id` (`campaign_id`),
+        KEY `idx_campaign_message_follow_up_date` (`follow_up_date`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createCampaignMessageSql)) {
+        echo "<p style='color:green;'>Verified table `" . CAMPAIGN_MESSAGE . "` for Campaign Message.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . CAMPAIGN_MESSAGE . "`: " . $conn->error . "</p>";
+    }
+
+    $createCampaignFollowUpSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN_FOLLOW_UP . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `campaign_id` INT NOT NULL,
+        `campaign_customer_id` INT NOT NULL,
+        `campaign_message_id` INT NOT NULL,
+        `pic_user_id` INT DEFAULT NULL,
+        `follow_up_date` DATE,
+        `follow_up_status` VARCHAR(30) DEFAULT 'Pending',
+        `screenshot_path` VARCHAR(255) DEFAULT NULL,
+        `remark` TEXT DEFAULT NULL,
+        `label_preview` VARCHAR(255) DEFAULT NULL,
+        `completed_by` VARCHAR(30) DEFAULT NULL,
+        `completed_date` DATE DEFAULT NULL,
+        `completed_time` TIME DEFAULT NULL,
+        `notification_sent` CHAR(1) DEFAULT 'N',
+        `notification_sent_date` DATE DEFAULT NULL,
+        `notification_sent_time` TIME DEFAULT NULL,
+        `create_by` VARCHAR(30),
+        `create_date` DATE,
+        `create_time` TIME,
+        `update_by` VARCHAR(30),
+        `update_date` DATE,
+        `update_time` TIME,
+        `status` CHAR(1) DEFAULT 'A',
+        KEY `idx_campaign_follow_up_campaign_id` (`campaign_id`),
+        KEY `idx_campaign_follow_up_customer_id` (`campaign_customer_id`),
+        KEY `idx_campaign_follow_up_message_id` (`campaign_message_id`),
+        KEY `idx_campaign_follow_up_date` (`follow_up_date`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createCampaignFollowUpSql)) {
+        echo "<p style='color:green;'>Verified table `" . CAMPAIGN_FOLLOW_UP . "` for Campaign Follow-Up.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . CAMPAIGN_FOLLOW_UP . "`: " . $conn->error . "</p>";
+    }
+
+    $createCampaignPurchaseRecordSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN_PURCHASE_RECORD . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `campaign_id` INT NOT NULL,
+        `campaign_customer_id` INT NOT NULL,
+        `platform` VARCHAR(30),
+        `order_id` VARCHAR(100),
+        `order_no` VARCHAR(150),
+        `order_detail` TEXT DEFAULT NULL,
+        `order_status` VARCHAR(100),
+        `order_amount` DECIMAL(12,2) DEFAULT 0.00,
+        `order_date` DATETIME DEFAULT NULL,
+        `package_text` TEXT DEFAULT NULL,
+        `customer_type` VARCHAR(30) DEFAULT NULL,
+        `create_by` VARCHAR(30),
+        `create_date` DATE,
+        `create_time` TIME,
+        `update_by` VARCHAR(30),
+        `update_date` DATE,
+        `update_time` TIME,
+        `status` CHAR(1) DEFAULT 'A',
+        KEY `idx_campaign_purchase_campaign_id` (`campaign_id`),
+        KEY `idx_campaign_purchase_customer_id` (`campaign_customer_id`),
+        KEY `idx_campaign_purchase_platform` (`platform`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createCampaignPurchaseRecordSql)) {
+        echo "<p style='color:green;'>Verified table `" . CAMPAIGN_PURCHASE_RECORD . "` for Campaign Purchase Record.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . CAMPAIGN_PURCHASE_RECORD . "`: " . $conn->error . "</p>";
+    }
+
+    migrationEnsureIndex($conn, $db_cms, CAMPAIGN_PURCHASE_RECORD, 'idx_campaign_purchase_unique_order', "ALTER TABLE `" . CAMPAIGN_PURCHASE_RECORD . "` ADD UNIQUE KEY `idx_campaign_purchase_unique_order` (`campaign_id`,`campaign_customer_id`,`platform`,`order_id`,`order_no`)", "Verified `" . CAMPAIGN_PURCHASE_RECORD . "` duplicate prevention index.");
+
+
+    $createCampaignRuleSettingSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN_RULE_SETTING . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `rule_name` VARCHAR(255),
+        `generate_schedule` VARCHAR(100),
+        `generate_day` VARCHAR(50) DEFAULT NULL,
+        `campaign_name_template` VARCHAR(255),
+        `campaign_period_rule` VARCHAR(100),
+        `customer_condition_json` MEDIUMTEXT DEFAULT NULL,
+        `default_pic_json` MEDIUMTEXT DEFAULT NULL,
+        `default_message_json` MEDIUMTEXT DEFAULT NULL,
+        `rule_status` VARCHAR(30) DEFAULT 'Active',
+        `last_generated_date` DATE DEFAULT NULL,
+        `last_generated_time` TIME DEFAULT NULL,
+        `remark` TEXT DEFAULT NULL,
+        `create_by` VARCHAR(30),
+        `create_date` DATE,
+        `create_time` TIME,
+        `update_by` VARCHAR(30),
+        `update_date` DATE,
+        `update_time` TIME,
+        `status` CHAR(1) DEFAULT 'A'
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createCampaignRuleSettingSql)) {
+        echo "<p style='color:green;'>Verified table `" . CAMPAIGN_RULE_SETTING . "` for Campaign Rule Setting.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . CAMPAIGN_RULE_SETTING . "`: " . $conn->error . "</p>";
+    }
+
+    $createCampaignRuleGeneratedLogSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN_RULE_GENERATED_LOG . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `rule_setting_id` INT NOT NULL,
+        `campaign_id` INT DEFAULT NULL,
+        `generated_key` VARCHAR(255),
+        `generated_date` DATE,
+        `generated_time` TIME,
+        `remark` TEXT DEFAULT NULL,
+        `create_by` VARCHAR(30),
+        `create_date` DATE,
+        `create_time` TIME,
+        `status` CHAR(1) DEFAULT 'A',
+        KEY `idx_campaign_rule_log_rule_setting` (`rule_setting_id`),
+        KEY `idx_campaign_rule_log_campaign_id` (`campaign_id`),
+        KEY `idx_campaign_rule_log_generated_key` (`generated_key`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createCampaignRuleGeneratedLogSql)) {
+        echo "<p style='color:green;'>Verified table `" . CAMPAIGN_RULE_GENERATED_LOG . "` for Campaign Rule Generated Log.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . CAMPAIGN_RULE_GENERATED_LOG . "`: " . $conn->error . "</p>";
+    }
+
+    migrationEnsureIndex($conn, $db_cms, CAMPAIGN_RULE_GENERATED_LOG, 'idx_campaign_rule_generated_key_unique', "ALTER TABLE `" . CAMPAIGN_RULE_GENERATED_LOG . "` ADD UNIQUE KEY `idx_campaign_rule_generated_key_unique` (`generated_key`)", "Verified `" . CAMPAIGN_RULE_GENERATED_LOG . "` generated key unique index.");
+
+
+    $campaignPinGroupSql = "INSERT INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+        (153, 'Campaign', '1,2,3,4', 'Campaign management', '1', CURDATE(), CURTIME(), 'A'),
+        (154, 'Campaign Rule Setting', '1,2,3,4', 'Campaign auto rule setting', '1', CURDATE(), CURTIME(), 'A')
+        ON DUPLICATE KEY UPDATE
+            `name` = VALUES(`name`),
+            `pins` = VALUES(`pins`),
+            `remark` = VALUES(`remark`),
+            `status` = 'A'";
+    if ($conn->query($campaignPinGroupSql)) {
+        echo "<p style='color:green;'>Verified pin groups 153 Campaign and 154 Campaign Rule Setting.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed verifying Campaign pin groups: " . $conn->error . "</p>";
+    }
+
+    $campaignGroupResult = $conn->query("SELECT `id`, `pins` FROM `user_group`");
+    if ($campaignGroupResult) {
+        while ($campaignGroupRow = $campaignGroupResult->fetch_assoc()) {
+            $groupId = isset($campaignGroupRow['id']) ? (int) $campaignGroupRow['id'] : 0;
+            if ($groupId <= 0) {
+                continue;
+            }
+
+            $currentPins = isset($campaignGroupRow['pins']) ? (string) $campaignGroupRow['pins'] : '';
+            if (in_array($groupId, array(1, 2), true)) {
+                $updatedPins = setPinBlockAccess($currentPins, 153, array(1, 2, 3, 4));
+                $updatedPins = setPinBlockAccess($updatedPins, 154, array(1, 2, 3, 4));
+            } else {
+                $updatedPins = removePinBlockById($currentPins, 153);
+                $updatedPins = removePinBlockById($updatedPins, 154);
+            }
+
+            if ($updatedPins !== $currentPins) {
+                $safePins = $conn->real_escape_string($updatedPins);
+                if ($conn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $groupId)) {
+                    echo "<p style='color:green;'>Verified Campaign pin access for `user_group` id " . (int) $groupId . ".</p>";
+                } else {
+                    echo "<p style='color:red;'>Failed updating Campaign pin access for `user_group` id " . (int) $groupId . ": " . $conn->error . "</p>";
+                }
+            } else {
+                echo "<p style='color:green;'>Verified Campaign pin access already matches `user_group` id " . (int) $groupId . ".</p>";
+            }
+        }
+    } else {
+        echo "<p style='color:red;'>Failed reading `user_group` for Campaign pin assignment: " . $conn->error . "</p>";
+    }
+
     $createLabelSql = "CREATE TABLE IF NOT EXISTS `" . LABEL . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `name` VARCHAR(120) NOT NULL,
@@ -3058,6 +3560,7 @@ if ($conn->select_db($db_fin)) {
 }
 
 if ($conn->select_db($db_cms)) {
+    migrationEnsureColumn($conn, $db_cms, 'package', 'platform_item_id', "ALTER TABLE `package` ADD COLUMN `platform_item_id` TEXT DEFAULT NULL AFTER `item_code`", "Verified `package` includes `platform_item_id`.");
     migrationEnsureColumn($conn, $db_cms, LAZADA_ORDER_REQ, 'airbill_no', "ALTER TABLE `" . LAZADA_ORDER_REQ . "` ADD COLUMN `airbill_no` VARCHAR(150) DEFAULT NULL AFTER `order_status`", "Verified `" . LAZADA_ORDER_REQ . "` includes `airbill_no`.");
     migrationEnsureColumn($conn, $db_cms, LAZADA_ORDER_REQ, 'airbill_attachment', "ALTER TABLE `" . LAZADA_ORDER_REQ . "` ADD COLUMN `airbill_attachment` TEXT DEFAULT NULL AFTER `airbill_no`", "Verified `" . LAZADA_ORDER_REQ . "` includes `airbill_attachment`.");
     migrationEnsureColumn($conn, $db_cms, LAZADA_ORDER_REQ, 'stock_out_warehouse_id', "ALTER TABLE `" . LAZADA_ORDER_REQ . "` ADD COLUMN `stock_out_warehouse_id` INT DEFAULT NULL AFTER `airbill_attachment`", "Verified `" . LAZADA_ORDER_REQ . "` includes `stock_out_warehouse_id`.");

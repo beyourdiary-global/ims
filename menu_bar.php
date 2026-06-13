@@ -248,6 +248,7 @@ $menuList = array(
             array('Whatsapp Customer', 'mdi mdi-deal-outline', $SITEURL . '/customerInfoTable.php', '38'),
             array('Customer Follow-Up', 'mdi mdi-account-clock-outline', $SITEURL . '/customer_follow_up_list.php', '151'),
             array('Customer Daily Report', 'mdi mdi-file-chart-outline', $SITEURL . '/customer_daily_report.php', '150'),
+            array('Campaign', 'mdi mdi-bullhorn-outline', $SITEURL . '/campaign_table.php', '153'),
             array(
                 'Setting',
                 'mdi mdi-cog',
@@ -259,11 +260,12 @@ $menuList = array(
                     array('Customer Repeat', 'mdi mdi-account-group-outline', $SITEURL . '/cus_repeat_table.php', '143'),
                     array('Message Shortcuts', 'mdi mdi-message-text-outline', $SITEURL . '/message_shortcuts_table.php', '144'),
                     array('Tag', 'mdi mdi-account-group-outline', $SITEURL . '/tagTable.php', '35'),
+                    array('Campaign Rule Setting', 'mdi mdi-cog-outline', $SITEURL . '/campaign_rule_setting_table.php', '154'),
                 ),
-                'pin' => array('29', '142', '143', '144', '35'),
+                'pin' => array('29', '142', '143', '144', '35', '154'),
             ),
         ),
-        'pin' => array('85', '91', '75', '84', '38', '150', '151', '29', '142', '143', '144', '35')
+        'pin' => array('85', '91', '75', '84', '38', '150', '151', '153', '29', '142', '143', '144', '35', '154')
     ),
     array(
         'Order',
@@ -306,6 +308,7 @@ $menuList = array(
             array('Stock Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/finance/stock_order_request_table.php', '126'),
             array('Stock In', 'mdi mdi-tray-arrow-down', $SITEURL . '/warehouse_stock_in_table.php', '125'),
             array('Stock List', 'mdi mdi-package-variant', $SITEURL . '/stock_list_table.php', '120'),
+            array('Order Warehouse Transfer', 'mdi mdi-swap-horizontal', $SITEURL . '/order_warehouse_transfer.php', '152'),
             array('Barcode Generate', 'mdi mdi-barcode', $SITEURL . '/barcode_generator.php', '22'),
             array('Rate Checking', 'mdi mdi-package-variant', $SITEURL . '/rate_checking.php', '17'),
             array(
@@ -319,7 +322,7 @@ $menuList = array(
                 'pin' => array('53'),
             ),
         ),
-        'pin' => array('16', '126', '125', '120', '22', '17', '53')
+        'pin' => array('16', '126', '125', '120', '152', '22', '17', '53')
     ),
     array(
         'Product',
@@ -429,8 +432,21 @@ $menuList = array(
                 ),
                 'pin' => array('123', '69', '92', '93', '100'),
             ),
+            array(
+                'Order',
+                'mdi mdi-cart-outline',
+                'javascript:void(0)',
+                'y',
+                'expand' => array(
+                    array('Shopee Order Report', 'mdi storefront-outline', $SITEURL . '/shopee/shopee_order_report.php', '155'),
+                    array('Facebook Order Report', 'mdi storefront-outline', $SITEURL . '/finance/facebook_order_report.php', '156'),
+                    array('Website Order Report', 'mdi mdi-note-text-outline', $SITEURL . '/finance/website_order_report.php', '157'),
+                    array('Lazada Order Report', 'mdi mdi-note-text-outline', $SITEURL . '/lazada_order_report.php', '158'),
+                ),
+                'pin' => array('155', '156', '157', '158'),
+            ),
         ),
-        'pin' => array('123', '69', '92', '93', '100')
+        'pin' => array('123', '69', '92', '93', '100', '155', '156', '157', '158')
     ),
     array(
         'Other',
@@ -496,6 +512,14 @@ $menuList = array(
         'n',
         'expand' => array(),
         'pin' => $importShortcutVisiblePins
+    ),
+    array(
+        'BMI Calculator',
+        'mdi mdi-calculator',
+        $SITEURL . '/bmi-calculator/bmi.php',
+        'n',
+        'expand' => array(),
+        'pin' => is_array(GlobalPin) ? GlobalPin : array('0')
     ),
     array(
         'Audit Log',

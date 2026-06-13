@@ -177,6 +177,12 @@ if (!$result) {
     .btn-container {
         white-space: nowrap;
     }
+
+    .platform-item-id-badge {
+        font-size: 14.4px;
+        font-weight: normal;
+        line-height: 1.5;
+    }
 </style>
 
 <body>
@@ -231,6 +237,7 @@ if (!$result) {
                                 <th id="action_col">Action</th>
                                 <th>Name</th>
                                 <th>Item Code</th>
+                                <th>Platform Item ID</th>
                                 <th>Item Description</th>
                                 <th>Price</th>
                                 <th>Brand</th>
@@ -259,6 +266,14 @@ if (!$result) {
                                     </td>
                                     <td><?= htmlspecialchars($row['name']) ?></td>
                                     <td><?= htmlspecialchars(isset($row['item_code']) ? $row['item_code'] : '') ?></td>
+                                    <td>
+                                        <?php
+                                        $platformItemIds = array_filter(array_map('trim', explode(',', isset($row['platform_item_id']) ? (string) $row['platform_item_id'] : '')), 'strlen');
+                                        foreach ($platformItemIds as $platformItemId) {
+                                            echo '<span class="badge bg-light text-dark border me-1 mb-1 platform-item-id-badge">' . htmlspecialchars($platformItemId, ENT_QUOTES, 'UTF-8') . '</span>';
+                                        }
+                                        ?>
+                                    </td>
                                     <td><?= htmlspecialchars(isset($row['item_description']) ? $row['item_description'] : '') ?></td>
                                     <td>
                                         <?php
@@ -306,6 +321,7 @@ if (!$result) {
                                 <th>Action</th>
                                 <th>Name</th>
                                 <th>Item Code</th>
+                                <th>Platform Item ID</th>
                                 <th>Item Description</th>
                                 <th>Price</th>
                                 <th>Brand</th>

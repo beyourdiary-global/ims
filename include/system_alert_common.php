@@ -56,6 +56,12 @@ if (!function_exists('systemAlertGetModuleConfigs')) {
                 'path' => '/customer_follow_up_list.php',
                 'action_label' => 'Open Follow-Up',
             ),
+            'campaign_follow_up_task' => array(
+                'pin_group_id' => 153,
+                'title' => 'Campaign Follow-Up Task',
+                'path' => '/campaign_follow_up_task.php',
+                'action_label' => 'Open Follow-Up',
+            ),
             'waiting_admin_final_check' => array(
                 'pin_group_id' => 129,
                 'title' => 'Waiting Admin Final Check',
@@ -1045,6 +1051,147 @@ if (!function_exists('systemAlertGenerateForUser')) {
 
         $createdCount += systemAlertSyncFollowUpNotificationsForUser($connect, $userId);
         $generatedCache[$cacheKey] = $createdCount;
+        return $createdCount;
+    }
+}
+
+if (!function_exists('systemAlertBuildCampaignFollowUpActionUrl')) {
+    function systemAlertBuildCampaignFollowUpActionUrl($campaignId, $followUpId = 0)
+    {
+        $params = array(
+            'campaign_id' => (int) $campaignId,
+        );
+
+        if ((int) $followUpId > 0) {
+            $params['follow_up_id'] = (int) $followUpId;
+        }
+
+        return systemAlertBuildActionUrl('campaign_follow_up_task', $params);
+    }
+}
+
+if (!function_exists('systemAlertCreateCampaignFollowUpAlert')) {
+    function systemAlertCreateCampaignFollowUpAlert($connect, $taskRow)
+    {
+        if (!($connect instanceof mysqli) || !is_array($taskRow) || empty($taskRow)) {
+            return 0;
+        }
+
+        $taskId = isset($taskRow['id']) ? (int) $taskRow['id'] : 0;
+        $targetUserId = isset($taskRow['pic_user_id']) ? (int) $taskRow['pic_user_id'] : 0;
+        $campaignId = isset($taskRow['campaign_id']) ? (int) $taskRow['campaign_id'] : 0;
+        $campaignMessageId = isset($taskRow['campaign_message_id']) ? (int) $taskRow['campaign_message_id'] : 0;
+        if ($taskId <= 0 || $targetUserId <= 0 || $campaignId <= 0 || $campaignMessageId <= 0) {
+            return 0;
+        }
+
+        $campaignName = trim((string) ($taskRow['campaign_name'] ?? 'Campaign'));
+        $messageTitle = trim((string) ($taskRow['message_title'] ?? 'Follow-Up'));
+        $followUpDate = trim((string) ($taskRow['follow_up_date'] ?? systemAlertNowDate()));
+        $dueCustomerTotal = isset($taskRow['due_customer_total']) ? (int) $taskRow['due_customer_total'] : 0;
+        if ($dueCustomerTotal <= 0) {
+            $dueCustomerTotal = 1;
+        }
+
+        $messageParts = array();
+        $messageParts[] = $campaignName . ': ' . $messageTitle;
+        $messageParts[] = $dueCustomerTotal . ' follow-up customer' . ($dueCustomerTotal === 1 ? '' : 's') . ' due';
+        if ($followUpDate !== '') {
+            $messageParts[] = 'Follow-up date ' . $followUpDate;
+        }
+
+        return systemAlertCreateOnce($connect, array(
+            'module_key' => 'campaign_follow_up_task',
+            'notification_type' => 'campaign_follow_up_due',
+            'target_user_id' => $targetUserId,
+            'target_user_group_id' => systemAlertGetUserGroupId($connect, $targetUserId),
+            'title' => 'Campaign Follow-Up Task',
+            'message' => implode('. ', array_filter($messageParts, 'strlen')) . '.',
+            'action_url' => systemAlertBuildCampaignFollowUpActionUrl($campaignId),
+            'action_label' => 'Open Follow-Up',
+            'related_table' => defined('CAMPAIGN_FOLLOW_UP') ? CAMPAIGN_FOLLOW_UP : 'campaign_follow_up',
+            'related_id' => $campaignMessageId,
+            'related_platform' => '',
+            'display_date' => $followUpDate !== '' ? $followUpDate : systemAlertNowDate(),
+            'create_by' => 'SYSTEM',
+            'create_date' => systemAlertNowDate(),
+            'create_time' => systemAlertNowTime(),
+        ));
+    }
+}
+
+if (!function_exists('systemAlertGenerateCampaignFollowUpAlerts')) {
+    function systemAlertGenerateCampaignFollowUpAlerts($connect, $displayDate = '')
+    {
+        $displayDate = trim((string) $displayDate) !== '' ? trim((string) $displayDate) : systemAlertNowDate();
+        if (!($connect instanceof mysqli) || !defined('CAMPAIGN_FOLLOW_UP') || !defined('CAMPAIGN') || !defined('CAMPAIGN_CUSTOMER') || !defined('CAMPAIGN_MESSAGE')) {
+            return 0;
+        }
+
+        $requiredTables = array(CAMPAIGN_FOLLOW_UP, CAMPAIGN, CAMPAIGN_CUSTOMER, CAMPAIGN_MESSAGE);
+        foreach ($requiredTables as $tableName) {
+            if (!tableExists($tableName, $connect)) {
+                return 0;
+            }
+        }
+
+        $sql = "SELECT cf.`id`, cf.`campaign_id`, cf.`campaign_message_id`, cf.`pic_user_id`, cf.`follow_up_date`, cf.`follow_up_status`,
+                       c.`campaign_name`,
+                       cc.`customer_name`, cc.`platform`,
+                       cm.`message_title`
+                FROM `" . CAMPAIGN_FOLLOW_UP . "` cf
+                INNER JOIN `" . CAMPAIGN . "` c ON c.`id` = cf.`campaign_id` AND c.`status` = 'A'
+                INNER JOIN `" . CAMPAIGN_CUSTOMER . "` cc ON cc.`id` = cf.`campaign_customer_id` AND cc.`status` = 'A'
+                INNER JOIN `" . CAMPAIGN_MESSAGE . "` cm ON cm.`id` = cf.`campaign_message_id` AND cm.`status` = 'A'
+                WHERE cf.`status` = 'A'
+                  AND IFNULL(cf.`follow_up_status`, '') <> 'Completed'
+                  AND IFNULL(cf.`pic_user_id`, 0) > 0
+                  AND IFNULL(cf.`notification_sent`, 'N') = 'N'
+                  AND cf.`follow_up_date` <= '" . systemAlertEscape($connect, $displayDate) . "'
+                ORDER BY cf.`follow_up_date` ASC, cf.`id` ASC
+                LIMIT 500";
+
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
+            return 0;
+        }
+
+        $groupedRows = array();
+        while ($row = mysqli_fetch_assoc($result)) {
+            $groupKey = (int) ($row['campaign_id'] ?? 0)
+                . '|' . (int) ($row['campaign_message_id'] ?? 0)
+                . '|' . (int) ($row['pic_user_id'] ?? 0)
+                . '|' . trim((string) ($row['follow_up_date'] ?? ''));
+            if (!isset($groupedRows[$groupKey])) {
+                $row['task_ids'] = array();
+                $row['due_customer_total'] = 0;
+                $groupedRows[$groupKey] = $row;
+            }
+
+            $taskId = isset($row['id']) ? (int) $row['id'] : 0;
+            if ($taskId > 0) {
+                $groupedRows[$groupKey]['task_ids'][] = $taskId;
+            }
+            $groupedRows[$groupKey]['due_customer_total']++;
+        }
+
+        $createdCount = 0;
+        foreach ($groupedRows as $row) {
+            $targetUserId = isset($row['pic_user_id']) ? (int) $row['pic_user_id'] : 0;
+            if ($targetUserId <= 0) {
+                continue;
+            }
+
+            $alertId = systemAlertCreateCampaignFollowUpAlert($connect, $row);
+            if ($alertId > 0) {
+                $taskIds = isset($row['task_ids']) && is_array($row['task_ids']) ? array_values(array_filter(array_map('intval', $row['task_ids']))) : array();
+                if (!empty($taskIds)) {
+                    mysqli_query($connect, "UPDATE `" . CAMPAIGN_FOLLOW_UP . "` SET `notification_sent`='Y', `notification_sent_date`=CURDATE(), `notification_sent_time`=CURTIME() WHERE `id` IN (" . implode(',', $taskIds) . ")");
+                }
+                $createdCount++;
+            }
+        }
+
         return $createdCount;
     }
 }

@@ -93,6 +93,14 @@ $lazadaCustomerTagState = customerTagHandlePost($connect, $lazadaCustomerTagPlat
 $lazadaCustomerActiveTags = $lazadaCustomerFreshAddPage ? array() : customerTagGetDisplayTags($connect, $lazadaCustomerTagPlatform, $lazadaCustomerTagCustomerId, $lazadaCustomerTagDraftToken);
 $lazadaCustomerDraftTagIds = customerTagExtractTagIds($lazadaCustomerActiveTags);
 
+$lazadaCustomerLabelMeta = array();
+$lazadaCustomerLabelDisplayHtml = '';
+if (isset($dataExisted) && !empty($dataID) && $act !== 'I' && isset($row['id']) && (int) $row['id'] > 0) {
+    $lazadaCustomerLabelMap = customerLabelGetCustomerLabelMap($connect, 'lazada', array((int) $row['id']));
+    $lazadaCustomerLabelMeta = isset($lazadaCustomerLabelMap[(int) $row['id']]) ? $lazadaCustomerLabelMap[(int) $row['id']] : array();
+    $lazadaCustomerLabelDisplayHtml = customerLabelRenderPageHeader($lazadaCustomerLabelMeta);
+}
+
 $series_list_result = getData('*', '', '', BRD_SERIES, $connect);
 
 if (post('actionBtn')) {
@@ -446,6 +454,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                             </h2>
                             <?php echo customerTagRenderManageButton($lazadaCustomerTagPlatform, $lazadaCustomerTagCustomerId, isActionAllowed('Edit', $pinAccess) && $act !== 'I'); ?>
                         </div>
+                        <?php echo $lazadaCustomerLabelDisplayHtml; ?>
                     </div>
 
                     <div id="err_msg" class="mb-3">
@@ -480,7 +489,10 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
             if (isset($row['name']))
             $echoVal = $row['name'];
             ?>
-            <input class="form-control" type="text" name="lcr_name" id="lcr_name" value="<?php echo !empty($echoVal) ? $row['name'] : '' ?>" <?php if ($act == '')echo 'disabled' ?>>       
+            <div class="customer-field-with-label">
+                <input class="form-control" type="text" name="lcr_name" id="lcr_name" value="<?php echo !empty($echoVal) ? $row['name'] : '' ?>" <?php if ($act == '')echo 'disabled' ?>>
+                <?php echo customerLabelRenderInlineSegmentationBadge($lazadaCustomerLabelMeta); ?>
+            </div>
             <?php if (isset($name_err)) { ?>
                 <div id="err_msg">
                     <span class="mt-n1"><?php echo $name_err; ?></span>
@@ -776,7 +788,8 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                                 <th width="60">S/N</th>
                                                 <th width="200">Action</th>
                                                 <th>Order ID</th>
-                                                <th>Date</th>
+                                                <th>Purchase Date</th>
+                                                <th>Received Date</th>
                                                 <th>Package</th>
                                                 <th>Buyer Payment Method</th>
                                                 <th>Charges &amp; Fees</th>
@@ -790,6 +803,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                                     $orderId = isset($orderRow['id']) ? (int) $orderRow['id'] : 0;
                                                     $orderNo = isset($orderRow['oder_number']) ? $orderRow['oder_number'] : '';
                                                     $orderDate = isset($orderRow['create_date']) ? $orderRow['create_date'] : '';
+                                                    $receivedDate = isset($orderRow['received_date']) ? $orderRow['received_date'] : '';
                                                     $pkgCsv = isset($orderRow['pkg']) ? trim((string) $orderRow['pkg']) : '';
                                                     $payMethodId = isset($orderRow['pay_meth']) ? trim((string) $orderRow['pay_meth']) : '';
                                                     $orderPackage = isset($orderPackageCache[$pkgCsv]) ? $orderPackageCache[$pkgCsv] : '';
@@ -807,6 +821,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                                         </td>
                                                         <td><?= htmlspecialchars((string) $orderNo, ENT_QUOTES, 'UTF-8') ?></td>
                                                         <td><?= htmlspecialchars((string) $orderDate, ENT_QUOTES, 'UTF-8') ?></td>
+                                                        <td><?= htmlspecialchars((string) $receivedDate, ENT_QUOTES, 'UTF-8') ?></td>
                                                         <td><?= htmlspecialchars((string) $orderPackage, ENT_QUOTES, 'UTF-8') ?></td>
                                                         <td><?= htmlspecialchars((string) $buyerPayMethod, ENT_QUOTES, 'UTF-8') ?></td>
                                                         <td><?= commonFormatAmountRm($orderFees) ?></td>
@@ -815,13 +830,13 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                                 <?php }
                                             } else { ?>
                                                 <tr>
-                                                    <td colspan="8" class="text-center">No order records found.</td>
+                                                    <td colspan="9" class="text-center">No order records found.</td>
                                                 </tr>
                                             <?php } ?>
                                         </tbody>
                                         <tfoot>
                                             <tr>
-                                                <th colspan="7" class="text-end">Sub-Total (RM)</th>
+                                                <th colspan="8" class="text-end">Sub-Total (RM)</th>
                                                 <th><?= commonFormatAmountRm($sumFinalAmount) ?></th>
                                             </tr>
                                         </tfoot>
