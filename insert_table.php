@@ -1788,6 +1788,7 @@ function pinBlockHasAccessId($allPins, $targetPinId, $accessId)
 //         `urbanism_member_id` INT DEFAULT NULL,
 //         `content` TEXT NOT NULL,
 //         `attachment` VARCHAR(255) DEFAULT NULL,
+//         `attachments` TEXT DEFAULT NULL,
 //         `created_by` VARCHAR(30) DEFAULT NULL,
 //         `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
 //         `updated_by` VARCHAR(30) DEFAULT NULL,
@@ -1855,12 +1856,26 @@ function pinBlockHasAccessId($allPins, $targetPinId, $accessId)
 //             echo "<p style='color:red;'>Failed migrating legacy `cust_id` values into `shopee_cust_id` in `" . USER_RECORD_LOG . "`: " . $conn->error . "</p>";
 //         }
 //     }
-
+//
 // } else {
 //     echo "<p style='color:red;'>Failed selecting CMS database for user record log migration.</p>";
 // }
 
 if ($conn->select_db($db_cms)) {
+    if (migrationTableExists($conn, $db_cms, USER_RECORD_LOG)) {
+        if (migrationColumnExists($conn, $db_cms, USER_RECORD_LOG, 'attachment')) {
+            if ($conn->query("ALTER TABLE `" . USER_RECORD_LOG . "` MODIFY COLUMN `attachment` TEXT DEFAULT NULL")) {
+                echo "<p style='color:green;'>Verified column `attachment` in `" . USER_RECORD_LOG . "` supports multiple attachments in CMS database.</p>";
+            } else {
+                echo "<p style='color:red;'>Failed updating `attachment` column in `" . USER_RECORD_LOG . "` in CMS database: " . $conn->error . "</p>";
+            }
+        } else {
+            echo "<p style='color:orange;'>Skipped `attachment` column update because column `attachment` was not found in `" . USER_RECORD_LOG . "`.</p>";
+        }
+    } else {
+        echo "<p style='color:orange;'>Skipped `attachment` column update because `" . USER_RECORD_LOG . "` was not found in CMS database `" . $db_cms . "`.</p>";
+    }
+
     $createTaskProjectSql = "CREATE TABLE IF NOT EXISTS `" . TASK_PROJECT . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `name` VARCHAR(180) NOT NULL,
