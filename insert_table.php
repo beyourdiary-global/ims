@@ -290,7 +290,7 @@ function insertTableEnsureOrderReportPins($cmsConn)
             if ($cmsConn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $groupId)) {
                 echo "<p style='color:green;'>Order Report pin setup granted View access for pin groups 155-158 to `user_group` id " . (int) $groupId . ".</p>";
             } else {
-                echo "<p style='color:red;'>Order Report pin setup failed updating `user_group` id " . (int) $groupId . ": " . $cmsConn->error . "</p>";
+                echo "<p style='color:red;'>Order Report pin setup failed updating `user_group` id " . (int) $groupId . ": " . htmlspecialchars($cmsConn->error, ENT_QUOTES, 'UTF-8') . "</p>";
             }
         } else {
             echo "<p style='color:green;'>Order Report pin setup verified View access already exists for `user_group` id " . (int) $groupId . ".</p>";
