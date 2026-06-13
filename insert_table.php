@@ -799,6 +799,16 @@ migrationEnsureIndex($conn, $db_fin, 'stock_out_batch_usage', 'idx_sobu_product_
 // addColumnIfMissing($conn, $db_cms, 'token_setting', 'chat_id', "ALTER TABLE `" . $safeCmsDb . "`.`token_setting` ADD COLUMN `chat_id` VARCHAR(100) DEFAULT '' AFTER `bot_token`");
     addColumnIfMissing($conn, $db_cms, 'token_setting', 'page_used', "ALTER TABLE `" . $safeCmsDb . "`.`token_setting` ADD COLUMN `page_used` VARCHAR(255) NOT NULL DEFAULT '' AFTER `name`");
     ensureVarcharColumnLengthAtLeast($conn, $db_cms, 'token_setting', 'page_used', 255, '');
+    addColumnIfMissing($conn, $db_cms, WHSE, 'telegram_token_setting_id', "ALTER TABLE `" . $safeCmsDb . "`.`" . WHSE . "` ADD COLUMN `telegram_token_setting_id` INT DEFAULT NULL AFTER `name`");
+    if (!indexExists($conn, $db_cms, WHSE, 'idx_warehouse_telegram_token_setting_id')) {
+        if ($conn->query("ALTER TABLE `" . $safeCmsDb . "`.`" . WHSE . "` ADD INDEX `idx_warehouse_telegram_token_setting_id` (`telegram_token_setting_id`)")) {
+            echo "<p style='color:blue;'>Added index `idx_warehouse_telegram_token_setting_id` to `" . WHSE . "`.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed adding index `idx_warehouse_telegram_token_setting_id` to `" . WHSE . "`: " . $conn->error . "</p>";
+        }
+    } else {
+        echo "<p style='color:green;'>Verified index `idx_warehouse_telegram_token_setting_id` already exists in `" . WHSE . "`.</p>";
+    }
 
 //     addColumnIfMissing($conn, $db_cms, 'user', 'main_report_supervisor', "ALTER TABLE `user` ADD COLUMN `main_report_supervisor` INT DEFAULT NULL AFTER `access_id`");
 //     addColumnIfMissing($conn, $db_cms, 'user', 'second_report_supervisor', "ALTER TABLE `user` ADD COLUMN `second_report_supervisor` INT DEFAULT NULL AFTER `main_report_supervisor`");

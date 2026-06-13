@@ -20,6 +20,9 @@ $num = 1;
 
 $redirect_page = $SITEURL . '/token_setting.php';
 $deleteRedirectPage = $SITEURL . '/token_setting_table.php';
+$warehouseUsageByTokenSettingId = function_exists('shopeeOmsBuildWarehouseUsageByTokenSettingId')
+    ? shopeeOmsBuildWarehouseUsageByTokenSettingId($connect)
+    : array();
 
 $result = false;
 $hasRows = false;
@@ -96,7 +99,7 @@ if (!$result) {
                             <th scope="col" width="60px">S/N</th>
                             <th scope="col" id="action_col" width="130px">Action</th>
                             <th scope="col">Name</th>
-                            <th scope="col">Page Used</th>
+                            <th scope="col">Warehouse Used</th>
                         </tr>
                     </thead>
 
@@ -113,7 +116,7 @@ if (!$result) {
                                         <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], '', $pageTitle, $redirect_page, $deleteRedirectPage); ?>
                                     </td>
                                     <td scope="row"><?= htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') ?></td>
-                                    <td scope="row"><?= htmlspecialchars((string) (function_exists('shopeeOmsGetTokenSettingPageDisplayText') ? shopeeOmsGetTokenSettingPageDisplayText(isset($row['page_used']) ? $row['page_used'] : '') : (isset($row['page_used']) ? $row['page_used'] : '')), ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?= htmlspecialchars(isset($warehouseUsageByTokenSettingId[(int) $row['id']]) ? implode(', ', $warehouseUsageByTokenSettingId[(int) $row['id']]) : '-', ENT_QUOTES, 'UTF-8') ?></td>
                                 </tr>
                             <?php }
                             } ?>
@@ -126,7 +129,7 @@ if (!$result) {
                             <th scope="col" width="60px">S/N</th>
                             <th scope="col" id="action_col" width="130px">Action</th>
                             <th scope="col">Name</th>
-                            <th scope="col">Page Used</th>
+                            <th scope="col">Warehouse Used</th>
                         </tr>
                     </tfoot>
                 </table>

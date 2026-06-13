@@ -275,6 +275,15 @@ if ($isStockBalanceView) {
     exit;
 }
 $pinAccess = checkCurrentPin($connect, $pageTitle);
+$warehouseTokenColumnAvailable = function_exists('commonWarehouseTelegramTokenColumnExists')
+    ? commonWarehouseTelegramTokenColumnExists($connect)
+    : false;
+$activeTelegramTokenOptions = function_exists('shopeeOmsLoadActiveTokenSettingOptions')
+    ? shopeeOmsLoadActiveTokenSettingOptions($connect)
+    : array();
+$allTelegramTokenNameMap = function_exists('shopeeOmsLoadTokenSettingNameMap')
+    ? shopeeOmsLoadTokenSettingNameMap($connect)
+    : array();
 
 //Current Page Action And Data ID
 $dataID = !empty(input('id')) ? input('id') : post('id');
@@ -345,6 +354,8 @@ if (post('actionBtn')) {
         case 'updData':
 
             $currentDataName = postSpaceFilter('currentDataName');
+            $telegramTokenSettingId = (int) postSpaceFilter('telegramTokenSettingId');
+            $telegramTokenErr = '';
 
             $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
@@ -352,6 +363,26 @@ if (post('actionBtn')) {
                 $err = "Duplicate record found for " . $pageTitle . " name.";
                 break;
             }
+
+            if (!$warehouseTokenColumnAvailable) {
+                $telegramTokenErr = 'Telegram Notification Bot field is not available on this deployment yet. Please update Warehouse setting schema first.';
+                break;
+            }
+
+            if ($telegramTokenSettingId <= 0) {
+                $telegramTokenErr = 'Telegram Notification Bot is required.';
+                break;
+            }
+
+            if (!isset($activeTelegramTokenOptions[$telegramTokenSettingId])) {
+                $telegramTokenErr = 'Please select a valid active Telegram Notification Bot.';
+                break;
+            }
+
+            $selectedTelegramTokenName = isset($activeTelegramTokenOptions[$telegramTokenSettingId]['name'])
+                ? (string) $activeTelegramTokenOptions[$telegramTokenSettingId]['name']
+                : ('Token #' . $telegramTokenSettingId);
+            $safeCurrentDataName = mysqli_real_escape_string($connect, $currentDataName);
 
             if ($action == 'addData') {
                 try {
@@ -361,8 +392,10 @@ if (post('actionBtn')) {
                         array_push($newvalarr, $currentDataName);
                         array_push($datafield, 'name');
                     }
+                    array_push($newvalarr, $selectedTelegramTokenName);
+                    array_push($datafield, 'telegram notification bot');
 
-                    $query = "INSERT INTO " . $tblName . "(name,create_by,create_date,create_time) VALUES ('$currentDataName','" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . "(name,telegram_token_setting_id,create_by,create_date,create_time) VALUES ('" . $safeCurrentDataName . "','" . $telegramTokenSettingId . "','" . USER_ID . "',curdate(),curtime())";
                     $returnData = mysqli_query($connect, $query);
                     $dataID = $connect->insert_id;
                 } catch (Exception $e) {
@@ -377,10 +410,20 @@ if (post('actionBtn')) {
                         array_push($datafield, 'name');
                     }
 
+                    $existingTelegramTokenSettingId = isset($row['telegram_token_setting_id']) ? (int) $row['telegram_token_setting_id'] : 0;
+                    if ($existingTelegramTokenSettingId !== $telegramTokenSettingId) {
+                        $existingTelegramTokenName = $existingTelegramTokenSettingId > 0 && isset($allTelegramTokenNameMap[$existingTelegramTokenSettingId])
+                            ? (string) $allTelegramTokenNameMap[$existingTelegramTokenSettingId]
+                            : '-';
+                        array_push($oldvalarr, $existingTelegramTokenName);
+                        array_push($chgvalarr, $selectedTelegramTokenName);
+                        array_push($datafield, 'telegram notification bot');
+                    }
+
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if ($oldvalarr && $chgvalarr) {
-                        $query = "UPDATE " . $tblName . " SET name ='$currentDataName', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
+                        $query = "UPDATE " . $tblName . " SET name ='" . $safeCurrentDataName . "', telegram_token_setting_id = '" . $telegramTokenSettingId . "', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
                         $returnData = mysqli_query($connect, $query);
                     } else {
                         $act = 'NC';
@@ -467,10 +510,38 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 
                     <div class="form-group mb-3">
                         <label class="form-label" for="currentDataName"><?php echo $pageTitle ?> Name</label>
-                        <input class="form-control" type="text" name="currentDataName" id="currentDataName" value="<?php if (isset($row['name'])) echo $row['name'] ?>" <?php if ($act == '') echo 'readonly' ?> required autocomplete="off">
+                        <input class="form-control" type="text" name="currentDataName" id="currentDataName" value="<?= htmlspecialchars(isset($currentDataName) ? (string) $currentDataName : (isset($row['name']) ? (string) $row['name'] : ''), ENT_QUOTES, 'UTF-8') ?>" <?php if ($act == '') echo 'readonly' ?> required autocomplete="off">
                         <div id="err_msg">
                             <span class="mt-n1" id="errorSpan"><?php if (isset($err)) echo $err; ?></span>
                         </div>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label class="form-label" for="telegramTokenSettingId">Telegram Notification Bot*</label>
+                        <?php
+                        $currentTelegramTokenSettingId = isset($telegramTokenSettingId)
+                            ? (int) $telegramTokenSettingId
+                            : (isset($row['telegram_token_setting_id']) ? (int) $row['telegram_token_setting_id'] : 0);
+                        $currentTelegramTokenName = $currentTelegramTokenSettingId > 0 && isset($allTelegramTokenNameMap[$currentTelegramTokenSettingId])
+                            ? (string) $allTelegramTokenNameMap[$currentTelegramTokenSettingId]
+                            : '';
+                        ?>
+                        <select class="form-select" name="telegramTokenSettingId" id="telegramTokenSettingId" <?= ($act == '') ? 'disabled' : '' ?> required>
+                            <option value=""><?= ($act == '') ? '-' : 'Select Telegram Notification Bot' ?></option>
+                            <?php foreach ($activeTelegramTokenOptions as $tokenOptionId => $tokenOptionRow) { ?>
+                                <option value="<?= (int) $tokenOptionId ?>" <?= ($currentTelegramTokenSettingId === (int) $tokenOptionId) ? 'selected' : '' ?>>
+                                    <?= htmlspecialchars((string) $tokenOptionRow['name'], ENT_QUOTES, 'UTF-8') ?>
+                                </option>
+                            <?php } ?>
+                            <?php if ($currentTelegramTokenSettingId > 0 && !isset($activeTelegramTokenOptions[$currentTelegramTokenSettingId]) && $currentTelegramTokenName !== '') { ?>
+                                <option value="<?= (int) $currentTelegramTokenSettingId ?>" selected>
+                                    <?= htmlspecialchars($currentTelegramTokenName . ' (Inactive)', ENT_QUOTES, 'UTF-8') ?>
+                                </option>
+                            <?php } ?>
+                        </select>
+                        <?php if (isset($telegramTokenErr) && $telegramTokenErr !== '') { ?>
+                            <div class="text-danger mt-1"><?= htmlspecialchars((string) $telegramTokenErr, ENT_QUOTES, 'UTF-8') ?></div>
+                        <?php } ?>
                     </div>
 
                     <?php if ($act != 'I' && isset($row) && is_array($row)) { ?>

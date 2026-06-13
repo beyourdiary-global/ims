@@ -17,6 +17,12 @@ $num = 1;   // numbering
 $redirect_page = $SITEURL . '/warehouse.php';
 $deleteRedirectPage = $SITEURL . '/warehouse_table.php';
 $stockBalancePage = $SITEURL . '/warehouse.php';
+$warehouseTokenColumnAvailable = function_exists('commonWarehouseTelegramTokenColumnExists')
+    ? commonWarehouseTelegramTokenColumnExists($connect)
+    : false;
+$warehouseTelegramTokenNameMap = function_exists('shopeeOmsLoadTokenSettingNameMap')
+    ? shopeeOmsLoadTokenSettingNameMap($connect)
+    : array();
 
 $warehousesWithStock = array();
 $stockRst = mysqli_query(
@@ -110,6 +116,7 @@ $result = getData('*', '', '', $tblName, $connect);
                                 <th scope="col" width="60px">S/N</th>
                                 <th scope="col" id="action_col" width="220px">Action</th>
                                 <th scope="col">Name</th>
+                                <th scope="col">Telegram Notification Bot</th>
                             </tr>
                         </thead>
 
@@ -129,6 +136,20 @@ $result = getData('*', '', '', $tblName, $connect);
                                             <?php } ?>
                                         </td>
                                         <td scope="row"><?= $row['name'] ?></td>
+                                        <td scope="row">
+                                            <?php
+                                            $telegramTokenSettingId = $warehouseTokenColumnAvailable && isset($row['telegram_token_setting_id'])
+                                                ? (int) $row['telegram_token_setting_id']
+                                                : 0;
+                                            echo htmlspecialchars(
+                                                $telegramTokenSettingId > 0 && isset($warehouseTelegramTokenNameMap[$telegramTokenSettingId])
+                                                    ? (string) $warehouseTelegramTokenNameMap[$telegramTokenSettingId]
+                                                    : '-',
+                                                ENT_QUOTES,
+                                                'UTF-8'
+                                            );
+                                            ?>
+                                        </td>
                                         </tr>
                                     <?php
                                 }
@@ -142,6 +163,7 @@ $result = getData('*', '', '', $tblName, $connect);
                                 <th scope="col" width="60px">S/N</th>
                                 <th scope="col" id="action_col" width="220px">Action</th>
                                 <th scope="col">Name</th>
+                                <th scope="col">Telegram Notification Bot</th>
                             </tr>
                         </tfoot>
                     </table>
