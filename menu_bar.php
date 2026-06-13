@@ -514,6 +514,14 @@ $menuList = array(
         'pin' => $importShortcutVisiblePins
     ),
     array(
+        'BMI Calculator',
+        'mdi mdi-calculator',
+        $SITEURL . '/bmi-calculator/bmi.php',
+        'n',
+        'expand' => array(),
+        'pin' => is_array(GlobalPin) ? GlobalPin : array('0')
+    ),
+    array(
         'Audit Log',
         'mdi mdi-text-box-search-outline',
         $SITEURL . '/audit_log.php',
