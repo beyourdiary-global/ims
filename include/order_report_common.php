@@ -1377,11 +1377,14 @@ if (!function_exists('orderReportBuildView')) {
         $rankingData = orderReportBuildRankingChartData($breakdowns);
         $breakdownPayload = orderReportBuildBreakdownPayload($breakdowns);
 
+        $safeUserName = orderReportEscape(defined('USER_NAME') ? USER_NAME : '');
+        $safePageTitle = orderReportEscape($pageTitle);
+
         orderReportWriteAuditLog(
             $connect,
             $pageTitle,
             'view',
-            USER_NAME . ' viewed <b>' . orderReportEscape($pageTitle) . '</b>.'
+            $safeUserName . ' viewed ' . $safePageTitle . '.'
         );
 
         if (!empty($state['search_requested'])) {
@@ -1389,7 +1392,7 @@ if (!function_exists('orderReportBuildView')) {
                 $connect,
                 $pageTitle,
                 'search',
-                USER_NAME . ' searched <b>' . orderReportEscape($pageTitle) . '</b> with filters: ' . orderReportEscape(orderReportSummarizeFiltersForAudit($state)) . '.'
+                $safeUserName . ' searched ' . $safePageTitle . ' with filters: ' . orderReportEscape(orderReportSummarizeFiltersForAudit($state)) . '.'
             );
         }
 
