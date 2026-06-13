@@ -681,7 +681,8 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                         <th width="60">S/N</th>
                                         <th width="200">Action</th>
                                         <th>Order ID</th>
-                                        <th>Date</th>
+                                        <th>Purchase Date</th>
+                                        <th>Received Date</th>
                                         <th>Package</th>
                                         <th>Buyer Payment Method</th>
                                         <th>Charges & Fees</th>
@@ -709,6 +710,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                             $orderId = isset($orderRow['id']) ? (int) $orderRow['id'] : 0;
                                             $orderNo = isset($orderRow['orderID']) ? $orderRow['orderID'] : '';
                                             $orderDate = isset($orderRow['date']) ? $orderRow['date'] : '';
+                                            $receivedDate = isset($orderRow['received_date']) ? $orderRow['received_date'] : '';
                                             $orderPackage = commonResolvePackageNamesFromCsv(isset($orderRow['package']) ? $orderRow['package'] : '', $connect);
                                             $buyerPayMethodRaw = isset($orderRow['buyer_pay_meth']) ? (string) $orderRow['buyer_pay_meth'] : '';
                                             $buyerPayMethodIds = array_values(array_filter(array_map('trim', explode(',', $buyerPayMethodRaw)), 'strlen'));
@@ -734,6 +736,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                                 </td>
                                                 <td><?= htmlspecialchars((string) $orderNo, ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td><?= htmlspecialchars((string) $orderDate, ENT_QUOTES, 'UTF-8') ?></td>
+                                                <td><?= htmlspecialchars((string) $receivedDate, ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td><?= htmlspecialchars((string) $orderPackage, ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td><?= htmlspecialchars((string) $buyerPayMethod, ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td><?= commonFormatAmountRm($orderFees) ?></td>
@@ -742,15 +745,15 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                         <?php }
                                     } else { ?>
                                         <tr>
-                                            <td colspan="8" class="text-center">No order records found.</td>
+                                            <td colspan="9" class="text-center">No order records found.</td>
                                         </tr>
                                     <?php } ?>
                                 </tbody>
                                 <tfoot>
-                                    <tr>
-                                        <th colspan="7" class="text-end">Sub-Total (RM)</th>
-                                        <th><?= commonFormatAmountRm($sumFinalAmount) ?></th>
-                                    </tr>
+                                        <tr>
+                                            <th colspan="8" class="text-end">Sub-Total (RM)</th>
+                                            <th><?= commonFormatAmountRm($sumFinalAmount) ?></th>
+                                        </tr>
                                 </tfoot>
                             </table>
                         </div>
