@@ -286,7 +286,7 @@ $allTelegramTokenNameMap = function_exists('shopeeOmsLoadTokenSettingNameMap')
     : array();
 
 //Current Page Action And Data ID
-$dataID = !empty(input('id')) ? input('id') : post('id');
+$dataID = (int) (!empty(input('id')) ? input('id') : post('id'));
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
