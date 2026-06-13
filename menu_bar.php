@@ -432,8 +432,21 @@ $menuList = array(
                 ),
                 'pin' => array('123', '69', '92', '93', '100'),
             ),
+            array(
+                'Order',
+                'mdi mdi-cart-outline',
+                'javascript:void(0)',
+                'y',
+                'expand' => array(
+                    array('Shopee Order Report', 'mdi storefront-outline', $SITEURL . '/shopee/shopee_order_report.php', '155'),
+                    array('Facebook Order Report', 'mdi storefront-outline', $SITEURL . '/finance/facebook_order_report.php', '156'),
+                    array('Website Order Report', 'mdi mdi-note-text-outline', $SITEURL . '/finance/website_order_report.php', '157'),
+                    array('Lazada Order Report', 'mdi mdi-note-text-outline', $SITEURL . '/lazada_order_report.php', '158'),
+                ),
+                'pin' => array('155', '156', '157', '158'),
+            ),
         ),
-        'pin' => array('123', '69', '92', '93', '100')
+        'pin' => array('123', '69', '92', '93', '100', '155', '156', '157', '158')
     ),
     array(
         'Other',
