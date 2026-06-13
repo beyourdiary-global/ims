@@ -67,6 +67,56 @@ if (!function_exists('campaignRenderPopupScript')) {
     }
 }
 
+if (!function_exists('campaignResolveBackUrl')) {
+    function campaignResolveBackUrl($fallbackUrl)
+    {
+        $fallbackUrl = trim((string) $fallbackUrl);
+        $requestedBackUrl = '';
+
+        if (isset($_REQUEST['back'])) {
+            $requestedBackUrl = trim((string) $_REQUEST['back']);
+        } else if (isset($_REQUEST['back_url'])) {
+            $requestedBackUrl = trim((string) $_REQUEST['back_url']);
+        }
+
+        if ($requestedBackUrl !== '') {
+            if (function_exists('commonSafeBackUrl')) {
+                return commonSafeBackUrl($requestedBackUrl, $fallbackUrl);
+            }
+
+            return $requestedBackUrl;
+        }
+
+        if (function_exists('commonResolveBackUrl')) {
+            return commonResolveBackUrl($fallbackUrl);
+        }
+
+        return $fallbackUrl;
+    }
+}
+
+if (!function_exists('campaignBuildUrl')) {
+    function campaignBuildUrl($baseUrl, $params = array())
+    {
+        $baseUrl = trim((string) $baseUrl);
+        $queryParams = array();
+
+        foreach ((array) $params as $key => $value) {
+            if ($value === null || $value === '') {
+                continue;
+            }
+
+            $queryParams[(string) $key] = (string) $value;
+        }
+
+        if (empty($queryParams)) {
+            return $baseUrl;
+        }
+
+        return $baseUrl . (strpos($baseUrl, '?') === false ? '?' : '&') . http_build_query($queryParams);
+    }
+}
+
 if (!function_exists('campaignAudit')) {
     function campaignAudit($connect, $pageTitle, $action, $message, $query = '', $table = '')
     {
@@ -159,7 +209,7 @@ if (!function_exists('campaignRenderBadge')) {
 }
 
 if (!function_exists('campaignBackButtonJs')) {
-    function campaignBackButtonJs($fallbackUrl = '')
+    function campaignBackButtonJs($fallbackUrl = '', $preferHistory = true)
     {
         global $SITEURL;
 
@@ -170,15 +220,19 @@ if (!function_exists('campaignBackButtonJs')) {
                 : ($SITEURL . '/campaign_table.php');
         }
 
+        if (!$preferHistory) {
+            return 'window.location.href=' . json_encode($fallbackUrl) . ';';
+        }
+
         return 'if(window.history.length > 1){window.history.back();}else{window.location.href=' . json_encode($fallbackUrl) . ';}';
     }
 }
 
 if (!function_exists('campaignRenderBackButton')) {
-    function campaignRenderBackButton($fallbackUrl = '')
+    function campaignRenderBackButton($fallbackUrl = '', $preferHistory = true)
     {
         echo '<div class="campaign-back-action-row mobile-sticky-form-actions-target d-flex justify-content-center flex-wrap mt-4">'
-            . '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" type="button" name="actionBtn" id="backBtn" value="back" onclick="' . campaignH(campaignBackButtonJs($fallbackUrl)) . '">Back</button>'
+            . '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" type="button" name="actionBtn" id="backBtn" value="back" onclick="' . campaignH(campaignBackButtonJs($fallbackUrl, $preferHistory)) . '">Back</button>'
             . '</div>';
     }
 }
