@@ -191,6 +191,25 @@ function normalizeLookupKey($value)
     return preg_replace('/[^a-z0-9]+/', '', $value);
 }
 
+function normalizePlatformItemIdCsv($value)
+{
+    if (is_array($value)) {
+        $value = implode(',', $value);
+    }
+
+    $value = str_replace(array("\r\n", "\r", "\n"), ',', (string) $value);
+    $parts = array_filter(array_map('trim', explode(',', $value)), 'strlen');
+
+    $clean = array();
+    foreach ($parts as $part) {
+        if (!in_array($part, $clean, true)) {
+            $clean[] = $part;
+        }
+    }
+
+    return implode(',', $clean);
+}
+
 function normalizeHeaderKey($value)
 {
     return preg_replace('/[^A-Z0-9]+/', '', strtoupper(normalizeCellText((string) $value)));
@@ -205,6 +224,9 @@ function buildHeaderIndexMap($headerRow)
         'ID' => 'ID',
         'NAME' => 'NAME',
         'ITEMCODE' => 'ITEM_CODE',
+        'PLATFORMITEMID' => 'PLATFORM_ITEM_ID',
+        'PLATFORMITEMIDS' => 'PLATFORM_ITEM_ID',
+        'PLATFORMITEMIDLIST' => 'PLATFORM_ITEM_ID',
         'ITEMDESCRIPTION' => 'ITEM_DESCRIPTION',
         'PRICE' => 'PRICE',
         'BRAND' => 'BRAND',
@@ -374,6 +396,7 @@ if ($action === 'preview') {
 
                         // Variables to check
                         $item_code = getColByKey($data, $indexMap, 'ITEM_CODE', '');
+                        $platform_item_id = normalizePlatformItemIdCsv(getColByKey($data, $indexMap, 'PLATFORM_ITEM_ID', ''));
                         $item_description = getColByKey($data, $indexMap, 'ITEM_DESCRIPTION', '');
                         $price = normalizeNumericString(getColByKey($data, $indexMap, 'PRICE', '0.00'), 2);
                         $cost = normalizeNumericString(getColByKey($data, $indexMap, 'COST', '0.00'), 2);
@@ -388,6 +411,7 @@ if ($action === 'preview') {
                             
                             if (normalizeCellText((string) $ex['name']) !== normalizeCellText($name)) $changes['name'] = true;
                             if (normalizeCellText((string) ($ex['item_code'] ?? '')) !== normalizeCellText($item_code)) $changes['item_code'] = true;
+                            if (normalizeCellText((string) ($ex['platform_item_id'] ?? '')) !== normalizeCellText($platform_item_id)) $changes['platform_item_id'] = true;
                             if (normalizeCellText((string) ($ex['item_description'] ?? '')) !== normalizeCellText($item_description)) $changes['item_description'] = true;
                             if ((float) $ex['price'] !== (float) $price) $changes['price'] = true;
                             if ((float) $ex['cost'] !== (float) $cost) $changes['cost'] = true;
@@ -423,6 +447,7 @@ if ($action === 'preview') {
                                 'id' => $id,
                                 'name' => $name,
                                 'item_code' => $item_code,
+                                'platform_item_id' => $platform_item_id,
                                 'item_description' => $item_description,
                                 'price' => $price,
                                 'brand_name' => $brandDisplay,
@@ -466,6 +491,8 @@ else if ($action === 'update') {
         $fieldErrors = [];
         $nameRaw = trim((string) (isset($row['name']) ? $row['name'] : ''));
         $itemCodeRaw = normalizeCellText((string) (isset($row['item_code']) ? $row['item_code'] : ''));
+        $platformItemIdRaw = normalizePlatformItemIdCsv((string) (isset($row['platform_item_id']) ? $row['platform_item_id'] : ''));
+        $row['platform_item_id'] = $platformItemIdRaw;
         $itemDescriptionRaw = normalizeCellText((string) (isset($row['item_description']) ? $row['item_description'] : ''));
         $brandRaw = normalizeCellText((string) (isset($row['brand_name']) ? $row['brand_name'] : ''));
         $priceCurrRaw = normalizeCellText((string) (isset($row['price_curr_name']) ? $row['price_curr_name'] : ''));
@@ -536,6 +563,7 @@ else if ($action === 'update') {
         
         $name = mysqli_real_escape_string($connect, normalizeCellText((string) $row['name']));
         $item_code = mysqli_real_escape_string($connect, normalizeCellText((string) $row['item_code']));
+        $platform_item_id = mysqli_real_escape_string($connect, normalizePlatformItemIdCsv((string) (isset($row['platform_item_id']) ? $row['platform_item_id'] : '')));
         $item_description = mysqli_real_escape_string($connect, normalizeCellText((string) $row['item_description']));
         
         $price = mysqli_real_escape_string($connect, normalizeNumericString(isset($row['price']) ? $row['price'] : '0.00', 2));
@@ -599,9 +627,9 @@ else if ($action === 'update') {
         if ($is_new) {
             // INSERT QUERY (Ignores provided ID to avoid conflicts)
             $query = "INSERT INTO " . PKG . " 
-                      (name, item_code, item_description, price, currency_unit, brand, cost, cost_curr, agent_cost, product, barcode_slot_total, remark, create_by, create_date, create_time, status) 
+                      (name, item_code, platform_item_id, item_description, price, currency_unit, brand, cost, cost_curr, agent_cost, product, barcode_slot_total, remark, create_by, create_date, create_time, status) 
                       VALUES 
-                      ('$name', '$item_code', '$item_description', '$price', '$price_curr_id', '$brand_id', '$cost', '$cost_curr_id', '$agent_cost', '$product_ids', '$barcode_slot', '$remark', '" . USER_ID . "', curdate(), curtime(), 'A')";
+                      ('$name', '$item_code', '$platform_item_id', '$item_description', '$price', '$price_curr_id', '$brand_id', '$cost', '$cost_curr_id', '$agent_cost', '$product_ids', '$barcode_slot', '$remark', '" . USER_ID . "', curdate(), curtime(), 'A')";
             
             if (mysqli_query($connect, $query)) {
                 $insertCount++;
@@ -611,6 +639,7 @@ else if ($action === 'update') {
             $query = "UPDATE " . PKG . " SET 
                       name='$name', 
                       item_code='$item_code', 
+                      platform_item_id='$platform_item_id', 
                       item_description='$item_description', 
                       price='$price', 
                       currency_unit='$price_curr_id', 
@@ -724,6 +753,11 @@ else if ($action === 'update') {
                                                     <label class="form-label">Item Code*</label>
                                                     <input type="text" class="form-control <?= isset($chg['item_code']) ? 'highlight-change' : '' ?> js-required-field" data-required-field="item_code" data-required-message="Item Code (SKU) field is required!" name="data[<?= $index ?>][item_code]" value="<?= htmlspecialchars($row['item_code']) ?>" required>
                                                     <?php if (isset($ferr['item_code'])) { ?><div class="field-error" data-field="item_code"><?= htmlspecialchars($ferr['item_code']) ?></div><?php } ?>
+                                                </div>
+                                                <div class="col-md-3">
+                                                    <label class="form-label">Platform Item ID</label>
+                                                    <input type="text" class="form-control <?= isset($chg['platform_item_id']) ? 'highlight-change' : '' ?>" name="data[<?= $index ?>][platform_item_id]" value="<?= htmlspecialchars(isset($row['platform_item_id']) ? $row['platform_item_id'] : '') ?>">
+                                                    <small class="text-muted">Separate multiple IDs with comma.</small>
                                                 </div>
                                                 <div class="col-md-3">
                                                     <label class="form-label">Item Description*</label>

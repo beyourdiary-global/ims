@@ -270,3 +270,105 @@ document
       evt.preventDefault();
     }
   });
+
+  function initPlatformItemIdTags() {
+  var hidden = document.getElementById("platform_item_id");
+  var input = document.getElementById("platform_item_id_input");
+  var tagsBox = document.getElementById("platform_item_id_tags");
+
+  if (!hidden || !tagsBox) {
+    return;
+  }
+
+  var tags = String(hidden.value || "")
+    .split(",")
+    .map(function (value) {
+      return value.trim();
+    })
+    .filter(function (value, index, arr) {
+      return value !== "" && arr.indexOf(value) === index;
+    });
+
+  function syncHidden() {
+    hidden.value = tags.join(",");
+  }
+
+  function renderTags() {
+    tagsBox.innerHTML = "";
+
+    tags.forEach(function (tag, index) {
+      var badge = document.createElement("span");
+      badge.className = "platform-item-id-tag";
+
+      var text = document.createElement("span");
+      text.textContent = tag;
+      badge.appendChild(text);
+
+      if (input) {
+        var removeBtn = document.createElement("button");
+        removeBtn.type = "button";
+        removeBtn.className = "platform-item-id-remove";
+        removeBtn.textContent = "×";
+        removeBtn.addEventListener("click", function () {
+          tags.splice(index, 1);
+          syncHidden();
+          renderTags();
+        });
+        badge.appendChild(removeBtn);
+      }
+
+      tagsBox.appendChild(badge);
+    });
+  }
+
+  function addTag(value) {
+    value = String(value || "").trim();
+
+    if (value === "") {
+      return;
+    }
+
+    if (tags.indexOf(value) === -1) {
+      tags.push(value);
+    }
+
+    if (input) {
+      input.value = "";
+    }
+
+    syncHidden();
+    renderTags();
+  }
+
+  if (input) {
+    input.addEventListener("keydown", function (event) {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        addTag(input.value);
+      }
+    });
+
+    input.addEventListener("blur", function () {
+      addTag(input.value);
+    });
+
+    input.addEventListener("paste", function () {
+      setTimeout(function () {
+        var value = input.value;
+        if (value.indexOf("\n") !== -1) {
+          value.split(/\n+/).forEach(function (part) {
+            addTag(part);
+          });
+          input.value = "";
+        }
+      }, 0);
+    });
+  }
+
+  syncHidden();
+  renderTags();
+}
+
+$(document).ready(function () {
+  initPlatformItemIdTags();
+});

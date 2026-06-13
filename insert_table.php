@@ -3531,6 +3531,7 @@ if ($conn->select_db($db_fin)) {
 }
 
 if ($conn->select_db($db_cms)) {
+    migrationEnsureColumn($conn, $db_cms, 'package', 'platform_item_id', "ALTER TABLE `package` ADD COLUMN `platform_item_id` TEXT DEFAULT NULL AFTER `item_code`", "Verified `package` includes `platform_item_id`.");
     migrationEnsureColumn($conn, $db_cms, LAZADA_ORDER_REQ, 'airbill_no', "ALTER TABLE `" . LAZADA_ORDER_REQ . "` ADD COLUMN `airbill_no` VARCHAR(150) DEFAULT NULL AFTER `order_status`", "Verified `" . LAZADA_ORDER_REQ . "` includes `airbill_no`.");
     migrationEnsureColumn($conn, $db_cms, LAZADA_ORDER_REQ, 'airbill_attachment', "ALTER TABLE `" . LAZADA_ORDER_REQ . "` ADD COLUMN `airbill_attachment` TEXT DEFAULT NULL AFTER `airbill_no`", "Verified `" . LAZADA_ORDER_REQ . "` includes `airbill_attachment`.");
     migrationEnsureColumn($conn, $db_cms, LAZADA_ORDER_REQ, 'stock_out_warehouse_id', "ALTER TABLE `" . LAZADA_ORDER_REQ . "` ADD COLUMN `stock_out_warehouse_id` INT DEFAULT NULL AFTER `airbill_attachment`", "Verified `" . LAZADA_ORDER_REQ . "` includes `stock_out_warehouse_id`.");
