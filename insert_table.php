@@ -185,7 +185,7 @@ function insertTableParsePinBlocks($rawPins)
             continue;
         }
 
-        $parts = explode(':', trim($entry, '[]'));
+        $parts = explode(':', trim($entry, '[]'), 2);
         if (count($parts) !== 2) {
             continue;
         }
