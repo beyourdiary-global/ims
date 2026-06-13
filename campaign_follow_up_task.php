@@ -21,7 +21,7 @@ if (!isActionAllowed('View', $pinAccess)) {
 $canSave = isActionAllowed('Add', $pinAccess) || isActionAllowed('Edit', $pinAccess);
 $canDelete = isActionAllowed('Delete', $pinAccess);
 $csrfToken = campaignCsrfToken('follow_up_task');
-$detailUrl = $campaignId > 0 ? $SITEURL . '/campaign.php?id=' . $campaignId : $SITEURL . '/campaign_table.php';
+$backUrl = $SITEURL . '/campaign_table.php';
 $pageUrl = $SITEURL . '/campaign_follow_up_task.php' . ($campaignId > 0 ? '?campaign_id=' . $campaignId : '');
 $campaign = $campaignId > 0 ? campaignFetchCampaign($connect, $campaignId) : array();
 
@@ -924,7 +924,7 @@ if ($stmt) {
                 </tbody>
             </table>
 
-            <?php campaignRenderBackButton($detailUrl); ?>
+            <?php campaignRenderBackButton($backUrl, false); ?>
         </div>
     </div>
 </div>

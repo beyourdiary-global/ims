@@ -26,7 +26,7 @@ if (!isActionAllowed('View', $pinAccess)) {
 
 $canManage = isActionAllowed('Add', $pinAccess) || isActionAllowed('Edit', $pinAccess);
 $csrfToken = campaignCsrfToken('assign_customer');
-$detailUrl = $SITEURL . '/campaign.php?id=' . $campaignId;
+$backUrl = $SITEURL . '/campaign_table.php';
 $pageUrl = $SITEURL . '/campaign_assign_customer.php?campaign_id=' . $campaignId;
 
 if (!function_exists('customerRecordNormalizeFilterValues')) {
@@ -715,7 +715,8 @@ if (post('actionBtn') === 'assignCustomers' || post('actionBtn') === 'removeCust
                 $count++;
             }
         }
-        campaignAudit($connect, $pageTitle, 'add', USER_NAME . " assigned " . $count . " campaign customer(s).", '', CAMPAIGN_CUSTOMER);
+        $syncSummary = campaignSyncFollowUpTasks($connect, $campaignId);
+        campaignAudit($connect, $pageTitle, 'add', USER_NAME . " assigned " . $count . " campaign customer(s) and synced follow-up tasks (created " . (int) $syncSummary['created'] . ", updated " . (int) $syncSummary['updated'] . ", deactivated " . (int) $syncSummary['deactivated'] . ").", '', CAMPAIGN_CUSTOMER);
         campaignSetPopup('Assigned ' . $count . ' customer(s).', $pageUrl, 'ErrMO');
     } else {
         $selectedIds = array_map('intval', (array) post('assigned_customer_ids'));
@@ -734,7 +735,8 @@ if (post('actionBtn') === 'assignCustomers' || post('actionBtn') === 'removeCust
                 $stmt->close();
             }
         }
-        campaignAudit($connect, $pageTitle, 'delete', USER_NAME . " removed " . $count . " campaign customer(s).", '', CAMPAIGN_CUSTOMER);
+        $syncSummary = campaignSyncFollowUpTasks($connect, $campaignId);
+        campaignAudit($connect, $pageTitle, 'delete', USER_NAME . " removed " . $count . " campaign customer(s) and synced follow-up tasks (created " . (int) $syncSummary['created'] . ", updated " . (int) $syncSummary['updated'] . ", deactivated " . (int) $syncSummary['deactivated'] . ").", '', CAMPAIGN_CUSTOMER);
         campaignSetPopup('Removed ' . $count . ' customer(s).', $pageUrl, 'ErrMO');
     }
 
@@ -1136,7 +1138,7 @@ ksort($platformFilterOptions, SORT_NATURAL | SORT_FLAG_CASE);
                     </table>
                 </form>
 
-                <?php campaignRenderBackButton($detailUrl); ?>
+                <?php campaignRenderBackButton($backUrl, false); ?>
             </div>
         </div>
     </div>

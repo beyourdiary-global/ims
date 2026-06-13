@@ -30,7 +30,7 @@ if (!isActionAllowed('View', $pinAccess)) {
 $canSave = isActionAllowed('Add', $pinAccess) || isActionAllowed('Edit', $pinAccess);
 $canDelete = isActionAllowed('Delete', $pinAccess);
 $csrfToken = campaignCsrfToken('message_shortcut');
-$detailUrl = $SITEURL . '/campaign.php?id=' . $campaignId;
+$backUrl = $SITEURL . '/campaign_table.php';
 $pageUrl = $SITEURL . '/campaign_message_shortcut.php?campaign_id=' . $campaignId;
 
 function campaignMessageShortcutOptions($connect)
@@ -177,120 +177,6 @@ function campaignMessageResequence($connect, $campaignId)
     return $updated;
 }
 
-function campaignMessageSyncFollowUpTasks($connect, $campaignId)
-{
-    $campaignId = (int) $campaignId;
-    $created = 0;
-    $updated = 0;
-    $deactivated = 0;
-    $userId = (string) USER_ID;
-
-    $picIds = array();
-    $picResult = $connect->query("SELECT `user_id` FROM `" . CAMPAIGN_PIC . "` WHERE `campaign_id` = " . $campaignId . " AND `status` = 'A' ORDER BY `id` ASC");
-    if ($picResult) {
-        while ($picRow = $picResult->fetch_assoc()) {
-            $picIds[] = (int) $picRow['user_id'];
-        }
-    }
-
-    $customerIds = array();
-    $customerResult = $connect->query("SELECT `id` FROM `" . CAMPAIGN_CUSTOMER . "` WHERE `campaign_id` = " . $campaignId . " AND `status` = 'A' ORDER BY `id` ASC");
-    if ($customerResult) {
-        while ($customerRow = $customerResult->fetch_assoc()) {
-            $customerIds[] = (int) $customerRow['id'];
-        }
-    }
-
-    $messageRows = array();
-    $messageResult = $connect->query("SELECT `id`, `follow_up_date` FROM `" . CAMPAIGN_MESSAGE . "` WHERE `campaign_id` = " . $campaignId . " AND `status` = 'A' ORDER BY `sequence_no` ASC, `id` ASC");
-    if ($messageResult) {
-        while ($messageRow = $messageResult->fetch_assoc()) {
-            $messageRows[] = $messageRow;
-        }
-    }
-
-    $existingTasks = array();
-    $taskResult = $connect->query("SELECT `id`, `campaign_customer_id`, `campaign_message_id`, `pic_user_id`, `follow_up_date` FROM `" . CAMPAIGN_FOLLOW_UP . "` WHERE `campaign_id` = " . $campaignId . " AND `status` = 'A'");
-    if ($taskResult) {
-        while ($taskRow = $taskResult->fetch_assoc()) {
-            $pairKey = (int) $taskRow['campaign_customer_id'] . ':' . (int) $taskRow['campaign_message_id'];
-            $existingTasks[$pairKey] = $taskRow;
-        }
-    }
-
-    $validPairs = array();
-    $picIndex = 0;
-    $insertStmt = $connect->prepare("INSERT INTO `" . CAMPAIGN_FOLLOW_UP . "` (`campaign_id`, `campaign_customer_id`, `campaign_message_id`, `pic_user_id`, `follow_up_date`, `follow_up_status`, `create_by`, `create_date`, `create_time`, `status`) VALUES (?, ?, ?, ?, ?, 'Pending', ?, CURDATE(), CURTIME(), 'A')");
-    $updateStmt = $connect->prepare("UPDATE `" . CAMPAIGN_FOLLOW_UP . "` SET `pic_user_id` = ?, `follow_up_date` = ?, `notification_sent` = 'N', `notification_sent_date` = NULL, `notification_sent_time` = NULL, `update_by` = ?, `update_date` = CURDATE(), `update_time` = CURTIME() WHERE `id` = ?");
-    $deactivateStmt = $connect->prepare("UPDATE `" . CAMPAIGN_FOLLOW_UP . "` SET `status` = 'D', `update_by` = ?, `update_date` = CURDATE(), `update_time` = CURTIME() WHERE `id` = ?");
-
-    foreach ($messageRows as $messageRow) {
-        $messageId = isset($messageRow['id']) ? (int) $messageRow['id'] : 0;
-        $followUpDate = isset($messageRow['follow_up_date']) ? (string) $messageRow['follow_up_date'] : '';
-        if ($messageId <= 0 || $followUpDate === '') {
-            continue;
-        }
-
-        foreach ($customerIds as $customerId) {
-            $pairKey = $customerId . ':' . $messageId;
-            $validPairs[$pairKey] = true;
-            $picUserId = !empty($picIds) ? $picIds[$picIndex % count($picIds)] : 0;
-            $picIndex++;
-
-            if (isset($existingTasks[$pairKey])) {
-                $taskRow = $existingTasks[$pairKey];
-                $existingPic = isset($taskRow['pic_user_id']) ? (int) $taskRow['pic_user_id'] : 0;
-                $existingDate = isset($taskRow['follow_up_date']) ? (string) $taskRow['follow_up_date'] : '';
-                if ($updateStmt && ($existingPic !== $picUserId || $existingDate !== $followUpDate)) {
-                    $taskId = (int) $taskRow['id'];
-                    $updateStmt->bind_param('issi', $picUserId, $followUpDate, $userId, $taskId);
-                    if ($updateStmt->execute()) {
-                        $updated++;
-                    }
-                }
-                continue;
-            }
-
-            if ($insertStmt) {
-                $insertStmt->bind_param('iiiiss', $campaignId, $customerId, $messageId, $picUserId, $followUpDate, $userId);
-                if ($insertStmt->execute()) {
-                    $created++;
-                }
-            }
-        }
-    }
-
-    foreach ($existingTasks as $pairKey => $taskRow) {
-        if (isset($validPairs[$pairKey])) {
-            continue;
-        }
-
-        if ($deactivateStmt) {
-            $taskId = (int) $taskRow['id'];
-            $deactivateStmt->bind_param('si', $userId, $taskId);
-            if ($deactivateStmt->execute()) {
-                $deactivated++;
-            }
-        }
-    }
-
-    if ($insertStmt) {
-        $insertStmt->close();
-    }
-    if ($updateStmt) {
-        $updateStmt->close();
-    }
-    if ($deactivateStmt) {
-        $deactivateStmt->close();
-    }
-
-    return array(
-        'created' => $created,
-        'updated' => $updated,
-        'deactivated' => $deactivated,
-    );
-}
-
 $shortcutOptions = campaignMessageShortcutOptions($connect);
 
 $campaignMessageSaveRequested = post('actionBtn') === 'saveMessage';
@@ -335,7 +221,7 @@ if ($campaignMessageDeleteRequested) {
         $query = "UPDATE `" . CAMPAIGN_MESSAGE . "` SET `status`='D', `update_by`='" . $userId . "', `update_date`=CURDATE(), `update_time`=CURTIME() WHERE `id`=" . $messageId . " AND `campaign_id`=" . (int) $campaignId;
         $connect->query($query);
         campaignMessageResequence($connect, $campaignId);
-        $syncSummary = campaignMessageSyncFollowUpTasks($connect, $campaignId);
+        $syncSummary = campaignSyncFollowUpTasks($connect, $campaignId);
         campaignAudit(
             $connect,
             $pageTitle,
@@ -412,7 +298,7 @@ if (post('actionBtn') === 'saveMessage') {
         $stmt->close();
 
         $resequenceCount = campaignMessageResequence($connect, $campaignId);
-        $syncSummary = campaignMessageSyncFollowUpTasks($connect, $campaignId);
+        $syncSummary = campaignSyncFollowUpTasks($connect, $campaignId);
         campaignAudit(
             $connect,
             $pageTitle,
@@ -629,7 +515,7 @@ $autocompleteConfigs = array(
                 </tbody>
             </table>
 
-            <?php campaignRenderBackButton($detailUrl); ?>
+            <?php campaignRenderBackButton($backUrl, false); ?>
         </div>
     </div>
 </div>
