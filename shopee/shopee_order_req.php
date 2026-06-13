@@ -214,7 +214,6 @@ $sorHandleConfirmReceiveWithFollowUp = function () use ($connect, $finance_conne
         exit;
     }
 
-    $actorRemark = shopeeOmsBuildParcelReceivedRemark($connect, USER_ID, 'user');
     $submitResult = customerFollowUpSubmitReceivedOrderAndTransition(
         $connect,
         $finance_connect,
@@ -230,7 +229,7 @@ $sorHandleConfirmReceiveWithFollowUp = function () use ($connect, $finance_conne
         USER_GROUP,
         array(
             'source_page' => $pageTitle,
-            'transition_remark' => $actorRemark,
+            'transition_remark' => 'Order Status Update to Parcel Received',
         )
     );
 
@@ -1619,7 +1618,6 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
 $transitionHistoryRows = array();
 $editHistoryRows = array();
 if (isset($row['id']) && (int) $row['id'] > 0) {
-    shopeeOmsBackfillParcelReceivedTransitionRemarks($connect, $finance_connect);
     $transitionHistoryRows = shopeeOmsFetchTransitionHistory($finance_connect, (int) $row['id']);
     $editHistoryRows = shopeeOmsFetchEditHistory($finance_connect, (int) $row['id']);
 }

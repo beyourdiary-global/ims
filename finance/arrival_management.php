@@ -208,8 +208,6 @@ if (post('confirmReceiveFollowUpBtn')) {
     } else {
         $platformKey = shopeeOmsNormalizePlatformKey(postSpaceFilter('confirm_receive_platform'));
         $orderId = (int) postSpaceFilter('confirm_receive_id');
-        $actorRemark = shopeeOmsBuildParcelReceivedRemark($connect, USER_ID, 'user');
-
         $submitResult = customerFollowUpSubmitReceivedOrderAndTransition(
             $connect,
             $finance_connect,
@@ -225,7 +223,7 @@ if (post('confirmReceiveFollowUpBtn')) {
             USER_GROUP,
             array(
                 'source_page' => $pageTitle,
-                'transition_remark' => $actorRemark,
+                'transition_remark' => 'Parcel received confirmed by admin.',
             )
         );
 
