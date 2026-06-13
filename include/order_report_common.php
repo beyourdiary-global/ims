@@ -679,8 +679,9 @@ if (!function_exists('orderReportBuildRowMeta')) {
             $levelName = isset($labelMeta['level']['name']) ? trim((string) $labelMeta['level']['name']) : '';
             $repeatName = isset($labelMeta['repeat']['name']) ? trim((string) $labelMeta['repeat']['name']) : '';
 
-            $packageLabels = array_values(orderReportResolvePackageOptionsFromRow($connect, $platformConfig['platform'], $row, $packageMap));
-            $packageIds = array_keys(orderReportResolvePackageOptionsFromRow($connect, $platformConfig['platform'], $row, $packageMap));
+            $packageOptions = orderReportResolvePackageOptionsFromRow($connect, $platformConfig['platform'], $row, $packageMap);
+            $packageLabels = array_values($packageOptions);
+            $packageIds = array_keys($packageOptions);
             $brandField = isset($platformConfig['brand_field']) ? (string) $platformConfig['brand_field'] : '';
             $brandRaw = $brandField !== '' && isset($row[$brandField]) ? trim((string) $row[$brandField]) : '';
             $brandName = orderReportResolveOptionLabel($brandRaw, $brandMap);
