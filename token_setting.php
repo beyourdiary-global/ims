@@ -112,36 +112,15 @@ if (post('actionBtn')) {
     switch ($action) {
         case 'addData':
         case 'updData':
-            $pageUsedErr = '';
             $currentDataName = postSpaceFilter('currentDataName');
-            $pageUsedValues = isset($_POST['pageUsed']) ? $_POST['pageUsed'] : array();
-            if (!is_array($pageUsedValues)) {
-                $pageUsedValues = array($pageUsedValues);
-            }
-            $pageUsedSelections = function_exists('shopeeOmsNormalizeTokenSettingPageValues')
-                ? shopeeOmsNormalizeTokenSettingPageValues($pageUsedValues, $tokenSettingPageOptions)
-                : array_values(array_unique(array_map('trim', $pageUsedValues)));
-            $pageUsed = implode(',', $pageUsedSelections);
-            $pageUsedDisplay = function_exists('shopeeOmsGetTokenSettingPageDisplayText')
-                ? shopeeOmsGetTokenSettingPageDisplayText($pageUsedSelections)
-                : implode(', ', $pageUsedSelections);
             $botToken = postSpaceFilter('botToken');
             $chatId = postSpaceFilter('chatId');
             $remark = postSpaceFilter('remark');
             $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
+            $pageUsed = ($action === 'updData' && isset($row['page_used'])) ? (string) $row['page_used'] : '';
 
             if ($currentDataName === '') {
                 $err = 'Name is required.';
-                break;
-            }
-
-            if (empty($pageUsedSelections)) {
-                $pageUsedErr = 'Page Used is required.';
-                break;
-            }
-
-            if (!$tokenSettingPageUsedAvailable) {
-                $pageUsedErr = 'Page Used is not available on this deployment yet. Please update the Token Setting table schema first.';
                 break;
             }
 
@@ -157,34 +136,14 @@ if (post('actionBtn')) {
             }
 
             $safePageUsed = mysqli_real_escape_string($connect, $pageUsed);
-            $pageUsedConflicts = function_exists('shopeeOmsFindTokenSettingPageConflicts')
-                ? shopeeOmsFindTokenSettingPageConflicts($connect, $pageUsedSelections, $dataID)
-                : array();
-            if (!empty($pageUsedConflicts)) {
-                $conflictPages = array();
-                foreach ($pageUsedConflicts as $pageUsedConflict) {
-                    if (isset($pageUsedConflict['pages']) && is_array($pageUsedConflict['pages'])) {
-                        $conflictPages = array_merge($conflictPages, $pageUsedConflict['pages']);
-                    }
-                }
-                $conflictPages = function_exists('shopeeOmsNormalizeTokenSettingPageValues')
-                    ? shopeeOmsNormalizeTokenSettingPageValues($conflictPages, $tokenSettingPageOptions)
-                    : array_values(array_unique($conflictPages));
-                $pageUsedErr = 'These pages are already assigned to another active token: ' . (function_exists('shopeeOmsGetTokenSettingPageDisplayText')
-                    ? shopeeOmsGetTokenSettingPageDisplayText($conflictPages)
-                    : implode(', ', $conflictPages)) . '.';
-                break;
-            }
 
             if ($action === 'addData') {
                 try {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     $newvalarr[] = $currentDataName;
-                    $newvalarr[] = $pageUsedDisplay;
                     $newvalarr[] = $botToken;
                     $datafield[] = 'name';
-                    $datafield[] = 'page used';
                     $datafield[] = 'bot_token';
 
                     $safeName = mysqli_real_escape_string($connect, $currentDataName);
@@ -204,14 +163,6 @@ if (post('actionBtn')) {
                         $oldvalarr[] = $row['name'];
                         $chgvalarr[] = $currentDataName;
                         $datafield[] = 'name';
-                    }
-
-                    if ((string) (isset($row['page_used']) ? $row['page_used'] : '') !== (string) $pageUsed) {
-                        $oldvalarr[] = function_exists('shopeeOmsGetTokenSettingPageDisplayText')
-                            ? shopeeOmsGetTokenSettingPageDisplayText(isset($row['page_used']) ? $row['page_used'] : '')
-                            : (string) (isset($row['page_used']) ? $row['page_used'] : '');
-                        $chgvalarr[] = (string) $pageUsedDisplay;
-                        $datafield[] = 'page used';
                     }
 
                     if ((string) (isset($row['bot_token']) ? $row['bot_token'] : '') !== (string) $botToken) {
@@ -397,42 +348,6 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                     <div class="form-group mb-3">
                         <label class="form-label" for="currentDataName">Name*</label>
                         <input class="form-control" type="text" name="currentDataName" id="currentDataName" value="<?= htmlspecialchars(isset($currentDataName) ? (string) $currentDataName : (isset($row['name']) ? (string) $row['name'] : ''), ENT_QUOTES, 'UTF-8') ?>" <?= ($act == '') ? 'readonly' : '' ?> required autocomplete="off">
-                    </div>
-
-                    <div class="form-group mb-3">
-                        <label class="form-label" for="pageUsed">Page Used*</label>
-                        <?php
-                        $selectedPageUsedCsv = isset($pageUsed) ? (string) $pageUsed : (isset($row['page_used']) ? (string) $row['page_used'] : '');
-                        $selectedPageUsedValues = function_exists('shopeeOmsNormalizeTokenSettingPageValues')
-                            ? shopeeOmsNormalizeTokenSettingPageValues($selectedPageUsedCsv, $tokenSettingPageOptions)
-                            : array_filter(array_map('trim', explode(',', $selectedPageUsedCsv)));
-                        $selectedPageUsedText = function_exists('shopeeOmsGetTokenSettingPageDisplayText')
-                            ? shopeeOmsGetTokenSettingPageDisplayText($selectedPageUsedValues)
-                            : implode(', ', $selectedPageUsedValues);
-                        ?>
-                        <div class="token-page-dropdown" id="pageUsedDropdown">
-                            <button type="button" class="form-select token-page-dropdown-toggle text-start" id="pageUsedDropdownToggle" aria-haspopup="listbox" aria-expanded="false" aria-controls="pageUsedDropdownMenu" <?= ($act == '') ? 'disabled' : '' ?>>
-                                <span id="pageUsedDropdownLabel"><?= htmlspecialchars($selectedPageUsedText !== '' ? $selectedPageUsedText : 'Select Page Used', ENT_QUOTES, 'UTF-8') ?></span>
-                            </button>
-                            <div class="token-page-dropdown-menu" id="pageUsedDropdownMenu">
-                                <?php foreach ($tokenSettingPageOptions as $optionValue => $optionLabel) { ?>
-                                    <label class="token-page-dropdown-item" for="pageUsedOption<?= md5((string) $optionValue) ?>">
-                                        <input
-                                            type="checkbox"
-                                            class="token-page-checkbox"
-                                            name="pageUsed[]"
-                                            id="pageUsedOption<?= md5((string) $optionValue) ?>"
-                                            value="<?= htmlspecialchars((string) $optionValue, ENT_QUOTES, 'UTF-8') ?>"
-                                            <?= in_array((string) $optionValue, $selectedPageUsedValues, true) ? 'checked' : '' ?>
-                                            <?= ($act == '') ? 'disabled' : '' ?>>
-                                        <span><?= htmlspecialchars((string) $optionLabel, ENT_QUOTES, 'UTF-8') ?></span>
-                                    </label>
-                                <?php } ?>
-                            </div>
-                        </div>
-                        <?php if (isset($pageUsedErr) && $pageUsedErr !== '') { ?>
-                            <div class="text-danger mt-1"><?= htmlspecialchars((string) $pageUsedErr, ENT_QUOTES, 'UTF-8') ?></div>
-                        <?php } ?>
                     </div>
 
                     <div class="form-group mb-3">

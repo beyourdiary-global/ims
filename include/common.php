@@ -5507,6 +5507,128 @@ if (!function_exists('shopeeOmsLoadWarehouseNameMap')) {
     }
 }
 
+if (!function_exists('commonWarehouseTelegramTokenColumnExists')) {
+    function commonWarehouseTelegramTokenColumnExists($connect)
+    {
+        static $availabilityMap = array();
+
+        if (!($connect instanceof mysqli)) {
+            return false;
+        }
+
+        $cacheKey = spl_object_hash($connect);
+        if (array_key_exists($cacheKey, $availabilityMap)) {
+            return $availabilityMap[$cacheKey];
+        }
+
+        $result = @mysqli_query($connect, "SHOW COLUMNS FROM `" . WHSE . "` LIKE 'telegram_token_setting_id'");
+        $availabilityMap[$cacheKey] = ($result && mysqli_num_rows($result) > 0);
+        return $availabilityMap[$cacheKey];
+    }
+}
+
+if (!function_exists('shopeeOmsLoadActiveTokenSettingOptions')) {
+    function shopeeOmsLoadActiveTokenSettingOptions($connect)
+    {
+        $rows = array();
+        if (!($connect instanceof mysqli)) {
+            return $rows;
+        }
+
+        $sql = "SELECT id, name, bot_token, chat_id FROM `" . TOKEN_SETT . "` WHERE status = 'A' ORDER BY name ASC, id ASC";
+        $result = mysqli_query($connect, $sql);
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $tokenId = isset($row['id']) ? (int) $row['id'] : 0;
+                if ($tokenId <= 0) {
+                    continue;
+                }
+
+                $rows[$tokenId] = array(
+                    'id' => $tokenId,
+                    'name' => isset($row['name']) && trim((string) $row['name']) !== '' ? (string) $row['name'] : ('Token #' . $tokenId),
+                    'bot_token' => isset($row['bot_token']) ? (string) $row['bot_token'] : '',
+                    'chat_id' => isset($row['chat_id']) ? (string) $row['chat_id'] : '',
+                );
+            }
+        }
+
+        return $rows;
+    }
+}
+
+if (!function_exists('shopeeOmsLoadTokenSettingNameMap')) {
+    function shopeeOmsLoadTokenSettingNameMap($connect, $activeOnly = false)
+    {
+        $nameMap = array();
+        if (!($connect instanceof mysqli)) {
+            return $nameMap;
+        }
+
+        $sql = "SELECT id, name FROM `" . TOKEN_SETT . "`";
+        if ($activeOnly) {
+            $sql .= " WHERE status = 'A'";
+        }
+        $sql .= " ORDER BY name ASC, id ASC";
+        $result = mysqli_query($connect, $sql);
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $tokenId = isset($row['id']) ? (int) $row['id'] : 0;
+                if ($tokenId <= 0) {
+                    continue;
+                }
+
+                $nameMap[$tokenId] = isset($row['name']) && trim((string) $row['name']) !== ''
+                    ? (string) $row['name']
+                    : ('Token #' . $tokenId);
+            }
+        }
+
+        return $nameMap;
+    }
+}
+
+if (!function_exists('shopeeOmsBuildWarehouseUsageByTokenSettingId')) {
+    function shopeeOmsBuildWarehouseUsageByTokenSettingId($connect)
+    {
+        $usageMap = array();
+        if (!($connect instanceof mysqli) || !commonWarehouseTelegramTokenColumnExists($connect)) {
+            return $usageMap;
+        }
+
+        $sql = "SELECT id, name, telegram_token_setting_id
+                FROM `" . WHSE . "`
+                WHERE status = 'A'
+                  AND telegram_token_setting_id IS NOT NULL
+                  AND telegram_token_setting_id > 0
+                ORDER BY name ASC, id ASC";
+        $result = mysqli_query($connect, $sql);
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $tokenId = isset($row['telegram_token_setting_id']) ? (int) $row['telegram_token_setting_id'] : 0;
+                if ($tokenId <= 0) {
+                    continue;
+                }
+
+                if (!isset($usageMap[$tokenId])) {
+                    $usageMap[$tokenId] = array();
+                }
+
+                $warehouseName = isset($row['name']) && trim((string) $row['name']) !== ''
+                    ? (string) $row['name']
+                    : ('Warehouse #' . (int) $row['id']);
+                $usageMap[$tokenId][] = $warehouseName;
+            }
+        }
+
+        foreach ($usageMap as $tokenId => $warehouseNames) {
+            $usageMap[$tokenId] = array_values(array_unique($warehouseNames));
+        }
+
+        return $usageMap;
+    }
+}
+
 if (!function_exists('shopeeOmsGetDefaultWarehouseId')) {
     function shopeeOmsGetDefaultWarehouseId($connect, $warehouseRows = null)
     {
@@ -5606,6 +5728,52 @@ if (!function_exists('shopeeOmsGetWarehouseId')) {
     function shopeeOmsGetWarehouseId($connect)
     {
         return shopeeOmsGetDefaultWarehouseId($connect);
+    }
+}
+
+if (!function_exists('commonGetWarehouseTelegramTokenSetting')) {
+    function commonGetWarehouseTelegramTokenSetting($connect, $warehouseId)
+    {
+        $warehouseId = shopeeOmsNormalizeWarehouseId($warehouseId);
+        if (!($connect instanceof mysqli) || $warehouseId <= 0 || !commonWarehouseTelegramTokenColumnExists($connect)) {
+            return array();
+        }
+
+        $sql = "SELECT id, name, telegram_token_setting_id
+                FROM `" . WHSE . "`
+                WHERE id = " . $warehouseId . " AND status = 'A'
+                LIMIT 1";
+        $result = mysqli_query($connect, $sql);
+        if ($result && ($row = mysqli_fetch_assoc($result))) {
+            return array(
+                'warehouse_id' => isset($row['id']) ? (int) $row['id'] : $warehouseId,
+                'warehouse_name' => isset($row['name']) && trim((string) $row['name']) !== '' ? (string) $row['name'] : ('Warehouse #' . $warehouseId),
+                'telegram_token_setting_id' => isset($row['telegram_token_setting_id']) ? (int) $row['telegram_token_setting_id'] : 0,
+            );
+        }
+
+        return array();
+    }
+}
+
+if (!function_exists('shopeeOmsFindWarehouseTokenSetting')) {
+    function shopeeOmsFindWarehouseTokenSetting($connect, $warehouseId)
+    {
+        $warehouseInfo = commonGetWarehouseTelegramTokenSetting($connect, $warehouseId);
+        if (empty($warehouseInfo)) {
+            return array();
+        }
+
+        $tokenSettingId = isset($warehouseInfo['telegram_token_setting_id']) ? (int) $warehouseInfo['telegram_token_setting_id'] : 0;
+        if ($tokenSettingId <= 0) {
+            $warehouseInfo['token_setting'] = array();
+            return $warehouseInfo;
+        }
+
+        $sql = "SELECT * FROM `" . TOKEN_SETT . "` WHERE id = " . $tokenSettingId . " AND status = 'A' LIMIT 1";
+        $result = mysqli_query($connect, $sql);
+        $warehouseInfo['token_setting'] = ($result && ($row = mysqli_fetch_assoc($result))) ? (array) $row : array();
+        return $warehouseInfo;
     }
 }
 
@@ -6210,6 +6378,7 @@ if (!function_exists('shopeeOmsBuildWarehouseMessage')) {
             $deliveryCustomerAddress = trim((string) (isset($deliveryInfo['customer_address']) ? $deliveryInfo['customer_address'] : ''));
         }
 
+        $warehouseId = 0;
         $warehouseName = '';
         if (function_exists('shopeeOmsResolveStockOutWarehouseId') && function_exists('shopeeOmsResolveWarehouseNameById')) {
             $warehouseId = shopeeOmsResolveStockOutWarehouseId($connect, $orderRow);
@@ -6301,6 +6470,8 @@ if (!empty($summary['package_lines']) && is_array($summary['package_lines'])) {
             'customer_name' => $platform === 'shopee' ? $deliveryCustomerName : $customerName,
             'customer_address' => $platform === 'shopee' ? $deliveryCustomerAddress : $customerAddress,
             'platform' => $platform,
+            'warehouse_id' => $warehouseId,
+            'warehouse_name' => $warehouseName,
             'package_summary' => isset($summary['package_summary']) ? $summary['package_summary'] : '',
             'product_summary' => !empty($summary['product_lines']) ? implode(', ', $summary['product_lines']) : '',
             'bundle_name' => isset($summary['bundle_name']) ? $summary['bundle_name'] : '',
@@ -7462,17 +7633,23 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
             );
         }
 
-        $sourcePage = trim((string) (
-            $sourcePage !== ''
-                ? $sourcePage
-                : (isset($notificationInfo['source_page']) ? $notificationInfo['source_page'] : '')
-        ));
-        $tokenSettingPage = shopeeOmsResolveWarehouseNotificationTokenPage($sourcePage, $tokenRow, $notificationInfo);
-        $tokenSetting = shopeeOmsFindPreferredTokenSetting($cmsConnect, $tokenSettingPage);
+        $resolvedWarehouseId = isset($notificationInfo['warehouse_id'])
+            ? shopeeOmsNormalizeWarehouseId($notificationInfo['warehouse_id'])
+            : 0;
+        if ($resolvedWarehouseId <= 0) {
+            $resolvedWarehouseId = shopeeOmsGetDefaultWarehouseId($cmsConnect);
+        }
+
+        $warehouseTokenInfo = shopeeOmsFindWarehouseTokenSetting($cmsConnect, $resolvedWarehouseId);
+        $tokenSetting = isset($warehouseTokenInfo['token_setting']) && is_array($warehouseTokenInfo['token_setting'])
+            ? $warehouseTokenInfo['token_setting']
+            : array();
         if (empty($tokenSetting)) {
-            $tokenNotSetMessage = $tokenSettingPage !== ''
-                ? 'Token not set yet, please set the Telegram token for ' . $tokenSettingPage . '.'
-                : 'Token not set yet, please set the Telegram token in Token Setting.';
+            $tokenNotSetMessage = 'Telegram Notification Bot is not set for this warehouse. Please update Warehouse setting.';
+            if ($financeConnect instanceof mysqli) {
+                $safeResultMessage = mysqli_real_escape_string($financeConnect, $tokenNotSetMessage);
+                mysqli_query($financeConnect, "UPDATE `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` SET `sent_result` = '" . $safeResultMessage . "', `update_by` = 'SYSTEM', `update_date` = CURDATE(), `update_time` = CURTIME() WHERE id = " . (int) $tokenRow['id'] . " LIMIT 1");
+            }
             return array(
                 'success' => true,
                 'sent' => false,

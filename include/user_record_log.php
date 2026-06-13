@@ -876,13 +876,14 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
         }
 
         $uploadedAttachments = array();
-        $allowed = array('png', 'jpg', 'jpeg', 'webp');
+        $allowed = array('png', 'jpg', 'jpeg', 'webp', 'pdf');
         $maxFileSize = 10 * 1024 * 1024;
         $mimeByExt = array(
             'png' => array('image/png'),
             'jpg' => array('image/jpeg'),
             'jpeg' => array('image/jpeg'),
             'webp' => array('image/webp'),
+            'pdf' => array('application/pdf'),
         );
 
         $fileEntries = array();
@@ -929,9 +930,9 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
 
             if (!in_array($ext, $allowed, true)) {
                 if ($urlIsFallback) {
-                    urlFallbackResponse('Attachment must be png, jpg, jpeg or webp.', false, $context['return_url']);
+                    urlFallbackResponse('Attachment must be png, jpg, jpeg, webp or pdf.', false, $context['return_url']);
                 }
-                urlJsonResponse(array('ok' => 0, 'message' => 'Attachment must be png, jpg, jpeg or webp.'));
+                urlJsonResponse(array('ok' => 0, 'message' => 'Attachment must be png, jpg, jpeg, webp or pdf.'));
             }
             if ($fileSize <= 0 || $fileSize > $maxFileSize) {
                 if ($urlIsFallback) {
@@ -1379,6 +1380,11 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                     display: inline-flex;
                 }
 
+                .user-record-log-module .url-edit-preview-open-btn {
+                    width: 120px;
+                    min-height: 120px;
+                }
+
                 .user-record-log-module .url-edit-preview-item img {
                     cursor: pointer;
                 }
@@ -1507,17 +1513,17 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                                     <div class="col-12 col-md-6">
                                         <div id="url_attachment_inputs">
                                             <div class="mb-2 si-attachment-input-row">
-                                                <input class="form-control user-record-log-attachment-input" type="file" name="attachment[]" id="url_attachment" accept=".png,.jpg,.jpeg,.webp">
+                                                <input class="form-control user-record-log-attachment-input" type="file" name="attachment[]" id="url_attachment" accept=".png,.jpg,.jpeg,.webp,.pdf,application/pdf">
                                                 <button class="mt-1 add-user-record-log-attachment-btn" id="action_menu_btn" type="button" title="Add another attachment"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>
                                             </div>
                                         </div>
-                                        <small class="text-muted">Click + to add more attachments.</small>
+                                        <small class="text-muted">Click + to add more attachments. Supports image and PDF files.</small>
                                         <div class="mt-2" id="url_existing_attachment_links"></div>
                                     </div>
                                     <div class="col-12 col-md-6">
                                         <div class="si-attach-preview">
                                             <div id="url_attachment_img_list" style="display:flex;flex-wrap:wrap;gap:8px;justify-content:center;"></div>
-                                            <span id="url_attachment_placeholder" class="text-muted">Image preview</span>
+                                            <span id="url_attachment_placeholder" class="text-muted">Image / PDF preview</span>
                                         </div>
                                     </div>
                                 </div>

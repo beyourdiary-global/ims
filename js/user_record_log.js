@@ -29,6 +29,7 @@
     var $attachmentModal = $("#url_attachment_preview_modal");
     var $attachmentModalClose = $("#url_attachment_modal_close");
     var $attachmentPreviewContent = $("#url_attachment_preview_content");
+    var currentAttachmentObjectUrls = [];
     var currentPage = 1;
     var currentPageSize = parseInt($pageSize.val() || "10", 10) || 10;
     var formFieldIds = [
@@ -154,6 +155,10 @@
       }[String(ext || "").toLowerCase()] === true;
     }
 
+    function isPdfExtension(ext) {
+      return String(ext || "").toLowerCase() === "pdf";
+    }
+
     function buildAttachmentUrl(attachmentPath) {
       var cleanPath = $.trim(String(attachmentPath || ""));
       if (!cleanPath) {
@@ -178,15 +183,15 @@
       );
     }
 
-    function buildAttachmentPreviewHtml(fileUrl) {
+    function buildAttachmentPreviewHtml(fileUrl, filePath) {
       var safeUrl = escHtml(fileUrl);
-      var ext = getFileExtension(fileUrl);
+      var ext = getFileExtension(filePath || fileUrl);
 
       if (isImageExtension(ext)) {
         return '<img src="' + safeUrl + '" alt="Attachment preview">';
       }
 
-      if (ext === "pdf") {
+      if (isPdfExtension(ext)) {
         return '<iframe src="' + safeUrl + '" title="Attachment PDF preview"></iframe>';
       }
 
@@ -200,13 +205,60 @@
       );
     }
 
-    function openAttachmentModal(fileUrl) {
+    function openAttachmentModal(fileUrl, filePath) {
       if (!$attachmentModal.length || !fileUrl) {
         return;
       }
-      $attachmentPreviewContent.html(buildAttachmentPreviewHtml(fileUrl));
+      $attachmentPreviewContent.html(buildAttachmentPreviewHtml(fileUrl, filePath));
       $attachmentModal.removeClass("d-none");
       $("body").addClass("url-modal-open");
+    }
+
+    function clearAttachmentObjectUrls() {
+      if (!currentAttachmentObjectUrls.length) {
+        return;
+      }
+
+      currentAttachmentObjectUrls.forEach(function (objectUrl) {
+        if (objectUrl) {
+          URL.revokeObjectURL(objectUrl);
+        }
+      });
+      currentAttachmentObjectUrls = [];
+    }
+
+    function createAttachmentPreviewTrigger(fileUrl, filePath) {
+      var fileName = String(filePath || "").split(/[\\/]/).pop() || "Attachment";
+      var ext = getFileExtension(filePath || fileUrl);
+      var trigger = document.createElement("button");
+      trigger.type = "button";
+      trigger.className = "url-attachment-thumb url-edit-preview-open-btn";
+      trigger.setAttribute("data-url", fileUrl);
+      trigger.setAttribute("data-file", filePath || fileName);
+      trigger.setAttribute("title", fileName);
+      trigger.setAttribute("aria-label", "Preview attachment " + fileName);
+
+      if (isImageExtension(ext)) {
+        var img = document.createElement("img");
+        img.src = fileUrl;
+        img.alt = fileName;
+        trigger.appendChild(img);
+        return trigger;
+      }
+
+      trigger.classList.add("url-attachment-thumb-file");
+
+      var extTag = document.createElement("span");
+      extTag.className = "url-attachment-file-ext";
+      extTag.textContent = ext ? ext.toUpperCase() : "FILE";
+
+      var nameTag = document.createElement("span");
+      nameTag.className = "url-attachment-file-name";
+      nameTag.textContent = fileName;
+
+      trigger.appendChild(extTag);
+      trigger.appendChild(nameTag);
+      return trigger;
     }
 
     function getEditor() {
@@ -373,35 +425,27 @@
         return;
       }
 
+      clearAttachmentObjectUrls();
       listWrap.innerHTML = "";
-      var hasImage = false;
+      var hasPreview = false;
       var existingList = Array.isArray(existingAttachments)
         ? existingAttachments
         : parseAttachmentList($existingAttachments.val());
 
       existingList.forEach(function (attachmentPath, index) {
         var ext = getFileExtension(attachmentPath);
-        if (!isImageExtension(ext)) {
-          return;
-        }
-
         var attachmentUrl = buildAttachmentUrl(attachmentPath);
-        if (!attachmentUrl) {
+        if (!attachmentUrl || (!isImageExtension(ext) && !isPdfExtension(ext))) {
           return;
         }
 
-        hasImage = true;
+        hasPreview = true;
         var existingWrap = document.createElement("div");
         existingWrap.className = "url-edit-preview-item";
-        var existingImg = document.createElement("img");
-        existingImg.src = attachmentUrl;
-        existingImg.alt = "Attachment Preview";
-        existingImg.style.maxWidth = "120px";
-        existingImg.style.maxHeight = "120px";
-        existingImg.style.objectFit = "cover";
-        existingImg.style.borderRadius = "6px";
-        existingImg.className = "url-existing-preview-image";
-        existingImg.setAttribute("data-url", attachmentUrl);
+        var previewTrigger = createAttachmentPreviewTrigger(
+          attachmentUrl,
+          attachmentPath,
+        );
 
         var removeBtn = document.createElement("button");
         removeBtn.type = "button";
@@ -410,7 +454,7 @@
         removeBtn.setAttribute("title", "Remove attachment");
         removeBtn.innerHTML = "&times;";
 
-        existingWrap.appendChild(existingImg);
+        existingWrap.appendChild(previewTrigger);
         existingWrap.appendChild(removeBtn);
         listWrap.appendChild(existingWrap);
       });
@@ -423,30 +467,33 @@
           }
 
           Array.prototype.forEach.call(input.files, function (file) {
-            if (!file || !file.type || file.type.indexOf("image/") !== 0) {
+            if (!file) {
               return;
             }
 
-            hasImage = true;
-            var reader = new FileReader();
-            reader.onload = function (ev) {
-              var img = document.createElement("img");
-              img.src = String(
-                ev.target && ev.target.result ? ev.target.result : "",
-              );
-              img.alt = "Attachment Preview";
-              img.style.maxWidth = "120px";
-              img.style.maxHeight = "120px";
-              img.style.objectFit = "cover";
-              img.style.borderRadius = "6px";
-              listWrap.appendChild(img);
-            };
-            reader.readAsDataURL(file);
+            var ext = getFileExtension(file.name || "");
+            var fileType = String(file.type || "");
+            var isImage = fileType.indexOf("image/") === 0 || isImageExtension(ext);
+            var isPdf = fileType === "application/pdf" || isPdfExtension(ext);
+            if (!isImage && !isPdf) {
+              return;
+            }
+
+            hasPreview = true;
+            var objectUrl = URL.createObjectURL(file);
+            currentAttachmentObjectUrls.push(objectUrl);
+
+            var uploadWrap = document.createElement("div");
+            uploadWrap.className = "url-edit-preview-item";
+            uploadWrap.appendChild(
+              createAttachmentPreviewTrigger(objectUrl, file.name || ""),
+            );
+            listWrap.appendChild(uploadWrap);
           });
         });
 
       if (placeholder) {
-        placeholder.style.display = hasImage ? "none" : "inline";
+        placeholder.style.display = hasPreview ? "none" : "inline";
       }
     }
 
@@ -458,7 +505,7 @@
 
       wrap.innerHTML =
         '<div class="mb-2 si-attachment-input-row">' +
-        '<input class="form-control user-record-log-attachment-input" type="file" name="attachment[]" id="url_attachment" accept=".png,.jpg,.jpeg,.webp">' +
+        '<input class="form-control user-record-log-attachment-input" type="file" name="attachment[]" id="url_attachment" accept=".png,.jpg,.jpeg,.webp,.pdf,application/pdf">' +
         '<button class="mt-1 add-user-record-log-attachment-btn" id="action_menu_btn" type="button" title="Add another attachment"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>' +
         "</div>";
     }
@@ -832,7 +879,7 @@
           var row = document.createElement("div");
           row.className = "mb-2 si-attachment-input-row";
           row.innerHTML =
-            '<input class="form-control user-record-log-attachment-input" type="file" name="attachment[]" accept=".png,.jpg,.jpeg,.webp">' +
+            '<input class="form-control user-record-log-attachment-input" type="file" name="attachment[]" accept=".png,.jpg,.jpeg,.webp,.pdf,application/pdf">' +
             '<button class="mt-1 remove-user-record-log-attachment-btn" id="action_menu_btn" type="button" title="Remove attachment row"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>';
           wrap.appendChild(row);
           return;
@@ -875,12 +922,13 @@
       removeExistingAttachmentByIndex(index);
     });
 
-    $(document).on("click", ".url-existing-preview-image", function () {
+    $(document).on("click", ".url-edit-preview-open-btn", function () {
       var fileUrl = String($(this).data("url") || "");
+      var filePath = String($(this).data("file") || "");
       if (!fileUrl) {
         return;
       }
-      openAttachmentModal(fileUrl);
+      openAttachmentModal(fileUrl, filePath);
     });
 
     $list.on("click", ".url-edit-btn", function () {
@@ -942,6 +990,10 @@
       if (e.key === "Escape" && !$attachmentModal.hasClass("d-none")) {
         closeAttachmentModal();
       }
+    });
+
+    $(window).on("beforeunload", function () {
+      clearAttachmentObjectUrls();
     });
 
     clearStoredFieldValues(formFieldIds.concat(filterFieldIds));

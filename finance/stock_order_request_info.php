@@ -302,34 +302,18 @@ function sorInfoResolveChatIdFromTokenRow($tokenRow)
     return '';
 }
 
-function sorInfoFindPreferredTokenRow($connect, $tokenTable, $pageName = 'Stock Order Request')
+function sorInfoFindWarehouseTokenRow($connect, $warehouseId)
 {
-    if (!($connect instanceof mysqli)) {
+    $warehouseId = (int) $warehouseId;
+    if (!($connect instanceof mysqli) || $warehouseId <= 0) {
         return null;
     }
 
-    if (function_exists('shopeeOmsFindPreferredTokenSetting')) {
-        $tokenRow = shopeeOmsFindPreferredTokenSetting($connect, $pageName);
-        if (!empty($tokenRow)) {
-            return $tokenRow;
+    if (function_exists('shopeeOmsFindWarehouseTokenSetting')) {
+        $warehouseTokenInfo = shopeeOmsFindWarehouseTokenSetting($connect, $warehouseId);
+        if (is_array($warehouseTokenInfo) && !empty($warehouseTokenInfo['token_setting']) && is_array($warehouseTokenInfo['token_setting'])) {
+            return $warehouseTokenInfo['token_setting'];
         }
-        return null;
-    }
-
-    $pageName = trim((string) $pageName);
-    if ($pageName === '') {
-        return null;
-    }
-
-    $pageColCheck = @mysqli_query($connect, "SHOW COLUMNS FROM `" . $tokenTable . "` LIKE 'page_used'");
-    if (!$pageColCheck || mysqli_num_rows($pageColCheck) === 0) {
-        return null;
-    }
-
-    $safePageName = mysqli_real_escape_string($connect, $pageName);
-    $rst = mysqli_query($connect, "SELECT * FROM `" . $tokenTable . "` WHERE status='A' AND FIND_IN_SET('" . $safePageName . "', REPLACE(page_used, ' ', '')) > 0 ORDER BY id DESC LIMIT 1");
-    if ($rst && mysqli_num_rows($rst) > 0) {
-        return mysqli_fetch_assoc($rst);
     }
 
     return null;
@@ -389,6 +373,7 @@ $telegramErr = '';
 
 if (post('actionBtn') === 'sendTelegramStockInBot') {
     $tokenTable = defined('TOKEN_SETT') ? TOKEN_SETT : 'token_setting';
+    $requestWarehouseId = isset($requestRow['warehouse_id']) ? (int) $requestRow['warehouse_id'] : 0;
 
     // Auto-add chat_id column if it doesn't exist yet
     $colCheck = @mysqli_query($connect, "SHOW COLUMNS FROM `" . $tokenTable . "` LIKE 'chat_id'");
@@ -396,15 +381,23 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
         @mysqli_query($connect, "ALTER TABLE `" . $tokenTable . "` ADD COLUMN `chat_id` VARCHAR(100) DEFAULT '' AFTER `bot_token`");
     }
 
-    $tokenRow = sorInfoFindPreferredTokenRow($connect, $tokenTable, 'Stock Order Request');
+    if ($requestWarehouseId <= 0) {
+        $telegramErr = 'Warehouse is not set for this Stock Order Request. Please update the request warehouse first.';
+    }
 
-    if (!$tokenRow) {
-        $telegramErr = 'Token not set yet, please set Stock Order Request Token.';
+    $tokenRow = $telegramErr === '' ? sorInfoFindWarehouseTokenRow($connect, $requestWarehouseId) : null;
+
+    if ($telegramErr !== '') {
+        // Validation message already prepared above.
+    } else if (!$tokenRow) {
+        $telegramErr = 'Telegram Notification Bot is not set for this warehouse. Please update Warehouse setting.';
     } else {
         $botToken = trim((string) (isset($tokenRow['bot_token']) ? $tokenRow['bot_token'] : ''));
 
         // Prefer explicit chat_id when available, then fallback to auto-detection.
-        $chatId = sorInfoResolveChatIdFromTokenRow($tokenRow);
+        $chatId = function_exists('shopeeOmsResolveChatIdFromTokenRow')
+            ? shopeeOmsResolveChatIdFromTokenRow($tokenRow)
+            : sorInfoResolveChatIdFromTokenRow($tokenRow);
 
         if ($botToken === '') {
             $telegramErr = 'Token Setting is incomplete. Bot Token is required.';
@@ -419,7 +412,7 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
                 $resolveErr = '';
                 $chatId = sorInfoResolveTelegramChatId($apiBase, $resolveErr);
                 if ($chatId === '') {
-                    $telegramErr = 'Unable to detect Telegram chat automatically. Please enter the Chat ID in Settings > Token Setting, or send /start to your bot once, then try again.';
+                    $telegramErr = 'Unable to detect Telegram chat automatically. Please enter the Chat ID in Settings > Token Setting for this warehouse bot, or send /start to your bot once, then try again.';
                     if ($resolveErr !== '') {
                         $telegramErr .= ' ' . $resolveErr;
                     }
