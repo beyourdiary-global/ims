@@ -238,7 +238,7 @@ if (!$result) {
                                 <th>Name</th>
                                 <th>Item Code</th>
                                 <th>Platform Item ID</th>
-                                <th></th>Item Description</th>
+                                <th>Item Description</th>
                                 <th>Price</th>
                                 <th>Brand</th>
                                 <th>Cost</th>
