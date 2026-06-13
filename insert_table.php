@@ -176,6 +176,135 @@ function ensureVarcharColumnLengthAtLeast($conn, $dbName, $tableName, $columnNam
     }
 }
 
+function insertTableParsePinBlocks($rawPins)
+{
+    $blocks = array();
+    foreach (explode('+', (string) $rawPins) as $entry) {
+        $entry = trim($entry);
+        if ($entry === '') {
+            continue;
+        }
+
+        $parts = explode(':', trim($entry, '[]'));
+        if (count($parts) !== 2) {
+            continue;
+        }
+
+        $pinGroupId = trim((string) $parts[0]);
+        if ($pinGroupId === '' || !ctype_digit($pinGroupId)) {
+            continue;
+        }
+
+        $pinIds = array();
+        foreach (explode(',', (string) $parts[1]) as $pinId) {
+            $pinId = trim((string) $pinId);
+            if ($pinId !== '' && ctype_digit($pinId)) {
+                $pinIds[$pinId] = $pinId;
+            }
+        }
+
+        $blocks[$pinGroupId] = array_values($pinIds);
+    }
+
+    return $blocks;
+}
+
+function insertTableBuildPinBlocks($blocks)
+{
+    $parts = array();
+    foreach ((array) $blocks as $pinGroupId => $pinIds) {
+        $pinGroupId = trim((string) $pinGroupId);
+        if ($pinGroupId === '' || !ctype_digit($pinGroupId)) {
+            continue;
+        }
+
+        $normalizedPinIds = array();
+        foreach ((array) $pinIds as $pinId) {
+            $pinId = trim((string) $pinId);
+            if ($pinId !== '' && ctype_digit($pinId)) {
+                $normalizedPinIds[$pinId] = $pinId;
+            }
+        }
+
+        if (!empty($normalizedPinIds)) {
+            $parts[] = '[' . $pinGroupId . ':' . implode(',', array_values($normalizedPinIds)) . ']';
+        }
+    }
+
+    return implode('+', $parts);
+}
+
+function insertTableAddPinBlockAccess($rawPins, $pinGroupId, $pinIds)
+{
+    $blocks = insertTableParsePinBlocks($rawPins);
+    $pinGroupId = (string) ((int) $pinGroupId);
+    if (!isset($blocks[$pinGroupId])) {
+        $blocks[$pinGroupId] = array();
+    }
+
+    foreach ((array) $pinIds as $pinId) {
+        $pinId = trim((string) $pinId);
+        if ($pinId !== '' && ctype_digit($pinId)) {
+            $blocks[$pinGroupId][$pinId] = $pinId;
+        }
+    }
+
+    return insertTableBuildPinBlocks($blocks);
+}
+
+function insertTableEnsureOrderReportPins($cmsConn)
+{
+    $pinGroupSql = "INSERT INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+        (155, 'Shopee Report', '1', 'Shopee order report view access', '1', CURDATE(), CURTIME(), 'A'),
+        (156, 'Facebook Report', '1', 'Facebook order report view access', '1', CURDATE(), CURTIME(), 'A'),
+        (157, 'Website Report', '1', 'Website order report view access', '1', CURDATE(), CURTIME(), 'A'),
+        (158, 'Lazada Report', '1', 'Lazada order report view access', '1', CURDATE(), CURTIME(), 'A')
+        ON DUPLICATE KEY UPDATE
+            `name` = VALUES(`name`),
+            `pins` = VALUES(`pins`),
+            `remark` = VALUES(`remark`),
+            `status` = 'A'";
+
+    if ($cmsConn->query($pinGroupSql)) {
+        echo "<p style='color:green;'><strong>Order Report pin setup:</strong> Verified pin groups 155-158 for Shopee Report, Facebook Report, Website Report, and Lazada Report.</p>";
+    } else {
+        echo "<p style='color:red;'><strong>Order Report pin setup:</strong> Failed creating pin groups 155-158: " . $cmsConn->error . "</p>";
+    }
+
+    foreach (array(1, 2) as $groupId) {
+        $userGroupResult = $cmsConn->query("SELECT `pins` FROM `user_group` WHERE `id` = " . (int) $groupId . " LIMIT 1");
+        if (!$userGroupResult || $userGroupResult->num_rows === 0) {
+            echo "<p style='color:orange;'>Order Report pin setup skipped `user_group` id " . (int) $groupId . " because the group was not found.</p>";
+            continue;
+        }
+
+        $userGroupRow = $userGroupResult->fetch_assoc();
+        $currentPins = isset($userGroupRow['pins']) ? (string) $userGroupRow['pins'] : '';
+        $updatedPins = $currentPins;
+        foreach (array(155, 156, 157, 158) as $pinGroupId) {
+            $updatedPins = insertTableAddPinBlockAccess($updatedPins, $pinGroupId, array(1));
+        }
+
+        if ($updatedPins !== $currentPins) {
+            $safePins = $cmsConn->real_escape_string($updatedPins);
+            if ($cmsConn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $groupId)) {
+                echo "<p style='color:green;'>Order Report pin setup granted View access for pin groups 155-158 to `user_group` id " . (int) $groupId . ".</p>";
+            } else {
+                echo "<p style='color:red;'>Order Report pin setup failed updating `user_group` id " . (int) $groupId . ": " . $cmsConn->error . "</p>";
+            }
+        } else {
+            echo "<p style='color:green;'>Order Report pin setup verified View access already exists for `user_group` id " . (int) $groupId . ".</p>";
+        }
+    }
+}
+
+$cmsConn = new mysqli($dbhost, $dbUser, $dbpwd, $db_cms, $dbport);
+if ($cmsConn->connect_error) {
+    echo "<p style='color:red;'><strong>Order Report pin setup:</strong> Failed connecting to CMS database `" . htmlspecialchars($db_cms, ENT_QUOTES, 'UTF-8') . "`: " . htmlspecialchars($cmsConn->connect_error, ENT_QUOTES, 'UTF-8') . "</p>";
+} else {
+    insertTableEnsureOrderReportPins($cmsConn);
+}
+
 function indexExists($conn, $dbName, $tableName, $indexName)
 {
     $safeDb = $conn->real_escape_string($dbName);
