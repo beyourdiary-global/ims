@@ -4191,7 +4191,7 @@ if (!function_exists('validateEstimatedReceivedDate')) {
             ? shopeeOmsGetEstimatedReceivedDateRange($orderContext)
             : array(
                 'min_date' => (new DateTimeImmutable('today'))->format('Y-m-d'),
-                'max_date' => (new DateTimeImmutable('today'))->modify('+1 month')->format('Y-m-d'),
+                'max_date' => (new DateTimeImmutable('today'))->modify('+7 days')->format('Y-m-d'),
             );
         $minDate = new DateTimeImmutable((string) $dateRange['min_date']);
         $maxDate = new DateTimeImmutable((string) $dateRange['max_date']);
@@ -4283,7 +4283,7 @@ if (!function_exists('shopeeOmsGetEstimatedReceivedDateRange')) {
         $minDate = $baseDate->modify('+1 day');
         return array(
             'min_date' => $minDate->format('Y-m-d'),
-            'max_date' => $minDate->modify('+1 month')->format('Y-m-d'),
+            'max_date' => $baseDate->modify('+7 days')->format('Y-m-d'),
         );
     }
 }
