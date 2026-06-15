@@ -21,6 +21,40 @@ $default_redirect_path = '/fb_cust_deals_table.php';
 $returnPageInput = trim((string) input('return_page'));
 $returnLabelInput = trim((string) input('return_label'));
 
+if ($returnPageInput !== '') {
+    $_SESSION['urbanism_member_return_page'] = $returnPageInput;
+} else if (isset($_SESSION['urbanism_member_return_page'])) {
+    $returnPageInput = trim((string) $_SESSION['urbanism_member_return_page']);
+}
+
+if ($returnLabelInput !== '') {
+    $_SESSION['urbanism_member_return_label'] = $returnLabelInput;
+} else if (isset($_SESSION['urbanism_member_return_label'])) {
+    $returnLabelInput = trim((string) $_SESSION['urbanism_member_return_label']);
+}
+
+if ((isset($_GET['return_page']) || isset($_GET['return_label'])) && $dataID !== '' && $act !== '') {
+    $cleanParams = array(
+        'id' => $dataID,
+        'act' => $act,
+    );
+
+    foreach ($_GET as $paramKey => $paramValue) {
+        if (in_array($paramKey, array('id', 'act', 'return_page', 'return_label'), true) || is_array($paramValue)) {
+            continue;
+        }
+
+        $cleanParamValue = input($paramKey);
+        if ($cleanParamValue !== '') {
+            $cleanParams[$paramKey] = $cleanParamValue;
+        }
+    }
+
+    $cleanUrl = $SITEURL . '/urb_cust_reg.php?' . http_build_query($cleanParams);
+    echo '<script>window.location.replace(' . json_encode($cleanUrl) . ');</script>';
+    exit;
+}
+
 $urbanismOrderSource = 'all';
 $returnPageLower = strtolower($returnPageInput);
 if ($returnPageLower !== '') {
@@ -60,8 +94,9 @@ if (!file_exists($img_fs_path)) {
 $urbanismSeedName = trim((string) $dataID);
 $urbanismSeedFbLink = '';
 
-if ($dataID && $act== 'I') { //edit/remove/view
+if ($dataID && $act== 'I') { //add mode
     $lookupCondition = "";
+    $sourceRowFound = false;
     if (ctype_digit((string) $dataID)) {
         $lookupCondition = "id='" . ((int) $dataID) . "'";
     } else {
@@ -71,12 +106,36 @@ if ($dataID && $act== 'I') { //edit/remove/view
 
     $rst = getData('*', $lookupCondition, 'LIMIT 1', $tblName, $connect);
     if ($rst != false && $rst->num_rows > 0) {
+        $sourceRowFound = true;
         $sourceRow = $rst->fetch_assoc();
         if (isset($sourceRow['name']) && trim((string) $sourceRow['name']) !== '') {
             $urbanismSeedName = trim((string) $sourceRow['name']);
         }
         if (isset($sourceRow['fb_link']) && trim((string) $sourceRow['fb_link']) !== '') {
             $urbanismSeedFbLink = trim((string) $sourceRow['fb_link']);
+        }
+    }
+
+    $existingMemberWhere = '';
+    $normalizedSeedName = strtolower(trim((string) $urbanismSeedName));
+    if ($normalizedSeedName !== '' && ($sourceRowFound || !ctype_digit((string) $dataID))) {
+        $existingMemberWhere = "LOWER(TRIM(name))='" . mysqli_real_escape_string($connect, $normalizedSeedName) . "'";
+    } else if (ctype_digit((string) $dataID)) {
+        $existingMemberWhere = "id='" . ((int) $dataID) . "'";
+    }
+
+    if ($existingMemberWhere !== '') {
+        $existingMemberRst = getData('id,name', $existingMemberWhere, 'LIMIT 1', $reg_tblName, $connect);
+        if ($existingMemberRst != false && $existingMemberRst->num_rows > 0) {
+            $existingMemberRow = $existingMemberRst->fetch_assoc();
+            $editParams = array(
+                'id' => isset($existingMemberRow['id']) ? (int) $existingMemberRow['id'] : $dataID,
+                'act' => 'E',
+            );
+
+            $editUrl = $SITEURL . '/urb_cust_reg.php?' . http_build_query($editParams);
+            echo '<script>window.location.replace(' . json_encode($editUrl) . ');</script>';
+            exit;
         }
     }
 }else if ($dataID) { //edit/remove/view
