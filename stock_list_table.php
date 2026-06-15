@@ -111,7 +111,7 @@ if (!empty($orderNumbers) && !empty($warehouseIds)) {
 </head>
 
 <script>
-    preloader(300);
+    
 
     $(document).ready(() => {
         if ($('#stockMovementTable').length) {

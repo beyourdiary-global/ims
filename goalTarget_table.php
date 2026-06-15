@@ -40,9 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'delete') {
 </head>
 
 <script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
-<script>
-    preloader(300);
-</script>
+
 
 <style>
     

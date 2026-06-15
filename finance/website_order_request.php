@@ -1755,28 +1755,6 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                 { textId: 'series', hiddenId: 'series_hidden', label: 'Series' }
             ];
 
-            function clearNewCustomerInlineError(field) {
-                if (!field) {
-                    return;
-                }
-                field.classList.remove('shopee-inline-invalid');
-                if (field.nextElementSibling && field.nextElementSibling.classList.contains('shopee-inline-error')) {
-                    field.nextElementSibling.remove();
-                }
-            }
-
-            function showNewCustomerInlineError(field, message) {
-                if (!field) {
-                    return;
-                }
-                clearNewCustomerInlineError(field);
-                field.classList.add('shopee-inline-invalid');
-                var errorNode = document.createElement('span');
-                errorNode.className = 'shopee-inline-error';
-                errorNode.textContent = message;
-                field.insertAdjacentElement('afterend', errorNode);
-            }
-
             function validateWebsiteNewCustomerForm() {
                 var hasError = false;
 

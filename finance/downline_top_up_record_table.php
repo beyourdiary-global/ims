@@ -130,9 +130,7 @@ $tblName = DW_TOP_UP_RECORD;
 </head>
 
 <script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
-<script>
-    preloader(300);
-</script>
+
 
 <body>
     
@@ -258,18 +256,7 @@ $tblName = DW_TOP_UP_RECORD;
                             $groupedRows = [];
                             $counters = 1;
 
-                            function generateTableRow($id, &$counters, $key, $topupAmt)
-                            {
-                                echo '<tr onclick="window.location=\'internal_consume_item_table_summary.php?ids=' . urlencode($id) . '\';" style="cursor:pointer;">';
-                                echo ' <th class="text-center"><input type="checkbox" class="export" value="' . $id . '"></th>';
-                                echo '<th class="hideColumn" scope="row">' . $id . '</th>';
-                                echo '<th scope="row">' . $counters++ . '</th>';
-                                foreach ($key as $k) {
-                                    echo '<td scope="row">' . $k . '</td>';
-                                }
-                                echo '<td scope="row">' . number_format($topupAmt, 2, '.', '') . '</td>';
-                                echo '</tr>';
-                            }
+
 
                             while ($row = $result->fetch_assoc()) {
                                 $viewActMsg = '';
@@ -359,11 +346,29 @@ $tblName = DW_TOP_UP_RECORD;
                                         }
                                     }
                                 } else if ($groupOption === 'brand') {
-                                    generateTableRow($row['id'], $counters, $brand, $row['amount']);
+                                    financeGenerateTableRow(array(
+                                        'id' => $row['id'],
+                                        'summary_page' => 'internal_consume_item_table_summary.php',
+                                        'id_before_checkbox' => false,
+                                        'cells' => array($brand),
+                                        'amount' => $row['amount'],
+                                    ), $counters);
                                 } else if ($groupOption === 'agent') {
-                                    generateTableRow($row['id'], $counters, $agent, $row['amount']);
+                                    financeGenerateTableRow(array(
+                                        'id' => $row['id'],
+                                        'summary_page' => 'internal_consume_item_table_summary.php',
+                                        'id_before_checkbox' => false,
+                                        'cells' => array($agent),
+                                        'amount' => $row['amount'],
+                                    ), $counters);
                                 } else if ($groupOption === 'currency') {
-                                    generateTableRow($row['id'], $counters, $curr, $row['amount']);
+                                    financeGenerateTableRow(array(
+                                        'id' => $row['id'],
+                                        'summary_page' => 'internal_consume_item_table_summary.php',
+                                        'id_before_checkbox' => false,
+                                        'cells' => array($curr),
+                                        'amount' => $row['amount'],
+                                    ), $counters);
                                 }
                             }
                             foreach ($groupedRows as $key => $groupedRow) {

@@ -3240,15 +3240,6 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
             var localPreviewUrl = '';
             var canFinalizeVerify = false;
 
-            function setStatus(message, isError) {
-                if (!statusNode) {
-                    return;
-                }
-                statusNode.textContent = message || '';
-                statusNode.classList.toggle('text-danger', !!isError);
-                statusNode.classList.toggle('text-muted', !isError);
-            }
-
             function setBusyState(isBusy) {
                 [directChoiceBtn, uploadChoiceBtn, compareBtn, reloadBtn, backBtn].forEach(function (button) {
                     if (!button) {
@@ -3893,26 +3884,6 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                         { textId: 'scr_brand', hiddenId: 'scr_brand_hidden', label: 'Brand' },
                         { textId: 'scr_series', hiddenId: 'scr_series_hidden', label: 'Series' }
                     ];
-
-                function clearNewCustomerInlineError(field) {
-                    if (!field) return;
-                    field.classList.remove('shopee-inline-invalid');
-                    var wrapper = field.parentElement;
-                    if (!wrapper) return;
-                    wrapper.querySelectorAll('.shopee-inline-error').forEach(function (node) {
-                        node.remove();
-                    });
-                }
-
-                function showNewCustomerInlineError(field, message) {
-                    if (!field) return;
-                    clearNewCustomerInlineError(field);
-                    field.classList.add('shopee-inline-invalid');
-                    var errorNode = document.createElement('small');
-                    errorNode.className = 'shopee-inline-error';
-                    errorNode.textContent = message;
-                    field.parentElement.appendChild(errorNode);
-                }
 
                 function validateNewCustomerForm() {
                     var firstInvalidField = null;

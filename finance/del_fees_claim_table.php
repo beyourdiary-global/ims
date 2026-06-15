@@ -267,24 +267,7 @@ $tblName = DEL_FEES_CLAIM;
                         $groupedRows = [];
                         $counters = 1;
         
-                        function generateTableRow($id, &$counters, $courier, $createdate, $topupAmt) {
-                            echo '<tr onclick="window.location=\'del_fees_claim_table_summary.php?ids=' . urlencode($id) . '\';" style="cursor:pointer;">';
-                            echo '<th class="hideColumn" scope="row">' . $id . '</th>';
-                            echo ' <th class="text-center"><input type="checkbox" class="export" value="' . $id . '"></th>';
-                            echo '<th scope="row">' . $counters++ . '</th>';
-                            echo '<td scope="row">' . $courier . '</td>';
-                            echo '<td scope="row">' . number_format($topupAmt, 2, '.', '') . '</td>';
-                            echo '</tr>';
-                        }
-                        function generateTableRow2($id, &$counters, $courier, $curr, $createdate,$topupAmt) {
-                            echo '<tr onclick="window.location=\'del_fees_claim_table_summary.php?ids=' . urlencode($id) . '\';" style="cursor:pointer;">';
-                            echo '<th class="hideColumn" scope="row">' . $id . '</th>';
-                            echo ' <th class="text-center"><input type="checkbox" class="export" value="' . $id . '"></th>';
-                            echo '<th scope="row">' . $counters++ . '</th>';
-                            echo '<td scope="row">' . $curr . '</td>';
-                            echo '<td scope="row">' . number_format($topupAmt, 2, '.', '') . '</td>';
-                            echo '</tr>';
-                        }
+
                         $groupedRows = [];
                         while ($row = $result->fetch_assoc()) {
                             $viewActMsg = '';
@@ -467,9 +450,19 @@ $tblName = DEL_FEES_CLAIM;
                                     }                         
                                     
                                 }else if ($groupOption === 'currency') {
-                                    generateTableRow2($row['id'],$counters, $courier, $curr,$createdate, $row['total']);
+                                    financeGenerateTableRow(array(
+                                        'id' => $row['id'],
+                                        'summary_page' => 'del_fees_claim_table_summary.php',
+                                        'cells' => array($curr),
+                                        'amount' => $row['total'],
+                                    ), $counters);
                                 }else if ($groupOption === 'courier') {
-                                    generateTableRow($row['id'], $counters, $courier, $createdate, $row['total']);
+                                    financeGenerateTableRow(array(
+                                        'id' => $row['id'],
+                                        'summary_page' => 'del_fees_claim_table_summary.php',
+                                        'cells' => array($courier),
+                                        'amount' => $row['total'],
+                                    ), $counters);
                                 }
                             }
                             

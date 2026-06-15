@@ -318,24 +318,7 @@ $tblName = FB_ADS_TOPUP;
                 $groupOption3 = isset($_GET['timeRange']) ? $_GET['timeRange'] : ''; 
                 $groupOption4 = isset($_GET['timeInterval']) ? $_GET['timeInterval'] : ''; 
 
-                function generateTableRow($id, &$counters, $accName, $paymentDate, $topupAmt) {
-                    echo '<tr onclick="window.location=\'fb_ads_topup_trans_table_summary.php?ids=' . urlencode($id) . '\';" style="cursor:pointer;">';
-                    echo '<th class="hideColumn" scope="row">' . $id . '</th>';
-                    echo ' <th class="text-center"><input type="checkbox" class="export" value="' . $id . '"></th>';
-                    echo '<th scope="row">' . $counters++ . '</th>';
-                    echo '<td scope="row">' . $accName . '</td>';
-                    echo '<td scope="row">' . number_format($topupAmt, 2, '.', '') . '</td>';
-                    echo '</tr>';
-                }
-                function generateTableRow2($id, &$counters, $accName, $paymentDate, $topupAmt) {
-                    echo '<tr onclick="window.location=\'fb_ads_topup_trans_table_summary.php?ids=' . urlencode($id) . '\';" style="cursor:pointer;">';
-                    echo '<th class="hideColumn" scope="row">' . $id . '</th>';
-                    echo ' <th class="text-center"><input type="checkbox" class="export" value="' . $id . '"></th>';
-                    echo '<th scope="row">' . $counters++ . '</th>';
-                    echo '<td scope="row">' . $paymentDate . '</td>';
-                    echo '<td scope="row">' . number_format($topupAmt, 2, '.', '') . '</td>';
-                    echo '</tr>';
-                }
+
                 
                 $groupedRows = [];
                 $counters = 1;
@@ -518,10 +501,20 @@ $tblName = FB_ADS_TOPUP;
                         
                     }  else if ($groupOption === 'invoice') {
                         $totalTopupAmount += (float) (isset($row['topup_amt']) ? $row['topup_amt'] : 0);
-                        generateTableRow2($row['id'], $counters, $accName, $paymentDate, $row['topup_amt']);
+                        financeGenerateTableRow(array(
+                            'id' => $row['id'],
+                            'summary_page' => 'fb_ads_topup_trans_table_summary.php',
+                            'cells' => array($paymentDate),
+                            'amount' => $row['topup_amt'],
+                        ), $counters);
                     } else if ($groupOption === 'metaaccount') {
                         $totalTopupAmount += (float) (isset($row['topup_amt']) ? $row['topup_amt'] : 0);
-                        generateTableRow($row['id'], $counters, $accName, $paymentDate, $row['topup_amt']);
+                        financeGenerateTableRow(array(
+                            'id' => $row['id'],
+                            'summary_page' => 'fb_ads_topup_trans_table_summary.php',
+                            'cells' => array($accName),
+                            'amount' => $row['topup_amt'],
+                        ), $counters);
                     }
                     
                 }

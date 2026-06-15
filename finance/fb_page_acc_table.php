@@ -22,14 +22,11 @@ if (!$result) {
 </head>
 
 <script>
-    preloader(300);
+    
     $(document).ready(() => {
         createSortingTable('fb_page_acc_table');
     });
 </script>
-
-
-
 <body>
 
 <div class="pre-load-center">

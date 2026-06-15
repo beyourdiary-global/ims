@@ -769,7 +769,7 @@ if ($stmt) {
     </style>
 </head>
 <script>
-    preloader(300);
+    
     $(document).ready(function () {
         createSortingTable('campaign_follow_up_table', {
             searching: true,

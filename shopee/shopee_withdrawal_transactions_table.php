@@ -270,17 +270,7 @@ $tblName = SHOPEE_WDL_TRANS;
                          $groupedRows = [];
                          $counters = 1;
          
-                         function generateTableRow($id, &$counters, $key, $topupAmt) {
-                            echo '<tr onclick="window.location=\'shopee_withdrawal_transactions_table_summary.php?ids=' . urlencode($id) . '\';" style="cursor:pointer;">';
-                            echo '<th class="hideColumn" scope="row">' . $id . '</th>';
-                            echo ' <th class="text-center"><input type="checkbox" class="export" value="' . $id . '"></th>';
-                            echo '<th scope="row">' . $counters++ . '</th>';
-                            foreach ($key as $k) {
-                                echo '<td scope="row">' . $k . '</td>';
-                            }
-                            echo '<td scope="row">' . number_format($topupAmt, 2, '.', '') . '</td>';
-                            echo '</tr>';
-                        }
+
                         
                        
                          $groupedRows = [];
@@ -386,11 +376,26 @@ $tblName = SHOPEE_WDL_TRANS;
                             }                    
                                 
                             }else if ($groupOption === 'currencynperson') {
-                                generateTableRow($row['id'], $counters, [$currency, $person], $row['amount']);
+                                financeGenerateTableRow(array(
+                                    'id' => $row['id'],
+                                    'summary_page' => 'shopee_withdrawal_transactions_table_summary.php',
+                                    'cells' => array($curr, $person),
+                                    'amount' => $row['amount'],
+                                ), $counters);
                             }else if ($groupOption === 'person') {
-                                generateTableRow($row['id'], $counters, $person, $row['amount']);
+                                financeGenerateTableRow(array(
+                                    'id' => $row['id'],
+                                    'summary_page' => 'shopee_withdrawal_transactions_table_summary.php',
+                                    'cells' => array($person),
+                                    'amount' => $row['amount'],
+                                ), $counters);
                             }else if ($groupOption === 'currency') {
-                                generateTableRow($row['id'], $counters, $curr, $row['amount']);
+                                financeGenerateTableRow(array(
+                                    'id' => $row['id'],
+                                    'summary_page' => 'shopee_withdrawal_transactions_table_summary.php',
+                                    'cells' => array($curr),
+                                    'amount' => $row['amount'],
+                                ), $counters);
                             }
                             }
                             foreach ($groupedRows as $key => $groupedRow) {  

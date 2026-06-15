@@ -793,9 +793,7 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
 
     </style>
 </head>
-<script>
-    preloader(300);
-</script>
+
 
 <body class="customer-follow-up-page">
     

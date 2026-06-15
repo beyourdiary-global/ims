@@ -1,287 +1,126 @@
-
-//export notification
-$('#resetButton').click(function() {
-    $('#datepicker input, #datepicker2 input[name="start"], #datepicker2 input[name="end"], #datepicker3 input[name="start"], #datepicker3 input[name="end"], #datepicker4 input[name="start"], #datepicker4 input[name="end"]').val('');
-    $('#group').val('');
-    $('#timeInterval').val('');
-    $('#datepicker input').change();
-});
-
-
-
-
-$(document).ready(function() {
-    var group = $('#group').val();
-    var group2 = $('#group2').val();
-    var timeParam3 = getParameterByName('timeInterval');
-    var groupParam = getParameterByName('group');
-    var ids = getParameterByName('ids');
-    var key = getParameterByName('key');
-    var time =  $('#datepicker input').val();
-    var timeInterval = $('#timeInterval').val();
-    var timeRange;
-    var currentDate = new Date().toISOString().slice(0,10);
-      
-        $('#datepicker input').val(currentDate);
-    window.onload = function() {
-        var time =  $('#datepicker input').val();
-        if(timeParam3 == null){
-            document.getElementById("timeInterval").value = 'daily'; 
-            timeParam3 = 'daily';
-            if(document.getElementById("group").value == null){
-                document.getElementById("group").value == groupParam;
-            } 
-
-            document.getElementById("timeInterval").value = timeParam3; 
-            timeRange = time;
-          
-        }else if(timeParam3){
-            document.getElementById("timeInterval").value = timeParam3; 
-            if(document.getElementById("group").value == null){
-                document.getElementById("group").value == groupParam;
-            }
-        }else{
-            document.getElementById("timeInterval").value = 'daily'; 
-            document.getElementById("group").value = 'courier'; 
-        }
-        if(document.getElementById("group2").value == null){
-            document.getElementById("group2").value == '';
-            group2 = ''
-            
-        }
-        if (!window.location.search) {
-            window.location.search = '?group=' + group + (time ? '&timeRange=' + time : '') + (timeInterval ? '&timeInterval=' + timeInterval : '');
-        }
-        
-};
-
-$('#datepicker input, #datepicker2 input[name="end"], #datepicker3 input[name="end"], #datepicker4 input[name="end"]').change(function() {
-    var time =  $('#datepicker input').val();
-    var timeInterval = $('#timeInterval').val();
-    var startDate = $('#datepicker2 input[name="start"]').val();
-    var endDate = $('#datepicker2 input[name="end"]').val();
-    var startMonth = $('#datepicker3 input[name="start"]').val();
-    var endMonth = $('#datepicker3 input[name="end"]').val();
-    var startYear = $('#datepicker4 input[name="start"]').val();
-    var endYear = $('#datepicker4 input[name="end"]').val();
-   
-    var timeRange;
-    if (timeInterval === 'weekly') {
-    timeRange = startDate + 'to' + endDate;
-    } else if (timeInterval === 'monthly') {
-        timeRange = startMonth + 'to' + endMonth;
-    } else if (timeInterval === 'yearly') {
-        timeRange = startYear + 'to' + endYear;
-    } else if (timeInterval === 'daily') {
-        timeRange = time;
+// export notification and report date/group filter handling
+(function ($) {
+    if (typeof $ === 'undefined') {
+        return;
     }
 
-    
-
-   
-    if (group === 'metaaccount' || group === 'courier' || group === 'shopee' || group === 'method' || group === 'brand' ||group === 'series' || group === 'package' || group === 'person' || group ==='merchant' || group === 'currencynperson') {
-      
-            window.location.search = '?group=' + group + (timeRange ? '&timeRange=' + timeRange : '') + (timeInterval ? '&timeInterval=' + timeInterval : '');
-        
-    } else if (group === 'invoice' || group === 'currency' || group === 'agent' || group === 'outlet'||group === 'facebook' ||group === 'channel' ||group === 'platform'|| group === 'stock_type' || group === 'product' || group === 'whse' || group === 'pdtcategory' || group === 'platform' || group === 'stockinpic' || group === 'stockoutpic'){
-        
-            window.location.search = '?group=' + group + (timeRange ? '&timeRange=' + timeRange : '') + (timeInterval ? '&timeInterval=' + timeInterval : '');
-        
-    } else if(group != ''){
-        window.location.search = (timeRange ? '?timeRange=' + timeRange : '') + (timeInterval ? '&timeInterval=' + timeInterval : '');
-    }else 
-
-    var group2 = $('#group2').val();
-console.log(group);
-
-    if (group2 === 'metaaccount' || group2 === 'courier' || group2 === 'shopee' || group2 === 'method' || group2 === 'brand' ||group2 === 'series' || group2 === 'package' || group2 === 'person' || group2 ==='merchant' || group2 === 'currencynperson') {
-      
-            window.location.search = '?group=' + group + (group2 ? '&group2=' + group2 : '') + (timeRange ? '&timeRange=' + timeRange : '') + (timeInterval ? '&timeInterval=' + timeInterval : '');
-        
-
-    } else if (group2 === 'invoice' || group2 === 'currency' || group2 === 'agent' || group2 === 'outlet'||group2 === 'facebook' ||group2 === 'channel'){
-        
-        window.location.search = '?group=' + group + (group2 ? '&group2=' + group2 : '') + (timeRange ? '&timeRange=' + timeRange : '') + (timeInterval ? '&timeInterval=' + timeInterval : '');
-        
-    } else if(group2 != null){
-        window.location.search = '?group=' + group  + (timeRange ? '&timeRange=' + timeRange : '') + (timeInterval ? '&timeInterval=' + timeInterval : '');
-    }
-
-
-
-    });
-
-
-    var groupParam = getParameterByName('group');
-    if (groupParam) {
-        $('#group').val(groupParam);
-    }
-  
-    
-    var timeParam4 = getParameterByName('timeRange');
-    var timeInterval = $('#timeInterval').val();
-    if (timeParam3 == 'weekly') {
-    $('#timeInterval').val(timeParam3);
-    var dateRange = timeParam4.split('to');
-    $('#datepicker2 input[name="start"]').val(dateRange[0]);
-    $('#datepicker2 input[name="end"]').val(dateRange[1]);
-    handleTimeIntervalChange();
-    $('#timeRangeParam').val(timeParam4);
-    $('#timeIntervalParam').val(timeParam3);
-    } else if (timeParam3 == 'monthly') {
-        $('#timeInterval').val(timeParam3);
-        var dateRange = timeParam4.split('to');
-        $('#datepicker3 input[name="start"]').val(dateRange[0]);
-        $('#datepicker3 input[name="end"]').val(dateRange[1]);
-        handleTimeIntervalChange();
-        $('#timeRangeParam').val(timeParam4);
-        $('#timeIntervalParam').val(timeParam3); 
-    } else if (timeParam3 == 'yearly') {
-        $('#timeInterval').val(timeParam3);
-        var dateRange = timeParam4.split('to');
-        $('#datepicker4 input[name="start"]').val(dateRange[0]);
-        $('#datepicker4 input[name="end"]').val(dateRange[1]);
-        handleTimeIntervalChange();
-        $('#timeRangeParam').val(timeParam4);
-        $('#timeIntervalParam').val(timeParam3);
-    } else if (timeParam3 == 'daily') {
-        $('#timeInterval').val('daily');
-        $('#timeInterval').val(timeParam3);
-        $('#timeIntervalParam').val('daily');
-        $('#timeRangeParam').val(timeParam4);
-        $('#datepicker input').val(timeParam4);
-        handleTimeIntervalChange();
-    }
-    if (timeParam3 === 'daily') {
-        $('#datepicker').prop('disabled', false).show();
-    } else if (timeParam3 === 'weekly') {
-        $('#datepicker2').prop('disabled', false).show();
-    } else if (timeParam3 === 'monthly') {
-        $('#datepicker3').prop('disabled', false).show();
-    } else if (timeParam3 === 'yearly') {
-        $('#datepicker4').prop('disabled', false).show();
-    }   
-
-    $('#group').change(function(){
-    var group = $(this).val();
-   
-          
-          if(timeParam4){
-            
-              window.location.search = '?group=' + group +'&timeRange=' + timeParam4 + (timeParam3 ? '&timeInterval=' + timeParam3 : '');
-          }else if(group != ''){
-              
-              window.location.search = '?group=' + group ;
-          }
-        
-    
-         
-        
-      
-   
-
-    });
-
-    $('#group2').change(function(){
-        
-        var group= $('#group').val();
-        group = groupParam;
-        console.log(group);
-        var group2 = $(this).val();
-        var group2value= $('#group2').val();
-        group2value = group2;
-        if (timeParam3 != 'daily'){
-            window.location.search = '?group=' + group +(group2 ? '&group2=' + group2 : '')+ '&timeRange=' + timeParam4 + (timeParam3 ? '&timeInterval=' + timeParam3 : '') +  (ids ? '&ids=' + ids : '')+  (key ? '&key=' + key : '');  
-        
+    function getQueryParam(name) {
+        if (typeof window.getParameterByName === 'function') {
+            return window.getParameterByName(name);
         }
-        else if (ids != '' && timeParam3 == 'daily'){
-            window.location.search = '?group=' + group +(group2 ? '&group2=' + group2 : '')+ '&timeRange=' + timeParam4 + (timeParam3 ? '&timeInterval=' + timeParam3 : '') +  (ids ? '&ids=' + ids : '')+  (key ? '&key=' + key : '');  
-        
-        } else{
-            window.location.search = '?group=' + group +(group2 ? '&group2=' + group2 : '')+ '&timeRange=' + timeParam4 + (timeParam3 ? '&timeInterval=' + timeParam3 : '');  
+
+        try {
+            return new URLSearchParams(window.location.search).get(name);
+        } catch (error) {
+            return null;
         }
-        });
-   
-   
-    
-    $('#datepicker').datepicker({
-        autoclose: true,
-        format: 'yyyy-mm-dd',
-        weekStart: 1,
-        maxViewMode: 0, 
-        minViewMode: 0,
-        todayHighlight: true,
-        toggleActive: true,
-        orientation: 'bottom left',
-    });
+    }
 
+    function hasElement(selector) {
+        return $(selector).length > 0;
+    }
 
-    $('#datepicker2 input[name="start"]').datepicker({
-        autoclose: true,
-        format: 'yyyy-mm-dd',
-        weekStart: 1,
-        maxViewMode: 1,
-        todayHighlight: true,
-        toggleActive: true,
-        orientation: 'bottom',
-    });
+    function getValue(selector) {
+        var element = $(selector);
 
-    $('#datepicker2 input[name="end"]').datepicker({
-        autoclose: true,
-        format: 'yyyy-mm-dd',
-        weekStart: 1,
-        maxViewMode: 1,
-        todayHighlight: true,
-        toggleActive: true,
-        orientation: 'bottom',
-    });
-        
-    $('#datepicker3 input[name="start"]').datepicker({
-        format: "yyyy-mm",
-        minViewMode: 1,
-        autoclose: true,
-        orientation: 'bottom',
-    });
+        if (!element.length) {
+            return '';
+        }
 
-    $('#datepicker3 input[name="end"]').datepicker({
-        format: "yyyy-mm",
-        minViewMode: 1,
-        autoclose: true,
-        orientation: 'bottom',
-    });
+        return element.val() || '';
+    }
 
-    $('#datepicker4 input[name="start"]').datepicker({
-        format: "yyyy",
-        minViewMode: 2,
-        autoclose: true,
-        orientation: 'bottom',
-    });
+    function setValue(selector, value) {
+        var element = $(selector);
 
-    $('#datepicker4 input[name="end"]').datepicker({
-        format: "yyyy",
-        minViewMode: 2,
-        autoclose: true,
-        orientation: 'bottom',
-    });
+        if (!element.length) {
+            return;
+        }
 
- 
-   
+        element.val(value);
+    }
+
+    function buildDateRange(timeInterval) {
+        var time = getValue('#datepicker input');
+        var startDate = getValue('#datepicker2 input[name="start"]');
+        var endDate = getValue('#datepicker2 input[name="end"]');
+        var startMonth = getValue('#datepicker3 input[name="start"]');
+        var endMonth = getValue('#datepicker3 input[name="end"]');
+        var startYear = getValue('#datepicker4 input[name="start"]');
+        var endYear = getValue('#datepicker4 input[name="end"]');
+
+        if (timeInterval === 'weekly') {
+            return startDate + 'to' + endDate;
+        }
+
+        if (timeInterval === 'monthly') {
+            return startMonth + 'to' + endMonth;
+        }
+
+        if (timeInterval === 'yearly') {
+            return startYear + 'to' + endYear;
+        }
+
+        if (timeInterval === 'daily') {
+            return time;
+        }
+
+        return '';
+    }
+
+    function updateWindowSearch(group, group2, timeRange, timeInterval, ids, key) {
+        var queryParts = [];
+
+        if (group) {
+            queryParts.push('group=' + encodeURIComponent(group));
+        }
+
+        if (group2) {
+            queryParts.push('group2=' + encodeURIComponent(group2));
+        }
+
+        if (timeRange) {
+            queryParts.push('timeRange=' + encodeURIComponent(timeRange));
+        }
+
+        if (timeInterval) {
+            queryParts.push('timeInterval=' + encodeURIComponent(timeInterval));
+        }
+
+        if (ids) {
+            queryParts.push('ids=' + encodeURIComponent(ids));
+        }
+
+        if (key) {
+            queryParts.push('key=' + encodeURIComponent(key));
+        }
+
+        if (queryParts.length > 0) {
+            window.location.search = '?' + queryParts.join('&');
+        }
+    }
+
     function handleTimeIntervalChange() {
-    var selectedOption = $('#timeInterval').val();
-    $('#datepicker, #datepicker2, #datepicker3, #datepicker4').prop('disabled', true).hide();
-    if (window.location.pathname === '/fb_order_req_income_table_summary.php') {
-        $('#timeInterval').prop('disabled', true).show();
-        
-    if (selectedOption === 'daily') {
-        $('#datepicker').prop('disabled', true).show();
-    } else if (selectedOption === 'weekly') {
-        $('#datepicker2').prop('disabled', true).show();
-    } else if (selectedOption === 'monthly') {
-        $('#datepicker3').prop('disabled', true).show();
-    } else if (selectedOption === 'yearly') {
-        $('#datepicker4').prop('disabled', true).show();
-    }
-    }else{
+        var selectedOption = getValue('#timeInterval');
+
+        $('#datepicker, #datepicker2, #datepicker3, #datepicker4').prop('disabled', true).hide();
+
+        if (window.location.pathname === '/fb_order_req_income_table_summary.php') {
+            $('#timeInterval').prop('disabled', true).show();
+
+            if (selectedOption === 'daily') {
+                $('#datepicker').prop('disabled', true).show();
+            } else if (selectedOption === 'weekly') {
+                $('#datepicker2').prop('disabled', true).show();
+            } else if (selectedOption === 'monthly') {
+                $('#datepicker3').prop('disabled', true).show();
+            } else if (selectedOption === 'yearly') {
+                $('#datepicker4').prop('disabled', true).show();
+            }
+
+            return;
+        }
+
         if (selectedOption === 'daily') {
             $('#datepicker').prop('disabled', false).show();
         } else if (selectedOption === 'weekly') {
@@ -292,8 +131,181 @@ console.log(group);
             $('#datepicker4').prop('disabled', false).show();
         }
     }
-    
-}
- 
-$('#timeInterval').change(handleTimeIntervalChange);
-});
+
+    function initDatepickers() {
+        if (!$.fn || typeof $.fn.datepicker !== 'function') {
+            return;
+        }
+
+        if (hasElement('#datepicker')) {
+            $('#datepicker').datepicker({
+                autoclose: true,
+                format: 'yyyy-mm-dd',
+                weekStart: 1,
+                maxViewMode: 0,
+                minViewMode: 0,
+                todayHighlight: true,
+                toggleActive: true,
+                orientation: 'bottom left'
+            });
+        }
+
+        if (hasElement('#datepicker2 input[name="start"]')) {
+            $('#datepicker2 input[name="start"]').datepicker({
+                autoclose: true,
+                format: 'yyyy-mm-dd',
+                weekStart: 1,
+                maxViewMode: 1,
+                todayHighlight: true,
+                toggleActive: true,
+                orientation: 'bottom'
+            });
+        }
+
+        if (hasElement('#datepicker2 input[name="end"]')) {
+            $('#datepicker2 input[name="end"]').datepicker({
+                autoclose: true,
+                format: 'yyyy-mm-dd',
+                weekStart: 1,
+                maxViewMode: 1,
+                todayHighlight: true,
+                toggleActive: true,
+                orientation: 'bottom'
+            });
+        }
+
+        if (hasElement('#datepicker3 input[name="start"]')) {
+            $('#datepicker3 input[name="start"]').datepicker({
+                format: 'yyyy-mm',
+                minViewMode: 1,
+                autoclose: true,
+                orientation: 'bottom'
+            });
+        }
+
+        if (hasElement('#datepicker3 input[name="end"]')) {
+            $('#datepicker3 input[name="end"]').datepicker({
+                format: 'yyyy-mm',
+                minViewMode: 1,
+                autoclose: true,
+                orientation: 'bottom'
+            });
+        }
+
+        if (hasElement('#datepicker4 input[name="start"]')) {
+            $('#datepicker4 input[name="start"]').datepicker({
+                format: 'yyyy',
+                minViewMode: 2,
+                autoclose: true,
+                orientation: 'bottom'
+            });
+        }
+
+        if (hasElement('#datepicker4 input[name="end"]')) {
+            $('#datepicker4 input[name="end"]').datepicker({
+                format: 'yyyy',
+                minViewMode: 2,
+                autoclose: true,
+                orientation: 'bottom'
+            });
+        }
+    }
+
+    $(document).ready(function () {
+        if (!hasElement('#timeInterval') || !hasElement('#group')) {
+            return;
+        }
+
+        var timeParam = getQueryParam('timeInterval');
+        var groupParam = getQueryParam('group');
+        var timeRangeParam = getQueryParam('timeRange');
+        var ids = getQueryParam('ids');
+        var key = getQueryParam('key');
+        var currentDate = new Date().toISOString().slice(0, 10);
+
+        $('#resetButton').off('click.orderReq').on('click.orderReq', function () {
+            $('#datepicker input, #datepicker2 input[name="start"], #datepicker2 input[name="end"], #datepicker3 input[name="start"], #datepicker3 input[name="end"], #datepicker4 input[name="start"], #datepicker4 input[name="end"]').val('');
+            $('#group').val('');
+            $('#timeInterval').val('');
+            $('#datepicker input').change();
+        });
+
+        if (!getValue('#datepicker input')) {
+            setValue('#datepicker input', currentDate);
+        }
+
+        if (!timeParam) {
+            timeParam = 'daily';
+        }
+
+        setValue('#timeInterval', timeParam);
+
+        if (groupParam) {
+            setValue('#group', groupParam);
+        }
+
+        if (hasElement('#group2') && getValue('#group2') === '') {
+            setValue('#group2', getQueryParam('group2') || '');
+        }
+
+        if (!window.location.search) {
+            updateWindowSearch(getValue('#group'), '', getValue('#datepicker input'), getValue('#timeInterval'), '', '');
+            return;
+        }
+
+        if (timeRangeParam) {
+            if (timeParam === 'weekly') {
+                var weeklyRange = timeRangeParam.split('to');
+                setValue('#datepicker2 input[name="start"]', weeklyRange[0] || '');
+                setValue('#datepicker2 input[name="end"]', weeklyRange[1] || '');
+            } else if (timeParam === 'monthly') {
+                var monthlyRange = timeRangeParam.split('to');
+                setValue('#datepicker3 input[name="start"]', monthlyRange[0] || '');
+                setValue('#datepicker3 input[name="end"]', monthlyRange[1] || '');
+            } else if (timeParam === 'yearly') {
+                var yearlyRange = timeRangeParam.split('to');
+                setValue('#datepicker4 input[name="start"]', yearlyRange[0] || '');
+                setValue('#datepicker4 input[name="end"]', yearlyRange[1] || '');
+            } else if (timeParam === 'daily') {
+                setValue('#datepicker input', timeRangeParam);
+            }
+
+            setValue('#timeRangeParam', timeRangeParam);
+            setValue('#timeIntervalParam', timeParam);
+        }
+
+        handleTimeIntervalChange();
+        initDatepickers();
+
+        $('#datepicker input, #datepicker2 input[name="end"], #datepicker3 input[name="end"], #datepicker4 input[name="end"]')
+            .off('change.orderReq')
+            .on('change.orderReq', function () {
+                var group = getValue('#group');
+                var group2 = getValue('#group2');
+                var timeInterval = getValue('#timeInterval');
+                var timeRange = buildDateRange(timeInterval);
+
+                updateWindowSearch(group, group2, timeRange, timeInterval, ids, key);
+            });
+
+        $('#group').off('change.orderReq').on('change.orderReq', function () {
+            var group = getValue('#group');
+            var group2 = getValue('#group2');
+            var timeInterval = getValue('#timeInterval');
+            var timeRange = timeRangeParam || buildDateRange(timeInterval);
+
+            updateWindowSearch(group, group2, timeRange, timeInterval, ids, key);
+        });
+
+        $('#group2').off('change.orderReq').on('change.orderReq', function () {
+            var group = getValue('#group') || groupParam;
+            var group2 = getValue('#group2');
+            var timeInterval = getValue('#timeInterval');
+            var timeRange = timeRangeParam || buildDateRange(timeInterval);
+
+            updateWindowSearch(group, group2, timeRange, timeInterval, ids, key);
+        });
+
+        $('#timeInterval').off('change.orderReq').on('change.orderReq', handleTimeIntervalChange);
+    });
+})(window.jQuery);

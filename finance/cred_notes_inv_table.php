@@ -77,7 +77,7 @@ if (post('pay_status_option')) {
 </head>
 
 <script>
-    preloader(300);
+    
 
     $(document).ready(() => {
         if ($('#cred_notes_inv_table').length) {

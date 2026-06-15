@@ -1331,6 +1331,262 @@ function initMobileActionMenus() {
 
 initMobileActionMenus();
 
+function updateCheckboxesOnOtherPages(isChecked, tableId) {
+  if (typeof window.jQuery === "undefined") {
+    return;
+  }
+
+  var $ = window.jQuery;
+  var checkedValue = !!isChecked;
+
+  function updateExportCheckboxesInTable(tableElement) {
+    if (!tableElement) {
+      return false;
+    }
+
+    var $table = $(tableElement);
+
+    try {
+      if ($.fn && $.fn.DataTable && $.fn.DataTable.isDataTable(tableElement)) {
+        var cells = $table.DataTable().cells().nodes();
+        $(cells).find(".export").prop("checked", checkedValue);
+        return true;
+      }
+    } catch (error) {
+      // Fallback to normal DOM checkboxes below.
+    }
+
+    $table.find(".export").prop("checked", checkedValue);
+    return true;
+  }
+
+  if (typeof tableId === "string" && tableId.trim() !== "") {
+    var normalizedTableId = tableId.trim();
+
+    if (normalizedTableId.charAt(0) !== "#") {
+      normalizedTableId = "#" + normalizedTableId;
+    }
+
+    updateExportCheckboxesInTable($(normalizedTableId).get(0));
+    return;
+  }
+
+  var updated = false;
+
+  $("table").each(function () {
+    if ($(this).find(".export").length === 0) {
+      return;
+    }
+
+    if (updateExportCheckboxesInTable(this)) {
+      updated = true;
+    }
+  });
+
+  if (!updated) {
+    $(".export").prop("checked", checkedValue);
+  }
+}
+
+function toggleFilters(sectionId) {
+  var section = document.getElementById(sectionId);
+
+  if (!section) {
+    return;
+  }
+
+  section.style.display = section.style.display === "none" ? "flex" : "none";
+}
+
+function autoToggleSections(config) {
+  config = config || {};
+
+  var urlParams = new URLSearchParams(window.location.search);
+  var filterFields = config.filterFields || ["month", "status", "brand", "pkg", "acc"];
+  var groupFields = config.groupFields || ["month_gb", "status_gb", "brand_gb", "pkg_gb", "acc_gb"];
+  var filterSectionId = config.filterSectionId || "filterSection";
+  var groupBySectionId = config.groupBySectionId || "groupBySection";
+
+  var filterActive = filterFields.some(function (key) {
+    var value = urlParams.get(key);
+    return value && value !== "" && value !== "All";
+  });
+
+  var groupActive = groupFields.some(function (key) {
+    var value = urlParams.get(key);
+    return value && value !== "";
+  });
+
+  var filterSection = document.getElementById(filterSectionId);
+  var groupBySection = document.getElementById(groupBySectionId);
+
+  if (filterActive && filterSection) {
+    filterSection.style.display = "flex";
+  }
+
+  if (groupActive && groupBySection) {
+    groupBySection.style.display = "flex";
+  }
+}
+
+function applyFilterOrGroup(param, element) {
+  if (!param || !element) {
+    return;
+  }
+
+  var value = element.value;
+  var url = new URL(window.location.href);
+  url.searchParams.set(param, value);
+  window.location.href = url.toString();
+}
+
+function activatePlatformTab(platformKey, hiddenInputs) {
+  document.querySelectorAll("[data-platform-tab]").forEach(function (button) {
+    button.classList.toggle(
+      "is-active",
+      button.getAttribute("data-platform-tab") === platformKey,
+    );
+  });
+
+  document.querySelectorAll("[data-platform-panel]").forEach(function (panel) {
+    panel.classList.toggle(
+      "is-active",
+      panel.getAttribute("data-platform-panel") === platformKey,
+    );
+  });
+
+  var inputs = [];
+
+  if (hiddenInputs) {
+    if (
+      typeof NodeList !== "undefined" &&
+      hiddenInputs instanceof NodeList
+    ) {
+      inputs = Array.prototype.slice.call(hiddenInputs);
+    } else if (Array.isArray(hiddenInputs)) {
+      inputs = hiddenInputs;
+    } else {
+      inputs = [hiddenInputs];
+    }
+  } else {
+    if (typeof hiddenPlatformInput !== "undefined" && hiddenPlatformInput) {
+      inputs.push(hiddenPlatformInput);
+    }
+
+    if (typeof hiddenPlatformInputs !== "undefined" && hiddenPlatformInputs) {
+      inputs = inputs.concat(Array.prototype.slice.call(hiddenPlatformInputs));
+    }
+
+    inputs = inputs.concat(Array.prototype.slice.call(
+      document.querySelectorAll("[data-platform-hidden-input]"),
+    ));
+  }
+
+  inputs.forEach(function (input) {
+    if (input) {
+      input.value = platformKey;
+    }
+  });
+}
+
+function getValidDataTableRowCount(tableElement) {
+  if (!tableElement) {
+    return 0;
+  }
+
+  var headerCount = tableElement.querySelectorAll("thead th").length;
+  var validRows = 0;
+
+  tableElement.querySelectorAll("tbody tr").forEach(function (rowElement) {
+    var cellCount = rowElement.querySelectorAll("td, th").length;
+    var hasColspan = rowElement.querySelector("[colspan]");
+
+    if (!hasColspan && cellCount === headerCount) {
+      validRows += 1;
+    }
+  });
+
+  return validRows;
+}
+
+function clearNewCustomerInlineError(field) {
+  if (!field) {
+    return;
+  }
+
+  field.classList.remove("shopee-inline-invalid");
+
+  if (
+    field.nextElementSibling &&
+    field.nextElementSibling.classList.contains("shopee-inline-error")
+  ) {
+    field.nextElementSibling.remove();
+  }
+
+  var wrapper = field.parentElement;
+  if (!wrapper) {
+    return;
+  }
+
+  wrapper.querySelectorAll(".shopee-inline-error").forEach(function (node) {
+    node.remove();
+  });
+}
+
+function showNewCustomerInlineError(field, message) {
+  if (!field) {
+    return;
+  }
+
+  clearNewCustomerInlineError(field);
+
+  field.classList.add("shopee-inline-invalid");
+
+  var errorNode = document.createElement("span");
+  errorNode.className = "shopee-inline-error";
+  errorNode.textContent = message;
+
+  field.insertAdjacentElement("afterend", errorNode);
+}
+
+function togglePassword(inputId) {
+  var input = document.getElementById(inputId);
+  var icon = document.getElementById(
+    "show" + inputId.charAt(0).toUpperCase() + inputId.slice(1),
+  );
+
+  if (!input || !icon) {
+    return;
+  }
+
+  if (input.getAttribute("type") === "password") {
+    input.setAttribute("type", "text");
+    icon.classList.remove("fa-eye-slash");
+    icon.classList.add("fa-eye");
+    return;
+  }
+
+  input.setAttribute("type", "password");
+  icon.classList.remove("fa-eye");
+  icon.classList.add("fa-eye-slash");
+}
+
+function setStatus(message, isError, targetStatusNode) {
+  var statusElement = targetStatusNode || null;
+
+  if (!statusElement && typeof statusNode !== "undefined") {
+    statusElement = statusNode;
+  }
+
+  if (!statusElement) {
+    return;
+  }
+
+  statusElement.textContent = message;
+  statusElement.classList.toggle("text-danger", !!isError);
+  statusElement.classList.toggle("text-muted", !isError);
+}
+
 function createSortingTable(tableid, options) {
   options = options || {};
 

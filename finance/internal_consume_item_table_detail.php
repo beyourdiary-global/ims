@@ -137,7 +137,7 @@ $result = getData('*', '', '', ITL_CSM_ITEM, $finance_connect);
 </head>
 
 <script>
-    preloader(300);
+    
 
     $(document).ready(() => {
         createSortingTable('internal_consume_item_table');

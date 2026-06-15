@@ -269,15 +269,7 @@ $tblName = MRCHT_COMM;
                           $groupedRows = [];
                           $counters = 1;
           
-                          function generateTableRow($id, &$counters, $key, $topupAmt) {
-                              echo '<tr onclick="window.location=\'internal_consume_item_table_summary.php?ids=' . urlencode($id) . '\';" style="cursor:pointer;">';
-                              echo ' <th class="text-center"><input type="checkbox" class="export" value="' . $id . '"></th>';
-                              echo '<th class="hideColumn" scope="row">' . $id . '</th>';
-                              echo '<th scope="row">' . $counters++ . '</th>';
-                              echo '<td scope="row">' . $key . '</td>';
-                              echo '<td scope="row">' . number_format($topupAmt, 2, '.', '') . '</td>';
-                              echo '</tr>';
-                          }
+
                         
                           $groupedRows = [];
                         
@@ -360,7 +352,13 @@ $tblName = MRCHT_COMM;
                         }                    
                             
                         }else if ($groupOption === 'currency') {
-                            generateTableRow($row['id'], $counters, $curr, $row['amount']);
+                            financeGenerateTableRow(array(
+                                'id' => $row['id'],
+                                'summary_page' => 'merchant_comm_record_table_summary.php',
+                                'id_before_checkbox' => false,
+                                'cells' => array($curr),
+                                'amount' => $row['amount'],
+                            ), $counters);
                         }
                         }
                         foreach ($groupedRows as $key => $groupedRow) {

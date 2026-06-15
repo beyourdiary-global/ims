@@ -17,7 +17,7 @@ $result = getData('*', '', '', SD_TRANS, $finance_connect);
 </head>
 
 <script>
-    preloader(300);
+    
 
     $(document).ready(() => {
         createSortingTable('sundry_debt_trans_table');

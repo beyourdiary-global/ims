@@ -392,7 +392,7 @@ $autocompleteConfigs = array(
     </style>
 </head>
 <script>
-    preloader(300);
+    
     $(document).ready(function () {
         var campaignMessageTable = document.getElementById('campaign_message_table');
         if (campaignMessageTable) {

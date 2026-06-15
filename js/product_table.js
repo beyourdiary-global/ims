@@ -51,9 +51,4 @@ $(document).ready(function ($) {
       alert("Please select data to export.");
     }
   });
-
-  function updateCheckboxesOnOtherPages(isChecked) {
-    var cells = $("#table").DataTable().rows({ page: "current" }).nodes();
-    $(cells).find(".export").prop("checked", isChecked);
-  }
 });

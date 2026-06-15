@@ -33,7 +33,7 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
 </head>
 
 <script>
-    preloader(300);
+    
     $(document).ready(() => {
         createSortingTable('shopee_cust_info_table', { searching: true });
         initCustomerRecordTableFilters({
@@ -54,9 +54,6 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
         });
     });
 </script>
-
-
-
 <body>
 
     

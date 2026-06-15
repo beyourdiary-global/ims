@@ -450,14 +450,6 @@ $result = getData(
                 console.log('No checkboxes are checked.');
             }
         });
-
-        function updateCheckboxesOnOtherPages(isChecked) {
-            // Get all cells in the DataTable
-            var cells = $('#shopee_order_req_table').DataTable().cells().nodes();
-
-            // Check/uncheck all checkboxes in the DataTable
-            $(cells).find('.export').prop('checked', isChecked);
-        }
     });
 
     <?php include "../js/order_req.js" ?>

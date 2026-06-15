@@ -272,15 +272,7 @@ $result = getData('*', '', '', $tblName, $finance_connect);
                             $groupedRows = [];
                             $counters = 1;
             
-                            function generateTableRow($id, &$counters, $key, $topupAmt) {
-                                echo '<tr onclick="window.location=\'stock_credit_top_up_request_table_summary.php?ids=' . urlencode($id) . '\';" style="cursor:pointer;">';
-                                echo ' <th class="text-center"><input type="checkbox" class="export" value="' . $id . '"></th>';
-                                echo '<th class="hideColumn" scope="row">' . $id . '</th>';
-                                echo '<th scope="row">' . $counters++ . '</th>';
-                                echo '<td scope="row">' . $key . '</td>';
-                                echo '<td scope="row">' . number_format($topupAmt, 2, '.', '') . '</td>';
-                                echo '</tr>';
-                            }
+
                           
                             $groupedRows = [];
                         
@@ -376,11 +368,29 @@ $result = getData('*', '', '', $tblName, $finance_connect);
                             }                    
                                 
                             }else if ($groupOption === 'brand') {
-                                generateTableRow($row['id'],$counters, $brand, $row['amount']);
+                                financeGenerateTableRow(array(
+                                    'id' => $row['id'],
+                                    'summary_page' => 'stock_credit_top_up_request_table_summary.php',
+                                    'id_before_checkbox' => false,
+                                    'cells' => array($brand),
+                                    'amount' => $row['amount'],
+                                ), $counters);
                             }else if ($groupOption === 'merchant') {
-                                generateTableRow($row['id'], $counters, $merchant, $row['amount']);
+                                financeGenerateTableRow(array(
+                                    'id' => $row['id'],
+                                    'summary_page' => 'stock_credit_top_up_request_table_summary.php',
+                                    'id_before_checkbox' => false,
+                                    'cells' => array($merchant),
+                                    'amount' => $row['amount'],
+                                ), $counters);
                             }else if ($groupOption === 'currency') {
-                                generateTableRow($row['id'], $counters, $curr, $row['amount']);
+                                financeGenerateTableRow(array(
+                                    'id' => $row['id'],
+                                    'summary_page' => 'stock_credit_top_up_request_table_summary.php',
+                                    'id_before_checkbox' => false,
+                                    'cells' => array($curr),
+                                    'amount' => $row['amount'],
+                                ), $counters);
                             }
                             }
                             foreach ($groupedRows as $key => $groupedRow) {

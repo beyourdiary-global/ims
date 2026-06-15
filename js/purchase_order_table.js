@@ -1,4 +1,4 @@
-﻿preloader(300);
+﻿
 
 $(document).ready(function () {
   var cfg = window.__PURCHASE_ORDER_TABLE_CONFIG || {};
@@ -67,12 +67,4 @@ $(document).ready(function () {
       $("#exportForm").trigger("submit");
     },
   );
-
-  function updateCheckboxesOnOtherPages(isChecked) {
-    if (!$.fn.DataTable.isDataTable("#table")) {
-      return;
-    }
-    var cells = $("#table").DataTable().rows({ page: "current" }).nodes();
-    $(cells).find(".export").prop("checked", isChecked);
-  }
 });

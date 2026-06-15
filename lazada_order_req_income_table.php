@@ -597,14 +597,6 @@ $(document).ready(function($) {
             console.log('No checkboxes are checked.');
         }
     });
-
-    function updateCheckboxesOnOtherPages(isChecked) {
-        // Get all cells in the DataTable
-        var cells = $('#website_order_request_table').DataTable().cells().nodes();
-
-        // Check/uncheck all checkboxes in the DataTable
-        $(cells).find('.export').prop('checked', isChecked);
-    }
 });
 
 <?php include "js/order_req.js" ?>

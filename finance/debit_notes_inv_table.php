@@ -73,7 +73,7 @@ if (post('pay_status_option')) {
 </head>
 
 <script>
-    preloader(300);
+    
 
     $(document).ready(() => {
         createSortingTable('debit_notes_inv_table');

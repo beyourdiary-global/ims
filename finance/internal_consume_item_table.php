@@ -131,7 +131,7 @@ $tblName = ITL_CSM_ITEM;
 </head>
 
 <script>
-    preloader(300);
+    
 
     $(document).ready(() => {
         createSortingTable('internal_consume_item_table');
@@ -260,15 +260,7 @@ $tblName = ITL_CSM_ITEM;
                          $groupedRows = [];
                          $counters = 1;
          
-                         function generateTableRow($id, &$counters, $key, $topupAmt) {
-                             echo '<tr onclick="window.location=\'internal_consume_item_table_summary.php?ids=' . urlencode($id) . '\';" style="cursor:pointer;">';
-                             echo '<th class="hideColumn" scope="row">' . $id . '</th>';
-                             echo ' <th class="text-center"><input type="checkbox" class="export" value="' . $id . '"></th>';
-                             echo '<th scope="row">' . $counters++ . '</th>';
-                             echo '<td scope="row">' . $key . '</td>';
-                             echo '<td scope="row">' . number_format($topupAmt, 2, '.', '') . '</td>';
-                             echo '</tr>';
-                         }
+
                        
                          $groupedRows = [];
                          while ($row = $result->fetch_assoc()) {
@@ -361,11 +353,21 @@ $tblName = ITL_CSM_ITEM;
                                 }                    
                                     
                                 }else if ($groupOption === 'brand') {
-                                    generateTableRow($row['id'],$counters, $brand, $row['cost']);
+                                    financeGenerateTableRow(array(
+                                        'id' => $row['id'],
+                                        'summary_page' => 'internal_consume_item_table_summary.php',
+                                        'cells' => array($brand),
+                                        'amount' => $row['cost'],
+                                    ), $counters);
                                 }else if ($groupOption === 'person') {
                                     generateTableRow($row['id'], $counters, $person, $row['cost']);
                                 }else if ($groupOption === 'package') {
-                                    generateTableRow($row['id'], $counters, $package, $row['cost']);
+                                    financeGenerateTableRow(array(
+                                        'id' => $row['id'],
+                                        'summary_page' => 'internal_consume_item_table_summary.php',
+                                        'cells' => array($package),
+                                        'amount' => $row['cost'],
+                                    ), $counters);
                                 }
                                 }
                                 foreach ($groupedRows as $key => $groupedRow) {

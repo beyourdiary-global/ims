@@ -159,6 +159,57 @@ if (!function_exists('commonFormatAmountRm')) {
     }
 }
 
+if (!function_exists('financeGenerateTableRow')) {
+    function financeGenerateTableRow($config, &$counters)
+    {
+        $id = isset($config['id']) ? $config['id'] : '';
+        $summaryPage = isset($config['summary_page']) ? trim((string) $config['summary_page']) : '';
+        $urlParamName = isset($config['url_param_name']) && trim((string) $config['url_param_name']) !== ''
+            ? trim((string) $config['url_param_name'])
+            : 'ids';
+        $cells = isset($config['cells']) ? $config['cells'] : array();
+        $amount = isset($config['amount']) ? $config['amount'] : 0;
+        $amountDecimals = isset($config['amount_decimals']) ? (int) $config['amount_decimals'] : 2;
+        $checkboxClass = isset($config['checkbox_class']) && trim((string) $config['checkbox_class']) !== ''
+            ? trim((string) $config['checkbox_class'])
+            : 'export';
+        $checkboxValue = array_key_exists('checkbox_value', $config) ? $config['checkbox_value'] : $id;
+        $idBeforeCheckbox = array_key_exists('id_before_checkbox', $config) ? (bool) $config['id_before_checkbox'] : true;
+        $includeHiddenId = array_key_exists('include_hidden_id', $config) ? (bool) $config['include_hidden_id'] : true;
+
+        if (!is_array($cells)) {
+            $cells = array($cells);
+        }
+
+        $url = $summaryPage !== ''
+            ? $summaryPage . '?' . rawurlencode($urlParamName) . '=' . rawurlencode((string) $id)
+            : '#';
+
+        $checkboxValueAttr = $checkboxValue === null ? '' : ' value="' . $checkboxValue . '"';
+
+        echo '<tr onclick="window.location=\'' . $url . '\';" style="cursor:pointer;">';
+
+        if ($idBeforeCheckbox && $includeHiddenId) {
+            echo '<th class="hideColumn" scope="row">' . $id . '</th>';
+        }
+
+        echo ' <th class="text-center"><input type="checkbox" class="' . $checkboxClass . '"' . $checkboxValueAttr . '></th>';
+
+        if (!$idBeforeCheckbox && $includeHiddenId) {
+            echo '<th class="hideColumn" scope="row">' . $id . '</th>';
+        }
+
+        echo '<th scope="row">' . $counters++ . '</th>';
+
+        foreach ($cells as $cell) {
+            echo '<td scope="row">' . $cell . '</td>';
+        }
+
+        echo '<td scope="row">' . number_format((float) $amount, $amountDecimals, '.', '') . '</td>';
+        echo '</tr>';
+    }
+}
+
 if (!function_exists('commonResolvePackageNamesFromCsv')) {
     function commonResolvePackageNamesFromCsv($packageCsv, $connect)
     {

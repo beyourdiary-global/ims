@@ -994,7 +994,7 @@ ksort($platformFilterOptions, SORT_NATURAL | SORT_FLAG_CASE);
     </style>
 </head>
 <script>
-    preloader(300);
+    
     $(document).ready(function () {
         createSortingTable('campaign_customer_search_table', {
             searching: true,

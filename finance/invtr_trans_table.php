@@ -18,7 +18,7 @@ $result = getData('*', '', '', INVTR_TRANS, $finance_connect);
 </head>
 
 <script>
-    preloader(300);
+    
 
     $(document).ready(() => {
         createSortingTable('invtr_trans_table');

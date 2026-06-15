@@ -600,7 +600,7 @@ foreach ($listRows as $row) {
         datatableAlignment('stockInListTable');
     }
     setButtonColor();
-    preloader(300);
+    
 </script>
 <script src="<?= $SITEURL ?>/js/warehouse_stock_in_table.js"></script>
 </body>

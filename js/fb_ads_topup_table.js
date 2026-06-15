@@ -54,17 +54,6 @@ $(document).ready(function ($) {
       alert("Please select data to export.");
     }
   });
-
-  function updateCheckboxesOnOtherPages(isChecked) {
-    // Get all cells in the DataTable
-    var cells = $("#fb_ads_topup_trans_table")
-      .DataTable()
-      .rows({ page: "current" })
-      .nodes();
-
-    // Check/uncheck all checkboxes in the DataTable
-    $(cells).find(".export").prop("checked", isChecked);
-  }
 });
 
 $("#resetButton").click(function () {

@@ -388,21 +388,6 @@ if (isset($_SESSION['tempValConfirmBox'])) {
     </div>
 
     <script>
-        function togglePassword(inputId) {
-            var input = document.getElementById(inputId);
-            var icon = document.getElementById('show' + inputId.charAt(0).toUpperCase() + inputId.slice(1));
-            if (!input || !icon) return;
-
-            if (input.getAttribute('type') === 'password') {
-                input.setAttribute('type', 'text');
-                icon.classList.remove('fa-eye-slash');
-                icon.classList.add('fa-eye');
-            } else {
-                input.setAttribute('type', 'password');
-                icon.classList.remove('fa-eye');
-                icon.classList.add('fa-eye-slash');
-            }
-        }
 
         if (typeof checkCurrentPage === 'function') {
             checkCurrentPage('invalid');

@@ -443,7 +443,7 @@ function sorQrHref($path, $siteUrl)
             datatableAlignment('sorTable');
         }
         setButtonColor();
-        preloader(300);
+        
 
         function sorShowStatusModal(title, msg) {
             var modalEl = document.getElementById('sorResultModal');

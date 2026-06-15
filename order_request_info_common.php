@@ -359,7 +359,7 @@ $customerFieldLabel = $platform === 'shopee' ? 'Shopee Buyer Username' : $platfo
     checkCurrentPage(<?= json_encode($menuPageTitle, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>, '');
     dropdownMenuDispFix();
     setButtonColor();
-    preloader(300);
+    
 
     var copyBtn = document.getElementById('copyOrderLinkBtn');
     var orderLinkInput = document.getElementById('orderRequestLink');

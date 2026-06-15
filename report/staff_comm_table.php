@@ -26,7 +26,7 @@ $result = getData('*', '', '', AGENT, $finance_connect);
 </head>
 
 <script>
-    preloader(300);
+    
     $(document).ready(() => {
         createSortingTable('agent_table');
     });

@@ -232,7 +232,7 @@ $customerTypeOptions = array('New Customer', 'Return Customer');
 </head>
 
 <script>
-    preloader(300);
+    
     $(document).ready(function () {
         createSortingTable('campaign_purchase_tracking_table', { searching: true, order: [[1, 'asc']] });
     });

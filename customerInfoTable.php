@@ -47,7 +47,7 @@ $customerTagMap = customerTagGetCustomerTagMap($connect, 'customer_info', $custo
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
 </head>
 <script>
-    preloader(300);
+    
 
     $(document).ready(() => {
         createSortingTable('table', { searching: true });

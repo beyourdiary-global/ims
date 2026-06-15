@@ -23,15 +23,12 @@ $result = getData('*', '', '', TAX_SETT, $finance_connect);
 </head>
 
 <script>
-    preloader(300);
+    
 
     $(document).ready(() => {
         createSortingTable('tax_table');
     });
 </script>
-
-
-
 <body>
     
 

@@ -309,25 +309,7 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
 </head>
 <script>
 
-  function toggleFilters(sectionId) {
-        const section = document.getElementById(sectionId);
-        section.style.display = (section.style.display === 'none') ? 'flex' : 'none';
-    }
-    function applyFilterOrGroup(param, element) {
-        const value = element.value;
-        const url = new URL(window.location.href);
-        url.searchParams.set(param, value);
-        window.location.href = url.toString();
-    }
-    function autoToggleSections() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const filterFields = ['month', 'status', 'brand', 'pkg', 'acc'];
-        const groupFields = ['month_gb', 'status_gb', 'brand_gb', 'pkg_gb', 'acc_gb'];
-        let filterActive = filterFields.some(key => urlParams.get(key) && urlParams.get(key) !== '' && urlParams.get(key) !== 'All');
-        let groupActive = groupFields.some(key => urlParams.get(key) && urlParams.get(key) !== '');
-        if (filterActive) { document.getElementById('filterSection').style.display = 'flex'; }
-        if (groupActive) { document.getElementById('groupBySection').style.display = 'flex'; }
-    }
+
     window.onload = autoToggleSections;
     $(document).ready(() => {
         createSortingTable('shopee_order_req_table');

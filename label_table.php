@@ -33,7 +33,7 @@ if ($result) {
 </head>
 
 <script>
-    preloader(300);
+    
     window.labelTableConfig = {
         pageTitle: <?= json_encode($pageTitle, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>,
         action: <?= json_encode(isset($act) ? $act : '', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>

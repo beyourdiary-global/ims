@@ -5080,16 +5080,6 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
 
         var clientPdfSubmitReady = false;
 
-        function setStatus(message, isError) {
-            if (!statusNode) {
-                return;
-            }
-
-            statusNode.textContent = message;
-            statusNode.classList.toggle('text-danger', !!isError);
-            statusNode.classList.toggle('text-muted', !isError);
-        }
-
         function setSubmittingState(isSubmitting, label) {
             submitBtn.disabled = !!isSubmitting;
             submitBtn.innerHTML = isSubmitting

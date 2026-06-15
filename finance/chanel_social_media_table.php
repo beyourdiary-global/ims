@@ -22,14 +22,11 @@ if (!$result) {
 </head>
 
 <script>
-    preloader(300);
+    
     $(document).ready(() => {
         createSortingTable('chanel_social_media_table');
     });
 </script>
-
-
-
 <body>
 
     

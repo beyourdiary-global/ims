@@ -595,7 +595,7 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
     checkCurrentPage('Stock Order Request', '');
     dropdownMenuDispFix();
     setButtonColor();
-    preloader(300);
+    
 
     function sorShowResultModal(message, isError) {
         var modalEl = document.getElementById('sorResultModal');

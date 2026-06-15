@@ -1899,32 +1899,6 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                 ? lazadaNewCustomerSection.querySelectorAll('[data-new-customer-required="1"]')
                 : [];
 
-            function clearNewCustomerInlineError(field) {
-                if (!field) {
-                    return;
-                }
-                field.classList.remove('shopee-inline-invalid');
-                var wrapper = field.parentElement;
-                if (!wrapper) {
-                    return;
-                }
-                wrapper.querySelectorAll('.shopee-inline-error').forEach(function (node) {
-                    node.remove();
-                });
-            }
-
-            function showNewCustomerInlineError(field, message) {
-                if (!field) {
-                    return;
-                }
-                clearNewCustomerInlineError(field);
-                field.classList.add('shopee-inline-invalid');
-                var errorNode = document.createElement('small');
-                errorNode.className = 'shopee-inline-error';
-                errorNode.textContent = message;
-                field.parentElement.appendChild(errorNode);
-            }
-
             function validateLazadaNewCustomerForm() {
                 var firstInvalidField = null;
                 Array.prototype.forEach.call(lazadaNewCustomerFields, function (field) {

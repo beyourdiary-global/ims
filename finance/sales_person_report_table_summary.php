@@ -31,9 +31,6 @@ $result4 = getData('*', '', '', SHOPEE_SG_ORDER_REQ, $finance_connect);
         createSortingTable('lazada_order_req');
     });
 </script>
-
-
-
 <body>
 
 <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

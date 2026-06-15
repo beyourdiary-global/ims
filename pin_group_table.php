@@ -24,11 +24,6 @@ $result = getData('*', '', '', $tblName, $connect);
 </head>
 
 <script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
-<script>
-    preloader(300);
-</script>
-
-
 
 <body>
     
@@ -142,7 +137,7 @@ $result = getData('*', '', '', $tblName, $connect);
         //to resize table with bootstrap 5 classes
         datatableAlignment('table');
         setButtonColor();
-        preloader(300);
+        
     </script>
 
 </body>

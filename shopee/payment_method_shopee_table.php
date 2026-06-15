@@ -22,14 +22,11 @@ if (!$result) {
 </head>
 
 <script>
-    preloader(300);
+    
     $(document).ready(() => {
         createSortingTable('payment_method_shopee_table');
     });
 </script>
-
-
-
 <body>
 
 <div class="pre-load-center">

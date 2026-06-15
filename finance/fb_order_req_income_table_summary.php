@@ -170,9 +170,6 @@ $result = getData('*', '', '', FB_ORDER_REQ, $finance_connect);
         createSortingTable('fb_order_req_table');
     });
 </script>
-
-
-
 <body>
 
     <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
@@ -712,14 +709,6 @@ $(document).ready(function ($) {
             console.log('No checkboxes are checked.');
         }
     });
-
-    function updateCheckboxesOnOtherPages(isChecked) {
-        // Get all cells in the DataTable
-        var cells = $('#fb_order_req_table').DataTable().cells().nodes();
-
-        // Check/uncheck all checkboxes in the DataTable
-        $(cells).find('.export').prop('checked', isChecked);
-    }
 });
     /**
   oufei 20231014

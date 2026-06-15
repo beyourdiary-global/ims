@@ -477,7 +477,7 @@ $h = function ($value) {
 <head>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
     <script>
-        preloader(300);
+        
     </script>
     <style>
         .customer-daily-report-stack {

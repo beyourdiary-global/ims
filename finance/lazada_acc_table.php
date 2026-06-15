@@ -22,7 +22,7 @@ $result = getData('*', '', '', LAZADA_ACC, $finance_connect);
 </head>
 
 <script>
-    preloader(300);
+    
     $(document).ready(() => {
         createSortingTable('lazada_acc_table');
     });

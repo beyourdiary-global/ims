@@ -202,7 +202,7 @@ foreach ($picAutocompleteOptions as $picOption) {
 </head>
 
 <script>
-    preloader(300);
+    
 
     $(document).ready(() => {
         createSortingTable('campaign_table', { searching: true });

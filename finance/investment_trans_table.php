@@ -18,7 +18,7 @@ $result = getData('*', '', '', INV_TRANS, $finance_connect);
 </head>
 
 <script>
-    preloader(300);
+    
 
 
     $(document).ready(() => {

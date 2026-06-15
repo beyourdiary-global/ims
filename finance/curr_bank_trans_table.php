@@ -18,7 +18,7 @@ $hasRows = $result instanceof mysqli_result && $result->num_rows > 0;
 </head>
 
 <script>
-    preloader(300);
+    
 
     $(document).ready(() => {
         if ($('#curr_bank_trans_table').length) {

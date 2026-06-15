@@ -259,12 +259,4 @@ $(document).ready(function ($) {
       }
     },
   );
-
-  function updateCheckboxesOnOtherPages(isChecked) {
-    // Get all cells in the DataTable
-    var cells = table.rows({ page: "current" }).nodes();
-
-    // Check/uncheck all checkboxes in the DataTable
-    $(cells).find(".export").prop("checked", isChecked);
-  }
 });

@@ -1217,18 +1217,7 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
             });
         }
 
-        function getValidDataTableRowCount(tableElement) {
-            var headerCount = tableElement.querySelectorAll('thead th').length;
-            var validRows = 0;
-            tableElement.querySelectorAll('tbody tr').forEach(function (rowElement) {
-                var cellCount = rowElement.querySelectorAll('td, th').length;
-                var hasColspan = rowElement.querySelector('[colspan]');
-                if (!hasColspan && cellCount === headerCount) {
-                    validRows += 1;
-                }
-            });
-            return validRows;
-        }
+        
 
         document.querySelectorAll('.arrival-management-table-js').forEach(function (tableElement) {
             var rowCount = getValidDataTableRowCount(tableElement);
@@ -1266,20 +1255,6 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
             document.getElementById('arrival_platform_section'),
             document.getElementById('estimated_received_platform_section')
         ];
-
-        function activatePlatformTab(platformKey) {
-            document.querySelectorAll('[data-platform-tab]').forEach(function (button) {
-                button.classList.toggle('is-active', button.getAttribute('data-platform-tab') === platformKey);
-            });
-            document.querySelectorAll('[data-platform-panel]').forEach(function (panel) {
-                panel.classList.toggle('is-active', panel.getAttribute('data-platform-panel') === platformKey);
-            });
-            hiddenPlatformInputs.forEach(function (input) {
-                if (input) {
-                    input.value = platformKey;
-                }
-            });
-        }
 
         document.querySelectorAll('[data-platform-tab]').forEach(function (button) {
             button.addEventListener('click', function () {

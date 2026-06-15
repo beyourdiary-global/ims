@@ -146,11 +146,6 @@ if (!$result) {
 </head>
 
 <script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
-<script>
-    preloader(300);
-</script>
-
-
 <body>
 
     <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

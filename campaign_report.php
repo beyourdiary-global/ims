@@ -195,7 +195,7 @@ if (input('export') === '1') {
 </head>
 
 <script>
-    preloader(300);
+    
     $(document).ready(function () {
         if ($('#campaign_report_follow_up_table').length) {
             createSortingTable('campaign_report_follow_up_table', { searching: false, order: [[0, 'asc']] });

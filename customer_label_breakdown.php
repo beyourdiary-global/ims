@@ -46,11 +46,6 @@ if (post('actionBtn') === 'back') {
 <head>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
 </head>
-
-<script>
-    preloader(300);
-</script>
-
 <body>
     
 

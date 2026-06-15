@@ -33,11 +33,6 @@ if (!$result) {
 </head>
 
 <script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
-<script>
-    preloader(300);
-</script>
-
-
 
 <body>
     
@@ -445,14 +440,6 @@ if (!$result) {
             console.log('No checkboxes are checked.');
         }
     });
-
-    function updateCheckboxesOnOtherPages(isChecked) {
-        // Get all cells in the DataTable
-        var cells = $('#stock_report').DataTable().cells().nodes();
-
-        // Check/uncheck all checkboxes in the DataTable
-        $(cells).find('.export').prop('checked', isChecked);
-    }
 });
 
     <?php include "js/fb_ads_topup_table.js" ?>

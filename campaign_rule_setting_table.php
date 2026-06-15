@@ -92,7 +92,7 @@ $userOptions = campaignFetchUsers($connect);
 </head>
 
 <script>
-    preloader(300);
+    
 
     $(document).ready(() => {
         createSortingTable('campaign_rule_setting_table', { searching: true });

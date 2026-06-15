@@ -163,7 +163,7 @@
 
     function initPage() {
         if (typeof preloader === 'function') {
-            preloader(300);
+            
         }
 
         if (typeof checkCurrentPage === 'function') {

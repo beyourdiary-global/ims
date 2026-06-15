@@ -654,6 +654,11 @@
 </div>
 
 <?php include_once ROOT . '/include/list_page_preloader.php'; ?>
+<script>
+    if (typeof preloader === 'function') {
+        preloader(300);
+    }
+</script>
 
 <div class="modal fade" id="allNotificationModal" tabindex="-1" aria-labelledby="allNotificationModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">

@@ -201,9 +201,6 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
         createSortingTable('website_order_request_table');
     });
 </script>
-
-
-
 <body>
 
     <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
@@ -725,14 +722,6 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
             console.log('No checkboxes are checked.');
         }
     });
-
-    function updateCheckboxesOnOtherPages(isChecked) {
-        // Get all cells in the DataTable
-        var cells = $('#website_order_request_table').DataTable().cells().nodes();
-
-        // Check/uncheck all checkboxes in the DataTable
-        $(cells).find('.export').prop('checked', isChecked);
-    }
 });
 
 <?php include "../js/order_req.js" ?>

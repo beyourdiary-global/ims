@@ -20,15 +20,12 @@ $result = getData('*', '', '', $tblName, $finance_connect);
 </head>
 
 <script>
-    preloader(300);
+    
 
     $(document).ready(() => {
         createSortingTable('fin_payment_method_table');
     });
 </script>
-
-
-
 <body>
     
 

@@ -292,15 +292,7 @@ $img_path = SITEURL . img_server . 'finance/atome_trans_backup/';
                           $groupedRows = [];
                           $counters = 1;
           
-                          function generateTableRow($id, &$counters, $key, $topupAmt) {
-                              echo '<tr onclick="window.location=\'stripe_trans_backup_table_summary.php?ids=' . urlencode($id) . '\';" style="cursor:pointer;">';
-                              echo '<th class="text-center"><input type="checkbox" class="exportAll"></th>';
-                              echo '<th class="hideColumn" scope="row">' . $id . '</th>';
-                              echo '<th scope="row">' . $counters++ . '</th>';
-                              echo '<td scope="row">' . $key . '</td>';
-                              echo '<td scope="row">' . number_format($topupAmt, 2, '.', '') . '</td>';
-                              echo '</tr>';
-                          }
+
                         
                           $groupedRows = [];
                         while ($row = $result->fetch_assoc()) {
@@ -389,9 +381,25 @@ $img_path = SITEURL . img_server . 'finance/atome_trans_backup/';
                                 }                    
                                     
                                 }else if ($groupOption === 'outlet') {
-                                    generateTableRow($row['id'],$counters, $outlet, $row['amt_rec']);
+                                    financeGenerateTableRow(array(
+                                        'id' => $row['id'],
+                                        'summary_page' => 'stripe_trans_backup_table_summary.php',
+                                        'id_before_checkbox' => false,
+                                        'checkbox_class' => 'exportAll',
+                                        'checkbox_value' => null,
+                                        'cells' => array($outlet),
+                                        'amount' => $row['amt_rec'],
+                                    ), $counters);
                                 }else if ($groupOption === 'receivable') {
-                                    generateTableRow($row['id'], $counters, $amount, $row['amt_rec']);
+                                    financeGenerateTableRow(array(
+                                        'id' => $row['id'],
+                                        'summary_page' => 'stripe_trans_backup_table_summary.php',
+                                        'id_before_checkbox' => false,
+                                        'checkbox_class' => 'exportAll',
+                                        'checkbox_value' => null,
+                                        'cells' => array($amount),
+                                        'amount' => $row['amt_rec'],
+                                    ), $counters);
                                 }
                                 }
                                 foreach ($groupedRows as $key => $groupedRow) {
