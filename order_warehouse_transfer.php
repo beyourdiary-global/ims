@@ -400,7 +400,7 @@ $transferLogRows = owtGetTransferLogRows($connect, $finance_connect);
 </script>
 
 <body>
-<div class="pre-load-center"><div class="preloader"></div></div>
+    
 
 <div class="page-load-cover">
     <div class="d-flex flex-column my-3 ms-3">

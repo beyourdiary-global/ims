@@ -413,7 +413,7 @@ $autocompleteConfigs = array(
     });
 </script>
 <body>
-<div class="pre-load-center"><div class="preloader"></div></div>
+    
 <div class="page-load-cover">
     <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3 campaign-message-page">
         <div class="col-12 col-md-11">

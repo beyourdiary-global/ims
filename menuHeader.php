@@ -8,6 +8,48 @@
     include_once "include/common_variable.php";
     include_once ROOT . "/include/system_alert_common.php";
 
+    $menuHeaderRootPath = defined('ROOT') ? realpath(ROOT) : realpath(__DIR__);
+    if ($menuHeaderRootPath === false) {
+        $menuHeaderRootPath = defined('ROOT') ? ROOT : __DIR__;
+    }
+
+    $menuHeaderIncludePaths = explode(PATH_SEPARATOR, get_include_path());
+    $menuHeaderNormalizedIncludePaths = array();
+
+    foreach ($menuHeaderIncludePaths as $menuHeaderIncludePath) {
+        $menuHeaderRealIncludePath = realpath($menuHeaderIncludePath);
+        $menuHeaderNormalizedIncludePaths[] = $menuHeaderRealIncludePath !== false ? $menuHeaderRealIncludePath : $menuHeaderIncludePath;
+    }
+
+    if (!in_array($menuHeaderRootPath, $menuHeaderNormalizedIncludePaths, true)) {
+        set_include_path($menuHeaderRootPath . PATH_SEPARATOR . get_include_path());
+    }
+
+    if (!function_exists('listPageNetworkFailRedirect')) {
+        function listPageNetworkFailRedirect($redirectUrl = '')
+        {
+            global $SITEURL;
+
+            $redirectUrl = trim((string) $redirectUrl);
+
+            if ($redirectUrl === '') {
+                if (isset($SITEURL) && trim((string) $SITEURL) !== '') {
+                    $redirectUrl = rtrim((string) $SITEURL, '/') . '/dashboard.php';
+                } else if (defined('SITEURL')) {
+                    $redirectUrl = rtrim((string) SITEURL, '/') . '/dashboard.php';
+                } else {
+                    $redirectUrl = 'dashboard.php';
+                }
+            }
+
+            echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+            echo '<script>location.href = ' . json_encode($redirectUrl) . ';</script>';
+            exit;
+        }
+    }
+
+
+
     $img_path = $SITEURL . '/' . img_server . 'themes/';
     $rst = getData('*', "id = '1'", '', 'projects', $connect);
 
@@ -610,6 +652,8 @@
     <!-- Navbar -->
     <?php include ROOT . "/menu_bar.php"; ?>
 </div>
+
+<?php include_once ROOT . '/include/list_page_preloader.php'; ?>
 
 <div class="modal fade" id="allNotificationModal" tabindex="-1" aria-labelledby="allNotificationModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">

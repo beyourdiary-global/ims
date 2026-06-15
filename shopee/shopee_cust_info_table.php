@@ -2,6 +2,7 @@
 $pageTitle = "Shopee Customer Record";
 $currentPagePin = 85;
 $isFinance = 1;
+
 include_once '../include/list_page_header.php';
 include_once ROOT . '/include/customer_tag.php';
 
@@ -58,9 +59,7 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
 
 <body>
 
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

@@ -899,7 +899,7 @@ if ($isViewMode && $dataID > 0 && isset($orderById[$dataID])) {
     </style>
 </head>
 <body>
-<div class="pre-load-center"><div class="preloader"></div></div>
+    
 <div class="page-load-cover">
     <div class="d-flex flex-column my-3 ms-3">
         <p><a href="<?= $redirectTable ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i>

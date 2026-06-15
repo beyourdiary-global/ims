@@ -145,10 +145,9 @@ if (!$result) {
       <link rel="stylesheet" href="../css/main.css">
 </head>
 
+<script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
 <script>
-    $(document).ready(() => {
-        createSortingTable('table');
-    });
+    preloader(300);
 </script>
 
 

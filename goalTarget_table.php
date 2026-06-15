@@ -2,6 +2,7 @@
 $currentPagePin = 121;
 $pageTitle = "Goal Target";
 
+
 include_once 'include/list_page_header.php';
 
 $tblName = YEARLYGOAL;
@@ -38,30 +39,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'delete') {
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
 </head>
 
+<script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
 <script>
     preloader(300);
-
-    $(document).ready(() => {
-        createSortingTable('table');
-    });
 </script>
 
 <style>
-    .btn {
-        padding: 0.2rem 0.5rem;
-        font-size: 0.75rem;
-        margin: 3px;
-    }
+    
 
-    .btn-container {
-        white-space: nowrap;
-    }
+    
 </style>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
 

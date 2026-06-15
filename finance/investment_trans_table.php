@@ -2,6 +2,7 @@
 $pageTitle = "Investment Transaction";
 $currentPagePin = 40;
 $isFinance = 1;
+
 include_once '../include/list_page_header.php';
 
 $redirect_page = $SITEURL . '/finance/investment_trans.php';
@@ -26,9 +27,7 @@ $result = getData('*', '', '', INV_TRANS, $finance_connect);
 </script>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

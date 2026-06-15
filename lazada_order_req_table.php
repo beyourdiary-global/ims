@@ -3,6 +3,7 @@ $pageTitle = "Lazada Order Request";
 $currentPagePin = 93;
 $listPageSkipSessionReset = true;
 $listPageSkipNumbering = true;
+
 include_once 'include/list_page_header.php';
 
 $canAssignEstimatedReceivedDate = isActionAllowed('Edit', $pinAccess);
@@ -207,15 +208,9 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
 </script>
 
 <style>
-    .btn {
-        padding: 0.2rem 0.5rem;
-        font-size: 0.75rem;
-        margin: 3px;
-    }
+    
 
-    .btn-container {
-        white-space: nowrap;
-    }
+    
 </style>
 
 <body>

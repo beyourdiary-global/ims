@@ -26,6 +26,13 @@ if (!isset($pageTitle)) {
 
 $rootPath = dirname(__DIR__);
 
+// Allow table pages in root folder and subfolders to use the same include path:
+// include_once 'include/list_page_preloader.php';
+$includePaths = explode(PATH_SEPARATOR, get_include_path());
+if (!in_array($rootPath, $includePaths, true)) {
+    set_include_path($rootPath . PATH_SEPARATOR . get_include_path());
+}
+
 include_once $rootPath . '/menuHeader.php';
 include_once $rootPath . '/checkCurrentPagePin.php';
 
@@ -76,3 +83,4 @@ if (!isset($connect) || !$connect) {
     echo '<script>alert("Network error. Please try again later.");location.href=' . json_encode($networkFailRedirect) . ';</script>';
     exit;
 }
+

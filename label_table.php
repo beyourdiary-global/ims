@@ -2,6 +2,7 @@
 $pageTitle = "Label";
 $currentPagePin = 145;
 
+
 include_once 'include/list_page_header.php';
 
 $tblName = LABEL;
@@ -40,21 +41,13 @@ if ($result) {
 </script>
 
 <style>
-    .btn {
-        padding: 0.2rem 0.5rem;
-        font-size: 0.75rem;
-        margin: 3px;
-    }
+    
 
-    .btn-container {
-        white-space: nowrap;
-    }
+    
 </style>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

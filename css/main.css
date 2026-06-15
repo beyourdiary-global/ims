@@ -2248,3 +2248,14 @@ td.btn-container.mobile-action-open-left .mobile-action-menu {
   padding-top: 4px;
   line-height: 20px;
 }
+
+/* Shared list/table page button style */
+#dispTable .btn {
+    padding: 0.2rem 0.5rem;
+    font-size: 0.75rem;
+    margin: 3px;
+}
+
+#dispTable .btn-container {
+    white-space: nowrap;
+}

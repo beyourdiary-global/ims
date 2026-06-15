@@ -5,6 +5,7 @@ $isFinance = 1;
 $listPageSkipSessionReset = true;
 $listPageSkipNumbering = true;
 
+
 include_once '../include/list_page_header.php';
 
 $canAssignEstimatedReceivedDate = isActionAllowed('Edit', $pinAccess);

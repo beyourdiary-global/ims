@@ -2,6 +2,7 @@
 $pageTitle = "Expense Type";
 $currentPagePin = 49;
 $isFinance = 1;
+
 include_once '../include/list_page_header.php';
 
 

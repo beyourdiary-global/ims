@@ -4,6 +4,7 @@ $pageTitle = "Shopee Ads Top Up Transaction";
 $currentPagePin = 77;
 $isFinance = 1;
 $listPageSkipPinAccess = true;
+
 include_once '../include/list_page_header.php';
 
 checkCurrentPin($connect, $pageTitle);

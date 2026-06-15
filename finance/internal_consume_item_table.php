@@ -3,6 +3,7 @@ $currentPagePin = 0;
 ob_start();
 $pageTitle = "Internal Consume Item";
 $isFinance = 1;
+
 include_once '../include/list_page_header.php';
 
 
@@ -138,9 +139,7 @@ $tblName = ITL_CSM_ITEM;
 </script>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

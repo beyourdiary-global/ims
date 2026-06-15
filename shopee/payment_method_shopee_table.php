@@ -2,6 +2,7 @@
 $pageTitle = "Payment Method (Shopee)";
 $currentPagePin = 80;
 $isFinance = 1;
+
 include_once '../include/list_page_header.php';
 
 $redirect_page = $SITEURL . '/shopee/payment_method_shopee.php';

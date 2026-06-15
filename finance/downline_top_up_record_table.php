@@ -4,6 +4,7 @@ ob_start();
 $pageTitle = 'Downline Top Up Record';
 $isFinance = 1;
 
+
 include_once '../include/list_page_header.php';
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . "_list.xlsx";
@@ -128,18 +129,13 @@ $tblName = DW_TOP_UP_RECORD;
 <link rel="stylesheet" href="../css/main.css">
 </head>
 
+<script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
 <script>
     preloader(300);
-
-    $(document).ready(() => {
-        createSortingTable('table');
-    });
 </script>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

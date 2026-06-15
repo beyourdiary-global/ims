@@ -2,6 +2,7 @@
 $pageTitle = "Chanel (Social Media)";
 $currentPagePin = 79;
 $isFinance = 1;
+
 include_once '../include/list_page_header.php';
 
 $redirect_page = $SITEURL . '/finance/chanel_social_media.php';
@@ -31,9 +32,7 @@ if (!$result) {
 
 <body>
 
-<div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

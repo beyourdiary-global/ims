@@ -2,6 +2,7 @@
 $pageTitle = "Current Bank Account Transaction";
 $currentPagePin = 43;
 $isFinance = 1;
+
 include_once '../include/list_page_header.php';
 
 $redirect_page = $SITEURL . '/finance/curr_bank_trans.php';
@@ -25,20 +26,9 @@ $hasRows = $result instanceof mysqli_result && $result->num_rows > 0;
         }
     });
 </script>
-<style>
-    .btn {
-        padding: 0.2rem 0.5rem;
-        font-size: 0.75rem;
-        margin: 3px;
-    }
-    .btn-container {
-        white-space: nowrap;
-    }
-</style>
+
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

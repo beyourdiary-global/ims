@@ -785,7 +785,7 @@ if ($stmt) {
     });
 </script>
 <body class="campaign-follow-up-page">
-<div class="pre-load-center"><div class="preloader"></div></div>
+    
 <div class="page-load-cover campaign-follow-up-page">
     <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
         <div class="col-12 col-md-11">

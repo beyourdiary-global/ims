@@ -2,6 +2,7 @@
 $pageTitle = "Tax";
 $currentPagePin = 57;
 $isFinance = 1;
+
 include_once '../include/list_page_header.php';
 
 $redirect_page = $SITEURL . '/finance/tax.php';
@@ -32,9 +33,7 @@ $result = getData('*', '', '', TAX_SETT, $finance_connect);
 
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

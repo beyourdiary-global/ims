@@ -2,6 +2,7 @@
 $pageTitle = "Cash On Hand Transaction";
 $currentPagePin = 47;
 $isFinance = 1;
+
 include_once '../include/list_page_header.php';
 
 $redirect_page = $SITEURL . '/finance/cash_on_hand_trans.php';

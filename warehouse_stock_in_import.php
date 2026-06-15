@@ -668,7 +668,7 @@ $previewData = isset($_SESSION['si_import_preview']) ? $_SESSION['si_import_prev
     </style>
 </head>
 <body>
-<div class="pre-load-center"><div class="preloader"></div></div>
+    
 <div class="page-load-cover">
     <div class="container-fluid mt-3 mb-5 d-flex justify-content-center si-import-wrap">
         <div class="col-12 col-md-11">

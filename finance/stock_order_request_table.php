@@ -240,7 +240,7 @@ function sorQrHref($path, $siteUrl)
 </script>
 
 <body>
-    <div class="pre-load-center"><div class="preloader"></div></div>
+        
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
             <div class="col-12 col-md-11">

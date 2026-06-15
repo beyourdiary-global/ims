@@ -2,6 +2,7 @@
 $pageTitle = "Meta Ads Account";
 $currentPagePin = 48;
 $isFinance = 1;
+
 include_once '../include/list_page_header.php';
 
 $deleteRedirectPage = $SITEURL . '/finance/meta_ads_acc_table.php';

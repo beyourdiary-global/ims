@@ -241,7 +241,7 @@ $customerFieldLabel = $platform === 'shopee' ? 'Shopee Buyer Username' : $platfo
     </style>
 </head>
 <body>
-<div class="pre-load-center"><div class="preloader"></div></div>
+    
 <div class="page-load-cover">
     <div class="container-fluid d-flex justify-content-center mt-3">
         <div class="col-12 col-md-11">

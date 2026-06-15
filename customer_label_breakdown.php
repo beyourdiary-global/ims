@@ -52,9 +52,7 @@ if (post('actionBtn') === 'back') {
 </script>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div class="container-fluid d-flex justify-content-center mt-3">

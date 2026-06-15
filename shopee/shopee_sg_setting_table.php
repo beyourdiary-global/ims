@@ -2,6 +2,7 @@
 $pageTitle = "Shopee SG Setting";
 $currentPagePin = 82;
 $isFinance = 1;
+
 include_once '../include/list_page_header.php';
 
 
@@ -18,20 +19,15 @@ $result = getData('*', '', '', SHOPEE_SG_SETT, $finance_connect);
     <link rel="stylesheet" href="../css/main.css">
 </head>
 
+<script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
 <script>
     preloader(300);
-
-    $(document).ready(() => {
-        createSortingTable('table');
-    });
 </script>
 
 
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

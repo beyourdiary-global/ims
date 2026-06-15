@@ -3,6 +3,7 @@ $pageTitle = "Credit Notes (Invoice)";
 $currentPagePin = 70;
 $isFinance = 1;
 
+
 include_once '../include/list_page_header.php';
 
 $tblName = CRED_NOTES_INV;
@@ -86,9 +87,7 @@ if (post('pay_status_option')) {
 </script>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

@@ -2,6 +2,7 @@
 $pageTitle = "Facebook Customer Record (Deals)";
 $currentPagePin = 75;
 $disablePinGroupPageTitleSync = true;
+
 include_once 'include/list_page_header.php';
 include_once ROOT . '/include/customer_tag.php';
 
@@ -54,14 +55,8 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
 
 <style>
     #addBtn,
-    .btn-container .btn {
-        padding: 0.2rem 0.5rem;
-        font-size: 0.75rem;
-        margin: 3px;
-    }
-    .btn-container {
-        white-space: nowrap;
-    }
+    .btn-container 
+    
 
 </style>
 

@@ -2,6 +2,7 @@
 $pageTitle = "Facebook Page Account";
 $currentPagePin = 76;
 $isFinance = 1;
+
 include_once '../include/list_page_header.php';
 
 $redirect_page = $SITEURL . '/finance/fb_page_acc.php';

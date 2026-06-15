@@ -2,6 +2,7 @@
 $pageTitle = "SQL Account";
 $currentPagePin = 132;
 
+
 include_once 'include/list_page_header.php';
 
 $tblName = SQL_ACC;
@@ -35,32 +36,15 @@ if (!$result) {
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
 </head>
 
+<script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
 <script>
     preloader(300);
-
-    $(document).ready(function () {
-        var hasRows = <?= $hasRows ? 'true' : 'false' ?>;
-        if (hasRows) {
-            createSortingTable('table');
-        }
-    });
 </script>
 
-<style>
-    .btn {
-        padding: 0.2rem 0.5rem;
-        font-size: 0.75rem;
-        margin: 3px;
-    }
-    .btn-container {
-        white-space: nowrap;
-    }
-</style>
+
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

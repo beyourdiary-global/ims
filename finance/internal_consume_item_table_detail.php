@@ -145,9 +145,7 @@ $result = getData('*', '', '', ITL_CSM_ITEM, $finance_connect);
 </script>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

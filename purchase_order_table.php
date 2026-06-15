@@ -3,6 +3,7 @@ ob_start();
 $pageTitle = "Purchase Order";
 $currentPagePin = 135;
 
+
 include_once 'include/list_page_header.php';
 
 $tblName = PURCHASE_ORDER;
@@ -194,7 +195,7 @@ if (!$result) {
     </style>
 </head>
 <body>
-    <div class="pre-load-center"><div class="preloader"></div></div>
+        
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
