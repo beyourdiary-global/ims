@@ -1472,11 +1472,11 @@ if (!function_exists('getUrbanismMemberActionData')) {
         );
 
         if ($returnPage !== '') {
-            $params['return_page'] = $returnPage;
+            $_SESSION['urbanism_member_return_page'] = $returnPage;
         }
 
         if ($returnLabel !== '') {
-            $params['return_label'] = $returnLabel;
+            $_SESSION['urbanism_member_return_label'] = $returnLabel;
         }
 
         $url = '#';
