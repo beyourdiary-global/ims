@@ -11,6 +11,7 @@ $shopeeOrderPinGroupIds = array(130, 129, 128);
 
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
+include_once ROOT . '/include/import_pdf_common.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $pinAccess = array();
@@ -979,22 +980,6 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
     }
 }
 
-function getImportOptionList($tableName, $labelField, $dbConnect)
-{
-    $list = [];
-    $tableName = mysqli_real_escape_string($dbConnect, $tableName);
-    $labelField = mysqli_real_escape_string($dbConnect, $labelField);
-    $query = "SELECT id, `$labelField` AS option_label FROM `$tableName` WHERE status = 'A' ORDER BY `$labelField` ASC";
-    $result = mysqli_query($dbConnect, $query);
-
-    if ($result) {
-        while ($row = mysqli_fetch_assoc($result)) {
-            $list[$row['id']] = $row['option_label'];
-        }
-    }
-
-    return $list;
-}
 
 function getActivePackageImportMeta($dbConnect)
 {
@@ -1019,16 +1004,6 @@ function getActivePackageImportMeta($dbConnect)
     return $list;
 }
 
-function normalizeImportText($text)
-{
-    $text = html_entity_decode((string) $text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-    return trim(preg_replace('/\s+/u', ' ', $text));
-}
-
-function normalizeImportLookup($text)
-{
-    return strtolower(preg_replace('/[^a-zA-Z0-9]+/', '', normalizeImportText($text)));
-}
 
 function extractShopeeHtmlIncomeAmountByLabels($html, $labels)
 {
@@ -1428,20 +1403,6 @@ function resolveBrandIdsByPackageIds($packageIds, $connect)
     return array_values(array_unique($brandIds));
 }
 
-function cleanPdfTextOperand($text)
-{
-    $text = str_replace("\x00", '', (string) $text);
-    $text = strtr($text, array(
-        '\\n' => ' ',
-        '\\r' => ' ',
-        '\\t' => ' ',
-        '\\(' => '(',
-        '\\)' => ')',
-        '\\\\' => '\\',
-    ));
-
-    return normalizeImportText(preg_replace('/[^[:print:] ]/', ' ', $text));
-}
 
 function pdfHexToUtf8($hex)
 {
@@ -1834,44 +1795,7 @@ function extractTextFromPdfViaCommand($filePath)
     return '';
 }
 
-function extractTextFromPdfContent($content)
-{
-    if ((string) $content === '') {
-        return '';
-    }
 
-    preg_match_all('/stream\s*\r?\n(.*?)\r?\n?endstream/s', (string) $content, $streamMatches);
-    $lines = array();
-
-    foreach ($streamMatches[1] as $stream) {
-        $decoded = decodePdfStream($stream);
-        if ($decoded === false) {
-            $decoded = (string) $stream;
-        }
-
-        $extractedLines = extractPdfTextTokensFromDecodedStream($decoded);
-        if (!empty($extractedLines)) {
-            $lines = array_merge($lines, $extractedLines);
-        }
-    }
-
-    return implode("\n", $lines);
-}
-
-function getPdfTextLines($text)
-{
-    $lines = preg_split('/\r\n|\r|\n/', (string) $text);
-    $normalizedLines = array();
-
-    foreach ($lines as $line) {
-        $line = normalizeImportText($line);
-        if ($line !== '') {
-            $normalizedLines[] = $line;
-        }
-    }
-
-    return $normalizedLines;
-}
 
 function extractPdfFieldByLabels($text, $labels)
 {

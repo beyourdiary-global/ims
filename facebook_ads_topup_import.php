@@ -10,6 +10,7 @@ $pageTitle = '';
 
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
+include_once ROOT . '/include/import_pdf_common.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $resolvedParentPageTitle = getPinGroupNameById($connect, $parentPagePinGroupId);
@@ -153,22 +154,6 @@ if ($action === 'parseFacebookAdsTopup') {
         }
     }
 }
-function getImportOptionList($tableName, $labelField, $dbConnect)
-{
-    $list = [];
-    $tableName = mysqli_real_escape_string($dbConnect, $tableName);
-    $labelField = mysqli_real_escape_string($dbConnect, $labelField);
-    $query = "SELECT id, `$labelField` AS option_label FROM `$tableName` WHERE status = 'A' ORDER BY `$labelField` ASC";
-    $result = mysqli_query($dbConnect, $query);
-
-    if ($result) {
-        while ($row = mysqli_fetch_assoc($result)) {
-            $list[$row['id']] = $row['option_label'];
-        }
-    }
-
-    return $list;
-}
 
 function getMetaAdsAccountOptions($dbConnect)
 {
@@ -194,16 +179,6 @@ function getMetaAdsAccountLabelById($options, $id)
     return isset($options[$id]['label']) ? $options[$id]['label'] : '';
 }
 
-function normalizeImportText($text)
-{
-    $text = html_entity_decode((string) $text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-    return trim(preg_replace('/\s+/u', ' ', $text));
-}
-
-function normalizeImportLookup($text)
-{
-    return strtolower(preg_replace('/[^a-zA-Z0-9]+/', '', normalizeImportText($text)));
-}
 
 function normalizeDigitsOnly($text)
 {
@@ -402,57 +377,7 @@ function collectFacebookImportSourceFiles($fileInfo, &$errors, &$warnings)
     return $sourceFiles;
 }
 
-function cleanPdfTextOperand($text)
-{
-    $text = str_replace("\x00", "", $text);
-    $text = strtr($text, [
-        '\\n' => ' ',
-        '\\r' => ' ',
-        '\\t' => ' ',
-        '\\(' => '(',
-        '\\)' => ')',
-        '\\\\' => '\\',
-    ]);
-    return normalizeImportText(preg_replace('/[^[:print:] ]/', ' ', $text));
-}
 
-function extractTextFromPdfContent($content)
-{
-    if ($content === '') {
-        return '';
-    }
-
-    preg_match_all('/stream\r?\n(.*?)endstream/s', $content, $streamMatches);
-    $lines = [];
-
-    foreach ($streamMatches[1] as $stream) {
-        $decoded = decodePdfStream($stream);
-        if ($decoded === false) {
-            continue;
-        }
-
-        if (preg_match_all('/\(([^\)]{1,500})\)\s*Tj/s', $decoded, $textMatches)) {
-            foreach ($textMatches[1] as $match) {
-                $cleanLine = cleanPdfTextOperand($match);
-                if ($cleanLine !== '') {
-                    $lines[] = $cleanLine;
-                }
-            }
-        }
-
-        if (preg_match_all('/\[(.*?)\]\s*TJ/s', $decoded, $arrayMatches)) {
-            foreach ($arrayMatches[1] as $chunk) {
-                preg_match_all('/\(([^\)]*)\)/', $chunk, $innerMatches);
-                $cleanLine = cleanPdfTextOperand(implode('', $innerMatches[1]));
-                if ($cleanLine !== '') {
-                    $lines[] = $cleanLine;
-                }
-            }
-        }
-    }
-
-    return implode("\n", $lines);
-}
 
 function extractPdfValueAfterLabel($text, $label)
 {
@@ -463,20 +388,6 @@ function extractPdfValueAfterLabel($text, $label)
     return '';
 }
 
-function getPdfTextLines($text)
-{
-    $lines = preg_split('/\r\n|\r|\n/', (string) $text);
-    $normalizedLines = [];
-
-    foreach ($lines as $line) {
-        $line = normalizeImportText($line);
-        if ($line !== '') {
-            $normalizedLines[] = $line;
-        }
-    }
-
-    return $normalizedLines;
-}
 
 function extractPdfFieldValue($text, $label)
 {
