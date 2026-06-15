@@ -595,24 +595,123 @@ if (!function_exists('sorImpDateToYmd')) {
 if (!function_exists('sorImpFindInvoiceNo')) {
     function sorImpFindInvoiceNo($text, $fileName)
     {
-        if (preg_match('/Invoice\s*#\s*([0-9]{6,})/i', $text, $m)) {
-            return trim((string) $m[1]);
+        $normalizeInvoiceNo = function ($value) {
+            $value = html_entity_decode((string) $value, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+            $value = strtr($value, array(
+                '—' => '-',
+                '–' => '-',
+                '−' => '-',
+                '-' => '-',
+                '＃' => '#',
+                '_' => '-',
+                ':' => '-',
+                '：' => '-',
+            ));
+            $value = strtoupper(trim((string) $value));
+            $value = preg_replace('/\s+/', '', (string) $value);
+            $value = preg_replace('/[^A-Z0-9-]/', '', (string) $value);
+            $value = preg_replace('/^1NV/i', 'INV', (string) $value);
+            $value = preg_replace('/^I-N-V[-]?/i', 'INV-', (string) $value);
+
+            $value = preg_replace('/(ORDERID|ORDERNO|ORDERNUMBER|ORDER|DATE|STATUS|FROM|TO|PRODUCT|SKU|QTY|TOTAL|SUBTOTAL|TAX|SHIPPING|UMSSTORE|UMS).*$/i', '', (string) $value);
+
+            if (preg_match('/^INV[-]?([0-9]{4,20})$/i', (string) $value, $m)) {
+                $value = 'INV-' . $m[1];
+            } else if (preg_match('/^INV([0-9][A-Z0-9-]{3,})$/i', (string) $value, $m)) {
+                $value = 'INV-' . $m[1];
+            }
+
+            if ($value === '' || !preg_match('/\d/', (string) $value)) {
+                return '';
+            }
+
+            if (preg_match('/^INV(?:OICE)?$/i', (string) $value)) {
+                return '';
+            }
+
+            return $value;
+        };
+
+        $extractFromSegment = function ($segment) use ($normalizeInvoiceNo) {
+            $segment = strtr((string) $segment, array(
+                '—' => '-',
+                '–' => '-',
+                '−' => '-',
+                '-' => '-',
+                '_' => '-',
+            ));
+            $segment = preg_split('/\b(?:order\s*id|date|status|from|to|product|sku|qty|total)\b/i', $segment);
+            $segment = isset($segment[0]) ? $segment[0] : '';
+
+            if (preg_match_all('/((?:I\s*N\s*V|1\s*N\s*V)\s*[-:\s]?\s*[A-Z0-9][A-Z0-9\-\s]{3,80})/iu', $segment, $matches)) {
+                foreach ($matches[1] as $candidate) {
+                    $invoiceNo = $normalizeInvoiceNo($candidate);
+                    if ($invoiceNo !== '') {
+                        return $invoiceNo;
+                    }
+                }
+            }
+
+            if (preg_match('/\b([0-9]{6,})\b/', $segment, $m)) {
+                return trim((string) $m[1]);
+            }
+
+            return '';
+        };
+
+        $text = html_entity_decode((string) $text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = strtr($text, array(
+            "\xC2\xA0" => ' ',
+            '—' => '-',
+            '–' => '-',
+            '−' => '-',
+            '-' => '-',
+            '＃' => '#',
+        ));
+
+        $lines = sorImpGetPdfTextLines($text);
+        for ($i = 0; $i < count($lines); $i++) {
+            $line = isset($lines[$i]) ? (string) $lines[$i] : '';
+            if (!preg_match('/\binvoice\b|\binv\b/i', $line)) {
+                continue;
+            }
+
+            $segment = $line;
+            if (isset($lines[$i + 1])) {
+                $segment .= ' ' . $lines[$i + 1];
+            }
+
+            $invoiceNo = $extractFromSegment($segment);
+            if ($invoiceNo !== '') {
+                return $invoiceNo;
+            }
         }
-        if (preg_match('/Invoice\s*(?:No|Number)[.:\s#-]*\s*([0-9]{6,})/i', $text, $m)) {
-            return trim((string) $m[1]);
+
+        if (preg_match_all('/((?:I\s*N\s*V|1\s*N\s*V)\s*[-:\s]?\s*[A-Z0-9][A-Z0-9\-\s]{3,80})/iu', $text, $matches)) {
+            foreach ($matches[1] as $candidate) {
+                $invoiceNo = $normalizeInvoiceNo($candidate);
+                if ($invoiceNo !== '') {
+                    return $invoiceNo;
+                }
+            }
         }
-        if (preg_match('/Invoice\s*#\s*(INV[-\s]?[A-Z0-9-]+)/i', $text, $m)) {
-            return strtoupper(preg_replace('/\s+/', '', $m[1]));
-        }
-        if (preg_match('/Invoice\s*(?:No|Number)[.:\s]*\s*(INV[-\s]?[A-Z0-9-]+)/i', $text, $m)) {
-            return strtoupper(preg_replace('/\s+/', '', $m[1]));
-        }
-        if (preg_match('/\b(INV[-\s]?[A-Z0-9-]{4,})\b/i', $text, $m)) {
-            return strtoupper(preg_replace('/\s+/', '', $m[1]));
-        }
+
         $base = pathinfo((string) $fileName, PATHINFO_FILENAME);
-        if (preg_match('/(INV[-\s]?[A-Z0-9-]{4,})/i', $base, $m)) {
-            return strtoupper(preg_replace('/\s+/', '', $m[1]));
+        $base = strtr($base, array(
+            '—' => '-',
+            '–' => '-',
+            '−' => '-',
+            '-' => '-',
+            '_' => '-',
+        ));
+
+        if (preg_match_all('/((?:I\s*N\s*V|1\s*N\s*V)\s*[-:\s]?\s*[A-Z0-9][A-Z0-9\-\s]{3,80})/iu', $base, $matches)) {
+            foreach ($matches[1] as $candidate) {
+                $invoiceNo = $normalizeInvoiceNo($candidate);
+                if ($invoiceNo !== '') {
+                    return $invoiceNo;
+                }
+            }
         }
 
         return strtoupper(preg_replace('/[^A-Z0-9-]/i', '', $base));
