@@ -714,6 +714,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
 <head>
     <link rel="stylesheet" href="../css/main.css">
     <script src="finance/header/js/pdf.min.js"></script>
+    <script src="js/pdf_airbill_parser.js"></script>
     <style>
         .shopee-airbill-row {
             align-items: flex-start;
@@ -1860,7 +1861,6 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
     }
     ?>
     <script>
-        <?php echo shopeeOmsRenderAirbillPdfAutofillScript(); ?>
         <?php echo shopeeOmsRenderAirbillAttachmentPreviewScript(); ?>
 
         var page = "<?= $pageTitle ?>";

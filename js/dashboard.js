@@ -1408,11 +1408,6 @@ function updateChart() {
     update(myChart14,datasets_shp_with)
     }
 }
- function getParameterByName(name) {
-        var urlParams = new URLSearchParams(window.location.search);
-        return urlParams.get(name);
-    }
-   
 $('#datepicker input, #datepicker2 input[name="end"], #datepicker3 input[name="end"], #datepicker4 input[name="end"]').change(function() {
   updateChart()
          

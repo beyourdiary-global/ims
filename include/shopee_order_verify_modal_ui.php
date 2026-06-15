@@ -151,6 +151,7 @@ if (!function_exists('shopeeOrderDetailPdfRenderVerifyModalScript')) {
         $siteUrl = isset($config['site_url']) && trim((string) $config['site_url']) !== '' ? rtrim((string) $config['site_url'], '/') : '';
         ?>
         <script src="../finance/header/js/pdf.min.js"></script>
+    <script src="../js/pdf_airbill_parser.js"></script>
         <script>
             (function () {
                 var config = {

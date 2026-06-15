@@ -1,17 +1,4 @@
 ﻿//export notification
-function exportData() {
-    var checkboxes = document.querySelectorAll('.export:checked');
-    if (checkboxes.length === 0) {
-        alert('Please select data to export.');
-        return false;
-    }
-    return true;
-}
-
-function showExportNotification() {
-    alert('Export successful!');
-}
-
 $(document).ready(function ($) {
     $(document).on("change", ".exportAll", function (event) { //checkbox handling
         event.preventDefault();

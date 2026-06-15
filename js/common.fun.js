@@ -3182,6 +3182,31 @@ function showExportNotification() {
   alert("Export successful!");
 }
 
+function auditExport(ids, tblName) {
+  var xhr = new XMLHttpRequest();
+  xhr.open("POST", "../export.php", true);
+  xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+  xhr.send("ids=" + ids.join(",") + "&tblName=" + tblName);
+}
+
+function captureAndExport(tblName) {
+  var selectedIds = [];
+  document.querySelectorAll("input.export:checked").forEach(function (checkbox) {
+    selectedIds.push(checkbox.value);
+  });
+
+  auditExport(selectedIds, tblName);
+
+  if (exportData()) {
+    showExportNotification();
+  }
+}
+
+function getParameterByName(name) {
+  var urlParams = new URLSearchParams(window.location.search);
+  return urlParams.get(name);
+}
+
 function commonMobileActionIsVisible(element) {
   if (!element) {
     return false;

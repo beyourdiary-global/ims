@@ -39,10 +39,6 @@ function getFilledValues(selector) {
 
 //autocomplete
 $(document).ready(function () {
-  function getParameterByName(name) {
-    var urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get(name);
-  }
   var act = getParameterByName("act");
   var trackOrderBtn = document.getElementById("trackOrderBtn");
   if (act !== "I" && trackOrderBtn) {
