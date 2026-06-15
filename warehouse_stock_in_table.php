@@ -19,17 +19,10 @@ $packages = siLoadPackages($connect);
 list($warehouseNameMap, $warehouseNameToId) = siBuildNameMaps($warehouses);
 list($productNameMap, $productNameToId) = siBuildNameMaps($products);
 list($packageNameMap, $packageNameToId) = siBuildNameMaps($packages);
+$listPageSkipSessionReset = true;
+$listPageSkipNumbering = true;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
-
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-if (!is_array($pinAccess)) {
-    $pinAccess = array();
-}
-
-
+include_once 'include/list_page_header.php';
 $msg = isset($_GET['msg']) ? trim((string) $_GET['msg']) : '';
 $err = isset($_GET['err']) ? trim((string) $_GET['err']) : '';
 

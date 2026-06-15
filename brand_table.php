@@ -1,18 +1,9 @@
 <?php
 $pageTitle = "Brand";
 $currentPagePin = 9;
-
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
-
 $tblName = BRAND;
-$pinAccess = checkCurrentPin($connect, $pageTitle);
 
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
+include_once 'include/list_page_header.php';
 
 $redirect_page = $SITEURL . '/brand.php';
 $deleteRedirectPage = $SITEURL . '/brand_table.php';

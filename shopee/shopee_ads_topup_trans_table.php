@@ -3,9 +3,8 @@ ob_start();
 $pageTitle = "Shopee Ads Top Up Transaction";
 $currentPagePin = 77;
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+$listPageSkipPinAccess = true;
+include_once '../include/list_page_header.php';
 
 checkCurrentPin($connect, $pageTitle);
 $pinAccess = checkPin($connect, $pageTitle);
@@ -191,12 +190,6 @@ if (!empty($checkboxValues)) {
     }
 }
 
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['searchChk'] = '';
-unset($_SESSION['resetChk']);
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 $deleteRedirectPage = $SITEURL . '/shopee/shopee_ads_topup_trans_table.php';
 $redirect_page = $SITEURL . '/shopee/shopee_ads_topup_trans.php';
 $result = getData('*', '', '', SHOPEE_ADS_TOPUP, $finance_connect);

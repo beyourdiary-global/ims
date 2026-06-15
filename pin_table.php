@@ -2,17 +2,9 @@
 $pageTitle = "Pin";
 $currentPagePin = 1;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once 'include/list_page_header.php';
 
 $tblName = PIN;
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/pin.php';
 $deleteRedirectPage = $SITEURL . '/pin_table.php';

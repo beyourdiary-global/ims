@@ -2,17 +2,9 @@
 $pageTitle = "Payment Method (Finance)";
 $currentPagePin = 60;
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once '../include/list_page_header.php';
 
 $tblName = FIN_PAY_METH;
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/finance/fin_payment_method.php';
 $deleteRedirectPage = $SITEURL . '/finance/fin_payment_method_table.php';

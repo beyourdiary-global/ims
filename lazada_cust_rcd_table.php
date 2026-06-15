@@ -1,16 +1,8 @@
 <?php
 $pageTitle = "Lazada Customer Record (Deals)";
 $currentPagePin = 91;
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
+include_once 'include/list_page_header.php';
 include_once ROOT . '/include/customer_tag.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
-
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/lazada_cust_rcd.php';
 $deleteRedirectPage = $SITEURL . '/lazada_cust_rcd_table.php';

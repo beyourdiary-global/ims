@@ -2,20 +2,9 @@
 $pageTitle = "Customer Level";
 $currentPagePin = 142;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$resolvedPageTitle = getPinGroupNameById($connect, $currentPagePin);
-if (!empty($resolvedPageTitle)) {
-    $pageTitle = $resolvedPageTitle;
-}
+include_once 'include/list_page_header.php';
 
 $tblName = CUS_LEVEL;
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;
 
 $redirect_page = $SITEURL . '/cus_level.php';
 $deleteRedirectPage = $SITEURL . '/cus_level_table.php';

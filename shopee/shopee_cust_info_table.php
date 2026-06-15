@@ -2,17 +2,8 @@
 $pageTitle = "Shopee Customer Record";
 $currentPagePin = 85;
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
+include_once '../include/list_page_header.php';
 include_once ROOT . '/include/customer_tag.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
-
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/shopee/shopee_cust_info.php';
 $deleteRedirectPage = $SITEURL . '/shopee/shopee_cust_info_table.php';

@@ -2,9 +2,12 @@
 $currentPagePin = 130;
 $pageTitle = "Shopee All Orders";
 $isFinance = 1;
+$listPageSkipTitleResolve = true;
+$listPageSkipPinAccess = true;
+$listPageSkipSessionReset = true;
+$listPageSkipNumbering = true;
 
-include_once '../menuHeader.php';
-include_once '../checkCurrentPagePin.php';
+include_once '../include/list_page_header.php';
 include_once ROOT . '/include/shopee_order_verify_modal_ui.php';
 
 $processingPageName = getPinGroupNameById($connect, 128);

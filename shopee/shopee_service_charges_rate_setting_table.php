@@ -2,15 +2,7 @@
 $pageTitle = "Shopee Service Charges Rate Setting";
 $currentPagePin = 83;
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
-
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
+include_once '../include/list_page_header.php';
 
 $redirect_page = $SITEURL . '/shopee/shopee_service_charges_rate_setting.php';
 $deleteRedirectPage = $SITEURL . '/shopee/shopee_service_charges_rate_setting_table.php';

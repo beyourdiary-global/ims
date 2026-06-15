@@ -4,9 +4,7 @@ $pageTitle = "Facebook Order Request";
 $currentPagePin = 69;
 $isFinance = 1;
 
-include_once '../menuHeader.php';
-include_once '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once '../include/list_page_header.php';
 
 
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
@@ -145,13 +143,6 @@ if (!empty($checkboxValues)) {
     }
 }
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['searchChk'] = '';
-unset($_SESSION['resetChk']);
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 $tblName = FB_ORDER_REQ;
 $redirect_page = $SITEURL . '/finance/fb_order_req.php';
 $deleteRedirectPage = $SITEURL . '/finance/fb_order_req_income_table.php';

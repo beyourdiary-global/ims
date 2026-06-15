@@ -4,9 +4,7 @@ ob_start();
 $pageTitle = 'Downline Top Up Record';
 $isFinance = 1;
 
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once '../include/list_page_header.php';
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . "_list.xlsx";
 $img_path = '../' . img_server . 'finance/downline_top_up_record/';
@@ -116,14 +114,6 @@ if (!empty($checkboxValues)) {
         echo 'Failed to create temporary Excel file';
     }
 }
-
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['searchChk'] = '';
-unset($_SESSION['resetChk']);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;  // numbering
 
 $redirect_page = $SITEURL . '/finance/downline_top_up_record.php';
 $deleteRedirectPage = $SITEURL . '/finance/downline_top_up_record_table.php';

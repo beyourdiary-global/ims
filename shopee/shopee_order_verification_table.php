@@ -3,15 +3,7 @@ $currentPagePin = 0;
 $pageTitle = "Shopee Order Request";
 $isFinance = 1;
 
-include_once '../menuHeader.php';
-include_once '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
-
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
+include_once '../include/list_page_header.php';
 
 $redirect_page = $SITEURL . '/shopee/shopee_order_req.php';
 $deleteRedirectPage = $SITEURL . '/shopee/shopee_order_req_table.php';

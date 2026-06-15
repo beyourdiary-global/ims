@@ -2,17 +2,9 @@
 $pageTitle = "Payment Terms";
 $currentPagePin = 63;
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once '../include/list_page_header.php';
 
 $tblName = FIN_PAY_TERMS;
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/finance/payment_terms.php';
 $deleteRedirectPage = $SITEURL . '/finance/payment_terms_table.php';

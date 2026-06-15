@@ -2,17 +2,9 @@
 $currentPagePin = 0;
 $pageTitle = "Race";
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once 'include/list_page_header.php';
 
 $tblName = RACE;
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/race.php';
 $deleteRedirectPage = $SITEURL . '/race_table.php';

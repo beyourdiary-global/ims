@@ -1,11 +1,10 @@
 <?php
 $pageTitle = "Lazada Order Request";
 $currentPagePin = 93;
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+$listPageSkipSessionReset = true;
+$listPageSkipNumbering = true;
+include_once 'include/list_page_header.php';
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
 $canAssignEstimatedReceivedDate = isActionAllowed('Edit', $pinAccess);
 $estimatedDateToday = new DateTimeImmutable('today');
 $estimatedDateMin = $estimatedDateToday->modify('+1 day')->format('Y-m-d');

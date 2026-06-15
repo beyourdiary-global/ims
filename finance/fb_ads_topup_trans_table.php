@@ -3,11 +3,7 @@ ob_start();
 $pageTitle = "Facebook Ads Top Up Transaction";
 $currentPagePin = 50;
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
-
-$pinAccess = checkCurrentPin($connect, $pageTitle);
+include_once '../include/list_page_header.php';
 
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d_H-i-s') . "_list.xlsx";
@@ -179,12 +175,6 @@ if (!empty($checkboxValues)) {
     }
 }
 
-$_SESSION['searchChk'] = '';
-unset($_SESSION['resetChk']);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 $deleteRedirectPage = $SITEURL . '/fb_ads_topup_trans_table.php';
 $redirect_page = $SITEURL . '/finance/fb_ads_topup_trans.php';
 $result = getData('*', '', '', FB_ADS_TOPUP, $finance_connect);

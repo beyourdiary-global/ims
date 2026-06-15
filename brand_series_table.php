@@ -2,17 +2,9 @@
 $pageTitle = "Brand Series";
 $currentPagePin = 74;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once 'include/list_page_header.php';
 
 $tblName = BRD_SERIES;
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/brand_series.php';
 $deleteRedirectPage = $SITEURL . '/brand_series_table.php';

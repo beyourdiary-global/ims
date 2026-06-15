@@ -2,21 +2,12 @@
 $pageTitle = "SQL Account";
 $currentPagePin = 132;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once 'include/list_page_header.php';
 
 $tblName = SQL_ACC;
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-
 if (function_exists('isStatusFieldAvailable') && !isStatusFieldAvailable($tblName, $connect)) {
     @mysqli_query($connect, "ALTER TABLE `" . $tblName . "` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A'");
 }
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;
 
 $redirect_page = $SITEURL . '/sql_account.php';
 $deleteRedirectPage = $SITEURL . '/sql_account_table.php';

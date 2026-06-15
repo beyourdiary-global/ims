@@ -4,9 +4,7 @@ $pageTitle = "Website Order Request";
 $currentPagePin = 92;
 $isFinance = 1;
 
-include_once '../menuHeader.php';
-include_once '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once '../include/list_page_header.php';
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . "_list.xlsx";
 $img_path = '../' . img_server . 'finance/website_order_request/';
@@ -176,13 +174,6 @@ if (!empty($checkboxValues)) {
     }
 }
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['searchChk'] = '';
-unset($_SESSION['resetChk']);
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 $tblName = WEB_ORDER_REQ;
 $redirect_page = $SITEURL . '/finance/website_order_request.php';
 $deleteRedirectPage = $SITEURL . '/finance/website_order_request_table.php';

@@ -2,9 +2,7 @@
 $currentPagePin = 0;
 ob_start();
 $pageTitle = 'Lazada Order Request';
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once 'include/list_page_header.php';
 
 require_once 'header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . '_list.xlsx';
@@ -177,13 +175,6 @@ if (!empty($checkboxValues)) {
     }
 }
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['searchChk'] = '';
-unset($_SESSION['resetChk']);
-$_SESSION['delChk'] = '';
-$num = 1;  // numbering
 $tblName = LAZADA_ORDER_REQ;
 
 $redirect_page = $SITEURL . '/lazada_order_req.php';

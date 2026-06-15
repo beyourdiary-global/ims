@@ -3,9 +3,7 @@ ob_start();
 $pageTitle = "Package";
 $currentPagePin = 21;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once 'include/list_page_header.php';
 
 $libPath = __DIR__ . '/header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 if (is_readable($libPath)) {
@@ -13,12 +11,6 @@ if (is_readable($libPath)) {
 }
 
 $tblName = PKG;
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/package.php';
 $deleteRedirectPage = $SITEURL . '/package_table.php';

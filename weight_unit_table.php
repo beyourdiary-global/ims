@@ -2,17 +2,9 @@
 $pageTitle = "Weight Unit";
 $currentPagePin = 19;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once 'include/list_page_header.php';
 
 $tblName = WGT_UNIT;
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/weight_unit.php';
 $deleteRedirectPage = $SITEURL . '/weight_unit_table.php';

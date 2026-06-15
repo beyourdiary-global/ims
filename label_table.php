@@ -2,17 +2,9 @@
 $pageTitle = "Label";
 $currentPagePin = 145;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once 'include/list_page_header.php';
 
 $tblName = LABEL;
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;
 
 $redirect_page = $SITEURL . '/label.php';
 $deleteRedirectPage = $SITEURL . '/label_table.php';

@@ -3,16 +3,9 @@ $pageTitle = "Merchant";
 $currentPagePin = 36;
 $isFinance = 1;
 
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once '../include/list_page_header.php';
 
 $tblName = MERCHANT;
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/finance/merchant.php';
 $deleteRedirectPage = $SITEURL . '/finance/merchant_table.php';

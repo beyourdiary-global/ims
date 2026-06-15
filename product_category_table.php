@@ -2,17 +2,9 @@
 $pageTitle = "Category";
 $currentPagePin = 56;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once 'include/list_page_header.php';
 
 $tblName = PROD_CATEGORY;
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/product_category.php';
 $deleteRedirectPage = $SITEURL . '/product_category_table.php';

@@ -3,18 +3,10 @@ ob_start();
 $pageTitle = "Purchase Order";
 $currentPagePin = 135;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once 'include/list_page_header.php';
 
 $tblName = PURCHASE_ORDER;
 $companyTbl = COMPANY;
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;
 
 $redirect_page = $SITEURL . '/purchase_order.php';
 $deleteRedirectPage = $SITEURL . '/purchase_order_table.php';

@@ -2,17 +2,9 @@
 $currentPagePin = 0;
 $pageTitle = "Holiday";
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once 'include/list_page_header.php';
 
 $tblName = HOLIDAY;
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/holiday.php';
 $deleteRedirectPage = $SITEURL . '/holiday_table.php';

@@ -2,17 +2,9 @@
 $currentPagePin = 0;
 $pageTitle = "Socso Category";
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once 'include/list_page_header.php';
 
 $tblName = SOCSO_CATH;
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/socso_category.php';
 $deleteRedirectPage = $SITEURL . '/socso_category_table.php';

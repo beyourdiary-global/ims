@@ -4,9 +4,7 @@ ob_start();
 $pageTitle = "Shopee SG Order Request";
 $isFinance = 1;
 
-include_once '../menuHeader.php';
-include_once '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once '../include/list_page_header.php';
 
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . "_list.xlsx";
@@ -173,13 +171,6 @@ if (!empty($checkboxValues)) {
     }
 }
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['searchChk'] = '';
-unset($_SESSION['resetChk']);
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 $tblName = SHOPEE_SG_ORDER_REQ;
 
 $redirect_page = $SITEURL . '/shopee/shopee_order_req.php';

@@ -3,17 +3,9 @@ ob_start();
 $pageTitle = "Company";
 $currentPagePin = 127;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once 'include/list_page_header.php';
 
 $tblName = COMPANY;
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;
 
 $redirect_page = $SITEURL . '/company.php';
 $deleteRedirectPage = $SITEURL . '/company_table.php';

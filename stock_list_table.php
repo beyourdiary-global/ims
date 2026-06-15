@@ -9,15 +9,10 @@ $stockInOrderTable = 'stock_in_order';
 $stockInItemTable = 'stock_in_order_item';
 $stockOutBatchUsageTable = STOCK_OUT_BATCH_USAGE;
 $stockFormPage = $SITEURL . '/stock_list.php';
+$listPageSkipSessionReset = true;
+$listPageSkipNumbering = true;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
-
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-if (!is_array($pinAccess)) {
-    $pinAccess = array();
-}
+include_once 'include/list_page_header.php';
 
 $warehouses = siLoadWarehouses($connect);
 $products = siLoadProducts($connect);

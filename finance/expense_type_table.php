@@ -2,15 +2,8 @@
 $pageTitle = "Expense Type";
 $currentPagePin = 49;
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once '../include/list_page_header.php';
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/finance/expense_type.php';
 $deleteRedirectPage = $SITEURL . '/finance/expense_type_table.php';

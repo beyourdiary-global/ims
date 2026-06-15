@@ -7,9 +7,7 @@ ob_start();
 $pageTitle = "Delivery Fees Claim Record";
 $currentPagePin = 66;
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once '../include/list_page_header.php';
 
 
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
@@ -121,14 +119,6 @@ if (!empty($checkboxValues)) {
         echo 'Failed to create temporary Excel file';
     }
 }
-
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['searchChk'] = '';
-unset($_SESSION['resetChk']);
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 
 $deleteRedirectPage = $SITEURL . '/finance/del_fees_claim_table.php';
 $redirect_page = $SITEURL . '/finance/del_fees_claim.php';

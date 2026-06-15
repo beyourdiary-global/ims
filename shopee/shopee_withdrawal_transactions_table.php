@@ -4,9 +4,7 @@ $pageTitle = "Shopee Withdrawal Transactions";
 $currentPagePin = 51;
 $isFinance = 1;
 
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once '../include/list_page_header.php';
 
 
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
@@ -118,14 +116,6 @@ if (!empty($checkboxValues)) {
         echo 'Failed to create temporary Excel file';
     }
 }
-
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['searchChk'] = '';
-unset($_SESSION['resetChk']);
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/shopee/shopee_withdrawal_transactions.php';
 $deleteRedirectPage = $SITEURL . '/shopee/shopee_withdrawal_transactions_table.php';

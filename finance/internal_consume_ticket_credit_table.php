@@ -4,9 +4,7 @@ $pageTitle = "Internal Consume Ticket/Credit";
 $currentPagePin = 65;
 $isFinance = 1;
 
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once '../include/list_page_header.php';
 
 
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
@@ -120,13 +118,6 @@ if (!empty($checkboxValues)) {
 }
 
 $tblName = INTERNAL_CONSUME;
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['searchChk'] = '';
-unset($_SESSION['resetChk']);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/finance/internal_consume_ticket_credit.php';
 $deleteRedirectPage = $SITEURL . '/finance/internal_consume_ticket_credit_table.php';

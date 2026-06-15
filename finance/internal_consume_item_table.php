@@ -3,9 +3,7 @@ $currentPagePin = 0;
 ob_start();
 $pageTitle = "Internal Consume Item";
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once '../include/list_page_header.php';
 
 
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
@@ -117,14 +115,6 @@ if (!empty($checkboxValues)) {
         echo 'Failed to create temporary Excel file';
     }
 }
-
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['searchChk'] = '';
-unset($_SESSION['resetChk']);
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 
 $deleteRedirectPage = $SITEURL . '/finance/internal_consume_item_table.php';
 $redirect_page = $SITEURL . '/finance/internal_consume_item.php';

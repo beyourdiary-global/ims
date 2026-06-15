@@ -2,21 +2,12 @@
 $pageTitle = "Token Setting";
 $currentPagePin = 133;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once 'include/list_page_header.php';
 
 $tblName = TOKEN_SETT;
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-
 if (function_exists('isStatusFieldAvailable') && !isStatusFieldAvailable($tblName, $connect)) {
     @mysqli_query($connect, "ALTER TABLE `" . $tblName . "` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A'");
 }
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;
 
 $redirect_page = $SITEURL . '/token_setting.php';
 $deleteRedirectPage = $SITEURL . '/token_setting_table.php';

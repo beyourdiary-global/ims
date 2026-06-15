@@ -2,20 +2,9 @@
 $pageTitle = "Message Shortcuts";
 $currentPagePin = 144;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$resolvedPageTitle = getPinGroupNameById($connect, $currentPagePin);
-if (!empty($resolvedPageTitle)) {
-    $pageTitle = $resolvedPageTitle;
-}
+include_once 'include/list_page_header.php';
 
 $tblName = MESSAGE_SHORTCUTS;
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;
 
 $redirect_page = $SITEURL . '/message_shortcuts.php';
 $deleteRedirectPage = $SITEURL . '/message_shortcuts_table.php';
