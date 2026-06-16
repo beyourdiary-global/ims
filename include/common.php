@@ -2529,7 +2529,7 @@ if (!function_exists('shopeeOmsGetOrderSourceConfigs')) {
                 'date_field' => 'create_date',
                 'fallback_code_prefix' => 'LAZ',
                 'view_url' => '/lazada_order_req.php',
-                'info_url' => '/lazada_order_request_info.php',
+                'info_url' => '/finance/lazada_order_request_info.php',
                 'attachment_page_name' => 'lazada_order_request',
             ),
             'facebook' => array(

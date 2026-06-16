@@ -265,7 +265,7 @@ if (post('order_status')) {
                                         break;
                                     case 'result4':
                                         $tableKey = LAZADA_ORDER_REQ;
-                                        $redirect_page = $SITEURL . '/lazada_order_req.php';
+                                        $redirect_page = $SITEURL . '/finance/lazada_order_req.php';
                                         break;
                                     default:
                                         $tableKey = '';

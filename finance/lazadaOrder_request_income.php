@@ -225,8 +225,8 @@ $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 $tblName = LAZADA_ORDER_REQ;
 
-$redirect_page = $SITEURL . '/lazada_order_req.php';
-$deleteRedirectPage = $SITEURL . '/lazada_order_req_table.php';
+$redirect_page = $SITEURL . '/finance/lazada_order_req.php';
+$deleteRedirectPage = $SITEURL . '/finance/lazada_order_req_table.php';
 $combineShowStatement = $groupbyValue . ($groupbyValue2 ? "," . $groupbyValue2 : '');
 $result = getData("$combineShowStatement , SUM(item_price_credit) as item_price_credit, id,  GROUP_CONCAT(id) AS combined_ids ", $sqlQuery . ' GROUP BY ' . $combineShowStatement, '', $tblName, $connect);
 

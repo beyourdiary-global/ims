@@ -3,9 +3,9 @@ $currentPagePin = 0;
 ob_start();
 $pageTitle = 'Lazada Order Request';
 
-include_once 'include/list_page_header.php';
+include_once __DIR__ . '/../include/list_page_header.php';
 
-require_once 'header/PhpXlsxGenerator/PhpXlsxGenerator.php';
+require_once __DIR__ . '/../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . '_list.xlsx';
 $img_path = '../' . img_server . 'finance/lazada_order_req/';
 
@@ -178,8 +178,8 @@ if (!empty($checkboxValues)) {
 
 $tblName = LAZADA_ORDER_REQ;
 
-$redirect_page = $SITEURL . '/lazada_order_req.php';
-$deleteRedirectPage = $SITEURL . '/lazada_order_req_table.php';
+$redirect_page = $SITEURL . '/finance/lazada_order_req.php';
+$deleteRedirectPage = $SITEURL . '/finance/lazada_order_req_table.php';
 $result = getData('*', '', '', LAZADA_ORDER_REQ, $connect);
 ?>
 
@@ -297,7 +297,7 @@ $(document).ready(() => {
                     </select>
                 </div>
                 <div class="col-md-2 d-flex align-items-center justify-content-center">
-                    <a id='resetButton' href="../reset.php?redirect=/lazada_order_req_income_table.php"
+                    <a id='resetButton' href="../reset.php?redirect=/finance/lazada_order_req_income_table.php"
                         class="btn btn-sm btn-rounded btn-primary"> <i class="fa fa-refresh"></i> Reset </a>
                 </div>
             </div>

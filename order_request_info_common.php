@@ -54,7 +54,7 @@ if (preg_match('#/[^/]+\?id=0$#', $redirectPage)) {
 
 switch ($platform) {
     case 'lazada':
-        $redirectPage = rtrim((string) $SITEURL, '/') . '/lazada_order_req_table.php';
+        $redirectPage = rtrim((string) $SITEURL, '/') . '/finance/lazada_order_req_table.php';
         break;
     case 'facebook':
         $redirectPage = rtrim((string) $SITEURL, '/') . '/finance/fb_order_req_table.php';

@@ -2,11 +2,11 @@
 $currentPagePin = 0;
 ob_start();
 $pageTitle = 'Lazada Order Request';
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
+include __DIR__ . '/../menuHeader.php';
+include __DIR__ . '/../checkCurrentPagePin.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-require_once 'header/PhpXlsxGenerator/PhpXlsxGenerator.php';
+require_once __DIR__ . '/../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . '_list.xlsx';
 $img_path = '../' . img_server . 'finance/lazada_order_req/';
 
@@ -213,8 +213,8 @@ $_SESSION['delChk'] = '';
 $num = 1;  // numbering
 $tblName = LAZADA_ORDER_REQ;
 
-$redirect_page = $SITEURL . '/lazada_order_req.php';
-$deleteRedirectPage = $SITEURL . '/lazada_order_req_table.php';
+$redirect_page = $SITEURL . '/finance/lazada_order_req.php';
+$deleteRedirectPage = $SITEURL . '/finance/lazada_order_req_table.php';
 $result = getData('*', '', '', LAZADA_ORDER_REQ, $connect);
 ?>
 

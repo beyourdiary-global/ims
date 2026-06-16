@@ -3,10 +3,10 @@
 
 <head>
     <?php
-    include_once "include/connection.php";
-    include_once "include/common.php";
-    include_once "include/common_variable.php";
-    include_once ROOT . "/include/system_alert_common.php";
+    include_once __DIR__ . "/include/connection.php";
+    include_once __DIR__ . "/include/common.php";
+    include_once __DIR__ . "/include/common_variable.php";
+    include_once __DIR__ . "/include/system_alert_common.php";
 
     $menuHeaderRootPath = defined('ROOT') ? realpath(ROOT) : realpath(__DIR__);
     if ($menuHeaderRootPath === false) {
@@ -144,7 +144,7 @@
     }
     // --- END OF NEW PART ---
 
-    include_once "header.php";
+    include_once __DIR__ . "/header.php";
 
     ?>
     <link rel="icon" type="image" href="<?php if (isset($row['meta_logo']))

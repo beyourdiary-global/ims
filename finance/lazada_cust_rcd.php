@@ -4,8 +4,8 @@ ob_start();
 $currentPagePin = 91;
 $pageTitle = "Lazada Customer Record (Deals)";
 
-include_once 'menuHeader.php';
-include_once 'checkCurrentPagePin.php';
+include_once __DIR__ . '/../menuHeader.php';
+include_once __DIR__ . '/../checkCurrentPagePin.php';
 include_once ROOT . '/include/customer_tag.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 $pinAccess = checkCurrentPin($connect, $pageTitle);
@@ -18,7 +18,7 @@ $act = input('act');
 $pageAction = getPageAction($act);
 
 
-$redirect_page = $SITEURL . '/lazada_cust_rcd_table.php';
+$redirect_page = $SITEURL . '/finance/lazada_cust_rcd_table.php';
 $redirectLink = ("<script>location.href = '$redirect_page';</script>");
 $clearLocalStorage = '<script>clearLocalStoragePreservingCustomerRecordFilters();</script>';
 
@@ -73,7 +73,7 @@ if ($dataID && isset($_GET['open_order_id'])) {
             ];
             audit_log($log);
 
-            echo "<script>location.href='" . $SITEURL . "/lazada_order_req.php?id=" . $openOrderId . "&act=E';</script>";
+            echo "<script>location.href='" . $SITEURL . "/finance/lazada_order_req.php?id=" . $openOrderId . "&act=E';</script>";
             exit;
         }
     }
@@ -813,7 +813,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                                         <td><?= $orderSN++ ?></td>
                                                         <td>
                                                             <a class="btn btn-sm btn-rounded btn-primary" style="white-space:nowrap;"
-                                                               href="<?= $SITEURL . '/lazada_cust_rcd.php?id=' . (int) $dataID . '&act=' . $act_2 . '&open_order_id=' . $orderId ?>">
+                                                               href="<?= $SITEURL . '/finance/lazada_cust_rcd.php?id=' . (int) $dataID . '&act=' . $act_2 . '&open_order_id=' . $orderId ?>">
                                                                 Show Order Detail
                                                             </a>
                                                         </td>
@@ -847,7 +847,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 
                 <?php
                 if ($dataID) {
-                    $customerLogReturnUrl = $SITEURL . '/lazada_cust_rcd.php?id=' . (int) $dataID;
+                    $customerLogReturnUrl = $SITEURL . '/finance/lazada_cust_rcd.php?id=' . (int) $dataID;
                     if ($act !== '') {
                         $customerLogReturnUrl .= '&act=' . urlencode((string) $act);
                     }
@@ -925,7 +925,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         preloader(300, action);
 
         <?php
-        include "./js/lazada_cust_rcd.js"
+        include __DIR__ . "/../js/lazada_cust_rcd.js"
         ?>
     </script>
 

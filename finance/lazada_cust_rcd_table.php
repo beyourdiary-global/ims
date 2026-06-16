@@ -2,11 +2,11 @@
 $pageTitle = "Lazada Customer Record (Deals)";
 $currentPagePin = 91;
 
-include_once 'include/list_page_header.php';
+include_once __DIR__ . '/../include/list_page_header.php';
 include_once ROOT . '/include/customer_tag.php';
 
-$redirect_page = $SITEURL . '/lazada_cust_rcd.php';
-$deleteRedirectPage = $SITEURL . '/lazada_cust_rcd_table.php';
+$redirect_page = $SITEURL . '/finance/lazada_cust_rcd.php';
+$deleteRedirectPage = $SITEURL . '/finance/lazada_cust_rcd_table.php';
 $result = getData('*', '', '', LAZADA_CUST_RCD, $connect);
 $tableRows = array();
 if ($result instanceof mysqli_result) {
@@ -36,7 +36,7 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
             panelStorageKey: 'lazada_customer_record_filter_panel_open',
             deferApply: true,
             selectFieldsMultiple: true,
-            scopePaths: ['lazada_cust_rcd_table.php', 'lazada_cust_rcd.php'],
+            scopePaths: ['finance/lazada_cust_rcd_table.php', 'finance/lazada_cust_rcd.php'],
             filters: [
                 { key: 'customer_label', label: 'Customer Label', attr: 'customer_label', type: 'select', placeholder: 'All Customer Labels' },
                 { key: 'customer_tag', label: 'Tag', attr: 'customer_tag', type: 'select', placeholder: 'All Tags' },

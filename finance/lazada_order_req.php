@@ -2,8 +2,8 @@
 $currentPagePin = 93;
 $pageTitle = "Lazada Order Request";
 
-include_once 'menuHeader.php';
-include_once 'checkCurrentPagePin.php';
+include_once __DIR__ . '/../menuHeader.php';
+include_once __DIR__ . '/../checkCurrentPagePin.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = LAZADA_ORDER_REQ;
@@ -13,7 +13,7 @@ $act = input('act');
 $pageAction = getPageAction($act);
 
 
-$redirect_page = $SITEURL . '/lazada_order_req_table.php';
+$redirect_page = $SITEURL . '/finance/lazada_order_req_table.php';
 $back_redirect_page = commonResolveBackUrl($redirect_page);
 $redirectLink = '<script>location.href=' . json_encode($redirect_page) . ';</script>';
 $backRedirectLink = '<script>location.replace(' . json_encode($back_redirect_page) . ');</script>';

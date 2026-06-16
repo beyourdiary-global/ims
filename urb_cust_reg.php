@@ -702,7 +702,7 @@ if ($urbanismOrderFbLink === '' && $urbanismFormName !== '') {
                                         'buyer_pay_method' => commonResolvePaymentMethodName(isset($lazadaOrderRow['pay_meth']) ? $lazadaOrderRow['pay_meth'] : '', $finance_connect),
                                         'fees' => isset($lazadaOrderRow['pay_fee']) ? (string) $lazadaOrderRow['pay_fee'] : '0.00',
                                         'final_amount' => isset($lazadaOrderRow['final_income']) ? (string) $lazadaOrderRow['final_income'] : '0.00',
-                                        'detail_url' => $SITEURL . '/lazada_order_req.php?id=' . (isset($lazadaOrderRow['id']) ? (int) $lazadaOrderRow['id'] : 0) . '&act=E',
+                                        'detail_url' => $SITEURL . '/finance/lazada_order_req.php?id=' . (isset($lazadaOrderRow['id']) ? (int) $lazadaOrderRow['id'] : 0) . '&act=E',
                                     );
                                     $sumFinalAmount += (float) (isset($lazadaOrderRow['final_income']) ? $lazadaOrderRow['final_income'] : 0);
                                 }

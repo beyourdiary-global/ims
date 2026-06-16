@@ -4,7 +4,7 @@ $currentPagePin = 93;
 $listPageSkipSessionReset = true;
 $listPageSkipNumbering = true;
 
-include_once 'include/list_page_header.php';
+include_once __DIR__ . '/../include/list_page_header.php';
 
 $canAssignEstimatedReceivedDate = isActionAllowed('Edit', $pinAccess);
 $estimatedDateToday = new DateTimeImmutable('today');
@@ -18,7 +18,7 @@ if (empty($_SESSION['csrf_token'])) {
 $currentTablePath = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
 $currentTableQuery = $_GET;
 unset($currentTableQuery['verify_id'], $currentTableQuery['complete_id']);
-$currentTableRedirect = $currentTablePath !== '' ? $currentTablePath : '/lazada_order_req_table.php';
+$currentTableRedirect = $currentTablePath !== '' ? $currentTablePath : '/finance/lazada_order_req_table.php';
 if (!empty($currentTableQuery)) {
     $currentTableRedirect .= '?' . http_build_query($currentTableQuery);
 }
@@ -177,8 +177,8 @@ $whereCondition = "";
 if (input('ids')) {
     $whereCondition = "id IN (" . input('ids') . ")";
 }
-$redirect_page = $SITEURL . '/lazada_order_req.php';
-$deleteRedirectPage = $SITEURL . '/lazada_order_req_table.php';
+$redirect_page = $SITEURL . '/finance/lazada_order_req.php';
+$deleteRedirectPage = $SITEURL . '/finance/lazada_order_req_table.php';
 $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
 
 ?>
