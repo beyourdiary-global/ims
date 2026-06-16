@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 129;
 $pageTitle = "Shopee Verify Order";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

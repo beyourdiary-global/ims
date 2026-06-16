@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 94;
 $pageTitle = "Debit Notes (Invoice)";
-$isFinance = 1;
 $redirectToCreateInvoicePage = 0; // Default value
 
 include '../menuHeader.php';

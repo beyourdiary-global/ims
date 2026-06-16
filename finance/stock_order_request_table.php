@@ -1,7 +1,6 @@
 <?php
 $pageTitle = 'Stock Order Request';
 $currentPagePin = 126;
-$isFinance = 1;
 
 $listPageSkipPinAccess = true;
 include_once '../include/list_page_header.php';

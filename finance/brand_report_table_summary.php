@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 0;
 $pageTitle = "Brand Report";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

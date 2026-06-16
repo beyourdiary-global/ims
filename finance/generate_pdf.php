@@ -1,5 +1,5 @@
 <?php
-$isFinance = 1;
+
 include_once "../include/connection.php";
 include_once "../include/common.php";
 include_once "../include/common_variable.php";

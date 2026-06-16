@@ -2,7 +2,6 @@
 $currentPagePin = 0;
 ob_start();
 $pageTitle = 'Downline Top Up Record';
-$isFinance = 1;
 
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';

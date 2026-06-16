@@ -2,7 +2,6 @@
 $currentPagePin = 69;
 ob_start();
 $pageTitle = "Facebook Order Request";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

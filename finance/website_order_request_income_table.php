@@ -2,7 +2,6 @@
 ob_start();
 $pageTitle = "Website Order Request";
 $currentPagePin = 92;
-$isFinance = 1;
 
 
 include_once '../include/list_page_header.php';

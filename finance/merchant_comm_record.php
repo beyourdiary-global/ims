@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 61;
 $pageTitle = "Merchant Commission Record";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

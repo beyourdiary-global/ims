@@ -2,7 +2,6 @@
 ob_start();
 $pageTitle = "Stock Credit Top Up Record";
 $currentPagePin = 78;
-$isFinance = 1;
 
 include_once '../include/list_page_header.php';
 

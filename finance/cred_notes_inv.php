@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 70;
 $pageTitle = "Credit Notes (Invoice)";
-$isFinance = 1;
 $redirectToCreateInvoicePage = 0; // Default value
 
 include '../menuHeader.php';

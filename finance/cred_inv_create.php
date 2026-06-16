@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 0;
 $pageTitle = "Credit Notes (Invoice)";
-$isFinance = 1;
 
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';

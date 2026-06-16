@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 47;
 $pageTitle = "Cash On Hand Transaction";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

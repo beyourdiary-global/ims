@@ -2,7 +2,6 @@
 $currentPagePin = 77;
 ob_start();
 $pageTitle = "Shopee Ads Top Up Transaction";
-$isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);

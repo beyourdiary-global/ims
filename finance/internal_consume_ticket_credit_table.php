@@ -2,7 +2,6 @@
 ob_start();
 $pageTitle = "Internal Consume Ticket/Credit";
 $currentPagePin = 65;
-$isFinance = 1;
 
 
 include_once '../include/list_page_header.php';

@@ -1,7 +1,6 @@
 <?php
 $pageTitle = "Stock Credit Top Up Record";
 $currentPagePin = 78;
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

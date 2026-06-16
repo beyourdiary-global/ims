@@ -1,7 +1,6 @@
 <?php
 $pageTitle = "Shopee Customer Record";
 $currentPagePin = 85;
-$isFinance = 1;
 
 include_once '../include/list_page_header.php';
 include_once ROOT . '/include/customer_tag.php';

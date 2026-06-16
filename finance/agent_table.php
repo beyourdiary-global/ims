@@ -1,7 +1,6 @@
 <?php
 $pageTitle = "Agent";
 $currentPagePin = 62;
-$isFinance = 1;
 
 include_once '../include/list_page_header.php';
 

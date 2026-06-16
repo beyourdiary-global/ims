@@ -5,7 +5,6 @@ $taskParentPin = 139;
 $currentPagePin = 140;
 $pageTitle = 'Project Settings';
 $taskParentTitle = 'Project Task';
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

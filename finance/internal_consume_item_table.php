@@ -2,7 +2,6 @@
 $currentPagePin = 0;
 ob_start();
 $pageTitle = "Internal Consume Item";
-$isFinance = 1;
 
 include_once '../include/list_page_header.php';
 

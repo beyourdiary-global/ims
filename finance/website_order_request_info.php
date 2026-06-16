@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 92;
 $disablePinGroupPageTitleSync = true;
-$isFinance = 1;
 $orderRequestInfoSource = 'website';
 $orderRequestInfoPageTitle = 'Website Order Request Info';
 $orderRequestInfoAllowedPins = array(92);

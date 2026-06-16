@@ -1,5 +1,4 @@
 <?php
-$isProcess = 1;
 
 $rootDir = __DIR__;
 if (file_exists($rootDir . '/init.php')) {

@@ -2,7 +2,6 @@
 ob_start();
 $pageTitle = "Atome Transaction Backup Record";
 $currentPagePin = 87;
-$isFinance = 1;
 include_once '../include/list_page_header.php';
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . "_list.xlsx";

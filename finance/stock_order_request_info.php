@@ -2,7 +2,6 @@
 $currentPagePin = 0;
 $pageTitle = 'Stock Order Request Info';
 $disablePinGroupPageTitleSync = true;
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

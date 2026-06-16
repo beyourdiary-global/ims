@@ -1,7 +1,6 @@
 <?php
 $pageTitle = "Payment Method (Finance)";
 $currentPagePin = 60;
-$isFinance = 1;
 
 include_once '../include/list_page_header.php';
 

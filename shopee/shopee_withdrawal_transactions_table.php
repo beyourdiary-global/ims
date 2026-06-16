@@ -2,7 +2,6 @@
 ob_start();
 $pageTitle = "Shopee Withdrawal Transactions";
 $currentPagePin = 51;
-$isFinance = 1;
 
 
 include_once '../include/list_page_header.php';

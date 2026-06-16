@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 0;
 $pageTitle = "Lazada Account";
-$isFinance = 1;
 
 include_once '../include/list_page_header.php';
 

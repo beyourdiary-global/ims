@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 45;
 $pageTitle = "Other Creditor Transaction";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

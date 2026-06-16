@@ -2,7 +2,6 @@
 $currentPagePin = 93;
 ob_start();
 $pageTitle = "Lazada Order Request";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

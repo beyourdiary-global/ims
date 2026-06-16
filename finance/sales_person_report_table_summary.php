@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 100;
 $pageTitle = 'Sales Person Report';
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

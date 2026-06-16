@@ -1,5 +1,5 @@
 <?php
-$isFinance = 1;
+
 $pageTitle = 'Flow Setting';
 include_once '../include/connection.php';
 include_once '../include/common.php';
@@ -212,7 +212,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['flow_action']) && $_P
 $currentPagePin = 149;
 $pageTitle = 'Flow Setting';
 $disablePinGroupPageTitleSync = true;
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

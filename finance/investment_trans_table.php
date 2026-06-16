@@ -1,7 +1,6 @@
 <?php
 $pageTitle = "Investment Transaction";
 $currentPagePin = 40;
-$isFinance = 1;
 
 include_once '../include/list_page_header.php';
 

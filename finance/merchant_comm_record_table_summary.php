@@ -2,7 +2,6 @@
 $currentPagePin = 61;
 ob_start();
 $pageTitle = "Merchant Commission Record";
-$isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);

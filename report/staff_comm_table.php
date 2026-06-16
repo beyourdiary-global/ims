@@ -1,6 +1,5 @@
 <?php
 $pageTitle = "Staff Commission Report";
-$isFinance = 1;
 $currentPagePin = 124;
 include_once '../include/list_page_header.php';
 include ROOT . '/include/access.php';

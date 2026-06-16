@@ -1,7 +1,6 @@
 <?php
 $pageTitle = "Credit Notes (Invoice)";
 $currentPagePin = 70;
-$isFinance = 1;
 
 
 include_once '../include/list_page_header.php';

@@ -3,7 +3,6 @@ $currentPagePin = 146;
 $pageTitle = 'Waiting To Pack';
 $displayPageTitle = 'Waiting To Pack';
 $disablePinGroupPageTitleSync = true;
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

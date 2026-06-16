@@ -1,7 +1,6 @@
 <?php
 $pageTitle = "Shopee Service Charges Rate Setting";
 $currentPagePin = 83;
-$isFinance = 1;
 
 include_once '../include/list_page_header.php';
 

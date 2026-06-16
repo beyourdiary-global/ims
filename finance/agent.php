@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 62;
 $pageTitle = "Agent";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

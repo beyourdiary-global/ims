@@ -1,7 +1,6 @@
 <?php
 $pageTitle = "Facebook Order Request";
 $currentPagePin = 69;
-$isFinance = 1;
 $listPageSkipSessionReset = true;
 $listPageSkipNumbering = true;
 

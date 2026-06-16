@@ -2,7 +2,6 @@
 $currentPagePin = 87;
 ob_start();
 $pageTitle = "Atome Transaction Backup Record Detail";
-$isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);

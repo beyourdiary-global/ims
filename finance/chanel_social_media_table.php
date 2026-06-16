@@ -1,7 +1,6 @@
 <?php
 $pageTitle = "Chanel (Social Media)";
 $currentPagePin = 79;
-$isFinance = 1;
 
 include_once '../include/list_page_header.php';
 

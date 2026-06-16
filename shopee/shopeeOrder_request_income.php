@@ -1,7 +1,6 @@
 <?php
 ob_start();
 $pageTitle = "Shopee Order Report";
-$isFinance = 1;
 $currentPagePin = 123;
 
 include_once '../menuHeader.php';

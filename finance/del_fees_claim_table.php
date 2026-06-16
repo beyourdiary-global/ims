@@ -6,7 +6,6 @@ curr AC -->
 ob_start();
 $pageTitle = "Delivery Fees Claim Record";
 $currentPagePin = 66;
-$isFinance = 1;
 
 include_once '../include/list_page_header.php';
 

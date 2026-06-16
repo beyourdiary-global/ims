@@ -3,7 +3,6 @@ $taskParentPin = 139;
 $currentPagePin = 138;
 $pageTitle = 'Sheets';
 $taskParentTitle = 'Project Task';
-$isFinance = 1;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     include_once '../include/connection.php';

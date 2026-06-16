@@ -1,7 +1,6 @@
 <?php
 $pageTitle = "Current Bank Account Transaction";
 $currentPagePin = 43;
-$isFinance = 1;
 
 include_once '../include/list_page_header.php';
 

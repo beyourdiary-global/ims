@@ -1,7 +1,6 @@
 <?php
 $pageTitle = "Meta Ads Account";
 $currentPagePin = 48;
-$isFinance = 1;
 
 include_once '../include/list_page_header.php';
 

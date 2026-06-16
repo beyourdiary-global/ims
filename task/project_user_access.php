@@ -5,7 +5,6 @@ $taskParentPin = 139;
 $currentPagePin = 141;
 $pageTitle = 'Project User Access';
 $taskParentTitle = 'Project Task';
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

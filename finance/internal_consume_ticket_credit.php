@@ -1,7 +1,6 @@
 <?php
 $pageTitle = "Internal Consume Ticket/Credit";
 $currentPagePin = 65;
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

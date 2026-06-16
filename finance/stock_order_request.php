@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 126;
 $pageTitle = "Stock Order Request";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

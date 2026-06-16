@@ -1,7 +1,6 @@
 <?php
 $pageTitle = "Website Order Request";
 $currentPagePin = 92;
-$isFinance = 1;
 $listPageSkipSessionReset = true;
 $listPageSkipNumbering = true;
 

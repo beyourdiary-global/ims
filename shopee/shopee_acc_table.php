@@ -1,7 +1,6 @@
 <?php
 $pageTitle = "Shopee Account";
 $currentPagePin = 58;
-$isFinance = 1;
 
 include_once '../include/list_page_header.php';
 

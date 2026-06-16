@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 60;
 $pageTitle = "Payment Method (Finance)";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

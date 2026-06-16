@@ -1,5 +1,5 @@
 <?php
-$isFinance = 1;
+
 include '../init.php';
 include ROOT . '/include/connection.php';
 include ROOT . '/include/common.php';

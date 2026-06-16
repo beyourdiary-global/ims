@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 80;
 $pageTitle = "Payment Method (Shopee)";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

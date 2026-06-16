@@ -3,7 +3,6 @@ $taskParentPin = 139;
 $currentPagePin = 136;
 $pageTitle = 'Board';
 $taskParentTitle = 'Project Task';
-$isFinance = 1;
 
 if (!function_exists('taskBoardAuditLog')) {
     function taskBoardAuditLog($connect, $pageTitle, $pageAction, $viewActMsg, $cdate, $ctime)

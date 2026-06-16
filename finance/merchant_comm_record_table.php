@@ -2,7 +2,6 @@
 ob_start();
 $pageTitle = "Merchant Commission Record";
 $currentPagePin = 61;
-$isFinance = 1;
 include_once '../include/list_page_header.php';
 
 

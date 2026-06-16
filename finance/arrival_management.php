@@ -3,7 +3,6 @@ $currentPagePin = 147;
 $pageTitle = 'Arrival Management';
 $displayPageTitle = 'Arrival Management';
 $disablePinGroupPageTitleSync = true;
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

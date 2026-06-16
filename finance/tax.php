@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 57;
 $pageTitle = "Tax";
-$isFinance = 1;
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);

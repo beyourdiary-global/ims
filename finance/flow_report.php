@@ -3,7 +3,6 @@ $currentPagePin = 148;
 $pageTitle = 'Daily Flow Report';
 $displayPageTitle = 'Daily Flow Report';
 $disablePinGroupPageTitleSync = true;
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

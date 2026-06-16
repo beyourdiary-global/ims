@@ -3,7 +3,6 @@ ob_start();
 
 $currentPagePin = 85;
 $pageTitle = "Shopee Customer Record";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

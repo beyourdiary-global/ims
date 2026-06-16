@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 130;
 $pageTitle = "Shopee All Orders";
-$isFinance = 1;
 $listPageSkipTitleResolve = true;
 $listPageSkipPinAccess = true;
 $listPageSkipSessionReset = true;

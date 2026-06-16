@@ -1,7 +1,6 @@
 <?php
 $pageTitle = "Facebook Page Account";
 $currentPagePin = 76;
-$isFinance = 1;
 
 include_once '../include/list_page_header.php';
 

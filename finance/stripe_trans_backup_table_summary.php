@@ -2,7 +2,6 @@
 $currentPagePin = 89;
 ob_start();
 $pageTitle = "Stripe Transaction Backup Record Summary";
-$isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
