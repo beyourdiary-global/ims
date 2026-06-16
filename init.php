@@ -63,6 +63,18 @@ if (!$siteOrlocalMode) {
     $siteUrl = 'https://uatcms.beyourdiary.com';
 }
 
+/**
+ * TODO SECURITY:
+ * Database credentials are still defined in this file for current system compatibility.
+ * This should be improved later by moving the database password and host config into
+ * environment variables or a .env file that is excluded from Git.
+ *
+ * When this is changed in the future:
+ * 1. Update the server/local environment configuration.
+ * 2. Remove plaintext credentials from the repository.
+ * 3. Rotate the exposed database password.
+ * 4. Test both CMS and finance database connections.
+ */
 define('dbuser', $dbUser);
 define('dbpwd', $siteOrlocalMode ? 'Byd1234@Global' : '');
 define('dbhost', $siteOrlocalMode ? '127.0.0.1:3306' : 'localhost');
