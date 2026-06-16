@@ -2250,15 +2250,12 @@ td.btn-container.mobile-action-open-left .mobile-action-menu {
 }
 
 #dispTable #addBtn.btn,
-
 #dispTable #actionBtn.btn,
-
-#dispTable #importBtn.btn, 
-
+#dispTable #importBtn.btn,
 #dispTable .btn[name="actionBtn"] {
-
-    font-size: 18px !important;
+  font-size: 18px !important;
+}
 
 #dispTable .btn-container {
-    white-space: nowrap;
+  white-space: nowrap;
 }
