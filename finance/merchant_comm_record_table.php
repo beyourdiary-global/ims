@@ -3,9 +3,7 @@ ob_start();
 $pageTitle = "Merchant Commission Record";
 $currentPagePin = 61;
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once '../include/list_page_header.php';
 
 
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
@@ -118,13 +116,7 @@ if (!empty($checkboxValues)) {
     }
 }
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$_SESSION['searchChk'] = '';
-unset($_SESSION['resetChk']);
-$num = 1;   // numbering
+
 $deleteRedirectPage = $SITEURL . '/finance/merchant_comm_record_table.php';
 $redirect_page = $SITEURL . '/finance/merchant_comm_record.php';
 $result = getData('*', '', '', MRCHT_COMM, $finance_connect);

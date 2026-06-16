@@ -3,9 +3,7 @@ ob_start();
 $pageTitle = "Monthly Bank Transaction Backup Record";
 $currentPagePin = 59;
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once '../include/list_page_header.php';
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . "_list.xlsx";
 $img_path = '../' . img_server . 'finance/bank_trans_backup/';
@@ -119,13 +117,6 @@ if (!empty($checkboxValues)) {
         echo 'Failed to create temporary Excel file';
     }
 }
-
-
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/finance/bank_trans_backup.php';
 

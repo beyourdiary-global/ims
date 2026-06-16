@@ -6,9 +6,7 @@ include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
 include_once ROOT . '/include/campaign_common.php';
 
-if ($connect instanceof mysqli) {
-    @mysqli_set_charset($connect, 'utf8mb4');
-}
+
 
 $campaignId = (int) input('campaign_id');
 if ($campaignId <= 0) {

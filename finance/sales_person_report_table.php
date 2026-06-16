@@ -3,16 +3,9 @@ $pageTitle = "Sales Person Report";
 $currentPagePin = 100;
 $isFinance = 1;
 
-include_once '../menuHeader.php';
-include_once '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once '../include/list_page_header.php';
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
-$deleteRedirectPage = $SITEURL . 'finance/sales_person_report_table.php';
+$deleteRedirectPage = $SITEURL . '/finance/sales_person_report_table.php';
 $result = getData('*', '', '', LAZADA_ORDER_REQ, $connect);
 $result2 = getData('*', '', '', FB_ORDER_REQ,$finance_connect
 );
@@ -29,7 +22,7 @@ $result4 = getData('*', '', '', SHOPEE_SG_ORDER_REQ ,$finance_connect);
 
 <script>
     $(document).ready(() => {
-        createSortingTable('lazada_order_req');
+        createSortingTable('sales_person_report_table');
     });
 </script>
 <body>
@@ -381,7 +374,7 @@ common.fun.js
 function(id)
 to resize table with bootstrap 5 classes
 */
-datatableAlignment('lazada_order_req');
+datatableAlignment('sales_person_report_table');
 </script>
 
 </html>

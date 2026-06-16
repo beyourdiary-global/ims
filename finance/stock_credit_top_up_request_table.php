@@ -4,9 +4,7 @@ $pageTitle = "Stock Credit Top Up Record";
 $currentPagePin = 78;
 $isFinance = 1;
 
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once '../include/list_page_header.php';
 
 
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
@@ -120,13 +118,7 @@ if (!empty($checkboxValues)) {
 }
 
 $tblName = STK_CDT_TOPUP_RCD;
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['searchChk'] = '';
-unset($_SESSION['resetChk']);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
+
 
 $redirect_page = $SITEURL . '/finance/stock_credit_top_up_request.php';
 $deleteRedirectPage = $SITEURL . '/finance/stock_credit_top_up_request_table.php';

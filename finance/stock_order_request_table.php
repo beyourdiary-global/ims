@@ -3,17 +3,13 @@ $pageTitle = 'Stock Order Request';
 $currentPagePin = 126;
 $isFinance = 1;
 
-include_once '../menuHeader.php';
-include_once '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+$listPageSkipPinAccess = true;
+include_once '../include/list_page_header.php';
 
 $pinAccess = checkPinByGroupId($connect, $currentPagePin);
 if (!is_array($pinAccess)) {
     $pinAccess = array();
 }
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
 
 $redirect_page = $SITEURL . '/finance/stock_order_request.php';
 $deleteRedirectPage = $SITEURL . '/finance/stock_order_request_table.php';

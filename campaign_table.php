@@ -2,19 +2,12 @@
 $pageTitle = "Campaign";
 $currentPagePin = 153;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
+include_once 'include/list_page_header.php';
 include_once ROOT . '/include/campaign_common.php';
-
-$resolvedPageTitle = getPinGroupNameById($connect, $currentPagePin);
-if (!empty($resolvedPageTitle)) {
-    $pageTitle = $resolvedPageTitle;
-}
 
 $tblName = CAMPAIGN;
 $redirect_page = $SITEURL . '/campaign.php';
 $deleteRedirectPage = $SITEURL . '/campaign_table.php';
-$pinAccess = checkCurrentPin($connect, $pageTitle);
 
 if (!isActionAllowed('View', $pinAccess)) {
     echo '<script>location.href = "' . $SITEURL . '/dashboard.php";</script>';

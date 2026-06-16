@@ -3,9 +3,7 @@ ob_start();
 $pageTitle = "Stripe Transaction Backup Record";
 $currentPagePin = 89;
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once '../include/list_page_header.php';
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . "_list.xlsx";
 $img_path = '../' . img_server . 'finance/stripe_trans_backup/';
@@ -116,14 +114,6 @@ if (!empty($checkboxValues)) {
     }
 }
 
-
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['searchChk'] = '';
-unset($_SESSION['resetChk']);
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 
 $deleteRedirectPage = $SITEURL . '/finance/stripe_trans_backup_table.php';
 $redirect_page = $SITEURL . '/finance/stripe_trans_backup.php';

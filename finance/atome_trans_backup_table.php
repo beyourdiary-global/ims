@@ -3,9 +3,7 @@ ob_start();
 $pageTitle = "Atome Transaction Backup Record";
 $currentPagePin = 87;
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once '../include/list_page_header.php';
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . "_list.xlsx";
 $img_path = '../' . img_server . 'finance/atome_trans_backup/';
@@ -118,16 +116,7 @@ if (!empty($checkboxValues)) {
 }
 
 
-
-
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
 $_SESSION['expChk'] = '';
-$_SESSION['searchChk'] = '';
-unset($_SESSION['resetChk']);
-$num = 1;   // numbering
 $deleteRedirectPage = $SITEURL . '/atome_trans_backup_table.php';
 $redirect_page = $SITEURL . '/finance/atome_trans_backup.php';
 
