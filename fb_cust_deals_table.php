@@ -52,14 +52,6 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
     });
 </script>
 
-
-<style>
-    #addBtn,
-    .btn-container 
-    
-
-</style>
-
 <body>
 
     <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

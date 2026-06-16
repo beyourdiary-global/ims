@@ -51,15 +51,9 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
 
 
 <style>
-    #addBtn,
-    .btn-container 
-
-    
-
     .customer-name-label-cell {
         white-space: nowrap;
     }
-
 </style>
 
 <body>

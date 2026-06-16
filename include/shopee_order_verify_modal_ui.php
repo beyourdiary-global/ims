@@ -195,6 +195,16 @@ if (!function_exists('shopeeOrderDetailPdfRenderVerifyModalScript')) {
                     var localPreviewUrl = '';
                     var canFinalizeVerify = false;
 
+                    function setStatus(message, isError) {
+                        if (!statusNode) {
+                            return;
+                        }
+
+                        statusNode.textContent = message || '';
+                        statusNode.classList.toggle('text-danger', !!isError);
+                        statusNode.classList.toggle('text-muted', !isError);
+                    }
+
                     function setBusyState(isBusy) {
                         [directChoiceBtn, uploadChoiceBtn, compareBtn, reloadBtn, backBtn].forEach(function (button) {
                             if (button) {
