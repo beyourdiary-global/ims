@@ -417,7 +417,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                     Open your created bot chat and send <strong>/start</strong> once.<br>
                                     <img class="token-help-media mt-2" src="<?= $SITEURL ?>/images_server/token_setting_guide/chat_id_step1.png" alt="Telegram bot chat with start command">
                                 </li>
-                                <li>Open this URL in browser (replace with your bot token):<br><code>TELEGRAM_API&lt;YOUR_BOT_TOKEN&gt;/getUpdates</code></li>
+                                <li>Open this URL in browser (replace with your bot token):<br><code><?= TELEGRAM_API ?>&lt;YOUR_BOT_TOKEN&gt;/getUpdates</code></li>
                                 <li>
                                     In the JSON response, find <code>message</code> -&gt; <code>chat</code> -&gt; <code>id</code>.<br>
                                     <img class="token-help-media mt-2" src="<?= $SITEURL ?>/images_server/token_setting_guide/chat_id_step2.png" alt="Telegram getUpdates response with chat id">
