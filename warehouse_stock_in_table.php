@@ -19,17 +19,11 @@ $packages = siLoadPackages($connect);
 list($warehouseNameMap, $warehouseNameToId) = siBuildNameMaps($warehouses);
 list($productNameMap, $productNameToId) = siBuildNameMaps($products);
 list($packageNameMap, $packageNameToId) = siBuildNameMaps($packages);
-
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
-
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-if (!is_array($pinAccess)) {
-    $pinAccess = array();
-}
+$listPageSkipSessionReset = true;
+$listPageSkipNumbering = true;
 
 
+include_once 'include/list_page_header.php';
 $msg = isset($_GET['msg']) ? trim((string) $_GET['msg']) : '';
 $err = isset($_GET['err']) ? trim((string) $_GET['err']) : '';
 
@@ -489,7 +483,7 @@ foreach ($listRows as $row) {
     <link rel="stylesheet" href="./css/main.css">
 </head>
 <body>
-<div class="pre-load-center"><div class="preloader"></div></div>
+    
 <div class="page-load-cover">
     <div class="container-fluid d-flex justify-content-center mt-3">
         <div class="col-12 col-md-11">
@@ -606,7 +600,7 @@ foreach ($listRows as $row) {
         datatableAlignment('stockInListTable');
     }
     setButtonColor();
-    preloader(300);
+    
 </script>
 <script src="<?= $SITEURL ?>/js/warehouse_stock_in_table.js"></script>
 </body>

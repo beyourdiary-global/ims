@@ -327,9 +327,7 @@ if ($submittedForSave) {
 </head>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
 
@@ -389,7 +387,7 @@ if ($submittedForSave) {
     checkCurrentPage(page, action);
     centerAlignment("formContainer");
     setButtonColor();
-    preloader(300);
+    
 
     const companyInput = document.getElementById('companyName');
     const companyIdInput = document.getElementById('company');

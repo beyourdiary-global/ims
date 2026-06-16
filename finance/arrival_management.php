@@ -644,34 +644,6 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
             min-width: 180px;
         }
 
-        .estimated-date-modal {
-            position: fixed;
-            inset: 0;
-            z-index: 2000;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            background: rgba(0, 0, 0, 0.45);
-            padding: 16px;
-        }
-
-        .estimated-date-modal.is-open {
-            display: flex;
-        }
-
-        .estimated-date-modal__dialog {
-            width: 100%;
-            max-width: 420px;
-            border-radius: 12px;
-            background: #fff;
-            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
-            padding: 20px;
-        }
-
-        .estimated-date-modal__close-btn,
-        .estimated-date-modal__action-btn {
-            text-transform: none !important;
-        }
 
         .arrival-follow-up-summary {
             background: #f8f9fa;
@@ -1118,32 +1090,7 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
         </div>
     </div>
 
-    <div id="estimatedReceivedDateModal" class="estimated-date-modal" onclick="if (event.target === this) closeEstimatedReceivedDateModal();">
-        <div class="estimated-date-modal__dialog">
-            <form method="post">
-                <div class="d-flex align-items-start justify-content-between gap-3 mb-4">
-                    <h5 class="mb-0" id="estimatedReceivedDateTitle">Assign Estimate Received Date</h5>
-                    <button type="button" class="btn btn-sm btn-light px-2 estimated-date-modal__close-btn" onclick="closeEstimatedReceivedDateModal()" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
-                </div>
-
-                <input type="hidden" name="estimated_received_platform" id="estimated_received_platform" value="">
-                <input type="hidden" name="estimated_received_order_id" id="estimated_received_order_id" value="">
-                <input type="hidden" name="platform_section" id="estimated_received_platform_section" value="<?= htmlspecialchars($activePlatform, ENT_QUOTES, 'UTF-8') ?>">
-                <div class="mb-2">
-                    <label class="form-label" for="estimated_received_date">Estimate Received Date</label>
-                    <input type="date" class="form-control" name="estimated_received_date" id="estimated_received_date" min="<?= htmlspecialchars($estimatedDateValidation['min_date']) ?>" max="<?= htmlspecialchars($estimatedDateValidation['max_date']) ?>" required>
-                </div>
-                <div class="text-muted mb-4" id="estimated_received_date_hint">
-                    Choose a date from <?= htmlspecialchars($estimatedDateValidation['min_date']) ?> until <?= htmlspecialchars($estimatedDateValidation['max_date']) ?>.
-                </div>
-
-                <div class="d-flex justify-content-end gap-3">
-                    <button type="button" class="btn btn-outline-secondary estimated-date-modal__action-btn" onclick="closeEstimatedReceivedDateModal()">Cancel</button>
-                    <button type="submit" name="saveEstimatedDateBtn" value="1" class="btn btn-primary estimated-date-modal__action-btn">Save</button>
-                </div>
-            </form>
-        </div>
-    </div>
+    <?php include_once ROOT . '/include/estimated_date_modal.php'; ?>
 
     <script>
     function bindArrivalFollowUpAttachmentPreview(inputId, wrapId, imageId, noteId) {
@@ -1237,36 +1184,6 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
         });
     }
 
-    function openEstimatedReceivedDateModal(platformKey, orderId, orderCode, minDate, maxDate) {
-        const modal = document.getElementById('estimatedReceivedDateModal');
-        const title = document.getElementById('estimatedReceivedDateTitle');
-        const platformInput = document.getElementById('estimated_received_platform');
-        const orderIdInput = document.getElementById('estimated_received_order_id');
-        const dateInput = document.getElementById('estimated_received_date');
-        const dateHint = document.getElementById('estimated_received_date_hint');
-
-        if (!modal || !platformInput || !orderIdInput || !dateInput) {
-            return;
-        }
-
-        title.textContent = orderCode ? 'Assign Estimate Received Date for ' + orderCode : 'Assign Estimate Received Date';
-        platformInput.value = platformKey || '';
-        orderIdInput.value = orderId;
-        dateInput.value = '';
-        dateInput.min = minDate;
-        dateInput.max = maxDate;
-        if (dateHint) {
-            dateHint.textContent = 'Choose a date from ' + minDate + ' until ' + maxDate + '.';
-        }
-        modal.classList.add('is-open');
-    }
-
-    function closeEstimatedReceivedDateModal() {
-        const modal = document.getElementById('estimatedReceivedDateModal');
-        if (modal) {
-            modal.classList.remove('is-open');
-        }
-    }
 
     (function () {
         <?php if ($statusMessage !== '') { ?>
@@ -1300,18 +1217,7 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
             });
         }
 
-        function getValidDataTableRowCount(tableElement) {
-            var headerCount = tableElement.querySelectorAll('thead th').length;
-            var validRows = 0;
-            tableElement.querySelectorAll('tbody tr').forEach(function (rowElement) {
-                var cellCount = rowElement.querySelectorAll('td, th').length;
-                var hasColspan = rowElement.querySelector('[colspan]');
-                if (!hasColspan && cellCount === headerCount) {
-                    validRows += 1;
-                }
-            });
-            return validRows;
-        }
+        
 
         document.querySelectorAll('.arrival-management-table-js').forEach(function (tableElement) {
             var rowCount = getValidDataTableRowCount(tableElement);
@@ -1349,20 +1255,6 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
             document.getElementById('arrival_platform_section'),
             document.getElementById('estimated_received_platform_section')
         ];
-
-        function activatePlatformTab(platformKey) {
-            document.querySelectorAll('[data-platform-tab]').forEach(function (button) {
-                button.classList.toggle('is-active', button.getAttribute('data-platform-tab') === platformKey);
-            });
-            document.querySelectorAll('[data-platform-panel]').forEach(function (panel) {
-                panel.classList.toggle('is-active', panel.getAttribute('data-platform-panel') === platformKey);
-            });
-            hiddenPlatformInputs.forEach(function (input) {
-                if (input) {
-                    input.value = platformKey;
-                }
-            });
-        }
 
         document.querySelectorAll('[data-platform-tab]').forEach(function (button) {
             button.addEventListener('click', function () {

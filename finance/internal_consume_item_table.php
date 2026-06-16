@@ -3,9 +3,8 @@ $currentPagePin = 0;
 ob_start();
 $pageTitle = "Internal Consume Item";
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+
+include_once '../include/list_page_header.php';
 
 
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
@@ -118,50 +117,6 @@ if (!empty($checkboxValues)) {
     }
 }
 
-function addDirToZip($dir, $zip, $basePath)
-{
-    $files = scandir($dir);
-    foreach ($files as $file) {
-        if ($file == '.' || $file == '..') {
-            continue;
-        }
-        $filePath = $dir . $file;
-        if (is_file($filePath)) {
-            // Add the file to the zip archive with a relative path
-            $relativePath = str_replace($basePath, '', $filePath);
-            $zip->addFile($filePath, $relativePath);
-        } elseif (is_dir($filePath)) {
-            // Add the directory to the zip archive
-            $zip->addEmptyDir(str_replace($basePath, '', $filePath));
-            // Recursively add files and directories inside the current directory
-            addDirToZip($filePath . '/', $zip, $basePath);
-        }
-    }
-}
-
-function deleteDir($dirPath) {
-    if (!is_dir($dirPath)) {
-        return;
-    }
-    $files = glob($dirPath . '*', GLOB_MARK);
-    foreach ($files as $file) {
-        if (is_dir($file)) {
-            deleteDir($file);
-        } else {
-            unlink($file);
-        }
-    }
-    rmdir($dirPath);
-}
-
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['searchChk'] = '';
-unset($_SESSION['resetChk']);
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
-
 $deleteRedirectPage = $SITEURL . '/finance/internal_consume_item_table.php';
 $redirect_page = $SITEURL . '/finance/internal_consume_item.php';
 $result = getData('*', '', '', ITL_CSM_ITEM, $finance_connect);
@@ -176,7 +131,7 @@ $tblName = ITL_CSM_ITEM;
 </head>
 
 <script>
-    preloader(300);
+    
 
     $(document).ready(() => {
         createSortingTable('internal_consume_item_table');
@@ -184,9 +139,7 @@ $tblName = ITL_CSM_ITEM;
 </script>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
@@ -307,15 +260,7 @@ $tblName = ITL_CSM_ITEM;
                          $groupedRows = [];
                          $counters = 1;
          
-                         function generateTableRow($id, &$counters, $key, $topupAmt) {
-                             echo '<tr onclick="window.location=\'internal_consume_item_table_summary.php?ids=' . urlencode($id) . '\';" style="cursor:pointer;">';
-                             echo '<th class="hideColumn" scope="row">' . $id . '</th>';
-                             echo ' <th class="text-center"><input type="checkbox" class="export" value="' . $id . '"></th>';
-                             echo '<th scope="row">' . $counters++ . '</th>';
-                             echo '<td scope="row">' . $key . '</td>';
-                             echo '<td scope="row">' . number_format($topupAmt, 2, '.', '') . '</td>';
-                             echo '</tr>';
-                         }
+
                        
                          $groupedRows = [];
                          while ($row = $result->fetch_assoc()) {
@@ -408,11 +353,21 @@ $tblName = ITL_CSM_ITEM;
                                 }                    
                                     
                                 }else if ($groupOption === 'brand') {
-                                    generateTableRow($row['id'],$counters, $brand, $row['cost']);
+                                    financeGenerateTableRow(array(
+                                        'id' => $row['id'],
+                                        'summary_page' => 'internal_consume_item_table_summary.php',
+                                        'cells' => array($brand),
+                                        'amount' => $row['cost'],
+                                    ), $counters);
                                 }else if ($groupOption === 'person') {
                                     generateTableRow($row['id'], $counters, $person, $row['cost']);
                                 }else if ($groupOption === 'package') {
-                                    generateTableRow($row['id'], $counters, $package, $row['cost']);
+                                    financeGenerateTableRow(array(
+                                        'id' => $row['id'],
+                                        'summary_page' => 'internal_consume_item_table_summary.php',
+                                        'cells' => array($package),
+                                        'amount' => $row['cost'],
+                                    ), $counters);
                                 }
                                 }
                                 foreach ($groupedRows as $key => $groupedRow) {

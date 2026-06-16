@@ -2,15 +2,8 @@
 $pageTitle = "Chanel (Social Media)";
 $currentPagePin = 79;
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
+include_once '../include/list_page_header.php';
 
 $redirect_page = $SITEURL . '/finance/chanel_social_media.php';
 $deleteRedirectPage = $SITEURL . '/finance/chanel_social_media_table.php';
@@ -29,19 +22,14 @@ if (!$result) {
 </head>
 
 <script>
-    preloader(300);
+    
     $(document).ready(() => {
         createSortingTable('chanel_social_media_table');
     });
 </script>
-
-
-
 <body>
 
-<div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

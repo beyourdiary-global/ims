@@ -2,15 +2,8 @@
 $pageTitle = "Facebook Page Account";
 $currentPagePin = 76;
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
+include_once '../include/list_page_header.php';
 
 $redirect_page = $SITEURL . '/finance/fb_page_acc.php';
 $deleteRedirectPage = $SITEURL . '/finance/fb_page_acc_table.php';
@@ -29,14 +22,11 @@ if (!$result) {
 </head>
 
 <script>
-    preloader(300);
+    
     $(document).ready(() => {
         createSortingTable('fb_page_acc_table');
     });
 </script>
-
-
-
 <body>
 
 <div class="pre-load-center">

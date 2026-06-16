@@ -404,7 +404,7 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
         } else {
             $telegramText = sorInfoBuildTelegramMessage($requestRow, $summary, $orderLink, $warehouseName);
 
-            $apiBase = 'https://api.telegram.org/bot' . $botToken;
+            $apiBase = TELEGRAM_API . $botToken;
             $sendPhotoUrl = $apiBase . '/sendPhoto';
             $sendMessageUrl = $apiBase . '/sendMessage';
 
@@ -526,7 +526,7 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
     </style>
 </head>
 <body>
-<div class="pre-load-center"><div class="preloader"></div></div>
+    
 <div class="page-load-cover">
     <div class="container-fluid d-flex justify-content-center mt-3">
         <div class="col-12 col-md-11">
@@ -595,7 +595,7 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
     checkCurrentPage('Stock Order Request', '');
     dropdownMenuDispFix();
     setButtonColor();
-    preloader(300);
+    
 
     function sorShowResultModal(message, isError) {
         var modalEl = document.getElementById('sorResultModal');

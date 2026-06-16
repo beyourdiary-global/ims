@@ -2,21 +2,13 @@
 $pageTitle = "SQL Account";
 $currentPagePin = 132;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+
+include_once 'include/list_page_header.php';
 
 $tblName = SQL_ACC;
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-
 if (function_exists('isStatusFieldAvailable') && !isStatusFieldAvailable($tblName, $connect)) {
     @mysqli_query($connect, "ALTER TABLE `" . $tblName . "` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A'");
 }
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;
 
 $redirect_page = $SITEURL . '/sql_account.php';
 $deleteRedirectPage = $SITEURL . '/sql_account_table.php';
@@ -44,32 +36,10 @@ if (!$result) {
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
 </head>
 
-<script>
-    preloader(300);
-
-    $(document).ready(function () {
-        var hasRows = <?= $hasRows ? 'true' : 'false' ?>;
-        if (hasRows) {
-            createSortingTable('table');
-        }
-    });
-</script>
-
-<style>
-    .btn {
-        padding: 0.2rem 0.5rem;
-        font-size: 0.75rem;
-        margin: 3px;
-    }
-    .btn-container {
-        white-space: nowrap;
-    }
-</style>
+<script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

@@ -47,7 +47,7 @@ $customerTagMap = customerTagGetCustomerTagMap($connect, 'customer_info', $custo
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
 </head>
 <script>
-    preloader(300);
+    
 
     $(document).ready(() => {
         createSortingTable('table', { searching: true });
@@ -70,21 +70,13 @@ $customerTagMap = customerTagGetCustomerTagMap($connect, 'customer_info', $custo
 </script>
 
 <style>
-    .btn {
-        padding: 0.2rem 0.5rem;
-        font-size: 0.75rem;
-        margin: 3px;
-    }
+    
 
-    .btn-container {
-        white-space: nowrap;
-    }
+    
 </style>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

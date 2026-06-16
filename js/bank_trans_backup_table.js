@@ -1,17 +1,3 @@
-﻿function exportData() {
-    var checkboxes = document.querySelectorAll('.export:checked');
-    if (checkboxes.length === 0) {
-        alert('Please select data to export.');
-        return false;
-    }
-    return true;
-}
-
-function showExportNotification() {
-    alert('Export successful!');
-}
-
-
 $(document).ready(function ($) {
     $(document).on("change", ".exportAll", function (event) { //checkbox handling
         event.preventDefault();
@@ -57,13 +43,4 @@ $(document).ready(function ($) {
             console.log('No checkboxes are checked.');
         }
     });
-
-    function updateCheckboxesOnOtherPages(isChecked) {
-        // Get all cells in the DataTable
-        var cells = $('#bank_trans_backup_table').DataTable().rows({ page: "current" }).nodes();
-
-        // Check/uncheck all checkboxes in the DataTable
-        $(cells).find('.export').prop('checked', isChecked);
-    }
 });
-

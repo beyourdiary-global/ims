@@ -2,20 +2,10 @@
 $pageTitle = "Campaign Rule Setting";
 $currentPagePin = 154;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
+include_once 'include/list_page_header.php';
 include_once ROOT . '/include/campaign_common.php';
 
-if ($connect instanceof mysqli) {
-    @mysqli_set_charset($connect, 'utf8mb4');
-}
 
-$resolvedPageTitle = getPinGroupNameById($connect, $currentPagePin);
-if (!empty($resolvedPageTitle)) {
-    $pageTitle = $resolvedPageTitle;
-}
-
-$pinAccess = checkCurrentPin($connect, $pageTitle);
 if (!isActionAllowed('View', $pinAccess)) {
     echo '<script>location.href = "' . $SITEURL . '/dashboard.php";</script>';
     exit();
@@ -92,7 +82,7 @@ $userOptions = campaignFetchUsers($connect);
 </head>
 
 <script>
-    preloader(300);
+    
 
     $(document).ready(() => {
         createSortingTable('campaign_rule_setting_table', { searching: true });
@@ -100,9 +90,7 @@ $userOptions = campaignFetchUsers($connect);
 </script>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

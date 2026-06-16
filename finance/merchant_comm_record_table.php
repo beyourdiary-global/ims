@@ -3,9 +3,7 @@ ob_start();
 $pageTitle = "Merchant Commission Record";
 $currentPagePin = 61;
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once '../include/list_page_header.php';
 
 
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
@@ -118,49 +116,7 @@ if (!empty($checkboxValues)) {
     }
 }
 
-function addDirToZip($dir, $zip, $basePath)
-{
-    $files = scandir($dir);
-    foreach ($files as $file) {
-        if ($file == '.' || $file == '..') {
-            continue;
-        }
-        $filePath = $dir . $file;
-        if (is_file($filePath)) {
-            // Add the file to the zip archive with a relative path
-            $relativePath = str_replace($basePath, '', $filePath);
-            $zip->addFile($filePath, $relativePath);
-        } elseif (is_dir($filePath)) {
-            // Add the directory to the zip archive
-            $zip->addEmptyDir(str_replace($basePath, '', $filePath));
-            // Recursively add files and directories inside the current directory
-            addDirToZip($filePath . '/', $zip, $basePath);
-        }
-    }
-}
 
-function deleteDir($dirPath) {
-    if (!is_dir($dirPath)) {
-        return;
-    }
-    $files = glob($dirPath . '*', GLOB_MARK);
-    foreach ($files as $file) {
-        if (is_dir($file)) {
-            deleteDir($file);
-        } else {
-            unlink($file);
-        }
-    }
-    rmdir($dirPath);
-}
-
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$_SESSION['searchChk'] = '';
-unset($_SESSION['resetChk']);
-$num = 1;   // numbering
 $deleteRedirectPage = $SITEURL . '/finance/merchant_comm_record_table.php';
 $redirect_page = $SITEURL . '/finance/merchant_comm_record.php';
 $result = getData('*', '', '', MRCHT_COMM, $finance_connect);
@@ -305,15 +261,7 @@ $tblName = MRCHT_COMM;
                           $groupedRows = [];
                           $counters = 1;
           
-                          function generateTableRow($id, &$counters, $key, $topupAmt) {
-                              echo '<tr onclick="window.location=\'internal_consume_item_table_summary.php?ids=' . urlencode($id) . '\';" style="cursor:pointer;">';
-                              echo ' <th class="text-center"><input type="checkbox" class="export" value="' . $id . '"></th>';
-                              echo '<th class="hideColumn" scope="row">' . $id . '</th>';
-                              echo '<th scope="row">' . $counters++ . '</th>';
-                              echo '<td scope="row">' . $key . '</td>';
-                              echo '<td scope="row">' . number_format($topupAmt, 2, '.', '') . '</td>';
-                              echo '</tr>';
-                          }
+
                         
                           $groupedRows = [];
                         
@@ -396,7 +344,13 @@ $tblName = MRCHT_COMM;
                         }                    
                             
                         }else if ($groupOption === 'currency') {
-                            generateTableRow($row['id'], $counters, $curr, $row['amount']);
+                            financeGenerateTableRow(array(
+                                'id' => $row['id'],
+                                'summary_page' => 'merchant_comm_record_table_summary.php',
+                                'id_before_checkbox' => false,
+                                'cells' => array($curr),
+                                'amount' => $row['amount'],
+                            ), $counters);
                         }
                         }
                         foreach ($groupedRows as $key => $groupedRow) {

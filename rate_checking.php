@@ -93,9 +93,7 @@ if (post('to') && post('from')) {
 </style>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div class="my-3 container-fluid d-flex justify-content-center">

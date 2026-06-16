@@ -6,9 +6,7 @@ include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
 include_once ROOT . '/include/campaign_common.php';
 
-if ($connect instanceof mysqli) {
-    @mysqli_set_charset($connect, 'utf8mb4');
-}
+
 if ($finance_connect instanceof mysqli) {
     @mysqli_set_charset($finance_connect, 'utf8mb4');
 }
@@ -195,7 +193,7 @@ if (input('export') === '1') {
 </head>
 
 <script>
-    preloader(300);
+    
     $(document).ready(function () {
         if ($('#campaign_report_follow_up_table').length) {
             createSortingTable('campaign_report_follow_up_table', { searching: false, order: [[0, 'asc']] });

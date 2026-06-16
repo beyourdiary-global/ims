@@ -488,7 +488,7 @@ else if ($action === 'update') {
     </style>
 </head>
 <body>
-<div class="pre-load-center"><div class="preloader"></div></div>
+    
 <div class="page-load-cover">
     <div class="container-fluid mt-3 mb-5 d-flex justify-content-center">
         <div class="col-12 col-md-11">

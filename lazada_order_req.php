@@ -714,6 +714,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
 <head>
     <link rel="stylesheet" href="../css/main.css">
     <script src="finance/header/js/pdf.min.js"></script>
+    <script src="js/pdf_airbill_parser.js"></script>
     <style>
         .shopee-airbill-row {
             align-items: flex-start;
@@ -855,9 +856,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
 </head>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
     <div class="page-load-cover">
         <div class="d-flex flex-column my-3 ms-3">
             <p><a href="<?= htmlspecialchars((string) $back_redirect_page, ENT_QUOTES, 'UTF-8') ?>">
@@ -1860,7 +1859,6 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
     }
     ?>
     <script>
-        <?php echo shopeeOmsRenderAirbillPdfAutofillScript(); ?>
         <?php echo shopeeOmsRenderAirbillAttachmentPreviewScript(); ?>
 
         var page = "<?= $pageTitle ?>";
@@ -1900,32 +1898,6 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
             var lazadaNewCustomerFields = lazadaNewCustomerSection
                 ? lazadaNewCustomerSection.querySelectorAll('[data-new-customer-required="1"]')
                 : [];
-
-            function clearNewCustomerInlineError(field) {
-                if (!field) {
-                    return;
-                }
-                field.classList.remove('shopee-inline-invalid');
-                var wrapper = field.parentElement;
-                if (!wrapper) {
-                    return;
-                }
-                wrapper.querySelectorAll('.shopee-inline-error').forEach(function (node) {
-                    node.remove();
-                });
-            }
-
-            function showNewCustomerInlineError(field, message) {
-                if (!field) {
-                    return;
-                }
-                clearNewCustomerInlineError(field);
-                field.classList.add('shopee-inline-invalid');
-                var errorNode = document.createElement('small');
-                errorNode.className = 'shopee-inline-error';
-                errorNode.textContent = message;
-                field.parentElement.appendChild(errorNode);
-            }
 
             function validateLazadaNewCustomerForm() {
                 var firstInvalidField = null;

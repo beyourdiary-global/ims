@@ -6,9 +6,7 @@ include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
 include_once ROOT . '/include/campaign_common.php';
 
-if ($connect instanceof mysqli) {
-    @mysqli_set_charset($connect, 'utf8mb4');
-}
+
 
 $campaignId = (int) input('campaign_id');
 if ($campaignId <= 0) {
@@ -392,7 +390,7 @@ $autocompleteConfigs = array(
     </style>
 </head>
 <script>
-    preloader(300);
+    
     $(document).ready(function () {
         var campaignMessageTable = document.getElementById('campaign_message_table');
         if (campaignMessageTable) {
@@ -413,7 +411,7 @@ $autocompleteConfigs = array(
     });
 </script>
 <body>
-<div class="pre-load-center"><div class="preloader"></div></div>
+    
 <div class="page-load-cover">
     <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3 campaign-message-page">
         <div class="col-12 col-md-11">

@@ -7,6 +7,7 @@ $pageTitle = '';
 
 include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
+include_once ROOT . '/include/import_pdf_common.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $resolvedParentPageTitle = getPinGroupNameById($connect, $parentPagePinGroupId);
@@ -156,22 +157,6 @@ if ($action === 'parseShopeeAdsTopup') {
         $importErrors[] = 'Unable to insert the import record. Please try again.';
     }
 }
-function getImportOptionList($tableName, $labelField, $dbConnect)
-{
-    $list = [];
-    $tableName = mysqli_real_escape_string($dbConnect, $tableName);
-    $labelField = mysqli_real_escape_string($dbConnect, $labelField);
-    $query = "SELECT id, `$labelField` AS option_label FROM `$tableName` WHERE status = 'A' ORDER BY `$labelField` ASC";
-    $result = mysqli_query($dbConnect, $query);
-
-    if ($result) {
-        while ($row = mysqli_fetch_assoc($result)) {
-            $list[$row['id']] = $row['option_label'];
-        }
-    }
-
-    return $list;
-}
 
 function sanitizeImportFilename($filename)
 {
@@ -316,20 +301,6 @@ function collectShopeeImportSourceFiles($fileInfo, &$errors, &$warnings)
     return $sourceFiles;
 }
 
-function cleanPdfTextOperand($text)
-{
-    $text = str_replace("\x00", '', (string) $text);
-    $text = strtr($text, array(
-        '\\n' => ' ',
-        '\\r' => ' ',
-        '\\t' => ' ',
-        '\\(' => '(',
-        '\\)' => ')',
-        '\\\\' => '\\',
-    ));
-
-    return normalizeImportText(preg_replace('/[^[:print:] ]/', ' ', $text));
-}
 
 function satPdfHexToUtf8($hex)
 {
@@ -736,46 +707,7 @@ function satExtractTextFromPdfViaCommand($filePath)
     return '';
 }
 
-function extractTextFromPdfContent($content)
-{
-    if ((string) $content === '') {
-        return '';
-    }
 
-    $unicodeMap = satBuildPdfUnicodeMapFromContent($content);
-    preg_match_all('/stream\s*\r?\n(.*?)\r?\n?endstream/s', (string) $content, $streamMatches);
-    $lines = array();
-
-    foreach ($streamMatches[1] as $stream) {
-        $decoded = decodePdfStream($stream);
-        if ($decoded === false) {
-            $decoded = (string) $stream;
-        }
-        $streamLines = satExtractPdfTextTokensFromDecodedStream($decoded, $unicodeMap);
-        if (!empty($streamLines)) {
-            foreach ($streamLines as $line) {
-                $lines[] = $line;
-            }
-        }
-    }
-
-    return implode("\n", $lines);
-}
-
-function getPdfTextLines($text)
-{
-    $lines = preg_split('/\r\n|\r|\n/', (string) $text);
-    $normalizedLines = array();
-
-    foreach ($lines as $line) {
-        $line = normalizeImportText($line);
-        if ($line !== '') {
-            $normalizedLines[] = $line;
-        }
-    }
-
-    return $normalizedLines;
-}
 
 function satRepairSplitPdfWords($text)
 {
@@ -1366,16 +1298,6 @@ function parseShopeeAdsTopupPdf($pdfContent, $fileName, $shopeeAccounts, $curren
     );
 }
 
-function normalizeImportText($text)
-{
-    $text = html_entity_decode((string) $text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
-    return trim(preg_replace('/\s+/u', ' ', $text));
-}
-
-function normalizeImportLookup($text)
-{
-    return strtolower(preg_replace('/[^a-zA-Z0-9]+/', '', normalizeImportText($text)));
-}
 
 function getNodeText($xpath, $query, $contextNode = null)
 {
@@ -1678,9 +1600,7 @@ function validateShopeeAdsPreview($previewData, &$importErrors, $shopeeAccounts,
 </head>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
     <div class="page-load-cover">
         <div class="container-fluid mt-3 mb-5 d-flex justify-content-center">
             <div class="col-12 col-md-11">

@@ -75,6 +75,46 @@ function xssFilter($url)
 	return $url;
 }
 
+if (!function_exists('addDirToZip')) {
+	function addDirToZip($dir, $zip, $basePath)
+	{
+		$files = scandir($dir);
+		foreach ($files as $file) {
+			if ($file == '.' || $file == '..') {
+				continue;
+			}
+			$filePath = $dir . $file;
+			if (is_file($filePath)) {
+				// Add the file to the zip archive with a relative path.
+				$relativePath = str_replace($basePath, '', $filePath);
+				$zip->addFile($filePath, $relativePath);
+			} elseif (is_dir($filePath)) {
+				// Add the directory to the zip archive and recurse into it.
+				$zip->addEmptyDir(str_replace($basePath, '', $filePath));
+				addDirToZip($filePath . '/', $zip, $basePath);
+			}
+		}
+	}
+}
+
+if (!function_exists('deleteDir')) {
+	function deleteDir($dirPath)
+	{
+		if (!is_dir($dirPath)) {
+			return;
+		}
+		$files = glob($dirPath . '*', GLOB_MARK);
+		foreach ($files as $file) {
+			if (is_dir($file)) {
+				deleteDir($file);
+			} else {
+				unlink($file);
+			}
+		}
+		rmdir($dirPath);
+	}
+}
+
 if (!function_exists('decodePdfStream')) {
     function decodePdfStream($stream)
     {
@@ -116,6 +156,57 @@ if (!function_exists('commonFormatAmountRm')) {
     {
         $num = is_numeric($val) ? (float) $val : 0;
         return number_format($num, 2, '.', '');
+    }
+}
+
+if (!function_exists('financeGenerateTableRow')) {
+    function financeGenerateTableRow($config, &$counters)
+    {
+        $id = isset($config['id']) ? $config['id'] : '';
+        $summaryPage = isset($config['summary_page']) ? trim((string) $config['summary_page']) : '';
+        $urlParamName = isset($config['url_param_name']) && trim((string) $config['url_param_name']) !== ''
+            ? trim((string) $config['url_param_name'])
+            : 'ids';
+        $cells = isset($config['cells']) ? $config['cells'] : array();
+        $amount = isset($config['amount']) ? $config['amount'] : 0;
+        $amountDecimals = isset($config['amount_decimals']) ? (int) $config['amount_decimals'] : 2;
+        $checkboxClass = isset($config['checkbox_class']) && trim((string) $config['checkbox_class']) !== ''
+            ? trim((string) $config['checkbox_class'])
+            : 'export';
+        $checkboxValue = array_key_exists('checkbox_value', $config) ? $config['checkbox_value'] : $id;
+        $idBeforeCheckbox = array_key_exists('id_before_checkbox', $config) ? (bool) $config['id_before_checkbox'] : true;
+        $includeHiddenId = array_key_exists('include_hidden_id', $config) ? (bool) $config['include_hidden_id'] : true;
+
+        if (!is_array($cells)) {
+            $cells = array($cells);
+        }
+
+        $url = $summaryPage !== ''
+            ? $summaryPage . '?' . rawurlencode($urlParamName) . '=' . rawurlencode((string) $id)
+            : '#';
+
+        $checkboxValueAttr = $checkboxValue === null ? '' : ' value="' . $checkboxValue . '"';
+
+        echo '<tr onclick="window.location=\'' . $url . '\';" style="cursor:pointer;">';
+
+        if ($idBeforeCheckbox && $includeHiddenId) {
+            echo '<th class="hideColumn" scope="row">' . $id . '</th>';
+        }
+
+        echo ' <th class="text-center"><input type="checkbox" class="' . $checkboxClass . '"' . $checkboxValueAttr . '></th>';
+
+        if (!$idBeforeCheckbox && $includeHiddenId) {
+            echo '<th class="hideColumn" scope="row">' . $id . '</th>';
+        }
+
+        echo '<th scope="row">' . $counters++ . '</th>';
+
+        foreach ($cells as $cell) {
+            echo '<td scope="row">' . $cell . '</td>';
+        }
+
+        echo '<td scope="row">' . number_format((float) $amount, $amountDecimals, '.', '') . '</td>';
+        echo '</tr>';
     }
 }
 
@@ -5975,7 +6066,7 @@ if (!function_exists('shopeeOmsSendTelegramAttachment')) {
                 continue;
             }
 
-            $apiUrl = 'https://api.telegram.org/bot' . $botToken . '/' . $strategy['endpoint'];
+            $apiUrl = TELEGRAM_API . $botToken . '/' . $strategy['endpoint'];
             $payload = array(
                 'chat_id' => $chatId,
                 'caption' => $captionText,
@@ -6053,7 +6144,7 @@ if (!function_exists('shopeeOmsSendTelegramAttachmentByUrl')) {
 
         $attemptErrors = array();
         foreach ($sendStrategies as $strategy) {
-            $apiUrl = 'https://api.telegram.org/bot' . $botToken . '/' . $strategy['endpoint'];
+            $apiUrl = TELEGRAM_API . $botToken . '/' . $strategy['endpoint'];
             $payload = array(
                 'chat_id' => $chatId,
                 'caption' => $captionText,
@@ -6923,399 +7014,7 @@ if (!function_exists('shopeeOmsExtractAirbillDeliveryInfoFromAttachment')) {
 if (!function_exists('shopeeOmsRenderAirbillPdfAutofillScript')) {
     function shopeeOmsRenderAirbillPdfAutofillScript()
     {
-        return <<<'JS'
-if (!window.shopeeOmsAirbillPdfAutofill) {
-    window.shopeeOmsAirbillPdfAutofill = (function () {
-        function getPdfTextItemX(item) {
-            return item && item.transform ? Number(item.transform[4]) || 0 : 0;
-        }
-
-        function getPdfTextItemY(item) {
-            return item && item.transform ? Number(item.transform[5]) || 0 : 0;
-        }
-
-        function normalizePdfTextItem(item) {
-            return String(item && item.str ? item.str : '').trim();
-        }
-
-        function sortPdfItemsForReading(items) {
-            return items.slice().sort(function (a, b) {
-                var yDiff = getPdfTextItemY(b) - getPdfTextItemY(a);
-                if (Math.abs(yDiff) > 2) {
-                    return yDiff;
-                }
-                return getPdfTextItemX(a) - getPdfTextItemX(b);
-            });
-        }
-
-        function groupPdfItemsIntoLines(items) {
-            var sortedItems = sortPdfItemsForReading(items);
-            var lines = [];
-
-            sortedItems.forEach(function (item) {
-                var text = normalizePdfTextItem(item);
-                if (text === '') {
-                    return;
-                }
-
-                var itemY = getPdfTextItemY(item);
-                var currentLine = lines.length > 0 ? lines[lines.length - 1] : null;
-                if (!currentLine || Math.abs(currentLine.y - itemY) > 2) {
-                    currentLine = {
-                        y: itemY,
-                        items: []
-                    };
-                    lines.push(currentLine);
-                }
-
-                currentLine.items.push(item);
-            });
-
-            return lines.map(function (line) {
-                return line.items
-                    .slice()
-                    .sort(function (a, b) {
-                        return getPdfTextItemX(a) - getPdfTextItemX(b);
-                    })
-                    .map(function (item) {
-                        return normalizePdfTextItem(item);
-                    })
-                    .filter(function (text) {
-                        return text !== '';
-                    })
-                    .join(' ')
-                    .replace(/\s+,/g, ',')
-                    .trim();
-            }).filter(function (line) {
-                return line !== '';
-            });
-        }
-
-        function isLikelyAirbillCode(text) {
-            var normalized = String(text || '').replace(/\s+/g, '').toUpperCase();
-            if (normalized.length < 10) {
-                return false;
-            }
-            if (!/[A-Z]/.test(normalized) || !/\d/.test(normalized)) {
-                return false;
-            }
-
-            return /^(?:GDSP|MY)[A-Z0-9]{8,}$/.test(normalized) || /^[A-Z0-9]{10,}$/.test(normalized);
-        }
-
-        function extractAirbillCodeFromPdfItems(items, pageHeight) {
-            var candidates = items
-                .map(function (item) {
-                    return {
-                        text: normalizePdfTextItem(item).replace(/\s+/g, '').toUpperCase(),
-                        x: getPdfTextItemX(item),
-                        y: getPdfTextItemY(item)
-                    };
-                })
-                .filter(function (item) {
-                    return item.y >= (pageHeight * 0.65) && isLikelyAirbillCode(item.text);
-                })
-                .sort(function (a, b) {
-                    if (Math.abs(b.y - a.y) > 2) {
-                        return b.y - a.y;
-                    }
-                    return a.x - b.x;
-                });
-
-            return candidates.length > 0 ? candidates[0].text : '';
-        }
-
-        function findRecipientSectionHeader(items, pageWidth) {
-            var headers = items
-                .filter(function (item) {
-                    var text = normalizePdfTextItem(item).toUpperCase();
-                    return text.indexOf('RECIPIENT DETAILS') === 0 && getPdfTextItemX(item) <= (pageWidth * 0.3);
-                })
-                .sort(function (a, b) {
-                    return getPdfTextItemY(b) - getPdfTextItemY(a);
-                });
-
-            return headers.length > 0 ? headers[0] : null;
-        }
-
-        function extractRecipientNameFromPdfItems(items, pageWidth) {
-            var recipientHeader = findRecipientSectionHeader(items, pageWidth);
-            var nameLabels = items
-                .filter(function (item) {
-                    return normalizePdfTextItem(item) === 'Name:' && getPdfTextItemX(item) <= (pageWidth * 0.2);
-                })
-                .filter(function (item) {
-                    return !recipientHeader || getPdfTextItemY(item) < getPdfTextItemY(recipientHeader) - 2;
-                })
-                .sort(function (a, b) {
-                    return getPdfTextItemY(b) - getPdfTextItemY(a);
-                });
-
-            if (nameLabels.length === 0) {
-                return '';
-            }
-
-            var recipientNameLabel = nameLabels[0];
-            var minX = getPdfTextItemX(recipientNameLabel) + Number(recipientNameLabel.width || 0) - 1;
-            var lineY = getPdfTextItemY(recipientNameLabel);
-            var maxX = pageWidth * 0.62;
-            var nameItems = items.filter(function (item) {
-                var text = normalizePdfTextItem(item);
-                if (text === '' || text === 'Name:' || text === 'Address:' || text === 'Phone:' || text === 'Postcode:') {
-                    return false;
-                }
-
-                return getPdfTextItemX(item) >= minX &&
-                    getPdfTextItemX(item) <= maxX &&
-                    Math.abs(getPdfTextItemY(item) - lineY) <= 3;
-            });
-
-            var nameLines = groupPdfItemsIntoLines(nameItems);
-            return nameLines.length > 0 ? nameLines[0].trim() : '';
-        }
-
-        function extractRecipientAddressFromPdfItems(items, pageWidth) {
-            var recipientHeader = findRecipientSectionHeader(items, pageWidth);
-            var addressLabels = items
-                .filter(function (item) {
-                    return normalizePdfTextItem(item) === 'Address:' && getPdfTextItemX(item) <= (pageWidth * 0.2);
-                })
-                .filter(function (item) {
-                    return !recipientHeader || getPdfTextItemY(item) < getPdfTextItemY(recipientHeader) - 2;
-                })
-                .sort(function (a, b) {
-                    return getPdfTextItemY(b) - getPdfTextItemY(a);
-                });
-
-            if (addressLabels.length === 0) {
-                return '';
-            }
-
-            var recipientAddressLabel = addressLabels[addressLabels.length - 1];
-            var recipientPostcodeLabel = items
-                .filter(function (item) {
-                    return normalizePdfTextItem(item) === 'Postcode:' &&
-                        getPdfTextItemX(item) <= (pageWidth * 0.2) &&
-                        getPdfTextItemY(item) < getPdfTextItemY(recipientAddressLabel) - 10;
-                })
-                .sort(function (a, b) {
-                    return getPdfTextItemY(b) - getPdfTextItemY(a);
-                })[0] || null;
-
-            var minX = getPdfTextItemX(recipientAddressLabel) + Number(recipientAddressLabel.width || 0) - 1;
-            var minY = recipientPostcodeLabel ? getPdfTextItemY(recipientPostcodeLabel) + 8 : getPdfTextItemY(recipientAddressLabel) - 60;
-            var maxY = getPdfTextItemY(recipientAddressLabel) + 1;
-            var maxX = pageWidth * 0.62;
-            var addressItems = items.filter(function (item) {
-                var text = normalizePdfTextItem(item);
-                if (text === '' || text === 'Address:' || text === 'Phone:' || text === 'Name:' || text === 'Postcode:') {
-                    return false;
-                }
-
-                var itemX = getPdfTextItemX(item);
-                var itemY = getPdfTextItemY(item);
-                return itemX >= minX && itemX <= maxX && itemY <= maxY && itemY >= minY;
-            });
-
-            return groupPdfItemsIntoLines(addressItems).join('\n').trim();
-        }
-
-        function extractShopeeAirbillDataFromPdfItems(items, pageWidth, pageHeight) {
-            return {
-                airbillNo: extractAirbillCodeFromPdfItems(items, pageHeight),
-                customerName: extractRecipientNameFromPdfItems(items, pageWidth),
-                customerAddress: extractRecipientAddressFromPdfItems(items, pageWidth)
-            };
-        }
-
-        function dispatchInputEvent(element) {
-            if (!element) {
-                return;
-            }
-
-            try {
-                element.dispatchEvent(new Event('input', { bubbles: true }));
-                element.dispatchEvent(new Event('change', { bubbles: true }));
-            } catch (error) {
-            }
-        }
-
-        function bind(config) {
-            config = config || {};
-            var fileInput = document.querySelector(config.fileInputSelector || '');
-            var airbillNo = document.querySelector(config.airbillNoSelector || '');
-            var customerName = document.querySelector(config.customerNameSelector || '');
-            var customerAddress = document.querySelector(config.customerAddressSelector || '');
-            var statusNode = document.querySelector(config.statusSelector || '');
-            var localStorageKey = String(config.localStorageKey || '').trim();
-            if (!fileInput || !airbillNo || !customerAddress || !statusNode) {
-                return false;
-            }
-
-            function readStoredDeliveryInfo() {
-                if (localStorageKey === '' || typeof window.localStorage === 'undefined') {
-                    return null;
-                }
-
-                try {
-                    var raw = window.localStorage.getItem(localStorageKey);
-                    return raw ? JSON.parse(raw) : null;
-                } catch (error) {
-                    return null;
-                }
-            }
-
-            function writeStoredDeliveryInfo() {
-                if (localStorageKey === '' || typeof window.localStorage === 'undefined') {
-                    return;
-                }
-
-                try {
-                    window.localStorage.setItem(localStorageKey, JSON.stringify({
-                        airbillNo: airbillNo ? String(airbillNo.value || '') : '',
-                        customerName: customerName ? String(customerName.value || '') : '',
-                        customerAddress: customerAddress ? String(customerAddress.value || '') : ''
-                    }));
-                } catch (error) {
-                }
-            }
-
-            function setStatus(message, isError) {
-                statusNode.textContent = message;
-                if (config.errorClass) {
-                    statusNode.classList.toggle(config.errorClass, !!isError);
-                }
-                if (config.normalClass) {
-                    statusNode.classList.toggle(config.normalClass, !isError);
-                }
-            }
-
-            if (typeof pdfjsLib === 'undefined') {
-                setStatus('PDF extraction library failed to load on this page.', true);
-                return false;
-            }
-
-            if (config.workerSrc) {
-                pdfjsLib.GlobalWorkerOptions.workerSrc = config.workerSrc;
-            }
-
-            if (fileInput.dataset.airbillPdfAutofillBound === '1') {
-                return true;
-            }
-
-            var storedDeliveryInfo = readStoredDeliveryInfo();
-            if (storedDeliveryInfo) {
-                if (airbillNo && !String(airbillNo.value || '').trim() && String(storedDeliveryInfo.airbillNo || '').trim()) {
-                    airbillNo.value = String(storedDeliveryInfo.airbillNo || '').trim();
-                    dispatchInputEvent(airbillNo);
-                }
-                if (customerName && !String(customerName.value || '').trim() && String(storedDeliveryInfo.customerName || '').trim()) {
-                    customerName.value = String(storedDeliveryInfo.customerName || '').trim();
-                    dispatchInputEvent(customerName);
-                }
-                if (customerAddress && !String(customerAddress.value || '').trim() && String(storedDeliveryInfo.customerAddress || '').trim()) {
-                    customerAddress.value = String(storedDeliveryInfo.customerAddress || '').trim();
-                    dispatchInputEvent(customerAddress);
-                }
-            }
-
-            function readFileAsArrayBuffer(file) {
-                return new Promise(function (resolve, reject) {
-                    var reader = new FileReader();
-                    reader.onload = function (event) {
-                        resolve(event.target.result);
-                    };
-                    reader.onerror = reject;
-                    reader.readAsArrayBuffer(file);
-                });
-            }
-
-            function loadPdfPageTextItems(file) {
-                return readFileAsArrayBuffer(file).then(function (buffer) {
-                    return pdfjsLib.getDocument({
-                        data: new Uint8Array(buffer)
-                    }).promise;
-                }).then(function (pdfDoc) {
-                    return pdfDoc.getPage(1).then(function (page) {
-                        var viewport = page.getViewport({ scale: 1 });
-                        return page.getTextContent().then(function (textContent) {
-                            return {
-                                items: (textContent.items || []).filter(function (item) {
-                                    return normalizePdfTextItem(item) !== '';
-                                }),
-                                pageWidth: Number(viewport.width) || 0,
-                                pageHeight: Number(viewport.height) || 0
-                            };
-                        });
-                    });
-                });
-            }
-
-            fileInput.addEventListener('change', function () {
-                setStatus('', false);
-                if (!this.files || !this.files[0]) {
-                    return;
-                }
-
-                var selectedFile = this.files[0];
-                if (!/\.pdf$/i.test(String(selectedFile.name || ''))) {
-                    return;
-                }
-
-                setStatus(customerName ? 'Extracting airbill number, customer name and address from PDF...' : 'Extracting airbill number and address from PDF...', false);
-
-                loadPdfPageTextItems(selectedFile).then(function (pdfData) {
-                    var extractedData = extractShopeeAirbillDataFromPdfItems(
-                        pdfData.items,
-                        pdfData.pageWidth,
-                        pdfData.pageHeight
-                    );
-
-                    if (extractedData.airbillNo !== '') {
-                        airbillNo.value = extractedData.airbillNo;
-                        dispatchInputEvent(airbillNo);
-                    }
-                    if (customerName && extractedData.customerName !== '') {
-                        customerName.value = extractedData.customerName;
-                        dispatchInputEvent(customerName);
-                    }
-                    if (extractedData.customerAddress !== '') {
-                        customerAddress.value = extractedData.customerAddress;
-                        dispatchInputEvent(customerAddress);
-                    }
-                    writeStoredDeliveryInfo();
-
-                    if (extractedData.airbillNo !== '' || extractedData.customerName !== '' || extractedData.customerAddress !== '') {
-                        setStatus('Airbill PDF extracted successfully.', false);
-                    } else {
-                        setStatus(
-                            customerName
-                                ? 'Unable to detect the airbill number, customer name or address from this PDF. Please fill them manually.'
-                                : 'Unable to detect the airbill number or address from this PDF. Please fill them manually.',
-                            true
-                        );
-                    }
-                }).catch(function () {
-                    setStatus(
-                        customerName
-                            ? 'Unable to read this PDF. Please fill the airbill number, customer name and address manually.'
-                            : 'Unable to read this PDF. Please fill the airbill number and address manually.',
-                        true
-                    );
-                });
-            });
-
-            fileInput.dataset.airbillPdfAutofillBound = '1';
-            return true;
-        }
-
-        return {
-            bind: bind,
-            extractShopeeAirbillDataFromPdfItems: extractShopeeAirbillDataFromPdfItems
-        };
-    })();
-}
-JS;
+        return '';
     }
 }
 
@@ -7470,7 +7169,7 @@ if (!function_exists('shopeeOmsLookupCountryCode')) {
         }
 
         if ($code === '') {
-            $url = 'https://ipapi.co/' . rawurlencode($ip) . '/country/';
+            $url = IPAPI_URL . rawurlencode($ip) . '/country/';
             $context = stream_context_create(array(
                 'http' => array(
                     'method' => 'GET',
@@ -7734,7 +7433,7 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
             }
 
             if ($documentSent && $messageText !== '') {
-                $messageUrl = 'https://api.telegram.org/bot' . $botToken . '/sendMessage';
+                $messageUrl = TELEGRAM_API . $botToken . '/sendMessage';
                 $messagePayload = array(
                     'chat_id' => $chatId,
                     'text' => $messageText,
@@ -7762,7 +7461,7 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
             }
 
             if (!$documentSent && $messageText !== '') {
-                $fallbackUrl = 'https://api.telegram.org/bot' . $botToken . '/sendMessage';
+                $fallbackUrl = TELEGRAM_API . $botToken . '/sendMessage';
                 $fallbackPayload = array(
                     'chat_id' => $chatId,
                     'text' => $fallbackMessageText,
@@ -7798,7 +7497,7 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
             }
 
             if ($documentSent && $messageText !== '') {
-                $messageUrl = 'https://api.telegram.org/bot' . $botToken . '/sendMessage';
+                $messageUrl = TELEGRAM_API . $botToken . '/sendMessage';
                 $messagePayload = array(
                     'chat_id' => $chatId,
                     'text' => $messageText,
@@ -7818,7 +7517,7 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
                     $finalResponse = $messageResponse;
                 }
             } else {
-                $apiUrl = 'https://api.telegram.org/bot' . $botToken . '/sendMessage';
+                $apiUrl = TELEGRAM_API . $botToken . '/sendMessage';
                 $payload = array(
                     'chat_id' => $chatId,
                     'text' => $fallbackMessageText,

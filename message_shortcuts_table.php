@@ -2,20 +2,10 @@
 $pageTitle = "Message Shortcuts";
 $currentPagePin = 144;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$resolvedPageTitle = getPinGroupNameById($connect, $currentPagePin);
-if (!empty($resolvedPageTitle)) {
-    $pageTitle = $resolvedPageTitle;
-}
+
+include_once 'include/list_page_header.php';
 
 $tblName = MESSAGE_SHORTCUTS;
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;
 
 $redirect_page = $SITEURL . '/message_shortcuts.php';
 $deleteRedirectPage = $SITEURL . '/message_shortcuts_table.php';
@@ -49,24 +39,14 @@ if (!function_exists('messageShortcutsTablePreview')) {
 <head>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
 </head>
-<script>
-    preloader(300);
 
-    $(document).ready(() => {
-        createSortingTable('table');
-    });
-</script>
+<script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
+
 
 <style>
-    .btn {
-        padding: 0.2rem 0.5rem;
-        font-size: 0.75rem;
-        margin: 3px;
-    }
+    
 
-    .btn-container {
-        white-space: nowrap;
-    }
+    
 
     .message-shortcuts-preview-cell {
         max-width: 520px;
@@ -76,9 +56,7 @@ if (!function_exists('messageShortcutsTablePreview')) {
 </style>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

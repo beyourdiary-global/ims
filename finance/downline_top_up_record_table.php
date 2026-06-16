@@ -4,9 +4,8 @@ ob_start();
 $pageTitle = 'Downline Top Up Record';
 $isFinance = 1;
 
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+
+include_once '../include/list_page_header.php';
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . "_list.xlsx";
 $img_path = '../' . img_server . 'finance/downline_top_up_record/';
@@ -117,49 +116,6 @@ if (!empty($checkboxValues)) {
     }
 }
 
-function addDirToZip($dir, $zip, $basePath)
-{
-    $files = scandir($dir);
-    foreach ($files as $file) {
-        if ($file == '.' || $file == '..') {
-            continue;
-        }
-        $filePath = $dir . $file;
-        if (is_file($filePath)) {
-            // Add the file to the zip archive with a relative path
-            $relativePath = str_replace($basePath, '', $filePath);
-            $zip->addFile($filePath, $relativePath);
-        } elseif (is_dir($filePath)) {
-            // Add the directory to the zip archive
-            $zip->addEmptyDir(str_replace($basePath, '', $filePath));
-            // Recursively add files and directories inside the current directory
-            addDirToZip($filePath . '/', $zip, $basePath);
-        }
-    }
-}
-
-function deleteDir($dirPath) {
-    if (!is_dir($dirPath)) {
-        return;
-    }
-    $files = glob($dirPath . '*', GLOB_MARK);
-    foreach ($files as $file) {
-        if (is_dir($file)) {
-            deleteDir($file);
-        } else {
-            unlink($file);
-        }
-    }
-    rmdir($dirPath);
-}
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['searchChk'] = '';
-unset($_SESSION['resetChk']);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;  // numbering
-
 $redirect_page = $SITEURL . '/finance/downline_top_up_record.php';
 $deleteRedirectPage = $SITEURL . '/finance/downline_top_up_record_table.php';
 $result = getData('*', '', '', DW_TOP_UP_RECORD, $finance_connect);
@@ -173,18 +129,11 @@ $tblName = DW_TOP_UP_RECORD;
 <link rel="stylesheet" href="../css/main.css">
 </head>
 
-<script>
-    preloader(300);
+<script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
 
-    $(document).ready(() => {
-        createSortingTable('table');
-    });
-</script>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
@@ -307,18 +256,7 @@ $tblName = DW_TOP_UP_RECORD;
                             $groupedRows = [];
                             $counters = 1;
 
-                            function generateTableRow($id, &$counters, $key, $topupAmt)
-                            {
-                                echo '<tr onclick="window.location=\'internal_consume_item_table_summary.php?ids=' . urlencode($id) . '\';" style="cursor:pointer;">';
-                                echo ' <th class="text-center"><input type="checkbox" class="export" value="' . $id . '"></th>';
-                                echo '<th class="hideColumn" scope="row">' . $id . '</th>';
-                                echo '<th scope="row">' . $counters++ . '</th>';
-                                foreach ($key as $k) {
-                                    echo '<td scope="row">' . $k . '</td>';
-                                }
-                                echo '<td scope="row">' . number_format($topupAmt, 2, '.', '') . '</td>';
-                                echo '</tr>';
-                            }
+
 
                             while ($row = $result->fetch_assoc()) {
                                 $viewActMsg = '';
@@ -408,11 +346,29 @@ $tblName = DW_TOP_UP_RECORD;
                                         }
                                     }
                                 } else if ($groupOption === 'brand') {
-                                    generateTableRow($row['id'], $counters, $brand, $row['amount']);
+                                    financeGenerateTableRow(array(
+                                        'id' => $row['id'],
+                                        'summary_page' => 'internal_consume_item_table_summary.php',
+                                        'id_before_checkbox' => false,
+                                        'cells' => array($brand),
+                                        'amount' => $row['amount'],
+                                    ), $counters);
                                 } else if ($groupOption === 'agent') {
-                                    generateTableRow($row['id'], $counters, $agent, $row['amount']);
+                                    financeGenerateTableRow(array(
+                                        'id' => $row['id'],
+                                        'summary_page' => 'internal_consume_item_table_summary.php',
+                                        'id_before_checkbox' => false,
+                                        'cells' => array($agent),
+                                        'amount' => $row['amount'],
+                                    ), $counters);
                                 } else if ($groupOption === 'currency') {
-                                    generateTableRow($row['id'], $counters, $curr, $row['amount']);
+                                    financeGenerateTableRow(array(
+                                        'id' => $row['id'],
+                                        'summary_page' => 'internal_consume_item_table_summary.php',
+                                        'id_before_checkbox' => false,
+                                        'cells' => array($curr),
+                                        'amount' => $row['amount'],
+                                    ), $counters);
                                 }
                             }
                             foreach ($groupedRows as $key => $groupedRow) {

@@ -59,7 +59,7 @@ if (post('actionBtn')) {
 
 <head>
     <link rel="stylesheet" href="./css/main.css">
-    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+    <script src="<?= JQUERY_3_6_4_JS ?>"></script>
    
 </head>
 

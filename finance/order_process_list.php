@@ -96,18 +96,6 @@ if (post('order_status')) {
         createSortingTable('order_process_list');
     });
 </script>
-
-<style>
-    .btn {
-        padding: 0.2rem 0.5rem;
-        font-size: 0.75rem;
-        margin: 3px;
-    }
-    .btn-container {
-        white-space: nowrap;
-    }
-</style>
-
 <body>
 
     <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

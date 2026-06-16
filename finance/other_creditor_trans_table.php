@@ -2,15 +2,8 @@
 $pageTitle = "Other Creditor Transaction";
 $currentPagePin = 45;
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
+include_once '../include/list_page_header.php';
 
 $redirect_page = $SITEURL . '/finance/other_creditor_trans.php';
 $result = getData('*', '', '', OCR_TRANS, $finance_connect);

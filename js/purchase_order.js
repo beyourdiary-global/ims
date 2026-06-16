@@ -1,4 +1,4 @@
-preloader(300);
+
 
 $(document).ready(function () {
   var cfg = window.__PURCHASE_ORDER_CONFIG || {};

@@ -1,22 +1,12 @@
 <?php
 $pageTitle = "Pin Group";
 $currentPagePin = 2;
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
-include ROOT.'/include/access.php';
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-if (!is_array($pinAccess)) {
-    $pinAccess = array();
-}
+include_once 'include/list_page_header.php';
+include ROOT.'/include/access.php';
 
 $tblName = PIN_GRP;
 
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/pin_group.php';
 $deleteRedirectPage = $SITEURL . '/pin_group_table.php';
@@ -32,27 +22,11 @@ $result = getData('*', '', '', $tblName, $connect);
 <head>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
 </head>
-<script>
-    $(document).ready(() => {
-        createSortingTable('table');
-    });
-</script>
 
-<style>
-    .btn {
-        padding: 0.2rem 0.5rem;
-        font-size: 0.75rem;
-        margin: 3px;
-    }
-    .btn-container {
-        white-space: nowrap;
-    }
-</style>
+<script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
     <div class="page-load-cover">
 
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
@@ -163,7 +137,7 @@ $result = getData('*', '', '', $tblName, $connect);
         //to resize table with bootstrap 5 classes
         datatableAlignment('table');
         setButtonColor();
-        preloader(300);
+        
     </script>
 
 </body>

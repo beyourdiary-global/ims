@@ -2,15 +2,8 @@
 $pageTitle = "Shopee Service Charges Rate Setting";
 $currentPagePin = 83;
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
+include_once '../include/list_page_header.php';
 
 $redirect_page = $SITEURL . '/shopee/shopee_service_charges_rate_setting.php';
 $deleteRedirectPage = $SITEURL . '/shopee/shopee_service_charges_rate_setting_table.php';
@@ -29,18 +22,11 @@ $result = getData('*', '', '', SHOPEE_SCR_SETT, $finance_connect);
     <link rel="stylesheet" href="../css/main.css">
 </head>
 
-<script>
-    preloader(300);
+<script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
 
-    $(document).ready(() => {
-        createSortingTable('table');
-    });
-</script>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

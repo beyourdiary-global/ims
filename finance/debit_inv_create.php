@@ -62,9 +62,7 @@ $pic_row = ($pic_result && $pic_result->num_rows > 0) ? $pic_result->fetch_assoc
 </head>
 
 <body style="background-color: rgb(240, 241, 247);">
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
 

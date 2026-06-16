@@ -2,15 +2,8 @@
 $pageTitle = "Payment Method (Shopee)";
 $currentPagePin = 80;
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
+include_once '../include/list_page_header.php';
 
 $redirect_page = $SITEURL . '/shopee/payment_method_shopee.php';
 $deleteRedirectPage = $SITEURL . '/shopee/payment_method_shopee_table.php';
@@ -29,14 +22,11 @@ if (!$result) {
 </head>
 
 <script>
-    preloader(300);
+    
     $(document).ready(() => {
         createSortingTable('payment_method_shopee_table');
     });
 </script>
-
-
-
 <body>
 
 <div class="pre-load-center">

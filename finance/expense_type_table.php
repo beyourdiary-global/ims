@@ -2,15 +2,9 @@
 $pageTitle = "Expense Type";
 $currentPagePin = 49;
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
+include_once '../include/list_page_header.php';
+
 
 $redirect_page = $SITEURL . '/finance/expense_type.php';
 $deleteRedirectPage = $SITEURL . '/finance/expense_type_table.php';
@@ -29,9 +23,6 @@ $result = getData('*', '', '', EXPENSE_TYPE, $finance_connect);
         createSortingTable('expense_type_table');
     });
 </script>
-
-
-
 <body>
 
     <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

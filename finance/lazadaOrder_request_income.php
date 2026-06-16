@@ -217,43 +217,6 @@ if (!empty($checkboxValues)) {
     }
 }
 
-function addDirToZip($dir, $zip, $basePath)
-{
-    $files = scandir($dir);
-    foreach ($files as $file) {
-        if ($file == '.' || $file == '..') {
-            continue;
-        }
-        $filePath = $dir . $file;
-        if (is_file($filePath)) {
-            // Add the file to the zip archive with a relative path
-            $relativePath = str_replace($basePath, '', $filePath);
-            $zip->addFile($filePath, $relativePath);
-        } elseif (is_dir($filePath)) {
-            // Add the directory to the zip archive
-            $zip->addEmptyDir(str_replace($basePath, '', $filePath));
-            // Recursively add files and directories inside the current directory
-            addDirToZip($filePath . '/', $zip, $basePath);
-        }
-    }
-}
-
-function deleteDir($dirPath)
-{
-    if (!is_dir($dirPath)) {
-        return;
-    }
-    $files = glob($dirPath . '*', GLOB_MARK);
-    foreach ($files as $file) {
-        if (is_dir($file)) {
-            deleteDir($file);
-        } else {
-            unlink($file);
-        }
-    }
-    rmdir($dirPath);
-}
-
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 $_SESSION['act'] = '';
 $_SESSION['viewChk'] = '';
@@ -282,9 +245,6 @@ $result = getData("$combineShowStatement , SUM(item_price_credit) as item_price_
         createSortingTable('lazada_order_req');
     });
 </script>
-
-
-
 <body>
 
     <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
@@ -478,14 +438,6 @@ $result = getData("$combineShowStatement , SUM(item_price_credit) as item_price_
                 console.log('No checkboxes are checked.');
             }
         });
-
-        function updateCheckboxesOnOtherPages(isChecked) {
-            // Get all cells in the DataTable
-            var cells = $('#shopee_order_req_table').DataTable().cells().nodes();
-
-            // Check/uncheck all checkboxes in the DataTable
-            $(cells).find('.export').prop('checked', isChecked);
-        }
     });
 
     <?php include "../js/order_req.js" ?>

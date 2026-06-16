@@ -3,16 +3,10 @@ $pageTitle = "Debit Notes (Invoice)";
 $currentPagePin = 94;
 $isFinance = 1;
 
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+
+include_once '../include/list_page_header.php';
 
 $tblName = DEBIT_NOTES_INV;
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/finance/debit_notes_inv.php';
 $result = getData('*', '', '', $tblName, $finance_connect);
@@ -79,7 +73,7 @@ if (post('pay_status_option')) {
 </head>
 
 <script>
-    preloader(300);
+    
 
     $(document).ready(() => {
         createSortingTable('debit_notes_inv_table');
@@ -87,9 +81,7 @@ if (post('pay_status_option')) {
 </script>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

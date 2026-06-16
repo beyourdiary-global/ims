@@ -5,10 +5,7 @@ $(document).ready(function () {
     var barcode = '<?=$barcode?>';
     var stock_rec_count = '<?= count($stock_rec) ?>';
     var prod_barcode_slot_total = '<?= $prod_barcode_slot_total ?>';
-    function getParameterByName(name) {
-        var urlParams = new URLSearchParams(window.location.search);
-        return urlParams.get(name);
-    }
+
     var pkg = getParameterByName('pkg_id');
     var usr = getParameterByName('usr_id');
     var whse = getParameterByName('whse_id');

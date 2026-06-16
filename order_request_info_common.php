@@ -241,7 +241,7 @@ $customerFieldLabel = $platform === 'shopee' ? 'Shopee Buyer Username' : $platfo
     </style>
 </head>
 <body>
-<div class="pre-load-center"><div class="preloader"></div></div>
+    
 <div class="page-load-cover">
     <div class="container-fluid d-flex justify-content-center mt-3">
         <div class="col-12 col-md-11">
@@ -359,7 +359,7 @@ $customerFieldLabel = $platform === 'shopee' ? 'Shopee Buyer Username' : $platfo
     checkCurrentPage(<?= json_encode($menuPageTitle, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>, '');
     dropdownMenuDispFix();
     setButtonColor();
-    preloader(300);
+    
 
     var copyBtn = document.getElementById('copyOrderLinkBtn');
     var orderLinkInput = document.getElementById('orderRequestLink');

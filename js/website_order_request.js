@@ -56,10 +56,6 @@ $(document).ready(function () {
 
   $("#wor_cust_id").change(autofill);
 
-  function getParameterByName(name) {
-    var urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get(name);
-  }
   var act = getParameterByName("act");
   var trackOrderBtn = document.getElementById("trackOrderBtn");
   if (act !== "I" && trackOrderBtn) {

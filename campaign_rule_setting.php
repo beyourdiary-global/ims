@@ -7,9 +7,7 @@ include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
 include_once ROOT . '/include/campaign_common.php';
 
-if ($connect instanceof mysqli) {
-    @mysqli_set_charset($connect, 'utf8mb4');
-}
+
 if ($finance_connect instanceof mysqli) {
     @mysqli_set_charset($finance_connect, 'utf8mb4');
 }
@@ -541,9 +539,7 @@ $estimatedCustomers = campaignRuleEstimateMatchedCustomers($connect, $finance_co
 </head>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div class="d-flex flex-column my-3 ms-3">

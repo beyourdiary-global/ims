@@ -2,16 +2,8 @@
 $pageTitle = "Investment Transaction";
 $currentPagePin = 40;
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
+include_once '../include/list_page_header.php';
 
 $redirect_page = $SITEURL . '/finance/investment_trans.php';
 $result = getData('*', '', '', INV_TRANS, $finance_connect);
@@ -26,7 +18,7 @@ $result = getData('*', '', '', INV_TRANS, $finance_connect);
 </head>
 
 <script>
-    preloader(300);
+    
 
 
     $(document).ready(() => {
@@ -35,9 +27,7 @@ $result = getData('*', '', '', INV_TRANS, $finance_connect);
 </script>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

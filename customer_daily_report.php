@@ -477,7 +477,7 @@ $h = function ($value) {
 <head>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
     <script>
-        preloader(300);
+        
     </script>
     <style>
         .customer-daily-report-stack {
@@ -683,9 +683,7 @@ $h = function ($value) {
     </style>
 </head>
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

@@ -1,41 +1,4 @@
 ﻿//export notification
-function exportData() {
-    var checkboxes = document.querySelectorAll('.export:checked');
-    if (checkboxes.length === 0) {
-        alert('Please select data to export.');
-        return false;
-    }
-    return true;
-}
-function captureAndExport(tblName) {
-    var selectedIds = [];
-    document.querySelectorAll('input.export:checked').forEach(function(checkbox) {
-        selectedIds.push(checkbox.value);
-    });
-
-    // Pass the selected IDs for auditing
-    auditExport(selectedIds, tblName);
-
-    // Trigger export action
-    if (exportData()) {
-        showExportNotification();
-    }
-}
-
-function auditExport(ids, tblName) {
-    
-    // Use AJAX to send the selected IDs for auditing
-    var xhr = new XMLHttpRequest();
-    xhr.open('POST', '../export.php', true);
-    xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-    xhr.send('ids=' + ids.join(',') + '&tblName=' + tblName);
-}
-
-
-function showExportNotification() {
-    alert('Export successful!'); 
-}
-
 $(document).ready(function ($) {
     $(document).on("change", ".exportAll", function (event) { //checkbox handling
         event.preventDefault();
@@ -81,14 +44,6 @@ $(document).ready(function ($) {
             console.log('No checkboxes are checked.');
         }
     });
-
-    function updateCheckboxesOnOtherPages(isChecked) {
-        // Get all cells in the DataTable
-        var cells = $('#atome_trans_backup_table').DataTable().rows({ page: "current" }).nodes();
-
-        // Check/uncheck all checkboxes in the DataTable
-        $(cells).find('.export').prop('checked', isChecked);
-    }
 });
 
 $(document).ready(function() {
@@ -150,11 +105,6 @@ $('#datepicker input, #datepicker2 input[name="end"], #datepicker3 input[name="e
 
     });
 
-
-    function getParameterByName(name) {
-        var urlParams = new URLSearchParams(window.location.search);
-        return urlParams.get(name);
-    }
 
     var groupParam = getParameterByName('group');
     if (groupParam) {

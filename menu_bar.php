@@ -492,7 +492,7 @@ $menuList = array(
                 'javascript:void(0)',
                 'y',
                 'expand' => array(
-                    array('Bank', 'mdi mdi-bank', 'bank_table.php', '8'),
+                    array('Bank', 'mdi mdi-bank', $SITEURL . '/bank_table.php', '8'),
                     array('Currencies', 'mdi mdi-swap-horizontal', $SITEURL . '/currencies_table.php', '11'),
                     array('Currency Unit', 'mdi mdi-currency-usd', $SITEURL . '/currency_unit_table.php', '10'),
                     array('Platform', 'mdi mdi-home-outline', $SITEURL . '/platform_table.php', '14'),

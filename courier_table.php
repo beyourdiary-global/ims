@@ -1,15 +1,9 @@
 <?php
 $pageTitle = "Courier";
 $currentPagePin = 53;
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
+include_once 'include/list_page_header.php';
+
 
 $redirect_page = $SITEURL . '/courier.php';
 $deleteRedirectPage = $SITEURL . '/courier_table.php';
@@ -30,15 +24,9 @@ $result = getData('*', '', '', COURIER, $connect);
 </script>
 
 <style>
-    .btn {
-        padding: 0.2rem 0.5rem;
-        font-size: 0.75rem;
-        margin: 3px;
-    }
+    
 
-    .btn-container {
-        white-space: nowrap;
-    }
+    
 </style>
 
 <body>

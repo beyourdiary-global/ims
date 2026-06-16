@@ -994,7 +994,7 @@ ksort($platformFilterOptions, SORT_NATURAL | SORT_FLAG_CASE);
     </style>
 </head>
 <script>
-    preloader(300);
+    
     $(document).ready(function () {
         createSortingTable('campaign_customer_search_table', {
             searching: true,
@@ -1006,7 +1006,7 @@ ksort($platformFilterOptions, SORT_NATURAL | SORT_FLAG_CASE);
     });
 </script>
 <body class="campaign-assign-page">
-    <div class="pre-load-center"><div class="preloader"></div></div>
+        
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
             <div class="col-12 col-md-11">

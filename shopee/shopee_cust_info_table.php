@@ -2,17 +2,9 @@
 $pageTitle = "Shopee Customer Record";
 $currentPagePin = 85;
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
+
+include_once '../include/list_page_header.php';
 include_once ROOT . '/include/customer_tag.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
-
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 
 $redirect_page = $SITEURL . '/shopee/shopee_cust_info.php';
 $deleteRedirectPage = $SITEURL . '/shopee/shopee_cust_info_table.php';
@@ -41,7 +33,7 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
 </head>
 
 <script>
-    preloader(300);
+    
     $(document).ready(() => {
         createSortingTable('shopee_cust_info_table', { searching: true });
         initCustomerRecordTableFilters({
@@ -62,14 +54,9 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
         });
     });
 </script>
-
-
-
 <body>
 
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

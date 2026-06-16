@@ -1,16 +1,9 @@
 <?php
 $pageTitle = "Website Customer Record (Deals)";
 $currentPagePin = 84;
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-include_once ROOT . '/include/customer_tag.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
+include_once 'include/list_page_header.php';
+include_once ROOT . '/include/customer_tag.php';
 
 $redirect_page = $SITEURL . '/website_customer_record.php';
 $deleteRedirectPage = $SITEURL . '/website_customer_record_table.php';
@@ -58,21 +51,9 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
 
 
 <style>
-    #addBtn,
-    .btn-container .btn {
-        padding: 0.2rem 0.5rem;
-        font-size: 0.75rem;
-        margin: 3px;
-    }
-
-    .btn-container {
-        white-space: nowrap;
-    }
-
     .customer-name-label-cell {
         white-space: nowrap;
     }
-
 </style>
 
 <body>

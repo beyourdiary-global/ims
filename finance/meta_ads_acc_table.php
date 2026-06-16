@@ -2,15 +2,9 @@
 $pageTitle = "Meta Ads Account";
 $currentPagePin = 48;
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
+include_once '../include/list_page_header.php';
+
 $deleteRedirectPage = $SITEURL . '/finance/meta_ads_acc_table.php';
 $redirect_page = $SITEURL . '/finance/meta_ads_acc.php';
 $result = getData('*', '', '', META_ADS_ACC, $finance_connect);

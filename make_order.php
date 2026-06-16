@@ -73,9 +73,7 @@ $country_telcode_to = getCountryTelCode($to, $connect);
 </script>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div class="my-3 container-fluid">

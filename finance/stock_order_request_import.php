@@ -2403,7 +2403,7 @@ if ($action === 'insertStockOrderPdf') {
                         }
                     }
                     if ($qrWebPath === '') {
-                        $qrWebPath = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=' . rawurlencode($orderLink);
+                        $qrWebPath = QR_CODE_API_URL . '?size=240x240&data=' . rawurlencode($orderLink);
                     }
 
                     $safeToken = mysqli_real_escape_string($finance_connect, $token);
@@ -2568,7 +2568,7 @@ if ($existingInvoiceRst) {
     </style>
 </head>
 <body>
-<div class="pre-load-center"><div class="preloader"></div></div>
+    
 <div class="page-load-cover">
     <div class="container-fluid mt-3 mb-5 d-flex justify-content-center sor-import">
         <div class="col-12 col-md-11">

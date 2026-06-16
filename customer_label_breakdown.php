@@ -46,15 +46,8 @@ if (post('actionBtn') === 'back') {
 <head>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
 </head>
-
-<script>
-    preloader(300);
-</script>
-
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div class="container-fluid d-flex justify-content-center mt-3">

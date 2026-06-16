@@ -2,15 +2,8 @@
 $pageTitle = "Sundry Debtors Transaction";
 $currentPagePin = 44;
 $isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
+include_once '../include/list_page_header.php';
 
 $redirect_page = $SITEURL . '/finance/sundry_debt_trans.php';
 $result = getData('*', '', '', SD_TRANS, $finance_connect);
@@ -24,7 +17,7 @@ $result = getData('*', '', '', SD_TRANS, $finance_connect);
 </head>
 
 <script>
-    preloader(300);
+    
 
     $(document).ready(() => {
         createSortingTable('sundry_debt_trans_table');
@@ -32,9 +25,7 @@ $result = getData('*', '', '', SD_TRANS, $finance_connect);
 </script>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
 

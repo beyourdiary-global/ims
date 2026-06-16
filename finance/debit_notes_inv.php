@@ -474,9 +474,7 @@ span.input-group-text{
 }
 </style>
 <body style="background-color: rgb(240, 241, 247);">
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
 

@@ -172,7 +172,7 @@ if (empty($_SESSION['csrf_token'])) {
     <link rel="stylesheet" href="../css/main.css">
     <link rel="stylesheet" href="../css/task.css">
     <link rel="stylesheet" href="../css/summary.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <script src="<?= CHART_JS_CDN_URL ?>@4.4.4/dist/chart.umd.min.js"></script>
 </head>
 <body>
 <div class="container-fluid d-flex justify-content-center mt-3 task-page-wrap">

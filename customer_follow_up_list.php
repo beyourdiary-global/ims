@@ -793,14 +793,10 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
 
     </style>
 </head>
-<script>
-    preloader(300);
-</script>
+
 
 <body class="customer-follow-up-page">
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover customer-follow-up-page">
         <div class="container-fluid d-flex justify-content-center mt-3">

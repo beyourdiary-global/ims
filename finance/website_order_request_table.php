@@ -2,12 +2,12 @@
 $pageTitle = "Website Order Request";
 $currentPagePin = 92;
 $isFinance = 1;
+$listPageSkipSessionReset = true;
+$listPageSkipNumbering = true;
 
-include_once '../menuHeader.php';
-include_once '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
+include_once '../include/list_page_header.php';
+
 $canAssignEstimatedReceivedDate = isActionAllowed('Edit', $pinAccess);
 $estimatedDateToday = new DateTimeImmutable('today');
 $estimatedDateMin = $estimatedDateToday->modify('+1 day')->format('Y-m-d');
@@ -188,63 +188,10 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
 
 <head>
     <link rel="stylesheet" href="../css/main.css">
-    <style>
-        .estimated-date-modal {
-            position: fixed;
-            inset: 0;
-            z-index: 2000;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            background: rgba(0, 0, 0, 0.45);
-            padding: 16px;
-        }
 
-        .estimated-date-modal.is-open {
-            display: flex;
-        }
-
-        .estimated-date-modal__dialog {
-            width: 100%;
-            max-width: 420px;
-            border-radius: 12px;
-            background: #fff;
-            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
-            padding: 20px;
-        }
-
-        .estimated-date-modal__close-btn,
-        .estimated-date-modal__action-btn {
-            text-transform: none !important;
-        }
-    </style>
 </head>
 
 <script>
-    function openEstimatedReceivedDateModal(orderId, orderCode, minDate, maxDate) {
-        const modal = document.getElementById('estimatedReceivedDateModal');
-        const title = document.getElementById('estimatedReceivedDateTitle');
-        const orderIdInput = document.getElementById('estimated_received_order_id');
-        const dateInput = document.getElementById('estimated_received_date');
-
-        if (!modal || !orderIdInput || !dateInput) {
-            return;
-        }
-
-        title.textContent = orderCode ? 'Assign Estimate Received Date for ' + orderCode : 'Assign Estimate Received Date';
-        orderIdInput.value = orderId;
-        dateInput.value = '';
-        dateInput.min = minDate;
-        dateInput.max = maxDate;
-        modal.classList.add('is-open');
-    }
-
-    function closeEstimatedReceivedDateModal() {
-        const modal = document.getElementById('estimatedReceivedDateModal');
-        if (modal) {
-            modal.classList.remove('is-open');
-        }
-    }
 
     $(document).ready(() => {
         createSortingTable('website_order_request_table');
@@ -525,29 +472,7 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
         </div>
     </div>
 
-    <div class="estimated-date-modal" id="estimatedReceivedDateModal" aria-hidden="true">
-        <div class="estimated-date-modal__dialog">
-            <div class="d-flex justify-content-between align-items-start mb-3">
-                <h4 class="mb-0" id="estimatedReceivedDateTitle">Assign Estimate Received Date</h4>
-                <button type="button" class="btn btn-light estimated-date-modal__close-btn" onclick="closeEstimatedReceivedDateModal()" aria-label="Close">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            </div>
-            <form method="post">
-                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
-                <input type="hidden" name="estimated_received_order_id" id="estimated_received_order_id" value="">
-                <div class="mb-3">
-                    <label class="form-label" for="estimated_received_date">Estimate Received Date</label>
-                    <input type="date" class="form-control" name="estimated_received_date" id="estimated_received_date" min="<?= $estimatedDateMin ?>" max="<?= $estimatedDateMax ?>" required>
-                    <small class="text-muted">Choose a date from <?= $estimatedDateMin ?> until <?= $estimatedDateMax ?>.</small>
-                </div>
-                <div class="d-flex justify-content-end gap-2">
-                    <button type="button" class="btn btn-light estimated-date-modal__action-btn" onclick="closeEstimatedReceivedDateModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary estimated-date-modal__action-btn" name="assignEstimatedReceivedDateBtn" value="1">Save</button>
-                </div>
-            </form>
-        </div>
-    </div>
+    <?php include_once ROOT . '/include/estimated_date_modal.php'; ?>
     <?php shopeeOmsRenderReceivedDateModal(array('wrapper_attributes' => 'aria-hidden="true"')); ?>
 
 </body>

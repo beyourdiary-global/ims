@@ -9,15 +9,11 @@ $stockInOrderTable = 'stock_in_order';
 $stockInItemTable = 'stock_in_order_item';
 $stockOutBatchUsageTable = STOCK_OUT_BATCH_USAGE;
 $stockFormPage = $SITEURL . '/stock_list.php';
+$listPageSkipSessionReset = true;
+$listPageSkipNumbering = true;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-if (!is_array($pinAccess)) {
-    $pinAccess = array();
-}
+include_once 'include/list_page_header.php';
 
 $warehouses = siLoadWarehouses($connect);
 $products = siLoadProducts($connect);
@@ -115,7 +111,7 @@ if (!empty($orderNumbers) && !empty($warehouseIds)) {
 </head>
 
 <script>
-    preloader(300);
+    
 
     $(document).ready(() => {
         if ($('#stockMovementTable').length) {
@@ -132,14 +128,8 @@ if (!empty($orderNumbers) && !empty($warehouseIds)) {
 </script>
 
 <style>
-    .btn {
-        padding: 0.2rem 0.5rem;
-        font-size: 0.75rem;
-        margin: 3px;
-    }
-    .btn-container {
-        white-space: nowrap;
-    }
+    
+    
     .cell-lines div {
         margin-bottom: 4px;
     }
@@ -149,9 +139,7 @@ if (!empty($orderNumbers) && !empty($warehouseIds)) {
 </style>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

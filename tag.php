@@ -201,9 +201,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 </head>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
 

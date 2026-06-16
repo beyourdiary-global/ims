@@ -3,17 +3,13 @@ $pageTitle = 'Stock Order Request';
 $currentPagePin = 126;
 $isFinance = 1;
 
-include_once '../menuHeader.php';
-include_once '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+$listPageSkipPinAccess = true;
+include_once '../include/list_page_header.php';
 
 $pinAccess = checkPinByGroupId($connect, $currentPagePin);
 if (!is_array($pinAccess)) {
     $pinAccess = array();
 }
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
 
 $redirect_page = $SITEURL . '/finance/stock_order_request.php';
 $deleteRedirectPage = $SITEURL . '/finance/stock_order_request_table.php';
@@ -240,7 +236,7 @@ function sorQrHref($path, $siteUrl)
 </script>
 
 <body>
-    <div class="pre-load-center"><div class="preloader"></div></div>
+        
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
             <div class="col-12 col-md-11">
@@ -443,7 +439,7 @@ function sorQrHref($path, $siteUrl)
             datatableAlignment('sorTable');
         }
         setButtonColor();
-        preloader(300);
+        
 
         function sorShowStatusModal(title, msg) {
             var modalEl = document.getElementById('sorResultModal');
