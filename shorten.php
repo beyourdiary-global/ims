@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $destination_url
     ]);
 
-    $shortened_url = "https://cms.beyourdiary.com/blog/preview.php?blog=" . $shorten_key;
+    $shortened_url = SITEURL . "/blog/preview.php?blog=" . $shorten_key;
 }
 ?>
 

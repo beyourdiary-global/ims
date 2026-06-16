@@ -1551,7 +1551,7 @@ if (!function_exists('orderReportRenderPage')) {
         );
 
         $chartPayloadJson = json_encode($chartPayload, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
-        $chartScriptPath = rtrim((string) SITEURL, '/') . '/header/js/chart.umd.min.js';
+        $chartScriptPath = CHART_JS_LOCAL_PATH;
         $reportScriptPath = rtrim((string) SITEURL, '/') . '/js/order_report.js';
         $reportScriptVersion = @filemtime(ROOT . '/js/order_report.js');
         $reportScriptUrl = $reportScriptPath . ($reportScriptVersion ? ('?v=' . $reportScriptVersion) : '');

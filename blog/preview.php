@@ -21,7 +21,7 @@ if (!$data) {
 $image = $data['image1'] ?: $data['image2'] ?: $data['image3'] ?: $data['image4'] ?: 'default.jpg';
 $description = htmlspecialchars($data['description']);
 $redirect_url = $data['destination_url'];
-$full_url = "https://cms.beyourdiary.com/blog/preview.php?blog=" . $shorten_key;
+$full_url = SITEURL . "/blog/preview.php?blog=" . $shorten_key;
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -33,14 +33,14 @@ $full_url = "https://cms.beyourdiary.com/blog/preview.php?blog=" . $shorten_key;
     <meta property="og:type" content="website">
     <meta property="og:title" content="Check this out!">
     <meta property="og:description" content="<?= $description ?>">
-    <meta property="og:image" content="https://cms.beyourdiary.com/<?= $image ?>">
+    <meta property="og:image" content="<?= SITEURL ?>/<?= $image ?>">
     <meta property="og:url" content="<?= $full_url ?>">
 
     <!-- Optional for Twitter -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Check this out!">
     <meta name="twitter:description" content="<?= $description ?>">
-    <meta name="twitter:image" content="https://cms.beyourdiary.com/<?= $image ?>">
+    <meta name="twitter:image" content="<?= SITEURL ?>/<?= $image ?>">
 
     <script>
         setTimeout(() => {

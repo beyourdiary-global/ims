@@ -73,6 +73,25 @@ $SITEURL = SITEURL;
 define('ROOT', dirname(__FILE__));
 define('email_cc', "report@beyourdiary.com	");
 
+// shared external URLs / CDN paths
+define('TELEGRAM_API', 'https://api.telegram.org/bot');
+define('QR_CODE_API_URL', 'https://api.qrserver.com/v1/create-qr-code/');
+define('IPAPI_URL', 'https://ipapi.co/');
+define('DUCKDUCKGO_FAVICON_URL', 'https://icons.duckduckgo.com/ip3/');
+define('GOOGLE_FAVICON_URL', 'https://www.google.com/s2/favicons');
+define('JQUERY_3_6_4_JS', 'https://code.jquery.com/jquery-3.6.4.min.js');
+define('CHART_JS_CDN_URL', 'https://cdn.jsdelivr.net/npm/chart.js');
+define('CHART_JS_LOCAL_PATH', SITEURL . '/header/js/chart.umd.min.js');
+define('PDF_JS_LOCAL_PATH', SITEURL . '/header/js/pdf.min.js');
+define('PDF_WORKER_LOCAL_PATH', SITEURL . '/header/js/pdf.worker.min.js');
+
+if (!function_exists('siteUrlPath')) {
+    function siteUrlPath($path = '')
+    {
+        return rtrim(SITEURL, '/') . '/' . ltrim((string) $path, '/');
+    }
+}
+
 
 // //define date time
 define('date_dis', date("Y-m-d"));
@@ -115,18 +134,23 @@ define('USER_GROUP', isset($_SESSION['user_group']) ? $_SESSION['user_group'] : 
 // $error_msg = array('3'=>'Required api key', '4'=>'Invalid api key', '5'=>'Unauthorized user', '0'=>'Success', '1'=>'Required authentication key', '1'=>'Invalid authentication key', '6'=>'Invalid data format');
 
 // easyparcel auth & api (live on live server, demo on localhost)
+define('EASYPARCEL_LIVE_DOMAIN_MY', 'https://connect.easyparcel.my/?ac=');
+define('EASYPARCEL_DEMO_DOMAIN_MY', 'https://demo.connect.easyparcel.my/?ac=');
+define('EASYPARCEL_LIVE_DOMAIN_SG', 'https://connect.easyparcel.sg/?ac=');
+define('EASYPARCEL_DEMO_DOMAIN_SG', 'https://demo.connect.easyparcel.sg/?ac=');
+
 if ($siteOrlocalMode) {
-    define('EASYPARCEL_DOMAIN_MY', 'https://connect.easyparcel.my/?ac=');
+    define('EASYPARCEL_DOMAIN_MY', EASYPARCEL_LIVE_DOMAIN_MY);
     define('EASYPARCEL_AUTH_MY', 'MwxHG9i3Wu');
     define('EASYPARCEL_API_MY', 'EP-Jj0HYyEkp');
-    define('EASYPARCEL_DOMAIN_SG', 'https://connect.easyparcel.sg/?ac=');
+    define('EASYPARCEL_DOMAIN_SG', EASYPARCEL_LIVE_DOMAIN_SG);
     define('EASYPARCEL_AUTH_SG', 'nYgGJWc9Hq');
     define('EASYPARCEL_API_SG', 'EP-Mqx0IKqqS');
 } else {
-    define('EASYPARCEL_DOMAIN_MY', 'https://demo.connect.easyparcel.my/?ac=');
+    define('EASYPARCEL_DOMAIN_MY', EASYPARCEL_DEMO_DOMAIN_MY);
     define('EASYPARCEL_AUTH_MY', 'MwxHG9i3Wu');
     define('EASYPARCEL_API_MY', 'EP-Jj0HYyEkp');
-    define('EASYPARCEL_DOMAIN_SG', 'https://demo.connect.easyparcel.sg/?ac=');
+    define('EASYPARCEL_DOMAIN_SG', EASYPARCEL_DEMO_DOMAIN_SG);
     define('EASYPARCEL_AUTH_SG', 'zKpyWplgj9');
     define('EASYPARCEL_API_SG', 'EP-Mqx0IKqqS');
 }

@@ -404,7 +404,7 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
         } else {
             $telegramText = sorInfoBuildTelegramMessage($requestRow, $summary, $orderLink, $warehouseName);
 
-            $apiBase = 'https://api.telegram.org/bot' . $botToken;
+            $apiBase = TELEGRAM_API . $botToken;
             $sendPhotoUrl = $apiBase . '/sendPhoto';
             $sendMessageUrl = $apiBase . '/sendMessage';
 

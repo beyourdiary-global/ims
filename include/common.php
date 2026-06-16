@@ -6066,7 +6066,7 @@ if (!function_exists('shopeeOmsSendTelegramAttachment')) {
                 continue;
             }
 
-            $apiUrl = 'https://api.telegram.org/bot' . $botToken . '/' . $strategy['endpoint'];
+            $apiUrl = TELEGRAM_API . $botToken . '/' . $strategy['endpoint'];
             $payload = array(
                 'chat_id' => $chatId,
                 'caption' => $captionText,
@@ -6144,7 +6144,7 @@ if (!function_exists('shopeeOmsSendTelegramAttachmentByUrl')) {
 
         $attemptErrors = array();
         foreach ($sendStrategies as $strategy) {
-            $apiUrl = 'https://api.telegram.org/bot' . $botToken . '/' . $strategy['endpoint'];
+            $apiUrl = TELEGRAM_API . $botToken . '/' . $strategy['endpoint'];
             $payload = array(
                 'chat_id' => $chatId,
                 'caption' => $captionText,
@@ -7169,7 +7169,7 @@ if (!function_exists('shopeeOmsLookupCountryCode')) {
         }
 
         if ($code === '') {
-            $url = 'https://ipapi.co/' . rawurlencode($ip) . '/country/';
+            $url = IPAPI_URL . rawurlencode($ip) . '/country/';
             $context = stream_context_create(array(
                 'http' => array(
                     'method' => 'GET',
@@ -7433,7 +7433,7 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
             }
 
             if ($documentSent && $messageText !== '') {
-                $messageUrl = 'https://api.telegram.org/bot' . $botToken . '/sendMessage';
+                $messageUrl = TELEGRAM_API . $botToken . '/sendMessage';
                 $messagePayload = array(
                     'chat_id' => $chatId,
                     'text' => $messageText,
@@ -7461,7 +7461,7 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
             }
 
             if (!$documentSent && $messageText !== '') {
-                $fallbackUrl = 'https://api.telegram.org/bot' . $botToken . '/sendMessage';
+                $fallbackUrl = TELEGRAM_API . $botToken . '/sendMessage';
                 $fallbackPayload = array(
                     'chat_id' => $chatId,
                     'text' => $fallbackMessageText,
@@ -7497,7 +7497,7 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
             }
 
             if ($documentSent && $messageText !== '') {
-                $messageUrl = 'https://api.telegram.org/bot' . $botToken . '/sendMessage';
+                $messageUrl = TELEGRAM_API . $botToken . '/sendMessage';
                 $messagePayload = array(
                     'chat_id' => $chatId,
                     'text' => $messageText,
@@ -7517,7 +7517,7 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
                     $finalResponse = $messageResponse;
                 }
             } else {
-                $apiUrl = 'https://api.telegram.org/bot' . $botToken . '/sendMessage';
+                $apiUrl = TELEGRAM_API . $botToken . '/sendMessage';
                 $payload = array(
                     'chat_id' => $chatId,
                     'text' => $fallbackMessageText,

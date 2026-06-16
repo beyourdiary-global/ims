@@ -878,7 +878,7 @@ if (!function_exists('scanLookupCountryCode')) {
 
         // Fallback to external service only if local lookup failed.
         if ($code === '') {
-            $url = 'https://ipapi.co/' . rawurlencode($ip) . '/country/';
+            $url = IPAPI_URL . rawurlencode($ip) . '/country/';
             $context = stream_context_create(array(
                 'http' => array(
                     'method' => 'GET',

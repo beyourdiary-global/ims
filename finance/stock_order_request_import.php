@@ -2403,7 +2403,7 @@ if ($action === 'insertStockOrderPdf') {
                         }
                     }
                     if ($qrWebPath === '') {
-                        $qrWebPath = 'https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=' . rawurlencode($orderLink);
+                        $qrWebPath = QR_CODE_API_URL . '?size=240x240&data=' . rawurlencode($orderLink);
                     }
 
                     $safeToken = mysqli_real_escape_string($finance_connect, $token);

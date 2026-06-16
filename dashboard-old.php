@@ -387,7 +387,7 @@ $data1 = extractXY($result9,$connect,$finance_connect,$result10, $result11, $res
 
 
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-html-plugin"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="<?= CHART_JS_CDN_URL ?>"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js">
     </script>
     </script>
