@@ -1,19 +1,10 @@
 <?php
 
-$rootDir = __DIR__;
-if (file_exists($rootDir . '/init.php')) {
-    include_once $rootDir . '/init.php';
-}
-if (defined('ROOT') && file_exists(ROOT . '/include/common.php')) {
-    include_once ROOT . '/include/common.php';
-} elseif (file_exists($rootDir . '/common.php')) {
-    include_once $rootDir . '/common.php';
-}
-if (defined('ROOT') && file_exists(ROOT . '/include/campaign_common.php')) {
-    include_once ROOT . '/include/campaign_common.php';
-} elseif (file_exists($rootDir . '/campaign_common.php')) {
-    include_once $rootDir . '/campaign_common.php';
-}
+$rootDir = dirname(__DIR__);
+
+include_once $rootDir . '/init.php';
+include_once ROOT . '/include/common.php';
+include_once ROOT . '/include/campaign_common.php';
 
 if (!isset($connect) || !($connect instanceof mysqli)) {
     echo "Campaign cron failed: CMS database connection is not available.\n";

@@ -1,9 +1,9 @@
 <?php
 // Expected cron:
-// 0 7 * * * /usr/local/bin/php -q /home/USERNAME/public_html/ims/cron_system_alert_message.php
+// 0 7 * * * /usr/local/bin/php -q /home/USERNAME/public_html/ims/cron/cron_system_alert_message.php
 // TODO: Add a secure cron-key wrapper if this project standardizes protected cron entry points.
 
-include_once 'init.php';
+include_once dirname(__DIR__) . '/init.php';
 include_once ROOT . '/include/common.php';
 include_once ROOT . '/include/campaign_common.php';
 include_once ROOT . '/include/system_alert_common.php';

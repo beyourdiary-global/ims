@@ -1,6 +1,6 @@
 <?php
 // Shared OMS housekeeping cron.
-include_once 'init.php';
+include_once dirname(__DIR__) . '/init.php';
 include_once ROOT . '/include/common.php';
 
 $postponedCount = shopeeOmsRunOverduePostponedAutoMove($connect, $finance_connect);

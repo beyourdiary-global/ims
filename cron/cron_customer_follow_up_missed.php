@@ -1,9 +1,9 @@
 <?php
 // Expected cron:
-// 5 0 * * * /usr/local/bin/php -q /home/USERNAME/public_html/ims/cron_customer_follow_up_missed.php
+// 5 0 * * * /usr/local/bin/php -q /home/USERNAME/public_html/ims/cron/cron_customer_follow_up_missed.php
 // TODO: Add a secure cron-key wrapper if this project standardizes protected cron entry points.
 
-include_once 'init.php';
+include_once dirname(__DIR__) . '/init.php';
 include_once ROOT . '/include/common.php';
 include_once ROOT . '/include/customer_follow_up_common.php';
 

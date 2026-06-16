@@ -1,8 +1,8 @@
 <?php
 // Example cron:
-// 0 */12 * * * /usr/bin/php /path/to/ims/cron_stock_order_tracking_refresh.php
+// 0 */12 * * * /usr/bin/php /path/to/ims/cron/cron_stock_order_tracking_refresh.php
 
-include 'init.php';
+include dirname(__DIR__) . '/init.php';
 include ROOT . '/include/common.php';
 
 $query = "SELECT id FROM " . STOCK_ORDER_REQ . " WHERE status='A' AND tracking_no IS NOT NULL AND tracking_no <> '' ORDER BY id DESC";

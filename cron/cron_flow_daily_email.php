@@ -1,8 +1,8 @@
 <?php
 // Expected cPanel cron:
-// 0 8 * * * /usr/local/bin/php -q /home/USERNAME/public_html/ims/cron_flow_daily_email.php
+// 0 8 * * * /usr/local/bin/php -q /home/USERNAME/public_html/ims/cron/cron_flow_daily_email.php
 
-include_once 'init.php';
+include_once dirname(__DIR__) . '/init.php';
 include_once ROOT . '/include/common.php';
 
 if (!function_exists('shopeeOmsSendMail')) {
