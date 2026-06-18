@@ -7,7 +7,7 @@ function objValue(str) {
 }
 
 function normalizeNotificationType(type) {
-  var resolvedType = String(type || "info").toLowerCase();
+  let resolvedType = String(type || "info").toLowerCase();
 
   if (
     resolvedType !== "success" &&
@@ -22,13 +22,13 @@ function normalizeNotificationType(type) {
 }
 
 function showNotification(message, type) {
-  var text = String(message == null ? "" : message).trim();
+  let text = String(message == null ? "" : message).trim();
   if (!text) {
     return;
   }
 
-  var resolvedType = normalizeNotificationType(type);
-  var palette = {
+  let resolvedType = normalizeNotificationType(type);
+  let palette = {
     success: {
       background: "#d1e7dd",
       border: "#badbcc",
@@ -51,7 +51,7 @@ function showNotification(message, type) {
     },
   };
 
-  var host = document.getElementById("global-notification-host");
+  let host = document.getElementById("global-notification-host");
   if (!host) {
     host = document.createElement("div");
     host.id = "global-notification-host";
@@ -67,7 +67,7 @@ function showNotification(message, type) {
     (document.body || document.documentElement).appendChild(host);
   }
 
-  var toast = document.createElement("div");
+  let toast = document.createElement("div");
   toast.setAttribute("role", "status");
   toast.style.background = palette[resolvedType].background;
   toast.style.border = "1px solid " + palette[resolvedType].border;
@@ -123,7 +123,7 @@ function isNumber(str) {
 }
 
 function MM_findObj(n, d) {
-  var p, i, x;
+  let p, i, x;
   if (!d) d = document;
   if ((p = n.indexOf("?")) > 0 && parent.frames.length) {
     d = parent.frames[n.substring(p + 1)].document;
@@ -143,7 +143,7 @@ function MM_jumpMenu(targ, selObj, restore) {
 }
 
 function MM_swapImage() {
-  var i,
+  let i,
     j = 0,
     x,
     a = MM_swapImage.arguments;
@@ -157,7 +157,7 @@ function MM_swapImage() {
 }
 
 function MM_swapImgRestore() {
-  var i,
+  let i,
     x,
     a = document.MM_sr;
   for (i = 0; a && i < a.length && (x = a[i]) && x.oSrc; i++) x.src = x.oSrc;
@@ -191,7 +191,8 @@ function popUp(webaddy, title, x, y) {
     ", height=" +
     y +
     ", left = 168, top = 118";
-  props = window.open(webaddy, title, features);
+  const popupWindow = window.open(webaddy, title, features);
+  return popupWindow;
 }
 
 function limitText(limitField, limitCount, limitNum) {
@@ -201,17 +202,17 @@ function limitText(limitField, limitCount, limitNum) {
 }
 
 function colorInputValidationCheck(ob, ob_des, msg) {
-  ob1 = obj(ob);
-  ob2 = obj(ob_des);
-  ob1.className = "redthickborder";
-  ob2.innerHTML = '<span class="font_red">' + msg + "</span>";
+  const inputElement = obj(ob);
+  const descriptionElement = obj(ob_des);
+  inputElement.className = "redthickborder";
+  descriptionElement.innerHTML = '<span class="font_red">' + msg + "</span>";
 }
 
 function removeColorInput(ob, ob_des) {
-  ob1 = obj(ob);
-  ob2 = obj(ob_des);
-  ob1.className = "";
-  ob2.innerHTML = "";
+  const inputElement = obj(ob);
+  const descriptionElement = obj(ob_des);
+  inputElement.className = "";
+  descriptionElement.innerHTML = "";
 }
 
 function convertSpecialChars() {
@@ -622,7 +623,8 @@ function showStickybar(elem) {
   }
 }
 
-var tooltipsfun = function (sensorele, tooltipID) {
+function tooltipsfun(sensorele, tooltipID) {
+  let timer = null;
   jQuery(sensorele).css("cursor", "pointer");
   jQuery(sensorele)
     .mouseenter(function () {
@@ -636,10 +638,10 @@ var tooltipsfun = function (sensorele, tooltipID) {
         jQuery("#" + tooltipID).hide();
       }, 700);
     });
-};
+}
 
-var vmoreHLnews = function (boxwidth, totalitems, nodata) {
-  var n = jQuery(".hlitem").length,
+function vmoreHLnews(boxwidth, totalitems, nodata) {
+  let n = jQuery(".hlitem").length,
     width = boxwidth,
     newwidth = width * n;
 
@@ -649,15 +651,15 @@ var vmoreHLnews = function (boxwidth, totalitems, nodata) {
   });
 
   jQuery(".hlitem").each(function (i) {
-    var thiswid = 730;
+    let thiswid = 730;
     jQuery(this).css({
       left: thiswid * i,
     });
   });
 
   jQuery("#hlprev").click(function () {
-    var hlprev = jQuery("#hlslide-holder .active").prev();
-    var curIndex =
+    let hlprev = jQuery("#hlslide-holder .active").prev();
+    let curIndex =
       jQuery(".active").index() - 1 < 0 ? 0 : jQuery(".active").index() - 1;
     if (hlprev.length) {
       getHLpaging(curIndex, totalitems, n, nodata);
@@ -671,8 +673,8 @@ var vmoreHLnews = function (boxwidth, totalitems, nodata) {
   });
   /* on right button click scroll to the next sibling of the current visible slide */
   jQuery("#hlnext").click(function () {
-    var hlnext = jQuery("#hlslide-holder .active").next();
-    var curIndex =
+    let hlnext = jQuery("#hlslide-holder .active").next();
+    let curIndex =
       jQuery(".active").index() + 1 > n ? n : jQuery(".active").index() + 1;
     if (hlnext.length) {
       getHLpaging(curIndex, totalitems, n, nodata);
@@ -689,24 +691,24 @@ var vmoreHLnews = function (boxwidth, totalitems, nodata) {
     most visible slide on viewport
     */
   jQuery("#hlstage").scroll(function () {
-    var scrollLeft = jQuery(this).scrollLeft();
+    let scrollLeft = jQuery(this).scrollLeft();
     jQuery(".hlitem").each(function (i) {
-      var posLeft = jQuery(this).position().left;
-      var w = jQuery(this).width();
+      let posLeft = jQuery(this).position().left;
+      let w = jQuery(this).width();
 
       if (scrollLeft >= posLeft && scrollLeft < posLeft + w) {
         jQuery(this).addClass("active").siblings().removeClass("active");
       }
     });
   });
-};
+}
 
 function getHLpaging(curIndex, totalitems, totaldivitems, totaldata) {
   jQuery("a.hlnavleft").removeClass("inactiveleft");
   jQuery("a.hlnavright").removeClass("inactiveright");
-  pagingIndex =
+  const pagingIndex =
     curIndex == totaldivitems - 1 ? totaldata : (curIndex + 1) * totalitems;
-  pagingText =
+  const pagingText =
     curIndex * totalitems + 1 + "-" + pagingIndex + " of " + totaldata;
   jQuery(".hlpaging").text(pagingText);
   if (curIndex == 0) {
@@ -719,7 +721,7 @@ function getHLpaging(curIndex, totalitems, totaldivitems, totaldata) {
 }
 
 function validCaptcha(formname, group) {
-  var v = grecaptcha.getResponse();
+  let v = grecaptcha.getResponse();
   if (v.length == 0) {
     showNotification("Please Complete The Captcha", "error");
     return false;
@@ -744,30 +746,30 @@ function validCaptcha(formname, group) {
 
 function checkValidDate(inDate, futurecheck) {
   /***get today date****/
-  var today = new Date();
-  var todaydd = today.getDate();
-  var todaymm = today.getMonth() + 1; //January is 0!
-  var todayyyyy = today.getFullYear();
+  let today = new Date();
+  let todaydd = today.getDate();
+  let todaymm = today.getMonth() + 1; //January is 0!
+  let todayyyyy = today.getFullYear();
   todayyyyy = todayyyyy.toString();
 
-  if (todaydd < 10) var todaydd = pad(todaydd, 2);
-  if (todaymm < 10) var todaymm = pad(todaymm, 2);
+  if (todaydd < 10) todaydd = pad(todaydd, 2);
+  if (todaymm < 10) todaymm = pad(todaymm, 2);
 
   if (inDate == "") return true;
-  var d = "312831303130313130313031";
+  let d = "312831303130313130313031";
 
   /* For invalid dates, return false */
   if (inDate.length > 0 && inDate.length < 8) return false;
 
   // Expected inDate format: dd.mm.yyyy
-  dd = inDate.substring(0, 2);
-  mm = inDate.substring(2, 4);
-  yy = inDate.substring(4, 8);
+  const dd = inDate.substring(0, 2);
+  const mm = inDate.substring(2, 4);
+  let yy = inDate.substring(4, 8);
 
   /* Now, convert the string yr1 into a numeric and test for leap year.
   If it is, change the end of month day string for Feb to 29  */
 
-  var isLeap = false;
+  let isLeap = false;
   yy = yy * 1;
   if (yy % 400 == 0) isLeap = true;
   else if (yy % 100 == 0) isLeap = false;
@@ -775,8 +777,8 @@ function checkValidDate(inDate, futurecheck) {
   if (isLeap) d = d.substring(0, 2) + "29" + d.substring(4, d.length);
 
   /* Pick the end of month day from the d string for this month. */
-  pos = mm * 2 - 2;
-  ld = d.substring(pos, pos + 2) + 0;
+  const pos = mm * 2 - 2;
+  const ld = d.substring(pos, pos + 2) + 0;
   if (dd < 1 || dd > ld) return false;
   else if (mm < 1 || mm > 12) return false;
   else if (yy < 1900) return false;
@@ -795,8 +797,8 @@ function pad(str, max) {
 }
 
 function gInputNumbersDotOnly(myfield, e) {
-  var key;
-  var keychar;
+  let key;
+  let keychar;
   if (window.event) key = window.event.keyCode;
   else if (e) key = e.which;
   else return true;
@@ -811,7 +813,7 @@ function gInputNumbersDotOnly(myfield, e) {
 }
 
 function gAddLoadEvent(func) {
-  var oldonload = window.onload;
+  let oldonload = window.onload;
   if (typeof window.onload != "function") {
     window.onload = func;
   } else {
@@ -833,7 +835,7 @@ function gDestroycatfish() {
 function gCloselink() {
   /* attach the catfish closer function to the link */
   if (document.getElementById("closeme")) {
-    var closelink =
+    let closelink =
       document.getElementById("closeme"); /* find the 'close this' link */
     closelink.onclick =
       gDestroycatfish; /* attach the destroy function to it's 'onclick' */
@@ -841,31 +843,31 @@ function gCloselink() {
 }
 
 function gSetCookie(cname, cvalue, exdays) {
-  var d = new Date();
+  let d = new Date();
   d.setTime(d.getTime() + exdays * 24 * 60 * 60 * 1000);
-  var expires = "expires=" + d.toUTCString();
+  let expires = "expires=" + d.toUTCString();
   document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
 }
 
 function convertDate(date, current_Date) {
   // format: DD/MM/YYYY (Check valid date and get date)
-  var valid_date = "";
+  let valid_date = "";
 
-  var todayDate = new Date();
-  var todayDD = todayDate.getDate().toString();
-  var todayMM = (todayDate.getMonth() + 1).toString();
-  var todayYY = todayDate.getFullYear().toString();
+  let todayDate = new Date();
+  let todayDD = todayDate.getDate().toString();
+  let todayMM = (todayDate.getMonth() + 1).toString();
+  let todayYY = todayDate.getFullYear().toString();
 
-  if (todayDD < 10) var todayDD = pad(todayDD, 2);
-  if (todayMM < 10) var todayMM = pad(todayMM, 2);
+  if (todayDD < 10) todayDD = pad(todayDD, 2);
+  if (todayMM < 10) todayMM = pad(todayMM, 2);
 
   if (date) {
-    var splitDate = date.split(/[-\/.]/);
-    var inputDD = splitDate[0] ? splitDate[0] : "";
+    let splitDate = date.split(/[-\/.]/);
+    let inputDD = splitDate[0] ? splitDate[0] : "";
     inputDD = inputDD.toString();
-    var inputMM = splitDate[1] ? splitDate[1] : "";
+    let inputMM = splitDate[1] ? splitDate[1] : "";
     inputMM = inputMM.toString();
-    var inputYY = splitDate[2] ? splitDate[2] : "";
+    let inputYY = splitDate[2] ? splitDate[2] : "";
     inputYY = inputYY.toString();
 
     if (inputDD < 10 && inputDD.length < 2) {
@@ -913,7 +915,7 @@ function ensureGlobalDataTableEmptyStateStyle() {
     return;
   }
 
-  var style = document.createElement("style");
+  let style = document.createElement("style");
   style.id = "global-dt-empty-state-style";
   style.textContent =
     ".global-dt-hidden{display:none !important;}" +
@@ -947,26 +949,26 @@ function syncGlobalDataTableEmptyState(dataTableApi) {
     return;
   }
 
-  var settings = dataTableApi.settings()[0];
+  let settings = dataTableApi.settings()[0];
   if (!settings || !settings.sTableId) {
     return;
   }
 
-  var tableId = settings.sTableId;
-  var wrapperId = tableId + "_wrapper";
-  var emptyStateId = tableId + "_global_no_result";
-  var wrapper = document.getElementById(wrapperId);
+  let tableId = settings.sTableId;
+  let wrapperId = tableId + "_wrapper";
+  let emptyStateId = tableId + "_global_no_result";
+  let wrapper = document.getElementById(wrapperId);
 
   if (!wrapper || !wrapper.parentNode) {
     return;
   }
 
-  var recordsTotal = 0;
+  let recordsTotal = 0;
   if (
     typeof dataTableApi.page === "function" &&
     typeof dataTableApi.page.info === "function"
   ) {
-    var pageInfo = dataTableApi.page.info();
+    let pageInfo = dataTableApi.page.info();
     if (pageInfo && typeof pageInfo.recordsTotal === "number") {
       recordsTotal = pageInfo.recordsTotal;
     }
@@ -976,8 +978,8 @@ function syncGlobalDataTableEmptyState(dataTableApi) {
     recordsTotal = dataTableApi.rows().count();
   }
 
-  var isEmpty = recordsTotal === 0;
-  var emptyStateNode = document.getElementById(emptyStateId);
+  let isEmpty = recordsTotal === 0;
+  let emptyStateNode = document.getElementById(emptyStateId);
 
   if (!emptyStateNode) {
     emptyStateNode = document.createElement("div");
@@ -1005,13 +1007,13 @@ function bindGlobalDataTableEmptyStateHandlers() {
   window.__globalDataTableEmptyStateHandlersBound = true;
 
   $(document).on("init.dt draw.dt", function (event, settings) {
-    var tableApi = getDataTableApiFromSettings(settings);
+    let tableApi = getDataTableApiFromSettings(settings);
     if (tableApi) {
       syncGlobalDataTableEmptyState(tableApi);
     }
   });
 
-  var existingTables = $.fn.dataTable.tables({ api: true });
+  let existingTables = $.fn.dataTable.tables({ api: true });
   if (
     existingTables &&
     typeof existingTables.count === "function" &&
@@ -1024,18 +1026,18 @@ function bindGlobalDataTableEmptyStateHandlers() {
 }
 
 function resolveActionLabel(element) {
-  var titleAttr = (element.getAttribute("title") || "").trim();
+  let titleAttr = (element.getAttribute("title") || "").trim();
   if (titleAttr !== "") {
     return titleAttr;
   }
 
-  var textLabel = (element.textContent || "").trim();
+  let textLabel = (element.textContent || "").trim();
   if (textLabel !== "") {
     return textLabel;
   }
 
-  var icon = element.querySelector("i");
-  var iconClass = icon ? icon.className : "";
+  let icon = element.querySelector("i");
+  let iconClass = icon ? icon.className : "";
   if (iconClass.indexOf("fa-eye") !== -1) return "View";
   if (iconClass.indexOf("fa-edit") !== -1 || iconClass.indexOf("fa-pen") !== -1)
     return "Edit";
@@ -1046,8 +1048,8 @@ function resolveActionLabel(element) {
 }
 
 function resolveActionType(element) {
-  var icon = element.querySelector("i");
-  var iconClass = icon ? icon.className : "";
+  let icon = element.querySelector("i");
+  let iconClass = icon ? icon.className : "";
 
   if (iconClass.indexOf("fa-eye") !== -1) return "view";
   if (iconClass.indexOf("fa-edit") !== -1 || iconClass.indexOf("fa-pen") !== -1)
@@ -1064,11 +1066,11 @@ function resolveActionType(element) {
 }
 
 function buildMobileActionItem(actionNode) {
-  var node = actionNode.cloneNode(true);
-  var actionLabel = resolveActionLabel(actionNode);
-  var actionType = resolveActionType(actionNode);
-  var iconNode = actionNode.querySelector("i");
-  var iconHtml = iconNode
+  let node = actionNode.cloneNode(true);
+  let actionLabel = resolveActionLabel(actionNode);
+  let actionType = resolveActionType(actionNode);
+  let iconNode = actionNode.querySelector("i");
+  let iconHtml = iconNode
     ? iconNode.outerHTML
     : '<i class="fas fa-circle"></i>';
 
@@ -1092,8 +1094,8 @@ function buildMobileActionItem(actionNode) {
 }
 
 function convertTableActionButtonsForMobile() {
-  var actionCells = document.querySelectorAll("td.btn-container");
-  var isMobileView = window.matchMedia("(max-width: 768px)").matches;
+  let actionCells = document.querySelectorAll("td.btn-container");
+  let isMobileView = window.matchMedia("(max-width: 768px)").matches;
 
   actionCells.forEach(function (cell) {
     if (!cell.dataset.originalActionHtml) {
@@ -1112,10 +1114,10 @@ function convertTableActionButtonsForMobile() {
       return;
     }
 
-    var tempWrapper = document.createElement("div");
+    let tempWrapper = document.createElement("div");
     tempWrapper.innerHTML = cell.dataset.originalActionHtml;
 
-    var actionNodes = Array.prototype.slice
+    let actionNodes = Array.prototype.slice
       .call(tempWrapper.querySelectorAll("a, button"))
       .filter(function (node) {
         return (
@@ -1128,10 +1130,10 @@ function convertTableActionButtonsForMobile() {
       return;
     }
 
-    var wrapper = document.createElement("div");
+    let wrapper = document.createElement("div");
     wrapper.className = "mobile-action-wrapper";
 
-    var trigger = document.createElement("button");
+    let trigger = document.createElement("button");
     trigger.type = "button";
     trigger.className = "mobile-action-trigger";
     trigger.setAttribute("aria-label", "Show row actions");
@@ -1143,7 +1145,7 @@ function convertTableActionButtonsForMobile() {
       trigger.classList.remove("is-hover");
     });
 
-    var menu = document.createElement("div");
+    let menu = document.createElement("div");
     menu.className = "mobile-action-menu";
 
     actionNodes.forEach(function (node) {
@@ -1160,10 +1162,10 @@ function convertTableActionButtonsForMobile() {
 }
 
 function initMobileActionMenus() {
-  var currentHoveredNode = null;
-  var hoverSyncIntervalId = null;
+  let currentHoveredNode = null;
+  let hoverSyncIntervalId = null;
 
-  var setHoveredNode = function (node) {
+  let setHoveredNode = function (node) {
     if (currentHoveredNode === node) {
       return;
     }
@@ -1178,11 +1180,11 @@ function initMobileActionMenus() {
     }
   };
 
-  var clearMobileHoverState = function () {
+  let clearMobileHoverState = function () {
     setHoveredNode(null);
   };
 
-  var applyMobileHoverFromPoint = function (clientX, clientY) {
+  let applyMobileHoverFromPoint = function (clientX, clientY) {
     if (
       typeof clientX !== "number" ||
       typeof clientY !== "number" ||
@@ -1192,14 +1194,14 @@ function initMobileActionMenus() {
       return;
     }
 
-    var findHoverCandidateByRect = function () {
-      var candidates = document.querySelectorAll(
+    let findHoverCandidateByRect = function () {
+      let candidates = document.querySelectorAll(
         "td.btn-container.mobile-action-open .mobile-action-item, td.btn-container.mobile-action-open .mobile-action-trigger",
       );
 
-      for (var i = 0; i < candidates.length; i++) {
-        var candidate = candidates[i];
-        var rect = candidate.getBoundingClientRect();
+      for (let i = 0; i < candidates.length; i++) {
+        let candidate = candidates[i];
+        let rect = candidate.getBoundingClientRect();
         if (
           clientX >= rect.left &&
           clientX <= rect.right &&
@@ -1213,24 +1215,24 @@ function initMobileActionMenus() {
       return null;
     };
 
-    var rectCandidate = findHoverCandidateByRect();
+    let rectCandidate = findHoverCandidateByRect();
     if (rectCandidate) {
       setHoveredNode(rectCandidate);
       return;
     }
 
-    var target = document.elementFromPoint(clientX, clientY);
+    let target = document.elementFromPoint(clientX, clientY);
     if (!target) {
       return;
     }
 
-    var hoveredItem = target.closest(".mobile-action-item");
+    let hoveredItem = target.closest(".mobile-action-item");
     if (hoveredItem) {
       setHoveredNode(hoveredItem);
       return;
     }
 
-    var hoveredTrigger = target.closest(".mobile-action-trigger");
+    let hoveredTrigger = target.closest(".mobile-action-trigger");
     if (hoveredTrigger) {
       setHoveredNode(hoveredTrigger);
       return;
@@ -1239,19 +1241,19 @@ function initMobileActionMenus() {
     setHoveredNode(null);
   };
 
-  var applyHoverByTarget = function (target) {
+  let applyHoverByTarget = function (target) {
     if (!target) {
       setHoveredNode(null);
       return;
     }
 
-    var hoveredItem = target.closest(".mobile-action-item");
+    let hoveredItem = target.closest(".mobile-action-item");
     if (hoveredItem) {
       setHoveredNode(hoveredItem);
       return;
     }
 
-    var hoveredTrigger = target.closest(".mobile-action-trigger");
+    let hoveredTrigger = target.closest(".mobile-action-trigger");
     if (hoveredTrigger) {
       setHoveredNode(hoveredTrigger);
       return;
@@ -1260,7 +1262,7 @@ function initMobileActionMenus() {
     setHoveredNode(null);
   };
 
-  var isInsideMobileActionUi = function (node) {
+  let isInsideMobileActionUi = function (node) {
     if (!node || !(node instanceof Element)) {
       return false;
     }
@@ -1269,7 +1271,7 @@ function initMobileActionMenus() {
     );
   };
 
-  var closeAllMenus = function () {
+  let closeAllMenus = function () {
     clearMobileHoverState();
     if (hoverSyncIntervalId !== null) {
       window.clearInterval(hoverSyncIntervalId);
@@ -1286,12 +1288,12 @@ function initMobileActionMenus() {
       });
   };
 
-  var syncHoverFromCssState = function () {
+  let syncHoverFromCssState = function () {
     if (!window.matchMedia("(max-width: 768px)").matches) {
       return;
     }
 
-    var openMenuExists = document.querySelector(
+    let openMenuExists = document.querySelector(
       "td.btn-container.mobile-action-open",
     );
     if (!openMenuExists) {
@@ -1299,8 +1301,8 @@ function initMobileActionMenus() {
     }
 
     try {
-      var hoveredChain = document.querySelectorAll(":hover");
-      var hoveredTarget = hoveredChain.length
+      let hoveredChain = document.querySelectorAll(":hover");
+      let hoveredTarget = hoveredChain.length
         ? hoveredChain[hoveredChain.length - 1]
         : null;
 
@@ -1309,7 +1311,7 @@ function initMobileActionMenus() {
         return;
       }
 
-      var actionHoverTarget = hoveredTarget.closest(
+      let actionHoverTarget = hoveredTarget.closest(
         ".mobile-action-item, .mobile-action-trigger",
       );
 
@@ -1324,19 +1326,19 @@ function initMobileActionMenus() {
   };
 
   document.addEventListener("click", function (event) {
-    var trigger = event.target.closest(".mobile-action-trigger");
-    var insideMenu = event.target.closest(".mobile-action-menu");
+    let trigger = event.target.closest(".mobile-action-trigger");
+    let insideMenu = event.target.closest(".mobile-action-menu");
 
     if (trigger) {
-      var actionCell = trigger.closest("td.btn-container");
-      var shouldOpen =
+      let actionCell = trigger.closest("td.btn-container");
+      let shouldOpen =
         actionCell && !actionCell.classList.contains("mobile-action-open");
       closeAllMenus();
       if (actionCell && shouldOpen) {
-        var menu = actionCell.querySelector(".mobile-action-menu");
-        var menuWidth = menu ? Math.max(menu.offsetWidth || 0, 160) : 160;
-        var triggerRect = trigger.getBoundingClientRect();
-        var spaceRight = window.innerWidth - triggerRect.right;
+        let menu = actionCell.querySelector(".mobile-action-menu");
+        let menuWidth = menu ? Math.max(menu.offsetWidth || 0, 160) : 160;
+        let triggerRect = trigger.getBoundingClientRect();
+        let spaceRight = window.innerWidth - triggerRect.right;
 
         actionCell.classList.add("mobile-action-open");
         if (spaceRight >= menuWidth + 12) {
@@ -1377,7 +1379,7 @@ function initMobileActionMenus() {
   });
 
   document.addEventListener("mouseout", function (event) {
-    var toNode = event && event.relatedTarget ? event.relatedTarget : null;
+    let toNode = event && event.relatedTarget ? event.relatedTarget : null;
     if (isInsideMobileActionUi(toNode)) {
       return;
     }
@@ -1395,7 +1397,7 @@ function initMobileActionMenus() {
     if (event.pointerType && event.pointerType !== "mouse") {
       return;
     }
-    var toNode = event && event.relatedTarget ? event.relatedTarget : null;
+    let toNode = event && event.relatedTarget ? event.relatedTarget : null;
     if (isInsideMobileActionUi(toNode)) {
       return;
     }
@@ -1431,19 +1433,19 @@ function updateCheckboxesOnOtherPages(isChecked, tableId) {
     return;
   }
 
-  var $ = window.jQuery;
-  var checkedValue = !!isChecked;
+  let $ = window.jQuery;
+  let checkedValue = !!isChecked;
 
   function updateExportCheckboxesInTable(tableElement) {
     if (!tableElement) {
       return false;
     }
 
-    var $table = $(tableElement);
+    let $table = $(tableElement);
 
     try {
       if ($.fn && $.fn.DataTable && $.fn.DataTable.isDataTable(tableElement)) {
-        var cells = $table.DataTable().cells().nodes();
+        let cells = $table.DataTable().cells().nodes();
         $(cells).find(".export").prop("checked", checkedValue);
         return true;
       }
@@ -1456,7 +1458,7 @@ function updateCheckboxesOnOtherPages(isChecked, tableId) {
   }
 
   if (typeof tableId === "string" && tableId.trim() !== "") {
-    var normalizedTableId = tableId.trim();
+    let normalizedTableId = tableId.trim();
 
     if (normalizedTableId.charAt(0) !== "#") {
       normalizedTableId = "#" + normalizedTableId;
@@ -1466,7 +1468,7 @@ function updateCheckboxesOnOtherPages(isChecked, tableId) {
     return;
   }
 
-  var updated = false;
+  let updated = false;
 
   $("table").each(function () {
     if ($(this).find(".export").length === 0) {
@@ -1484,7 +1486,7 @@ function updateCheckboxesOnOtherPages(isChecked, tableId) {
 }
 
 function toggleFilters(sectionId) {
-  var section = document.getElementById(sectionId);
+  let section = document.getElementById(sectionId);
 
   if (!section) {
     return;
@@ -1496,24 +1498,24 @@ function toggleFilters(sectionId) {
 function autoToggleSections(config) {
   config = config || {};
 
-  var urlParams = new URLSearchParams(window.location.search);
-  var filterFields = config.filterFields || ["month", "status", "brand", "pkg", "acc"];
-  var groupFields = config.groupFields || ["month_gb", "status_gb", "brand_gb", "pkg_gb", "acc_gb"];
-  var filterSectionId = config.filterSectionId || "filterSection";
-  var groupBySectionId = config.groupBySectionId || "groupBySection";
+  let urlParams = new URLSearchParams(window.location.search);
+  let filterFields = config.filterFields || ["month", "status", "brand", "pkg", "acc"];
+  let groupFields = config.groupFields || ["month_gb", "status_gb", "brand_gb", "pkg_gb", "acc_gb"];
+  let filterSectionId = config.filterSectionId || "filterSection";
+  let groupBySectionId = config.groupBySectionId || "groupBySection";
 
-  var filterActive = filterFields.some(function (key) {
-    var value = urlParams.get(key);
+  let filterActive = filterFields.some(function (key) {
+    let value = urlParams.get(key);
     return value && value !== "" && value !== "All";
   });
 
-  var groupActive = groupFields.some(function (key) {
-    var value = urlParams.get(key);
+  let groupActive = groupFields.some(function (key) {
+    let value = urlParams.get(key);
     return value && value !== "";
   });
 
-  var filterSection = document.getElementById(filterSectionId);
-  var groupBySection = document.getElementById(groupBySectionId);
+  let filterSection = document.getElementById(filterSectionId);
+  let groupBySection = document.getElementById(groupBySectionId);
 
   if (filterActive && filterSection) {
     filterSection.style.display = "flex";
@@ -1529,8 +1531,8 @@ function applyFilterOrGroup(param, element) {
     return;
   }
 
-  var value = element.value;
-  var url = new URL(window.location.href);
+  let value = element.value;
+  let url = new URL(window.location.href);
   url.searchParams.set(param, value);
   window.location.href = url.toString();
 }
@@ -1550,7 +1552,7 @@ function activatePlatformTab(platformKey, hiddenInputs) {
     );
   });
 
-  var inputs = [];
+  let inputs = [];
 
   if (hiddenInputs) {
     if (
@@ -1589,12 +1591,12 @@ function getValidDataTableRowCount(tableElement) {
     return 0;
   }
 
-  var headerCount = tableElement.querySelectorAll("thead th").length;
-  var validRows = 0;
+  let headerCount = tableElement.querySelectorAll("thead th").length;
+  let validRows = 0;
 
   tableElement.querySelectorAll("tbody tr").forEach(function (rowElement) {
-    var cellCount = rowElement.querySelectorAll("td, th").length;
-    var hasColspan = rowElement.querySelector("[colspan]");
+    let cellCount = rowElement.querySelectorAll("td, th").length;
+    let hasColspan = rowElement.querySelector("[colspan]");
 
     if (!hasColspan && cellCount === headerCount) {
       validRows += 1;
@@ -1618,7 +1620,7 @@ function clearNewCustomerInlineError(field) {
     field.nextElementSibling.remove();
   }
 
-  var wrapper = field.parentElement;
+  let wrapper = field.parentElement;
   if (!wrapper) {
     return;
   }
@@ -1637,7 +1639,7 @@ function showNewCustomerInlineError(field, message) {
 
   field.classList.add("shopee-inline-invalid");
 
-  var errorNode = document.createElement("span");
+  let errorNode = document.createElement("span");
   errorNode.className = "shopee-inline-error";
   errorNode.textContent = message;
 
@@ -1645,8 +1647,8 @@ function showNewCustomerInlineError(field, message) {
 }
 
 function togglePassword(inputId) {
-  var input = document.getElementById(inputId);
-  var icon = document.getElementById(
+  let input = document.getElementById(inputId);
+  let icon = document.getElementById(
     "show" + inputId.charAt(0).toUpperCase() + inputId.slice(1),
   );
 
@@ -1667,7 +1669,7 @@ function togglePassword(inputId) {
 }
 
 function setStatus(message, isError, targetStatusNode) {
-  var statusElement = targetStatusNode || null;
+  let statusElement = targetStatusNode || null;
 
   if (!statusElement && typeof statusNode !== "undefined") {
     statusElement = statusNode;
@@ -1711,12 +1713,12 @@ function normalizeCustomerRecordFilterValue(value) {
 }
 
 function splitCustomerRecordFilterValues(rawValue) {
-  var values = [];
-  var uniqueMap = {};
-  var sourceValue = String(rawValue == null ? "" : rawValue);
+  let values = [];
+  let uniqueMap = {};
+  let sourceValue = String(rawValue == null ? "" : rawValue);
 
   sourceValue.split("||").forEach(function (value) {
-    var trimmedValue = String(value == null ? "" : value)
+    let trimmedValue = String(value == null ? "" : value)
       .replace(/\s+/g, " ")
       .trim();
 
@@ -1759,7 +1761,7 @@ function getCustomerRecordFilterRowNode(settings, dataIndex, tableApi) {
   }
 
   if (tableApi && typeof tableApi.row === "function") {
-    var rowApi = tableApi.row(dataIndex);
+    let rowApi = tableApi.row(dataIndex);
     if (rowApi && typeof rowApi.node === "function") {
       return rowApi.node();
     }
@@ -1769,10 +1771,10 @@ function getCustomerRecordFilterRowNode(settings, dataIndex, tableApi) {
 }
 
 function getCustomerRecordFilterSourceRows(tableElement, tableApi) {
-  var rowNodes = [];
+  let rowNodes = [];
 
   if (tableApi && typeof tableApi.rows === "function") {
-    var apiNodes = tableApi.rows().nodes();
+    let apiNodes = tableApi.rows().nodes();
 
     if (apiNodes) {
       if (typeof apiNodes.toArray === "function") {
@@ -1810,12 +1812,12 @@ function readCustomerRecordFilterStorage(storageKey) {
   }
 
   try {
-    var rawValue = localStorage.getItem(storageKey);
+    let rawValue = localStorage.getItem(storageKey);
     if (!rawValue) {
       return {};
     }
 
-    var parsedValue = JSON.parse(rawValue);
+    let parsedValue = JSON.parse(rawValue);
     return parsedValue && typeof parsedValue === "object" ? parsedValue : {};
   } catch (error) {
     return {};
@@ -1823,11 +1825,11 @@ function readCustomerRecordFilterStorage(storageKey) {
 }
 
 function normalizeCustomerRecordFilterValuesList(values) {
-  var normalizedValues = [];
-  var uniqueMap = {};
+  let normalizedValues = [];
+  let uniqueMap = {};
 
   (Array.isArray(values) ? values : [values]).forEach(function (value) {
-    var trimmedValue = String(value == null ? "" : value)
+    let trimmedValue = String(value == null ? "" : value)
       .replace(/\s+/g, " ")
       .trim();
 
@@ -1859,8 +1861,8 @@ function normalizeCustomerRecordFieldStoredValue(field, rawValue) {
 }
 
 function cloneCustomerRecordFilterState(fields, rawState) {
-  var normalizedState = {};
-  var sourceState =
+  let normalizedState = {};
+  let sourceState =
     rawState && typeof rawState === "object" ? rawState : {};
 
   fields.forEach(function (field) {
@@ -1875,7 +1877,7 @@ function cloneCustomerRecordFilterState(fields, rawState) {
 
 function customerRecordFilterStateHasValues(fields, filterState) {
   return fields.some(function (field) {
-    var fieldValue = filterState ? filterState[field.key] : "";
+    let fieldValue = filterState ? filterState[field.key] : "";
 
     if (field.multiple) {
       return Array.isArray(fieldValue) && fieldValue.length > 0;
@@ -1894,14 +1896,14 @@ function getCustomerRecordSelectedNormalizedValues(selectedValues) {
 }
 
 function customerRecordRowMatchesSelectedValues(rowNode, attrName, selectedValues) {
-  var normalizedSelections =
+  let normalizedSelections =
     getCustomerRecordSelectedNormalizedValues(selectedValues);
 
   if (!normalizedSelections.length) {
     return true;
   }
 
-  var rowValues = getCustomerRecordRowFilterNormalizedValues(rowNode, attrName);
+  let rowValues = getCustomerRecordRowFilterNormalizedValues(rowNode, attrName);
   return normalizedSelections.some(function (selectedValue) {
     return rowValues.indexOf(selectedValue) !== -1;
   });
@@ -1917,8 +1919,8 @@ function normalizeCustomerRecordFilterPath(path) {
 }
 
 function customerRecordFilterPathMatches(expectedPath, actualPath) {
-  var normalizedExpected = normalizeCustomerRecordFilterPath(expectedPath);
-  var normalizedActual = normalizeCustomerRecordFilterPath(actualPath);
+  let normalizedExpected = normalizeCustomerRecordFilterPath(expectedPath);
+  let normalizedActual = normalizeCustomerRecordFilterPath(actualPath);
 
   if (!normalizedExpected || !normalizedActual) {
     return false;
@@ -1932,7 +1934,7 @@ function customerRecordFilterPathMatches(expectedPath, actualPath) {
     return false;
   }
 
-  var boundaryIndex = normalizedActual.length - normalizedExpected.length - 1;
+  let boundaryIndex = normalizedActual.length - normalizedExpected.length - 1;
   return boundaryIndex < 0 || normalizedActual.charAt(boundaryIndex) === "/";
 }
 
@@ -1942,7 +1944,7 @@ function getCustomerRecordReferrerPath() {
   }
 
   try {
-    var parser = document.createElement("a");
+    let parser = document.createElement("a");
     parser.href = document.referrer;
     return normalizeCustomerRecordFilterPath(parser.pathname || "");
   } catch (error) {
@@ -1951,7 +1953,7 @@ function getCustomerRecordReferrerPath() {
 }
 
 function shouldResetCustomerRecordFilterState(config) {
-  var scopePaths = Array.isArray(config && config.scopePaths)
+  let scopePaths = Array.isArray(config && config.scopePaths)
     ? config.scopePaths
     : [];
 
@@ -1959,17 +1961,17 @@ function shouldResetCustomerRecordFilterState(config) {
     return false;
   }
 
-  var referrerPath = getCustomerRecordReferrerPath();
+  let referrerPath = getCustomerRecordReferrerPath();
   if (!referrerPath) {
     return false;
   }
 
-  var allowedPaths = scopePaths
+  let allowedPaths = scopePaths
     .map(normalizeCustomerRecordFilterPath)
     .filter(function (path) {
       return path !== "";
     });
-  var currentPath = normalizeCustomerRecordFilterPath(window.location.pathname);
+  let currentPath = normalizeCustomerRecordFilterPath(window.location.pathname);
 
   if (
     currentPath !== "" &&
@@ -1996,14 +1998,14 @@ function initCustomerRecordTableFilters(config) {
     return null;
   }
 
-  var tableElement = document.getElementById(config.tableId);
+  let tableElement = document.getElementById(config.tableId);
   if (!tableElement || !$.fn.DataTable.isDataTable(tableElement)) {
     return null;
   }
 
-  var $tableElement = $(tableElement);
-  var tableApi = $tableElement.DataTable();
-  var wrapper = $("#" + config.tableId + "_wrapper");
+  let $tableElement = $(tableElement);
+  let tableApi = $tableElement.DataTable();
+  let wrapper = $("#" + config.tableId + "_wrapper");
 
   if (!wrapper.length) {
     wrapper = $tableElement.closest(".dataTables_wrapper, .dt-container");
@@ -2013,13 +2015,13 @@ function initCustomerRecordTableFilters(config) {
     return null;
   }
 
-  var fields = Array.isArray(config.filters) ? config.filters : [];
+  let fields = Array.isArray(config.filters) ? config.filters : [];
   if (!fields.length) {
     return null;
   }
 
   fields = fields.map(function (field) {
-    var normalizedField = field || {};
+    let normalizedField = field || {};
     if (
       normalizedField.type === "select" &&
       config.selectFieldsMultiple === true &&
@@ -2031,9 +2033,9 @@ function initCustomerRecordTableFilters(config) {
     return normalizedField;
   });
 
-  var storageKey = config.storageKey || "";
-  var panelStorageKey = config.panelStorageKey || "";
-  var deferredApply = config.deferApply === true;
+  let storageKey = config.storageKey || "";
+  let panelStorageKey = config.panelStorageKey || "";
+  let deferredApply = config.deferApply === true;
 
   if (shouldResetCustomerRecordFilterState(config)) {
     if (storageKey) {
@@ -2044,12 +2046,12 @@ function initCustomerRecordTableFilters(config) {
     }
   }
 
-  var activeFilters = cloneCustomerRecordFilterState(
+  let activeFilters = cloneCustomerRecordFilterState(
     fields,
     readCustomerRecordFilterStorage(storageKey),
   );
-  var pendingFilters = cloneCustomerRecordFilterState(fields, activeFilters);
-  var tableSearchFn = tableElement.__customerRecordFilterSearch || null;
+  let pendingFilters = cloneCustomerRecordFilterState(fields, activeFilters);
+  let tableSearchFn = tableElement.__customerRecordFilterSearch || null;
 
   if (!tableSearchFn) {
     tableSearchFn = function (settings, rowData, dataIndex) {
@@ -2057,14 +2059,14 @@ function initCustomerRecordTableFilters(config) {
         return true;
       }
 
-      var rowNode = getCustomerRecordFilterRowNode(settings, dataIndex, tableApi);
+      let rowNode = getCustomerRecordFilterRowNode(settings, dataIndex, tableApi);
       if (!rowNode) {
         return true;
       }
 
-      for (var i = 0; i < fields.length; i++) {
-        var field = fields[i];
-        var rawFilterValue = activeFilters[field.key];
+      for (let i = 0; i < fields.length; i++) {
+        let field = fields[i];
+        let rawFilterValue = activeFilters[field.key];
 
         if (field.multiple) {
           if (
@@ -2080,16 +2082,16 @@ function initCustomerRecordTableFilters(config) {
           continue;
         }
 
-        var filterValue = normalizeCustomerRecordFilterValue(rawFilterValue);
+        let filterValue = normalizeCustomerRecordFilterValue(rawFilterValue);
 
         if (!filterValue) {
           continue;
         }
 
-        var rowValues = getCustomerRecordRowFilterNormalizedValues(rowNode, field.attr);
+        let rowValues = getCustomerRecordRowFilterNormalizedValues(rowNode, field.attr);
 
         if (field.type === "text") {
-          var textMatched = rowValues.some(function (rowValue) {
+          let textMatched = rowValues.some(function (rowValue) {
             return rowValue.indexOf(filterValue) !== -1;
           });
 
@@ -2112,7 +2114,7 @@ function initCustomerRecordTableFilters(config) {
     $.fn.dataTable.ext.search.push(tableSearchFn);
   }
 
-  var toolbarRow = wrapper.parent().find(
+  let toolbarRow = wrapper.parent().find(
     ".customer-record-filter-toolbar-row[data-table-id='" + config.tableId + "']",
   );
   if (!toolbarRow.length) {
@@ -2121,14 +2123,14 @@ function initCustomerRecordTableFilters(config) {
     wrapper.before(toolbarRow);
   }
 
-  var toolbar = toolbarRow.find(".customer-record-filter-toolbar");
+  let toolbar = toolbarRow.find(".customer-record-filter-toolbar");
   if (!toolbar.length) {
     toolbar = $('<div class="customer-record-filter-toolbar"></div>');
     toolbar.attr("data-table-id", config.tableId);
     toolbarRow.append(toolbar);
   }
 
-  var filterButton = toolbar.find(".customer-record-filter-toggle");
+  let filterButton = toolbar.find(".customer-record-filter-toggle");
   if (!filterButton.length) {
     filterButton = $(
       '<button type="button" class="btn btn-info customer-record-filter-toggle">Show/Hide Filters</button>',
@@ -2136,7 +2138,7 @@ function initCustomerRecordTableFilters(config) {
     toolbar.append(filterButton);
   }
 
-  var panel = wrapper.find(
+  let panel = wrapper.find(
     ".customer-record-filter-panel[data-table-id='" + config.tableId + "']",
   );
 
@@ -2151,16 +2153,16 @@ function initCustomerRecordTableFilters(config) {
   }
   panel.empty();
 
-  var fieldNodes = {};
-  var searchButton = null;
+  let fieldNodes = {};
+  let searchButton = null;
 
-  var updateDropdownButtonLabel = function (field) {
+  let updateDropdownButtonLabel = function (field) {
     if (!field || !field.multiple || !fieldNodes[field.key]) {
       return;
     }
 
-    var fieldNode = fieldNodes[field.key];
-    var selectedValues = normalizeCustomerRecordFilterValuesList(
+    let fieldNode = fieldNodes[field.key];
+    let selectedValues = normalizeCustomerRecordFilterValuesList(
       fieldNode.inputs
         .filter(":checked")
         .map(function () {
@@ -2178,8 +2180,8 @@ function initCustomerRecordTableFilters(config) {
     }
   };
 
-  var getFieldNodeValue = function (field) {
-    var fieldNode = fieldNodes[field.key];
+  let getFieldNodeValue = function (field) {
+    let fieldNode = fieldNodes[field.key];
     if (!fieldNode) {
       return field.multiple ? [] : "";
     }
@@ -2198,21 +2200,21 @@ function initCustomerRecordTableFilters(config) {
     return String(fieldNode.input.val() == null ? "" : fieldNode.input.val());
   };
 
-  var setFieldNodeValue = function (field, value) {
-    var fieldNode = fieldNodes[field.key];
+  let setFieldNodeValue = function (field, value) {
+    let fieldNode = fieldNodes[field.key];
     if (!fieldNode) {
       return;
     }
 
     if (field.multiple) {
-      var selectedValues = normalizeCustomerRecordFilterValuesList(value);
-      var selectedMap = {};
+      let selectedValues = normalizeCustomerRecordFilterValuesList(value);
+      let selectedMap = {};
       selectedValues.forEach(function (selectedValue) {
         selectedMap[selectedValue] = true;
       });
 
       fieldNode.inputs.each(function () {
-        var input = $(this);
+        let input = $(this);
         input.prop("checked", !!selectedMap[String(input.val()).trim()]);
       });
 
@@ -2223,8 +2225,8 @@ function initCustomerRecordTableFilters(config) {
     fieldNode.input.val(value || "");
   };
 
-  var getCurrentFieldValues = function () {
-    var values = {};
+  let getCurrentFieldValues = function () {
+    let values = {};
 
     fields.forEach(function (field) {
       values[field.key] = getFieldNodeValue(field);
@@ -2233,7 +2235,7 @@ function initCustomerRecordTableFilters(config) {
     return values;
   };
 
-  var saveActiveFilters = function () {
+  let saveActiveFilters = function () {
     if (!storageKey) {
       return;
     }
@@ -2245,7 +2247,7 @@ function initCustomerRecordTableFilters(config) {
     }
   };
 
-  var setPanelOpenState = function (shouldOpen) {
+  let setPanelOpenState = function (shouldOpen) {
     panel.toggleClass("is-open", shouldOpen);
     panel.css("display", shouldOpen ? "flex" : "none");
     filterButton.toggleClass("active", shouldOpen);
@@ -2255,7 +2257,7 @@ function initCustomerRecordTableFilters(config) {
     }
   };
 
-  var applyFilters = function () {
+  let applyFilters = function () {
     activeFilters = cloneCustomerRecordFilterState(fields, getCurrentFieldValues());
     pendingFilters = cloneCustomerRecordFilterState(fields, activeFilters);
     saveActiveFilters();
@@ -2263,11 +2265,11 @@ function initCustomerRecordTableFilters(config) {
     tableApi.draw(false);
   };
 
-  var syncPendingFiltersFromInputs = function () {
+  let syncPendingFiltersFromInputs = function () {
     pendingFilters = cloneCustomerRecordFilterState(fields, getCurrentFieldValues());
   };
 
-  var handleFieldValueChange = function (field) {
+  let handleFieldValueChange = function (field) {
     if (field.multiple) {
       updateDropdownButtonLabel(field);
     }
@@ -2281,10 +2283,10 @@ function initCustomerRecordTableFilters(config) {
   };
 
   fields.forEach(function (field) {
-    var columnClass = field.columnClass || "col-md-3 mb-3";
-    var fieldWrap = $('<div class="' + columnClass + '"></div>');
-    var fieldId = config.tableId + "_" + field.key;
-    var labelNode;
+    let columnClass = field.columnClass || "col-md-3 mb-3";
+    let fieldWrap = $('<div class="' + columnClass + '"></div>');
+    let fieldId = config.tableId + "_" + field.key;
+    let labelNode;
 
     if (field.type === "text") {
       labelNode = $(
@@ -2296,7 +2298,7 @@ function initCustomerRecordTableFilters(config) {
           "</label>",
       );
 
-      var inputNode = $(
+      let inputNode = $(
         '<input type="text" class="form-control customer-record-filter-input" id="' +
           fieldId +
           '" placeholder="' +
@@ -2321,14 +2323,14 @@ function initCustomerRecordTableFilters(config) {
       return;
     }
 
-    var optionValues = {};
+    let optionValues = {};
     getCustomerRecordFilterSourceRows(tableElement, tableApi).forEach(function (rowNode) {
       getCustomerRecordRowFilterValues(rowNode, field.attr).forEach(function (value) {
         optionValues[value] = true;
       });
     });
 
-    var sortedOptionValues = Object.keys(optionValues).sort(function (
+    let sortedOptionValues = Object.keys(optionValues).sort(function (
       leftValue,
       rightValue,
     ) {
@@ -2345,23 +2347,23 @@ function initCustomerRecordTableFilters(config) {
           "</label>",
       );
 
-      var dropdownWrap = $(
+      let dropdownWrap = $(
         '<div class="dropdown customer-record-filter-dropdown"></div>',
       );
-      var dropdownButton = $(
+      let dropdownButton = $(
         '<button class="customer-record-filter-dropdown-toggle" type="button" id="' +
           fieldId +
           '" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false"></button>',
       );
-      var dropdownMenu = $(
+      let dropdownMenu = $(
         '<div class="dropdown-menu" aria-labelledby="' + fieldId + '"></div>',
       );
 
-      var checkboxNodes = $();
+      let checkboxNodes = $();
       sortedOptionValues.forEach(function (value, index) {
-        var checkboxId = fieldId + "_" + index;
-        var checkboxWrap = $('<div class="form-check"></div>');
-        var checkboxNode = $(
+        let checkboxId = fieldId + "_" + index;
+        let checkboxWrap = $('<div class="form-check"></div>');
+        let checkboxNode = $(
           '<input class="form-check-input customer-record-filter-checkbox" type="checkbox" value="' +
             $("<div></div>").text(value).html() +
             '" id="' +
@@ -2372,7 +2374,7 @@ function initCustomerRecordTableFilters(config) {
             $("<div></div>").text(field.placeholder || "All").html() +
             '">',
         );
-        var checkboxLabel = $(
+        let checkboxLabel = $(
           '<label class="form-check-label" for="' +
             checkboxId +
             '">' +
@@ -2416,7 +2418,7 @@ function initCustomerRecordTableFilters(config) {
         "</label>",
     );
 
-    var selectNode = $(
+    let selectNode = $(
       '<select class="form-select customer-record-filter-input" id="' +
         fieldId +
         '"></select>',
@@ -2453,13 +2455,13 @@ function initCustomerRecordTableFilters(config) {
   });
 
   if (deferredApply) {
-    var actionWrap = $(
+    let actionWrap = $(
       '<div class="col-md-3 mb-3 d-flex align-items-end customer-record-filter-action-wrap"></div>',
     );
     searchButton = $(
       '<button class="btn btn-outline-primary filter-reset me-2 customer-record-filter-search" type="button">Search</button>',
     );
-    var resetButton = $(
+    let resetButton = $(
       '<button class="btn btn-outline-danger filter-reset customer-record-filter-reset" type="button">Reset</button>',
     );
 
@@ -2467,16 +2469,16 @@ function initCustomerRecordTableFilters(config) {
     actionWrap.append(resetButton);
     panel.append(actionWrap);
   } else {
-    var resetWrap = $('<div class="col-md-2 mb-3"></div>');
+    let resetWrap = $('<div class="col-md-2 mb-3"></div>');
     resetWrap.append('<label class="form-label d-block invisible">Reset</label>');
-    var resetButton = $(
+    let resetButton = $(
       '<a href="#" class="btn btn-outline-danger filter-reset customer-record-filter-reset">Reset</a>',
     );
     resetWrap.append(resetButton);
     panel.append(resetWrap);
   }
 
-  var resetFilters = function () {
+  let resetFilters = function () {
     activeFilters = cloneCustomerRecordFilterState(fields, {});
     pendingFilters = cloneCustomerRecordFilterState(fields, {});
 
@@ -2562,21 +2564,21 @@ function createSortingLeaveTransactionTable(tableid) {
 }
 
 function setWidth(id, id2) {
-  var one = document.getElementById(id);
-  var two = document.getElementById(id2);
-  style = window.getComputedStyle(one);
-  wdt = style.getPropertyValue("width");
-  two.style.width = wdt;
+  let one = document.getElementById(id);
+  let two = document.getElementById(id2);
+  const style = window.getComputedStyle(one);
+  const width = style.getPropertyValue("width");
+  two.style.width = width;
 }
 
 function datatableAlignment(elementID) {
   $(window).on("load resize", () => {
-    var lengthElement = $("#" + elementID + "_length");
-    var filterElement = $("#" + elementID + "_filter");
-    var tableElement = $("#" + elementID);
-    var tableParentElement = tableElement.parent();
-    var infoElement = $("#" + elementID + "_paginate");
-    var paginateElement = $("#" + elementID + "_paginate");
+    let lengthElement = $("#" + elementID + "_length");
+    let filterElement = $("#" + elementID + "_filter");
+    let tableElement = $("#" + elementID);
+    let tableParentElement = tableElement.parent();
+    let infoElement = $("#" + elementID + "_paginate");
+    let paginateElement = $("#" + elementID + "_paginate");
 
     // show entries and length row
     if (window.matchMedia("(max-width: 769px)").matches) {
@@ -2611,12 +2613,12 @@ function datatableAlignment(elementID) {
 
 function keepDataTableControlsVisible(elementID) {
   $(window).on("load resize", () => {
-    var tableElement = $("#" + elementID);
+    let tableElement = $("#" + elementID);
     if (!tableElement.length) {
       return;
     }
 
-    var wrapperElement = tableElement.closest(
+    let wrapperElement = tableElement.closest(
       ".dataTables_wrapper, .dt-container, #" + elementID + "_wrapper",
     );
     if (!wrapperElement.length) {
@@ -2627,7 +2629,7 @@ function keepDataTableControlsVisible(elementID) {
       return;
     }
 
-    var scrollWrap = tableElement.parent(".datatable-scroll-wrap");
+    let scrollWrap = tableElement.parent(".datatable-scroll-wrap");
     if (!scrollWrap.length) {
       tableElement.wrap(
         '<div class="datatable-scroll-wrap table-responsive"></div>',
@@ -2642,7 +2644,7 @@ function keepDataTableControlsVisible(elementID) {
       wrapperElement.removeClass("table-responsive");
     }
 
-    var outerResponsiveWrap = wrapperElement.parent(".table-responsive");
+    let outerResponsiveWrap = wrapperElement.parent(".table-responsive");
     if (
       outerResponsiveWrap.length &&
       !outerResponsiveWrap.hasClass("datatable-scroll-wrap")
@@ -2665,7 +2667,7 @@ function keepDataTableControlsVisible(elementID) {
 
 function centerAlignment(elementID) {
   $(window).on("load resize", () => {
-    var form = $("#" + elementID);
+    let form = $("#" + elementID);
 
     if (window.matchMedia("(max-height: 1250px)").matches) {
       if (form.hasClass("centered")) form.removeClass("centered");
@@ -2691,7 +2693,7 @@ function floatInput(element) {
 
 function previewImage(input, output) {
   if (input.files && input.files[0]) {
-    var reader = new FileReader();
+    let reader = new FileReader();
 
     reader.onload = function (e) {
       $("#" + output).attr("src", e.target.result);
@@ -2723,41 +2725,45 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
     document.body.style.removeProperty("padding-right");
   }
 
+  let title = "";
+  let title2 = "";
+  let btn = "";
+
   switch (act) {
     case "I":
-      var title = "Successful Insert " + pagename;
-      var title2 = "Are you sure want to insert?";
-      var btn = "Insert";
+      title = "Successful Insert " + pagename;
+      title2 = "Are you sure want to insert?";
+      btn = "Insert";
       break;
     case "E":
-      var title = "Successful Edit " + pagename;
-      var title2 = "Are you sure want to edit?";
-      var btn = "Edit";
+      title = "Successful Edit " + pagename;
+      title2 = "Are you sure want to edit?";
+      btn = "Edit";
       break;
     case "D":
-      var title = "Successful Delete " + pagename;
-      var title2 = "Are You Sure Want To Delete This " + pagename + " ?";
-      var btn = "Delete";
+      title = "Successful Delete " + pagename;
+      title2 = "Are You Sure Want To Delete This " + pagename + " ?";
+      btn = "Delete";
       break;
     case "F":
-      var title = "Error Occurred,Please Try Again Later";
+      title = "Error Occurred,Please Try Again Later";
       break;
     case "MO":
-      var title = msg + " Successful Place";
+      title = msg + " Successful Place";
       break;
     case "ErrMO":
-      var title = msg;
+      title = msg;
       break;
     case "NC":
-      var title = "No changes were made.";
+      title = "No changes were made.";
       break;
     case "PC":
-      var title = "Successful Change " + pagename;
+      title = "Successful Change " + pagename;
       break;
     case "LA":
     case "LD":
     case "LC":
-      var action;
+      let action;
       if (act === "LA") {
         action = "approval";
       } else if (act === "LD") {
@@ -2766,31 +2772,31 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
         action = "Cancel";
       }
 
-      var title = `Leave transaction ${action}`;
-      var title2 = `<span style="color:#FF9B44" class="mdi mdi-alert-circle-outline"></span> Confirm Action`;
-      var msg = [
+      title = `Leave transaction ${action}`;
+      title2 = `<span style="color:#FF9B44" class="mdi mdi-alert-circle-outline"></span> Confirm Action`;
+      msg = [
         `This leave transaction cannot modify once it has been ${action}. Do you still want to proceed ?`,
       ];
-      var btn = "Confirm";
+      btn = "Confirm";
       break;
     default:
-      var title = "Error";
+      title = "Error";
   }
 
   if (act !== "ErrMO") {
     clearLocalStoragePreservingCustomerRecordFilters();
   }
 
-  var message = "";
+  let message = "";
   if (msg.length >= 1) {
     for (let i = 0; i < msg.length; i++)
       message += `<p class="mt-n3" style="text-align:center; font-weight:bold;">${msg[i]}</p>`;
   }
 
   if (act == "D" || act == "LD" || act == "LA" || act == "LC") {
-    var firstContent = title2;
+    let firstContent = title2;
   } else {
-    var firstContent = title;
+    let firstContent = title;
   }
 
   const modalElem = document.createElement("div");
@@ -2875,7 +2881,7 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
           return new Promise((resolve, reject) => {
             document.body.addEventListener("click", response);
 
-            var myTimeout = setTimeout(() => {
+            let myTimeout = setTimeout(() => {
               document.body.removeEventListener("click", response);
               cleanupConfirmationModal(myModal2, modelResult);
               resolve(true);
@@ -2920,7 +2926,7 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
     return new Promise((resolve, reject) => {
       document.body.addEventListener("click", response);
 
-      var myTimeout = setTimeout(() => {
+      let myTimeout = setTimeout(() => {
         document.body.removeEventListener("click", response);
         cleanupConfirmationModal(myModal2, modelResult);
         resolve(true);
@@ -2946,8 +2952,8 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
 }
 
 /* Rate Checking */
-var getUrlParameter = function getUrlParameter(sParam) {
-  var sPageURL = window.location.search.substring(1),
+function getUrlParameter(sParam) {
+  let sPageURL = window.location.search.substring(1),
     sURLVariables = sPageURL.split("&"),
     sParameterName,
     i;
@@ -2962,7 +2968,7 @@ var getUrlParameter = function getUrlParameter(sParam) {
     }
   }
   return false;
-};
+}
 
 /* fix issue of dropdown menu display inside table responsive */
 function dropdownMenuDispFix() {
@@ -2979,14 +2985,14 @@ function dropdownMenuDispFix() {
 
 //autocomplete
 function ensureAutocompleteResultShell(elementID) {
-  var $input = $("#" + elementID);
+  let $input = $("#" + elementID);
   if (!$input.length) {
     return;
   }
 
-  var resultId = "searchResult_" + elementID;
-  var clearId = "clear_" + elementID;
-  var $wrapper = $input.closest(".autocomplete");
+  let resultId = "searchResult_" + elementID;
+  let clearId = "clear_" + elementID;
+  let $wrapper = $input.closest(".autocomplete");
 
   if (!$wrapper.length) {
     $wrapper = $input.parent();
@@ -3004,8 +3010,8 @@ function ensureAutocompleteResultShell(elementID) {
 }
 
 function positionAutocompleteResult(elementID) {
-  var input = document.getElementById(elementID);
-  var result = document.getElementById("searchResult_" + elementID);
+  let input = document.getElementById(elementID);
+  let result = document.getElementById("searchResult_" + elementID);
   if (!input || !result) {
     return;
   }
@@ -3016,13 +3022,13 @@ function positionAutocompleteResult(elementID) {
 }
 
 function searchInput(param, siteURL) {
-  var elementID = param["elementID"];
-  var hiddenElementID = param["hiddenElementID"];
-  var search = param["search"];
-  var type = param["searchType"];
-  var dbTable = param["dbTable"];
+  let elementID = param["elementID"];
+  let hiddenElementID = param["hiddenElementID"];
+  let search = param["search"];
+  let type = param["searchType"];
+  let dbTable = param["dbTable"];
   if (param["addSelection"]) {
-    var addSelection = param["addSelection"];
+    let addSelection = param["addSelection"];
   }
 
   if (search != "") {
@@ -3044,21 +3050,21 @@ function searchInput(param, siteURL) {
         setWidth(elementID, "searchResult_" + elementID);
         positionAutocompleteResult(elementID);
 
-        var dataArr = [];
+        let dataArr = [];
 
         // loop result
-        var len = result.length;
+        let len = result.length;
         $("#searchResult_" + elementID).empty();
-        for (var i = 0; i < len; i++) {
+        for (let i = 0; i < len; i++) {
           if (result[i]["desc"] != undefined) {
-            var desc = result[i]["desc"];
-            var value = result[i]["val"];
+            let desc = result[i]["desc"];
+            let value = result[i]["val"];
             $("#searchResult_" + elementID).append(
               "<li value='" + value + "'>" + desc + "</li>",
             );
           } else {
-            var id = result[i]["id"];
-            var name = result[i][type];
+            let id = result[i]["id"];
+            let name = result[i][type];
             $("#searchResult_" + elementID).append(
               "<li value='" + id + "'>" + name + "</li>",
             );
@@ -3089,16 +3095,16 @@ function searchInput(param, siteURL) {
   }
 }
 function searchInput2(param, siteURL) {
-  var elementID = param["elementID"];
-  var hiddenElementID = param["hiddenElementID"];
-  var search = param["search"];
-  var type = param["searchTypes"];
-  var pkg = param["pkgID"];
-  var usr = param["usrID"];
-  var whse = param["whseID"];
+  let elementID = param["elementID"];
+  let hiddenElementID = param["hiddenElementID"];
+  let search = param["search"];
+  let type = param["searchTypes"];
+  let pkg = param["pkgID"];
+  let usr = param["usrID"];
+  let whse = param["whseID"];
 
   if (param["addSelection"]) {
-    var addSelection = param["addSelection"];
+    let addSelection = param["addSelection"];
   }
 
   if (search != "") {
@@ -3122,21 +3128,21 @@ function searchInput2(param, siteURL) {
         setWidth(elementID, "searchResult_" + elementID);
         positionAutocompleteResult(elementID);
 
-        var dataArr = [];
+        let dataArr = [];
 
         // loop result
-        var len = result.length;
+        let len = result.length;
         $("#searchResult_" + elementID).empty();
-        for (var i = 0; i < len; i++) {
+        for (let i = 0; i < len; i++) {
           if (result[i]["desc"] != undefined) {
-            var desc = result[i]["desc"];
-            var value = result[i]["val"];
+            let desc = result[i]["desc"];
+            let value = result[i]["val"];
             $("#searchResult_" + elementID).append(
               "<li value='" + value + "'>" + desc + "</li>",
             );
           } else {
-            var id = result[i]["id"];
-            var name = result[i][type];
+            let id = result[i]["id"];
+            let name = result[i][type];
             $("#searchResult_" + elementID).append(
               "<li value='" + id + "'>" + name + "</li>",
             );
@@ -3167,11 +3173,11 @@ function searchInput2(param, siteURL) {
   }
 }
 function retrieveDBData(param, siteURL, callback) {
-  var search = param["search"];
-  var type = param["searchType"];
-  var dbTable = param["dbTable"];
-  var col = param["searchCol"];
-  var fin = param["isFin"];
+  let search = param["search"];
+  let type = param["searchType"];
+  let dbTable = param["dbTable"];
+  let col = param["searchCol"];
+  let fin = param["isFin"];
 
   if (search != "") {
     $.ajax({
@@ -3216,8 +3222,8 @@ function retrieveJSONData(search, type, tblname) {
 }
 
 function setText(element, val, val2) {
-  var text = $(element).text();
-  var value = $(element).attr("value");
+  let text = $(element).text();
+  let value = $(element).attr("value");
 
   if (value != "emptyValue") {
     $(val).val(text);
@@ -3229,11 +3235,11 @@ function setText(element, val, val2) {
 }
 
 document.addEventListener("DOMContentLoaded", function () {
-  var actionBtn = document.getElementById("actionBtn");
+  let actionBtn = document.getElementById("actionBtn");
   retrieveDataFromLocalStorage();
 
   // Attach input event listener to each input field
-  var inputFields = document.querySelectorAll("input, textarea ,select");
+  let inputFields = document.querySelectorAll("input, textarea ,select");
   inputFields.forEach(function (input) {
     if (!input.readOnly) {
       input.addEventListener("input", function () {
@@ -3255,8 +3261,8 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function retrieveDataFromLocalStorage() {
-    var inputFields = document.querySelectorAll("input, textarea ,select");
-    var page = localStorage.getItem("page");
+    let inputFields = document.querySelectorAll("input, textarea ,select");
+    let page = localStorage.getItem("page");
 
     if (page !== "invalid") {
       inputFields.forEach(function (input) {
@@ -3274,8 +3280,8 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function saveFormDataToLocalStorage() {
-    var inputFields = document.querySelectorAll("input, textarea ,select");
-    var page = localStorage.getItem("page");
+    let inputFields = document.querySelectorAll("input, textarea ,select");
+    let page = localStorage.getItem("page");
 
     if (page !== "invalid") {
       inputFields.forEach(function (input) {
@@ -3293,7 +3299,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function displayPreviousData() {
     // Loop through input fields and restore previous data
-    var inputFields = document.querySelectorAll("input, textarea,select");
+    let inputFields = document.querySelectorAll("input, textarea,select");
     inputFields.forEach(function (input) {
       // Check if the input is not readonly and has previous data
       if (
@@ -3307,7 +3313,7 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function validateForm() {
-    var alertMessages = document.querySelectorAll('span[role="alert"]');
+    let alertMessages = document.querySelectorAll('span[role="alert"]');
     alertMessages.forEach(function (alert) {
       alert.parentNode.removeChild(alert);
     });
@@ -3318,19 +3324,19 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function checkRequiredInputs() {
-    var requiredInputs = document.querySelectorAll(
+    let requiredInputs = document.querySelectorAll(
       "input[required], select[required]",
     );
 
     requiredInputs.forEach(function (input) {
       if (input.value.trim() === "") {
-        var labelContent = document.querySelector(
+        let labelContent = document.querySelector(
           'label[for="' + input.id + '"]',
         ).textContent;
 
         labelContent = labelContent.replace(/\*/g, "");
 
-        var alertMessage = document.createElement("span");
+        let alertMessage = document.createElement("span");
         alertMessage.textContent = labelContent + " is required!";
         alertMessage.style.color = "red";
         alertMessage.setAttribute("role", "alert");
@@ -3347,13 +3353,13 @@ document.addEventListener("DOMContentLoaded", function () {
 // Wait for the DOM to be ready
 document.addEventListener("DOMContentLoaded", function () {
   // Get the input field and error message elements
-  var currentDataNameInput = document.getElementById("currentDataName");
-  var errorSpan = document.getElementById("errorSpan");
+  let currentDataNameInput = document.getElementById("currentDataName");
+  let errorSpan = document.getElementById("errorSpan");
 
   if (currentDataNameInput) {
     // Function to toggle error message visibility
     function toggleErrorMessage() {
-      var inputValue = currentDataNameInput.value.trim();
+      let inputValue = currentDataNameInput.value.trim();
       errorSpan.style.display =
         inputValue !== "" &&
         inputValue !== localStorage.getItem("currentDataName")
@@ -3370,9 +3376,9 @@ document.addEventListener("DOMContentLoaded", function () {
 });
 
 function setCookie(cname, cvalue, exMins) {
-  var d = new Date();
+  let d = new Date();
   d.setTime(d.getTime() + exMins * 60 * 1000);
-  var expires = "expires=" + d.toUTCString();
+  let expires = "expires=" + d.toUTCString();
   document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
 }
 
@@ -3381,15 +3387,15 @@ function toggleCustomerLabelVisibility(toggleButton) {
     return;
   }
 
-  var labelWrap = toggleButton.closest(".js-customer-label-wrap");
+  let labelWrap = toggleButton.closest(".js-customer-label-wrap");
   if (!labelWrap) {
     return;
   }
 
-  var extraLabels = labelWrap.querySelectorAll(".customer-label-extra");
-  var isExpanded = labelWrap.getAttribute("data-expanded") === "1";
+  let extraLabels = labelWrap.querySelectorAll(".customer-label-extra");
+  let isExpanded = labelWrap.getAttribute("data-expanded") === "1";
 
-  for (var i = 0; i < extraLabels.length; i++) {
+  for (let i = 0; i < extraLabels.length; i++) {
     extraLabels[i].classList.toggle("d-none", isExpanded);
   }
 
@@ -3398,7 +3404,7 @@ function toggleCustomerLabelVisibility(toggleButton) {
 }
 
 document.addEventListener("click", function (event) {
-  var toggleButton = event.target.closest(".js-toggle-customer-labels");
+  let toggleButton = event.target.closest(".js-toggle-customer-labels");
   if (!toggleButton) {
     return;
   }
@@ -3408,10 +3414,10 @@ document.addEventListener("click", function (event) {
 });
 
 function getCustomerRecordFilterStorageSnapshot() {
-  var preservedEntries = {};
+  let preservedEntries = {};
 
-  for (var i = 0; i < localStorage.length; i++) {
-    var key = localStorage.key(i);
+  for (let i = 0; i < localStorage.length; i++) {
+    let key = localStorage.key(i);
     if (!key) {
       continue;
     }
@@ -3435,14 +3441,14 @@ function restoreCustomerRecordFilterStorageSnapshot(entries) {
 }
 
 function clearLocalStoragePreservingCustomerRecordFilters() {
-  var preservedEntries = getCustomerRecordFilterStorageSnapshot();
+  let preservedEntries = getCustomerRecordFilterStorageSnapshot();
   localStorage.clear();
   restoreCustomerRecordFilterStorageSnapshot(preservedEntries);
 }
 
 function checkCurrentPage(page, action) {
-  var previousPage = localStorage.getItem("page");
-  var perviousAction = localStorage.getItem("action");
+  let previousPage = localStorage.getItem("page");
+  let perviousAction = localStorage.getItem("action");
 
   if (previousPage != page || perviousAction != action) {
     clearLocalStoragePreservingCustomerRecordFilters();
@@ -3454,17 +3460,17 @@ function checkCurrentPage(page, action) {
 function preloader(additionalDelay, action) {
   function releasePageLoader() {
     setTimeout(function () {
-      var preloaders = document.querySelectorAll(".preloader");
-      var preloadCenters = document.querySelectorAll(".pre-load-center");
-      var pageCovers = document.querySelectorAll(".page-load-cover");
+      let preloaders = document.querySelectorAll(".preloader");
+      let preloadCenters = document.querySelectorAll(".pre-load-center");
+      let pageCovers = document.querySelectorAll(".page-load-cover");
 
-      for (var i = 0; i < preloaders.length; i++) {
+      for (let i = 0; i < preloaders.length; i++) {
         preloaders[i].style.display = "none";
       }
-      for (var j = 0; j < preloadCenters.length; j++) {
+      for (let j = 0; j < preloadCenters.length; j++) {
         preloadCenters[j].style.display = "none";
       }
-      for (var k = 0; k < pageCovers.length; k++) {
+      for (let k = 0; k < pageCovers.length; k++) {
         pageCovers[k].style.display = "block";
       }
 
@@ -3489,7 +3495,7 @@ function preloader(additionalDelay, action) {
 
 function setAutofocus(action) {
   if (action === "I" || action === "E") {
-    var firstInput = $(
+    let firstInput = $(
       "input[type='text']:visible:enabled:not(:checkbox,:radio,:hidden,[readonly]), textarea:visible:enabled:not(:hidden,[readonly]), input[type='number']:visible:enabled:not(:hidden,[readonly])",
     )
       .filter(function () {
@@ -3500,14 +3506,14 @@ function setAutofocus(action) {
     if (firstInput.length > 0) {
       firstInput.focus();
 
-      var inputValue = firstInput.val();
+      let inputValue = firstInput.val();
       if (inputValue) {
-        var lastSpaceIndex = inputValue.lastIndexOf(" ");
+        let lastSpaceIndex = inputValue.lastIndexOf(" ");
 
         if (lastSpaceIndex !== -1) {
-          var input = firstInput.get(0);
-          var lastWordIndex = inputValue.indexOf(" ", lastSpaceIndex + 1);
-          var cursorPosition =
+          let input = firstInput.get(0);
+          let lastWordIndex = inputValue.indexOf(" ", lastSpaceIndex + 1);
+          let cursorPosition =
             lastWordIndex !== -1 ? lastWordIndex : inputValue.length;
           input.setSelectionRange(cursorPosition, cursorPosition);
         } else {
@@ -3521,7 +3527,7 @@ function setAutofocus(action) {
 
 //export notification
 function exportData() {
-  var checkboxes = document.querySelectorAll(".export:checked");
+  let checkboxes = document.querySelectorAll(".export:checked");
   if (checkboxes.length === 0) {
     showNotification("Please select data to export.", "warning");
     return false;
@@ -3534,14 +3540,14 @@ function showExportNotification() {
 }
 
 function auditExport(ids, tblName) {
-  var xhr = new XMLHttpRequest();
+  let xhr = new XMLHttpRequest();
   xhr.open("POST", "../export.php", true);
   xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
   xhr.send("ids=" + ids.join(",") + "&tblName=" + tblName);
 }
 
 function captureAndExport(tblName) {
-  var selectedIds = [];
+  let selectedIds = [];
   document.querySelectorAll("input.export:checked").forEach(function (checkbox) {
     selectedIds.push(checkbox.value);
   });
@@ -3554,7 +3560,7 @@ function captureAndExport(tblName) {
 }
 
 function getParameterByName(name) {
-  var urlParams = new URLSearchParams(window.location.search);
+  let urlParams = new URLSearchParams(window.location.search);
   return urlParams.get(name);
 }
 
@@ -3567,7 +3573,7 @@ function commonMobileActionIsVisible(element) {
     return false;
   }
 
-  var style = window.getComputedStyle(element);
+  let style = window.getComputedStyle(element);
   return style.display !== "none" && style.visibility !== "hidden";
 }
 
@@ -3576,7 +3582,7 @@ function commonNormalizeButtonText(text) {
 }
 
 function commonResolvePageTitle() {
-  var path = (window.location.pathname || "").toLowerCase();
+  let path = (window.location.pathname || "").toLowerCase();
 
   if (
     /\/shopee\/(shopee_order_req_table|shopee_processing_order|shopee_verify)\.php$/.test(
@@ -3594,18 +3600,18 @@ function commonResolveButtonTitle(element, pageTitle) {
     return "";
   }
 
-  var text = commonNormalizeButtonText(element.textContent || element.value || "");
-  var value = commonNormalizeButtonText(element.value || "");
-  var href = (element.getAttribute("href") || "").toLowerCase();
-  var existingTitle = commonNormalizeButtonText(element.getAttribute("title") || "");
-  var iconClass = "";
-  var iconElement = element.querySelector("i");
+  let text = commonNormalizeButtonText(element.textContent || element.value || "");
+  let value = commonNormalizeButtonText(element.value || "");
+  let href = (element.getAttribute("href") || "").toLowerCase();
+  let existingTitle = commonNormalizeButtonText(element.getAttribute("title") || "");
+  let iconClass = "";
+  let iconElement = element.querySelector("i");
 
   if (iconElement) {
     iconClass = iconElement.className || "";
   }
 
-  var hasGenericTitle =
+  let hasGenericTitle =
     existingTitle === "" ||
     /^(add|edit|view|delete|back|add record|edit record)$/i.test(existingTitle);
 
@@ -3654,11 +3660,11 @@ function commonResolveButtonTitle(element, pageTitle) {
 }
 
 function commonApplyButtonTitles() {
-  var pageTitle = commonResolvePageTitle();
-  var buttons = document.querySelectorAll("a.btn, button.btn");
+  let pageTitle = commonResolvePageTitle();
+  let buttons = document.querySelectorAll("a.btn, button.btn");
 
-  for (var i = 0; i < buttons.length; i++) {
-    var title = commonResolveButtonTitle(buttons[i], pageTitle);
+  for (let i = 0; i < buttons.length; i++) {
+    let title = commonResolveButtonTitle(buttons[i], pageTitle);
     if (title !== "") {
       buttons[i].setAttribute("title", title);
       if (!buttons[i].getAttribute("aria-label")) {
@@ -3669,16 +3675,16 @@ function commonApplyButtonTitles() {
 }
 
 function commonApplyVisibleActionLabels() {
-  var pageTitle = commonResolvePageTitle();
+  let pageTitle = commonResolvePageTitle();
   if (!pageTitle) {
     return;
   }
 
-  var buttons = document.querySelectorAll("a.btn, button.btn");
-  for (var i = 0; i < buttons.length; i++) {
-    var button = buttons[i];
-    var text = commonNormalizeButtonText(button.textContent || "");
-    var value = commonNormalizeButtonText(button.value || "");
+  let buttons = document.querySelectorAll("a.btn, button.btn");
+  for (let i = 0; i < buttons.length; i++) {
+    let button = buttons[i];
+    let text = commonNormalizeButtonText(button.textContent || "");
+    let value = commonNormalizeButtonText(button.value || "");
 
     if (
       /^upd/i.test(value) ||
@@ -3696,8 +3702,8 @@ function commonSyncButtonVisualStyle(sourceButton, targetButton) {
     return;
   }
 
-  var computedStyle = window.getComputedStyle(sourceButton);
-  var properties = [
+  let computedStyle = window.getComputedStyle(sourceButton);
+  let properties = [
     "background",
     "backgroundColor",
     "border",
@@ -3717,8 +3723,8 @@ function commonSyncButtonVisualStyle(sourceButton, targetButton) {
     "textTransform",
   ];
 
-  for (var i = 0; i < properties.length; i++) {
-    var property = properties[i];
+  for (let i = 0; i < properties.length; i++) {
+    let property = properties[i];
     targetButton.style[property] = computedStyle[property];
   }
 }
@@ -3728,7 +3734,7 @@ function commonBuildMobileFloatingAddButton() {
     return;
   }
 
-  var sourceButton = document.querySelector(
+  let sourceButton = document.querySelector(
     "a#addBtn.btn, button#addBtn.btn, a[name='addBtn'].btn, button[name='addBtn'].btn",
   );
 
@@ -3736,10 +3742,10 @@ function commonBuildMobileFloatingAddButton() {
     return;
   }
 
-  var stickyBar = document.createElement("div");
+  let stickyBar = document.createElement("div");
   stickyBar.className = "mobile-floating-action-bar mobile-floating-action-bar--single";
 
-  var buttonClone = sourceButton.cloneNode(true);
+  let buttonClone = sourceButton.cloneNode(true);
   buttonClone.removeAttribute("id");
   buttonClone.classList.add("mobile-floating-primary-action");
   commonSyncButtonVisualStyle(sourceButton, buttonClone);
@@ -3752,12 +3758,12 @@ function commonBuildMobileFloatingAddButton() {
 }
 
 function commonBuildMobileStickyFormActions() {
-  var preferredContainer = document.querySelector(".mobile-sticky-form-actions-target");
+  let preferredContainer = document.querySelector(".mobile-sticky-form-actions-target");
   if (preferredContainer) {
     preferredContainer.classList.add("mobile-sticky-form-actions");
     document.body.classList.add("has-mobile-sticky-form-actions");
 
-    var preferredButtons = Array.prototype.slice
+    let preferredButtons = Array.prototype.slice
       .call(
         preferredContainer.querySelectorAll(
           "button.submitBtn, button.cancel, button#actionBtn, button#backBtn, button[name='actionBtn'], button[name='updateStatusBtn'], a.submitBtn, a.cancel, a#actionBtn, a#backBtn",
@@ -3768,17 +3774,17 @@ function commonBuildMobileStickyFormActions() {
       });
 
     preferredButtons.sort(function (a, b) {
-      var aText = commonNormalizeButtonText(a.textContent || a.value || "").toLowerCase();
-      var bText = commonNormalizeButtonText(b.textContent || b.value || "").toLowerCase();
+      let aText = commonNormalizeButtonText(a.textContent || a.value || "").toLowerCase();
+      let bText = commonNormalizeButtonText(b.textContent || b.value || "").toLowerCase();
 
-      var aIsBack =
+      let aIsBack =
         a.id === "backBtn" ||
         a.classList.contains("backBtn") ||
         a.classList.contains("cancel") ||
         a.value === "back" ||
         aText === "back";
 
-      var bIsBack =
+      let bIsBack =
         b.id === "backBtn" ||
         b.classList.contains("backBtn") ||
         b.classList.contains("cancel") ||
@@ -3796,7 +3802,7 @@ function commonBuildMobileStickyFormActions() {
       return 0;
     });
 
-    for (var p = 0; p < preferredButtons.length; p++) {
+    for (let p = 0; p < preferredButtons.length; p++) {
       preferredButtons[p].classList.add("mobile-sticky-form-button");
       preferredContainer.appendChild(preferredButtons[p]);
     }
@@ -3804,13 +3810,13 @@ function commonBuildMobileStickyFormActions() {
     return;
   }
 
-  var selector =
+  let selector =
   "button.submitBtn, button.cancel, button#actionBtn, button#backBtn, button[name='actionBtn'], button[name='updateStatusBtn'], a.submitBtn, a.cancel, a#actionBtn, a#backBtn";
-  var buttons = Array.prototype.slice.call(document.querySelectorAll(selector)).filter(function (
+  let buttons = Array.prototype.slice.call(document.querySelectorAll(selector)).filter(function (
     button,
   ) {
-    var parentForm = button.closest("form");
-    var isUploadAnalyzeButton =
+    let parentForm = button.closest("form");
+    let isUploadAnalyzeButton =
       parentForm &&
       parentForm.querySelector("input[type='file']") &&
       !button.hasAttribute("formnovalidate");
@@ -3827,16 +3833,16 @@ function commonBuildMobileStickyFormActions() {
     return;
   }
 
-  var groupedParents = [];
+  let groupedParents = [];
 
-  for (var i = 0; i < buttons.length; i++) {
-    var parent = buttons[i].parentElement;
+  for (let i = 0; i < buttons.length; i++) {
+    let parent = buttons[i].parentElement;
     if (!parent) {
       continue;
     }
 
-    var existingGroup = null;
-    for (var j = 0; j < groupedParents.length; j++) {
+    let existingGroup = null;
+    for (let j = 0; j < groupedParents.length; j++) {
       if (groupedParents[j].element === parent) {
         existingGroup = groupedParents[j];
         break;
@@ -3867,24 +3873,24 @@ function commonBuildMobileStickyFormActions() {
     );
   });
 
-  var actionContainer = groupedParents[0].element;
+  let actionContainer = groupedParents[0].element;
     actionContainer.classList.add("mobile-sticky-form-actions");
     document.body.classList.add("has-mobile-sticky-form-actions");
 
-    var stickyButtons = groupedParents[0].buttons;
+    let stickyButtons = groupedParents[0].buttons;
 
     stickyButtons.sort(function (a, b) {
-      var aText = commonNormalizeButtonText(a.textContent || a.value || "").toLowerCase();
-      var bText = commonNormalizeButtonText(b.textContent || b.value || "").toLowerCase();
+      let aText = commonNormalizeButtonText(a.textContent || a.value || "").toLowerCase();
+      let bText = commonNormalizeButtonText(b.textContent || b.value || "").toLowerCase();
 
-      var aIsBack =
+      let aIsBack =
         a.id === "backBtn" ||
         a.classList.contains("backBtn") ||
         a.classList.contains("cancel") ||
         a.value === "back" ||
         aText === "back";
 
-      var bIsBack =
+      let bIsBack =
         b.id === "backBtn" ||
         b.classList.contains("backBtn") ||
         b.classList.contains("cancel") ||
@@ -3902,7 +3908,7 @@ function commonBuildMobileStickyFormActions() {
       return 0;
     });
 
-    for (var k = 0; k < stickyButtons.length; k++) {
+    for (let k = 0; k < stickyButtons.length; k++) {
       stickyButtons[k].classList.add("mobile-sticky-form-button");
       actionContainer.appendChild(stickyButtons[k]);
     }
