@@ -211,12 +211,12 @@ $result = getData('*', '', '', DEL_FEES_CLAIM, $finance_connect);
                         ?>
 
                                 <tr onclick="window.location='del_fees_claim_table_detail.php?ids=<?= urlencode($row['id']) ?>';" style="cursor:pointer;">
-                                    <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
-                                    <th class="text-center"><input type="checkbox" class="export" value="<?= $row['id'] ?>"></th>
+                                    <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
+                                    <th class="text-center"><input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>"></th>
                                     <td scope="row"><?= $num++ ?></td>
-                                    <td scope="row"><?php if (isset($row3['name'])) echo $row3['name'] ?></td>
-                                    <td scope="row"><?php if (isset($row2['unit'])) echo $row2['unit'] ?></td>
-                                    <td scope="row"><?php if (isset($row['total'])) echo  $row['total'] ?></td>
+                                    <td scope="row"><?php if (isset($row3['name'])) echo htmlspecialchars((string) $row3['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row2['unit'])) echo htmlspecialchars((string) $row2['unit'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['total'])) echo  htmlspecialchars((string) $row['total'], ENT_QUOTES, 'UTF-8') ?></td>
                                  
                                 </tr>
                         <?php }

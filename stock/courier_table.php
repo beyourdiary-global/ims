@@ -74,7 +74,7 @@ $result = getData('*', '', '', COURIER, $connect);
                                 ?>
 
                                 <tr>
-                                    <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                    <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                     <th scope="row"><?= $num++; ?></th>
                                     <td scope="row" class="btn-container">
                                         <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
@@ -82,13 +82,13 @@ $result = getData('*', '', '', COURIER, $connect);
                                         <?php renderDeleteButton($pinAccess, $row['id'], $row['id'], $row['name'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                     </td>
                                     <td scope="row"><?php if (isset($row['id']))
-                                        echo $row['id'] ?></td>
-                                        <td scope="row"><?= $row['tracking_link'] ?></td>
-                                    <td scope="row"><?= $row['name'] ?></td>
+                                        echo htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td scope="row"><?= htmlspecialchars((string) $row['tracking_link'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?= htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') ?></td>
                                     <td scope="row"><?php if (isset($countries['nicename']))
-                                        echo $countries['nicename'] ?></td>
+                                        echo htmlspecialchars((string) $countries['nicename'], ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row"><?php if (isset($row['taxable'])) {
-                                        echo ($row['taxable'] == 'Y') ? 'Yes' : 'No';
+                                        echo (htmlspecialchars((string) $row['taxable'], ENT_QUOTES, 'UTF-8') == 'Y') ? 'Yes' : 'No';
                                     } ?></td>
                                 </tr>
                             <?php }

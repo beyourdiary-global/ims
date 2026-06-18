@@ -221,10 +221,10 @@ $img_path = SITEURL . img_server . 'finance/stripe_trans_backup/';
 
                                 <tr>
                                     <th class="hideColumn" scope="row">
-                                        <?= $row['id'] ?>
+                                        <?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>
                                     </th>
                                     <th class="text-center">
-                                        <input type="checkbox" class="export" value="<?= $row['id'] ?>">
+                                        <input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>">
                                     </th>
                                     <th scope="row">
                                         <?= $num++; ?>
@@ -238,18 +238,18 @@ $img_path = SITEURL . img_server . 'finance/stripe_trans_backup/';
                                             </div>
                                     </td>
                                    
-                                    <td scope="row"><?php if (isset($row['payout_id'])) echo $row['payout_id'] ?></td>
+                                    <td scope="row"><?php if (isset($row['payout_id'])) echo htmlspecialchars((string) $row['payout_id'], ENT_QUOTES, 'UTF-8') ?></td>
                                     
-                                    <td scope="row"><?php if (isset($row['date_paid'])) echo $row['date_paid'] ?></td>
+                                    <td scope="row"><?php if (isset($row['date_paid'])) echo htmlspecialchars((string) $row['date_paid'], ENT_QUOTES, 'UTF-8') ?></td>
 
-                                    <td scope="row"><?php if (isset($row['curr_unit'])) echo $row['curr_unit'] ?></td>
+                                    <td scope="row"><?php if (isset($row['curr_unit'])) echo htmlspecialchars((string) $row['curr_unit'], ENT_QUOTES, 'UTF-8') ?></td>
                                     
-                                    <td scope="row"><?php if (isset($row['amount'])) echo $row['amount'] ?></td>
+                                    <td scope="row"><?php if (isset($row['amount'])) echo htmlspecialchars((string) $row['amount'], ENT_QUOTES, 'UTF-8') ?></td>
 
                                     <td scope="row">
                                         <?php if (isset($row['attachment'])) { ?><a href="<?= $img_path . $row['attachment'] ?>"
                                                 target="_blank">
-                                                <?= $row['attachment'] ?>
+                                                <?= htmlspecialchars((string) $row['attachment'], ENT_QUOTES, 'UTF-8') ?>
                                             </a>
                                         <?php } ?>
                                     </td>

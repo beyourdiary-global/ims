@@ -149,7 +149,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                             <div class="col-sm mb-3">
                                 <label class="form-label" for="company_name">Company Name</label>
                                 <input class="form-control" type="text" name="company_name" id="company_name"
-                                    value="<?php if (isset($row['company_name'])) echo $row['company_name'] ?>"
+                                    value="<?php if (isset($row['company_name'])) echo htmlspecialchars((string) $row['company_name'], ENT_QUOTES, 'UTF-8') ?>"
                                     <?= $viewOnly ?>>
                             </div>
 
@@ -157,14 +157,14 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                 <label class="form-label" for="company_business_no">Company Business No</label>
                                 <input class="form-control" type="text" name="company_business_no"
                                     id="company_business_no"
-                                    value="<?php if (isset($row['company_business_no'])) echo $row['company_business_no'] ?>"
+                                    value="<?php if (isset($row['company_business_no'])) echo htmlspecialchars((string) $row['company_business_no'], ENT_QUOTES, 'UTF-8') ?>"
                                     <?= $viewOnly ?>>
                             </div>
 
                             <div class="col-sm mb-3">
                                 <label class="form-label" for="finance_year">Finance Year</label>
                                 <input class="form-control" type="date" name="finance_year" id="finance_year"
-                                    value="<?php if (isset($row['finance_year'])) echo $row['finance_year'] ?>"
+                                    value="<?php if (isset($row['finance_year'])) echo htmlspecialchars((string) $row['finance_year'], ENT_QUOTES, 'UTF-8') ?>"
                                     <?= $viewOnly ?>>
                             </div>
 
@@ -176,7 +176,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                             <div class="col-sm">
                                 <label class="form-label" for="company_address">Company Address</label>
                                 <textarea class="form-control" name="company_address" id="company_address" rows="3"
-                                    <?= $viewOnly ?>><?php if (isset($row['company_address'])) echo $row['company_address'] ?></textarea>
+                                    <?= $viewOnly ?>><?php if (isset($row['company_address'])) echo htmlspecialchars((string) $row['company_address'], ENT_QUOTES, 'UTF-8') ?></textarea>
                             </div>
                         </div>
                     </div>
@@ -186,13 +186,13 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                             <div class="col-sm mb-3">
                                 <label class="form-label" for="company_contact">Company Contact</label>
                                 <input class="form-control" type="text" name="company_contact" id="company_contact"
-                                    value="<?php if (isset($row['company_contact'])) echo $row['company_contact'] ?>"
+                                    value="<?php if (isset($row['company_contact'])) echo htmlspecialchars((string) $row['company_contact'], ENT_QUOTES, 'UTF-8') ?>"
                                     <?= $viewOnly ?>>
                             </div>
                             <div class="col-sm mb-3">
                                 <label class="form-label" for="company_email">Company Email</label>
                                 <input class="form-control" type="text" name="company_email" id="company_email"
-                                    value="<?php if (isset($row['company_email'])) echo $row['company_email'] ?>"
+                                    value="<?php if (isset($row['company_email'])) echo htmlspecialchars((string) $row['company_email'], ENT_QUOTES, 'UTF-8') ?>"
                                     <?= $viewOnly ?>>
                                 <?php if (isset($email_err)) { ?>
                                 <div id="err_msg">
@@ -209,13 +209,13 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                             <div class="col-sm mb-3">
                                 <label class="form-label" for="meta">Meta</label>
                                 <input class="form-control" type="text" name="meta" id="meta"
-                                    value="<?php if (isset($row['meta'])) echo $row['meta'] ?>" <?= $viewOnly ?>>
+                                    value="<?php if (isset($row['meta'])) echo htmlspecialchars((string) $row['meta'], ENT_QUOTES, 'UTF-8') ?>" <?= $viewOnly ?>>
                             </div>
 
                             <div class="col-sm mb-3">
                                 <label class="form-label" for="barcode_prefix">Barcode Prefix</label>
                                 <input class="form-control" type="text" name="barcode_prefix" id="barcode_prefix"
-                                    value="<?php if (isset($row['barcode_prefix'])) echo $row['barcode_prefix'] ?>"
+                                    value="<?php if (isset($row['barcode_prefix'])) echo htmlspecialchars((string) $row['barcode_prefix'], ENT_QUOTES, 'UTF-8') ?>"
                                     <?= $viewOnly ?>>
                             </div>
 
@@ -223,7 +223,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                 <label class="form-label" for="barcode_next_number">Barcode Next Number</label>
                                 <input class="form-control" type="number" step="any" name="barcode_next_number"
                                     id="barcode_next_number"
-                                    value="<?php if (isset($row['barcode_next_number'])) echo $row['barcode_next_number'] ?>"
+                                    value="<?php if (isset($row['barcode_next_number'])) echo htmlspecialchars((string) $row['barcode_next_number'], ENT_QUOTES, 'UTF-8') ?>"
                                     <?= $viewOnly ?>>
                             </div>
 
@@ -235,7 +235,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                             <div class="col-sm mb-3">
                                 <label class="form-label" for="invoice_prefix_credit">Invoice Prefix (Credit Notes)</label>
                                 <input class="form-control" type="text" name="invoice_prefix_credit" id="invoice_prefix_credit"
-                                    value="<?php if (isset($row['invoice_prefix_credit'])) echo $row['invoice_prefix_credit'] ?>"
+                                    value="<?php if (isset($row['invoice_prefix_credit'])) echo htmlspecialchars((string) $row['invoice_prefix_credit'], ENT_QUOTES, 'UTF-8') ?>"
                                     <?= $viewOnly ?>>
                             </div>
 
@@ -243,7 +243,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                 <label class="form-label" for="invoice_next_number_credit">Invoice Next Number (Credit Notes)</label>
                                 <input class="form-control" type="number" step="any" name="invoice_next_number_credit"
                                     id="invoice_next_number_credit"
-                                    value="<?php if (isset($row['invoice_next_number_credit'])) echo $row['invoice_next_number_credit'] ?>"
+                                    value="<?php if (isset($row['invoice_next_number_credit'])) echo htmlspecialchars((string) $row['invoice_next_number_credit'], ENT_QUOTES, 'UTF-8') ?>"
                                     <?= $viewOnly ?>>
                             </div>
 
@@ -254,7 +254,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                             <div class="col-sm mb-3">
                                 <label class="form-label" for="invoice_prefix_debit">Invoice Prefix (Debit Notes)</label>
                                 <input class="form-control" type="text" name="invoice_prefix_debit" id="invoice_prefix_debit"
-                                    value="<?php if (isset($row['invoice_prefix_debit'])) echo $row['invoice_prefix_debit'] ?>"
+                                    value="<?php if (isset($row['invoice_prefix_debit'])) echo htmlspecialchars((string) $row['invoice_prefix_debit'], ENT_QUOTES, 'UTF-8') ?>"
                                     <?= $viewOnly ?>>
                             </div>
 
@@ -262,7 +262,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                 <label class="form-label" for="invoice_next_number_debit">Invoice Next Number (Debit Notes)</label>
                                 <input class="form-control" type="number" step="any" name="invoice_next_number_debit"
                                     id="invoice_next_number_debit"
-                                    value="<?php if (isset($row['invoice_next_number_debit'])) echo $row['invoice_next_number_debit'] ?>"
+                                    value="<?php if (isset($row['invoice_next_number_debit'])) echo htmlspecialchars((string) $row['invoice_next_number_debit'], ENT_QUOTES, 'UTF-8') ?>"
                                     <?= $viewOnly ?>>
                             </div>
 
@@ -273,7 +273,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                         <div class="col-12">
                             <div class="form-group mb-3 d-flex justify-content-center flex-md-row flex-column">
                                 <?php if (isActionAllowed("Edit", $pinAccess)) : ?>
-                                <button style="background-color: <?= $row['buttonColor'] ?>;"
+                                <button style="background-color: <?= htmlspecialchars((string) $row['buttonColor'], ENT_QUOTES, 'UTF-8') ?>;"
                                     class="btn btn-lg btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="actionBtn"
                                     value="save">Save</button>
                                 <?php endif; ?>

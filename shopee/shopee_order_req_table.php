@@ -399,7 +399,7 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                         $brandResult = mysqli_query($connect, $brandSql);
                         while ($brandRow = mysqli_fetch_assoc($brandResult)) {
                             $selected = ($brandFilter == $brandRow['id']) ? 'selected' : '';
-                            echo "<option value='{$brandRow['id']}' $selected>{$brandRow['name']}</option>";
+                            echo "<option value='" . htmlspecialchars((string) $brandRow['id'], ENT_QUOTES, 'UTF-8') . "' $selected>" . htmlspecialchars((string) $brandRow['name'], ENT_QUOTES, 'UTF-8') . "</option>";
                         }
                         ?>
                     </select>
@@ -413,7 +413,7 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                         $pkgResult = mysqli_query($connect, $pkgSql);
                         while ($pkgRow = mysqli_fetch_assoc($pkgResult)) {
                             $selected = ($pkgFilter == $pkgRow['id']) ? 'selected' : '';
-                            echo "<option value='{$pkgRow['id']}' $selected>{$pkgRow['name']}</option>";
+                            echo "<option value='" . htmlspecialchars((string) $pkgRow['id'], ENT_QUOTES, 'UTF-8') . "' $selected>" . htmlspecialchars((string) $pkgRow['name'], ENT_QUOTES, 'UTF-8') . "</option>";
                         }
                         ?>
                     </select>
@@ -427,14 +427,14 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                         $accResult = mysqli_query($finance_connect, $accSql);
                         while ($accRow = mysqli_fetch_assoc($accResult)) {
                             $selected = ($accFilter == $accRow['id']) ? 'selected' : '';
-                            echo "<option value='{$accRow['id']}' $selected>{$accRow['name']}</option>";
+                            echo "<option value='" . htmlspecialchars((string) $accRow['id'], ENT_QUOTES, 'UTF-8') . "' $selected>" . htmlspecialchars((string) $accRow['name'], ENT_QUOTES, 'UTF-8') . "</option>";
                         }
                         ?>
                     </select>
                 </div>
                 <div class="col-md-2">
                     <label class="form-label d-block invisible">Reset</label>
-                    <a href="<?= $_SERVER['PHP_SELF']; ?>" class="btn btn-outline-danger filter-reset">Reset</a>
+                    <a href="<?= htmlspecialchars((string) $_SERVER['PHP_SELF'], ENT_QUOTES, 'UTF-8') ?>" class="btn btn-outline-danger filter-reset">Reset</a>
                 </div>
             </div>
     
@@ -477,7 +477,7 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                         mysqli_data_seek($brandResult, 0); 
                         while ($brandRow = mysqli_fetch_assoc($brandResult)) {
                             $selected = ($brandGroup == $brandRow['id']) ? 'selected' : '';
-                            echo "<option value='{$brandRow['id']}' $selected>{$brandRow['name']}</option>";
+                            echo "<option value='" . htmlspecialchars((string) $brandRow['id'], ENT_QUOTES, 'UTF-8') . "' $selected>" . htmlspecialchars((string) $brandRow['name'], ENT_QUOTES, 'UTF-8') . "</option>";
                         }
                         ?>
                     </select>
@@ -490,7 +490,7 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                         mysqli_data_seek($pkgResult, 0); 
                         while ($pkgRow = mysqli_fetch_assoc($pkgResult)) {
                             $selected = ($pkgGroup == $pkgRow['id']) ? 'selected' : '';
-                            echo "<option value='{$pkgRow['id']}' $selected>{$pkgRow['name']}</option>";
+                            echo "<option value='" . htmlspecialchars((string) $pkgRow['id'], ENT_QUOTES, 'UTF-8') . "' $selected>" . htmlspecialchars((string) $pkgRow['name'], ENT_QUOTES, 'UTF-8') . "</option>";
                         }
                         ?>
                     </select>
@@ -503,14 +503,14 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                         mysqli_data_seek($accResult, 0);
                         while ($accRow = mysqli_fetch_assoc($accResult)) {
                             $selected = ($accGroup == $accRow['id']) ? 'selected' : '';
-                            echo "<option value='{$accRow['id']}' $selected>{$accRow['name']}</option>";
+                            echo "<option value='" . htmlspecialchars((string) $accRow['id'], ENT_QUOTES, 'UTF-8') . "' $selected>" . htmlspecialchars((string) $accRow['name'], ENT_QUOTES, 'UTF-8') . "</option>";
                         }
                         ?>
                     </select>
                 </div>
                 <div class="col-md-2">
                     <label class="form-label d-block invisible">Reset</label>
-                    <a href="<?= $_SERVER['PHP_SELF']; ?>" class="btn btn-outline-danger filter-reset">Reset</a>
+                    <a href="<?= htmlspecialchars((string) $_SERVER['PHP_SELF'], ENT_QUOTES, 'UTF-8') ?>" class="btn btn-outline-danger filter-reset">Reset</a>
                 </div>
             </div>
             <?php
@@ -674,7 +674,7 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                             $total_final_amt += $final_amt; $total_final_service_fee += $final_service_fee;
                             ?>
                             <tr>
-                                <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                 <th scope="row" class="sticky-action"><?= $num++; ?></th>
                                 <td scope="row" class="btn-container sticky-action">
                                 <?php renderViewEditButtonByPin("1", $redirectPage, $row, $accessActionKey); ?>
@@ -725,7 +725,7 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                                  >Verified</button>
                                 <?php } ?>
                                 <?php if ($statusCode === 'V' && $canCompleteThisOrder) { ?>
-                                 <a href="?complete_id=<?= $row['id'] ?>" class="btn btn-sm btn-dark btn-verified" onclick="return confirm('Mark this order as complete?')">Complete</a>
+                                 <a href="?complete_id=<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>" class="btn btn-sm btn-dark btn-verified" onclick="return confirm('Mark this order as complete?')">Complete</a>
                                 <?php } ?>
                                 <?php if (in_array($statusCode, array('SP', 'WAERD', 'WR', 'PD', 'PR', 'WAFC', 'V', 'C'), true)) { ?>
                                 <?php if ($statusCode === 'PR') { ?>
@@ -749,25 +749,25 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                                 </td>
                                 <td scope="row"><?= getOrderStatusLabel($row['order_status']) ?></td>
                                 <td scope="row"><?= !empty($row['estimated_received_date']) ? $row['estimated_received_date'] : '' ?></td>
-                                <td scope="row"><?= $acc['name'] ?? '' ?></td>
-                                <td scope="row"><?= $curr['unit'] ?? '' ?></td>
-                                <td scope="row"><?= $row['orderID'] ?? '' ?></td>
-                                <td scope="row"><?= $row['date'] ?? '' ?></td>
-                                <td scope="row"><?= $row['time'] ?? '' ?></td>
-                                <td scope="row"><?= $pkg['name'] ?? '' ?></td>
-                                <td scope="row"><?= $brand['name'] ?? '' ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) ($acc['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) ($curr['unit'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) ($row['orderID'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) ($row['date'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) ($row['time'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) ($pkg['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) ($brand['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                                 <td scope="row"><?= customerLabelRenderShopeeBuyerCell($connect, $finance_connect, isset($row['buyer']) ? $row['buyer'] : '', '', $shopeeBuyerMetaMap) ?></td>
-                                <td scope="row"><?= $pay['name'] ?? '' ?></td>
-                                <td scope="row"><?= $pic['name'] ?? '' ?></td>
-                                <td scope="row"><?= $row['price'] ?? '' ?></td>
-                                <td scope="row"><?= $row['voucher'] ?? '' ?></td>
-                                <td scope="row"><?= $row['act_shipping_fee'] ?? '' ?></td>
-                                <td scope="row"><?= $row['service_fee'] ?? '' ?></td>
-                                <td scope="row"><?= $row['trans_fee'] ?? '' ?></td>
-                                <td scope="row"><?= $row['ams_fee'] ?? '' ?></td>
-                                <td scope="row"><?= $row['fees'] ?? '' ?></td>
-                                <td scope="row"><?= $row['final_amt'] ?? '' ?></td>
-                                <td scope="row"><?= $row['remark'] ?? '' ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) ($pay['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) ($pic['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) ($row['price'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) ($row['voucher'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) ($row['act_shipping_fee'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) ($row['service_fee'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) ($row['trans_fee'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) ($row['ams_fee'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) ($row['fees'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) ($row['final_amt'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) ($row['remark'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                                <?php  
                                 if (in_array(15, $accessActionKey)) { 
                                     $clear_profit = ($final_amt - (float)($pkg['cost'] ?? 0));

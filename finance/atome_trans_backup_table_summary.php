@@ -214,16 +214,16 @@ $img_path = SITEURL . img_server . 'finance/atome_trans_backup/';
 
                                 <tr onclick="window.location='atome_trans_backup_table_detail.php?ids=<?= urlencode($row['id']) ?>';" style="cursor:pointer;">>
                                     <th class="hideColumn" scope="row">
-                                        <?= $row['id'] ?>
+                                        <?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>
                                     </th>
                                     <th class="text-center">
-                                        <input type="checkbox" class="export" value="<?= $row['id'] ?>">
+                                        <input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>">
                                     </th>
                                     <th scope="row">
                                         <?= $num++; ?>
                                     </th>
-                                    <td scope="row"><?php if (isset($row['trans_outlet'])) echo $row['trans_outlet'] ?></td>
-                                    <td scope="row"><?php if (isset($row['amt_rec'])) echo $row['amt_rec'] ?></td>
+                                    <td scope="row"><?php if (isset($row['trans_outlet'])) echo htmlspecialchars((string) $row['trans_outlet'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['amt_rec'])) echo htmlspecialchars((string) $row['amt_rec'], ENT_QUOTES, 'UTF-8') ?></td>
                                 </tr>
                             <?php }
                                 }

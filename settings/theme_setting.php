@@ -218,7 +218,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                     <label class="form-label form_lbl" id="website_name_lbl" for="website_name">Website Name</label>
                                 </div>
                                 <div class="col-12 col-md-9">
-                                    <input class="form-control" type="text" name="website_name" id="website_name" value="<?php echo $row['project_title'] ?>" <?= $viewOnly  ?>>
+                                    <input class="form-control" type="text" name="website_name" id="website_name" value="<?php echo htmlspecialchars((string) $row['project_title'], ENT_QUOTES, 'UTF-8') ?>" <?= $viewOnly  ?>>
                                     <div id="err_msg">
                                         <span class="mt-n1"><?php if (isset($err)) echo $err; ?></span>
                                     </div>
@@ -234,7 +234,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                     <label class="form-label form_lbl" id="themesColorLbl" for="themesColor">Themes Color</label>
                                 </div>
                                 <div class="col-12 col-md-9">
-                                    <input class="form-control" type="color" name="themesColor" id="themesColor" value="<?php echo  $row['themesColor'] ?>" style="height:40px ;" <?= $viewOnly  ?>>
+                                    <input class="form-control" type="color" name="themesColor" id="themesColor" value="<?php echo  htmlspecialchars((string) $row['themesColor'], ENT_QUOTES, 'UTF-8') ?>" style="height:40px ;" <?= $viewOnly  ?>>
                                 </div>
                             </div>
                         </div>
@@ -248,7 +248,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                     <label class="form-label form_lbl" id="buttonColorLbl" for="buttonColor">Button Color</label>
                                 </div>
                                 <div class="col-12 col-md-9">
-                                    <input class="form-control" type="color" name="buttonColor" id="buttonColor" value="<?php echo $row['buttonColor'] ?>" style="height:40px ;" <?= $viewOnly  ?>>
+                                    <input class="form-control" type="color" name="buttonColor" id="buttonColor" value="<?php echo htmlspecialchars((string) $row['buttonColor'], ENT_QUOTES, 'UTF-8') ?>" style="height:40px ;" <?= $viewOnly  ?>>
                                 </div>
                             </div>
                         </div>
@@ -270,8 +270,8 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                 </div>
                                 <div class="col-12 col-md-2">
                                     <div class="d-flex justify-content-center justify-content-md-end px-4">
-                                        <img id="light_logo_preview" name="light_logo_preview" src="<?php echo ($row['logo'] == '' || $row['logo'] == NULL) ?   $SITEURL . '/' . img . '/logo2.png' : $SITEURL . '/' . $img_path . $row['logo']; ?>" class="img-thumbnail" alt="Logo Preview">
-                                        <input type="hidden" name="light_logo_imageValue" value="<?= $row['logo'] ?>">
+                                        <img id="light_logo_preview" name="light_logo_preview" src="<?php echo (htmlspecialchars((string) $row['logo'], ENT_QUOTES, 'UTF-8') == '' || htmlspecialchars((string) $row['logo'], ENT_QUOTES, 'UTF-8') == NULL) ?   $SITEURL . '/' . img . '/logo2.png' : $SITEURL . '/' . $img_path . htmlspecialchars((string) $row['logo'], ENT_QUOTES, 'UTF-8'); ?>" class="img-thumbnail" alt="Logo Preview">
+                                        <input type="hidden" name="light_logo_imageValue" value="<?= htmlspecialchars((string) $row['logo'], ENT_QUOTES, 'UTF-8') ?>">
                                     </div>
                                 </div>
                             </div>
@@ -293,9 +293,9 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                 </div>
                                 <div class="col-12 col-md-2">
                                     <div class="d-flex justify-content-center justify-content-md-end px-4">
-                                        <img id="favicon_preview" name="favicon_preview" src="<?php echo ($row['meta_logo'] == '' || $row['meta_logo'] == NULL) ? $SITEURL . '/' . img . '/logo2.png' :  $SITEURL . '/' . $img_path . $row['meta_logo']; ?>" class="img-thumbnail" alt="Meta Logo Preview">
+                                        <img id="favicon_preview" name="favicon_preview" src="<?php echo (htmlspecialchars((string) $row['meta_logo'], ENT_QUOTES, 'UTF-8') == '' || htmlspecialchars((string) $row['meta_logo'], ENT_QUOTES, 'UTF-8') == NULL) ? $SITEURL . '/' . img . '/logo2.png' :  $SITEURL . '/' . $img_path . htmlspecialchars((string) $row['meta_logo'], ENT_QUOTES, 'UTF-8'); ?>" class="img-thumbnail" alt="Meta Logo Preview">
 
-                                        <input type="hidden" name="favicon_imageValue" value="<?= $row['meta_logo'] ?>">
+                                        <input type="hidden" name="favicon_imageValue" value="<?= htmlspecialchars((string) $row['meta_logo'], ENT_QUOTES, 'UTF-8') ?>">
                                     </div>
                                 </div>
                             </div>
@@ -305,7 +305,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                             <div class="col-12">
                                 <div class="form-group mb-3 d-flex justify-content-center flex-md-row flex-column">
                                     <?php if (isActionAllowed("Edit", $pinAccess)) : ?>
-                                        <button style="background-color: <?= $row['buttonColor'] ?>;" class="btn btn-lg btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="actionBtn" value="save">Save</button>
+                                        <button style="background-color: <?= htmlspecialchars((string) $row['buttonColor'], ENT_QUOTES, 'UTF-8') ?>;" class="btn btn-lg btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="actionBtn" value="save">Save</button>
                                     <?php endif; ?>
                                 </div>
                             </div>

@@ -89,7 +89,7 @@ $result = getData('*', '', '', SD_TRANS, $finance_connect);
 
                                     <tr>
                                         <th class="hideColumn" scope="row">
-                                            <?= $row['id'] ?>
+                                            <?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>
                                         </th>
                                         <th scope="row">
                                             <?= $num++; ?>
@@ -102,43 +102,43 @@ $result = getData('*', '', '', SD_TRANS, $finance_connect);
                                         </div>
                                         </td>
                                         <td scope="row">
-                                            <?= $row['transactionID'] ?>
+                                            <?= htmlspecialchars((string) $row['transactionID'], ENT_QUOTES, 'UTF-8') ?>
                                         </td>
                                         <td scope="row">
                                             <?php if (isset($row['type']))
-                                                echo $row['type'] ?>
+                                                echo htmlspecialchars((string) $row['type'], ENT_QUOTES, 'UTF-8') ?>
                                             </td>
                                             <td scope="row">
                                             <?php if (isset($row['payment_date']))
-                                                echo $row['payment_date'] ?>
+                                                echo htmlspecialchars((string) $row['payment_date'], ENT_QUOTES, 'UTF-8') ?>
                                             </td>
                                             <td scope="row">
                                             <?php if (isset($row2['name']))
-                                                echo $row2['name'] ?>
+                                                echo htmlspecialchars((string) $row2['name'], ENT_QUOTES, 'UTF-8') ?>
                                             </td>
                                             <td scope="row">
                                             <?php if (isset($row['amount']))
-                                                echo $row['amount'] ?>
+                                                echo htmlspecialchars((string) $row['amount'], ENT_QUOTES, 'UTF-8') ?>
                                             </td>
                                             <td scope="row">
                                             <?php if (isset($row['prev_amt']))
-                                                echo $row['prev_amt'] ?>
+                                                echo htmlspecialchars((string) $row['prev_amt'], ENT_QUOTES, 'UTF-8') ?>
                                             </td>
                                             <td scope="row">
                                             <?php if (isset($row['final_amt']))
-                                                echo $row['final_amt'] ?>
+                                                echo htmlspecialchars((string) $row['final_amt'], ENT_QUOTES, 'UTF-8') ?>
                                             </td>
                                             <td scope="row">
                                             <?php if (isset($row['description']))
-                                                echo $row['description'] ?>
+                                                echo htmlspecialchars((string) $row['description'], ENT_QUOTES, 'UTF-8') ?>
                                             </td>
                                             <td scope="row">
                                             <?php if (isset($row['remark']))
-                                                echo $row['remark'] ?>
+                                                echo htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') ?>
                                             </td>
                                             <td scope="row">
                                             <?php if (isset($row['attachment']))
-                                                echo $row['attachment'] ?>
+                                                echo htmlspecialchars((string) $row['attachment'], ENT_QUOTES, 'UTF-8') ?>
                                             </td>
                                     </tr>
                                 <?php }

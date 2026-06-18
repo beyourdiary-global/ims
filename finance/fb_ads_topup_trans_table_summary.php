@@ -208,12 +208,12 @@ $result2 = getData('*', '', '', FB_ADS_TOPUP, $finance_connect);
                     ?>
                    
                    <tr onclick="window.location='fb_ads_topup_trans_table_detail.php?ids=<?= urlencode($row['id']) ?>';" style="cursor:pointer;">
-                        <td class="hideColumn" scope="row"><?= $row['id'] ?></td>
-                        <th class="text-center"><input type="checkbox" class="export" value="<?= $row['id'] ?>"></th>
+                        <td class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></td>
+                        <th class="text-center"><input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>"></th>
                         <td scope="row"><?= $num++; ?></td>
-                        <td scope="row"><?php if (isset($meta_acc['accName'])) echo $meta_acc['accName'] ?></td>
-                        <td scope="row"><?php if (isset($row['payment_date'])) echo $row['payment_date'] ?></td>
-                        <td scope="row"><?php if (isset($row['topup_amt'])) echo $row['topup_amt'] ?></td>
+                        <td scope="row"><?php if (isset($meta_acc['accName'])) echo htmlspecialchars((string) $meta_acc['accName'], ENT_QUOTES, 'UTF-8') ?></td>
+                        <td scope="row"><?php if (isset($row['payment_date'])) echo htmlspecialchars((string) $row['payment_date'], ENT_QUOTES, 'UTF-8') ?></td>
+                        <td scope="row"><?php if (isset($row['topup_amt'])) echo htmlspecialchars((string) $row['topup_amt'], ENT_QUOTES, 'UTF-8') ?></td>
                     </tr>
                     <?php }
                             }

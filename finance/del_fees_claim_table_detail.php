@@ -211,8 +211,8 @@ $result = getData('*', '', '', DEL_FEES_CLAIM, $finance_connect);
                         ?>
 
                                 <tr>
-                                    <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
-                                    <th class="text-center"><input type="checkbox" class="export" value="<?= $row['id'] ?>"></th>
+                                    <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
+                                    <th class="text-center"><input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>"></th>
                                     <td scope="row"><?= $num++ ?></td>
                                     <td scope="row" class="btn-container">
                                     <div class="d-flex align-items-center">
@@ -221,12 +221,12 @@ $result = getData('*', '', '', DEL_FEES_CLAIM, $finance_connect);
                                         <?php renderDeleteButton($pinAccess, $row['id'], '', '', $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                     </div>
                                     </td>
-                                    <td scope="row"><?php if (isset($row3['name'])) echo $row3['name'] ?></td>
-                                    <td scope="row"><?php if (isset($row2['unit'])) echo $row2['unit'] ?></td>
-                                    <td scope="row"><?php if (isset($row['subtotal'])) echo  $row['subtotal'] ?></td>
-                                    <td scope="row"><?php if (isset($row['tax'])) echo  $row['tax'] ?></td>
-                                    <td scope="row"><?php if (isset($row['total'])) echo  $row['total'] ?></td>
-                                    <td scope="row"><?php if (isset($row['remark'])) echo  $row['remark'] ?></td>
+                                    <td scope="row"><?php if (isset($row3['name'])) echo htmlspecialchars((string) $row3['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row2['unit'])) echo htmlspecialchars((string) $row2['unit'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['subtotal'])) echo  htmlspecialchars((string) $row['subtotal'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['tax'])) echo  htmlspecialchars((string) $row['tax'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['total'])) echo  htmlspecialchars((string) $row['total'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['remark'])) echo  htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') ?></td>
                                 </tr>
                         <?php }
                                 }

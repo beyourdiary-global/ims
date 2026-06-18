@@ -70,7 +70,7 @@ if (!$result) {
                     ?>
 
                             <tr>
-                                <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                 <th scope="row"><?= $num++; ?></th>
                                 <td scope="row" class="btn-container">
                                 <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>

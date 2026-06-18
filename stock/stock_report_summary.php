@@ -141,8 +141,8 @@ if (!$result) {
                             $createdate = $row['create_date'];
                             ?>
                             <tr onclick="window.location='stock_report_detail.php?ids=<?= urlencode($row['id']) ?>';" style="cursor:pointer;">
-                                <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
-                                <th class="text-center"><input type="checkbox" class="export" value="<?= $row['id'] ?>"></th>
+                                <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
+                                <th class="text-center"><input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>"></th>
                                 <th scope="row"><?= $num++; ?></th>
                                 <td scope="row"><?php if (isset($stockOutUsr_name)) { echo 'Stock Out'; } else { echo 'Stock In'; } ?></td>
                                 <td scope="row"><?php if (isset($brd_name)) echo $brd_name ?></td>

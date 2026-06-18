@@ -89,7 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'delete') {
                             <?php
                             while ($row = $result->fetch_assoc()) { ?>
                                 <tr>
-                                    <td class="hideColumn" scope="row"><?= $row['year'] ?></td>
+                                    <td class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['year'], ENT_QUOTES, 'UTF-8') ?></td>
                                     <td scope="row"><?= $num++; ?></td>
                                     <td scope="row" class="btn-container">
                                         <?php if (isActionAllowed("View", $pinAccess)): ?>
@@ -98,16 +98,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'delete') {
                                         <?php endif; ?>
                                         <?php if (isActionAllowed("Edit", $pinAccess)): ?>
                                             <a class="btn btn-warning me-1"
-                                                href="<?= $redirectPage . "?id=" . $row['year'] . '&act=' . $act_2 ?>"><i
+                                                href="<?= htmlspecialchars((string) ($redirectPage . '?id=' . (int) $row['year'] . '&act=' . $act_2), ENT_QUOTES, 'UTF-8') ?>"><i
                                                     class="fas fa-edit"></i></a>
                                         <?php endif; ?>
                                         <?php if (isActionAllowed("Delete", $pinAccess)): ?>
                                             <a class="btn btn-danger"
-                                                onclick="confirmationDialogGoalYear('<?= $row['year'] ?>','Are you sure want to delete','<?php echo $pageTitle ?>','<?= $redirectPage ?>','<?= $deleteRedirectPage ?>','D')"><i
+                                                onclick="confirmationDialogGoalYear(<?= json_encode((string) $row['year']) ?>,'Are you sure want to delete',<?= json_encode((string) $pageTitle) ?>,<?= json_encode((string) $redirectPage) ?>,<?= json_encode((string) $deleteRedirectPage) ?>,'D')"><i
                                                     class="fas fa-trash-alt"></i></a>
                                         <?php endif; ?>
                                     </td>
-                                    <td scope="row"><?= $row['year'] ?></td>
+                                    <td scope="row"><?= htmlspecialchars((string) $row['year'], ENT_QUOTES, 'UTF-8') ?></td>
                                     <td scope="row"><?= isset($row['goal']) ? $row['goal'] : '' ?></td>
                                 </tr>
                             <?php } ?>

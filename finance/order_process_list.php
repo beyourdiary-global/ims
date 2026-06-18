@@ -239,7 +239,7 @@ if (post('order_status')) {
 
                             <tr>
                                 <th class="hideColumn" scope="row">
-                                    <?= $row['id'] ?>
+                                    <?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>
                                 </th>
                                 <th scope="row">
                                     <?= $num++; ?>
@@ -273,9 +273,9 @@ if (post('order_status')) {
                                 }
                               
                               
-                                echo'<a class="btn btn-primary me-1" href="' . $redirectPage . '?id=' . $row['id'] . '" title="View order"><i class="fas fa-eye" title="View order"></i></a>';
-                                echo'<a class="btn btn-warning me-1" href="' . $redirect_page2 . '?id=' . $row['id'] . '&act=' . $act_1 .'&channel=' . $channelid . '&orderid=' . $orderId .'" title="Update shipment"><i class="fas fa-edit" title="Update shipment"></i></a>';
-                                echo '<a class="btn btn-danger me-1" href="#" onclick="updateOrderStatus('.$row['id'].', \'WP\', \''.$tableKey.'\')" title="Process shipment"><i class="fa fa-cog" title="Process shipment"></i></a>'
+                                echo'<a class="btn btn-primary me-1" href="' . $redirectPage . '?id=' . htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') . '" title="View order"><i class="fas fa-eye" title="View order"></i></a>';
+                                echo'<a class="btn btn-warning me-1" href="' . $redirect_page2 . '?id=' . htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') . '&act=' . $act_1 .'&channel=' . $channelid . '&orderid=' . $orderId .'" title="Update shipment"><i class="fas fa-edit" title="Update shipment"></i></a>';
+                                echo '<a class="btn btn-danger me-1" href="#" onclick="updateOrderStatus('.htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8').', \'WP\', \''.$tableKey.'\')" title="Process shipment"><i class="fa fa-cog" title="Process shipment"></i></a>'
                                  ?>
                                 </td>
                                 <td scope="row">
@@ -291,10 +291,10 @@ if (post('order_status')) {
                                     <?= $pic ?>
                                 </td>    
                                 <td scope="row">
-                                    <?= $brand['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($brand['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $pkg['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($pkg['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                             </tr>
                         <?php }}} ?>

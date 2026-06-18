@@ -230,7 +230,7 @@ if (!$result) {
                                 }
                                 ?>
                                 <tr>
-                                    <th class="hideColumn"><?= $row['id'] ?></th>
+                                    <th class="hideColumn"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                     <td class="text-center"><input type="checkbox" class="export" value="<?= (int) $row['id'] ?>"></td>
                                     <th><?= $num++ ?></th>
                                     <td class="btn-container">
@@ -253,26 +253,26 @@ if (!$result) {
                                         <?php
                                         $resultCurUnit = getData('unit', "id='" . $row['currency_unit'] . "'", '', CUR_UNIT, $connect);
                                         $rowCurUnit = ($resultCurUnit && $resultCurUnit->num_rows > 0) ? $resultCurUnit->fetch_assoc() : null;
-                                        echo $rowCurUnit ? $rowCurUnit['unit'] . ' ' . $row['price'] : 'N/A';
+                                        echo $rowCurUnit ? htmlspecialchars((string) $rowCurUnit['unit'], ENT_QUOTES, 'UTF-8') . ' ' . htmlspecialchars((string) $row['price'], ENT_QUOTES, 'UTF-8') : 'N/A';
                                         ?>
                                     </td>
                                     <td>
                                         <?php
                                         $resultBrand = getData('name', "id='" . $row['brand'] . "'", '', BRAND, $connect);
                                         $rowBrand = ($resultBrand && $resultBrand->num_rows > 0) ? $resultBrand->fetch_assoc() : null;
-                                        echo $rowBrand ? $rowBrand['name'] : 'N/A';
+                                        echo $rowBrand ? htmlspecialchars((string) $rowBrand['name'], ENT_QUOTES, 'UTF-8') : 'N/A';
                                         ?>
                                     </td>
                                     <td>
                                         <?php
                                         $resultCurUnit2 = getData('unit', "id='" . $row['cost_curr'] . "'", '', CUR_UNIT, $connect);
                                         $rowCurUnit2 = ($resultCurUnit2 && $resultCurUnit2->num_rows > 0) ? $resultCurUnit2->fetch_assoc() : null;
-                                        echo $rowCurUnit2 ? $rowCurUnit2['unit'] . ' ' . $row['cost'] : 'N/A';
+                                        echo $rowCurUnit2 ? htmlspecialchars((string) $rowCurUnit2['unit'], ENT_QUOTES, 'UTF-8') . ' ' . htmlspecialchars((string) $row['cost'], ENT_QUOTES, 'UTF-8') : 'N/A';
                                         ?>
                                     </td>
                                     <td>
                                         <?php
-                                        echo $row['agent_cost']?'RM'. $row['agent_cost']:'';
+                                        echo htmlspecialchars((string) $row['agent_cost'], ENT_QUOTES, 'UTF-8')?'RM'. htmlspecialchars((string) $row['agent_cost'], ENT_QUOTES, 'UTF-8'):'';
                                         ?>
                                     </td>
                                     <td>
@@ -280,7 +280,7 @@ if (!$result) {
                                     </td>
                                     <td width="25%">
                                         <?php
-                                        echo $row['remark']?'RM'. $row['remark']:'';
+                                        echo htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8')?'RM'. htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8'):'';
                                         ?>
                                     </td>
                                 </tr>

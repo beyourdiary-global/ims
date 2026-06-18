@@ -148,7 +148,7 @@ if (!$result) {
                             $created_name = isset($created_fetch['name']) ? $created_fetch['name'] : '';
                             if (isset( $row['id'])) { ?>
                                 <tr>
-                                    <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                    <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                     <th scope="row"><?= $num++; ?></th>
                                     <td scope="row" class="btn-container">
                                     <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
@@ -157,26 +157,26 @@ if (!$result) {
                                     </td>
                                     <td scope="row"><?php if (isset($brd_name)) echo $brd_name ?></td>
                                     <td scope="row"><?php if (isset($prod_name)) echo $prod_name ?></td>
-                                    <td scope="row"><?php if (isset($row['stock_in_date'])) echo $row['stock_in_date'] ?></td>
-                                    <td scope="row"><?php if (isset($row['stock_out_date'])) echo $row['stock_out_date'] ?></td>
-                                    <td scope="row"><?php if (isset($row['transfer_date'])) echo $row['transfer_date'] ?></td>
-                                    <td scope="row"><?php if (isset($row['barcode'])) echo $row['barcode'] ?></td>
-                                    <td scope="row"><?php if (isset($row['product_batch_code'])) echo $row['product_batch_code'] ?></td>
+                                    <td scope="row"><?php if (isset($row['stock_in_date'])) echo htmlspecialchars((string) $row['stock_in_date'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['stock_out_date'])) echo htmlspecialchars((string) $row['stock_out_date'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['transfer_date'])) echo htmlspecialchars((string) $row['transfer_date'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['barcode'])) echo htmlspecialchars((string) $row['barcode'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['product_batch_code'])) echo htmlspecialchars((string) $row['product_batch_code'], ENT_QUOTES, 'UTF-8') ?></td>
                                     <td scope="row"><?php if (isset($prod_stat)) echo $prod_stat ?></td>
                                     <td scope="row"><?php if (isset($prod_cat)) echo $prod_cat ?></td>
                                     <td scope="row"><?php if (isset($plat_name)) echo $plat_name ?></td>
                                     <td scope="row"><?php if (isset($ware_name)) echo $ware_name ?></td>
                                     <td scope="row"><?php if (isset($stockInUsr_name)) echo $stockInUsr_name ?></td>
                                     <td scope="row"><?php if (isset($stockOutUsr_name)) echo $stockOutUsr_name ?></td>
-                                    <td scope="row"><?php if (isset($row['stock_out_customer_purchase_id'])) echo $row['stock_out_customer_purchase_id'] ?></td>
-                                    <td scope="row"><?php if (isset($row['remark'])) echo $row['remark'] ?></td>
-                                    <td scope="row"><?php if (isset($row['create_date'])) echo $row['create_date'] ?></td>
-                                    <td scope="row"><?php if (isset($row['create_time'])) echo $row['create_time'] ?></td>
+                                    <td scope="row"><?php if (isset($row['stock_out_customer_purchase_id'])) echo htmlspecialchars((string) $row['stock_out_customer_purchase_id'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['remark'])) echo htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['create_date'])) echo htmlspecialchars((string) $row['create_date'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['create_time'])) echo htmlspecialchars((string) $row['create_time'], ENT_QUOTES, 'UTF-8') ?></td>
                                     <td scope="row"><?php if (isset($created_name)) echo $created_name ?></td>
-                                    <td scope="row"><?php echo isset($row['update_date']) ? $row['update_date'] : '-'; ?></td>
-                                    <td scope="row"><?php echo isset($row['update_time']) ? $row['update_time'] : ''; ?></td>
+                                    <td scope="row"><?php echo isset($row['update_date']) ? htmlspecialchars((string) $row['update_date'], ENT_QUOTES, 'UTF-8') : '-'; ?></td>
+                                    <td scope="row"><?php echo isset($row['update_time']) ? htmlspecialchars((string) $row['update_time'], ENT_QUOTES, 'UTF-8') : ''; ?></td>
                                     <td scope="row"><?php echo isset($updated_name) ? $updated_name : '-'; ?></td>
-                                    <td scope="row"><?php if (isset($row['status'])) echo strtoupper($row['status']) === 'A' ? 'Active' : $row['status']; ?></td>
+                                    <td scope="row"><?php if (isset($row['status'])) echo strtoupper(htmlspecialchars((string) $row['status'], ENT_QUOTES, 'UTF-8')) === 'A' ? 'Active' : htmlspecialchars((string) $row['status'], ENT_QUOTES, 'UTF-8'); ?></td>
                                 </tr>
                         <?php
                             }

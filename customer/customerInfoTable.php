@@ -196,7 +196,7 @@ $customerTagMap = customerTagGetCustomerTagMap($connect, 'customer_info', $custo
                                     ));
                                     ?>
                                     <tr <?= $filterAttributes ?>>
-                                        <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                        <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                         <th scope="row"><?= $num++; ?></th>
                                         <td scope="row" class="btn-container">
                                             <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
@@ -215,22 +215,22 @@ $customerTagMap = customerTagGetCustomerTagMap($connect, 'customer_info', $custo
                                                 class="btn <?= $urbanismAction['is_member'] ? 'btn-success' : 'btn-secondary' ?> me-1 <?= $urbanismAction['disabled'] ? 'disabled' : '' ?>"
                                                 href="<?= htmlspecialchars($urbanismAction['url'], ENT_QUOTES, 'UTF-8') ?>"
                                                 title="<?= htmlspecialchars($urbanismAction['title'], ENT_QUOTES, 'UTF-8') ?>"
-                                                <?= $urbanismAction['disabled'] ? 'onclick="return false;" aria-disabled="true"' : '' ?>><i class="<?= $urbanismAction['icon_class'] ?>"></i></a>
+                                                <?= $urbanismAction['disabled'] ? 'onclick="return false;" aria-disabled="true"' : '' ?>><i class="<?= htmlspecialchars((string) $urbanismAction['icon_class'], ENT_QUOTES, 'UTF-8') ?>"></i></a>
                                         </td>
                                         <td scope="row">
                                             <?php if (isset($row['name'], $row['last_name']))
-                                                echo $row['name'] . " " . $row['last_name'] ?>
+                                                echo htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') . " " . htmlspecialchars((string) $row['last_name'], ENT_QUOTES, 'UTF-8') ?>
                                             </td>
                                             <td scope="row"><?php if (isset($row['email']))
-                                                echo $row['email'] ?></td>
+                                                echo htmlspecialchars((string) $row['email'], ENT_QUOTES, 'UTF-8') ?></td>
                                             <td scope="row">
                                             <?php if (isset($row['phone_country'], $row['phone_number']))
-                                                echo $row['phone_country'] . $row['phone_number'] ?>
+                                                echo htmlspecialchars((string) $row['phone_country'], ENT_QUOTES, 'UTF-8') . htmlspecialchars((string) $row['phone_number'], ENT_QUOTES, 'UTF-8') ?>
                                             </td>
                                             <td scope="row"><?php if (isset($row['gender']))
-                                                echo $row['gender'] ?></td>
+                                                echo htmlspecialchars((string) $row['gender'], ENT_QUOTES, 'UTF-8') ?></td>
                                             <td scope="row"><?php if (isset($row['birthday']))
-                                                echo $row['birthday'] ?></td>
+                                                echo htmlspecialchars((string) $row['birthday'], ENT_QUOTES, 'UTF-8') ?></td>
                                         </tr>
                                     <?php
                                 }

@@ -75,21 +75,21 @@ $result = getData('*', '', '', $tblName, $finance_connect);
                             while ($row = $result->fetch_assoc()) {
                                 if (isset($row['name'], $row['id']) && !empty($row['name'])) { ?>
                                     <tr>
-                                        <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                        <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                         <th scope="row"><?= $num++; ?></th>
                                         <td scope="row" class="btn-container">
                                             <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
                                             <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
                                             <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                         </td>
-                                        <td scope="row"><?= $row['name'] ?></td>
-                                        <td scope="row"><?php if (isset($row['business_no'])) echo $row['business_no'] ?></td>
-                                        <td scope="row"><?php if (isset($row['contact'])) echo $row['contact'] ?></td>
-                                        <td scope="row"><?php if (isset($row['email'])) echo $row['email'] ?></td>
-                                        <td scope="row"><?php if (isset($row['address'])) echo $row['address'] ?></td>
-                                        <td scope="row"><?php if (isset($row['person_in_charges'])) echo $row['person_in_charges'] ?></td>
-                                        <td scope="row"><?php if (isset($row['person_in_charges_contact'])) echo $row['person_in_charges_contact'] ?></td>
-                                        <td scope="row"><?php if (isset($row['remark'])) echo $row['remark'] ?></td>
+                                        <td scope="row"><?= htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td scope="row"><?php if (isset($row['business_no'])) echo htmlspecialchars((string) $row['business_no'], ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td scope="row"><?php if (isset($row['contact'])) echo htmlspecialchars((string) $row['contact'], ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td scope="row"><?php if (isset($row['email'])) echo htmlspecialchars((string) $row['email'], ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td scope="row"><?php if (isset($row['address'])) echo htmlspecialchars((string) $row['address'], ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td scope="row"><?php if (isset($row['person_in_charges'])) echo htmlspecialchars((string) $row['person_in_charges'], ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td scope="row"><?php if (isset($row['person_in_charges_contact'])) echo htmlspecialchars((string) $row['person_in_charges_contact'], ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td scope="row"><?php if (isset($row['remark'])) echo htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') ?></td>
                                     </tr>
                             <?php
                                 }

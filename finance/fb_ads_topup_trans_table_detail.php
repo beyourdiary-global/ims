@@ -213,8 +213,8 @@ $result2 = getData('*', '', '', FB_ADS_TOPUP, $finance_connect);
                             $usr = $pic->fetch_assoc();
                     ?>
                             <tr>
-                                <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
-                                <th class="text-center"><input type="checkbox" class="export" value="<?= $row['id'] ?>"></th>
+                                <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
+                                <th class="text-center"><input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>"></th>
                                 <th scope="row"><?= $num++; ?></th>
                                 <td scope="row" class="btn-container">
                                 <div class="d-flex align-items-center">
@@ -223,13 +223,13 @@ $result2 = getData('*', '', '', FB_ADS_TOPUP, $finance_connect);
                                     <?php renderDeleteButton($pinAccess, $row['id'], $row['meta_acc'], $row['transactionID'], $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                 </div>
                                 </td>
-                                <td scope="row"><?php if (isset($meta_acc['accName'])) echo  $meta_acc['accName'] ?></td>
-                                <td scope="row"><?= $row['transactionID'] ?></td>
-                                <td scope="row"><?php if (isset($row['payment_date'])) echo $row['payment_date'] ?></td>
-                                <td scope="row"><?php if (isset($usr['name'])) echo $usr['name'] ?></td>
-                                <td scope="row"><?php if (isset($row['topup_amt'])) echo  $row['topup_amt'] ?></td>
-                                <td scope="row"><?php if (isset($row['attachment'])) echo $row['attachment'] ?></td>
-                                <td scope="row"><?php if (isset($row['remark'])) echo $row['remark'] ?></td>
+                                <td scope="row"><?php if (isset($meta_acc['accName'])) echo  htmlspecialchars((string) $meta_acc['accName'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) $row['transactionID'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?php if (isset($row['payment_date'])) echo htmlspecialchars((string) $row['payment_date'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?php if (isset($usr['name'])) echo htmlspecialchars((string) $usr['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?php if (isset($row['topup_amt'])) echo  htmlspecialchars((string) $row['topup_amt'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?php if (isset($row['attachment'])) echo htmlspecialchars((string) $row['attachment'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?php if (isset($row['remark'])) echo htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') ?></td>
                            
                             </tr>
                     <?php }

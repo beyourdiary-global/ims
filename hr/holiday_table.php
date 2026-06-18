@@ -77,21 +77,21 @@ $result = getData('*', '', '', $tblName, $connect);
                             while ($row = $result->fetch_assoc()) {
                                 if (isset($row['name'], $row['id']) && !empty($row['name'])) { ?>
                                     <tr>
-                                        <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                        <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                         <th scope="row"><?= $num++; ?></th>
                                         <td scope="row" class="btn-container">
                                             <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
                                             <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
                                             <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['date'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                         </td>
-                                        <td scope="row"><?= $row['name'] ?></td>
+                                        <td scope="row"><?= htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row">
                                             <?php if (isset($row['date']))
-                                                echo $date = date("j M Y", strtotime($row['date'])) ?>
+                                                echo $date = date("j M Y", strtotime(htmlspecialchars((string) $row['date'], ENT_QUOTES, 'UTF-8'))) ?>
                                             </td>
                                             <td scope="row">
                                             <?php if (isset($row['date']))
-                                                echo $day = date("l", strtotime($row['date'])) ?>
+                                                echo $day = date("l", strtotime(htmlspecialchars((string) $row['date'], ENT_QUOTES, 'UTF-8'))) ?>
                                             </td>
                                         </tr>
                                     <?php

@@ -242,10 +242,10 @@ $img_path = SITEURL . img_server . 'finance/j&t_trans_backup/';
 
                                 <tr>
                                     <th class="text-center">
-                                        <input type="checkbox" class="export" value="<?= $row['id'] ?>">
+                                        <input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>">
                                     </th>
                                     <th class="hideColumn" scope="row">
-                                        <?= $row['id'] ?>
+                                        <?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>
                                     </th>
                                     <th scope="row">
                                         <?= $num++; ?>
@@ -258,19 +258,19 @@ $img_path = SITEURL . img_server . 'finance/j&t_trans_backup/';
                                         </div>
                                     </td>
                                     <td scope="row"><?php if (isset($row['number']))
-                                        echo $row['number'] ?></td>
+                                        echo htmlspecialchars((string) $row['number'], ENT_QUOTES, 'UTF-8') ?></td>
 
                                         <td scope="row"><?php if (isset($row['date']))
-                                        echo $row['date'] ?></td>
+                                        echo htmlspecialchars((string) $row['date'], ENT_QUOTES, 'UTF-8') ?></td>
 
                                         <td scope="row"><?php if (isset($row['currency']))
-                                            echo $row['currency'] ?></td>
+                                            echo htmlspecialchars((string) $row['currency'], ENT_QUOTES, 'UTF-8') ?></td>
 
                                         <td scope="row"><?php if (isset($row['total_gst']))
-                                            echo $row['total_gst'] ?></td>
+                                            echo htmlspecialchars((string) $row['total_gst'], ENT_QUOTES, 'UTF-8') ?></td>
 
                                         <td scope="row"><?php if (isset($row['total_amount']))
-                                            echo $row['total_amount'] ?></td>
+                                            echo htmlspecialchars((string) $row['total_amount'], ENT_QUOTES, 'UTF-8') ?></td>
 
                                         <td scope="row">
                                         <?php

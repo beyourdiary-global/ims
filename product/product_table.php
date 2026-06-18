@@ -211,7 +211,7 @@ if (!$result) {
                         while ($row = $result->fetch_assoc()) {
                             if (isset($row['name'], $row['id']) && !empty($row['name'])) { ?>
                                 <tr>
-                                    <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                    <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                     <td class="text-center"><input type="checkbox" class="export" value="<?= (int) $row['id'] ?>"></td>
                                     <th scope="row"><?= $num++; ?></th>
                                     <td scope="row" class="btn-container">
@@ -219,7 +219,7 @@ if (!$result) {
                                         <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
                                         <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], '', $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                     </td>
-                                    <td scope="row"><?= $row['name'] ?></td>
+                                    <td scope="row"><?= htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') ?></td>
                                     <td scope="row">
                                         <?php
                                         $currency_unit = '';
@@ -229,7 +229,7 @@ if (!$result) {
                                                 $currency_unit = $resultCurUnit->fetch_assoc()['unit'] . ' ';
                                             }
                                         }
-                                        echo $currency_unit . (isset($row['cost']) ? $row['cost'] : '');
+                                        echo $currency_unit . (isset($row['cost']) ? htmlspecialchars((string) $row['cost'], ENT_QUOTES, 'UTF-8') : '');
                                         ?>
                                     </td>
                                     <td scope="row">
@@ -241,7 +241,7 @@ if (!$result) {
                                                 $weight_unit = ' ' . $resultWeightUnit->fetch_assoc()['unit'];
                                             }
                                         }
-                                        echo (isset($row['weight']) ? $row['weight'] : '') . $weight_unit;
+                                        echo (isset($row['weight']) ? htmlspecialchars((string) $row['weight'], ENT_QUOTES, 'UTF-8') : '') . $weight_unit;
                                         ?>
                                     </td>
                                     <td scope="row">
@@ -251,7 +251,7 @@ if (!$result) {
                                             if ($resultParentPrd && $resultParentPrd->num_rows > 0) {
                                                 echo $resultParentPrd->fetch_assoc()['name'];
                                             } else {
-                                                echo $row['parent_product']; // Fallback if name is missing but ID exists
+                                                echo htmlspecialchars((string) $row['parent_product'], ENT_QUOTES, 'UTF-8'); // Fallback if name is missing but ID exists
                                             }
                                         }
                                         ?>

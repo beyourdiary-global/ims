@@ -351,7 +351,7 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
                                 }
                                 ?>
                                 <tr>
-                                    <td class="hideColumn" scope="row"><?= $row['id'] ?></td>
+                                    <td class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></td>
                                     <td scope="row"><?= $num++ ?></td>
                                     <td scope="row" class="btn-container">
                                         <div class="d-flex align-items-center">

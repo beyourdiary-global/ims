@@ -194,13 +194,13 @@ $result = getData('*', '', '', DW_TOP_UP_RECORD, $finance_connect);
                             $currRow = $currResult->fetch_assoc();
                         ?>
                                 <tr onclick="window.location='downline_top_up_record_table_detail.php?ids=<?= urlencode($row['id']) ?>';" style="cursor:pointer;">
-                                    <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
-                                    <th class="text-center"><input type="checkbox" class="export" value="<?= $row['id'] ?>"></th>
+                                    <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
+                                    <th class="text-center"><input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>"></th>
                                     <td scope="row"><?= $num++ ?></td>
-                                    <td scope="row"><?php if (isset($row3['name'])) echo  $row3['name'] ?></td>
-                                    <td scope="row"><?php if (isset($row4['name'])) echo  $row4['name'] ?></td>
-                                    <td scope="row"><?php if (isset($currRow['unit'])) echo $currRow['unit'] ?></td>
-                                    <td scope="row"><?php if (isset($row['amount'])) echo  $row['amount'] ?></td>
+                                    <td scope="row"><?php if (isset($row3['name'])) echo  htmlspecialchars((string) $row3['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row4['name'])) echo  htmlspecialchars((string) $row4['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($currRow['unit'])) echo htmlspecialchars((string) $currRow['unit'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['amount'])) echo  htmlspecialchars((string) $row['amount'], ENT_QUOTES, 'UTF-8') ?></td>
                                 </tr>
                         <?php
                             }

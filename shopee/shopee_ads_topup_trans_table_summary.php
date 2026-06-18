@@ -192,13 +192,13 @@ $result = getData('*', '', '', SHOPEE_ADS_TOPUP, $finance_connect);
                             $pay = $q3->fetch_assoc();
                     ?>
                             <tr onclick="window.location='shopee_ads_topup_trans_table_detail.php?ids=<?= urlencode($row['id']) ?>';" style="cursor:pointer;">
-                                <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
-                                <th class="text-center"><input type="checkbox" class="export" value="<?= $row['id'] ?>"></th>
+                                <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
+                                <th class="text-center"><input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>"></th>
                                 <th scope="row"><?= $num++; ?></th>
-                                <td scope="row"><?php if (isset($shopee_acc['name'])) echo  $shopee_acc['name'] ?></td>
-                                <td scope="row"><?php if (isset($curr['unit'])) echo $curr['unit'] ?></td>
-                                <td scope="row"><?php if (isset($row['topup_amt'])) echo  $row['topup_amt'] ?></td>
-                                <td scope="row"><?php if (isset($pay['name'])) echo  $pay['name'] ?></td>
+                                <td scope="row"><?php if (isset($shopee_acc['name'])) echo  htmlspecialchars((string) $shopee_acc['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?php if (isset($curr['unit'])) echo htmlspecialchars((string) $curr['unit'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?php if (isset($row['topup_amt'])) echo  htmlspecialchars((string) $row['topup_amt'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?php if (isset($pay['name'])) echo  htmlspecialchars((string) $pay['name'], ENT_QUOTES, 'UTF-8') ?></td>
 
                             </tr>
                             <?php }

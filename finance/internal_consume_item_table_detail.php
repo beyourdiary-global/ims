@@ -207,8 +207,8 @@ $result = getData('*', '', '', ITL_CSM_ITEM, $finance_connect);
                         ?>
 
                                 <tr>
-                                    <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
-                                    <th class="text-center"><input type="checkbox" class="export" value="<?= $row['id'] ?>"></th>
+                                    <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
+                                    <th class="text-center"><input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>"></th>
                                     <th scope="row"><?= $num++; ?></th>
                                     <td scope="row" class="btn-container">
                                         <div class="d-flex align-items-center"> 
@@ -217,12 +217,12 @@ $result = getData('*', '', '', ITL_CSM_ITEM, $finance_connect);
                                             <?php renderDeleteButton($pinAccess, $row['id'],'', '', $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                         </div>
                                     </td>
-                                    <td scope="row"><?php if (isset($row['date'])) echo  $row['date'] ?></td>
-                                    <td scope="row"><?php if (isset($usr['name'])) echo  $usr['name'] ?></td>
-                                    <td scope="row"><?php if (isset($row2['name'])) echo  $row2['name'] ?></td>
-                                    <td scope="row"><?php if (isset($row3['name'])) echo  $row3['name'] ?></td>
-                                    <td scope="row"><?php if (isset($row['cost'])) echo  $row['cost'] ?></td>
-                                    <td scope="row"><?php if (isset($row['remark'])) echo $row['remark'] ?></td>
+                                    <td scope="row"><?php if (isset($row['date'])) echo  htmlspecialchars((string) $row['date'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($usr['name'])) echo  htmlspecialchars((string) $usr['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row2['name'])) echo  htmlspecialchars((string) $row2['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row3['name'])) echo  htmlspecialchars((string) $row3['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['cost'])) echo  htmlspecialchars((string) $row['cost'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['remark'])) echo htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') ?></td>
                                 </tr>
                                 <?php }
                                 }

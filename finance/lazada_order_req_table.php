@@ -26,12 +26,12 @@ if (!empty($currentTableQuery)) {
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceivedDateBtn')) {
     $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
-        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes(htmlspecialchars((string) $_SERVER['REQUEST_URI'], ENT_QUOTES, 'UTF-8')) . "');</script>";
         exit;
     }
 
     if (!$canAssignEstimatedReceivedDate) {
-        echo "<script>alert('Security Error: You do not have permission to assign Estimate Received Dates.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+        echo "<script>alert('Security Error: You do not have permission to assign Estimate Received Dates.'); location.replace('" . addslashes(htmlspecialchars((string) $_SERVER['REQUEST_URI'], ENT_QUOTES, 'UTF-8')) . "');</script>";
         exit;
     }
 
@@ -66,14 +66,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceiv
         audit_log($auditData);
     }
 
-    echo "<script>alert('" . addslashes($assignmentResult['message']) . "'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+    echo "<script>alert('" . addslashes(htmlspecialchars((string) $assignmentResult['message'], ENT_QUOTES, 'UTF-8')) . "'); location.replace('" . addslashes(htmlspecialchars((string) $_SERVER['REQUEST_URI'], ENT_QUOTES, 'UTF-8')) . "');</script>";
     exit;
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('moveToPackBtn')) {
     $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
-        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes(htmlspecialchars((string) $_SERVER['REQUEST_URI'], ENT_QUOTES, 'UTF-8')) . "');</script>";
         exit;
     }
 
@@ -303,7 +303,7 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
 
                             <tr>
                                 <th class="hideColumn" scope="row">
-                                    <?= $row['id'] ?>
+                                    <?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>
                                 </th>
                                 <th scope="row">
                                     <?= $num++; ?>
@@ -313,7 +313,7 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
                                     <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
                                     <?php if (isActionAllowed("Delete", $pinAccess)): ?>
                                         <a class="btn btn-danger"
-                                            onclick="confirmationDialog('<?= $row['id'] ?>',['<?= $row['curr_unit'] ?>','<?= $row['country'] ?>'],'<?php echo $pageTitle ?>','<?= $redirectPage ?>','<?= $deleteRedirectPage ?>','D')"><i
+                                            onclick="confirmationDialog(<?= json_encode((string) $row['id']) ?>,[<?= json_encode((string) $row['curr_unit']) ?>,<?= json_encode((string) $row['country']) ?>],<?= json_encode((string) $pageTitle) ?>,<?= json_encode((string) $redirectPage) ?>,<?= json_encode((string) $deleteRedirectPage) ?>,'D')"><i
                                                 class="fas fa-trash-alt"></i></a>
                                     <?php endif; ?>
                                     <?php
@@ -379,26 +379,26 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
                                 <td scope="row"><?= isset($lazada_acc['name']) ? $lazada_acc['name'] : '' ?></td>
                                 <td scope="row"><?= isset($curr_unit['unit']) ? $curr_unit['unit'] : $row['curr_unit']; ?></td>
                                 <td scope="row"><?= isset($country['nicename']) ? $country['nicename'] : '' ?></td>
-                                <td scope="row"><?= $row['cust_id'] ?></td>
-                                <td scope="row"><?= $row['cust_name'] ?></td>
-                                <td scope="row"><?= $row['cust_email'] ?></td>
-                                <td scope="row"><?= $row['cust_phone'] ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) $row['cust_id'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) $row['cust_name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) $row['cust_email'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) $row['cust_phone'], ENT_QUOTES, 'UTF-8') ?></td>
                                 <td scope="row"><?= isset($country['nicename']) ? $country['nicename'] : '' ?></td>
-                                <td scope="row"><?= $row['oder_number'] ?></td>
-                                <td scope="row"><?= $row['sales_pic'] ?></td>
-                                <td scope="row"><?= $row['ship_rec_name'] ?></td>
-                                <td scope="row"><?= $row['ship_rec_address'] ?></td>
-                                <td scope="row"><?= $row['ship_rec_contact'] ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) $row['oder_number'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) $row['sales_pic'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) $row['ship_rec_name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) $row['ship_rec_address'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) $row['ship_rec_contact'], ENT_QUOTES, 'UTF-8') ?></td>
                                 <td scope="row"><?= isset($brand['name']) ? $brand['name'] : '' ?></td>
                                 <td scope="row"><?= isset($series['name']) ? $series['name'] : '' ?></td>
                                 <td scope="row"><?= isset($package['name']) ? $package['name'] : '' ?></td>
-                                <td scope="row"><?= $row['item_price_credit'] ?></td>
-                                <td scope="row"><?= $row['commision'] ?></td>
-                                <td scope="row"><?= $row['other_discount'] ?></td>
-                                <td scope="row"><?= $row['pay_fee'] ?></td>
-                                <td scope="row"><?= $row['final_income'] ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) $row['item_price_credit'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) $row['commision'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) $row['other_discount'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) $row['pay_fee'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) $row['final_income'], ENT_QUOTES, 'UTF-8') ?></td>
                                 <td scope="row"><?= isset($pay_meth['name']) ? $pay_meth['name'] : '' ?></td>
-                                <td scope="row"><?= $row['remark'] ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') ?></td>
                             </tr>
                         <?php } ?>
                     </tbody>

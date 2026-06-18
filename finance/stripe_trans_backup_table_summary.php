@@ -218,18 +218,18 @@ $img_path = SITEURL . img_server . 'finance/stripe_trans_backup/';
 
                                 <tr onclick="window.location='stripe_trans_backup_table_detail.php?ids=<?= urlencode($row['id']) ?>';" style="cursor:pointer;">
                                     <th class="hideColumn" scope="row">
-                                        <?= $row['id'] ?>
+                                        <?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>
                                     </th>
                                     <th class="text-center">
-                                        <input type="checkbox" class="export" value="<?= $row['id'] ?>">
+                                        <input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>">
                                     </th>
                                     <th scope="row">
                                         <?= $num++; ?>
                                     </th>
 
-                                    <td scope="row"><?php if (isset($row2['unit'])) echo $row2['unit'] ?></td>
+                                    <td scope="row"><?php if (isset($row2['unit'])) echo htmlspecialchars((string) $row2['unit'], ENT_QUOTES, 'UTF-8') ?></td>
                                     
-                                    <td scope="row"><?php if (isset($row['amount'])) echo $row['amount'] ?></td>
+                                    <td scope="row"><?php if (isset($row['amount'])) echo htmlspecialchars((string) $row['amount'], ENT_QUOTES, 'UTF-8') ?></td>
 
                                 </tr>
                             <?php }

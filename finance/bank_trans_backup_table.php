@@ -213,10 +213,10 @@ $img_path = SITEURL . img_server . 'finance/bank_trans_backup/';
 
                                 <tr>
                                     <th class="hideColumn" scope="row">
-                                        <?= $row['id'] ?>
+                                        <?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>
                                     </th>
                                     <th class="text-center">
-                                        <input type="checkbox" class="export" value="<?= $row['id'] ?>">
+                                        <input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>">
                                     </th>
                                     <th scope="row">
                                         <?= $num++; ?>
@@ -228,7 +228,7 @@ $img_path = SITEURL . img_server . 'finance/bank_trans_backup/';
                                     </td>
                                     <td scope="row">
                                         <?php if (isset($row['year']))
-                                            echo $row['year'] ?>
+                                            echo htmlspecialchars((string) $row['year'], ENT_QUOTES, 'UTF-8') ?>
                                         </td>
                                         <td scope="row">
                                         <?= $fullMonthName ?>
@@ -236,7 +236,7 @@ $img_path = SITEURL . img_server . 'finance/bank_trans_backup/';
                                     <td scope="row">
                                         <?php if (isset($row['attachment'])) { ?><a href="<?= $img_path . $row['attachment'] ?>"
                                                 target="_blank">
-                                                <?= $row['attachment'] ?>
+                                                <?= htmlspecialchars((string) $row['attachment'], ENT_QUOTES, 'UTF-8') ?>
                                             </a>
                                         <?php } ?>
                                     </td>

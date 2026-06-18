@@ -83,7 +83,7 @@ $result = getData('*', '', '', TAX_SETT, $finance_connect);
                                     ?>
 
                                     <tr>
-                                        <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                        <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                         <th scope="row"><?= $num++; ?></th>
                                         <td scope="row" class="btn-container">
                                             <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
@@ -91,12 +91,12 @@ $result = getData('*', '', '', TAX_SETT, $finance_connect);
                                             <?php renderDeleteButton($pinAccess, $row['id'], $row['percentage'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                         </td>
                                         <td scope="row"><?php if (isset($row3['name']))
-                                            echo $row3['name'] ?></td>
-                                            <td scope="row"><?= $row['name'] ?></td>
+                                            echo htmlspecialchars((string) $row3['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                            <td scope="row"><?= htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row"><?php if (isset($row['percentage']))
-                                            echo $row['percentage'] ?></td>
+                                            echo htmlspecialchars((string) $row['percentage'], ENT_QUOTES, 'UTF-8') ?></td>
                                             <td scope="row"><?php if (isset($row['remark']))
-                                            echo $row['remark'] ?></td>
+                                            echo htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') ?></td>
                                         </tr>
                                 <?php }
                             }

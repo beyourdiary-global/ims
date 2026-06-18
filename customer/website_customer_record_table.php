@@ -156,7 +156,7 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
 
                             <tr <?= $filterAttributes ?>>
                                 <th class="hideColumn" scope="row">
-                                    <?= $row['id'] ?>
+                                    <?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>
                                 </th>
                                 <th scope="row">
                                     <?= $num++; ?>
@@ -178,11 +178,11 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
                                         class="btn <?= $urbanismAction['is_member'] ? 'btn-success' : 'btn-secondary' ?> me-1 <?= $urbanismAction['disabled'] ? 'disabled' : '' ?>"
                                         href="<?= htmlspecialchars($urbanismAction['url'], ENT_QUOTES, 'UTF-8') ?>"
                                         title="<?= htmlspecialchars($urbanismAction['title'], ENT_QUOTES, 'UTF-8') ?>"
-                                        <?= $urbanismAction['disabled'] ? 'onclick="return false;" aria-disabled="true"' : '' ?>><i class="<?= $urbanismAction['icon_class'] ?>"></i></a>
+                                        <?= $urbanismAction['disabled'] ? 'onclick="return false;" aria-disabled="true"' : '' ?>><i class="<?= htmlspecialchars((string) $urbanismAction['icon_class'], ENT_QUOTES, 'UTF-8') ?>"></i></a>
                                 </td>
 
                                 <td scope="row">
-                                    <?= $row['cust_id'] ?>
+                                    <?= htmlspecialchars((string) $row['cust_id'], ENT_QUOTES, 'UTF-8') ?>
                                 </td>
 
                                 <td scope="row" class="customer-name-label-cell">
@@ -192,15 +192,15 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
                                 <td scope="row"><?= customerLabelRenderSummaryCell($customerLabelMeta, $customerTagRows) ?></td>
 
                                 <td scope="row">
-                                    <?= $row['contact'] ?>
+                                    <?= htmlspecialchars((string) $row['contact'], ENT_QUOTES, 'UTF-8') ?>
                                 </td>
 
                                 <td scope="row">
-                                    <?= $row['cust_email'] ?>
+                                    <?= htmlspecialchars((string) $row['cust_email'], ENT_QUOTES, 'UTF-8') ?>
                                 </td>
 
                                 <td scope="row">
-                                    <?= $row['cust_birthday'] ?>
+                                    <?= htmlspecialchars((string) $row['cust_birthday'], ENT_QUOTES, 'UTF-8') ?>
                                 </td>
 
                                 <td scope="row"><?= $picName ?></td>
@@ -214,16 +214,16 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
                                 <td scope="row"><?= $seriesName ?></td>
 
                                 <td scope="row">
-                                    <?= $row['ship_rec_name'] ?>
+                                    <?= htmlspecialchars((string) $row['ship_rec_name'], ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['ship_rec_add'] ?>
+                                    <?= htmlspecialchars((string) $row['ship_rec_add'], ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['ship_rec_contact'] ?>
+                                    <?= htmlspecialchars((string) $row['ship_rec_contact'], ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['remark'] ?>
+                                    <?= htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                             </tr>
                         <?php } ?>

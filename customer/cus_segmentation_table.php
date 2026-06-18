@@ -78,14 +78,14 @@ $amountCountMap = customerLabelGetLabelCountMap($connect, 'segmentation');
                                 $row2 = $brnd->fetch_assoc();
                                 if (isset($row['name'], $row['id']) && !empty($row['name'])) { ?>
                                     <tr>
-                                        <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                        <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                         <th scope="row"><?= $num++; ?></th>
                                         <td scope="row" class="btn-container">
                                             <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
                                             <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
                                             <?php renderDeleteButton($pinAccess, $row['id'], $row['colorCode'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                         </td>
-                                        <td scope="row"><?= $row['name'] ?></td>
+                                        <td scope="row"><?= htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row">
                                             <?php
                                             $amountCount = isset($amountCountMap[(int) $row['id']]) ? (int) $amountCountMap[(int) $row['id']] : 0;
@@ -98,15 +98,15 @@ $amountCountMap = customerLabelGetLabelCountMap($connect, 'segmentation');
                                             ?>
                                         </td>
                                         <td scope="row"><?php if (isset($row['colorCode'])) { ?><input type="color"
-                                                    value="<?= $row['colorCode'] ?>" disabled><?php } ?></td>
+                                                    value="<?= htmlspecialchars((string) $row['colorCode'], ENT_QUOTES, 'UTF-8') ?>" disabled><?php } ?></td>
                                         <td scope="row"><?php if (isset($row['boxFrom']))
-                                            echo $row['boxFrom'] ?></td>
+                                            echo htmlspecialchars((string) $row['boxFrom'], ENT_QUOTES, 'UTF-8') ?></td>
                                             <td scope="row"><?php if (isset($row['boxUntil']))
-                                            echo $row['boxUntil'] ?></td>
+                                            echo htmlspecialchars((string) $row['boxUntil'], ENT_QUOTES, 'UTF-8') ?></td>
                                             <td scope="row"><?php if (isset($row['brandSeries']))
-                                            echo $row2['name'] ?></td>
+                                            echo htmlspecialchars((string) $row2['name'], ENT_QUOTES, 'UTF-8') ?></td>
                                             <td scope="row"><?php if (isset($row['remark']))
-                                            echo $row['remark'] ?></td>
+                                            echo htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') ?></td>
                                         </tr>
                                     <?php
                                 }

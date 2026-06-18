@@ -71,7 +71,7 @@ $result = getData('*', '', '', SHOPEE_SG_SETT, $finance_connect);
                                 ?>
 
                                 <tr>
-                                    <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                    <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                     <th scope="row"><?= $num++; ?></th>
                                     <td scope="row" class="btn-container">
                                         <div class="d-flex align-items-center">
@@ -81,11 +81,11 @@ $result = getData('*', '', '', SHOPEE_SG_SETT, $finance_connect);
                                         </div>
                                     </td>
                                     <td scope="row"><?php if (isset($row['commission']))
-                                        echo $row['commission'] ?></td>
+                                        echo htmlspecialchars((string) $row['commission'], ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row"><?php if (isset($row['service']))
-                                        echo $row['service'] ?></td>
+                                        echo htmlspecialchars((string) $row['service'], ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row"><?php if (isset($row['transaction']))
-                                        echo $row['transaction'] ?></td>
+                                        echo htmlspecialchars((string) $row['transaction'], ENT_QUOTES, 'UTF-8') ?></td>
                                     </tr>
                             <?php }
 

@@ -220,10 +220,10 @@ $img_path = SITEURL . img_server . 'finance/atome_trans_backup/';
 
                                 <tr>
                                     <th class="hideColumn" scope="row">
-                                        <?= $row['id'] ?>
+                                        <?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>
                                     </th>
                                     <th class="text-center">
-                                        <input type="checkbox" class="export" value="<?= $row['id'] ?>">
+                                        <input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>">
                                     </th>
                                     <th scope="row">
                                         <?= $num++; ?>
@@ -237,16 +237,16 @@ $img_path = SITEURL . img_server . 'finance/atome_trans_backup/';
                                     <?php renderDeleteButton($pinAccess, $row['id'], $row['trans_id'], $row['atome_id'], $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                 </div>
                                 </td>
-                                    <td scope="row"><?php if (isset($row['trans_id'])) echo $row['trans_id'] ?></td>
-                                    <td scope="row"><?php if (isset($row['atome_id'])) echo $row['atome_id'] ?></td>
-                                    <td scope="row"><?php if (isset($row['date'])) echo $row['date'] ?></td>
-                                    <td scope="row"><?php if (isset($row['trans_outlet'])) echo $row['trans_outlet'] ?></td>
-                                    <td scope="row"><?php if (isset($row['platform_id'])) echo $row['platform_id'] ?></td>
-                                    <td scope="row"><?php if (isset($row['amt_rec'])) echo $row['amt_rec'] ?></td>
+                                    <td scope="row"><?php if (isset($row['trans_id'])) echo htmlspecialchars((string) $row['trans_id'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['atome_id'])) echo htmlspecialchars((string) $row['atome_id'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['date'])) echo htmlspecialchars((string) $row['date'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['trans_outlet'])) echo htmlspecialchars((string) $row['trans_outlet'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['platform_id'])) echo htmlspecialchars((string) $row['platform_id'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['amt_rec'])) echo htmlspecialchars((string) $row['amt_rec'], ENT_QUOTES, 'UTF-8') ?></td>
                                     <td scope="row">
                                         <?php if (isset($row['attachment'])) { ?><a href="<?= $img_path . $row['attachment'] ?>"
                                                 target="_blank">
-                                                <?= $row['attachment'] ?>
+                                                <?= htmlspecialchars((string) $row['attachment'], ENT_QUOTES, 'UTF-8') ?>
                                             </a>
                                         <?php } ?>
                                     </td>

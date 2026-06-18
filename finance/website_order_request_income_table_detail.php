@@ -342,9 +342,9 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
 
                             <tr>
                                 <th class="hideColumn" scope="row">
-                                    <?= $row['id'] ?>
+                                    <?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>
                                 </th>
-                                <th class="text-center"><input type="checkbox" class="export" value="<?= $row['id'] ?>"></th>
+                                <th class="text-center"><input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>"></th>
                                 <th scope="row">
                                     <?= $num++; ?>
                                 </th>
@@ -365,73 +365,73 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
                                 <td scope="row"><?= getMarketplaceRequestStatusLabel(isset($row['order_status']) ? $row['order_status'] : '') ?></td>
                                 <td scope="row"><?= !empty($row['estimated_received_date']) ? htmlspecialchars((string) $row['estimated_received_date'], ENT_QUOTES, 'UTF-8') : '' ?></td>
                                 <td scope="row">
-                                    <?= $row['order_id'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['order_id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['brand'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['brand'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['series'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['series'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                
                                 <td scope="row">
-                                    <?= $package['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($package['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $country['nicename'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($country['nicename'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
 
                                 <td scope="row">
-                                    <?= $currency['unit'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($currency['unit'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                               
                                 <td scope="row">
-                                    <?= $row['price'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['price'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
 
                                 <td scope="row">
-                                    <?= $row['shipping'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['shipping'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
 
                                 <td scope="row">
-                                    <?= $row['discount'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['discount'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
 
                                 <td scope="row">
-                                    <?= $row['total'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['total'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
 
                                 <td scope="row">
-                                    <?= $pay['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($pay['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['pic'] ?? '' ?>
-                                </td>
-
-                                <td scope="row">
-                                    <?= $cust_id['cust_id'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['pic'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
 
                                 <td scope="row">
-                                    <?= $row['cust_name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($cust_id['cust_id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                                </td>
+
+                                <td scope="row">
+                                    <?= htmlspecialchars((string) ($row['cust_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['cust_email'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['cust_email'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['cust_birthday'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['cust_birthday'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['shipping_name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['shipping_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['shipping_address'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['shipping_address'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['shipping_contact'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['shipping_contact'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['remark'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['remark'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                             </tr>
                         <?php }}}} ?>

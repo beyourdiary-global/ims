@@ -67,7 +67,7 @@ $result = getData('*', '', '', META_ADS_ACC, $finance_connect);
                             if (isset($row['accID'], $row['id'], $row['accName']) && !empty($row['accID'])) {
                                 ?>
                                 <tr>
-                                    <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                    <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                     <th scope="row"><?= $num++; ?></th>
                                     <td scope="row" class="btn-container">
                                         <div class="d-flex align-items-center">
@@ -76,8 +76,8 @@ $result = getData('*', '', '', META_ADS_ACC, $finance_connect);
                                             <?php renderDeleteButton($pinAccess, $row['id'], $row['accID'], $row['accName'], $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                         </div>
                                     </td>
-                                    <td scope="row"><?= $row['accID'] ?></td>
-                                    <td scope="row"><?= $row['accName'] ?></td>
+                                    <td scope="row"><?= htmlspecialchars((string) $row['accID'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?= htmlspecialchars((string) $row['accName'], ENT_QUOTES, 'UTF-8') ?></td>
                                 </tr>
                             <?php }
                         } ?>

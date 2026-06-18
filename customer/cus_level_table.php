@@ -83,14 +83,14 @@ $amountCountMap = customerLabelGetLabelCountMap($connect, 'level');
                                 }
                                 if (isset($row['name'], $row['id']) && !empty($row['name'])) { ?>
                                     <tr>
-                                        <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                        <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                         <th scope="row"><?= $num++; ?></th>
                                         <td scope="row" class="btn-container">
                                             <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
                                             <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
                                             <?php renderDeleteButton($pinAccess, $row['id'], $row['colorCode'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                         </td>
-                                        <td scope="row"><?= $row['name'] ?></td>
+                                        <td scope="row"><?= htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row">
                                             <?php
                                             $amountCount = isset($amountCountMap[(int) $row['id']]) ? (int) $amountCountMap[(int) $row['id']] : 0;
@@ -103,11 +103,11 @@ $amountCountMap = customerLabelGetLabelCountMap($connect, 'level');
                                             ?>
                                         </td>
                                         <td scope="row"><?php if (isset($row['colorCode'])) { ?><input type="color"
-                                                    value="<?= $row['colorCode'] ?>" disabled><?php } ?></td>
-                                        <td scope="row"><?php if (isset($row['purchaseAmountFrom'])) echo $row['purchaseAmountFrom'] ?></td>
-                                        <td scope="row"><?php if (isset($row['purchaseAmountUntil'])) echo $row['purchaseAmountUntil'] ?></td>
-                                        <td scope="row"><?php if (isset($currencyRow['unit'])) echo $currencyRow['unit'] ?></td>
-                                        <td scope="row"><?php if (isset($row['remark'])) echo $row['remark'] ?></td>
+                                                    value="<?= htmlspecialchars((string) $row['colorCode'], ENT_QUOTES, 'UTF-8') ?>" disabled><?php } ?></td>
+                                        <td scope="row"><?php if (isset($row['purchaseAmountFrom'])) echo htmlspecialchars((string) $row['purchaseAmountFrom'], ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td scope="row"><?php if (isset($row['purchaseAmountUntil'])) echo htmlspecialchars((string) $row['purchaseAmountUntil'], ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td scope="row"><?php if (isset($currencyRow['unit'])) echo htmlspecialchars((string) $currencyRow['unit'], ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td scope="row"><?php if (isset($row['remark'])) echo htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') ?></td>
                                     </tr>
                                     <?php
                                 }

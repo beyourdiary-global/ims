@@ -72,7 +72,7 @@ $result = getData('*', '', '', SHOPEE_SCR_SETT, $finance_connect);
                         ?>
     
                                 <tr>
-                                <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                     <th scope="row"><?= $num++; ?></th>
                                     <td scope="row" class="btn-container">
                                     <div class="d-flex align-items-center">
@@ -81,10 +81,10 @@ $result = getData('*', '', '', SHOPEE_SCR_SETT, $finance_connect);
                                     <?php renderDeleteButton($pinAccess, $row['id'], $currencyUnit,$row['commission'], $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                     </div>
                                     </td>
-                                    <td scope="row"><?php if (isset($row2['unit'])) echo $row2['unit'] ?></td>
-                                    <td scope="row"><?php if (isset($row['commission'])) echo $row['commission'] ?></td>
-                                    <td scope="row"><?php if (isset($row['service'])) echo $row['service'] ?></td>
-                                    <td scope="row"><?php if (isset($row['transaction'])) echo $row['transaction'] ?></td>
+                                    <td scope="row"><?php if (isset($row2['unit'])) echo htmlspecialchars((string) $row2['unit'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['commission'])) echo htmlspecialchars((string) $row['commission'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['service'])) echo htmlspecialchars((string) $row['service'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['transaction'])) echo htmlspecialchars((string) $row['transaction'], ENT_QUOTES, 'UTF-8') ?></td>
                                 </tr>
                         <?php }
                          }

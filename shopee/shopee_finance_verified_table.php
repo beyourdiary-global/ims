@@ -180,14 +180,14 @@ if ($result instanceof mysqli_result) {
 
                                 <tr>
                                     <th class="hideColumn" scope="row">
-                                        <?= $row['id'] ?>
+                                        <?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>
                                     </th>
                                     <th scope="row">
                                         <?= $num++; ?>
                                     </th>
 
                                     <td scope="row" class="btn-container">
-                                        <a href="?verify_id=<?= $row['id'] ?>" class="btn btn-sm btn-success btn-verified" onclick="return confirm('Mark this order as verified?')">
+                                        <a href="?verify_id=<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>" class="btn btn-sm btn-success btn-verified" onclick="return confirm('Mark this order as verified?')">
                                             Verified
                                         </a>
 
@@ -197,56 +197,56 @@ if ($result instanceof mysqli_result) {
                                     </td>
 
                                     <td scope="row">
-                                        <?= $acc['name'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($acc['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $curr['unit'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($curr['unit'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['orderID'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($row['orderID'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['date'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($row['date'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['time'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($row['time'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $pkg['name'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($pkg['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $brand['name'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($brand['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row"><?= customerLabelRenderShopeeBuyerCell($connect, $finance_connect, isset($row['buyer']) ? $row['buyer'] : '', '', $shopeeBuyerMetaMap) ?></td>
                                     <td scope="row">
-                                        <?= $pay['name'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($pay['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['price'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($row['price'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['voucher'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($row['voucher'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['act_shipping_fee'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($row['act_shipping_fee'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['service_fee'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($row['service_fee'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['trans_fee'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($row['trans_fee'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['ams_fee'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($row['ams_fee'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['fees'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($row['fees'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['final_amt'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($row['final_amt'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['remark'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($row['remark'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                 </tr>
                                 <?php } ?>
