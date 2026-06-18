@@ -179,6 +179,44 @@ function generateYearlyGoalForm($goals = [], $isReadOnly = false)
 
 }
 ?>
+<head>
+        <style>
+        .accordion-button {
+            font-weight: bold;
+        }
+
+        .goal {
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        .month-total {
+            font-weight: bold;
+            color: #333;
+        }
+
+        .month-total-display {
+            margin-left: 10px;
+            font-weight: normal;
+            color: #555;
+        }
+
+        .floatLeftBtn {
+            width: 20%;
+            height: 42px;
+            display: flex;
+            align-items: center;
+            text-align: center;
+            justify-content: center;
+        }
+
+        .textMIddle {
+            text-align: center;
+            justify-content: center;
+            display: flex;
+        }
+    </style>
+</head>
 
 <script>
     document.addEventListener('DOMContentLoaded', function () {
@@ -262,43 +300,6 @@ function generateYearlyGoalForm($goals = [], $isReadOnly = false)
         });
     });
 </script>
-
-<style>
-    .accordion-button {
-        font-weight: bold;
-    }
-
-    .goal {
-        width: 100%;
-        box-sizing: border-box;
-    }
-
-    .month-total {
-        font-weight: bold;
-        color: #333;
-    }
-
-    .month-total-display {
-        margin-left: 10px;
-        font-weight: normal;
-        color: #555;
-    }
-
-    .floatLeftBtn {
-        width: 20%;
-        height: 42px;
-        display: flex;
-        align-items: center;
-        text-align: center;
-        justify-content: center;
-    }
-
-    .textMIddle {
-        text-align: center;
-        justify-content: center;
-        display: flex;
-    }
-</style>
 
 <body>
 

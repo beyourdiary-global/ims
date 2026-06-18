@@ -128,10 +128,7 @@ $tblName = DW_TOP_UP_RECORD;
 <link rel="stylesheet" href="../css/main.css">
 </head>
 
-<script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
-
-
-<body>
+<script src="<?= $SITEURL ?>/js/list_page_common.js"></script><body>
     
 
     <div class="page-load-cover">

@@ -57,6 +57,32 @@ if ($result instanceof mysqli_result) {
 
     <head>
         <link rel="stylesheet" href="../css/main.css">
+        <style>
+            .btn-verified {
+                display: inline-block;
+                padding: 0.25rem 0.5rem;
+                font-size: 0.875rem;
+                font-weight: 500;
+                color: #fff;
+                background-color: #0d6efd;
+                border: 1px solid #0d6efd;
+                border-radius: 0.25rem;
+                text-decoration: none;
+                transition: background-color 0.2s, box-shadow 0.2s;
+            }
+        
+            .btn-verified:hover {
+                background-color: #0b5ed7;
+                text-decoration: none;
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+            }
+        
+            .btn-verified:active {
+                background-color: #0a58ca;
+                box-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
+            }
+        </style>
+
     </head>
 
     <script>
@@ -64,33 +90,6 @@ if ($result instanceof mysqli_result) {
             createSortingTable('shopee_finance_verified_table');
         });
     </script>
-
-    <style>
-        .btn-verified {
-            display: inline-block;
-            padding: 0.25rem 0.5rem;
-            font-size: 0.875rem;
-            font-weight: 500;
-            color: #fff;
-            background-color: #0d6efd;
-            border: 1px solid #0d6efd;
-            border-radius: 0.25rem;
-            text-decoration: none;
-            transition: background-color 0.2s, box-shadow 0.2s;
-        }
-    
-        .btn-verified:hover {
-            background-color: #0b5ed7;
-            text-decoration: none;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-        }
-    
-        .btn-verified:active {
-            background-color: #0a58ca;
-            box-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
-        }
-    </style>
-
 
     <body>
 <?php if (!empty($verifyMessage)): ?>

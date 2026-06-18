@@ -192,17 +192,7 @@ foreach ($picAutocompleteOptions as $picOption) {
 
 <head>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
-</head>
-
-<script>
-    
-
-    $(document).ready(() => {
-        createSortingTable('campaign_table', { searching: true });
-    });
-</script>
-
-<style>
+    <style>
     .campaign-action-btns {
         min-width: 310px;
         white-space: nowrap;
@@ -272,9 +262,16 @@ foreach ($picAutocompleteOptions as $picOption) {
         border-color: #19a179;
         color: #fff;
     }
-</style>
+    </style>
+</head>
 
-<body>
+<script>
+    
+
+    $(document).ready(() => {
+        createSortingTable('campaign_table', { searching: true });
+    });
+</script><body>
     
 
     <div class="page-load-cover">

@@ -23,13 +23,6 @@ $amountCountMap = customerLabelGetLabelCountMap($connect, 'repeat');
 
 <script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
 
-
-<style>
-    
-
-    
-</style>
-
 <body>
     
 

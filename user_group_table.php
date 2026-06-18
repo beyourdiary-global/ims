@@ -25,10 +25,7 @@ if (!$result) {
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
 </head>
 
-<script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
-
-
-<body>
+<script src="<?= $SITEURL ?>/js/list_page_common.js"></script><body>
     
 
     

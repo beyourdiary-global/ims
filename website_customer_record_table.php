@@ -25,6 +25,11 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
 
 <head>
     <link rel="stylesheet" href="../css/main.css">
+    <style>
+        .customer-name-label-cell {
+            white-space: nowrap;
+        }
+    </style>
 </head>
 
 <script>
@@ -48,13 +53,6 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
         });
     });
 </script>
-
-
-<style>
-    .customer-name-label-cell {
-        white-space: nowrap;
-    }
-</style>
 
 <body>
 

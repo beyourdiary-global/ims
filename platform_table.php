@@ -23,13 +23,6 @@ $result = getData('*', '', '', $tblName, $connect);
 
 <script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
 
-
-<style>
-    
-
-    
-</style>
-
 <body>
     
 

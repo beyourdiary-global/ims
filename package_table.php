@@ -150,22 +150,16 @@ if (!$result) {
 
 <head>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
+    <style>
+        .platform-item-id-badge {
+            font-size: 14.4px;
+            font-weight: normal;
+            line-height: 1.5;
+        }
+    </style>
 </head>
 
 <script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
-
-
-<style>
-    
-
-    
-
-    .platform-item-id-badge {
-        font-size: 14.4px;
-        font-weight: normal;
-        line-height: 1.5;
-    }
-</style>
 
 <body>
     

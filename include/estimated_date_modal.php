@@ -17,36 +17,39 @@ $estimatedDateModalSubmitName = isset($estimatedDateModalSubmitName) && trim((st
 $estimatedDateModalPlatformSection = isset($activePlatform) ? (string) $activePlatform : '';
 $estimatedDateModalCsrfToken = isset($_SESSION['csrf_token']) ? (string) $_SESSION['csrf_token'] : '';
 ?>
-<style>
-    .estimated-date-modal {
-        position: fixed;
-        inset: 0;
-        z-index: 2000;
-        display: none;
-        align-items: center;
-        justify-content: center;
-        background: rgba(0, 0, 0, 0.45);
-        padding: 16px;
-    }
+<head>
+    <style>
+        .estimated-date-modal {
+            position: fixed;
+            inset: 0;
+            z-index: 2000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(0, 0, 0, 0.45);
+            padding: 16px;
+        }
 
-    .estimated-date-modal.is-open {
-        display: flex;
-    }
+        .estimated-date-modal.is-open {
+            display: flex;
+        }
 
-    .estimated-date-modal__dialog {
-        width: 100%;
-        max-width: 420px;
-        border-radius: 12px;
-        background: #fff;
-        box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
-        padding: 20px;
-    }
+        .estimated-date-modal__dialog {
+            width: 100%;
+            max-width: 420px;
+            border-radius: 12px;
+            background: #fff;
+            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
+            padding: 20px;
+        }
 
-    .estimated-date-modal__close-btn,
-    .estimated-date-modal__action-btn {
-        text-transform: none !important;
-    }
-</style>
+        .estimated-date-modal__close-btn,
+        .estimated-date-modal__action-btn {
+            text-transform: none !important;
+        }
+    </style>
+</head>
+
 
 <div id="estimatedReceivedDateModal" class="estimated-date-modal" aria-hidden="true" onclick="if (event.target === this) closeEstimatedReceivedDateModal();">
     <div class="estimated-date-modal__dialog">

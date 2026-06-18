@@ -476,9 +476,6 @@ $h = function ($value) {
 <html>
 <head>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
-    <script>
-        
-    </script>
     <style>
         .customer-daily-report-stack {
             display: flex;

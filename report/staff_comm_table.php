@@ -23,13 +23,6 @@ $result = getData('*', '', '', AGENT, $finance_connect);
         createSortingTable('agent_table');
     });
 </script>
-
-<style>
-    
-
-    
-</style>
-
 <body>
 
     

@@ -132,12 +132,6 @@ if ($accRst) {
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
 </head>
 
-<style>
-    
-
-    
-</style>
-
 <body>
     
 

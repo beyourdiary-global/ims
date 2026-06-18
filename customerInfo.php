@@ -239,10 +239,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 <head>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
 </head>
-<style>
 
-    
-</style>
 <body>
     
 

@@ -61,6 +61,27 @@ if (post('to') && post('from')) {
 
 <head>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
+    <style>
+        .title-form {
+            font-size: 32px;
+            font-weight: 500;
+            color: #000000;
+        }
+
+        .chkRate {
+            background-color: #FFFFFF;
+            border-radius: 5px;
+            box-shadow: 0px 0px 1px 1px #E4E6E6;
+        }
+
+        .disabledSelection {
+            pointer-events: none;
+        }
+
+        p{
+            margin-bottom: 0;
+        }
+    </style>
 </head>
 
 <script>
@@ -70,27 +91,6 @@ if (post('to') && post('from')) {
     preloader(500);
 </script>
 
-<style>
-    .title-form {
-        font-size: 32px;
-        font-weight: 500;
-        color: #000000;
-    }
-
-    .chkRate {
-        background-color: #FFFFFF;
-        border-radius: 5px;
-        box-shadow: 0px 0px 1px 1px #E4E6E6;
-    }
-
-    .disabledSelection {
-        pointer-events: none;
-    }
-
-    p{
-        margin-bottom: 0;
-    }
-</style>
 
 <body>
     

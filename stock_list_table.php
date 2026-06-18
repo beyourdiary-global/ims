@@ -108,6 +108,15 @@ if (!empty($orderNumbers) && !empty($warehouseIds)) {
 <html>
 <head>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
+    <style>
+        
+        .cell-lines div {
+            margin-bottom: 4px;
+        }
+        .cell-lines div:last-child {
+            margin-bottom: 0;
+        }
+    </style>
 </head>
 
 <script>
@@ -126,17 +135,6 @@ if (!empty($orderNumbers) && !empty($warehouseIds)) {
         }
     });
 </script>
-
-<style>
-    
-    
-    .cell-lines div {
-        margin-bottom: 4px;
-    }
-    .cell-lines div:last-child {
-        margin-bottom: 0;
-    }
-</style>
 
 <body>
     

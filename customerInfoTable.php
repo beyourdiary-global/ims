@@ -68,13 +68,6 @@ $customerTagMap = customerTagGetCustomerTagMap($connect, 'customer_info', $custo
         });
     });
 </script>
-
-<style>
-    
-
-    
-</style>
-
 <body>
     
 

@@ -24,6 +24,19 @@ if ($result instanceof mysqli_result) {
 
 <head>
     <link rel="stylesheet" href="../css/main.css">
+    <style>
+    .checkedBtn{
+        background-color:#fb7624;
+        color:white;
+        padding:5px 10px;
+        font-weight:500;
+        border-radius:6px;
+    }
+    .checkedBtn:hover{
+        background-color:#fc9a4e;
+        color:white;
+    }
+    </style>
 </head>
 
 <script>
@@ -31,20 +44,6 @@ if ($result instanceof mysqli_result) {
         createSortingTable('shopee_order_req_table');
     });
 </script>
-<style>
-.checkedBtn{
-    background-color:#fb7624;
-    color:white;
-    padding:5px 10px;
-    font-weight:500;
-    border-radius:6px;
-}
-.checkedBtn:hover{
-    background-color:#fc9a4e;
-    color:white;
-}
-</style>
-
 
 <body>
 

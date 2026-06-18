@@ -467,12 +467,13 @@ if ($redirectToCreateInvoicePage == 1 && isset($returnData) && $returnData && !e
 <head>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
     <link rel="stylesheet" href="./css/package.css">
+    <style>
+    span.input-group-text{
+        border:none;
+    }
+    </style>
 </head>
-<style>
-span.input-group-text{
-    border:none;
-}
-</style>
+
 <body style="background-color: rgb(240, 241, 247);">
     
 

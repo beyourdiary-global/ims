@@ -74,13 +74,6 @@ if ($countResult instanceof mysqli_result) {
 
 <script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
 
-
-<style>
-    
-
-    
-</style>
-
 <body>
     
 

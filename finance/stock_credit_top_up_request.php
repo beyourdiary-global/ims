@@ -270,13 +270,12 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 
 <head>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
+    <style>
+        .requireRed {
+            color: red;
+        }
+    </style>
 </head>
-
-<style>
-    .requireRed {
-        color: red;
-    }
-</style>
 
 <body>
     

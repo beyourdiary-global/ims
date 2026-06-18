@@ -23,12 +23,6 @@ $result = getData('*', '', '', COURIER, $connect);
     });
 </script>
 
-<style>
-    
-
-    
-</style>
-
 <body>
 
     <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">

@@ -38,23 +38,17 @@ if (!function_exists('messageShortcutsTablePreview')) {
 
 <head>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
+    <style>
+        .message-shortcuts-preview-cell {
+            max-width: 520px;
+            white-space: normal;
+            overflow-wrap: anywhere;
+        }
+    </style>
+
 </head>
 
 <script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
-
-
-<style>
-    
-
-    
-
-    .message-shortcuts-preview-cell {
-        max-width: 520px;
-        white-space: normal;
-        overflow-wrap: anywhere;
-    }
-</style>
-
 <body>
     
 

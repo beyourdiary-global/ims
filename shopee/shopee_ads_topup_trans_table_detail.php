@@ -138,10 +138,7 @@ $result = getData('*', '', '', SHOPEE_ADS_TOPUP, $finance_connect);
     $(document).ready(() => {
         createSortingTable('shopee_ads_topup_trans_table');
     });
-</script>
-
-
-<body>
+</script><body>
 
     <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
 

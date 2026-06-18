@@ -290,6 +290,11 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 
 <head>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
+    <style>
+        .required-dot {
+    color: red;
+    }
+    </style>
 </head>
 
 <body>
@@ -301,11 +306,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                 <?php echo $pageActionTitle ?>
             </p>
         </div>
-<style>
-    .required-dot {
-  color: red;
-}
-</style>
+
         <div id="formContainer" class="container d-flex justify-content-center">
             <div class="col-8 col-md-6 formWidthAdjust">
                 <form id="form" method="post" novalidate>

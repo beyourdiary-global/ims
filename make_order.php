@@ -49,24 +49,26 @@ $country_telcode_from = getCountryTelCode($from, $connect);
 $country_telcode_to = getCountryTelCode($to, $connect);
 
 ?>
+<head>
+    <style>
+        .input-group-text {
+            max-width: 55px;
+            width: 55px;
+            display: flex;
+            justify-content: center;
+        }
 
-<style>
-    .input-group-text {
-        max-width: 55px;
-        width: 55px;
-        display: flex;
-        justify-content: center;
-    }
+        .invalid-msg {
+            color: red;
+            margin-bottom: 0;
+        }
 
-    .invalid-msg {
-        color: red;
-        margin-bottom: 0;
-    }
+        p {
+            margin-bottom: 0;
+        }
+    </style>
 
-    p {
-        margin-bottom: 0;
-    }
-</style>
+</head>
 
 <script>
     preloader(500);

@@ -41,13 +41,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'delete') {
 
 <script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
 
-
-<style>
-    
-
-    
-</style>
-
 <body>
     
 

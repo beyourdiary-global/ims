@@ -386,24 +386,24 @@ $viewMessageHtml = isset($row['shortcuts_message']) ? messageShortcutsSanitizeHt
 
 <head>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
+    <style>
+        .message-shortcuts-preview {
+            min-height: 260px;
+            background-color: #fff;
+            overflow-wrap: anywhere;
+            white-space: normal;
+        }
+
+        .message-shortcuts-preview p:last-child,
+        .message-shortcuts-preview ul:last-child,
+        .message-shortcuts-preview ol:last-child,
+        .message-shortcuts-preview blockquote:last-child,
+        .message-shortcuts-preview pre:last-child {
+            margin-bottom: 0;
+        }
+    </style>
+
 </head>
-
-<style>
-    .message-shortcuts-preview {
-        min-height: 260px;
-        background-color: #fff;
-        overflow-wrap: anywhere;
-        white-space: normal;
-    }
-
-    .message-shortcuts-preview p:last-child,
-    .message-shortcuts-preview ul:last-child,
-    .message-shortcuts-preview ol:last-child,
-    .message-shortcuts-preview blockquote:last-child,
-    .message-shortcuts-preview pre:last-child {
-        margin-bottom: 0;
-    }
-</style>
 
 <body>
     
