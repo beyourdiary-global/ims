@@ -681,6 +681,8 @@ if ($result instanceof mysqli_result) {
                                 <?php renderViewEditButtonByPin("2", $redirectPage, $row, $accessActionKey, $act_2); ?>
                                 <?php renderDeleteButtonByPin($accessActionKey, $row['id'], $row['orderID'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage); ?> 
                                 <?php
+                                $statusCode = shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '');
+
                                 $estimatedDateRange = function_exists('shopeeOmsGetEstimatedReceivedDateRange')
                                     ? shopeeOmsGetEstimatedReceivedDateRange($row)
                                     : array('min_date' => $estimatedDateMin, 'max_date' => $estimatedDateMax);
@@ -695,12 +697,9 @@ if ($result instanceof mysqli_result) {
                                      data-max-date="<?= htmlspecialchars((string) $estimatedDateRange['max_date'], ENT_QUOTES, 'UTF-8') ?>"
                                      title="Assign Estimate Received Date"><i class="fa-solid fa-calendar-days"></i></button>
                                 <?php } ?>
-                                <?php if($statusCode === 'WAFC' && $canVerifyAction){ ?>
+                                <?php if ($statusCode === 'WAFC' && $canVerifyAction) { ?>
                                  <a href="?verify_id=<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>&month=<?= urlencode($monthFilter) ?>&status=<?= urlencode($statusFilter) ?>" class="btn btn-sm btn-success btn-verified" onclick="return confirm('Mark this order as verified?')">Verified</a>
                                 <?php } ?>
-                                <?php
-                                $statusCode = shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '');
-                                ?>
                                 <?php if ($statusCode === 'TP') { ?>
                                  <a class="btn btn-sm btn-rounded btn-primary" href="<?= htmlspecialchars((string) shopeeOmsGetOrderSourceInfoUrl('shopee', (int) $row['id']), ENT_QUOTES, 'UTF-8') ?>" title="Open QR Info">
                                      <i class="fa-solid fa-qrcode"></i>
