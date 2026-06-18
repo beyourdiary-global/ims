@@ -12,7 +12,7 @@ $redirect_page = 'dashboard.php';  // if no value get
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 // Check if required parameters are missing and redirect if necessary
 if (!$barcode || !$prod_id || !$whse_id || !$usr_id) {
-    echo "<script type='text/javascript'>alert('Invalid request for stock-out. Please provide valid data.'); window.location.href ='$SITEURL/dashboard.php';</script>";
+    renderNotificationScript('Invalid request for stock-out. Please provide valid data.', 'error', $SITEURL . '/dashboard.php');
     exit; // Terminate further execution
 }
 
@@ -85,16 +85,15 @@ if ($prod_barcode_slot_required && $prod_barcode_slot_total >= 1) {
 
 // Check if database queries fail and redirect if necessary
 if (!$rst_prod_info || !$rst_whse_info || !$rst_usr) {
-    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.'); window.location.href ='$SITEURL/dashboard.php';</script>";
+    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error', $SITEURL . '/dashboard.php');
 }
 
 if(!$stock_rec){
-    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.'); window.location.href ='$SITEURL/dashboard.php';</script>";
+    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error', $SITEURL . '/dashboard.php');
 }
 
 if ($stock_rec['stock_out_date'] != null && $stock_rec['stock_out_person_in_charges'] != null &&  $stock_rec['stock_out_customer_purchase_id'] != null) {
-    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error', $SITEURL . '/dashboard.php');
 }
 
 // Get user info and generate buttons
@@ -387,8 +386,10 @@ if (post('usrBtn')) {
         const usr_id = '<?=$usr_id?>';
 
         if (!barcode || !prod_id || !whse_id || !usr_id) {
-            alert('Invalid request for stock-in. Please provide valid data.');
-            window.location.href = '<?=$SITEURL?>/dashboard.php';
+            showNotification('Invalid request for stock-in. Please provide valid data.', 'error');
+            window.setTimeout(function () {
+                window.location.href = '<?=$SITEURL?>/dashboard.php';
+            }, 1200);
         }
 
         const isBarcodeRequired = <?=$prod_barcode_slot_required ? 'true' : 'false'?>;

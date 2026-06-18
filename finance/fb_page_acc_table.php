@@ -8,7 +8,7 @@ $redirect_page = $SITEURL . '/finance/fb_page_acc.php';
 $deleteRedirectPage = $SITEURL . '/finance/fb_page_acc_table.php';
 $result = getData('*', '', '', FB_PAGE_ACC, $finance_connect);
 if (!$result) {
-    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
 }
 ?>

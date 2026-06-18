@@ -36,7 +36,7 @@ if (!is_array($pinAccess) || count($pinAccess) === 0) {
         echo "<script>location.replace('../finance/waiting_to_pack.php');</script>";
         exit;
     }
-    echo "<script>alert('You do not have permission to view Shopee All Orders.'); location.replace('../dashboard.php');</script>";
+    renderNotificationScript('You do not have permission to view Shopee All Orders.', 'error', '../dashboard.php', 1200, true);
     exit;
 }
 
@@ -84,7 +84,7 @@ if (
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceivedDateBtn')) {
     if (!$canAssignEstimatedReceivedDate) {
-        echo "<script>alert('Security Error: You do not have permission to assign Estimate Received Dates.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+        renderNotificationScript('Security Error: You do not have permission to assign Estimate Received Dates.', 'error', (string) $_SERVER['REQUEST_URI'], 1200, true);
         exit;
     }
 
@@ -118,7 +118,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceiv
         audit_log($auditData);
     }
 
-    echo "<script>alert('" . addslashes($assignmentResult['message']) . "'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+    $assignmentMessage = (string) $assignmentResult['message'];
+    renderNotificationScript($assignmentMessage, resolveNotificationType($assignmentMessage, 'info'), (string) $_SERVER['REQUEST_URI'], 1200, true);
     exit;
 }
 
@@ -130,7 +131,8 @@ if (isset($_GET['verify_id'])) {
         'source_page' => $pageTitle,
         'remark' => 'Verified from all orders list.',
     ));
-    echo "<script>alert('" . addslashes(isset($verifyResult['message']) ? $verifyResult['message'] : 'Unable to verify order.') . "'); location.replace('shopee_order_req_table.php');</script>";
+    $verifyMessage = (string) (isset($verifyResult['message']) ? $verifyResult['message'] : 'Unable to verify order.');
+    renderNotificationScript($verifyMessage, resolveNotificationType($verifyMessage, 'info'), 'shopee_order_req_table.php', 1200, true);
     exit;
 }
 
@@ -142,14 +144,15 @@ if (isset($_GET['complete_id'])) {
         'source_page' => $pageTitle,
         'remark' => 'Completed from all orders list.',
     ));
-    echo "<script>alert('" . addslashes(isset($completeResult['message']) ? $completeResult['message'] : 'Unable to complete order.') . "'); location.replace('shopee_order_req_table.php');</script>";
+    $completeMessage = (string) (isset($completeResult['message']) ? $completeResult['message'] : 'Unable to complete order.');
+    renderNotificationScript($completeMessage, resolveNotificationType($completeMessage, 'info'), 'shopee_order_req_table.php', 1200, true);
     exit;
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['move_to_pack_id'])) {
     $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
-        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('shopee_order_req_table.php');</script>";
+        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', 'shopee_order_req_table.php', 1200, true);
         exit;
     }
 
@@ -168,7 +171,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['move_to_pack_
         'action' => 'move_to_pack',
         'platform' => 'shopee',
     ));
-    echo '<script>alert(' . json_encode((string) (isset($moveToPackResult['message']) ? $moveToPackResult['message'] : 'Unable to move order to To Pack.'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . '); location.replace(' . json_encode('shopee_order_req_table.php', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ');</script>';
+    $moveToPackMessage = (string) (isset($moveToPackResult['message']) ? $moveToPackResult['message'] : 'Unable to move order to To Pack.');
+    renderNotificationScript($moveToPackMessage, resolveNotificationType($moveToPackMessage, 'info'), 'shopee_order_req_table.php', 1200, true);
     exit;
 }
 
@@ -176,7 +180,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['force_wafc_id
     $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
 
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
-        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('shopee_order_req_table.php');</script>";
+        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', 'shopee_order_req_table.php', 1200, true);
         exit;
     }
 
@@ -212,7 +216,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['force_wafc_id
         ));
     }
 
-    echo "<script>alert('" . addslashes(isset($wafcResult['message']) ? $wafcResult['message'] : 'Unable to move order to WAFC.') . "'); location.replace('shopee_order_req_table.php');</script>";
+    $wafcMessage = (string) (isset($wafcResult['message']) ? $wafcResult['message'] : 'Unable to move order to WAFC.');
+    renderNotificationScript($wafcMessage, resolveNotificationType($wafcMessage, 'info'), 'shopee_order_req_table.php', 1200, true);
     exit;
 }
 
@@ -230,7 +235,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['return_id']))
 
     $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
-        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('shopee_order_req_table.php');</script>";
+        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', 'shopee_order_req_table.php', 1200, true);
         exit;
     }
 
@@ -242,7 +247,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['return_id']))
         'remark' => 'Marked as Return from all orders list.',
         'action' => 'mark_return',
     ));
-    echo "<script>alert('" . addslashes(isset($returnResult['message']) ? $returnResult['message'] : 'Unable to mark order as Return.') . "'); location.replace('shopee_order_req_table.php');</script>";
+    $returnMessage = (string) (isset($returnResult['message']) ? $returnResult['message'] : 'Unable to mark order as Return.');
+    renderNotificationScript($returnMessage, resolveNotificationType($returnMessage, 'info'), 'shopee_order_req_table.php', 1200, true);
     exit;
 }
 

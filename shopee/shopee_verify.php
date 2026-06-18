@@ -25,7 +25,7 @@ if (!is_array($pinAccess) || count($pinAccess) === 0) {
         echo "<script>location.replace('shopee_processing_order.php');</script>";
         exit;
     }
-    echo "<script>alert('You do not have permission to view Shopee Verify Order.'); location.replace('../dashboard.php');</script>";
+    renderNotificationScript('You do not have permission to view Shopee Verify Order.', 'error', '../dashboard.php', 1200, true);
     exit;
 }
 
@@ -89,12 +89,12 @@ if (
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceivedDateBtn')) {
     $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
-        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', (string) $_SERVER['REQUEST_URI'], 1200, true);
         exit;
     }
 
     if (!$canAssignEstimatedReceivedDate) {
-        echo "<script>alert('Security Error: You do not have permission to assign Estimate Received Dates.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+        renderNotificationScript('Security Error: You do not have permission to assign Estimate Received Dates.', 'error', (string) $_SERVER['REQUEST_URI'], 1200, true);
         exit;
     }
 
@@ -128,19 +128,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceiv
         audit_log($auditData);
     }
 
-    echo "<script>alert('" . addslashes($assignmentResult['message']) . "'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+    $assignmentMessage = (string) $assignmentResult['message'];
+    renderNotificationScript($assignmentMessage, resolveNotificationType($assignmentMessage, 'info'), (string) $_SERVER['REQUEST_URI'], 1200, true);
     exit;
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['verify_id'])) {
     $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
-        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('shopee_verify.php');</script>";
+        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', 'shopee_verify.php', 1200, true);
         exit;
     }
     
     if (!$canVerifyAction) {
-        echo "<script>alert('Security Error: You do not have permission to verify orders.'); location.replace('shopee_verify.php');</script>";
+        renderNotificationScript('Security Error: You do not have permission to verify orders.', 'error', 'shopee_verify.php', 1200, true);
         exit;
     }
 
@@ -160,7 +161,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['verify_id']))
     $oldStatusCode = shopeeOmsNormalizeStatusCode($oldStatus);
 
     if (!in_array($oldStatusCode, array('OC', 'WAFC'), true)) {
-        echo "<script>alert('Only OC or WAFC orders can be verified.'); location.replace('shopee_verify.php');</script>";
+        renderNotificationScript('Only OC or WAFC orders can be verified.', 'warning', 'shopee_verify.php', 1200, true);
         exit;
     }
 
@@ -196,7 +197,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['verify_id']))
         ));
     }
 
-    echo "<script>alert('" . addslashes(isset($verifyResult['message']) ? $verifyResult['message'] : 'Unable to verify order.') . "'); location.replace('shopee_verify.php');</script>";
+    $verifyMessage = (string) (isset($verifyResult['message']) ? $verifyResult['message'] : 'Unable to verify order.');
+    renderNotificationScript($verifyMessage, resolveNotificationType($verifyMessage, 'info'), 'shopee_verify.php', 1200, true);
     exit;
 }
 
@@ -213,7 +215,7 @@ shopeeOmsHandleMoveToWafcWithReceivedDatePost($connect, $finance_connect, array(
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['return_id'])) {
     $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
-        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('shopee_verify.php');</script>";
+        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', 'shopee_verify.php', 1200, true);
         exit;
     }
 
@@ -225,7 +227,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['return_id']))
         'remark' => 'Marked as Return from verify order list.',
         'action' => 'mark_return',
     ));
-    echo "<script>alert('" . addslashes(isset($returnResult['message']) ? $returnResult['message'] : 'Unable to mark order as Return.') . "'); location.replace('shopee_verify.php');</script>";
+    $returnMessage = (string) (isset($returnResult['message']) ? $returnResult['message'] : 'Unable to mark order as Return.');
+    renderNotificationScript($returnMessage, resolveNotificationType($returnMessage, 'info'), 'shopee_verify.php', 1200, true);
     exit;
 }
 

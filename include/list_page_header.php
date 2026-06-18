@@ -80,7 +80,6 @@ $networkFailRedirect = isset($listPageNetworkFailRedirect) && trim((string) $lis
     : (defined('SITEURL') ? SITEURL . '/dashboard.php' : 'dashboard.php');
 
 if (!isset($connect) || !$connect) {
-    echo '<script>alert("Network error. Please try again later.");location.href=' . json_encode($networkFailRedirect) . ';</script>';
+    renderNotificationScript('Network error. Please try again later.', 'error', $networkFailRedirect);
     exit;
 }
-

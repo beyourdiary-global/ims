@@ -56,10 +56,8 @@ if ($row_id) { //edit/remove/view
 }
 
 if (!($row_id) && !($act)) {
-    echo '<script>
-    alert("Invalid action.");
-    window.location.href = "' . $redirect_page . '"; // Redirect to previous page
-    </script>';
+    renderNotificationScript('Invalid action.', 'error', $redirect_page);
+
 }
 
 //dropdown list for currency

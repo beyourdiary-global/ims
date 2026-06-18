@@ -45,10 +45,8 @@ if ($act == 'D') {
 }
 
 if (!($dataID) && !($act)) {
-    echo '<script>
-    alert("Invalid action.");
-    window.location.href = "' . $redirect_page . '"; // Redirect to previous page
-    </script>';
+    renderNotificationScript('Invalid action.', 'error', $redirect_page);
+
 }
 
 function isDuplicateRecordForNameAndBrand($name, $agt_brand, $tbl, $connect, $primaryKeyValue)
@@ -369,7 +367,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
             if (isset($echoVal)) {
                 $brand_rst = getData('name', "id = '$echoVal'", '', BRAND, $connect);
                 if (!$brand_rst) {
-                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                 }
                 $brand_row = $brand_rst->fetch_assoc();
@@ -402,7 +400,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         if (isset($echoVal)) {
             $user_rst = getData('name', "id = '$echoVal'", '', USR_USER, $connect);
             if (!$user_rst) {
-                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                 echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
             }
             $user_row = $user_rst->fetch_assoc();
@@ -465,7 +463,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
             if (isset($echoVal)) {
                 $country_rst = getData('name', "id = '$echoVal'", '', COUNTRIES, $connect);
                 if (!$country_rst) {
-                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                 }
                 $country_row = $country_rst->fetch_assoc();

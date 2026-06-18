@@ -51,7 +51,7 @@ $(document).ready(function ($) {
 
       window.location.href = "fb_ads_topup_trans_table.php";
     } else {
-      alert("Please select data to export.");
+      showNotification("Please select data to export.", "warning");
     }
   });
 });

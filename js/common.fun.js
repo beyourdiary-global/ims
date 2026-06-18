@@ -6,6 +6,101 @@ function objValue(str) {
   return document.getElementById(str).value;
 }
 
+function normalizeNotificationType(type) {
+  var resolvedType = String(type || "info").toLowerCase();
+
+  if (
+    resolvedType !== "success" &&
+    resolvedType !== "error" &&
+    resolvedType !== "warning" &&
+    resolvedType !== "info"
+  ) {
+    resolvedType = "info";
+  }
+
+  return resolvedType;
+}
+
+function showNotification(message, type) {
+  var text = String(message == null ? "" : message).trim();
+  if (!text) {
+    return;
+  }
+
+  var resolvedType = normalizeNotificationType(type);
+  var palette = {
+    success: {
+      background: "#d1e7dd",
+      border: "#badbcc",
+      color: "#0f5132",
+    },
+    error: {
+      background: "#f8d7da",
+      border: "#f5c2c7",
+      color: "#842029",
+    },
+    warning: {
+      background: "#fff3cd",
+      border: "#ffecb5",
+      color: "#664d03",
+    },
+    info: {
+      background: "#cff4fc",
+      border: "#b6effb",
+      color: "#055160",
+    },
+  };
+
+  var host = document.getElementById("global-notification-host");
+  if (!host) {
+    host = document.createElement("div");
+    host.id = "global-notification-host";
+    host.setAttribute("aria-live", "polite");
+    host.style.position = "fixed";
+    host.style.top = "16px";
+    host.style.right = "16px";
+    host.style.zIndex = "1080";
+    host.style.display = "flex";
+    host.style.flexDirection = "column";
+    host.style.gap = "10px";
+    host.style.maxWidth = "min(360px, calc(100vw - 32px))";
+    (document.body || document.documentElement).appendChild(host);
+  }
+
+  var toast = document.createElement("div");
+  toast.setAttribute("role", "status");
+  toast.style.background = palette[resolvedType].background;
+  toast.style.border = "1px solid " + palette[resolvedType].border;
+  toast.style.borderRadius = "10px";
+  toast.style.boxShadow = "0 10px 24px rgba(15, 23, 42, 0.14)";
+  toast.style.color = palette[resolvedType].color;
+  toast.style.fontSize = "14px";
+  toast.style.fontWeight = "600";
+  toast.style.lineHeight = "1.4";
+  toast.style.padding = "12px 14px";
+  toast.style.opacity = "0";
+  toast.style.transform = "translateY(-8px)";
+  toast.style.transition = "opacity 0.2s ease, transform 0.2s ease";
+  toast.textContent = text;
+
+  host.appendChild(toast);
+
+  window.requestAnimationFrame(function () {
+    toast.style.opacity = "1";
+    toast.style.transform = "translateY(0)";
+  });
+
+  window.setTimeout(function () {
+    toast.style.opacity = "0";
+    toast.style.transform = "translateY(-8px)";
+    window.setTimeout(function () {
+      if (toast.parentNode) {
+        toast.parentNode.removeChild(toast);
+      }
+    }, 220);
+  }, 3200);
+}
+
 function toggle(str) {
   if (obj(str).style.display == "none") {
     obj(str).style.display = "block";
@@ -626,7 +721,7 @@ function getHLpaging(curIndex, totalitems, totaldivitems, totaldata) {
 function validCaptcha(formname, group) {
   var v = grecaptcha.getResponse();
   if (v.length == 0) {
-    alert("Please Complete The Captcha");
+    showNotification("Please Complete The Captcha", "error");
     return false;
   } else {
     if (typeof formname != "undefined" && formname != "") {
@@ -3428,14 +3523,14 @@ function setAutofocus(action) {
 function exportData() {
   var checkboxes = document.querySelectorAll(".export:checked");
   if (checkboxes.length === 0) {
-    alert("Please select data to export.");
+    showNotification("Please select data to export.", "warning");
     return false;
   }
   return true;
 }
 
 function showExportNotification() {
-  alert("Export successful!");
+  showNotification("Export successful!", "success");
 }
 
 function auditExport(ids, tblName) {

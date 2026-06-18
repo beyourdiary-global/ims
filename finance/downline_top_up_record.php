@@ -44,10 +44,8 @@ if ($dataID) { //edit/remove/view
 }
 
 if (!($dataID) && !($act)) {
-    echo '<script>
-    alert("Invalid action.");
-    window.location.href = "' . $redirect_page . '"; // Redirect to previous page
-    </script>';
+    renderNotificationScript('Invalid action.', 'error', $redirect_page);
+
 }
 
 //Delete Data
@@ -351,7 +349,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                             if (isset($echoVal)) {
                                 $agent_rst = getData('name', "id = '$echoVal'", '', AGENT, $finance_connect);
                                 if (!$agent_rst) {
-                                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                                    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                                     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                                 }
                                 $agent_row = $agent_rst->fetch_assoc();
@@ -380,7 +378,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 if (isset($echoVal)) {
                                     $brand_rst = getData('name', "id = '$echoVal'", '', BRAND, $connect);
                                     if (!$brand_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                                        renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                                         echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                                     }
                                     $brand_row = $brand_rst->fetch_assoc();

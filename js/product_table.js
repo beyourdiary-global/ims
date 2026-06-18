@@ -45,10 +45,12 @@ $(document).ready(function ($) {
         selectAllCheckbox.checked = false;
       }
 
-      alert("Export successful!");
-      window.location.href = "product_table.php";
+      showNotification("Export successful!", "success");
+      window.setTimeout(function () {
+        window.location.href = "product_table.php";
+      }, 600);
     } else {
-      alert("Please select data to export.");
+      showNotification("Please select data to export.", "warning");
     }
   });
 });

@@ -57,7 +57,7 @@ if (!function_exists('customerFollowUpPageGetAllowedPinIds')) {
 $pageAccess = checkPinByGroupId($connect, $currentPagePin);
 $canViewPage = isActionAllowed('View', $pageAccess);
 if (!$canViewPage) {
-    echo '<script>alert("You do not have permission to view Customer Follow-Up."); location.replace("dashboard.php");</script>';
+    renderNotificationScript('You do not have permission to view Customer Follow-Up.', 'error', 'dashboard.php', 1200, true);
     exit;
 }
 
@@ -1575,7 +1575,7 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
 
         function customerFollowUpShowResultPopup(message, onContinue) {
             if (typeof bootstrap === 'undefined' || !bootstrap.Modal) {
-                window.alert(message || 'Action completed.');
+                showNotification(message || 'Action completed.', 'info');
                 if (typeof onContinue === 'function') {
                     onContinue();
                 }

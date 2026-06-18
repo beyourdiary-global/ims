@@ -24,7 +24,7 @@ if (!is_array($pinAccess) || count($pinAccess) === 0) {
         echo "<script>location.replace('shopee_order_req_table.php');</script>";
         exit;
     }
-    echo "<script>alert('You do not have permission to view Shopee Processing Order.'); location.replace('../dashboard.php');</script>";
+    renderNotificationScript('You do not have permission to view Shopee Processing Order.', 'error', '../dashboard.php', 1200, true);
     exit;
 }
 

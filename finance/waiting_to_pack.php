@@ -12,7 +12,7 @@ $legacyProcessingAccess = checkPinByGroupId($connect, 128);
 $allOrdersAccess = checkPinByGroupId($connect, 130);
 $canViewPage = isActionAllowed('View', $processingAccess) || isActionAllowed('View', $legacyProcessingAccess) || isActionAllowed('View', $allOrdersAccess);
 if (!$canViewPage) {
-    echo '<script>alert("You do not have permission to view Waiting To Pack."); location.replace("../dashboard.php");</script>';
+    renderNotificationScript('You do not have permission to view Waiting To Pack.', 'error', '../dashboard.php', 1200, true);
     exit;
 }
 

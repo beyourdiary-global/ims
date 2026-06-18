@@ -28,7 +28,7 @@ if (!function_exists('urlFallbackResponse')) {
             $target = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : (string) $_SERVER['PHP_SELF'];
         }
 
-        echo '<script>alert(' . json_encode((string) $message) . ');location.href=' . json_encode($target) . ';</script>';
+        echo '<script>showNotification(' . json_encode((string) $message) . ', "success");setTimeout(function(){location.href=' . json_encode($target) . ';}, 1200);</script>';
         exit;
     }
 }

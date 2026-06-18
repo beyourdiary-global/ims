@@ -20,7 +20,7 @@ if ($pageMode == 'emailRstPassword') {
         $dataExisted = 1;
         $row = $rstProj->fetch_assoc();
     } else {
-        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+        renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
         echo "<script>location.href ='$SITEURL/index.php';</script>";
     }
 }
@@ -97,7 +97,7 @@ if ($pageMode == 'userChgPassword') {
             if ($new_password == $confirm_password) {
                 $rst = getData('*', "id = '$id'", '', USR_USER, $connect);
                 if (!$rst) {
-                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                 }
                 $row = $rst->fetch_assoc();
@@ -145,7 +145,7 @@ if ($pageMode == 'userChgPassword') {
                 $safeEmail = mysqli_real_escape_string($connect, $email);
                 $rst = getData('*', "email = '" . $safeEmail . "'", '', USR_USER, $connect);
                 if (!$rst) {
-                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                 }
                 $row = $rst->fetch_assoc();

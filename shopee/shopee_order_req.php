@@ -322,10 +322,8 @@ $sorWarehouseNameMap = shopeeOmsLoadWarehouseNameMap($connect);
 $sorDefaultWarehouseId = shopeeOmsGetDefaultWarehouseId($connect, $sorWarehouseRows);
 
 if (!($dataID) && !($act)) {
-    echo '<script>
-    alert("Invalid action.");
-    window.location.replace("' . $redirect_page . '");
-    </script>';
+    renderNotificationScript('Invalid action.', 'error', $redirect_page, 1200, true);
+
 }
 
 $sorHandleVerifyWorkflowRequest = function () use (

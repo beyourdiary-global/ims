@@ -44,10 +44,8 @@ if ($act == 'D') {
 }
 
 if (!($dataID) && !($act)) {
-    echo '<script>
-    alert("Invalid action.");
-    window.location.href = "' . $redirect_page . '"; // Redirect to previous page
-    </script>';
+    renderNotificationScript('Invalid action.', 'error', $redirect_page);
+
 }
 
 //Edit And Add Data

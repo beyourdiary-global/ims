@@ -42,8 +42,7 @@
                 }
             }
 
-            echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-            echo '<script>location.href = ' . json_encode($redirectUrl) . ';</script>';
+            renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error', $redirectUrl);
             exit;
         }
     }
@@ -54,8 +53,7 @@
     $rst = getData('*', "id = '1'", '', 'projects', $connect);
 
     if (!$rst) {
-        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-        echo '<script>location.href = "' . $SITEURL . '/index.php";</script>';
+        renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error', $SITEURL . '/index.php');
     } else {
         $dataExisted = 1;
         $row = $rst->fetch_assoc();

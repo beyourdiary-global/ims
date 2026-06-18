@@ -28,7 +28,7 @@ if ($product_id) {
         $dataExisted = 1;
         $row = $rst->fetch_assoc();
     } else {
-        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+        renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
         echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
     }
 }
@@ -62,7 +62,7 @@ if (post('actionBtn')) {
             if (($product && $product) && ($page_no || ($page_no != '0')) && ($warehouse != 'noValue')) {
                 $rst_projInfo = getData("barcode_prefix,barcode_next_number", "id='1'", '', PROJ, $connect);
                 if (!$rst_projInfo) {
-                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                 }
                 $projInfo = $rst_projInfo->fetch_assoc();
@@ -163,7 +163,7 @@ if(isset($_SESSION['tempValConfirmBox']))
                                                                                                         if (isset($echoVal)) {
                                                                                                             $rst = getData('name', "id = '$echoVal'", '', $tblname, $connect);
                                                                                                             if (!$rst) {
-                                                                                                                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                                                                                                                renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                                                                                                                 echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                                                                                                             }
                                                                                                             $row = $rst->fetch_assoc();
@@ -207,7 +207,7 @@ if(isset($_SESSION['tempValConfirmBox']))
                                 <?php
                                 $rst_warehouse_list = getData("id,name", '', '', WHSE, $connect);
                                 if (!$rst_warehouse_list) {
-                                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                                    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                                     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                                 }
                                 while ($warehouse_list = $rst_warehouse_list->fetch_assoc()) {

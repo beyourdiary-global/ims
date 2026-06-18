@@ -40,7 +40,7 @@ if ($rst && $rst->num_rows > 0) {
 $pinResult = getData('*', '', '', PIN, $connect);
 
 if (!$pinResult) {
-    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
     echo $redirectLink;
 }
 

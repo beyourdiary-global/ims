@@ -1244,13 +1244,13 @@ document.addEventListener("DOMContentLoaded", function () {
         }
 
         if (typeof bootstrap === "undefined" || !bootstrap.Modal) {
-            window.alert(popupMessage);
+            showNotification(popupMessage, isSuccess ? "success" : "info");
             return;
         }
 
         var popupElement = customerTagEnsurePopupModal();
         if (!popupElement) {
-            window.alert(popupMessage);
+            showNotification(popupMessage, isSuccess ? "success" : "info");
             return;
         }
 
@@ -1522,7 +1522,7 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     if (typeof bootstrap === "undefined" || !bootstrap.Modal) {
-        window.alert(popupMessage);
+        showNotification(popupMessage, "info");
         return;
     }
 

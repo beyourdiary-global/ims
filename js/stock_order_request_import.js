@@ -1117,6 +1117,9 @@ document.querySelectorAll(".sor-pkg-select").forEach(function (sel) {
   form.addEventListener("submit", function (e) {
     if (!ocrRunning) return;
     e.preventDefault();
-    alert("Please wait. PDF text extraction is still processing.");
+    showNotification(
+      "Please wait. PDF text extraction is still processing.",
+      "warning",
+    );
   });
 })();

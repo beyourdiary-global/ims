@@ -312,7 +312,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                                         if (isset($echoVal)) {
                                                             $brd_rst = getData('name', "id = '$echoVal'", '', BRD_SERIES, $connect);
                                                             if (!$brd_rst) {
-                                                                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                                                                renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                                                                 echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                                                             }
                                                             $brd_row = $brd_rst->fetch_assoc();

@@ -13,8 +13,7 @@ $deleteRedirectPage = $SITEURL . '/bank_table.php';
 $result = getData('*', '', '', $tblName, $connect);
 
 if (!$result) {
-    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error', $SITEURL . '/dashboard.php');
 }
 ?>
 

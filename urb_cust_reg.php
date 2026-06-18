@@ -167,10 +167,8 @@ if ($dataID && $act== 'I') { //add mode
 }
 
 if (!($dataID) && !($act)) {
-    echo '<script>
-    alert("Invalid action.");
-    window.location.href = "' . $redirect_page . '"; // Redirect to previous page
-    </script>';
+    renderNotificationScript('Invalid action.', 'error', $redirect_page);
+
 }
 
 if ($urbanismSeedFbLink === '' && $urbanismSeedName !== '') {

@@ -31,10 +31,8 @@ if ($dataID) { //edit/remove/view
     }
 }
 if (!($dataID) && !($act)) {
-    echo '<script>
-    alert("Invalid action.");
-    window.location.href = "' . $redirect_page . '"; // Redirect to previous page
-    </script>';
+    renderNotificationScript('Invalid action.', 'error', $redirect_page);
+
 }
 
 if (post('actionBtn')) {
@@ -300,7 +298,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 if (isset($echoVal)) {
                                     $courier_rst = getData('name', "id = '$echoVal'", '', COURIER, $connect);
                                     if (!$courier_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                                        renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                                         echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                                     }
                                     $courier_row = $courier_rst->fetch_assoc();
@@ -353,7 +351,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 if (isset($echoVal)) {
                                     $curr_rst = getData('unit', "id = '$echoVal'", '', CUR_UNIT, $connect);
                                     if (!$courier_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                                        renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                                         echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                                     }
                                     $curr_row = $curr_rst->fetch_assoc();

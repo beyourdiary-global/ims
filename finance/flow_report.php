@@ -10,7 +10,7 @@ include_once '../checkCurrentPagePin.php';
 $reportAccess = checkPinByGroupId($connect, 148);
 $canViewPage = isActionAllowed('View', $reportAccess);
 if (!$canViewPage) {
-    echo '<script>alert("You do not have permission to view Daily Flow Report."); location.replace("../dashboard.php");</script>';
+    renderNotificationScript('You do not have permission to view Daily Flow Report.', 'error', '../dashboard.php', 1200, true);
     exit;
 }
 

@@ -24,6 +24,6 @@ if (is_array(checkPin($connect, 'Shopee Processing Order'))) {
 }
 
 // 4. Fallback if they have no access
-echo "<script>alert('You do not have permission to view Shopee Orders.'); location.replace('../dashboard.php');</script>";
+renderNotificationScript('You do not have permission to view Shopee Orders.', 'error', '../dashboard.php', 1200, true);
 exit;
 ?>

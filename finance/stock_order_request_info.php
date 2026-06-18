@@ -10,7 +10,7 @@ $pageTitle = 'Stock Order Request Info';
 
 $pinAccess = checkPin($connect, 'Stock Order Request');
 if (!is_array($pinAccess) || count($pinAccess) === 0 || !isActionAllowed('View', $pinAccess)) {
-    echo '<script>alert("No permission.");location.href = "' . $SITEURL . '/dashboard.php";</script>';
+    renderNotificationScript('No permission.', 'error', $SITEURL . '/dashboard.php');
     exit;
 }
 
@@ -321,7 +321,7 @@ function sorInfoFindWarehouseTokenRow($connect, $warehouseId)
 $requestSql = "SELECT * FROM " . STOCK_ORDER_REQ . " WHERE id='" . $requestId . "' AND status='A' LIMIT 1";
 $requestRst = mysqli_query($finance_connect, $requestSql);
 if (!$requestRst || mysqli_num_rows($requestRst) === 0) {
-    echo '<script>alert("Request not found.");location.href = "' . $redirectPage . '";</script>';
+    renderNotificationScript('Request not found.', 'info', $redirectPage);
     exit;
 }
 $requestRow = mysqli_fetch_assoc($requestRst);

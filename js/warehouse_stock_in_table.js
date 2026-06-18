@@ -37,13 +37,13 @@ $(document).ready(function ($) {
         selectAllCheckbox.checked = false;
       }
 
-      alert("Export successful!");
+      showNotification("Export successful!", "success");
       const exportUrl =
         "warehouse_stock_in_table.php?export=excel&ids=" +
         encodeURIComponent(checkboxValues.join(","));
       window.open(exportUrl, "_blank");
     } else {
-      alert("Please select data to export.");
+      showNotification("Please select data to export.", "warning");
     }
   });
 });

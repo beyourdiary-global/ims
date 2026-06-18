@@ -53,7 +53,7 @@ $(document).ready(function () {
       }
 
       if (checkboxValues.length <= 0) {
-        alert("Please select data to export.");
+        showNotification("Please select data to export.", "warning");
         return;
       }
 
@@ -62,7 +62,11 @@ $(document).ready(function () {
         window.location.hostname === "localhost" ||
         window.location.hostname === "127.0.0.1"
       ) {
-        alert("Export succesful.");
+        showNotification("Export succesful.", "success");
+        window.setTimeout(function () {
+          $("#exportForm").trigger("submit");
+        }, 600);
+        return;
       }
       $("#exportForm").trigger("submit");
     },

@@ -42,7 +42,7 @@ $pic_result = getData('*', "id = '" . $row['sales_pic'] . "'", '', USR_USER, $co
 
 
 if (!$proj_result) {
-    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
     echo $redirectLink;
 }
 
@@ -314,7 +314,7 @@ $pic_row = ($pic_result && $pic_result->num_rows > 0) ? $pic_result->fetch_assoc
                                                             if (isset($row['currency']) && !empty($row['currency'])) {
                                                                 $curr_rst = getData('unit', "id = '" . $row['currency'] . "'", '', CUR_UNIT, $connect);
                                                                 if (!$curr_rst) {
-                                                                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                                                                    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                                                                     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                                                                 }
                                                                 $curr_row = $curr_rst->fetch_assoc();

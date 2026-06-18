@@ -40,8 +40,7 @@ $query .= " ORDER BY datetimes DESC";
 $result = mysqli_query($connect, $query);
 
 if (!$result) {
-    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-    echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
+    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error', $SITEURL . '/dashboard.php');
 }
 ?>
 

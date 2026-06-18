@@ -22,7 +22,7 @@ if (post('pay_status_option')) {
     echo "<script>console.log('TEST2')</script>";
 
     if (!$rst) {
-        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</>";
+        renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
         echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
     }
 

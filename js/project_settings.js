@@ -313,12 +313,12 @@
             dataType: 'json'
         }).done(function (res) {
             if (!res || !res.ok) {
-                window.alert(res && res.message ? res.message : 'Failed to update project settings.');
+                showNotification(res && res.message ? res.message : 'Failed to update project settings.', 'error');
                 return;
             }
             renderSettingsData(res);
         }).fail(function () {
-            window.alert('Failed to update project settings.');
+            showNotification('Failed to update project settings.', 'error');
         });
     }
 

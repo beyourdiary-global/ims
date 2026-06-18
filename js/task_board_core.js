@@ -620,7 +620,7 @@ function setComposerWorkType($toggle, workType) {
 normalizeAllWorkTypes();
 
 function notify(message) {
-  window.alert(message || "Operation completed.");
+  showNotification(message || "Operation completed.", "info");
 }
 
 function cleanupTaskDialogArtifacts() {

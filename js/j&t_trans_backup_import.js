@@ -353,6 +353,9 @@ document.querySelectorAll(".record-card").forEach(function (recordCard) {
       return;
     }
     e.preventDefault();
-    alert("Please wait. PDF text extraction is still processing.");
+    showNotification(
+      "Please wait. PDF text extraction is still processing.",
+      "warning",
+    );
   });
 })();

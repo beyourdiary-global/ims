@@ -31,10 +31,8 @@ if ($dataID) { //edit/remove/view
     }
 }
 if (!($dataID) && !($act)) {
-    echo '<script>
-    alert("Invalid action.");
-    window.location.href = "' . $redirect_page . '"; // Redirect to previous page
-    </script>';
+    renderNotificationScript('Invalid action.', 'error', $redirect_page);
+
 }
 
 if (post('actionBtn')) {
@@ -364,7 +362,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 if (isset($echoVal)) {
                                     $country_rst = getData('*', "id = '$echoVal'", '', COUNTRIES, $connect);
                                     if (!$country_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                                        renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                                         echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                                     }
                                     $countries = $country_rst->fetch_assoc();

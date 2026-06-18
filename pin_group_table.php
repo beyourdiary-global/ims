@@ -86,7 +86,7 @@ $result = getData('*', '', '', $tblName, $connect);
                                                 if ($val === '') continue;
                                                 $pinname_result = getData('name', "id='$val'", '', PIN, $connect);
                                                 if (!$pinname_result) {
-                                                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                                                    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                                                     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                                                 }
                                                 $pinname_row = $pinname_result->fetch_assoc();

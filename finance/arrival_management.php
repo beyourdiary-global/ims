@@ -13,7 +13,7 @@ $legacyVerifyAccess = checkPinByGroupId($connect, 129);
 $allOrdersAccess = checkPinByGroupId($connect, 130);
 $canViewPage = isActionAllowed('View', $verifyAccess) || isActionAllowed('View', $legacyVerifyAccess) || isActionAllowed('View', $allOrdersAccess);
 if (!$canViewPage) {
-    echo '<script>alert("You do not have permission to view Arrival Management."); location.replace("../dashboard.php");</script>';
+    renderNotificationScript('You do not have permission to view Arrival Management.', 'error', '../dashboard.php', 1200, true);
     exit;
 }
 
@@ -1396,7 +1396,7 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
             button.addEventListener('click', function () {
                 var blockMessage = button.getAttribute('data-block-message') || '';
                 if (blockMessage) {
-                    window.alert(blockMessage);
+                    showNotification(blockMessage, 'warning');
                     return;
                 }
 

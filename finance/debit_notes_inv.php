@@ -82,7 +82,7 @@ $pay_terms_result = getData('*', '', '', FIN_PAY_TERMS, $finance_connect);
 $proj_result = getData('*', "id = '1'", '', PROJ, $connect);
 
 if (!$proj_result) {
-    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
     echo $redirectLink;
 }
 

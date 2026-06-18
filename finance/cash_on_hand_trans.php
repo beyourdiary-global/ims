@@ -55,10 +55,8 @@ if ($dataID) { //edit/remove/view
 }
 
 if (!($dataID) && !($act)) {
-    echo '<script>
-    alert("Invalid action.");
-    window.location.href = "' . $redirect_page . '"; // Redirect to previous page
-    </script>';
+    renderNotificationScript('Invalid action.', 'error', $redirect_page);
+
 }
 
 //dropdown list for currency
@@ -558,7 +556,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                             if (isset($echoVal)) {
                                 $user_rst = getData('name', "id = '$echoVal'", '', USR_USER, $connect);
                                 if (!$user_rst) {
-                                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                                    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                                     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                                 }
                                 $user_row = $user_rst->fetch_assoc();

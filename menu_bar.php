@@ -1246,12 +1246,12 @@ if ($hasTaskManagementAccess) {
                 }
                 confirmBtn.disabled = false;
                 if (data && data.message) {
-                    alert(data.message);
+                    showNotification(data.message, 'error');
                 }
                 })
                 .catch(function () {
                 confirmBtn.disabled = false;
-                alert('Failed to create project task.');
+                showNotification('Failed to create project task.', 'error');
                 });
             });
         }

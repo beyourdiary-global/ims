@@ -8,7 +8,7 @@ $redirect_page = $SITEURL . '/finance/chanel_social_media.php';
 $deleteRedirectPage = $SITEURL . '/finance/chanel_social_media_table.php';
 $result = getData('*', '', '', CHANEL_SC_MD, $finance_connect);
 if (!$result) {
-    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
 }
 ?>

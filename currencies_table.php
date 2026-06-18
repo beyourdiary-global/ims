@@ -13,7 +13,7 @@ $deleteRedirectPage = $SITEURL . '/currencies_table.php';
 $result = getData('*', '', '', $tblName, $connect);
 
 if (!$result) {
-    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
 }
 
@@ -75,7 +75,7 @@ if (!$result) {
                                 $resultExUnit = getData('unit', "id='" . $row['exchange_currency_unit'] . "'", '', CUR_UNIT, $connect);
 
                                 if (!$resultDeUnit || !$resultExUnit) {
-                                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                                    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                                     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                                 }
 

@@ -44,10 +44,8 @@ if ($dataID) { //edit/remove/view
 }
 
 if (!($dataID) && !($act)) {
-    echo '<script>
-    alert("Invalid action.");
-    window.location.href = "' . $redirect_page . '"; // Redirect to previous page
-    </script>';
+    renderNotificationScript('Invalid action.', 'error', $redirect_page);
+
 }
 
 $cur_list_result = getData('*', '', '', CUR_UNIT, $connect);

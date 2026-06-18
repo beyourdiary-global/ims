@@ -13,7 +13,7 @@ $redirectPage = $SITEURL . '/dashboard.php';
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 if (!is_array($pinAccess) || count($pinAccess) === 0 || !isActionAllowed('View', $pinAccess)) {
-    echo '<script>alert("No permission.");location.href = "' . $redirectPage . '";</script>';
+    renderNotificationScript('No permission.', 'error', $redirectPage);
     exit;
 }
 
@@ -46,7 +46,7 @@ $profileResultAction = '';
 
 $userRst = getData('*', "id='" . $userId . "'", 'LIMIT 1', $tblName, $connect);
 if (!$userRst || $userRst->num_rows === 0) {
-    echo '<script>alert("User not found.");location.href = "' . $SITEURL . '/logout.php";</script>';
+    renderNotificationScript('User not found.', 'info', $SITEURL . '/logout.php');
     exit;
 }
 $userRow = $userRst->fetch_assoc();
@@ -178,7 +178,7 @@ if (post('actionBtn')) {
 
 $userRst = getData('*', "id='" . $userId . "'", 'LIMIT 1', $tblName, $connect);
 if (!$userRst || $userRst->num_rows === 0) {
-    echo '<script>alert("User not found.");location.href = "' . $SITEURL . '/logout.php";</script>';
+    renderNotificationScript('User not found.', 'info', $SITEURL . '/logout.php');
     exit;
 }
 $userRow = $userRst->fetch_assoc();

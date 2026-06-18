@@ -11,7 +11,7 @@ if(isset($_SESSION['userid']))
     $result = mysqli_query($connect, $query);
 
     if (!$result) {
-        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+        renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
         echo '<script>location.href = "' . $SITEURL . '/index.php";</script>';
     }
 

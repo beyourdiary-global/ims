@@ -431,7 +431,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                 if (isset($echoVal) && $echoVal != '') {
                                     $weight_rst = getData('unit', "id = '$echoVal'", '', WGT_UNIT, $connect);
                                     if (!$weight_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                                        renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                                         echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                                     }
                                     $weight_row = $weight_rst->fetch_assoc();
@@ -459,7 +459,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                 if (!empty($echoVal)) {
                                     $currency_unit_rst = getData('unit', "id = '$echoVal'", '', CUR_UNIT, $connect);
                                     if (!$currency_unit_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                                        renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                                         echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                                     }
                                     $currency_unit_row = $currency_unit_rst->fetch_assoc();
@@ -502,7 +502,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                             if (!empty($echoVal)) {
                                 $product_rst = getData('name', "id = '$echoVal'", '', PROD_CATEGORY, $connect);
                                 if (!$product_rst) {
-                                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                                    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                                     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                                 }
                                 $product_row = $product_rst->fetch_assoc();
@@ -530,7 +530,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                 if (!empty($echoVal)) {
                                     $product_rst = getData('name', "id = '$echoVal'", '', PROD, $connect);
                                     if (!$product_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                                        renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                                         echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                                     }
                                     $product_row = $product_rst->fetch_assoc();

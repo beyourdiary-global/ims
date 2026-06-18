@@ -110,7 +110,7 @@ $taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParen
 
 $pinAccess = taskGetPinAccessByGroupId($connect, $currentPagePin);
 if (!taskIsActionAllowed('view', $pinAccess)) {
-    echo "<script>alert('You do not have permission to view Project Task.'); location.replace('../dashboard.php');</script>";
+    renderNotificationScript('You do not have permission to view Project Task.', 'error', '../dashboard.php', 1200, true);
     exit;
 }
 
@@ -120,7 +120,7 @@ $taskParentTitle = !empty($currentProject) && isset($currentProject['name']) && 
     ? (string) $currentProject['name']
     : $taskParentTitle;
 if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $currentPagePin)) {
-    echo "<script>alert('You do not have access to this project summary.'); location.replace('../dashboard.php');</script>";
+    renderNotificationScript('You do not have access to this project summary.', 'error', '../dashboard.php', 1200, true);
     exit;
 }
 

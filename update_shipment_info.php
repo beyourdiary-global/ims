@@ -24,10 +24,8 @@ $pageAction = getPageAction($act);
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
 if (!($dataID) && !($act)) {
-    echo '<script>
-    alert("Invalid action.");
-    window.location.href = "' . $redirect_page . '"; // Redirect to previous page
-    </script>';
+    renderNotificationScript('Invalid action.', 'error', $redirect_page);
+
 }
 
 if (post('actionBtn')) {

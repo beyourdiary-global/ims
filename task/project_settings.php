@@ -353,7 +353,7 @@ if (!function_exists('taskProjectSettingsWriteViewAudit')) {
 
 $pinAccess = taskGetPinAccessByGroupId($connect, $currentPagePin);
 if (!taskIsActionAllowed('view', $pinAccess)) {
-    echo "<script>alert('You do not have permission to view project settings.'); location.replace('../dashboard.php');</script>";
+    renderNotificationScript('You do not have permission to view project settings.', 'error', '../dashboard.php', 1200, true);
     exit;
 }
 
@@ -366,7 +366,7 @@ $taskParentTitle = !empty($currentProject) && isset($currentProject['name']) && 
     : $taskParentTitle;
 $canEdit = $currentProjectId > 0 ? taskCanEditProjectSettings($connect, $currentProjectId) : false;
 if ($currentProjectId > 0 && !taskCanAccessProjectSettings($connect, $currentProjectId, true)) {
-    echo "<script>alert('You do not have permission to view project settings.'); location.replace('../dashboard.php');</script>";
+    renderNotificationScript('You do not have permission to view project settings.', 'error', '../dashboard.php', 1200, true);
     exit;
 }
 
