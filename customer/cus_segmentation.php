@@ -9,7 +9,7 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 $tblName = CUR_SEGMENTATION;
 
 //Current Page Action And Data ID
-$dataId = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? (int) input('id') : (int) post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
@@ -83,6 +83,12 @@ if (post('actionBtn')) {
             $currentDataboxUntil = postSpaceFilter('boxUntil');
             $brandSeries = postSpaceFilter('brandSeries_hidden');
             $dataRemark = postSpaceFilter('currentDataRemark');
+            $sqlCurrentDataName = mysqli_real_escape_string($connect, trim((string) $currentDataName));
+            $sqlColorSegmentation = mysqli_real_escape_string($connect, trim((string) $colorSegmentation));
+            $sqlCurrentDataboxFrom = mysqli_real_escape_string($connect, trim((string) $currentDataboxFrom));
+            $sqlCurrentDataboxUntil = mysqli_real_escape_string($connect, trim((string) $currentDataboxUntil));
+            $sqlBrandSeries = mysqli_real_escape_string($connect, trim((string) $brandSeries));
+            $sqlDataRemark = mysqli_real_escape_string($connect, trim((string) $dataRemark));
 
             $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
@@ -124,7 +130,7 @@ if (post('actionBtn')) {
                     if ($brandSeries)
                         array_push($newvalarr, $brandSeries);
 
-                    $query = "INSERT INTO " . $tblName . "(name,colorCode,remark,boxFrom,boxUntil,brandSeries,create_by,create_date,create_time) VALUES ('$currentDataName','$colorSegmentation','$dataRemark','$currentDataboxFrom','$currentDataboxUntil','$brandSeries','" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . "(name,colorCode,remark,boxFrom,boxUntil,brandSeries,create_by,create_date,create_time) VALUES ('$sqlCurrentDataName','$sqlColorSegmentation','$sqlDataRemark','$sqlCurrentDataboxFrom','$sqlCurrentDataboxUntil','$sqlBrandSeries','" . USER_ID . "',curdate(),curtime())";
 
                     $returnData = mysqli_query($connect, $query);
                     $dataId = $connect->insert_id;
@@ -175,7 +181,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if ($oldvalarr && $chgvalarr) {
-                        $query = "UPDATE " . $tblName . " SET name ='$currentDataName', colorCode = '$colorSegmentation' , boxFrom='$currentDataboxFrom', boxUntil='$currentDataboxUntil', brandSeries='$brandSeries', remark ='$dataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
+                        $query = "UPDATE " . $tblName . " SET name ='$sqlCurrentDataName', colorCode = '$sqlColorSegmentation' , boxFrom='$sqlCurrentDataboxFrom', boxUntil='$sqlCurrentDataboxUntil', brandSeries='$sqlBrandSeries', remark ='$sqlDataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($connect, $query);
                         if ($returnData) {
                             $act = 'E';

@@ -14,7 +14,7 @@ include_once ROOT . '/include/user_record_log.php';
 
 $tblName = FB_CUST_DEALS;
 
-$dataId = input('id');
+$dataId = (int) input('id');
 $act = input('act');
 $pageAction = getPageAction($act);
 
@@ -114,16 +114,23 @@ if (post('actionBtn')) {
     $fcb_name = postSpaceFilter('fcb_name');
     $fcb_link = postSpaceFilter('fcb_link');
     $fcb_ctc = postSpaceFilter('fcb_contact');
-    $fcb_pic = postSpaceFilter('fcb_pic_hidden');
-    $fcb_country = postSpaceFilter('fcb_country_hidden');
-    $fcb_brand = postSpaceFilter('fcb_brand_hidden');
-    $fcb_series = postSpaceFilter('fcb_series_hidden');
-    $fcb_fbpage = postSpaceFilter('fcb_fbpage_hidden');
-    $fcb_channel = postSpaceFilter('fcb_channel_hidden');
+    $fcb_pic = (int) postSpaceFilter('fcb_pic_hidden');
+    $fcb_country = (int) postSpaceFilter('fcb_country_hidden');
+    $fcb_brand = (int) postSpaceFilter('fcb_brand_hidden');
+    $fcb_series = (int) postSpaceFilter('fcb_series_hidden');
+    $fcb_fbpage = (int) postSpaceFilter('fcb_fbpage_hidden');
+    $fcb_channel = (int) postSpaceFilter('fcb_channel_hidden');
     $fcb_rec_name = postSpaceFilter('fcb_rec_name');
     $fcb_rec_ctc = postSpaceFilter('fcb_rec_ctc');
     $fcb_rec_add = postSpaceFilter('fcb_rec_add');
     $fcb_remark = postSpaceFilter('fcb_remark');
+    $sqlFcbName = mysqli_real_escape_string($connect, trim((string) $fcb_name));
+    $sqlFcbLink = mysqli_real_escape_string($connect, trim((string) $fcb_link));
+    $sqlFcbCtc = mysqli_real_escape_string($connect, trim((string) $fcb_ctc));
+    $sqlFcbRecName = mysqli_real_escape_string($connect, trim((string) $fcb_rec_name));
+    $sqlFcbRecCtc = mysqli_real_escape_string($connect, trim((string) $fcb_rec_ctc));
+    $sqlFcbRecAdd = mysqli_real_escape_string($connect, trim((string) $fcb_rec_add));
+    $sqlFcbRemark = mysqli_real_escape_string($connect, trim((string) $fcb_remark));
 
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
@@ -234,7 +241,7 @@ if (post('actionBtn')) {
                         array_push($datafield, 'remark');
                     }
 
-                    $query = "INSERT INTO " . $tblName . "(name,fb_link,contact,sales_pic,country,brand,series,fb_page,channel,ship_rec_name,ship_rec_add,ship_rec_contact,remark,create_by,create_date,create_time) VALUES ('$fcb_name','$fcb_link','$fcb_ctc','$fcb_pic','$fcb_country','$fcb_brand','$fcb_series','$fcb_fbpage','$fcb_channel','$fcb_rec_name','$fcb_rec_add','$fcb_rec_ctc','$fcb_remark','" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . "(name,fb_link,contact,sales_pic,country,brand,series,fb_page,channel,ship_rec_name,ship_rec_add,ship_rec_contact,remark,create_by,create_date,create_time) VALUES ('$sqlFcbName','$sqlFcbLink','$sqlFcbCtc','$fcb_pic','$fcb_country','$fcb_brand','$fcb_series','$fcb_fbpage','$fcb_channel','$sqlFcbRecName','$sqlFcbRecAdd','$sqlFcbRecCtc','$sqlFcbRemark','" . USER_ID . "',curdate(),curtime())";
                     // Execute the query
                     $returnData = mysqli_query($connect, $query);
                     if ($returnData) {
@@ -341,7 +348,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
-                        $query = "UPDATE " . $tblName . " SET name = '$fcb_name', fb_link = '$fcb_link', contact = '$fcb_ctc', sales_pic = '$fcb_pic', country = '$fcb_country', brand = '$fcb_brand', series = '$fcb_series', fb_page = '$fcb_fbpage', channel = '$fcb_channel', ship_rec_name = '$fcb_rec_name', ship_rec_add = '$fcb_rec_add', ship_rec_contact = '$fcb_rec_ctc', remark ='$fcb_remark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
+                        $query = "UPDATE " . $tblName . " SET name = '$sqlFcbName', fb_link = '$sqlFcbLink', contact = '$sqlFcbCtc', sales_pic = '$fcb_pic', country = '$fcb_country', brand = '$fcb_brand', series = '$fcb_series', fb_page = '$fcb_fbpage', channel = '$fcb_channel', ship_rec_name = '$sqlFcbRecName', ship_rec_add = '$sqlFcbRecAdd', ship_rec_contact = '$sqlFcbRecCtc', remark ='$sqlFcbRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($connect, $query);
 
                     } else {
@@ -389,7 +396,7 @@ if (post('actionBtn')) {
 
 
 if (post('act') == 'D') {
-    $id = post('id');
+    $id = (int) post('id');
     if ($id) {
         try {
             // take name

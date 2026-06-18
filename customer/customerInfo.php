@@ -10,7 +10,7 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 $tblName = CUS_INFO;
 
 //Current Page Action And Data ID
-$dataId = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? (int) input('id') : (int) post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
@@ -100,6 +100,27 @@ if (post('actionBtn')) {
             $tag = postSpaceFilter('tag');
             $personIncharges = postSpaceFilter('personIncharges');
 
+            $sqlCusFirstName = mysqli_real_escape_string($connect, trim((string) $cusFirstName));
+            $sqlCusLastName = mysqli_real_escape_string($connect, trim((string) $cusLastName));
+            $sqlCusGender = mysqli_real_escape_string($connect, trim((string) $cusGender));
+            $sqlCusEmail = mysqli_real_escape_string($connect, trim((string) $cusEmail));
+            $sqlCusBirthday = mysqli_real_escape_string($connect, trim((string) $cusBirthday));
+            $sqlCusPhoneCode = mysqli_real_escape_string($connect, trim((string) $cusPhoneCode));
+            $sqlCusPhoneNum = mysqli_real_escape_string($connect, trim((string) $cusPhoneNum));
+            $sqlShippingFirstName = mysqli_real_escape_string($connect, trim((string) $shippingFirstName));
+            $sqlShippingLastName = mysqli_real_escape_string($connect, trim((string) $shippingLastName));
+            $sqlShippingContactNum = mysqli_real_escape_string($connect, trim((string) $shippingContactNum));
+            $sqlCompany = mysqli_real_escape_string($connect, trim((string) $company));
+            $sqlAddress1 = mysqli_real_escape_string($connect, trim((string) $address1));
+            $sqlAddress2 = mysqli_real_escape_string($connect, trim((string) $address2));
+            $sqlCountry = mysqli_real_escape_string($connect, trim((string) $country));
+            $sqlCity = mysqli_real_escape_string($connect, trim((string) $city));
+            $sqlState = mysqli_real_escape_string($connect, trim((string) $state));
+            $sqlZipcode = mysqli_real_escape_string($connect, trim((string) $zipcode));
+            $sqlCurSegmentation = mysqli_real_escape_string($connect, trim((string) $curSegmentation));
+            $sqlTag = mysqli_real_escape_string($connect, trim((string) $tag));
+            $sqlPersonIncharges = mysqli_real_escape_string($connect, trim((string) $personIncharges));
+
             $variables = [
                 'name' => $cusFirstName,
                 'last_name' => $cusLastName,
@@ -156,7 +177,7 @@ if (post('actionBtn')) {
                         }
                     }
 
-                    $query = "INSERT INTO " . $tblName . "(name,last_name,gender,email,birthday,phone_country,phone_number,shipping_name,shipping_last_name,shipping_contact_number,shipping_company,shipping_address_1,shipping_address_2,shipping_country_region,shipping_city,shipping_state_province,shipping_zip_code,default_segmentation,tags,person_in_charges,create_by,create_date,create_time) VALUES ('$cusFirstName','$cusLastName','$cusGender','$cusEmail','$cusBirthday','$cusPhoneCode','$cusPhoneNum','$shippingFirstName','$shippingLastName','$shippingContactNum','$company','$address1','$address2','$country','$city','$state','$zipcode','$curSegmentation','$tag','$personIncharges','" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . "(name,last_name,gender,email,birthday,phone_country,phone_number,shipping_name,shipping_last_name,shipping_contact_number,shipping_company,shipping_address_1,shipping_address_2,shipping_country_region,shipping_city,shipping_state_province,shipping_zip_code,default_segmentation,tags,person_in_charges,create_by,create_date,create_time) VALUES ('$sqlCusFirstName','$sqlCusLastName','$sqlCusGender','$sqlCusEmail','$sqlCusBirthday','$sqlCusPhoneCode','$sqlCusPhoneNum','$sqlShippingFirstName','$sqlShippingLastName','$sqlShippingContactNum','$sqlCompany','$sqlAddress1','$sqlAddress2','$sqlCountry','$sqlCity','$sqlState','$sqlZipcode','$sqlCurSegmentation','$sqlTag','$sqlPersonIncharges','" . USER_ID . "',curdate(),curtime())";
                  
                     $returnData = mysqli_query($connect, $query);
                     $dataId = $connect->insert_id;
@@ -177,7 +198,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if ($oldvalarr && $chgvalarr) {
-                        $query = "UPDATE $tblName SET name = '$cusFirstName', last_name = '$cusLastName', gender = '$cusGender', email = '$cusEmail', birthday = '$cusBirthday', phone_country = '$cusPhoneCode', phone_number = '$cusPhoneNum', shipping_name = '$shippingFirstName', shipping_last_name = '$shippingLastName', shipping_contact_number = '$shippingContactNum', shipping_company = '$company', shipping_address_1 = '$address1', shipping_address_2 = '$address2', shipping_country_region = '$country', shipping_city = '$city', shipping_state_province = '$state', shipping_zip_code = '$zipcode', default_segmentation = '$curSegmentation', tags = '$tag', person_in_charges = '$personIncharges', update_date = CURDATE(), update_time = CURTIME(), update_by = '" . USER_ID . "' WHERE id = '$dataId'";
+                        $query = "UPDATE $tblName SET name = '$sqlCusFirstName', last_name = '$sqlCusLastName', gender = '$sqlCusGender', email = '$sqlCusEmail', birthday = '$sqlCusBirthday', phone_country = '$sqlCusPhoneCode', phone_number = '$sqlCusPhoneNum', shipping_name = '$sqlShippingFirstName', shipping_last_name = '$sqlShippingLastName', shipping_contact_number = '$sqlShippingContactNum', shipping_company = '$sqlCompany', shipping_address_1 = '$sqlAddress1', shipping_address_2 = '$sqlAddress2', shipping_country_region = '$sqlCountry', shipping_city = '$sqlCity', shipping_state_province = '$sqlState', shipping_zip_code = '$sqlZipcode', default_segmentation = '$sqlCurSegmentation', tags = '$sqlTag', person_in_charges = '$sqlPersonIncharges', update_date = CURDATE(), update_time = CURTIME(), update_by = '" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($connect, $query);
                     } else {
                         $act = 'NC';

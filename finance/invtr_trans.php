@@ -9,7 +9,7 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 $tblName = INVTR_TRANS;
 
 //Current Page Action And Data ID
-$dataId = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? (int) input('id') : (int) post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
@@ -88,8 +88,8 @@ if (post('actionBtn')) {
 
     if (isset($_FILES["invtr_attach"]) && $_FILES["invtr_attach"]["size"] != 0) {
         $invtr_attach = $_FILES["invtr_attach"]["name"];
-    } elseif (isset($_POST['existing_attachment'])) {
-        $invtr_attach = $_POST['existing_attachment'];
+    } elseif (post('existing_attachment') !== '') {
+        $invtr_attach = trim((string) post('existing_attachment'));
     }
 
     switch ($action) {
@@ -203,7 +203,17 @@ if (post('actionBtn')) {
                         array_push($datafield, 'remark');
                     }
 
-                    $query = "INSERT INTO " . $tblName . "(transactionID,date,merchantID,itemID,unit_price,bal_qty,amount,remark,attachment,create_by,create_date,create_time) VALUES ('$trans_id','$invtr_date','$invtr_mrcht','$invtr_item','$invtr_unit_price','$invtr_bal_qty','$invtr_amt','$invtr_remark','$invtr_attach','" . USER_ID . "',curdate(),curtime())";
+                    $sqlTransId = mysqli_real_escape_string($finance_connect, trim((string) $trans_id));
+                    $sqlInvtrDate = mysqli_real_escape_string($finance_connect, trim((string) $invtr_date));
+                    $sqlInvtrMrcht = mysqli_real_escape_string($finance_connect, trim((string) $invtr_mrcht));
+                    $sqlInvtrItem = mysqli_real_escape_string($finance_connect, trim((string) $invtr_item));
+                    $sqlInvtrUnitPrice = mysqli_real_escape_string($finance_connect, trim((string) $invtr_unit_price));
+                    $sqlInvtrBalQty = mysqli_real_escape_string($finance_connect, trim((string) $invtr_bal_qty));
+                    $sqlInvtrAmt = mysqli_real_escape_string($finance_connect, trim((string) $invtr_amt));
+                    $sqlInvtrRemark = mysqli_real_escape_string($finance_connect, trim((string) $invtr_remark));
+                    $sqlInvtrAttach = mysqli_real_escape_string($finance_connect, trim((string) $invtr_attach));
+
+                    $query = "INSERT INTO " . $tblName . "(transactionID,date,merchantID,itemID,unit_price,bal_qty,amount,remark,attachment,create_by,create_date,create_time) VALUES ('$sqlTransId','$sqlInvtrDate','$sqlInvtrMrcht','$sqlInvtrItem','$sqlInvtrUnitPrice','$sqlInvtrBalQty','$sqlInvtrAmt','$sqlInvtrRemark','$sqlInvtrAttach','" . USER_ID . "',curdate(),curtime())";
                     // Execute the query
                     $returnData = mysqli_query($finance_connect, $query);
                     $dataId = $finance_connect->insert_id;
@@ -279,7 +289,13 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
-                        $query = "UPDATE " . $tblName . " SET `date` = '$invtr_date',`amount` = '$invtr_amt', `merchantID` = '$invtr_mrcht', `attachment` ='$invtr_attach', `remark` ='$invtr_remark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
+                        $sqlInvtrDate = mysqli_real_escape_string($finance_connect, trim((string) $invtr_date));
+                        $sqlInvtrAmt = mysqli_real_escape_string($finance_connect, trim((string) $invtr_amt));
+                        $sqlInvtrMrcht = mysqli_real_escape_string($finance_connect, trim((string) $invtr_mrcht));
+                        $sqlInvtrAttach = mysqli_real_escape_string($finance_connect, trim((string) $invtr_attach));
+                        $sqlInvtrRemark = mysqli_real_escape_string($finance_connect, trim((string) $invtr_remark));
+
+                        $query = "UPDATE " . $tblName . " SET `date` = '$sqlInvtrDate',`amount` = '$sqlInvtrAmt', `merchantID` = '$sqlInvtrMrcht', `attachment` ='$sqlInvtrAttach', `remark` ='$sqlInvtrRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($finance_connect, $query);
                     } else {
                         $act = 'NC';

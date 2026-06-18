@@ -8,7 +8,7 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = FIN_PAY_TERMS;
 
-$dataId = input('id');
+$dataId = (int) input('id');
 $act = input('act');
 $pageAction = getPageAction($act);
 
@@ -41,6 +41,9 @@ if (post('actionBtn')) {
     $pay_terms_name = postSpaceFilter("pay_terms_name");
     $pay_terms_desc = postSpaceFilter("pay_terms_desc");
     $pay_terms_remark = postSpaceFilter("pay_terms_remark");
+    $sqlPayTermsName = mysqli_real_escape_string($finance_connect, trim((string) $pay_terms_name));
+    $sqlPayTermsDesc = mysqli_real_escape_string($finance_connect, trim((string) $pay_terms_desc));
+    $sqlPayTermsRemark = mysqli_real_escape_string($finance_connect, trim((string) $pay_terms_remark));
 
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
@@ -70,7 +73,7 @@ if (post('actionBtn')) {
                         array_push($datafield, 'remark');
                     }
 
-                    $query = "INSERT INTO " . $tblName  . "(name,description,remark,create_by,create_date,create_time) VALUES ('$pay_terms_name','$pay_terms_desc','$pay_terms_remark','" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName  . "(name,description,remark,create_by,create_date,create_time) VALUES ('$sqlPayTermsName','$sqlPayTermsDesc','$sqlPayTermsRemark','" . USER_ID . "',curdate(),curtime())";
                     // Execute the query
                     $returnData = mysqli_query($finance_connect, $query);
                     // generateDBData(FIN_PAY_TERMS, $finance_connect);
@@ -109,7 +112,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
-                        $query = "UPDATE " . $tblName  . " SET name = '$pay_terms_name', description = '$pay_terms_desc', remark = '$pay_terms_remark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
+                        $query = "UPDATE " . $tblName  . " SET name = '$sqlPayTermsName', description = '$sqlPayTermsDesc', remark = '$sqlPayTermsRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($finance_connect, $query);
                         generateDBData(FIN_PAY_TERMS, $finance_connect);
                     } else {
@@ -157,7 +160,7 @@ if (post('actionBtn')) {
 
 
 if (post('act') == 'D') {
-    $id = post('id');
+    $id = (int) post('id');
     if ($id) {
         try {
             // take name

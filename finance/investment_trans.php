@@ -8,7 +8,7 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = INV_TRANS;
 
-$row_id = input('id');
+$row_id = (int) input('id');
 $act = input('act');
 $pageAction = getPageAction($act);
 $allowed_ext = array("png", "jpg", "jpeg", "svg", "pdf");
@@ -75,8 +75,8 @@ if (post('actionBtn')) {
 
     if (isset($_FILES["ivs_attach"]) && $_FILES["ivs_attach"]["size"] != 0) {
         $ivs_attach = $_FILES["ivs_attach"]["name"];
-    } elseif (isset($_POST['existing_attachment'])) {
-        $ivs_attach = $_POST['existing_attachment'];
+    } elseif (post('existing_attachment') !== '') {
+        $ivs_attach = trim((string) post('existing_attachment'));
     }
 
     $ivs_prev_amt = 0;
@@ -150,13 +150,14 @@ if (post('actionBtn')) {
                         }
                     }
                     //get final_amt from prev row
+                    $sqlIvsMrcht = mysqli_real_escape_string($finance_connect, trim((string) $ivs_mrcht));
                     $query = "SELECT
                     final_amt,
                     LAG(final_amt) OVER (ORDER BY id DESC) AS prev_final_amt
                     FROM
                         " . $tblName  . "
                     WHERE
-                        merchant = '$ivs_mrcht'
+                        merchant = '$sqlIvsMrcht'
                     ORDER BY
                         id DESC
                     LIMIT 1";
@@ -230,7 +231,15 @@ if (post('actionBtn')) {
                         array_push($datafield, 'remarks');
                     }
 
-                    $query = "INSERT INTO " . $tblName  . "(transactionID,type,date,amount,prev_amt,final_amt,merchant,remarks,attachment,create_by,create_date,create_time) VALUES ('$trans_id','$ivs_type','$ivs_date','$ivs_amt','$ivs_prev_amt','$ivs_final_amt','$ivs_mrcht','$ivs_remark','$ivs_attach','" . USER_ID . "',curdate(),curtime())";
+                    $sqlTransId = mysqli_real_escape_string($finance_connect, trim((string) $trans_id));
+                    $sqlIvsType = mysqli_real_escape_string($finance_connect, trim((string) $ivs_type));
+                    $sqlIvsDate = mysqli_real_escape_string($finance_connect, trim((string) $ivs_date));
+                    $sqlIvsAmt = mysqli_real_escape_string($finance_connect, trim((string) $ivs_amt));
+                    $sqlIvsRemark = mysqli_real_escape_string($finance_connect, trim((string) $ivs_remark));
+                    $sqlIvsAttach = mysqli_real_escape_string($finance_connect, trim((string) $ivs_attach));
+                    $sqlIvsMrcht = mysqli_real_escape_string($finance_connect, trim((string) $ivs_mrcht));
+
+                    $query = "INSERT INTO " . $tblName  . "(transactionID,type,date,amount,prev_amt,final_amt,merchant,remarks,attachment,create_by,create_date,create_time) VALUES ('$sqlTransId','$sqlIvsType','$sqlIvsDate','$sqlIvsAmt','$ivs_prev_amt','$ivs_final_amt','$sqlIvsMrcht','$sqlIvsRemark','$sqlIvsAttach','" . USER_ID . "',curdate(),curtime())";
                     // Execute the query
                     $returnData = mysqli_query($finance_connect, $query);
                     $dataId = $finance_connect->insert_id;
@@ -311,13 +320,14 @@ if (post('actionBtn')) {
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
 
                         //get final_amt from prev row
+                        $sqlIvsMrcht = mysqli_real_escape_string($finance_connect, trim((string) $ivs_mrcht));
                         $query = "SELECT
                         final_amt,
                         LAG(final_amt) OVER (ORDER BY id DESC) AS prev_final_amt
                         FROM
                             " . $tblName  . "
                         WHERE
-                            merchant = '$ivs_mrcht'
+                            merchant = '$sqlIvsMrcht'
                             AND id < '$row_id'
                             AND `status` != 'D'
                         ORDER BY
@@ -344,7 +354,13 @@ if (post('actionBtn')) {
                             $ivs_final_amt = number_format($ivs_prev_amt - $ivs_amt, 2, '.', '');
                         }
 
-                        $query = "UPDATE " . $tblName  . " SET type = '$ivs_type',date = '$ivs_date',amount = '$ivs_amt', prev_amt ='$ivs_prev_amt', final_amt ='$ivs_final_amt', merchant = '$ivs_mrcht', attachment ='$ivs_attach', remarks ='$ivs_remark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$row_id'";
+                        $sqlIvsType = mysqli_real_escape_string($finance_connect, trim((string) $ivs_type));
+                        $sqlIvsDate = mysqli_real_escape_string($finance_connect, trim((string) $ivs_date));
+                        $sqlIvsAmt = mysqli_real_escape_string($finance_connect, trim((string) $ivs_amt));
+                        $sqlIvsAttach = mysqli_real_escape_string($finance_connect, trim((string) $ivs_attach));
+                        $sqlIvsRemark = mysqli_real_escape_string($finance_connect, trim((string) $ivs_remark));
+
+                        $query = "UPDATE " . $tblName  . " SET type = '$sqlIvsType',date = '$sqlIvsDate',amount = '$sqlIvsAmt', prev_amt ='$ivs_prev_amt', final_amt ='$ivs_final_amt', merchant = '$sqlIvsMrcht', attachment ='$sqlIvsAttach', remarks ='$sqlIvsRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$row_id'";
                         $returnData = mysqli_query($finance_connect, $query);
 
                         updateTransAmt($finance_connect, $tblName, ['merchant'], ['merchant']);
@@ -392,7 +408,7 @@ if (post('actionBtn')) {
 
 
 if (post('act') == 'D') {
-    $id = post('id');
+    $id = (int) post('id');
     if ($id) {
         try {
             // take name

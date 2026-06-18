@@ -9,7 +9,7 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 $tblName = PIN_GRP;
 
 //Current Page Action And Data ID
-$dataId = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? (int) input('id') : (int) post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
@@ -91,6 +91,9 @@ if (post('actionBtn')) {
             } else {
                 $pinArr = '';
             }
+            $sqlCurrentDataName = mysqli_real_escape_string($connect, trim((string) $currentDataName));
+            $sqlPinArr = mysqli_real_escape_string($connect, trim((string) $pinArr));
+            $sqlDataRemark = mysqli_real_escape_string($connect, trim((string) $dataRemark));
 
             $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
@@ -118,7 +121,7 @@ if (post('actionBtn')) {
                         array_push($datafield, 'remark');
                     }
 
-                    $query = "INSERT INTO " . $tblName . "(name,pins,remark,create_by,create_date,create_time) VALUES ('$currentDataName','$pinArr','$dataRemark','" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . "(name,pins,remark,create_by,create_date,create_time) VALUES ('$sqlCurrentDataName','$sqlPinArr','$sqlDataRemark','" . USER_ID . "',curdate(),curtime())";
                     $returnData = mysqli_query($connect, $query);
                     $dataId = $connect->insert_id;
                 } catch (Exception $e) {
@@ -148,7 +151,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if ($oldvalarr && $chgvalarr) {
-                        $query = "UPDATE " . $tblName . " SET name ='$currentDataName',pins = '$pinArr', remark ='$dataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
+                        $query = "UPDATE " . $tblName . " SET name ='$sqlCurrentDataName',pins = '$sqlPinArr', remark ='$sqlDataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($connect, $query);
                     } else {
                         $act = 'NC';

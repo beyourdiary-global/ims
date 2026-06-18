@@ -9,7 +9,7 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 $tblName = USR_USER;
 
 //Current Page Action And Data ID
-$dataId = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? (int) input('id') : (int) post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
@@ -112,12 +112,16 @@ if (post('actionBtn')) {
 
             $currentDataName = postSpaceFilter('currentDataName');
             $dataUsername = postSpaceFilter('dataUsername');
-            $userGroup = postSpaceFilter('userGroup');
+            $userGroup = (int) postSpaceFilter('userGroup');
             $userEmail = postSpaceFilter('currentUserEmail');
             $userPassword = postSpaceFilter('password');
             $userConfirmPassword = postSpaceFilter('confirmPassword');
             $mainReportSupervisor = (int) postSpaceFilter('mainReportSupervisor');
             $secondReportSupervisor = (int) postSpaceFilter('secondReportSupervisor');
+            $sqlCurrentDataName = mysqli_real_escape_string($connect, trim((string) $currentDataName));
+            $sqlDataUsername = mysqli_real_escape_string($connect, trim((string) $dataUsername));
+            $sqlUserEmail = mysqli_real_escape_string($connect, trim((string) $userEmail));
+            $sqlUserPassword = mysqli_real_escape_string($connect, trim((string) $userPassword));
 
             $isSuperAdminGroup = false;
             if ((int) $userGroup > 0) {
@@ -230,12 +234,13 @@ if (post('actionBtn')) {
 
                     // Temporarily using md5 to maintain compatibility with the existing login.php flow
                     $hashedPassword = md5($userPassword);
+                    $sqlHashedPassword = mysqli_real_escape_string($connect, $hashedPassword);
                     if ($hasSupervisorColumns) {
                         $mainSupervisorSql = ($mainReportSupervisor > 0) ? "'" . (int) $mainReportSupervisor . "'" : "NULL";
                         $secondSupervisorSql = ($secondReportSupervisor > 0) ? "'" . (int) $secondReportSupervisor . "'" : "NULL";
-                        $query = "INSERT INTO " . $tblName . "(name,username,password,password_alt,email,access_id,main_report_supervisor,second_report_supervisor,create_by,create_date,create_time) VALUES ('$currentDataName','$dataUsername','$userPassword','$hashedPassword','$userEmail','$userGroup',$mainSupervisorSql,$secondSupervisorSql,'" . USER_ID . "',curdate(),curtime())";
+                        $query = "INSERT INTO " . $tblName . "(name,username,password,password_alt,email,access_id,main_report_supervisor,second_report_supervisor,create_by,create_date,create_time) VALUES ('$sqlCurrentDataName','$sqlDataUsername','$sqlUserPassword','$sqlHashedPassword','$sqlUserEmail','$userGroup',$mainSupervisorSql,$secondSupervisorSql,'" . USER_ID . "',curdate(),curtime())";
                     } else {
-                        $query = "INSERT INTO " . $tblName . "(name,username,password,password_alt,email,access_id,create_by,create_date,create_time) VALUES ('$currentDataName','$dataUsername','$userPassword','$hashedPassword','$userEmail','$userGroup','" . USER_ID . "',curdate(),curtime())";
+                        $query = "INSERT INTO " . $tblName . "(name,username,password,password_alt,email,access_id,create_by,create_date,create_time) VALUES ('$sqlCurrentDataName','$sqlDataUsername','$sqlUserPassword','$sqlHashedPassword','$sqlUserEmail','$userGroup','" . USER_ID . "',curdate(),curtime())";
                     }
                     $returnData = mysqli_query($connect, $query);
                     $dataId = $connect->insert_id;
@@ -293,9 +298,9 @@ if (post('actionBtn')) {
                         if ($hasSupervisorColumns) {
                             $mainSupervisorSql = ($mainReportSupervisor > 0) ? "'" . (int) $mainReportSupervisor . "'" : "NULL";
                             $secondSupervisorSql = ($secondReportSupervisor > 0) ? "'" . (int) $secondReportSupervisor . "'" : "NULL";
-                            $query = "UPDATE " . $tblName . " SET name ='$currentDataName', username ='$dataUsername',email ='$userEmail', access_id ='$userGroup', main_report_supervisor = $mainSupervisorSql, second_report_supervisor = $secondSupervisorSql, update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
+                            $query = "UPDATE " . $tblName . " SET name ='$sqlCurrentDataName', username ='$sqlDataUsername',email ='$sqlUserEmail', access_id ='$userGroup', main_report_supervisor = $mainSupervisorSql, second_report_supervisor = $secondSupervisorSql, update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         } else {
-                            $query = "UPDATE " . $tblName . " SET name ='$currentDataName', username ='$dataUsername',email ='$userEmail', access_id ='$userGroup', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
+                            $query = "UPDATE " . $tblName . " SET name ='$sqlCurrentDataName', username ='$sqlDataUsername',email ='$sqlUserEmail', access_id ='$userGroup', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         }
                         $returnData = mysqli_query($connect, $query);
                     } else {

@@ -4,10 +4,11 @@ $pageTitle = "Stock Out";
 include '../menuHeader.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$barcode = input('barcode');
-$prod_id = input('pkg_id');
-$whse_id = input('whse_id');
-$usr_id = input('usr_id');
+$barcode = trim((string) input('barcode'));
+$prod_id = (int) input('pkg_id');
+$whse_id = (int) input('whse_id');
+$usr_id = (int) input('usr_id');
+$safeBarcode = mysqli_real_escape_string($connect, $barcode);
 $redirectPage = 'dashboard.php';  // if no value get
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 // Check if required parameters are missing and redirect if necessary
@@ -49,34 +50,36 @@ if ($prod_barcode_slot_required && $prod_barcode_slot_total >= 1) {
     for ($x = 1; $x <= $max_slots; $x++) {
         $barcode_input .= "<input class=\"form-control mb-1\" id=\"barcode_input_$x\" name=\"barcode_input[]\" type=\"text\" placeholder=\"Barcode Slot $x\">";
     }
-    $order_id = post('order_id');
+    $order_id = trim((string) post('order_id'));
+    $sqlOrderIdConnect = mysqli_real_escape_string($connect, $order_id);
+    $sqlOrderIdFinance = mysqli_real_escape_string($finance_connect, $order_id);
     if($max_slots == 0 && $order_id){
-        $lazada = getData('*', "oder_number='$order_id' ", '',LAZADA_ORDER_REQ, $connect);
+        $lazada = getData('*', "oder_number='$sqlOrderIdConnect' ", '',LAZADA_ORDER_REQ, $connect);
         
-        $shopee = getData('*',"orderID='$order_id'", "", '',SHOPEE_SG_ORDER_REQ, $finance_connect);
-        $fbs = getData('*', "id='$order_id'", '',FB_ORDER_REQ, $finance_connect);
-        $web = getData('*', "order_id='$order_id'", '',WEB_ORDER_REQ, $finance_connect);
+        $shopee = getData('*',"orderID='$sqlOrderIdFinance'", "", '',SHOPEE_SG_ORDER_REQ, $finance_connect);
+        $fbs = getData('*', "id='$sqlOrderIdFinance'", '',FB_ORDER_REQ, $finance_connect);
+        $web = getData('*', "order_id='$sqlOrderIdFinance'", '',WEB_ORDER_REQ, $finance_connect);
         $newStatus = 'CP';
         if ($lazada) {
-            $query = "UPDATE LAZADA_ORDER_REQ SET order_status = '$newStatus' WHERE oder_number='$order_id";
+            $query = "UPDATE LAZADA_ORDER_REQ SET order_status = '$newStatus' WHERE oder_number='$sqlOrderIdConnect'";
             $acc_result = $connect->query($query);
          
         }
         
         if ($shopee) {
-            $query = "UPDATE SHOPEE_SG_ORDER_REQ SET order_status = '$newStatus' WHERE orderID='$order_id'";
+            $query = "UPDATE SHOPEE_SG_ORDER_REQ SET order_status = '$newStatus' WHERE orderID='$sqlOrderIdFinance'";
             $acc_result = $finance_connect->query($query);
            
         }
         
         if ($fbs) {
-            $query = "UPDATE FB_ORDER_REQ SET order_status = '$newStatus' WHERE id='$order_id'";
+            $query = "UPDATE FB_ORDER_REQ SET order_status = '$newStatus' WHERE id='$sqlOrderIdFinance'";
             $acc_result = $finance_connect->query($query);
            
         }
         
         if ($web) {
-            $query = "UPDATE WEB_ORDER_REQ SET order_status = '$newStatus' WHERE order_id='$order_id'";
+            $query = "UPDATE WEB_ORDER_REQ SET order_status = '$newStatus' WHERE order_id='$sqlOrderIdFinance'";
             $acc_result = $finance_connect->query($query);
           
         }
@@ -106,9 +109,10 @@ while ($usr = $rst_usr->fetch_assoc()) {
 
 // Submission
 if (post('usrBtn')) {
-    $usrBtn = post('usrBtn');
+    $usrBtn = (int) post('usrBtn');
     $barcodeInputs = post('barcode_input');
-    $orderid = post('order_id');
+    $orderid = trim((string) post('order_id'));
+    $sqlOrderId = mysqli_real_escape_string($connect, $orderid);
     if ($barcodeInputs != '') {
         $arrNum = sizeof($barcodeInputs);
 
@@ -136,7 +140,8 @@ if (post('usrBtn')) {
                 foreach ($barcodeInputs as $batchCode) {
                  
                     $stockInDate = date("Y-m-d");
-                    $barcode = input('barcode');
+                    $barcode = trim((string) input('barcode'));
+                    $sqlBarcode = mysqli_real_escape_string($connect, $barcode);
                     $productBatchCode = $batchCode;
                     $productStatusId = 4;
                     $warehouseId = $whse_id;
@@ -153,13 +158,13 @@ if (post('usrBtn')) {
                     SET 
                         stock_out_date = '$stockOutDate', 
                         stock_out_person_in_charges = '$stockOutPersonInCharges', 
-                        stock_out_customer_purchase_id = '$orderid' 
+                        stock_out_customer_purchase_id = '$sqlOrderId' 
                     WHERE 
                         brand_id = '$brandId' AND 
                         product_id = '$productId' AND 
-                        barcode = '$barcode'";
+                        barcode = '$sqlBarcode'";
                         var_dump($insertQuery);
-                    $insertQuery2 = "INSERT INTO $tblname2 (brand_id, product_id, product_category, stock_out_date, stock_out_person_in_charges, stock_out_customer_purchase_id, remark, create_date, create_time, create_by) VALUES ('$brandId', '$productId','$productCategoryId','$stockInDate', '$stockInPersonInCharges','$orderid', '$remark', '$createDate', '$createTime', '$createBy')";
+                    $insertQuery2 = "INSERT INTO $tblname2 (brand_id, product_id, product_category, stock_out_date, stock_out_person_in_charges, stock_out_customer_purchase_id, remark, create_date, create_time, create_by) VALUES ('$brandId', '$productId','$productCategoryId','$stockInDate', '$stockInPersonInCharges','$sqlOrderId', '$remark', '$createDate', '$createTime', '$createBy')";
                 
                     $result = mysqli_query($connect, $insertQuery);
                     $result2 = mysqli_query($connect, $insertQuery2);
@@ -215,8 +220,9 @@ if (post('usrBtn')) {
             }
                 
                 $stockInDate = date("Y-m-d");
-                $order_id = input('order_id');
-                $barcode = input('barcode');
+                $order_id = trim((string) input('order_id'));
+                $sqlOrderIdInput = mysqli_real_escape_string($connect, $order_id);
+                $barcode = trim((string) input('barcode'));
                 $productBatchCode = null;
                 $productStatusId = 4;
                 $warehouseId = $whse_id;
@@ -233,13 +239,13 @@ if (post('usrBtn')) {
                 SET 
                     stock_out_date = '$stockOutDate', 
                     stock_out_person_in_charges = '$stockOutPersonInCharges', 
-                    stock_out_customer_purchase_id = '$orderid' 
+                    stock_out_customer_purchase_id = '$sqlOrderId' 
                 WHERE 
                     brand_id = '$brandId' AND 
                     product_id = '$productId' AND 
-                    barcode = '$order_id'";
+                    barcode = '$sqlOrderIdInput'";
                 var_dump($insertQuery);
-                $insertQuery2 = "INSERT INTO $tblname2 (brand_id, product_id, product_category, stock_out_date, stock_out_person_in_charges, stock_out_customer_purchase_id, remark, create_date, create_time, create_by) VALUES ('$brandId', '$productId', '$stockInDate', '$stockInPersonInCharges','$orderid', '$remark', '$createDate', '$createTime', '$createBy')";
+                $insertQuery2 = "INSERT INTO $tblname2 (brand_id, product_id, product_category, stock_out_date, stock_out_person_in_charges, stock_out_customer_purchase_id, remark, create_date, create_time, create_by) VALUES ('$brandId', '$productId', '$stockInDate', '$stockInPersonInCharges','$sqlOrderId', '$remark', '$createDate', '$createTime', '$createBy')";
                 $result = mysqli_query($connect, $insertQuery);
                 $result2 = mysqli_query($connect, $insertQuery2);
                 if ($result) {

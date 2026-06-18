@@ -8,7 +8,7 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = FB_ADS_TOPUP;
 
-$dataId = input('id');
+$dataId = (int) input('id');
 $act = input('act');
 $pageAction = getPageAction($act);
 $allowed_ext = array("png", "jpg", "jpeg", "svg", "pdf");
@@ -52,10 +52,10 @@ if (!($dataId) && !($act)) {
 if (post('actionBtn')) {
     $action = post('actionBtn');
 
-    $fat_acc = postSpaceFilter("fat_meta_acc_hidden");
+    $fat_acc = (int) postSpaceFilter("fat_meta_acc_hidden");
     $fat_trans_id = postSpaceFilter("fat_trans_id");
     $fat_date = postSpaceFilter("fat_date");
-    $fat_pic = postSpaceFilter("fat_pic_hidden");
+    $fat_pic = (int) postSpaceFilter("fat_pic_hidden");
     $fat_bank = postSpaceFilter("fat_bank");
     $fat_amt = postSpaceFilter('fat_amt');
     $fat_remark = postSpaceFilter('fat_remark');
@@ -63,8 +63,8 @@ if (post('actionBtn')) {
     $fat_attach = null;
     if (isset($_FILES["fat_attach"]) && $_FILES["fat_attach"]["size"] != 0) {
         $fat_attach = $_FILES["fat_attach"]["name"];
-    } elseif (isset($_POST['existing_attachment'])) {
-        $fat_attach = $_POST['existing_attachment'];
+    } elseif (post('existing_attachment') !== '') {
+        $fat_attach = trim((string) post('existing_attachment'));
     }
 
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
@@ -152,7 +152,13 @@ if (post('actionBtn')) {
                         array_push($datafield, 'remark');
                     }
 
-                    $query = "INSERT INTO " . $tblName  . "(meta_acc,transactionID,payment_date,pic,topup_amt,attachment,remark,create_by,create_date,create_time) VALUES ('$fat_acc','$fat_trans_id','$fat_date','$fat_pic','$fat_amt','$fat_attach','$fat_remark','" . USER_ID . "',curdate(),curtime())";
+                    $sqlFatTransId = mysqli_real_escape_string($finance_connect, trim((string) $fat_trans_id));
+                    $sqlFatDate = mysqli_real_escape_string($finance_connect, trim((string) $fat_date));
+                    $sqlFatAmt = mysqli_real_escape_string($finance_connect, trim((string) $fat_amt));
+                    $sqlFatAttach = mysqli_real_escape_string($finance_connect, trim((string) $fat_attach));
+                    $sqlFatRemark = mysqli_real_escape_string($finance_connect, trim((string) $fat_remark));
+
+                    $query = "INSERT INTO " . $tblName  . "(meta_acc,transactionID,payment_date,pic,topup_amt,attachment,remark,create_by,create_date,create_time) VALUES ('$fat_acc','$sqlFatTransId','$sqlFatDate','$fat_pic','$sqlFatAmt','$sqlFatAttach','$sqlFatRemark','" . USER_ID . "',curdate(),curtime())";
                     // Execute the query
                     $returnData = mysqli_query($finance_connect, $query);
                     $_SESSION['tempValConfirmBox'] = true;
@@ -216,7 +222,13 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {                        
-                        $query = "UPDATE " . $tblName  . " SET meta_acc = '$fat_acc', transactionID = '$fat_trans_id', payment_date = '$fat_date', pic = '$fat_pic', topup_amt = '$fat_amt', remark ='$fat_remark', attachment ='$fat_attach', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
+                        $sqlFatTransId = mysqli_real_escape_string($finance_connect, trim((string) $fat_trans_id));
+                        $sqlFatDate = mysqli_real_escape_string($finance_connect, trim((string) $fat_date));
+                        $sqlFatAmt = mysqli_real_escape_string($finance_connect, trim((string) $fat_amt));
+                        $sqlFatAttach = mysqli_real_escape_string($finance_connect, trim((string) $fat_attach));
+                        $sqlFatRemark = mysqli_real_escape_string($finance_connect, trim((string) $fat_remark));
+
+                        $query = "UPDATE " . $tblName  . " SET meta_acc = '$fat_acc', transactionID = '$sqlFatTransId', payment_date = '$sqlFatDate', pic = '$fat_pic', topup_amt = '$sqlFatAmt', remark ='$sqlFatRemark', attachment ='$sqlFatAttach', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($finance_connect, $query);
 
                     } else {
@@ -264,7 +276,7 @@ if (post('actionBtn')) {
 
 
 if (post('act') == 'D') {
-    $id = post('id');
+    $id = (int) post('id');
     if ($id) {
         try {
             // take name

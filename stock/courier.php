@@ -8,8 +8,9 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = COURIER;
 
-$dataId = input('id');
+$dataId = trim((string) input('id'));
 $act = input('act');
+$sqlDataId = mysqli_real_escape_string($connect, $dataId);
 $pageAction = getPageAction($act);
 
 $redirectPage = $SITEURL . '/stock/courier_table.php';
@@ -18,7 +19,7 @@ $clearLocalStorage = '<script>localStorage.clear();</script>';
 
 // to display data to input
 if ($dataId) { //edit/remove/view
-    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $connect);
+    $result = getData('*', "id = '$sqlDataId'", 'LIMIT 1', $tblName, $connect);
 
     if ($result != false && $result->num_rows > 0) {
         $dataExisted = 1;
@@ -43,6 +44,11 @@ if (post('actionBtn')) {
     $courier_country = postSpaceFilter("courier_country_hidden");
     $courier_tax = postSpaceFilter("courier_tax");
     $courier_tracking_link = postSpaceFilter("courier_tracking_link");
+    $sqlCourierId = mysqli_real_escape_string($connect, trim((string) $courier_id));
+    $sqlCourierName = mysqli_real_escape_string($connect, trim((string) $courier_name));
+    $sqlCourierCountry = mysqli_real_escape_string($connect, trim((string) $courier_country));
+    $sqlCourierTax = mysqli_real_escape_string($connect, trim((string) $courier_tax));
+    $sqlCourierTrackingLink = mysqli_real_escape_string($connect, trim((string) $courier_tracking_link));
 
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
@@ -97,7 +103,7 @@ if (post('actionBtn')) {
                         array_push($datafield, 'tracking_link');
                     }
 
-                    $query = "INSERT INTO " . $tblName  . "(id,courierID,name,country,taxable,create_by,create_date,create_time,tracking_link) VALUES ('$courier_id','','$courier_name','$courier_country','$courier_tax','" . USER_ID . "',curdate(),curtime(),'$courier_tracking_link')";
+                    $query = "INSERT INTO " . $tblName  . "(id,courierID,name,country,taxable,create_by,create_date,create_time,tracking_link) VALUES ('$sqlCourierId','','$sqlCourierName','$sqlCourierCountry','$sqlCourierTax','" . USER_ID . "',curdate(),curtime(),'$sqlCourierTrackingLink')";
                     // Execute the query
                     $returnData = mysqli_query($connect, $query);
                     
@@ -110,7 +116,7 @@ if (post('actionBtn')) {
             } else {
                 try {
                     // take old value
-                    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $connect);
+                    $result = getData('*', "id = '$sqlDataId'", 'LIMIT 1', $tblName, $connect);
                     $row = $result->fetch_assoc();
 
                     // check value
@@ -150,7 +156,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
-                        $query = "UPDATE " . $tblName  . " SET id = '$courier_id',name = '$courier_name',country = '$courier_country',tracking_link ='$courier_tracking_link',taxable = '$courier_tax', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
+                        $query = "UPDATE " . $tblName  . " SET id = '$sqlCourierId',name = '$sqlCourierName',country = '$sqlCourierCountry',tracking_link ='$sqlCourierTrackingLink',taxable = '$sqlCourierTax', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$sqlDataId'";
 
                         $returnData = mysqli_query($connect, $query);
                       
@@ -202,11 +208,12 @@ if (post('actionBtn')) {
 
 
 if (post('act') == 'D') {
-    $id = post('id');
+    $id = trim((string) post('id'));
     if ($id) {
         try {
             // take name
-            $result = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $connect);
+            $sqlId = mysqli_real_escape_string($connect, $id);
+            $result = getData('*', "id = '$sqlId'", 'LIMIT 1', $tblName, $connect);
             $row = $result->fetch_assoc();
 
             $dataId = $row['id'];

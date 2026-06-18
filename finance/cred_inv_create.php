@@ -8,7 +8,7 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = CRED_NOTES_INV;
 //Current Page Action And Data ID
-$dataId = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? (int) input('id') : (int) post('id');
 
 //Page Redirect Link , Clean LocalStorage , Error Alert Msg 
 $redirectPage = $SITEURL . '/finance/cred_notes_inv_table.php';

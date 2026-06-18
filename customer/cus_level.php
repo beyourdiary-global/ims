@@ -12,7 +12,7 @@ if (!empty($resolvedPageTitle)) {
 $tblName = CUS_LEVEL;
 $currency_list_result = getData('*', '', '', CUR_UNIT, $connect);
 
-$dataId = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? (int) input('id') : (int) post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
@@ -75,8 +75,13 @@ if (post('actionBtn')) {
             $colorSegmentation =  postSpaceFilter('segmentationColor');
             $purchaseAmountFrom = postSpaceFilter('purchaseAmountFrom');
             $purchaseAmountUntil = postSpaceFilter('purchaseAmountUntil');
-            $currency = postSpaceFilter('currency_hidden');
+            $currency = (int) postSpaceFilter('currency_hidden');
             $dataRemark = postSpaceFilter('currentDataRemark');
+            $sqlCurrentDataName = mysqli_real_escape_string($connect, trim((string) $currentDataName));
+            $sqlColorSegmentation = mysqli_real_escape_string($connect, trim((string) $colorSegmentation));
+            $sqlPurchaseAmountFrom = mysqli_real_escape_string($connect, trim((string) $purchaseAmountFrom));
+            $sqlPurchaseAmountUntil = mysqli_real_escape_string($connect, trim((string) $purchaseAmountUntil));
+            $sqlDataRemark = mysqli_real_escape_string($connect, trim((string) $dataRemark));
 
             $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
@@ -128,7 +133,7 @@ if (post('actionBtn')) {
                         array_push($datafield, 'remark');
                     }
 
-                    $query = "INSERT INTO " . $tblName . "(name,colorCode,remark,purchaseAmountFrom,purchaseAmountUntil,currency,create_by,create_date,create_time) VALUES ('$currentDataName','$colorSegmentation','$dataRemark','$purchaseAmountFrom','$purchaseAmountUntil','$currency','" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . "(name,colorCode,remark,purchaseAmountFrom,purchaseAmountUntil,currency,create_by,create_date,create_time) VALUES ('$sqlCurrentDataName','$sqlColorSegmentation','$sqlDataRemark','$sqlPurchaseAmountFrom','$sqlPurchaseAmountUntil','$currency','" . USER_ID . "',curdate(),curtime())";
 
                     $returnData = mysqli_query($connect, $query);
                     $dataId = $connect->insert_id;
@@ -182,7 +187,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if ($oldvalarr && $chgvalarr) {
-                        $query = "UPDATE " . $tblName . " SET name ='$currentDataName', colorCode = '$colorSegmentation' , purchaseAmountFrom='$purchaseAmountFrom', purchaseAmountUntil='$purchaseAmountUntil', currency='$currency', remark ='$dataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
+                        $query = "UPDATE " . $tblName . " SET name ='$sqlCurrentDataName', colorCode = '$sqlColorSegmentation' , purchaseAmountFrom='$sqlPurchaseAmountFrom', purchaseAmountUntil='$sqlPurchaseAmountUntil', currency='$currency', remark ='$sqlDataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($connect, $query);
                         if ($returnData) {
                             $act = 'E';

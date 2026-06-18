@@ -12,13 +12,13 @@ $_SESSION['act'] = '';
 $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
-$channel = input('channel');
+$channel = (int) input('channel');
 $redirectPage = $SITEURL . '/finance/order_process_list.php';
 $redirectLink = ("<script>location.href = '$redirectPage';</script>");
 
 
-$dataId = input('id');
-$orderID = input('orderid');
+$dataId = (int) input('id');
+$orderID = trim((string) input('orderid'));
 $act = input('act');
 $pageAction = getPageAction($act);
 $clearLocalStorage = '<script>localStorage.clear();</script>';
@@ -31,11 +31,14 @@ if (!($dataId) && !($act)) {
 if (post('actionBtn')) {
     $action = post('actionBtn');
 
-    $dfc_courier = postSpaceFilter("dfc_courier_hidden");
-    $for_channel = postSpaceFilter('for_channel');
+    $dfc_courier = (int) postSpaceFilter("dfc_courier_hidden");
+    $for_channel = (int) postSpaceFilter('for_channel');
     $usi_tracking = postSpaceFilter('usi_tracking');
     $usi_order_id = postSpaceFilter('usi_order_id');
     $usi_officialoid = postSpaceFilter('usi_officialoid');
+    $sqlUsiTracking = mysqli_real_escape_string($connect, trim((string) $usi_tracking));
+    $sqlUsiOrderId = mysqli_real_escape_string($connect, trim((string) $usi_order_id));
+    $sqlUsiOfficialOid = mysqli_real_escape_string($connect, trim((string) $usi_officialoid));
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
     switch ($action) {
@@ -87,21 +90,29 @@ if (post('actionBtn')) {
                     $channel_rst2 = getData('*', "id = '$channel'", '', CHANEL_SC_MD, $finance_connect);
                     $channel_row = $channel_rst2->fetch_assoc();
                     $channelname = $channel_row['name'];
+                    $targetTable = '';
                     if($channelname =='Shopee'){
-                        $tblName = SHOPEE_SG_ORDER_REQ;
+                        $targetTable = SHOPEE_SG_ORDER_REQ;
                     }else if($channelname =='Facebook'){
-                        $tblName = FB_ORDER_REQ;
+                        $targetTable = FB_ORDER_REQ;
                     }else if($channelname =='Web'){
-                        $tblName = WEB_ORDER_REQ;
+                        $targetTable = WEB_ORDER_REQ;
                     }
                     else if($channelname =='Lazada'){
-                        $tblName = LAZADA_ORDER_REQ;
+                        $targetTable = LAZADA_ORDER_REQ;
+                    }
+
+                    if ($targetTable === '') {
+                        $errorMsg = 'Invalid channel table.';
+                        $act = "F";
+                        break;
                     }
                     
-                    $query = "INSERT INTO " . $tblName . " (official_order_id,courier_id,tracking_id,order_id,channel)VALUES('$usi_officialoid','$dfc_courier','$usi_tracking','$usi_order_id','$for_channel')";
+                    $query = "INSERT INTO " . $targetTable . " (official_order_id,courier_id,tracking_id,order_id,channel)VALUES('$sqlUsiOfficialOid','$dfc_courier','$sqlUsiTracking','$sqlUsiOrderId','$for_channel')";
                     $returnData = mysqli_query($connect, $query);
-                    $query2 = "UPDATE $tblName SET order_status = 'SP' WHERE id = '$dataId'";
+                    $query2 = "UPDATE $targetTable SET order_status = 'SP' WHERE id = '$dataId'";
                     $returnData2 = mysqli_query($finance_connect, $query2);
+                    $tblName = $targetTable;
                     $_SESSION['tempValConfirmBox'] = true;
                     } catch (Exception $e) {
                         $errorMsg = $e->getMessage();

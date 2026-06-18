@@ -9,7 +9,7 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 $tblName = STK_CDT_TOPUP_RCD;
 
 //Current Page Action And Data ID
-$dataId = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? (int) input('id') : (int) post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
@@ -91,11 +91,13 @@ if (post('actionBtn')) {
         case 'addData':
         case 'updData':
 
-            $sc_mrcht = postSpaceFilter('sc_mrcht_hidden');
-            $brand = postSpaceFilter('brand_hidden');
-            $sc_currency = postSpaceFilter("sc_currency_hidden");
+            $sc_mrcht = (int) postSpaceFilter('sc_mrcht_hidden');
+            $brand = (int) postSpaceFilter('brand_hidden');
+            $sc_currency = (int) postSpaceFilter("sc_currency_hidden");
             $amount = postSpaceFilter('amount');
             $dataRemark = postSpaceFilter('currentDataRemark');
+            $sqlAmount = mysqli_real_escape_string($finance_connect, trim((string) $amount));
+            $sqlDataRemark = mysqli_real_escape_string($finance_connect, trim((string) $dataRemark));
 
             $attach = null;
 
@@ -106,9 +108,10 @@ if (post('actionBtn')) {
                 $img_ext_lc = strtolower($img_ext);
                 $imgExist = true;
                 move_uploaded_file($attachment_tmp_name, $img_path . $attach);
-            } else if (isset($_POST['existing_attachment'])) {
-                $attach = $_POST['existing_attachment'];
+            } else if (post('existing_attachment') !== '') {
+                $attach = trim((string) post('existing_attachment'));
             }
+            $sqlAttach = mysqli_real_escape_string($finance_connect, trim((string) $attach));
 
             $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
             $fields = array('merchant', 'brand', 'currency_unit', 'amount'); // Define fields to check for duplicates
@@ -159,7 +162,7 @@ if (post('actionBtn')) {
                         array_push($newvalarr, $attach);
                         array_push($datafield, 'attachment');
                     }
-                    $query = "INSERT INTO " . $tblName . "(merchant,brand,currency_unit,amount,remark,attachment,create_by,create_date,create_time) VALUES ('$sc_mrcht','$brand','$sc_currency','$amount','$dataRemark','$attach','" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . "(merchant,brand,currency_unit,amount,remark,attachment,create_by,create_date,create_time) VALUES ('$sc_mrcht','$brand','$sc_currency','$sqlAmount','$sqlDataRemark','$sqlAttach','" . USER_ID . "',curdate(),curtime())";
 
                     $returnData = mysqli_query($finance_connect, $query);
                     $dataId = $finance_connect->insert_id;
@@ -209,7 +212,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if ($oldvalarr && $chgvalarr) {
-                        $query = "UPDATE " . $tblName . " SET merchant = '$sc_mrcht',brand='$brand',currency_unit='$sc_currency',amount='$amount',remark ='$dataRemark',attachment='$attach', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
+                        $query = "UPDATE " . $tblName . " SET merchant = '$sc_mrcht',brand='$brand',currency_unit='$sc_currency',amount='$sqlAmount',remark ='$sqlDataRemark',attachment='$sqlAttach', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($finance_connect, $query);
                     } else {
                         $act = 'NC';

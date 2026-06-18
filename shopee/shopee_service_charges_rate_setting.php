@@ -8,7 +8,7 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 $tblName = SHOPEE_SCR_SETT;
 
 //Current Page Action And Data ID
-$dataId = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? (int) input('id') : (int) post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
@@ -58,10 +58,13 @@ if (post('actionBtn')) {
         case 'addData':
         case 'updData':
 
-    $curr = postSpaceFilter('curr');
+    $curr = (int) postSpaceFilter('curr');
     $commission = postSpaceFilter('commission');
     $service = postSpaceFilter('service');
     $transaction = postSpaceFilter('transaction');
+    $sqlCommission = mysqli_real_escape_string($finance_connect, trim((string) $commission));
+    $sqlService = mysqli_real_escape_string($finance_connect, trim((string) $service));
+    $sqlTransaction = mysqli_real_escape_string($finance_connect, trim((string) $transaction));
 
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
@@ -106,7 +109,7 @@ if (post('actionBtn')) {
                         array_push($datafield, 'transaction');
                     }
 
-                    $query = "INSERT INTO " . $tblName . "(currency_unit,commission,service,transaction,create_by,create_date,create_time) VALUES ('$curr','$commission','$service',$transaction,'" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . "(currency_unit,commission,service,transaction,create_by,create_date,create_time) VALUES ('$curr','$sqlCommission','$sqlService','$sqlTransaction','" . USER_ID . "',curdate(),curtime())";
                     $returnData = mysqli_query($finance_connect, $query);
                     $dataId = $finance_connect->insert_id;
                     $_SESSION['tempValConfirmBox'] = true;
@@ -149,7 +152,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {                        
-                        $query = "UPDATE " . $tblName  . " SET currency_unit = '$curr',commission = '$commission', service ='$service', transaction ='$transaction', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
+                        $query = "UPDATE " . $tblName  . " SET currency_unit = '$curr',commission = '$sqlCommission', service ='$sqlService', transaction ='$sqlTransaction', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($finance_connect, $query);
 
                     } else {
@@ -202,6 +205,7 @@ if (post('actionBtn')) {
     
 
 if (post('act') == 'D') {
+        $id = (int) post('id');
         try {
             // take name
             $result = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $finance_connect);

@@ -4,10 +4,11 @@ $pageTitle = "Stock In";
 include '../menuHeader.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$barcode = input('barcode');
-$prod_id = input('pkg_id');
-$whse_id = input('whse_id');
-$usr_id = input('usr_id');
+$barcode = trim((string) input('barcode'));
+$prod_id = (int) input('pkg_id');
+$whse_id = (int) input('whse_id');
+$usr_id = (int) input('usr_id');
+$safeBarcode = mysqli_real_escape_string($connect, $barcode);
 $redirectPage = 'dashboard.php';  // if no value get
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 // Check if required parameters are missing and redirect if necessary
@@ -59,7 +60,7 @@ while ($usr = $rst_usr->fetch_assoc()) {
 
 // Submission
 if (post('usrBtn')) {
-    $usrBtn = post('usrBtn');
+    $usrBtn = (int) post('usrBtn');
     $barcodeInputs = post('barcode_input');
 
     if ($barcodeInputs != '') {
@@ -87,8 +88,10 @@ if (post('usrBtn')) {
                 }
                 foreach ($barcodeInputs as $batchCode) {
                     $stockInDate = date("Y-m-d");
-                    $barcode = input('barcode');
-                    $productBatchCode = $batchCode;
+                    $barcode = trim((string) input('barcode'));
+                    $productBatchCode = trim((string) $batchCode);
+                    $sqlBarcode = mysqli_real_escape_string($connect, $barcode);
+                    $sqlProductBatchCode = mysqli_real_escape_string($connect, $productBatchCode);
                     $productStatusId = 4;
                     $warehouseId = $whse_id;
                     $stockInPersonInCharges = $usrBtn;
@@ -97,7 +100,7 @@ if (post('usrBtn')) {
                     $createTime = date("H:i:s");
                     $createBy = $usrBtn;
 
-                    $insertQuery = "INSERT INTO $tblname (brand_id, product_id, stock_in_date, barcode, product_batch_code, product_status_id, product_category_id, warehouse_id, stock_in_person_in_charges, remark, create_date, create_time, create_by, `status`) VALUES ('$brandId', '$productId', '$stockInDate', '$barcode', '$productBatchCode', '$productStatusId', '$productCategoryId', '$warehouseId', '$stockInPersonInCharges', '$remark', '$createDate', '$createTime', '$createBy', 'active')";
+                    $insertQuery = "INSERT INTO $tblname (brand_id, product_id, stock_in_date, barcode, product_batch_code, product_status_id, product_category_id, warehouse_id, stock_in_person_in_charges, remark, create_date, create_time, create_by, `status`) VALUES ('$brandId', '$productId', '$stockInDate', '$sqlBarcode', '$sqlProductBatchCode', '$productStatusId', '$productCategoryId', '$warehouseId', '$stockInPersonInCharges', '$remark', '$createDate', '$createTime', '$createBy', 'active')";
 
                     $result = mysqli_query($connect, $insertQuery);
                     $tblname2 = STK_COST;
@@ -173,8 +176,10 @@ if (post('usrBtn')) {
             }
           
                 $stockInDate = date("Y-m-d");
-                $barcode = input('barcode');
+                $barcode = trim((string) input('barcode'));
+                $sqlBarcode = mysqli_real_escape_string($connect, $barcode);
                 $productBatchCode = null;
+                $sqlProductBatchCode = '';
                 $productStatusId = 4;
                 $warehouseId = $whse_id;
                 $stockInPersonInCharges = $usrBtn;
@@ -184,7 +189,7 @@ if (post('usrBtn')) {
                 $createBy = $usrBtn;
                 $tblname2 = STK_COST;
                 
-                $insertQuery = "INSERT INTO $tblname (brand_id, product_id, stock_in_date, barcode, product_batch_code, product_status_id, product_category_id, warehouse_id, stock_in_person_in_charges, remark, create_date, create_time, create_by, `status`) VALUES ('$brandId', '$productId', '$stockInDate', '$barcode', '$productBatchCode', '$productStatusId', '$productCategoryId', '$warehouseId', '$stockInPersonInCharges', '$remark', '$createDate', '$createTime', '$createBy', 'active')";
+                $insertQuery = "INSERT INTO $tblname (brand_id, product_id, stock_in_date, barcode, product_batch_code, product_status_id, product_category_id, warehouse_id, stock_in_person_in_charges, remark, create_date, create_time, create_by, `status`) VALUES ('$brandId', '$productId', '$stockInDate', '$sqlBarcode', '$sqlProductBatchCode', '$productStatusId', '$productCategoryId', '$warehouseId', '$stockInPersonInCharges', '$remark', '$createDate', '$createTime', '$createBy', 'active')";
                 $result = mysqli_query($connect, $insertQuery);
                 $stockCosting = getData('*', "brand_id='$brandId' AND product_id='$productId'", '', $tblname2, $connect);
 

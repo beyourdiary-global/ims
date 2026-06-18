@@ -9,7 +9,7 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 $tblName = SHOPEE_WDL_TRANS;
 
 //Current Page Action And Data ID
-$dataId = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? (int) input('id') : (int) post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addTransaction' : 'updTransaction';
 
@@ -65,18 +65,23 @@ if (post('actionBtn')) {
             
     $swt_date = postSpaceFilter("swt_date");
     $swt_id = postSpaceFilter("swt_id");
-    $curr = postSpaceFilter("curr_hidden");
+    $curr = (int) postSpaceFilter("curr_hidden");
     $swt_amt = postSpaceFilter("swt_amt");
-    $swt_pic = postSpaceFilter("swt_pic_hidden");
+    $swt_pic = (int) postSpaceFilter("swt_pic_hidden");
 
     $swt_attach = null;
     if (isset($_FILES["swt_attach"]) && $_FILES["swt_attach"]["size"] != 0) {
         $swt_attach = $_FILES["swt_attach"]["name"];
-    } elseif (isset($_POST['existing_attachment'])) {
-        $swt_attach = $_POST['existing_attachment'];
+    } elseif (post('existing_attachment') !== '') {
+        $swt_attach = trim((string) post('existing_attachment'));
     }
 
     $swt_remark = postSpaceFilter('swt_remark');
+    $sqlSwtDate = mysqli_real_escape_string($finance_connect, trim((string) $swt_date));
+    $sqlSwtId = mysqli_real_escape_string($finance_connect, trim((string) $swt_id));
+    $sqlSwtAmt = mysqli_real_escape_string($finance_connect, trim((string) $swt_amt));
+    $sqlSwtAttach = mysqli_real_escape_string($finance_connect, trim((string) $swt_attach));
+    $sqlSwtRemark = mysqli_real_escape_string($finance_connect, trim((string) $swt_remark));
 
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
@@ -169,7 +174,7 @@ if (post('actionBtn')) {
                         array_push($datafield, 'remark');
                     }
 
-                    $query = "INSERT INTO " . $tblName  . "(date,swt_id,currency_unit,amount,pic,attachment,remark,create_by,create_date,create_time) VALUES ('$swt_date','$swt_id','$curr','$swt_amt','$swt_pic','$swt_attach','$swt_remark','" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName  . "(date,swt_id,currency_unit,amount,pic,attachment,remark,create_by,create_date,create_time) VALUES ('$sqlSwtDate','$sqlSwtId','$curr','$sqlSwtAmt','$swt_pic','$sqlSwtAttach','$sqlSwtRemark','" . USER_ID . "',curdate(),curtime())";
                     // Execute the query
                     $returnData = mysqli_query($finance_connect, $query);
                     $dataId = $finance_connect->insert_id;
@@ -235,7 +240,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {                      
-                        $query = "UPDATE " . $tblName  . " SET date = '$swt_date', swt_id = '$swt_id', currency_unit = '$curr', amount = '$swt_amt', pic = '$swt_pic', attachment = '$swt_attach', remark ='$swt_remark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
+                        $query = "UPDATE " . $tblName  . " SET date = '$sqlSwtDate', swt_id = '$sqlSwtId', currency_unit = '$curr', amount = '$sqlSwtAmt', pic = '$swt_pic', attachment = '$sqlSwtAttach', remark ='$sqlSwtRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($finance_connect, $query);
 
                      
@@ -283,6 +288,7 @@ if (post('actionBtn')) {
 }
 
 if (post('act') == 'D') {
+    $id = (int) post('id');
     try {
         // take name
         $result = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $finance_connect);
