@@ -2,8 +2,8 @@
 $pageTitle = 'Lazada Order Report';
 $currentPagePin = 158;
 
-include_once __DIR__ . '/menuHeader.php';
-include_once __DIR__ . '/checkCurrentPagePin.php';
+include_once '../menuHeader.php';
+include_once '../checkCurrentPagePin.php';
 include_once ROOT . '/include/order_report_common.php';
 
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
