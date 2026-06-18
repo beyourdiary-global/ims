@@ -305,7 +305,7 @@ $menuList = array(
         'y',
         'expand' => array(
             array('Warehouse', 'mdi mdi-warehouse', $SITEURL . '/stock/warehouse_table.php', '16'),
-            array('Stock Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/finance/stock_order_request_table.php', '126'),
+            array('Stock Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/stock/stock_order_request_table.php', '126'),
             array('Stock In', 'mdi mdi-tray-arrow-down', $SITEURL . '/stock/warehouse_stock_in_table.php', '125'),
             array('Stock List', 'mdi mdi-package-variant', $SITEURL . '/stock/stock_list_table.php', '120'),
             array('Order Warehouse Transfer', 'mdi mdi-swap-horizontal', $SITEURL . '/stock/order_warehouse_transfer.php', '152'),

@@ -21,7 +21,7 @@ $pageAction = getPageAction($act);
 $pageActionTitle = $pageAction . ' ' . $pageTitle;
 $actionBtnValue = ($act === 'I') ? 'addRecord' : 'updRecord';
 
-$redirectPage = $SITEURL . '/finance/stock_order_request_table.php';
+$redirectPage = $SITEURL . '/stock/stock_order_request_table.php';
 $redirectLink = "<script>location.href = '$redirectPage';</script>";
 
 if ((!$dataId && !$act) || ($act && !isActionAllowed($pageAction, is_array($pinAccess) ? $pinAccess : array()))) {

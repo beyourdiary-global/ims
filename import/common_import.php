@@ -121,7 +121,7 @@ $shortcutCards = array(
         'desc' => 'Import stock order request data.',
         'canImport' => $canStockOrderReqImport,
         'importUrl' => $SITEURL . '/import/stock_order_request_import.php',
-        'backUrl' => $SITEURL . '/finance/stock_order_request_table.php',
+        'backUrl' => $SITEURL . '/stock/stock_order_request_table.php',
         'backText' => 'Back To Stock Order Page'
     ),
     array(

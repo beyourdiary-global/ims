@@ -15,7 +15,7 @@ if (!is_array($pinAccess) || count($pinAccess) === 0 || !isActionAllowed('View',
 }
 
 $requestId = (int) (!empty(input('id')) ? input('id') : post('id'));
-$redirectPage = $SITEURL . '/finance/stock_order_request_table.php';
+$redirectPage = $SITEURL . '/stock/stock_order_request_table.php';
 
 if ($requestId <= 0) {
     echo '<script>location.href = "' . $redirectPage . '";</script>';

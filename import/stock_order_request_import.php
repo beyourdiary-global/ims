@@ -37,7 +37,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
     audit_log($log);
 }
 
-$tablePage = $SITEURL . '/finance/stock_order_request_table.php';
+$tablePage = $SITEURL . '/stock/stock_order_request_table.php';
 $shortcutPage = $SITEURL . '/import/common_import.php';
 if (!headers_sent()) {
     header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');

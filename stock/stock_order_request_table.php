@@ -10,8 +10,8 @@ if (!is_array($pinAccess)) {
     $pinAccess = array();
 }
 
-$redirectPage = $SITEURL . '/finance/stock_order_request.php';
-$deleteRedirectPage = $SITEURL . '/finance/stock_order_request_table.php';
+$redirectPage = $SITEURL . '/stock/stock_order_request.php';
+$deleteRedirectPage = $SITEURL . '/stock/stock_order_request_table.php';
 
 // 1. Refactored Main Query using a SUBQUERY (No JOINs)
 $sql = "SELECT r.*,
@@ -381,7 +381,7 @@ function sorQrHref($path, $siteUrl)
                                     $isStockedInOrder = ($resolvedOrderNumber !== '' && isset($stockedInOrderMap[$resolvedOrderNumber]));
                                     ?>
                                     <?php if (!empty($row['qr_image']) && !$isStockedInOrder) { ?>
-                                        <a class="btn btn-sm btn-rounded btn-primary" href="<?= $SITEURL . '/finance/stock_order_request_info.php?id=' . (int) $row['id'] ?>" title="Open QR Info">
+                                        <a class="btn btn-sm btn-rounded btn-primary" href="<?= $SITEURL . '/stock/stock_order_request_info.php?id=' . (int) $row['id'] ?>" title="Open QR Info">
                                             <i class="fa-solid fa-qrcode"></i>
                                         </a>
                                     <?php } ?>
