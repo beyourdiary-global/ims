@@ -14,8 +14,8 @@ $pageAction = getPageAction($act);
 $allowed_ext = array("png", "jpg", "jpeg", "svg", "pdf");
 
 
-$redirect_page = $SITEURL . '/finance/investment_trans_table.php';
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$redirectPage = $SITEURL . '/finance/investment_trans_table.php';
+$redirectLink = ("<script>location.href = '$redirectPage';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
 $img_path = '../' . img_server . 'finance/investment/';
@@ -25,14 +25,14 @@ if (!file_exists($img_path)) {
 
 // to display data to input
 if ($row_id) { //edit/remove/view
-    $rst = getData('*', "id = '$row_id'", '', $tblName, $finance_connect);
+    $result = getData('*', "id = '$row_id'", '', $tblName, $finance_connect);
 
-    if ($rst != false && $rst->num_rows > 0) {
+    if ($result != false && $result->num_rows > 0) {
         $dataExisted = 1;
-        $row = $rst->fetch_assoc();
+        $row = $result->fetch_assoc();
         $trans_id = $row['transactionID'];
     } else {
-        // If $rst is false or no data found ($act==null)
+        // If $result is false or no data found ($act==null)
         $errorExist = 1;
         $_SESSION['tempValConfirmBox'] = true;
         $act = "F";
@@ -57,7 +57,7 @@ if ($row_id) { //edit/remove/view
 }
 
 if (!($row_id) && !($act)) {
-    renderNotificationScript('Invalid action.', 'error', $redirect_page);
+    renderNotificationScript('Invalid action.', 'error', $redirectPage);
 
 }
 
@@ -233,7 +233,7 @@ if (post('actionBtn')) {
                     $query = "INSERT INTO " . $tblName  . "(transactionID,type,date,amount,prev_amt,final_amt,merchant,remarks,attachment,create_by,create_date,create_time) VALUES ('$trans_id','$ivs_type','$ivs_date','$ivs_amt','$ivs_prev_amt','$ivs_final_amt','$ivs_mrcht','$ivs_remark','$ivs_attach','" . USER_ID . "',curdate(),curtime())";
                     // Execute the query
                     $returnData = mysqli_query($finance_connect, $query);
-                    $dataID = $finance_connect->insert_id;
+                    $dataId = $finance_connect->insert_id;
                     $_SESSION['tempValConfirmBox'] = true;
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
@@ -250,9 +250,9 @@ if (post('actionBtn')) {
                         }
                     }
                     // take old value
-                    //$rst = getData('*', "id = '$row_id'", 'LIMIT 1',$tblName , $finance_connect);
-                    $rst = getData('*', "id = '$row_id'", '', $tblName, $finance_connect);
-                    $row = $rst->fetch_assoc();
+                    //$result = getData('*', "id = '$row_id'", 'LIMIT 1',$tblName , $finance_connect);
+                    $result = getData('*', "id = '$row_id'", '', $tblName, $finance_connect);
+                    $row = $result->fetch_assoc();
 
                     // check value
                     if ($row['type'] != $ivs_type) {
@@ -374,7 +374,7 @@ if (post('actionBtn')) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval']  = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
@@ -396,9 +396,9 @@ if (post('act') == 'D') {
     if ($id) {
         try {
             // take name
-            //$rst = getData('*', "id = '$id'", 'LIMIT 1', $tblName , $finance_connect);
-            $rst = getData('*', "id = '$id'", '', $tblName, $finance_connect);
-            $row = $rst->fetch_assoc();
+            //$result = getData('*', "id = '$id'", 'LIMIT 1', $tblName , $finance_connect);
+            $result = getData('*', "id = '$id'", '', $tblName, $finance_connect);
+            $row = $result->fetch_assoc();
 
             $row_id = $row['id'];
             $trans_id = $row['transactionID'];
@@ -451,7 +451,7 @@ if (($row_id) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 
     <div class="page-load-cover">
         <div class="d-flex flex-column my-3 ms-3">
-            <p><a href="<?= $redirect_page ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?php
+            <p><a href="<?= $redirectPage ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?php
                                                                                                                         echo displayPageAction($act, 'Transaction');
                                                                                                                         ?></p>
 
@@ -669,7 +669,7 @@ if (($row_id) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
     if (isset($_SESSION['tempValConfirmBox'])) {
         unset($_SESSION['tempValConfirmBox']);
         echo $clearLocalStorage;
-        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
     }
     ?>
 

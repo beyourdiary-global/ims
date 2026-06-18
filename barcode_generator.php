@@ -9,7 +9,7 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 
-$redirect_page = '';
+$redirectPage = '';
 $tblname = PROD;
 $product_id = input('id');
 $act = input('act');
@@ -22,11 +22,11 @@ if (!file_exists($PNG_TEMP_DIR)) {
 
 // to display data to input
 if ($product_id) {
-    $rst = getData('*', "id = '$product_id'", '', $tblname, $connect);
+    $result = getData('*', "id = '$product_id'", '', $tblname, $connect);
 
-    if ($rst != false) {
+    if ($result != false) {
         $dataExisted = 1;
-        $row = $rst->fetch_assoc();
+        $row = $result->fetch_assoc();
     } else {
         renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
         echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
@@ -121,7 +121,7 @@ if (post('actionBtn')) {
 if(isset($_SESSION['tempValConfirmBox']))
 {
     unset($_SESSION['tempValConfirmBox']);
-    echo '<script>confirmationDialog("","","Product","","'.$redirect_page.'","'.$act.'");</script>';
+    echo '<script>confirmationDialog("","","Product","","'.$redirectPage.'","'.$act.'");</script>';
 } 
 */
 ?>
@@ -161,12 +161,12 @@ if(isset($_SESSION['tempValConfirmBox']))
                                                                                                             $echoVal = $row['id'];
 
                                                                                                         if (isset($echoVal)) {
-                                                                                                            $rst = getData('name', "id = '$echoVal'", '', $tblname, $connect);
-                                                                                                            if (!$rst) {
+                                                                                                            $result = getData('name', "id = '$echoVal'", '', $tblname, $connect);
+                                                                                                            if (!$result) {
                                                                                                                 renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                                                                                                                 echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                                                                                                             }
-                                                                                                            $row = $rst->fetch_assoc();
+                                                                                                            $row = $result->fetch_assoc();
                                                                                                             if (isset($row['name'])) echo $row['name'];
                                                                                                         }
                                                                                                         ?>">

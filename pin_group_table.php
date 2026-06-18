@@ -8,7 +8,7 @@ include ROOT.'/include/access.php';
 $tblName = PIN_GRP;
 
 
-$redirect_page = $SITEURL . '/pin_group.php';
+$redirectPage = $SITEURL . '/pin_group.php';
 $deleteRedirectPage = $SITEURL . '/pin_group_table.php';
 
 $result = getData('*', '', '', $tblName, $connect);
@@ -43,7 +43,7 @@ $result = getData('*', '', '', $tblName, $connect);
                             <h2><?php echo $pageTitle ?></h2>
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add <?php echo $pageTitle ?> </a>
+                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add <?php echo $pageTitle ?> </a>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -72,9 +72,9 @@ $result = getData('*', '', '', $tblName, $connect);
                                     <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
                                     <th scope="row"><?= $num++; ?></th>
                                     <td scope="row" class="btn-container">
-                                    <?php renderViewEditButtonByPin("1", $redirect_page, $row, $accessActionKey); ?>
-                                    <?php renderViewEditButtonByPin("2", $redirect_page, $row, $accessActionKey, $act_2); ?>
-                                    <?php renderDeleteButtonByPin($accessActionKey, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                    <?php renderViewEditButtonByPin("1", $redirectPage, $row, $accessActionKey); ?>
+                                    <?php renderViewEditButtonByPin("2", $redirectPage, $row, $accessActionKey, $act_2); ?>
+                                    <?php renderDeleteButtonByPin($accessActionKey, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                     </td>
                                     <td scope="row"><?= $row['name'] ?></td>
                                     <td scope="row">

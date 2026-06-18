@@ -55,9 +55,9 @@ if (!function_exists('owtpRedirectToPage')) {
 }
 
 if (!function_exists('owtpBuildQualifiedTableName')) {
-    function owtpBuildQualifiedTableName($dbName, $tableName)
+    function owtpBuildQualifiedTableName($dbName, $tblName)
     {
-        return '`' . str_replace('`', '``', (string) $dbName) . '`.`' . str_replace('`', '``', (string) $tableName) . '`';
+        return '`' . str_replace('`', '``', (string) $dbName) . '`.`' . str_replace('`', '``', (string) $tblName) . '`';
     }
 }
 

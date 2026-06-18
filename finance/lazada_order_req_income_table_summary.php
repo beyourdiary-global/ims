@@ -186,7 +186,7 @@ $_SESSION['delChk'] = '';
 $num = 1;  // numbering
 $tblName = LAZADA_ORDER_REQ;
 
-$redirect_page = $SITEURL . '/finance/lazada_order_req.php';
+$redirectPage = $SITEURL . '/finance/lazada_order_req.php';
 $deleteRedirectPage = $SITEURL . '/finance/lazada_order_req_table.php';
 $result = getData('*', '', '', LAZADA_ORDER_REQ, $connect);
 ?>
@@ -226,7 +226,7 @@ $result = getData('*', '', '', LAZADA_ORDER_REQ, $connect);
                     <div class="mt-auto mb-auto">
                         <?php if (isActionAllowed('Add', $pinAccess)): ?>
                             <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                href="<?= $redirect_page . '?act=' . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                href="<?= $redirectPage . '?act=' . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                 Record </a>
                         <?php endif; ?>
                         <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>

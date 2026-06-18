@@ -5,11 +5,11 @@ include "include/common_variable.php";
 include "include/connection.php";
 
 $img_path = $SITEURL . img_server . 'themes/';
-$rst = getData('*', "id = '1'", '', PROJ, $connect);
+$result = getData('*', "id = '1'", '', PROJ, $connect);
 
-if ($rst != false) {
+if ($result != false) {
     $dataExisted = 1;
-    $row = $rst->fetch_assoc();
+    $row = $result->fetch_assoc();
 } else {
     renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
     echo "<script>location.href ='$SITEURL/index.php';</script>";

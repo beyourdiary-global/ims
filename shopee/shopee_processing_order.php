@@ -307,7 +307,7 @@ if (!empty($accGroup)) { $groupByFields[] = "shopee_acc"; }
 $groupBySql = !empty($groupByFields) ? "GROUP BY " . implode(", ", $groupByFields) : "";
 $whereSql = implode(" AND ", $whereConditions);
 
-$redirect_page = $SITEURL . '/shopee/shopee_order_req.php';
+$redirectPage = $SITEURL . '/shopee/shopee_order_req.php';
 $deleteRedirectPage = $SITEURL . '/shopee/shopee_processing_order.php';
 $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_connect);
 $shopeeBuyerMetaMap = array();
@@ -358,7 +358,7 @@ if ($result instanceof mysqli_result) {
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess) || isActionAllowed("Import", $pinAccess)): ?>
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
-                                    <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Request </a>
+                                    <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Request </a>
                                 <?php endif; ?>
                                 <?php if (isActionAllowed("Import", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="importBtn" id="importBtn" href="<?= $SITEURL ?>/shopee_order_import.php"><i class="fa-solid fa-file-import"></i> Import </a>
@@ -677,9 +677,9 @@ if ($result instanceof mysqli_result) {
                                 <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
                                 <th scope="row" class="sticky-action"><?= $num++; ?></th>
                                 <td scope="row" class="btn-container sticky-action">
-                                <?php renderViewEditButtonByPin("1", $redirect_page, $row, $accessActionKey); ?>
-                                <?php renderViewEditButtonByPin("2", $redirect_page, $row, $accessActionKey, $act_2); ?>
-                                <?php renderDeleteButtonByPin($accessActionKey, $row['id'], $row['orderID'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?> 
+                                <?php renderViewEditButtonByPin("1", $redirectPage, $row, $accessActionKey); ?>
+                                <?php renderViewEditButtonByPin("2", $redirectPage, $row, $accessActionKey, $act_2); ?>
+                                <?php renderDeleteButtonByPin($accessActionKey, $row['id'], $row['orderID'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage); ?> 
                                 <?php
                                 $estimatedDateRange = function_exists('shopeeOmsGetEstimatedReceivedDateRange')
                                     ? shopeeOmsGetEstimatedReceivedDateRange($row)

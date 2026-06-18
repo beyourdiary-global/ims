@@ -20,12 +20,12 @@ if (!function_exists('scrEsc')) {
 }
 
 //Current Page Action And Data ID
-$dataID = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addRecord' : 'updRecord';
 
-$redirect_page = $SITEURL . '/shopee/shopee_cust_info_table.php';
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$redirectPage = $SITEURL . '/shopee/shopee_cust_info_table.php';
+$redirectLink = ("<script>location.href = '$redirectPage';</script>");
 $clearLocalStorage = '<script>clearLocalStoragePreservingCustomerRecordFilters();</script>';
 
 //Check a current page pin is exist or not
@@ -34,7 +34,7 @@ $pageActionTitle = $pageAction . " " . $pageTitle;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 
 if (!function_exists('resolveLookupValue')) {
-    function resolveLookupValue($tableName, $rawValue, $displayField, $connect, $altDisplayField = '')
+    function resolveLookupValue($tblName, $rawValue, $displayField, $connect, $altDisplayField = '')
     {
         $rawValue = trim((string) $rawValue);
         $resolved = [
@@ -49,18 +49,18 @@ if (!function_exists('resolveLookupValue')) {
         // Escape the raw value before using it in SQL conditions to prevent SQL injection
         $escapedValue = mysqli_real_escape_string($connect, (string) $rawValue);
 
-        $rst = getData("id,$displayField", "id = '$escapedValue'", 'LIMIT 1', $tableName, $connect);
+        $result = getData("id,$displayField", "id = '$escapedValue'", 'LIMIT 1', $tblName, $connect);
 
-        if ((!$rst || $rst->num_rows === 0) && $altDisplayField !== '') {
-            $rst = getData("id,$displayField", "$altDisplayField = '$escapedValue'", 'LIMIT 1', $tableName, $connect);
+        if ((!$result || $result->num_rows === 0) && $altDisplayField !== '') {
+            $result = getData("id,$displayField", "$altDisplayField = '$escapedValue'", 'LIMIT 1', $tblName, $connect);
         }
 
-        if ((!$rst || $rst->num_rows === 0) && $displayField !== $altDisplayField) {
-            $rst = getData("id,$displayField", "$displayField = '$escapedValue'", 'LIMIT 1', $tableName, $connect);
+        if ((!$result || $result->num_rows === 0) && $displayField !== $altDisplayField) {
+            $result = getData("id,$displayField", "$displayField = '$escapedValue'", 'LIMIT 1', $tblName, $connect);
         }
 
-        if ($rst && $rst->num_rows > 0) {
-            $lookupRow = $rst->fetch_assoc();
+        if ($result && $result->num_rows > 0) {
+            $lookupRow = $result->fetch_assoc();
             $resolved['id'] = $lookupRow['id'];
             $resolved['display'] = $lookupRow[$displayField];
         } else {
@@ -74,14 +74,14 @@ if (!function_exists('resolveLookupValue')) {
 }
 
 // to display data to input
-if ($dataID) { //edit/remove/view
-    $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $finance_connect);
+if ($dataId) { //edit/remove/view
+    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $finance_connect);
 
-    if ($rst != false && $rst->num_rows > 0) {
+    if ($result != false && $result->num_rows > 0) {
         $dataExisted = 1;
-        $row = $rst->fetch_assoc();
+        $row = $result->fetch_assoc();
     } else {
-        // If $rst is false or no data found ($act==null)
+        // If $result is false or no data found ($act==null)
         $errorExist = 1;
         $_SESSION['tempValConfirmBox'] = true;
         $act = "F";
@@ -90,18 +90,18 @@ if ($dataID) { //edit/remove/view
 
 $shopeeCustomerLabelMeta = array();
 $shopeeCustomerLabelDisplayHtml = '';
-if (isset($dataExisted) && !empty($dataID) && $act !== 'I' && isset($row['id']) && (int) $row['id'] > 0) {
+if (isset($dataExisted) && !empty($dataId) && $act !== 'I' && isset($row['id']) && (int) $row['id'] > 0) {
     $shopeeCustomerLabelMap = customerLabelGetCustomerLabelMap($connect, 'shopee', array((int) $row['id']));
     $shopeeCustomerLabelMeta = isset($shopeeCustomerLabelMap[(int) $row['id']]) ? $shopeeCustomerLabelMap[(int) $row['id']] : array();
     $shopeeCustomerLabelDisplayHtml = customerLabelRenderPageHeader($shopeeCustomerLabelMeta);
 }
 
-if (!($dataID) && !($act)) {
-    renderNotificationScript('Invalid action.', 'error', $redirect_page);
+if (!($dataId) && !($act)) {
+    renderNotificationScript('Invalid action.', 'error', $redirectPage);
 
 }
 
-if ($dataID && isset($_GET['open_order_id'])) {
+if ($dataId && isset($_GET['open_order_id'])) {
     $openOrderId = (int) $_GET['open_order_id'];
     if ($openOrderId > 0) {
         $orderRst = getData('id,orderID', "id='$openOrderId'", 'LIMIT 1', SHOPEE_SG_ORDER_REQ, $finance_connect);
@@ -143,7 +143,7 @@ $shopeeCustomerDraftTagIds = customerTagExtractTagIds($shopeeCustomerActiveTags)
 
 //Delete Data
 if ($act == 'D') {
-    deleteRecord($tblName, '', $dataID, (isset($row['buyer_username']) ? $row['buyer_username'] : ''), $finance_connect, $connect, $cdate, $ctime, $pageTitle);
+    deleteRecord($tblName, '', $dataId, (isset($row['buyer_username']) ? $row['buyer_username'] : ''), $finance_connect, $connect, $cdate, $ctime, $pageTitle);
     $_SESSION['delChk'] = 1;
 }
 
@@ -262,8 +262,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // Execute the query
                     $returnData = mysqli_query($finance_connect, $query);
                     if ($returnData) {
-                        $dataID = $finance_connect->insert_id;
-                        customerTagApplyDraftTagsToCustomer($connect, $shopeeCustomerTagPlatform, $dataID, $pageTitle, $scr_username, customerTagGetPostedDraftTagIds(), $shopeeCustomerTagDraftToken);
+                        $dataId = $finance_connect->insert_id;
+                        customerTagApplyDraftTagsToCustomer($connect, $shopeeCustomerTagPlatform, $dataId, $pageTitle, $scr_username, customerTagGetPostedDraftTagIds(), $shopeeCustomerTagDraftToken);
                         $_SESSION['tempValConfirmBox'] = true;
                     } else {
                         $errorMsg = mysqli_error($finance_connect);
@@ -278,8 +278,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 try {
                     // take old value
-                    $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $finance_connect);
-                    $row = $rst->fetch_assoc();
+                    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $finance_connect);
+                    $row = $result->fetch_assoc();
 
                     // check value
 
@@ -331,7 +331,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
-                        $query = "UPDATE " . $tblName . " SET buyer_username = '" . scrEsc($finance_connect, $scr_username) . "', pic = '" . scrEsc($finance_connect, $scr_pic) . "', country = '" . scrEsc($finance_connect, $scr_country) . "', brand = '" . scrEsc($finance_connect, $scr_brand) . "', series = '" . scrEsc($finance_connect, $scr_series) . "', contact_no = '" . scrEsc($finance_connect, $scr_contact) . "', remark = '" . scrEsc($finance_connect, $scr_remark) . "', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '" . (int) $dataID . "'";
+                        $query = "UPDATE " . $tblName . " SET buyer_username = '" . scrEsc($finance_connect, $scr_username) . "', pic = '" . scrEsc($finance_connect, $scr_pic) . "', country = '" . scrEsc($finance_connect, $scr_country) . "', brand = '" . scrEsc($finance_connect, $scr_brand) . "', series = '" . scrEsc($finance_connect, $scr_series) . "', contact_no = '" . scrEsc($finance_connect, $scr_contact) . "', remark = '" . scrEsc($finance_connect, $scr_remark) . "', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '" . (int) $dataId . "'";
                         $returnData = mysqli_query($finance_connect, $query);
                         if (!$returnData) {
                             $errorMsg = mysqli_error($finance_connect);
@@ -367,11 +367,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (!empty($returnData) ? '' : (isset($errorMsg) ? $errorMsg : '')));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $tblName, $pageAction, (!empty($returnData) ? '' : (isset($errorMsg) ? $errorMsg : '')));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval'] = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (!empty($returnData) ? '' : (isset($errorMsg) ? $errorMsg : '')));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (!empty($returnData) ? '' : (isset($errorMsg) ? $errorMsg : '')));
                 }
                 audit_log($log);
             }
@@ -392,10 +392,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if (post('act') == 'D') {
     try {
         // take name
-        $rst = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $finance_connect);
-        $row = $rst->fetch_assoc();
+        $result = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $finance_connect);
+        $row = $result->fetch_assoc();
 
-        $dataID = $row['id'];
+        $dataId = $row['id'];
 
     } catch (Exception $e) {
         echo 'Message: ' . $e->getMessage();
@@ -403,14 +403,14 @@ if (post('act') == 'D') {
 }
 
 //view
-if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
+if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
     $acc_name = isset($dataExisted) ? $row['buyer_username'] : '';
     $_SESSION['viewChk'] = 1;
 
     if (isset($errorExist)) {
-        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataID . "</b> ] from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataId . "</b> ] from <b><i>$tblName Table</i></b>.";
     } else {
-        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataID . "</b> ] <b>" . $acc_name . "</b> from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataId . "</b> ] <b>" . $acc_name . "</b> from <b><i>$tblName Table</i></b>.";
     }
 
     $log = [
@@ -441,7 +441,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 
     <div class="page-load-cover" style="display:block !important;">
         <div class="d-flex flex-column my-3 ms-3">
-            <p><a href="<?= $redirect_page ?>">
+            <p><a href="<?= $redirectPage ?>">
                     <?= $pageTitle ?>
                 </a> <i class="fa-solid fa-chevron-right fa-xs"></i>
                 <?php
@@ -650,10 +650,10 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                         </div>
 
                     <?php
-                    if ($dataID) {
+                    if ($dataId) {
                         $orderRows = array();
                         $sumFinalAmount = 0.00;
-                        $buyerId = (int) $dataID;
+                        $buyerId = (int) $dataId;
                         $orderWhere = "status='A' AND buyer='" . $buyerId . "'";
 
                         $orderSql = "SELECT * FROM " . SHOPEE_SG_ORDER_REQ . " WHERE " . $orderWhere . " ORDER BY date DESC, time DESC, id DESC";
@@ -725,7 +725,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                                 <td><?= $orderSN++ ?></td>
                                                 <td>
                                                     <a class="btn btn-sm btn-rounded btn-primary" style="white-space:nowrap;"
-                                                       href="<?= $SITEURL . '/shopee/shopee_cust_info.php?id=' . (int) $dataID . '&act=' . $act_2 . '&open_order_id=' . $orderId ?>">
+                                                       href="<?= $SITEURL . '/shopee/shopee_cust_info.php?id=' . (int) $dataId . '&act=' . $act_2 . '&open_order_id=' . $orderId ?>">
                                                         Show Order Detail
                                                     </a>
                                                 </td>
@@ -757,14 +757,14 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                 </form>
 
                 <?php
-                if ($dataID) {
-                    $customerLogReturnUrl = $SITEURL . '/shopee/shopee_cust_info.php?id=' . (int) $dataID;
+                if ($dataId) {
+                    $customerLogReturnUrl = $SITEURL . '/shopee/shopee_cust_info.php?id=' . (int) $dataId;
                     if ($act !== '') {
                         $customerLogReturnUrl .= '&act=' . urlencode((string) $act);
                     }
 
                     $customerLogContext = urlResolveUserRecordLogContext($connect, $connect, array(
-                        'customer_id' => (int) $dataID,
+                        'customer_id' => (int) $dataId,
                         'customer_column' => 'shopee_cust_id',
                         'customer_label' => isset($row['buyer_username']) ? $row['buyer_username'] : '',
                         'return_url' => $customerLogReturnUrl,
@@ -809,7 +809,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
     if (isset($_SESSION['tempValConfirmBox'])) {
         unset($_SESSION['tempValConfirmBox']);
         echo $clearLocalStorage;
-        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
     }
     ?>
 

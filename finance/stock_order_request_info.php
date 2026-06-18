@@ -88,9 +88,9 @@ function sorInfoResolveWarehouseName($connect, $requestRow)
         return 'Unknown';
     }
 
-    $rst = mysqli_query($connect, "SELECT name FROM " . WHSE . " WHERE id='" . $warehouseId . "' LIMIT 1");
-    if ($rst && mysqli_num_rows($rst) > 0) {
-        $row = mysqli_fetch_assoc($rst);
+    $result = mysqli_query($connect, "SELECT name FROM " . WHSE . " WHERE id='" . $warehouseId . "' LIMIT 1");
+    if ($result && mysqli_num_rows($result) > 0) {
+        $row = mysqli_fetch_assoc($result);
         $name = isset($row['name']) ? trim((string) $row['name']) : '';
         if ($name !== '') {
             return $name;

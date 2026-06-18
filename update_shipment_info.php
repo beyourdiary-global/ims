@@ -13,18 +13,18 @@ $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 $channel = input('channel');
-$redirect_page = $SITEURL . '/finance/order_process_list.php';
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$redirectPage = $SITEURL . '/finance/order_process_list.php';
+$redirectLink = ("<script>location.href = '$redirectPage';</script>");
 
 
-$dataID = input('id');
+$dataId = input('id');
 $orderID = input('orderid');
 $act = input('act');
 $pageAction = getPageAction($act);
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
-if (!($dataID) && !($act)) {
-    renderNotificationScript('Invalid action.', 'error', $redirect_page);
+if (!($dataId) && !($act)) {
+    renderNotificationScript('Invalid action.', 'error', $redirectPage);
 
 }
 
@@ -88,19 +88,19 @@ if (post('actionBtn')) {
                     $channel_row = $channel_rst2->fetch_assoc();
                     $channelname = $channel_row['name'];
                     if($channelname =='Shopee'){
-                        $tableName = SHOPEE_SG_ORDER_REQ;
+                        $tblName = SHOPEE_SG_ORDER_REQ;
                     }else if($channelname =='Facebook'){
-                        $tableName = FB_ORDER_REQ;
+                        $tblName = FB_ORDER_REQ;
                     }else if($channelname =='Web'){
-                        $tableName = WEB_ORDER_REQ;
+                        $tblName = WEB_ORDER_REQ;
                     }
                     else if($channelname =='Lazada'){
-                        $tableName = LAZADA_ORDER_REQ;
+                        $tblName = LAZADA_ORDER_REQ;
                     }
                     
                     $query = "INSERT INTO " . $tblName . " (official_order_id,courier_id,tracking_id,order_id,channel)VALUES('$usi_officialoid','$dfc_courier','$usi_tracking','$usi_order_id','$for_channel')";
                     $returnData = mysqli_query($connect, $query);
-                    $query2 = "UPDATE $tableName SET order_status = 'SP' WHERE id = '$dataID'";
+                    $query2 = "UPDATE $tblName SET order_status = 'SP' WHERE id = '$dataId'";
                     $returnData2 = mysqli_query($finance_connect, $query2);
                     $_SESSION['tempValConfirmBox'] = true;
                     } catch (Exception $e) {
@@ -126,7 +126,7 @@ if (post('actionBtn')) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
             }
@@ -141,13 +141,13 @@ if (post('actionBtn')) {
 
 
 //view
-if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
+if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
     $_SESSION['viewChk'] = 1;
 
     if (isset($errorExist)) {
-        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataID . "</b> ] from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataId . "</b> ] from <b><i>$tblName Table</i></b>.";
     } else {
-        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataID . "</b> ] from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataId . "</b> ] from <b><i>$tblName Table</i></b>.";
     }
 
     $log = [
@@ -178,7 +178,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 
     <div class="page-load-cover">
         <div class="d-flex flex-column my-3 ms-3">
-            <p><a href="<?= $redirect_page ?>">
+            <p><a href="<?= $redirectPage ?>">
                     <?= $pageTitle ?>
                 </a> <i class="fa-solid fa-chevron-right fa-xs"></i>
                 <?php
@@ -345,7 +345,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
     if (isset($_SESSION['tempValConfirmBox'])) {
         unset($_SESSION['tempValConfirmBox']);
         echo $clearLocalStorage;
-        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
     }
     ?>
     <script>

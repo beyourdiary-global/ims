@@ -15,16 +15,16 @@ if (!is_array($pinAccess) || count($pinAccess) === 0) {
 
 $tblName = STOCK_ORDER_REQ;
 
-$dataID = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $pageAction = getPageAction($act);
 $pageActionTitle = $pageAction . ' ' . $pageTitle;
 $actionBtnValue = ($act === 'I') ? 'addRecord' : 'updRecord';
 
-$redirect_page = $SITEURL . '/finance/stock_order_request_table.php';
-$redirectLink = "<script>location.href = '$redirect_page';</script>";
+$redirectPage = $SITEURL . '/finance/stock_order_request_table.php';
+$redirectLink = "<script>location.href = '$redirectPage';</script>";
 
-if ((!$dataID && !$act) || ($act && !isActionAllowed($pageAction, is_array($pinAccess) ? $pinAccess : array()))) {
+if ((!$dataId && !$act) || ($act && !isActionAllowed($pageAction, is_array($pinAccess) ? $pinAccess : array()))) {
     echo $redirectLink;
     exit;
 }
@@ -161,14 +161,14 @@ $row = array();
 $itemRows = array();
 $packageItemRows = array();
 
-if ($dataID) {
-    $rst = getData('*', "id = '$dataID'", 'LIMIT 1', STOCK_ORDER_REQ, $finance_connect);
-    if ($rst && $rst->num_rows > 0) {
-        $row = $rst->fetch_assoc();
+if ($dataId) {
+    $result = getData('*', "id = '$dataId'", 'LIMIT 1', STOCK_ORDER_REQ, $finance_connect);
+    if ($result && $result->num_rows > 0) {
+        $row = $result->fetch_assoc();
 
         $itemSql = "SELECT *
                     FROM " . STOCK_ORDER_REQ_ITEM . "
-                    WHERE request_id = '" . (int) $dataID . "' AND status = 'A'
+                    WHERE request_id = '" . (int) $dataId . "' AND status = 'A'
                     ORDER BY id ASC";
         $itemRst = mysqli_query($finance_connect, $itemSql);
         if ($itemRst) {
@@ -211,13 +211,13 @@ if (!empty($itemRows)) {
     $packageItemRows = $itemRows;
 }
 
-if ($act == 'D' && $dataID) {
-    $deleteHeaderQuery = "UPDATE " . STOCK_ORDER_REQ . " SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . (int) $dataID . "'";
-    $deleteItemQuery = "UPDATE " . STOCK_ORDER_REQ_ITEM . " SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE request_id='" . (int) $dataID . "'";
+if ($act == 'D' && $dataId) {
+    $deleteHeaderQuery = "UPDATE " . STOCK_ORDER_REQ . " SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . (int) $dataId . "'";
+    $deleteItemQuery = "UPDATE " . STOCK_ORDER_REQ_ITEM . " SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE request_id='" . (int) $dataId . "'";
     $deleteHeaderResult = mysqli_query($finance_connect, $deleteHeaderQuery);
     $deleteItemResult = mysqli_query($finance_connect, $deleteItemQuery);
 
-    $orderNoForLog = isset($row['invoice_no']) ? normalizeAuditLogValue($row['invoice_no']) : 'SOR-' . (int) $dataID;
+    $orderNoForLog = isset($row['invoice_no']) ? normalizeAuditLogValue($row['invoice_no']) : 'SOR-' . (int) $dataId;
     $delErrMsg = '';
     if (!$deleteHeaderResult || !$deleteItemResult) {
         $delErrMsg = mysqli_error($finance_connect);
@@ -232,23 +232,23 @@ if ($act == 'D' && $dataID) {
         'query_rec' => $deleteHeaderQuery . '; ' . $deleteItemQuery,
         'query_table' => $tblName . ', ' . STOCK_ORDER_REQ_ITEM,
         'oldval' => 'Order No: ' . $orderNoForLog,
-        'act_msg' => USER_NAME . ' ' . (!$deleteHeaderResult || !$deleteItemResult ? 'failed to delete' : 'deleted') . ' Stock Order Request [<b>ID = ' . (int) $dataID . '</b>] from <b><i>' . $tblName . '</i></b>' . ($delErrMsg !== '' ? ' (' . $delErrMsg . ')' : '.') ,
+        'act_msg' => USER_NAME . ' ' . (!$deleteHeaderResult || !$deleteItemResult ? 'failed to delete' : 'deleted') . ' Stock Order Request [<b>ID = ' . (int) $dataId . '</b>] from <b><i>' . $tblName . '</i></b>' . ($delErrMsg !== '' ? ' (' . $delErrMsg . ')' : '.') ,
         'page' => $pageTitle,
         'connect' => $connect,
     ];
     audit_log($log);
 
     $_SESSION['delChk'] = 1;
-    echo "<script>location.href='$redirect_page';</script>";
+    echo "<script>location.href='$redirectPage';</script>";
     exit;
 }
 
-if ($dataID && !$act && USER_ID && empty($_SESSION['viewChk']) && empty($_SESSION['delChk'])) {
+if ($dataId && !$act && USER_ID && empty($_SESSION['viewChk']) && empty($_SESSION['delChk'])) {
     $_SESSION['viewChk'] = 1;
 
-    $viewActMsg = USER_NAME . " viewed the data [<b>ID = " . (int) $dataID . "</b>] from <b><i>" . $tblName . " Table</i></b>.";
+    $viewActMsg = USER_NAME . " viewed the data [<b>ID = " . (int) $dataId . "</b>] from <b><i>" . $tblName . " Table</i></b>.";
     if (empty($row)) {
-        $viewActMsg = USER_NAME . " failed to view the data [<b>ID = " . (int) $dataID . "</b>] from <b><i>" . $tblName . " Table</i></b>.";
+        $viewActMsg = USER_NAME . " failed to view the data [<b>ID = " . (int) $dataId . "</b>] from <b><i>" . $tblName . " Table</i></b>.";
     }
 
     $log = [
@@ -582,8 +582,8 @@ if (post('actionBtn')) {
         // --- FIX: Check for duplicate invoice numbers in the database ---
         $safeInvoiceNoCheck = mysqli_real_escape_string($finance_connect, $sor_invoice_no);
         $invCheckQuery = "SELECT id FROM " . STOCK_ORDER_REQ . " WHERE invoice_no = '$safeInvoiceNoCheck' AND status = 'A'";
-        if ($action === 'updRecord' && $dataID) {
-            $invCheckQuery .= " AND id != '" . (int)$dataID . "'"; // Ignore itself when editing
+        if ($action === 'updRecord' && $dataId) {
+            $invCheckQuery .= " AND id != '" . (int)$dataId . "'"; // Ignore itself when editing
         }
         $invCheckRst = mysqli_query($finance_connect, $invCheckQuery);
         $isDuplicateInvoice = ($invCheckRst && $invCheckRst->num_rows > 0);
@@ -691,7 +691,7 @@ if (post('actionBtn')) {
                               VALUES
                                                                 ('$safeWarehouse', '" . $requestCompanyId . "', '" . $requestBrandId . "', '$safeInvoiceNo', '$safeInvoiceDate', '$safeRequestDate', " . $courierSqlValue . ", '$safeTrackingNo', '$safeTotalPrice', '$safeAttachment', '$safeRemark', '" . USER_ID . "', CURDATE(), CURTIME())";
                     $returnData = mysqli_query($finance_connect, $query);
-                    $dataID = $finance_connect->insert_id;
+                    $dataId = $finance_connect->insert_id;
                 } else {
                     $query = "UPDATE " . STOCK_ORDER_REQ . "
                               SET warehouse_id = '$safeWarehouse',
@@ -708,7 +708,7 @@ if (post('actionBtn')) {
                                   update_by = '" . USER_ID . "',
                                   update_date = CURDATE(),
                                   update_time = CURTIME()
-                              WHERE id = '" . (int) $dataID . "'";
+                              WHERE id = '" . (int) $dataId . "'";
 
                     $auditPairs = array(
                         'warehouse_id' => array(isset($auditOldRow['warehouse_id']) ? $auditOldRow['warehouse_id'] : '', $sor_warehouse),
@@ -765,12 +765,12 @@ if (post('actionBtn')) {
                             $insertItemSql = "INSERT INTO " . STOCK_ORDER_REQ_ITEM . "
                                               (request_id, product_id, brand_id, company_id, package_id, package_group_key, package_desc, package_price, packageQty, productQty, create_by, create_date, create_time)
                                               VALUES
-                                              ('" . (int) $dataID . "', '" . $safeProdId . "', '" . $safeBrandId . "', '" . $safeCompanyId . "', '$safePkgId', '$safePkgGroupKey', '$safeDesc', '" . number_format($safePkgPrice, 2, '.', '') . "', '$safePackageQty', '$safeProductQty', '" . USER_ID . "', CURDATE(), CURTIME())";
+                                              ('" . (int) $dataId . "', '" . $safeProdId . "', '" . $safeBrandId . "', '" . $safeCompanyId . "', '$safePkgId', '$safePkgGroupKey', '$safeDesc', '" . number_format($safePkgPrice, 2, '.', '') . "', '$safePackageQty', '$safeProductQty', '" . USER_ID . "', CURDATE(), CURTIME())";
                             mysqli_query($finance_connect, $insertItemSql);
                         }
                     } else {
                         $existingItemIds = array();
-                        $existingRst = mysqli_query($finance_connect, "SELECT id FROM " . STOCK_ORDER_REQ_ITEM . " WHERE request_id='" . (int) $dataID . "' AND status='A'");
+                        $existingRst = mysqli_query($finance_connect, "SELECT id FROM " . STOCK_ORDER_REQ_ITEM . " WHERE request_id='" . (int) $dataId . "' AND status='A'");
                         if ($existingRst) {
                             while ($existingRow = mysqli_fetch_assoc($existingRst)) {
                                 $existingItemIds[(int)$existingRow['id']] = true;
@@ -807,7 +807,7 @@ if (post('actionBtn')) {
                                                       update_by='" . USER_ID . "',
                                                       update_date=CURDATE(),
                                                       update_time=CURTIME()
-                                                  WHERE id='" . $itemId . "' AND request_id='" . (int) $dataID . "'";
+                                                  WHERE id='" . $itemId . "' AND request_id='" . (int) $dataId . "'";
                                 mysqli_query($finance_connect, $updateItemSql);
                                 $postedItemIds[] = $itemId;
                             } else {
@@ -815,7 +815,7 @@ if (post('actionBtn')) {
                                 $insertItemSql = "INSERT INTO " . STOCK_ORDER_REQ_ITEM . "
                                                   (request_id, product_id, brand_id, company_id, package_id, package_group_key, package_desc, package_price, packageQty, productQty, create_by, create_date, create_time)
                                                   VALUES
-                                                  ('" . (int) $dataID . "', '" . $safeProdId . "', '" . $safeBrandId . "', '" . $safeCompanyId . "', '$safePkgId', '$safePkgGroupKey', '$safeDesc', '" . number_format($safePkgPrice, 2, '.', '') . "', '$safePackageQty', '$safeProductQty', '" . USER_ID . "', CURDATE(), CURTIME())";
+                                                  ('" . (int) $dataId . "', '" . $safeProdId . "', '" . $safeBrandId . "', '" . $safeCompanyId . "', '$safePkgId', '$safePkgGroupKey', '$safeDesc', '" . number_format($safePkgPrice, 2, '.', '') . "', '$safePackageQty', '$safeProductQty', '" . USER_ID . "', CURDATE(), CURTIME())";
                                 mysqli_query($finance_connect, $insertItemSql);
                             }
                         }
@@ -823,19 +823,19 @@ if (post('actionBtn')) {
                         // DELETE any records that existed in the DB but were NOT posted back from the UI
                         foreach ($existingItemIds as $id => $val) {
                             if (!in_array($id, $postedItemIds)) {
-                                mysqli_query($finance_connect, "UPDATE " . STOCK_ORDER_REQ_ITEM . " SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $id . "' AND request_id='" . (int) $dataID . "'");
+                                mysqli_query($finance_connect, "UPDATE " . STOCK_ORDER_REQ_ITEM . " SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $id . "' AND request_id='" . (int) $dataId . "'");
                             }
                         }
                     }
 
-                    $token = sorEncodeToken($dataID);
+                    $token = sorEncodeToken($dataId);
                     $orderLink = $SITEURL . '/warehouse_stock_in_scan.php?t=' . urlencode($token);
 
                     $qrDir = ROOT . DIRECTORY_SEPARATOR . 'temp' . DIRECTORY_SEPARATOR . 'stock_order_request' . DIRECTORY_SEPARATOR;
                     if (!file_exists($qrDir)) {
                         mkdir($qrDir, 0777, true);
                     }
-                    $qrFileName = 'sor_' . (int) $dataID . '.png';
+                    $qrFileName = 'sor_' . (int) $dataId . '.png';
                     $qrFsPath = $qrDir . $qrFileName;
                     $qrWebPath = '';
                     if (function_exists('imagecreate')) {
@@ -851,7 +851,7 @@ if (post('actionBtn')) {
 
                     $safeToken = mysqli_real_escape_string($finance_connect, $token);
                     $safeQr = mysqli_real_escape_string($finance_connect, $qrWebPath);
-                    mysqli_query($finance_connect, "UPDATE " . STOCK_ORDER_REQ . " SET order_link_token='$safeToken', qr_image='$safeQr' WHERE id='" . (int) $dataID . "'");
+                    mysqli_query($finance_connect, "UPDATE " . STOCK_ORDER_REQ . " SET order_link_token='$safeToken', qr_image='$safeQr' WHERE id='" . (int) $dataId . "'");
 
                     // After successful save, stay on current page in edit mode.
                     $act = 'E';
@@ -874,26 +874,26 @@ if (post('actionBtn')) {
 
                     if ($pageAction === 'Add') {
                         $log['newval'] = implodeWithComma($auditNewValArr);
-                        $log['act_msg'] = actMsgLog($dataID, $auditDataField, $auditNewValArr, array(), array(), $tblName, $pageAction, '');
+                        $log['act_msg'] = actMsgLog($dataId, $auditDataField, $auditNewValArr, array(), array(), $tblName, $pageAction, '');
                         audit_log($log);
                     } else if ($pageAction === 'Edit') {
                         if (!empty($auditDataField) && !empty($auditOldValArr) && !empty($auditChgValArr)) {
                             $log['oldval'] = implodeWithComma($auditOldValArr);
                             $log['changes'] = implodeWithComma($auditChgValArr);
-                            $log['act_msg'] = actMsgLog($dataID, $auditDataField, array(), $auditOldValArr, $auditChgValArr, $tblName, $pageAction, '');
+                            $log['act_msg'] = actMsgLog($dataId, $auditDataField, array(), $auditOldValArr, $auditChgValArr, $tblName, $pageAction, '');
                             audit_log($log);
                         }
                     }
 
                     // Reload persisted header and item rows so add/edit success view exactly matches DB state.
-                    $reloadRst = getData('*', "id='" . (int) $dataID . "'", 'LIMIT 1', STOCK_ORDER_REQ, $finance_connect);
+                    $reloadRst = getData('*', "id='" . (int) $dataId . "'", 'LIMIT 1', STOCK_ORDER_REQ, $finance_connect);
                     if ($reloadRst && $reloadRst->num_rows > 0) {
                         $row = $reloadRst->fetch_assoc();
                     }
 
                     $itemRows = array();
                     $packageItemRows = array();
-                    $reloadItemSql = "SELECT * FROM " . STOCK_ORDER_REQ_ITEM . " WHERE request_id='" . (int) $dataID . "' AND status='A' ORDER BY id ASC";
+                    $reloadItemSql = "SELECT * FROM " . STOCK_ORDER_REQ_ITEM . " WHERE request_id='" . (int) $dataId . "' AND status='A' ORDER BY id ASC";
                     $reloadItemRst = mysqli_query($finance_connect, $reloadItemSql);
                     if ($reloadItemRst) {
                         while ($item = mysqli_fetch_assoc($reloadItemRst)) {
@@ -1249,13 +1249,13 @@ function sorAttachmentUrl($relativePath, $siteUrl)
         
     <div class="page-load-cover">
         <div class="d-flex flex-column my-3 ms-3">
-            <p><a href="<?= $redirect_page ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?= $pageActionTitle ?></p>
+            <p><a href="<?= $redirectPage ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?= $pageActionTitle ?></p>
         </div>
 
         <div id="formContainer" class="container d-flex justify-content-center">
             <div class="col-11 col-md-10 formWidthAdjust">
                 <form id="sorForm" method="post" enctype="multipart/form-data" autocomplete="off">
-                    <input type="hidden" name="id" value="<?= sorEcho($dataID) ?>">
+                    <input type="hidden" name="id" value="<?= sorEcho($dataId) ?>">
                     <input type="hidden" name="act" value="<?= sorEcho($act) ?>">
 
                     <div class="form-group mb-4">
@@ -1590,7 +1590,7 @@ function sorAttachmentUrl($relativePath, $siteUrl)
             page: <?= json_encode((string) $pageTitle) ?>,
             siteURL: <?= json_encode((string) $SITEURL) ?>,
             action: <?= json_encode((string) (isset($act) ? $act : '')) ?>,
-            redirectPage: <?= json_encode((string) $redirect_page) ?>,
+            redirectPage: <?= json_encode((string) $redirectPage) ?>,
             showQrPanel: <?= $showQrPanel ? 'true' : 'false' ?>,
             modalAct: <?= json_encode((string) $modalAct) ?>,
             warehouses: <?= json_encode(array_values($warehouses)) ?>,

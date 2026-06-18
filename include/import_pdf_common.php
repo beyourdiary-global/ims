@@ -1,12 +1,12 @@
 <?php
 
 if (!function_exists('getImportOptionList')) {
-    function getImportOptionList($tableName, $labelField, $dbConnect)
+    function getImportOptionList($tblName, $labelField, $dbConnect)
     {
         $list = [];
-        $tableName = mysqli_real_escape_string($dbConnect, $tableName);
+        $tblName = mysqli_real_escape_string($dbConnect, $tblName);
         $labelField = mysqli_real_escape_string($dbConnect, $labelField);
-        $query = "SELECT id, `$labelField` AS option_label FROM `$tableName` WHERE status = 'A' ORDER BY `$labelField` ASC";
+        $query = "SELECT id, `$labelField` AS option_label FROM `$tblName` WHERE status = 'A' ORDER BY `$labelField` ASC";
         $result = mysqli_query($dbConnect, $query);
 
         if ($result) {

@@ -5,7 +5,7 @@ $currentPagePin = 91;
 include_once __DIR__ . '/../include/list_page_header.php';
 include_once ROOT . '/include/customer_tag.php';
 
-$redirect_page = $SITEURL . '/finance/lazada_cust_rcd.php';
+$redirectPage = $SITEURL . '/finance/lazada_cust_rcd.php';
 $deleteRedirectPage = $SITEURL . '/finance/lazada_cust_rcd_table.php';
 $result = getData('*', '', '', LAZADA_CUST_RCD, $connect);
 $tableRows = array();
@@ -73,7 +73,7 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
                             <h2><?php echo $pageTitle ?></h2>
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                    <a class="btn btn-sm btn-rounded btn-primary" name="addNewBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Record </a>
+                                    <a class="btn btn-sm btn-rounded btn-primary" name="addNewBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Record </a>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -164,9 +164,9 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
                                     <?= $num++; ?>
                                 </th>
                                 <td scope="row" class="btn-container">
-                                    <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                    <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                    <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                    <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                    <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
+                                    <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                     <?php
                                     $urbanismAction = getUrbanismMemberActionData(
                                         $connect,

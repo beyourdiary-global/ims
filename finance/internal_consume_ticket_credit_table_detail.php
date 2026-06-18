@@ -126,7 +126,7 @@ $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 
-$redirect_page = $SITEURL . '/finance/internal_consume_ticket_credit.php';
+$redirectPage = $SITEURL . '/finance/internal_consume_ticket_credit.php';
 $deleteRedirectPage = $SITEURL . '/finance/internal_consume_ticket_credit_table.php';
 
 $result = getData('*', '', '', $tblName, $finance_connect);
@@ -161,7 +161,7 @@ if (!$result) {
                         <h2><?php echo $pageTitle . " Detail"; ?></h2>
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
+                                <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
                             <?php endif; ?>
                             <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="if (exportData()) { showExportNotification(); }"><i class="fa-solid fa-file-export"></i> Export</a>
                         </div>
@@ -216,9 +216,9 @@ if (!$result) {
                                     <th scope="row"><?= $num++; ?></th>
                                     <td scope="row" class="btn-container">
                                     <div class="d-flex align-items-center">
-                                        <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess);?>
-                                        <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2) ?>
-                                        <?php renderDeleteButton($pinAccess, $row['id'], $picRow['name'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage) ?>
+                                        <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess);?>
+                                        <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2) ?>
+                                        <?php renderDeleteButton($pinAccess, $row['id'], $picRow['name'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                     </div>
                                     </td>
                                     <td scope="row"><?php if (isset($picRow['name'])) echo $picRow['name'] ?></td>

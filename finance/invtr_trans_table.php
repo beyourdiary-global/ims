@@ -4,7 +4,7 @@ $currentPagePin = 41;
 
 include_once '../include/list_page_header.php';
 
-$redirect_page = $SITEURL . '/finance/invtr_trans.php';
+$redirectPage = $SITEURL . '/finance/invtr_trans.php';
 $result = getData('*', '', '', INVTR_TRANS, $finance_connect);
 
 ?>
@@ -42,7 +42,7 @@ $result = getData('*', '', '', INVTR_TRANS, $finance_connect);
                             <h2><?php echo $pageTitle ?></h2>
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
+                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -89,9 +89,9 @@ $result = getData('*', '', '', INVTR_TRANS, $finance_connect);
                                         <th scope="row"><?= $num++; ?></th>
                                         <td scope="row" class="btn-container">
                                         <div class="d-flex align-items-center"> 
-                                        <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess);?>
-                                        <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2) ?>
-                                        <?php renderDeleteButton($pinAccess, $row['id'], $row['transactionID'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage) ?>
+                                        <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess);?>
+                                        <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2) ?>
+                                        <?php renderDeleteButton($pinAccess, $row['id'], $row['transactionID'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                         </div>
                                         </td>
                                         <td scope="row"><?= $row['transactionID'] ?></td>

@@ -123,7 +123,7 @@ $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 $deleteRedirectPage = $SITEURL . '/finance/merchant_comm_record_table.php';
-$redirect_page = $SITEURL . '/finance/merchant_comm_record.php';
+$redirectPage = $SITEURL . '/finance/merchant_comm_record.php';
 $result = getData('*', '', '', MRCHT_COMM, $finance_connect);
 ?>
 
@@ -158,7 +158,7 @@ $result = getData('*', '', '', MRCHT_COMM, $finance_connect);
                         <h2><?php echo $pageTitle . " Detail"; ?></h2>
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                     Transaction </a>
                             <?php endif; ?>
                             <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="if (exportData()) { showExportNotification(); }"><i class="fa-solid fa-file-export"></i> Export</a>
@@ -204,9 +204,9 @@ $result = getData('*', '', '', MRCHT_COMM, $finance_connect);
                                     <th scope="row"><?= $num++; ?></th>
                                     <td scope="row" class="btn-container">
                                         <div class="d-flex align-items-center">
-                                            <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess);?>
-                                            <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2) ?>
-                                            <?php renderDeleteButton($pinAccess, $row['id'], '', $row['merchantID'], $pageTitle, $redirect_page, $deleteRedirectPage) ?>
+                                            <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess);?>
+                                            <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2) ?>
+                                            <?php renderDeleteButton($pinAccess, $row['id'], '', $row['merchantID'], $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                         </div>
                                     </td>
                                     <td scope="row"><?= $row['merchantID'] ?></td>

@@ -20,14 +20,14 @@ if ($isDebit) {
 }
 
 //Current Page Action And Data ID
-$dataID = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? input('id') : post('id');
 
 
 //Get The Data From Database
-$rst = getData('*', "id = '$dataID'", '', $tblName, $finance_connect);
+$result = getData('*', "id = '$dataId'", '', $tblName, $finance_connect);
 
 //Checking Data Error When Retrieved From Database
-$row = $rst->fetch_assoc();
+$row = $result->fetch_assoc();
 
 
 $proj_result = getData('*', "id = '" . $row['projectID'] . "'", '', PROJ, $connect);

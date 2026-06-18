@@ -9,33 +9,33 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 $tblName = LABEL;
 
 $rawDataID = !empty(input('id')) ? input('id') : post('id');
-$dataID = '';
+$dataId = '';
 if ($rawDataID !== '' && ctype_digit((string) $rawDataID)) {
-    $dataID = (string) ((int) $rawDataID);
+    $dataId = (string) ((int) $rawDataID);
 }
 
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
-$redirect_page = $SITEURL . '/label_table.php';
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$redirectPage = $SITEURL . '/label_table.php';
+$redirectLink = ("<script>location.href = '$redirectPage';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
 $pageAction = getPageAction($act);
 $pageActionTitle = $pageAction . " " . $pageTitle;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 
-if (($rawDataID !== '' && $dataID === '') || (!($dataID) && !($act)) || !isActionAllowed($pageAction, $pinAccess)) {
+if (($rawDataID !== '' && $dataId === '') || (!($dataId) && !($act)) || !isActionAllowed($pageAction, $pinAccess)) {
     echo $redirectLink;
 }
 
 $row = array();
-$rst = false;
-if ($dataID !== '') {
-    $rst = getData('*', "id = '$dataID'", '', $tblName, $connect);
+$result = false;
+if ($dataId !== '') {
+    $result = getData('*', "id = '$dataId'", '', $tblName, $connect);
 }
 
-if ($dataID !== '' && (!$rst || !($row = $rst->fetch_assoc())) && $act != 'I') {
+if ($dataId !== '' && (!$result || !($row = $result->fetch_assoc())) && $act != 'I') {
     $errorExist = 1;
     $act = "F";
 }
@@ -72,15 +72,15 @@ if ($retainFormInput && !$useSelfParentFallback) {
 }
 
 if ($act == 'D') {
-    deleteRecord($tblName, '', $dataID, $row['name'], $connect, $connect, $cdate, $ctime, $pageTitle);
+    deleteRecord($tblName, '', $dataId, $row['name'], $connect, $connect, $cdate, $ctime, $pageTitle);
     $_SESSION['delChk'] = 1;
 }
 
-if ($dataID && !$act && USER_ID && !$_SESSION['viewChk'] && !$_SESSION['delChk']) {
+if ($dataId && !$act && USER_ID && !$_SESSION['viewChk'] && !$_SESSION['delChk']) {
     $_SESSION['viewChk'] = 1;
 
     $safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
-    $safeDataID = htmlspecialchars((string) $dataID, ENT_QUOTES, 'UTF-8');
+    $safeDataID = htmlspecialchars((string) $dataId, ENT_QUOTES, 'UTF-8');
     $safeTblName = htmlspecialchars((string) $tblName, ENT_QUOTES, 'UTF-8');
 
     if (isset($errorExist)) {
@@ -167,8 +167,8 @@ if (post('actionBtn')) {
                 $duplicateWhere .= " AND parent_label = '" . $safeResolvedParentLabelId . "'";
             }
 
-            if ($dataID !== '') {
-                $duplicateWhere .= " AND id != '" . (int) $dataID . "'";
+            if ($dataId !== '') {
+                $duplicateWhere .= " AND id != '" . (int) $dataId . "'";
             }
 
             $duplicateResult = getData('id', $duplicateWhere, 'LIMIT 1', $tblName, $connect);
@@ -197,9 +197,9 @@ if (post('actionBtn')) {
                     $returnData = mysqli_query($connect, $query);
 
                     if ($returnData) {
-                        $dataID = (string) $connect->insert_id;
+                        $dataId = (string) $connect->insert_id;
                         if ($resolvedParentLabelId === 'SELF_ON_CREATE') {
-                            $selfParentQuery = "UPDATE " . $tblName . " SET parent_label = '" . (int) $dataID . "' WHERE id = '" . (int) $dataID . "'";
+                            $selfParentQuery = "UPDATE " . $tblName . " SET parent_label = '" . (int) $dataId . "' WHERE id = '" . (int) $dataId . "'";
                             mysqli_query($connect, $selfParentQuery);
                             $query = $query . "; " . $selfParentQuery;
                         }
@@ -237,7 +237,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if ($oldvalarr && $chgvalarr) {
-                        $query = "UPDATE " . $tblName . " SET name ='" . $safeLabelName . "', parent_label = '" . (int) $resolvedParentLabelId . "', remark ='" . $safeLabelRemark . "', update_date = CURDATE(), update_time = CURTIME(), update_by ='" . USER_ID . "' WHERE id = '" . (int) $dataID . "'";
+                        $query = "UPDATE " . $tblName . " SET name ='" . $safeLabelName . "', parent_label = '" . (int) $resolvedParentLabelId . "', remark ='" . $safeLabelRemark . "', update_date = CURDATE(), update_time = CURTIME(), update_by ='" . USER_ID . "' WHERE id = '" . (int) $dataId . "'";
                         $returnData = mysqli_query($connect, $query);
 
                         if ($returnData) {
@@ -270,11 +270,11 @@ if (post('actionBtn')) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval']  = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
             }
@@ -289,7 +289,7 @@ if (post('actionBtn')) {
 if (isset($_SESSION['tempValConfirmBox'])) {
     unset($_SESSION['tempValConfirmBox']);
     echo $clearLocalStorage;
-    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
 }
 ?>
 
@@ -305,7 +305,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 
     <div class="page-load-cover">
         <div class="d-flex flex-column my-3 ms-3">
-            <p><a href="<?= $redirect_page ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?php echo $pageActionTitle ?></p>
+            <p><a href="<?= $redirectPage ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?php echo $pageActionTitle ?></p>
         </div>
 
         <div id="formContainer" class="container d-flex justify-content-center">

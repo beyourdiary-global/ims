@@ -11,7 +11,7 @@ if (!isActionAllowed('View', $pinAccess)) {
     exit();
 }
 
-$redirect_page = $SITEURL . '/campaign_rule_setting.php';
+$redirectPage = $SITEURL . '/campaign_rule_setting.php';
 $deleteRedirectPage = $SITEURL . '/campaign_rule_setting_table.php';
 $ruleRows = campaignRuleSettingFetchRows($connect, array());
 $userOptions = campaignFetchUsers($connect);
@@ -109,7 +109,7 @@ $userOptions = campaignFetchUsers($connect);
                             <h2><?= campaignH($pageTitle) ?></h2>
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed('Add', $pinAccess)): ?>
-                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page ?>?act=<?= $act_1 ?>">
+                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage ?>?act=<?= $act_1 ?>">
                                         <i class="fa-solid fa-plus"></i> Add Rule
                                     </a>
                                 <?php endif; ?>
@@ -152,9 +152,9 @@ $userOptions = campaignFetchUsers($connect);
                                 <th class="hideColumn" scope="row"><?= $ruleId ?></th>
                                 <th scope="row"><?= $num++; ?></th>
                                 <td scope="row" class="btn-container">
-                                    <?php renderViewEditButton('View', $redirect_page, $row, $pinAccess); ?>
-                                    <?php renderViewEditButton('Edit', $redirect_page, $row, $pinAccess, $act_2); ?>
-                                    <?php renderDeleteButton($pinAccess, $ruleId, $row['rule_name'] ?? '', $row['remark'] ?? '', $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                    <?php renderViewEditButton('View', $redirectPage, $row, $pinAccess); ?>
+                                    <?php renderViewEditButton('Edit', $redirectPage, $row, $pinAccess, $act_2); ?>
+                                    <?php renderDeleteButton($pinAccess, $ruleId, $row['rule_name'] ?? '', $row['remark'] ?? '', $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                 </td>
                                 <td scope="row"><?= campaignH($row['rule_name'] ?? '') ?></td>
                                 <td scope="row"><?= campaignH($scheduleText) ?></td>

@@ -14,7 +14,7 @@ $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 
-$redirect_page = $SITEURL . '/stock_list_table.php';
+$redirectPage = $SITEURL . '/stock_list_table.php';
 $deleteRedirectPage = $SITEURL . '/stock_list_table.php';
 
 $result = getData('*', '', '', $tblName, $connect);

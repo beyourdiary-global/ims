@@ -9,12 +9,12 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 $tblName = OCR_TRANS;
 
 //Current Page Action And Data ID
-$dataID = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
-$redirect_page = $SITEURL . '/finance/other_creditor_trans_table.php';
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$redirectPage = $SITEURL . '/finance/other_creditor_trans_table.php';
+$redirectLink = ("<script>location.href = '$redirectPage';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 $errorMsgAlert = "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
 
@@ -26,15 +26,15 @@ if (!file_exists($img_path)) {
 }
 
 // to display data to input
-if ($dataID) { //edit/remove/view
-    $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $finance_connect);
+if ($dataId) { //edit/remove/view
+    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $finance_connect);
 
-    if ($rst != false && $rst->num_rows > 0) {
+    if ($result != false && $result->num_rows > 0) {
         $dataExisted = 1;
-        $row = $rst->fetch_assoc();
+        $row = $result->fetch_assoc();
         $trans_id = $row['transactionID'];
     } else {
-        // If $rst is false or no data found ($act==null)
+        // If $result is false or no data found ($act==null)
         $errorExist = 1;
         $_SESSION['tempValConfirmBox'] = true;
         $act = "F";
@@ -58,8 +58,8 @@ if ($dataID) { //edit/remove/view
     $trans_id = "OCRT{$currentDate}{$nextRowId}";
 }
 
-if (!($dataID) && !($act)) {
-    renderNotificationScript('Invalid action.', 'error', $redirect_page);
+if (!($dataId) && !($act)) {
+    renderNotificationScript('Invalid action.', 'error', $redirectPage);
 
 }
 
@@ -222,7 +222,7 @@ if (post('actionBtn')) {
                     $query = "INSERT INTO " . $tblName . "(transactionID,type,date,creditor,amount,prev_amt,final_amt,description,remark,attachment,create_by,create_date,create_time) VALUES ('$trans_id','$ocr_type','$ocr_date','$ocr_creditor','$ocr_amt','$ocr_prev_amt','$ocr_final_amt','$ocr_desc','$ocr_remark','$ocr_attach','" . USER_ID . "',curdate(),curtime())";
                     // Execute the query
                     $returnData = mysqli_query($finance_connect, $query);
-                    $dataID = $finance_connect->insert_id;
+                    $dataId = $finance_connect->insert_id;
                     $_SESSION['tempValConfirmBox'] = true;
                 } catch (Exception $e) {
                     echo 'Message: ' . $e->getMessage();
@@ -239,8 +239,8 @@ if (post('actionBtn')) {
                         }
                     }
                     // take old value
-                    $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $finance_connect);
-                    $row = $rst->fetch_assoc();
+                    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $finance_connect);
+                    $row = $result->fetch_assoc();
                     $oldvalarr = $chgvalarr = array();
 
                     // check value
@@ -307,7 +307,7 @@ if (post('actionBtn')) {
                             " . $tblName . "
                         WHERE
                             creditor = '$ocr_creditor'
-                            AND id < '$dataID'
+                            AND id < '$dataId'
                             AND `status` != 'D'
                         ORDER BY
                             id DESC
@@ -334,7 +334,7 @@ if (post('actionBtn')) {
                             $ocr_final_amt = number_format($ocr_prev_amt - $ocr_amt, 2, '.', '');
                         }
 
-                        $query = "UPDATE " . $tblName . " SET type = '$ocr_type',date = '$ocr_date',creditor = '$ocr_creditor', amount = '$ocr_amt', prev_amt ='$ocr_prev_amt', final_amt ='$ocr_final_amt', description='$ocr_desc', attachment ='$ocr_attach', remark ='$ocr_remark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
+                        $query = "UPDATE " . $tblName . " SET type = '$ocr_type',date = '$ocr_date',creditor = '$ocr_creditor', amount = '$ocr_amt', prev_amt ='$ocr_prev_amt', final_amt ='$ocr_final_amt', description='$ocr_desc', attachment ='$ocr_attach', remark ='$ocr_remark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($finance_connect, $query);
 
                         updateTransAmt($finance_connect, $tblName, ['creditor'], ['creditor']);
@@ -379,7 +379,7 @@ if (post('actionBtn')) {
                 } else if ($pageAction == 'Edit') {
                     $log['oldval'] = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
 
                 audit_log($log);
@@ -400,14 +400,14 @@ if (post('act') == 'D') {
     if ($id) {
         try {
             // take name
-            $rst = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $finance_connect);
-            $row = $rst->fetch_assoc();
+            $result = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $finance_connect);
+            $row = $result->fetch_assoc();
 
-            $dataID = $row['id'];
+            $dataId = $row['id'];
             $trans_id = $row['transactionID'];
 
             //SET the record status to 'D'
-            deleteRecord($tblName,'', $dataID, $trans_id, $finance_connect, $connect, $cdate, $ctime, $pageTitle);
+            deleteRecord($tblName,'', $dataId, $trans_id, $finance_connect, $connect, $cdate, $ctime, $pageTitle);
             $_SESSION['delChk'] = 1;
         } catch (Exception $e) {
             echo 'Message: ' . $e->getMessage();
@@ -417,7 +417,7 @@ if (post('act') == 'D') {
 }
 
 //view
-if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
+if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
     $trans_id = isset($dataExisted) ? $row['transactionID'] : '';
     $_SESSION['viewChk'] = 1;
 
@@ -451,7 +451,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 
 <body>
     <div class="d-flex flex-column my-3 ms-3">
-        <p><a href="<?= $redirect_page ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?php
+        <p><a href="<?= $redirectPage ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?php
                                                                                                                 echo displayPageAction($act, 'Transaction');
                                                                                                                 ?></p>
 
@@ -673,7 +673,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
     if (isset($_SESSION['tempValConfirmBox'])) {
         unset($_SESSION['tempValConfirmBox']);
         echo $clearLocalStorage;
-        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
     }
     ?>
     <script>

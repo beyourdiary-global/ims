@@ -13,7 +13,7 @@ if (is_readable($libPath)) {
 
 $tblName = PKG;
 
-$redirect_page = $SITEURL . '/package.php';
+$redirectPage = $SITEURL . '/package.php';
 $deleteRedirectPage = $SITEURL . '/package_table.php';
 
 $checkboxValues = isset($_COOKIE['rowID']) ? $_COOKIE['rowID'] : '';
@@ -179,7 +179,7 @@ if (!$result) {
                             <div class="mt-auto mb-auto d-flex gap-2">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                       href="<?= $redirect_page . "?act=" . $act_1 ?>">
+                                       href="<?= $redirectPage . "?act=" . $act_1 ?>">
                                         <i class="fa-solid fa-plus"></i> Add <?php echo $pageTitle ?>
                                     </a>
                                 <?php endif; ?>
@@ -234,9 +234,9 @@ if (!$result) {
                                     <td class="text-center"><input type="checkbox" class="export" value="<?= (int) $row['id'] ?>"></td>
                                     <th><?= $num++ ?></th>
                                     <td class="btn-container">
-                                        <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                        <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                        <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                        <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                        <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
+                                        <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                     </td>
                                     <td><?= htmlspecialchars($row['name']) ?></td>
                                     <td><?= htmlspecialchars(isset($row['item_code']) ? $row['item_code'] : '') ?></td>

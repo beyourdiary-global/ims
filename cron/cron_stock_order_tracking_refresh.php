@@ -6,9 +6,9 @@ include dirname(__DIR__) . '/init.php';
 include ROOT . '/include/common.php';
 
 $query = "SELECT id FROM " . STOCK_ORDER_REQ . " WHERE status='A' AND tracking_no IS NOT NULL AND tracking_no <> '' ORDER BY id DESC";
-$rst = mysqli_query($finance_connect, $query);
+$result = mysqli_query($finance_connect, $query);
 
-if (!$rst) {
+if (!$result) {
     echo "Failed to fetch requests.\n";
     exit(1);
 }
@@ -16,7 +16,7 @@ if (!$rst) {
 $okCount = 0;
 $failCount = 0;
 
-while ($row = mysqli_fetch_assoc($rst)) {
+while ($row = mysqli_fetch_assoc($result)) {
     $message = '';
     $ok = sorRefreshTrackingStatus($finance_connect, (int) $row['id'], $message, $connect);
     if ($ok) {

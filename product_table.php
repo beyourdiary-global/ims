@@ -8,7 +8,7 @@ include_once 'include/list_page_header.php';
 
 $tblName = PROD;
 
-$redirect_page = $SITEURL . '/product.php';
+$redirectPage = $SITEURL . '/product.php';
 $deleteRedirectPage = $SITEURL . '/product_table.php';
 
 $checkboxValues = isset($_COOKIE['rowID']) ? $_COOKIE['rowID'] : '';
@@ -179,7 +179,7 @@ if (!$result) {
                             <h2><?php echo $pageTitle ?></h2>
                             <div class="mt-auto mb-auto d-flex gap-2">
                                 <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add <?php echo $pageTitle ?> </a>
+                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add <?php echo $pageTitle ?> </a>
                                 <?php endif; ?>
                                 <?php if (isActionAllowed("Import", $pinAccess)) : ?>
                                     <a class="btn btn-sm btn-rounded btn-info text-white" id="addBtn" href="product_import.php"><i class="fa-solid fa-file-import"></i> Import</a>
@@ -215,9 +215,9 @@ if (!$result) {
                                     <td class="text-center"><input type="checkbox" class="export" value="<?= (int) $row['id'] ?>"></td>
                                     <th scope="row"><?= $num++; ?></th>
                                     <td scope="row" class="btn-container">
-                                        <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                        <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                        <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], '', $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                        <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                        <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
+                                        <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], '', $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                     </td>
                                     <td scope="row"><?= $row['name'] ?></td>
                                     <td scope="row">

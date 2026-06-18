@@ -8,7 +8,7 @@ $barcode = input('barcode');
 $prod_id = input('pkg_id');
 $whse_id = input('whse_id');
 $usr_id = input('usr_id');
-$redirect_page = 'dashboard.php';  // if no value get
+$redirectPage = 'dashboard.php';  // if no value get
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 // Check if required parameters are missing and redirect if necessary
 if (!$barcode || !$prod_id || !$whse_id || !$usr_id) {
@@ -372,7 +372,7 @@ if (post('usrBtn')) {
  if (isset($_SESSION['tempValConfirmBox'])) {
     unset($_SESSION['tempValConfirmBox']);
     echo $clearLocalStorage;
-    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","I");</script>';
+    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","I");</script>';
 }
 ?>
 <script>

@@ -136,36 +136,36 @@ if (!function_exists('campaignAudit')) {
 }
 
 if (!function_exists('campaignTableExists')) {
-    function campaignTableExists($conn, $tableName)
+    function campaignTableExists($conn, $tblName)
     {
-        if (!($conn instanceof mysqli) || trim((string) $tableName) === '') {
+        if (!($conn instanceof mysqli) || trim((string) $tblName) === '') {
             return false;
         }
 
-        $safeTable = $conn->real_escape_string((string) $tableName);
+        $safeTable = $conn->real_escape_string((string) $tblName);
         $result = $conn->query("SHOW TABLES LIKE '" . $safeTable . "'");
         return ($result && $result->num_rows > 0);
     }
 }
 
 if (!function_exists('campaignColumnExists')) {
-    function campaignColumnExists($conn, $tableName, $columnName)
+    function campaignColumnExists($conn, $tblName, $columnName)
     {
-        if (!campaignTableExists($conn, $tableName)) {
+        if (!campaignTableExists($conn, $tblName)) {
             return false;
         }
 
         $safeColumn = $conn->real_escape_string((string) $columnName);
-        $result = $conn->query("SHOW COLUMNS FROM `" . str_replace('`', '``', (string) $tableName) . "` LIKE '" . $safeColumn . "'");
+        $result = $conn->query("SHOW COLUMNS FROM `" . str_replace('`', '``', (string) $tblName) . "` LIKE '" . $safeColumn . "'");
         return ($result && $result->num_rows > 0);
     }
 }
 
 if (!function_exists('campaignFirstColumn')) {
-    function campaignFirstColumn($conn, $tableName, $columns)
+    function campaignFirstColumn($conn, $tblName, $columns)
     {
         foreach ((array) $columns as $column) {
-            if (campaignColumnExists($conn, $tableName, $column)) {
+            if (campaignColumnExists($conn, $tblName, $column)) {
                 return $column;
             }
         }
@@ -257,14 +257,14 @@ if (!function_exists('campaignFetchUsers')) {
 }
 
 if (!function_exists('campaignFetchSimpleOptions')) {
-    function campaignFetchSimpleOptions($connect, $tableName, $nameColumn = 'name')
+    function campaignFetchSimpleOptions($connect, $tblName, $nameColumn = 'name')
     {
         $rows = array();
-        if (!campaignTableExists($connect, $tableName) || !campaignColumnExists($connect, $tableName, $nameColumn)) {
+        if (!campaignTableExists($connect, $tblName) || !campaignColumnExists($connect, $tblName, $nameColumn)) {
             return $rows;
         }
 
-        $result = getData('id,`' . $nameColumn . '`', '', '', $tableName, $connect);
+        $result = getData('id,`' . $nameColumn . '`', '', '', $tblName, $connect);
         if ($result instanceof mysqli_result) {
             while ($row = $result->fetch_assoc()) {
                 $id = isset($row['id']) ? (int) $row['id'] : 0;
@@ -280,15 +280,15 @@ if (!function_exists('campaignFetchSimpleOptions')) {
 }
 
 if (!function_exists('campaignResolveLookupName')) {
-    function campaignResolveLookupName($connect, $tableName, $id)
+    function campaignResolveLookupName($connect, $tblName, $id)
     {
         $id = trim((string) $id);
-        if ($id === '' || $id === '0' || !campaignTableExists($connect, $tableName) || !campaignColumnExists($connect, $tableName, 'name')) {
+        if ($id === '' || $id === '0' || !campaignTableExists($connect, $tblName) || !campaignColumnExists($connect, $tblName, 'name')) {
             return $id;
         }
 
         $safeId = $connect->real_escape_string($id);
-        $result = getData('name', "id='" . $safeId . "'", 'LIMIT 1', $tableName, $connect);
+        $result = getData('name', "id='" . $safeId . "'", 'LIMIT 1', $tblName, $connect);
         if ($result && $result->num_rows > 0) {
             $row = $result->fetch_assoc();
             return isset($row['name']) ? (string) $row['name'] : $id;
@@ -565,9 +565,9 @@ if (!function_exists('campaignCurrentUserId')) {
 }
 
 if (!function_exists('campaignTableName')) {
-    function campaignTableName($tableName)
+    function campaignTableName($tblName)
     {
-        return '`' . str_replace('`', '``', (string) $tableName) . '`';
+        return '`' . str_replace('`', '``', (string) $tblName) . '`';
     }
 }
 
@@ -662,9 +662,9 @@ if (!function_exists('campaignBuildCampaignCode')) {
 }
 
 if (!function_exists('campaignGetFirstExistingColumn')) {
-    function campaignGetFirstExistingColumn($conn, $tableName, $columns)
+    function campaignGetFirstExistingColumn($conn, $tblName, $columns)
     {
-        return campaignFirstColumn($conn, $tableName, (array) $columns);
+        return campaignFirstColumn($conn, $tblName, (array) $columns);
     }
 }
 
@@ -801,20 +801,20 @@ if (!function_exists('campaignPurchaseQuoteColumn')) {
 }
 
 if (!function_exists('campaignPurchaseColumnType')) {
-    function campaignPurchaseColumnType($conn, $tableName, $columnName)
+    function campaignPurchaseColumnType($conn, $tblName, $columnName)
     {
         static $cache = array();
 
-        if (!($conn instanceof mysqli) || trim((string) $tableName) === '' || trim((string) $columnName) === '') {
+        if (!($conn instanceof mysqli) || trim((string) $tblName) === '' || trim((string) $columnName) === '') {
             return '';
         }
 
-        $cacheKey = spl_object_hash($conn) . '|' . $tableName . '|' . $columnName;
+        $cacheKey = spl_object_hash($conn) . '|' . $tblName . '|' . $columnName;
         if (array_key_exists($cacheKey, $cache)) {
             return $cache[$cacheKey];
         }
 
-        $safeTable = str_replace('`', '``', (string) $tableName);
+        $safeTable = str_replace('`', '``', (string) $tblName);
         $safeColumn = $conn->real_escape_string((string) $columnName);
         $result = $conn->query("SHOW COLUMNS FROM `" . $safeTable . "` LIKE '" . $safeColumn . "'");
         if ($result && $result->num_rows > 0) {
@@ -829,9 +829,9 @@ if (!function_exists('campaignPurchaseColumnType')) {
 }
 
 if (!function_exists('campaignPurchaseColumnIsNumeric')) {
-    function campaignPurchaseColumnIsNumeric($conn, $tableName, $columnName)
+    function campaignPurchaseColumnIsNumeric($conn, $tblName, $columnName)
     {
-        $columnType = campaignPurchaseColumnType($conn, $tableName, $columnName);
+        $columnType = campaignPurchaseColumnType($conn, $tblName, $columnName);
         return (bool) preg_match('/\b(int|decimal|float|double|real|numeric|bit)\b/i', $columnType);
     }
 }
@@ -1667,15 +1667,15 @@ if (!function_exists('campaignRuleConditionBuildJsonFromPost')) {
 }
 
 if (!function_exists('campaignFetchActiveSimpleOptions')) {
-    function campaignFetchActiveSimpleOptions($connect, $tableName, $nameColumn = 'name')
+    function campaignFetchActiveSimpleOptions($connect, $tblName, $nameColumn = 'name')
     {
         $rows = array();
-        if (!campaignTableExists($connect, $tableName) || !campaignColumnExists($connect, $tableName, $nameColumn)) {
+        if (!campaignTableExists($connect, $tblName) || !campaignColumnExists($connect, $tblName, $nameColumn)) {
             return $rows;
         }
 
-        $where = campaignColumnExists($connect, $tableName, 'status') ? "`status`='A'" : '1=1';
-        $sql = "SELECT `id`, `" . str_replace('`', '``', $nameColumn) . "` AS option_name FROM " . campaignTableName($tableName) . " WHERE " . $where . " ORDER BY option_name ASC, `id` ASC";
+        $where = campaignColumnExists($connect, $tblName, 'status') ? "`status`='A'" : '1=1';
+        $sql = "SELECT `id`, `" . str_replace('`', '``', $nameColumn) . "` AS option_name FROM " . campaignTableName($tblName) . " WHERE " . $where . " ORDER BY option_name ASC, `id` ASC";
         $result = mysqli_query($connect, $sql);
         if ($result instanceof mysqli_result) {
             while ($row = $result->fetch_assoc()) {
@@ -1864,15 +1864,15 @@ if (!function_exists('campaignRuleTargetPlatformConfigs')) {
 }
 
 if (!function_exists('campaignRuleFetchActiveRows')) {
-    function campaignRuleFetchActiveRows($conn, $tableName)
+    function campaignRuleFetchActiveRows($conn, $tblName)
     {
-        if (!($conn instanceof mysqli) || !campaignTableExists($conn, $tableName)) {
+        if (!($conn instanceof mysqli) || !campaignTableExists($conn, $tblName)) {
             return array();
         }
 
-        $where = campaignColumnExists($conn, $tableName, 'status') ? "WHERE IFNULL(`status`, 'A') = 'A'" : '';
+        $where = campaignColumnExists($conn, $tblName, 'status') ? "WHERE IFNULL(`status`, 'A') = 'A'" : '';
         $rows = array();
-        $result = mysqli_query($conn, "SELECT * FROM " . campaignTableName($tableName) . " " . $where);
+        $result = mysqli_query($conn, "SELECT * FROM " . campaignTableName($tblName) . " " . $where);
         if ($result instanceof mysqli_result) {
             while ($row = $result->fetch_assoc()) {
                 $rows[] = $row;

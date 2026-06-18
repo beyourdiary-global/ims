@@ -15,8 +15,8 @@ if ($requestId <= 0) {
 $sql = "SELECT *
     FROM " . STOCK_ORDER_REQ . "
     WHERE id='" . (int) $requestId . "' AND status='A'";
-$rst = mysqli_query($finance_connect, $sql);
-if (!$rst || !($row = mysqli_fetch_assoc($rst))) {
+$result = mysqli_query($finance_connect, $sql);
+if (!$result || !($row = mysqli_fetch_assoc($result))) {
     echo '<h3>Order request not found.</h3>';
     exit;
 }

@@ -178,7 +178,7 @@ if (!empty($checkboxValues)) {
 
 $tblName = LAZADA_ORDER_REQ;
 
-$redirect_page = $SITEURL . '/finance/lazada_order_req.php';
+$redirectPage = $SITEURL . '/finance/lazada_order_req.php';
 $deleteRedirectPage = $SITEURL . '/finance/lazada_order_req_table.php';
 $result = getData('*', '', '', LAZADA_ORDER_REQ, $connect);
 ?>
@@ -219,7 +219,7 @@ $(document).ready(() => {
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed('Add', $pinAccess)): ?>
                             <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                href="<?= $redirect_page . '?act=' . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                href="<?= $redirectPage . '?act=' . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                 Record </a>
                             <?php endif; ?>
                             <?php if (isActionAllowed('Export', $pinAccess)): ?>

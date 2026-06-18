@@ -31,10 +31,10 @@ if (!function_exists('customerTagTableExists')) {
         }
 
         $safeTable = mysqli_real_escape_string($connect, customerTagGetAssignmentTable());
-        $rst = mysqli_query($connect, "SHOW TABLES LIKE '" . $safeTable . "'");
-        $exists = ($rst instanceof mysqli_result) && $rst->num_rows > 0;
-        if ($rst instanceof mysqli_result) {
-            $rst->free();
+        $result = mysqli_query($connect, "SHOW TABLES LIKE '" . $safeTable . "'");
+        $exists = ($result instanceof mysqli_result) && $result->num_rows > 0;
+        if ($result instanceof mysqli_result) {
+            $result->free();
         }
 
         $existsCache[$cacheKey] = $exists;
@@ -51,9 +51,9 @@ if (!function_exists('customerTagGetActiveTagOptions')) {
 
         $rows = array();
         $sql = "SELECT id, name, remark FROM `" . TAG . "` WHERE status = 'A' ORDER BY name ASC, id ASC";
-        $rst = mysqli_query($connect, $sql);
-        if ($rst instanceof mysqli_result) {
-            while ($row = $rst->fetch_assoc()) {
+        $result = mysqli_query($connect, $sql);
+        if ($result instanceof mysqli_result) {
+            while ($row = $result->fetch_assoc()) {
                 $rows[] = $row;
             }
         }
@@ -76,9 +76,9 @@ if (!function_exists('customerTagFindTagByName')) {
 
         $safeTagName = mysqli_real_escape_string($connect, $tagName);
         $sql = "SELECT id, name, remark, status FROM `" . TAG . "` WHERE name = '" . $safeTagName . "' ORDER BY status = 'A' DESC, id ASC LIMIT 1";
-        $rst = mysqli_query($connect, $sql);
-        if ($rst instanceof mysqli_result && $rst->num_rows > 0) {
-            return $rst->fetch_assoc();
+        $result = mysqli_query($connect, $sql);
+        if ($result instanceof mysqli_result && $result->num_rows > 0) {
+            return $result->fetch_assoc();
         }
 
         return null;
@@ -97,9 +97,9 @@ if (!function_exists('customerTagGetTagById')) {
             return null;
         }
 
-        $rst = getData('id,name,remark,status', "id = '" . $tagId . "'", 'LIMIT 1', TAG, $connect);
-        if ($rst instanceof mysqli_result && $rst->num_rows > 0) {
-            return $rst->fetch_assoc();
+        $result = getData('id,name,remark,status', "id = '" . $tagId . "'", 'LIMIT 1', TAG, $connect);
+        if ($result instanceof mysqli_result && $result->num_rows > 0) {
+            return $result->fetch_assoc();
         }
 
         return null;
@@ -130,9 +130,9 @@ if (!function_exists('customerTagGetCustomerTagMap')) {
                 ORDER BY t.name ASC, a.id ASC";
 
         $tagMap = array();
-        $rst = mysqli_query($connect, $sql);
-        if ($rst instanceof mysqli_result) {
-            while ($row = $rst->fetch_assoc()) {
+        $result = mysqli_query($connect, $sql);
+        if ($result instanceof mysqli_result) {
+            while ($row = $result->fetch_assoc()) {
                 $customerId = isset($row['customer_id']) ? (int) $row['customer_id'] : 0;
                 if ($customerId <= 0) {
                     continue;
@@ -571,11 +571,11 @@ if (!function_exists('customerTagAssignToCustomer')) {
         }
 
         $safePlatform = mysqli_real_escape_string($connect, $platform);
-        $tableName = customerTagGetAssignmentTable();
-        $queryCheck = "SELECT id, status FROM `" . $tableName . "` WHERE platform = '" . $safePlatform . "' AND customer_id = '" . $customerId . "' AND tag_id = '" . $tagId . "' LIMIT 1";
-        $rst = mysqli_query($connect, $queryCheck);
-        if ($rst instanceof mysqli_result && $rst->num_rows > 0) {
-            $existingRow = $rst->fetch_assoc();
+        $tblName = customerTagGetAssignmentTable();
+        $queryCheck = "SELECT id, status FROM `" . $tblName . "` WHERE platform = '" . $safePlatform . "' AND customer_id = '" . $customerId . "' AND tag_id = '" . $tagId . "' LIMIT 1";
+        $result = mysqli_query($connect, $queryCheck);
+        if ($result instanceof mysqli_result && $result->num_rows > 0) {
+            $existingRow = $result->fetch_assoc();
             $assignmentId = isset($existingRow['id']) ? (int) $existingRow['id'] : 0;
             $existingStatus = isset($existingRow['status']) ? (string) $existingRow['status'] : '';
 
@@ -583,11 +583,11 @@ if (!function_exists('customerTagAssignToCustomer')) {
                 return array('success' => true, 'already_active' => true, 'query' => $queryCheck);
             }
 
-            $query = "UPDATE `" . $tableName . "` SET status = 'A', update_by = '" . USER_ID . "', update_date = CURDATE(), update_time = CURTIME() WHERE id = '" . $assignmentId . "'";
+            $query = "UPDATE `" . $tblName . "` SET status = 'A', update_by = '" . USER_ID . "', update_date = CURDATE(), update_time = CURTIME() WHERE id = '" . $assignmentId . "'";
             return array('success' => (bool) mysqli_query($connect, $query), 'already_active' => false, 'query' => $query);
         }
 
-        $query = "INSERT INTO `" . $tableName . "` (platform, customer_id, tag_id, create_by, create_date, create_time, status) VALUES ('" . $safePlatform . "', '" . $customerId . "', '" . $tagId . "', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
+        $query = "INSERT INTO `" . $tblName . "` (platform, customer_id, tag_id, create_by, create_date, create_time, status) VALUES ('" . $safePlatform . "', '" . $customerId . "', '" . $tagId . "', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
         return array('success' => (bool) mysqli_query($connect, $query), 'already_active' => false, 'query' => $query);
     }
 }

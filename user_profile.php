@@ -38,8 +38,8 @@ function upfIsDuplicateField($connect, $table, $field, $value, $excludeId)
 
     // Force same collation on both sides to avoid illegal mix of collations.
     $sql = "SELECT id FROM " . $table . " WHERE id <> '" . $safeId . "' AND CONVERT(`" . $safeField . "` USING utf8mb4) COLLATE utf8mb4_unicode_ci = CONVERT('" . $safeValue . "' USING utf8mb4) COLLATE utf8mb4_unicode_ci LIMIT 1";
-    $rst = mysqli_query($connect, $sql);
-    return ($rst && mysqli_num_rows($rst) > 0);
+    $result = mysqli_query($connect, $sql);
+    return ($result && mysqli_num_rows($result) > 0);
 }
 
 $profileResultAction = '';

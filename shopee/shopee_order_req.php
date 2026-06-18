@@ -22,20 +22,20 @@ if (empty($_SESSION['shopee_order_verify_pdf_csrf'])) {
     $_SESSION['shopee_order_verify_pdf_csrf'] = bin2hex(random_bytes(32));
 }
 
-$dataID = input('id');
+$dataId = input('id');
 $act = input('act');
 $pageAction = getPageAction($act);
 $allowed_ext = array("png", "jpg", "jpeg", "pdf");
 
 // Redirect directly to role page to avoid extra router history entries.
-$redirect_page = $SITEURL . '/shopee/shopee_processing_order.php';
+$redirectPage = $SITEURL . '/shopee/shopee_processing_order.php';
 if (in_array('130', GlobalPin)) {
-    $redirect_page = $SITEURL . '/shopee/shopee_order_req_table.php';
+    $redirectPage = $SITEURL . '/shopee/shopee_order_req_table.php';
 } else if (in_array('129', GlobalPin)) {
-    $redirect_page = $SITEURL . '/shopee/shopee_verify.php';
+    $redirectPage = $SITEURL . '/shopee/shopee_verify.php';
 }
-$back_redirect_page = commonResolveBackUrl($redirect_page);
-$redirectLink = '<script>location.href=' . json_encode($redirect_page) . ';</script>';
+$back_redirect_page = commonResolveBackUrl($redirectPage);
+$redirectLink = '<script>location.href=' . json_encode($redirectPage) . ';</script>';
 $clearLocalStorage = <<<'HTML'
 <script>
 (function () {
@@ -96,13 +96,13 @@ $sorBuildLocalTelegramFailureMessage = function ($notifyResult) use ($sorIsLiveS
 
     return "Telegram message failed to send.\nReason: " . $reason;
 };
-$sorHandleStatusTransition = function ($newStatus) use ($connect, $finance_connect, $dataID, $pageTitle, $cdate, $ctime, $tblName, $redirect_page, $sorBuildLocalTelegramFailureMessage, $sorIsAjaxRequest, $sorPrepareAjaxJsonResponse) {
+$sorHandleStatusTransition = function ($newStatus) use ($connect, $finance_connect, $dataId, $pageTitle, $cdate, $ctime, $tblName, $redirectPage, $sorBuildLocalTelegramFailureMessage, $sorIsAjaxRequest, $sorPrepareAjaxJsonResponse) {
     $newStatus = shopeeOmsNormalizeStatusCode($newStatus);
     $transitionRemark = 'Order Status Update to ' . shopeeOmsGetStatusLabel($newStatus);
     $statusUpdateFallbackMessage = $newStatus === 'TP'
         ? 'Airbill is required when Order Status is To Pack.'
         : 'Unable to update order status.';
-    $transitionResult = shopeeOmsExecuteTransition($connect, $finance_connect, (int) $dataID, $newStatus, array(
+    $transitionResult = shopeeOmsExecuteTransition($connect, $finance_connect, (int) $dataId, $newStatus, array(
         'actor_user_id' => USER_ID,
         'actor_user_group_id' => USER_GROUP,
         'source_page' => $pageTitle,
@@ -136,7 +136,7 @@ $sorHandleStatusTransition = function ($newStatus) use ($connect, $finance_conne
             'connect'      => $connect,
             'oldval'       => 'order_status: ' . $oldStatus,
             'changes'      => 'order_status: ' . $newStatusCode,
-            'act_msg'      => USER_NAME . " updated Shopee order #" . (int) $dataID . " from " . htmlspecialchars($oldStatus, ENT_QUOTES, 'UTF-8') . " to " . htmlspecialchars($newStatusCode, ENT_QUOTES, 'UTF-8') . ".",
+            'act_msg'      => USER_NAME . " updated Shopee order #" . (int) $dataId . " from " . htmlspecialchars($oldStatus, ENT_QUOTES, 'UTF-8') . " to " . htmlspecialchars($newStatusCode, ENT_QUOTES, 'UTF-8') . ".",
         ];
         audit_log($log);
         if ($sorIsAjaxRequest) {
@@ -144,12 +144,12 @@ $sorHandleStatusTransition = function ($newStatus) use ($connect, $finance_conne
             echo json_encode(array(
                 'success' => true,
                 'message' => (string) $transitionResult['message'],
-                'redirect_url' => (string) $redirect_page,
+                'redirect_url' => (string) $redirectPage,
             ));
             exit;
         }
 
-        echo '<script>alert(' . json_encode((string) $transitionResult['message']) . '); window.location.replace(' . json_encode((string) $redirect_page) . ');</script>';
+        echo '<script>alert(' . json_encode((string) $transitionResult['message']) . '); window.location.replace(' . json_encode((string) $redirectPage) . ');</script>';
         exit;
     }
 
@@ -165,7 +165,7 @@ $sorHandleStatusTransition = function ($newStatus) use ($connect, $finance_conne
     echo '<script>alert(' . json_encode((string) (isset($transitionResult['message']) ? $transitionResult['message'] : $statusUpdateFallbackMessage)) . ');</script>';
     exit;
 };
-$sorLogOmsTransitionAudit = function ($transitionResult) use ($pageTitle, $cdate, $ctime, $tblName, $connect, $dataID) {
+$sorLogOmsTransitionAudit = function ($transitionResult) use ($pageTitle, $cdate, $ctime, $tblName, $connect, $dataId) {
     $oldStatus = isset($transitionResult['old_status']) ? (string) $transitionResult['old_status'] : '';
     $newStatusCode = isset($transitionResult['new_status']) ? (string) $transitionResult['new_status'] : '';
     $queryStatusUpdate = "OMS transition " . $oldStatus . " -> " . $newStatusCode;
@@ -181,7 +181,7 @@ $sorLogOmsTransitionAudit = function ($transitionResult) use ($pageTitle, $cdate
         'connect' => $connect,
         'oldval' => 'order_status: ' . $oldStatus,
         'changes' => 'order_status: ' . $newStatusCode,
-        'act_msg' => USER_NAME . " updated Shopee order #" . (int) $dataID . " from " . htmlspecialchars($oldStatus, ENT_QUOTES, 'UTF-8') . " to " . htmlspecialchars($newStatusCode, ENT_QUOTES, 'UTF-8') . ".",
+        'act_msg' => USER_NAME . " updated Shopee order #" . (int) $dataId . " from " . htmlspecialchars($oldStatus, ENT_QUOTES, 'UTF-8') . " to " . htmlspecialchars($newStatusCode, ENT_QUOTES, 'UTF-8') . ".",
     ));
 };
 $sorWriteVerifyAuditLog = function ($queryRecord, $oldValue, $changeValue, $message) use ($pageTitle, $cdate, $ctime, $tblName, $connect) {
@@ -200,7 +200,7 @@ $sorWriteVerifyAuditLog = function ($queryRecord, $oldValue, $changeValue, $mess
         'act_msg' => (string) $message,
     ));
 };
-$sorHandleConfirmReceiveWithFollowUp = function () use ($connect, $finance_connect, $dataID, $pageTitle, $cdate, $ctime, $tblName, $redirect_page, $sorIsAjaxRequest, $sorPrepareAjaxJsonResponse) {
+$sorHandleConfirmReceiveWithFollowUp = function () use ($connect, $finance_connect, $dataId, $pageTitle, $cdate, $ctime, $tblName, $redirectPage, $sorIsAjaxRequest, $sorPrepareAjaxJsonResponse) {
     $postedCsrfToken = isset($_POST['shopee_order_follow_up_csrf']) ? (string) $_POST['shopee_order_follow_up_csrf'] : '';
     if (!hash_equals((string) $_SESSION['shopee_order_follow_up_csrf'], $postedCsrfToken)) {
         $message = 'Invalid follow-up session token. Please refresh and try again.';
@@ -218,7 +218,7 @@ $sorHandleConfirmReceiveWithFollowUp = function () use ($connect, $finance_conne
         $connect,
         $finance_connect,
         'shopee',
-        (int) $dataID,
+        (int) $dataId,
         array(
             'message_shortcut_id' => postSpaceFilter('follow_up_message_shortcut_id'),
             'next_follow_up_date' => postSpaceFilter('follow_up_next_follow_up_date'),
@@ -237,7 +237,7 @@ $sorHandleConfirmReceiveWithFollowUp = function () use ($connect, $finance_conne
         $sourceConfig = isset($submitResult['source_config']) ? $submitResult['source_config'] : shopeeOmsGetOrderSourceConfig('shopee');
         $orderRow = isset($submitResult['order_row_after']) && !empty($submitResult['order_row_after'])
             ? $submitResult['order_row_after']
-            : shopeeOmsLoadOrder(shopeeOmsGetOrderSourceDbConnection($connect, $finance_connect, $sourceConfig), (int) $dataID, $sourceConfig);
+            : shopeeOmsLoadOrder(shopeeOmsGetOrderSourceDbConnection($connect, $finance_connect, $sourceConfig), (int) $dataId, $sourceConfig);
         $transitionResult = isset($submitResult['transition_result']) ? $submitResult['transition_result'] : array();
         $oldStatus = isset($transitionResult['old_status']) ? (string) $transitionResult['old_status'] : '';
         $newStatusCode = isset($transitionResult['new_status']) ? (string) $transitionResult['new_status'] : 'PR';
@@ -254,7 +254,7 @@ $sorHandleConfirmReceiveWithFollowUp = function () use ($connect, $finance_conne
             'connect' => $connect,
             'oldval' => 'order_status: ' . $oldStatus,
             'changes' => 'order_status: ' . $newStatusCode,
-            'act_msg' => USER_NAME . " updated Shopee order #" . (int) $dataID . " from " . htmlspecialchars($oldStatus, ENT_QUOTES, 'UTF-8') . " to " . htmlspecialchars($newStatusCode, ENT_QUOTES, 'UTF-8') . ".",
+            'act_msg' => USER_NAME . " updated Shopee order #" . (int) $dataId . " from " . htmlspecialchars($oldStatus, ENT_QUOTES, 'UTF-8') . " to " . htmlspecialchars($newStatusCode, ENT_QUOTES, 'UTF-8') . ".",
         ));
 
         if ($sorIsAjaxRequest) {
@@ -262,12 +262,12 @@ $sorHandleConfirmReceiveWithFollowUp = function () use ($connect, $finance_conne
             echo json_encode(array(
                 'success' => true,
                 'message' => isset($submitResult['message']) ? (string) $submitResult['message'] : 'Follow-up submitted successfully.',
-                'redirect_url' => (string) $redirect_page,
+                'redirect_url' => (string) $redirectPage,
             ));
             exit;
         }
 
-        echo '<script>alert(' . json_encode((string) (isset($submitResult['message']) ? $submitResult['message'] : 'Follow-up submitted successfully.')) . '); window.location.replace(' . json_encode((string) $redirect_page) . ');</script>';
+        echo '<script>alert(' . json_encode((string) (isset($submitResult['message']) ? $submitResult['message'] : 'Follow-up submitted successfully.')) . '); window.location.replace(' . json_encode((string) $redirectPage) . ');</script>';
         exit;
     }
 
@@ -285,13 +285,13 @@ $sorHandleConfirmReceiveWithFollowUp = function () use ($connect, $finance_conne
 };
 
 // to display data to input
-if ($dataID) { //edit/remove/view
-    $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $finance_connect);
+if ($dataId) { //edit/remove/view
+    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $finance_connect);
 
-    if ($rst != false && $rst->num_rows > 0) {
+    if ($result != false && $result->num_rows > 0) {
         $dataExisted = 1;
-        $row = $rst->fetch_assoc();
-        $rememberedDeliveryInfo = shopeeOmsGetRememberedWarehouseDeliveryInfo('shopee', (int) $dataID);
+        $row = $result->fetch_assoc();
+        $rememberedDeliveryInfo = shopeeOmsGetRememberedWarehouseDeliveryInfo('shopee', (int) $dataId);
         if ((!isset($sor_customer_name) || trim((string) $sor_customer_name) === '') && isset($rememberedDeliveryInfo['customer_name'])) {
             $sor_customer_name = trim((string) $rememberedDeliveryInfo['customer_name']);
         }
@@ -299,7 +299,7 @@ if ($dataID) { //edit/remove/view
             $sor_customer_address = trim((string) $rememberedDeliveryInfo['customer_address']);
         }
     } else {
-        // If $rst is false or no data found ($act==null)
+        // If $result is false or no data found ($act==null)
         $errorExist = 1;
         $_SESSION['tempValConfirmBox'] = true;
         $act = "F";
@@ -307,7 +307,7 @@ if ($dataID) { //edit/remove/view
 }
 
 $sorFollowUpModalContext = isset($row) && is_array($row)
-    ? customerFollowUpBuildReceivedOrderContext($connect, $finance_connect, 'shopee', (int) $dataID, $row)
+    ? customerFollowUpBuildReceivedOrderContext($connect, $finance_connect, 'shopee', (int) $dataId, $row)
     : array();
 
 $sorWarehouseRows = shopeeOmsLoadActiveWarehouses($connect);
@@ -321,18 +321,18 @@ foreach ($sorWarehouseRows as $warehouseRow) {
 $sorWarehouseNameMap = shopeeOmsLoadWarehouseNameMap($connect);
 $sorDefaultWarehouseId = shopeeOmsGetDefaultWarehouseId($connect, $sorWarehouseRows);
 
-if (!($dataID) && !($act)) {
-    renderNotificationScript('Invalid action.', 'error', $redirect_page, 1200, true);
+if (!($dataId) && !($act)) {
+    renderNotificationScript('Invalid action.', 'error', $redirectPage, 1200, true);
 
 }
 
 $sorHandleVerifyWorkflowRequest = function () use (
     $connect,
     $finance_connect,
-    $dataID,
+    $dataId,
     $tblName,
     $row,
-    $redirect_page,
+    $redirectPage,
     $pageTitle,
     $sorPrepareAjaxJsonResponse,
     $sorLogOmsTransitionAudit,
@@ -358,7 +358,7 @@ $sorHandleVerifyWorkflowRequest = function () use (
     }
 
     $verifyAction = trim((string) post('sor_verify_order_action'));
-    $freshOrderRow = shopeeOmsLoadOrder($finance_connect, (int) $dataID, shopeeOmsResolveOrderSourceConfig('shopee'));
+    $freshOrderRow = shopeeOmsLoadOrder($finance_connect, (int) $dataId, shopeeOmsResolveOrderSourceConfig('shopee'));
     if (empty($freshOrderRow)) {
         echo json_encode(array('success' => false, 'message' => 'Invalid order.'));
         exit;
@@ -392,7 +392,7 @@ $sorHandleVerifyWorkflowRequest = function () use (
             exit;
         }
 
-        $latestOrderRow = shopeeOmsLoadOrder($finance_connect, (int) $dataID, shopeeOmsResolveOrderSourceConfig('shopee'));
+        $latestOrderRow = shopeeOmsLoadOrder($finance_connect, (int) $dataId, shopeeOmsResolveOrderSourceConfig('shopee'));
         $comparisonRows = shopeeOrderDetailPdfBuildComparisonRows(
             $connect,
             $finance_connect,
@@ -455,11 +455,11 @@ $sorHandleVerifyWorkflowRequest = function () use (
                 'Shopee verify workflow direct verified',
                 '',
                 'Order status update to Verify',
-                USER_NAME . " used direct verified for Shopee order #" . (int) $dataID . "."
+                USER_NAME . " used direct verified for Shopee order #" . (int) $dataId . "."
             );
         }
 
-        $transitionResult = shopeeOmsExecuteTransition($connect, $finance_connect, (int) $dataID, 'V', array(
+        $transitionResult = shopeeOmsExecuteTransition($connect, $finance_connect, (int) $dataId, 'V', array(
             'actor_user_id' => USER_ID,
             'actor_user_group_id' => USER_GROUP,
             'source_page' => $pageTitle,
@@ -479,7 +479,7 @@ $sorHandleVerifyWorkflowRequest = function () use (
         if (!empty($historyChanges)) {
             shopeeOmsLogOrderEditHistory(
                 $finance_connect,
-                (int) $dataID,
+                (int) $dataId,
                 isset($freshOrderRow['orderID']) ? $freshOrderRow['orderID'] : '',
                 $historyChanges,
                 USER_ID,
@@ -499,7 +499,7 @@ $sorHandleVerifyWorkflowRequest = function () use (
                     'Shopee verify workflow field value changes',
                     implode("\n", $oldValuePairs),
                     implode("\n", $changePairs),
-                    USER_NAME . " updated Shopee order detail values during verify workflow for order #" . (int) $dataID . "."
+                    USER_NAME . " updated Shopee order detail values during verify workflow for order #" . (int) $dataId . "."
                 );
             }
         }
@@ -511,7 +511,7 @@ $sorHandleVerifyWorkflowRequest = function () use (
             'message' => $verifyAction === 'direct_verified'
                 ? 'Order verified successfully.'
                 : 'Order Detail PDF values saved and order verified successfully.',
-            'redirect_url' => $verifyRedirectUrl !== '' ? $verifyRedirectUrl : (string) $redirect_page,
+            'redirect_url' => $verifyRedirectUrl !== '' ? $verifyRedirectUrl : (string) $redirectPage,
         ));
         exit;
     }
@@ -530,7 +530,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
     $scr_country_name = trim((string) $_POST['scr_country']);
     $scr_brand_name = trim((string) $_POST['scr_brand']);
     $scr_series_name = trim((string) $_POST['scr_series']);
-    $scr_resolve_lookup_id = function ($rawId, $displayValue, $tableName, $columnName) use ($connect) {
+    $scr_resolve_lookup_id = function ($rawId, $displayValue, $tblName, $columnName) use ($connect) {
         $rawId = trim((string) $rawId);
         if ($rawId !== '' && ctype_digit($rawId) && (int) $rawId > 0) {
             return $rawId;
@@ -542,7 +542,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
         }
 
         $safeDisplayValue = mysqli_real_escape_string($connect, $displayValue);
-        $lookupRst = getData('id', $columnName . " = '$safeDisplayValue'", 'LIMIT 1', $tableName, $connect);
+        $lookupRst = getData('id', $columnName . " = '$safeDisplayValue'", 'LIMIT 1', $tblName, $connect);
         if ($lookupRst && $lookupRst->num_rows > 0) {
             $lookupRow = $lookupRst->fetch_assoc();
             return isset($lookupRow['id']) ? trim((string) $lookupRow['id']) : '';
@@ -637,7 +637,7 @@ if ($pendingStatusUpdate !== '' && !$sorShouldSaveBeforeStatusUpdate) {
 if (post('returnActionBtn')) {
     $returnType = postSpaceFilter('return_type');
     $returnRemark = postSpaceFilter('return_remark');
-    $returnResult = shopeeOmsHandleReturn($connect, $finance_connect, (int) $dataID, $returnType, $returnRemark, USER_ID, USER_GROUP, $pageTitle);
+    $returnResult = shopeeOmsHandleReturn($connect, $finance_connect, (int) $dataId, $returnType, $returnRemark, USER_ID, USER_GROUP, $pageTitle);
     if (!empty($returnResult['success'])) {
         $log = [
             'log_act' => 'edit',
@@ -650,10 +650,10 @@ if (post('returnActionBtn')) {
             'page' => $pageTitle,
             'connect' => $connect,
             'changes' => 'return_type: ' . $returnType,
-            'act_msg' => USER_NAME . " marked Shopee order #" . (int) $dataID . " as returned (" . htmlspecialchars($returnType, ENT_QUOTES, 'UTF-8') . ").",
+            'act_msg' => USER_NAME . " marked Shopee order #" . (int) $dataId . " as returned (" . htmlspecialchars($returnType, ENT_QUOTES, 'UTF-8') . ").",
         ];
         audit_log($log);
-        echo '<script>alert(' . json_encode((string) $returnResult['message']) . '); window.location.replace(' . json_encode((string) $redirect_page) . ');</script>';
+        echo '<script>alert(' . json_encode((string) $returnResult['message']) . '); window.location.replace(' . json_encode((string) $redirectPage) . ');</script>';
         exit;
     }
 
@@ -678,7 +678,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
         return 'Unable to save edited order details.';
     };
 
-    $resolveMultiIds = function ($hiddenInput, $nameInput, $tableName) use ($connect) {
+    $resolveMultiIds = function ($hiddenInput, $nameInput, $tblName) use ($connect) {
         $resolved = array();
 
         if (!is_array($hiddenInput)) {
@@ -703,7 +703,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
             }
 
             $escapedName = mysqli_real_escape_string($connect, $nameVal);
-            $nameRst = getData('id', "name = '$escapedName'", 'LIMIT 1', $tableName, $connect);
+            $nameRst = getData('id', "name = '$escapedName'", 'LIMIT 1', $tblName, $connect);
             if ($nameRst && $nameRst->num_rows > 0) {
                 $nameRow = $nameRst->fetch_assoc();
                 $resolvedId = (int) $nameRow['id'];
@@ -801,8 +801,8 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
     $sor_airbill = postSpaceFilter('sor_airbill');
     $sor_customer_name = postSpaceFilter('sor_customer_name');
     $sor_customer_address = postSpaceFilter('sor_customer_address');
-    if ((int) $dataID > 0 && ($sor_customer_name !== '' || $sor_customer_address !== '')) {
-        shopeeOmsRememberWarehouseDeliveryInfo('shopee', (int) $dataID, array(
+    if ((int) $dataId > 0 && ($sor_customer_name !== '' || $sor_customer_address !== '')) {
+        shopeeOmsRememberWarehouseDeliveryInfo('shopee', (int) $dataId, array(
             'customer_name' => $sor_customer_name,
             'customer_address' => $sor_customer_address,
         ));
@@ -1121,13 +1121,13 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                     }
 
                     if ($returnData) {
-                        $dataID = (int) mysqli_insert_id($finance_connect);
-                        shopeeOmsRememberWarehouseDeliveryInfo('shopee', $dataID, array(
+                        $dataId = (int) mysqli_insert_id($finance_connect);
+                        shopeeOmsRememberWarehouseDeliveryInfo('shopee', $dataId, array(
                             'customer_name' => $sor_customer_name,
                             'customer_address' => $sor_customer_address,
                         ));
                         shopeeOmsLogTransition($finance_connect, array(
-                            'order_id' => $dataID,
+                            'order_id' => $dataId,
                             'order_code' => $sor_order,
                             'from_status' => '',
                             'to_status' => $sor_order_status,
@@ -1139,7 +1139,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                         ));
 
                         if ($sor_order_status === 'TP') {
-                            $freshOrderRow = shopeeOmsLoadOrder($finance_connect, $dataID);
+                            $freshOrderRow = shopeeOmsLoadOrder($finance_connect, $dataId);
                             if ($sor_customer_name !== '') {
                                 $freshOrderRow['customer_name'] = $sor_customer_name;
                             }
@@ -1148,11 +1148,11 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                                 $notifyResult = shopeeOmsSendWarehouseNotification($connect, $finance_connect, $tokenResult['token_row'], $tokenResult['notification'], $pageTitle);
                                 $sorLocalTelegramFailureMessage = $sorBuildLocalTelegramFailureMessage($notifyResult);
                                 if (!empty($notifyResult['sent'])) {
-                                    mysqli_query($finance_connect, "UPDATE `" . $tblName . "` SET `step_a_sent_at` = NOW() WHERE id = " . $dataID . " LIMIT 1");
+                                    mysqli_query($finance_connect, "UPDATE `" . $tblName . "` SET `step_a_sent_at` = NOW() WHERE id = " . $dataId . " LIMIT 1");
                                 }
                             }
                         } else if ($requiresInitialShippedAutoMove) {
-                            $initialShippedResult = shopeeOmsFinalizeInitialShippedOrder($connect, $finance_connect, $dataID, USER_ID, USER_GROUP, $pageTitle);
+                            $initialShippedResult = shopeeOmsFinalizeInitialShippedOrder($connect, $finance_connect, $dataId, USER_ID, USER_GROUP, $pageTitle);
                             if (empty($initialShippedResult['success'])) {
                                 throw new Exception(isset($initialShippedResult['message']) ? $initialShippedResult['message'] : 'Unable to process initial Shipped status.');
                             }
@@ -1174,8 +1174,8 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
             } else {
                 try {
                     // take old value
-                    $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $finance_connect);
-                    $row = $rst->fetch_assoc();
+                    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $finance_connect);
+                    $row = $result->fetch_assoc();
                     $existingStoredStockOutWarehouseId = isset($row['stock_out_warehouse_id']) ? shopeeOmsNormalizeWarehouseId($row['stock_out_warehouse_id']) : 0;
                     $existingEffectiveStockOutWarehouseId = shopeeOmsResolveStockOutWarehouseId($connect, $row, $sorDefaultWarehouseId);
                     $updatedStoredStockOutWarehouseId = $existingStoredStockOutWarehouseId;
@@ -1383,7 +1383,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                         $query .= "update_by = '" . USER_ID . "', ";
                         $query .= "update_date = curdate(), ";
                         $query .= "update_time = curtime() ";
-                        $query .= "WHERE id = '$dataID'"; // Specify your condition here
+                        $query .= "WHERE id = '$dataId'"; // Specify your condition here
 
                         $returnData = mysqli_query($finance_connect, $query);
                         if ($returnData) {
@@ -1408,7 +1408,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                                 $newValuesForHistory['customer_name'] = $sor_customer_name;
                             }
                             $orderChanges = shopeeOmsDetectOrderChanges($connect, $row, $newValuesForHistory);
-                            shopeeOmsLogOrderEditHistory($finance_connect, (int) $dataID, $sor_order, $orderChanges, USER_ID, USER_GROUP, $pageTitle);
+                            shopeeOmsLogOrderEditHistory($finance_connect, (int) $dataId, $sor_order, $orderChanges, USER_ID, USER_GROUP, $pageTitle);
                         } else {
                             $error = 1;
                             $errorMsg = trim((string) mysqli_error($finance_connect)) !== ''
@@ -1447,11 +1447,11 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval'] = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
             }
@@ -1541,13 +1541,13 @@ if (post('act') == 'D') {
     if ($id) {
         try {
             // take name
-            $rst = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $finance_connect);
-            $row = $rst->fetch_assoc();
+            $result = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $finance_connect);
+            $row = $result->fetch_assoc();
 
-            $dataID = $row['id'];
+            $dataId = $row['id'];
 
             //SET the record status to 'D'
-            deleteRecord($tblName, '', $dataID, $sor_name, $finance_connect, $connect, $cdate, $ctime, $pageTitle);
+            deleteRecord($tblName, '', $dataId, $sor_name, $finance_connect, $connect, $cdate, $ctime, $pageTitle);
             $_SESSION['delChk'] = 1;
         } catch (Exception $e) {
             echo 'Message: ' . $e->getMessage();
@@ -1556,13 +1556,13 @@ if (post('act') == 'D') {
 }
 
 //view
-if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
+if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
     $_SESSION['viewChk'] = 1;
 
     if (isset($errorExist)) {
-        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataID . "</b> ] from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataId . "</b> ] from <b><i>$tblName Table</i></b>.";
     } else {
-        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataID . "</b> ] <b>" . (isset($row['orderID']) ? $row['orderID'] : $dataID) . "</b> from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataId . "</b> ] <b>" . (isset($row['orderID']) ? $row['orderID'] : $dataId) . "</b> from <b><i>$tblName Table</i></b>.";
     }
 
     $log = [
@@ -1609,7 +1609,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
     $connect,
     '',
     $urbanismBadgeSeedName,
-    $redirect_page,
+    $redirectPage,
     $pageTitle
 );
 
@@ -3070,7 +3070,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                     <input type="hidden" name="return_type" id="return_type" value="">
                     <input type="hidden" name="return_remark" id="return_remark" value="">
                     <button type="button" class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn" id="actionBtn"
-                        onclick="if (window.history.length > 1) { window.history.back(); } else { location.href = <?= htmlspecialchars(json_encode($redirect_page), ENT_QUOTES, 'UTF-8') ?>; }">Back</button>
+                        onclick="if (window.history.length > 1) { window.history.back(); } else { location.href = <?= htmlspecialchars(json_encode($redirectPage), ENT_QUOTES, 'UTF-8') ?>; }">Back</button>
                 </div>
             </form>
         </div>
@@ -3089,7 +3089,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
         if ($sorLocalTelegramFailureMessage !== '') {
             echo '<script>alert(' . json_encode($sorLocalTelegramFailureMessage) . ');</script>';
         }
-        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
     }
     ?>
     <script>
@@ -3860,7 +3860,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                     customerNameSelector: '#sor_customer_name',
                     customerAddressSelector: '#sor_customer_address',
                     statusSelector: '#sor_airbill_extract_status',
-                    localStorageKey: <?= (int) $dataID > 0 ? "'shopee_airbill_delivery_info_" . (int) $dataID . "'" : "''" ?>,
+                    localStorageKey: <?= (int) $dataId > 0 ? "'shopee_airbill_delivery_info_" . (int) $dataId . "'" : "''" ?>,
                     workerSrc: '../finance/header/js/pdf.worker.min.js',
                     errorClass: 'is-error'
                 });

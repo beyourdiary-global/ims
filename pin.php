@@ -8,38 +8,38 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = PIN;
 
-$dataID = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
-$redirect_page = $SITEURL . '/pin_table.php';
+$redirectPage = $SITEURL . '/pin_table.php';
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
 $pageAction = getPageAction($act);
 $pageActionTitle = $pageAction . " " . $pageTitle;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 
-if (!($dataID) && !($act) || !isActionAllowed($pageAction, $pinAccess))
-    echo "<script>location.href = '$redirect_page';</script>";
+if (!($dataId) && !($act) || !isActionAllowed($pageAction, $pinAccess))
+    echo "<script>location.href = '$redirectPage';</script>";
 
-$rst = getData('*', "id = '$dataID'", '', $tblName, $connect);
+$result = getData('*', "id = '$dataId'", '', $tblName, $connect);
 
-if (!$rst || !($row = $rst->fetch_assoc()) && $act != 'I') {
+if (!$result || !($row = $result->fetch_assoc()) && $act != 'I') {
     $errorExist = 1;
     $act = "F";
 }
 
 if ($act == 'D') {
-    deleteRecord($tblName, '', $dataID, $row['name'], $connect, $connect, $cdate, $ctime, $pageTitle);
-    echo "<script>location.href = '$redirect_page';</script>";
+    deleteRecord($tblName, '', $dataId, $row['name'], $connect, $connect, $cdate, $ctime, $pageTitle);
+    echo "<script>location.href = '$redirectPage';</script>";
     exit;
 }
 
-if ($dataID && !$act && USER_ID && !$_SESSION['viewChk']) {
+if ($dataId && !$act && USER_ID && !$_SESSION['viewChk']) {
     $_SESSION['viewChk'] = 1;
     $viewActMsg = isset($errorExist) ?
-        USER_NAME . " fail to viewed the data [<b> ID = $dataID</b> ] from <b><i>$tblName Table</i></b>." :
-        USER_NAME . " viewed the data [<b> ID = $dataID</b> ] <b>" . $row['name'] . "</b> from <b><i>$tblName Table</i></b>.";
+        USER_NAME . " fail to viewed the data [<b> ID = $dataId</b> ] from <b><i>$tblName Table</i></b>." :
+        USER_NAME . " viewed the data [<b> ID = $dataId</b> ] <b>" . $row['name'] . "</b> from <b><i>$tblName Table</i></b>.";
 
     audit_log([
         'log_act' => $pageAction,
@@ -67,7 +67,7 @@ if (post('actionBtn')) {
 
             $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
-            if (isDuplicateRecord("name", $currentDataName, $tblName, $connect, $dataID)) {
+            if (isDuplicateRecord("name", $currentDataName, $tblName, $connect, $dataId)) {
                 $err = "Duplicate record found for $pageTitle name.";
                 break;
             }
@@ -86,7 +86,7 @@ if (post('actionBtn')) {
                     $query = "INSERT INTO $tblName (name,remark,create_by,create_date,create_time)
                               VALUES ('$currentDataName','$dataRemark','" . USER_ID . "',curdate(),curtime())";
                     mysqli_query($connect, $query);
-                    $dataID = $connect->insert_id;
+                    $dataId = $connect->insert_id;
                     $successAction = 'Inserted';
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
@@ -109,7 +109,7 @@ if (post('actionBtn')) {
                     if ($oldvalarr && $chgvalarr) {
                         $query = "UPDATE $tblName SET name='$currentDataName', remark='$dataRemark',
                                   update_date=curdate(), update_time=curtime(), update_by='" . USER_ID . "' 
-                                  WHERE id = '$dataID'";
+                                  WHERE id = '$dataId'";
                         mysqli_query($connect, $query);
                         $successAction = 'Updated';
                     } else {
@@ -136,18 +136,18 @@ if (post('actionBtn')) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, '');
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $tblName, $pageAction, '');
                 } else if ($pageAction == 'Edit') {
                     $log['oldval'] = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, '');
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, '');
                 }
                 audit_log($log);
             }
             break;
 
         case 'back':
-            echo $clearLocalStorage . "<script>location.href = '$redirect_page';</script>";
+            echo $clearLocalStorage . "<script>location.href = '$redirectPage';</script>";
             exit;
     }
 }
@@ -163,7 +163,7 @@ if (post('actionBtn')) {
 
 <div class="page-load-cover">
     <div class="d-flex flex-column my-3 ms-3">
-        <p><a href="<?= $redirect_page ?>"><?= $pageTitle ?></a>
+        <p><a href="<?= $redirectPage ?>"><?= $pageTitle ?></a>
             <i class="fa-solid fa-chevron-right fa-xs"></i>
             <?= $pageActionTitle ?>
         </p>
@@ -212,7 +212,7 @@ if (post('actionBtn')) {
 
     <?php if (!empty($successAction)): ?>
     alert("Data successfully <?= $successAction ?>.");
-    window.location.href = "<?= $redirect_page ?>";
+    window.location.href = "<?= $redirectPage ?>";
     <?php endif; ?>
 </script>
 </body>

@@ -8,25 +8,25 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = LAZADA_ORDER_REQ;
 
-$dataID = input('id');
+$dataId = input('id');
 $act = input('act');
 $pageAction = getPageAction($act);
 
 
-$redirect_page = $SITEURL . '/finance/lazada_order_req_table.php';
-$back_redirect_page = commonResolveBackUrl($redirect_page);
-$redirectLink = '<script>location.href=' . json_encode($redirect_page) . ';</script>';
+$redirectPage = $SITEURL . '/finance/lazada_order_req_table.php';
+$back_redirect_page = commonResolveBackUrl($redirectPage);
+$redirectLink = '<script>location.href=' . json_encode($redirectPage) . ';</script>';
 $backRedirectLink = '<script>location.replace(' . json_encode($back_redirect_page) . ');</script>';
-$back_redirect_page = commonResolveBackUrl($redirect_page);
+$back_redirect_page = commonResolveBackUrl($redirectPage);
 $backRedirectLink = '<script>location.replace(' . json_encode($back_redirect_page) . ');</script>';
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 $pendingStatusUpdate = shopeeOmsNormalizeStatusCode(post('updateStatusBtn'));
 $lorShouldSaveBeforeStatusUpdate = $pendingStatusUpdate !== '' && $act === 'E';
 $lorTriggerStatusTransitionAfterSave = false;
-$lorHandleStatusTransition = function ($newStatus) use ($connect, $finance_connect, $dataID, $pageTitle, $cdate, $ctime, $tblName, $redirect_page) {
+$lorHandleStatusTransition = function ($newStatus) use ($connect, $finance_connect, $dataId, $pageTitle, $cdate, $ctime, $tblName, $redirectPage) {
     $newStatus = shopeeOmsNormalizeStatusCode($newStatus);
     $transitionRemark = 'Order Status Update to ' . shopeeOmsGetStatusLabel($newStatus);
-    $transitionResult = shopeeOmsExecuteTransition($connect, $finance_connect, (int) $dataID, $newStatus, array(
+    $transitionResult = shopeeOmsExecuteTransition($connect, $finance_connect, (int) $dataId, $newStatus, array(
         'actor_user_id' => USER_ID,
         'actor_user_group_id' => USER_GROUP,
         'source_page' => $pageTitle,
@@ -49,9 +49,9 @@ $lorHandleStatusTransition = function ($newStatus) use ($connect, $finance_conne
             'connect' => $connect,
             'oldval' => 'order_status: ' . $oldStatus,
             'changes' => 'order_status: ' . $newStatusCode,
-            'act_msg' => USER_NAME . " updated Lazada order #" . (int) $dataID . " from " . htmlspecialchars($oldStatus, ENT_QUOTES, 'UTF-8') . " to " . htmlspecialchars($newStatusCode, ENT_QUOTES, 'UTF-8') . ".",
+            'act_msg' => USER_NAME . " updated Lazada order #" . (int) $dataId . " from " . htmlspecialchars($oldStatus, ENT_QUOTES, 'UTF-8') . " to " . htmlspecialchars($newStatusCode, ENT_QUOTES, 'UTF-8') . ".",
         ));
-        echo '<script>alert(' . json_encode((string) $transitionRemark) . '); window.location.replace(' . json_encode((string) $redirect_page) . ');</script>';
+        echo '<script>alert(' . json_encode((string) $transitionRemark) . '); window.location.replace(' . json_encode((string) $redirectPage) . ');</script>';
         exit;
     }
 
@@ -60,22 +60,22 @@ $lorHandleStatusTransition = function ($newStatus) use ($connect, $finance_conne
 };
 
 // to display data to input
-if ($dataID) { //edit/remove/view
-    $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $connect);
+if ($dataId) { //edit/remove/view
+    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $connect);
 
-    if ($rst != false && $rst->num_rows > 0) {
+    if ($result != false && $result->num_rows > 0) {
         $dataExisted = 1;
-        $row = $rst->fetch_assoc();
+        $row = $result->fetch_assoc();
     } else {
-        // If $rst is false or no data found ($act==null)
+        // If $result is false or no data found ($act==null)
         $errorExist = 1;
         $_SESSION['tempValConfirmBox'] = true;
         $act = "F";
     }
 }
 
-if (!($dataID) && !($act)) {
-    renderNotificationScript('Invalid action.', 'error', $redirect_page);
+if (!($dataId) && !($act)) {
+    renderNotificationScript('Invalid action.', 'error', $redirectPage);
 
 }
 
@@ -404,14 +404,14 @@ if (post('actionBtn') || $lorShouldSaveBeforeStatusUpdate) {
                     // Execute the query
                     $returnData = mysqli_query($connect, $query);
                     if ($returnData) {
-                        $dataID = (int) mysqli_insert_id($connect);
-                        if ($lor_order_status === 'TP' && $dataID > 0) {
-                            $freshOrderRow = shopeeOmsLoadOrder($connect, $dataID, 'lazada');
+                        $dataId = (int) mysqli_insert_id($connect);
+                        if ($lor_order_status === 'TP' && $dataId > 0) {
+                            $freshOrderRow = shopeeOmsLoadOrder($connect, $dataId, 'lazada');
                             $tokenResult = shopeeOmsCreateWarehouseToken($connect, $finance_connect, $freshOrderRow, USER_ID, 'lazada');
                             if (!empty($tokenResult['success']) && !empty($tokenResult['token_row']) && !empty($tokenResult['notification'])) {
                                 $notifyResult = shopeeOmsSendWarehouseNotification($connect, $finance_connect, $tokenResult['token_row'], $tokenResult['notification'], $pageTitle);
                                 if (!empty($notifyResult['sent']) && shopeeOmsTableHasColumn($connect, dbname, $tblName, 'step_a_sent_at')) {
-                                    mysqli_query($connect, "UPDATE `" . $tblName . "` SET `step_a_sent_at` = NOW() WHERE id = " . $dataID . " LIMIT 1");
+                                    mysqli_query($connect, "UPDATE `" . $tblName . "` SET `step_a_sent_at` = NOW() WHERE id = " . $dataId . " LIMIT 1");
                                 }
                             }
                         }
@@ -425,8 +425,8 @@ if (post('actionBtn') || $lorShouldSaveBeforeStatusUpdate) {
             } else {
                 try {
                     // take old value
-                    $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $connect);
-                    $row = $rst->fetch_assoc();
+                    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $connect);
+                    $row = $result->fetch_assoc();
 
                     // check value
 
@@ -589,7 +589,7 @@ if (post('actionBtn') || $lorShouldSaveBeforeStatusUpdate) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
-                        $query = "UPDATE " . $tblName . " SET lazada_acc = '$lor_lazada_acc', curr_unit = '$lor_curr_unit', lzd_country = '$lor_lzd_country', cust_id = '$lor_cust_id', cust_name = '$lor_cust_name', cust_email = '$lor_cust_email', cust_phone = '$lor_cust_phone', country = '$lor_country', oder_number = '$lor_oder_number', sales_pic = '$lor_sales_pic', ship_rec_name = '$lor_ship_rec_name', ship_rec_address = '$lor_ship_rec_address', ship_rec_contact = '$lor_ship_rec_contact', brand = '$lor_brand', series = '$lor_series', pkg = '$lor_pkg', item_price_credit = '$lor_item_price_credit', commision = '$commision', other_discount = '$lor_other_discount', pay_fee = '$lor_pay_fee', final_income = '$lor_final_income', pay_meth = '$lor_pay_meth', remark ='$lor_remark', order_status = '$lor_order_status', stock_out_warehouse_id = " . ($lor_stock_out_warehouse_id > 0 ? $lor_stock_out_warehouse_id : 'NULL') . ", airbill_no = '$lor_airbill_no', airbill_attachment = '" . mysqli_real_escape_string($connect, $lor_airbill_attachment) . "', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
+                        $query = "UPDATE " . $tblName . " SET lazada_acc = '$lor_lazada_acc', curr_unit = '$lor_curr_unit', lzd_country = '$lor_lzd_country', cust_id = '$lor_cust_id', cust_name = '$lor_cust_name', cust_email = '$lor_cust_email', cust_phone = '$lor_cust_phone', country = '$lor_country', oder_number = '$lor_oder_number', sales_pic = '$lor_sales_pic', ship_rec_name = '$lor_ship_rec_name', ship_rec_address = '$lor_ship_rec_address', ship_rec_contact = '$lor_ship_rec_contact', brand = '$lor_brand', series = '$lor_series', pkg = '$lor_pkg', item_price_credit = '$lor_item_price_credit', commision = '$commision', other_discount = '$lor_other_discount', pay_fee = '$lor_pay_fee', final_income = '$lor_final_income', pay_meth = '$lor_pay_meth', remark ='$lor_remark', order_status = '$lor_order_status', stock_out_warehouse_id = " . ($lor_stock_out_warehouse_id > 0 ? $lor_stock_out_warehouse_id : 'NULL') . ", airbill_no = '$lor_airbill_no', airbill_attachment = '" . mysqli_real_escape_string($connect, $lor_airbill_attachment) . "', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($connect, $query);
 
                     } else {
@@ -622,11 +622,11 @@ if (post('actionBtn') || $lorShouldSaveBeforeStatusUpdate) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval'] = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
             }
@@ -651,13 +651,13 @@ if (post('act') == 'D') {
     if ($id) {
         try {
             // take name
-            $rst = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $connect);
-            $row = $rst->fetch_assoc();
+            $result = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $connect);
+            $row = $result->fetch_assoc();
 
-            $dataID = $row['id'];
+            $dataId = $row['id'];
 
             //SET the record status to 'D'
-            deleteRecord($tblName, '', $dataID, $fcb_name, $connect, $connect, $cdate, $ctime, $pageTitle);
+            deleteRecord($tblName, '', $dataId, $fcb_name, $connect, $connect, $cdate, $ctime, $pageTitle);
             $_SESSION['delChk'] = 1;
         } catch (Exception $e) {
             echo 'Message: ' . $e->getMessage();
@@ -666,13 +666,13 @@ if (post('act') == 'D') {
 }
 
 //view
-if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
+if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
     $_SESSION['viewChk'] = 1;
 
     if (isset($errorExist)) {
-        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataID . "</b> ] from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataId . "</b> ] from <b><i>$tblName Table</i></b>.";
     } else {
-        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataID . "</b> ] <b>" . "</b> from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataId . "</b> ] <b>" . "</b> from <b><i>$tblName Table</i></b>.";
     }
 
     $log = [
@@ -701,7 +701,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
     $connect,
     '',
     $urbanismBadgeSeedName,
-    $redirect_page,
+    $redirectPage,
     $pageTitle
 );
 ?>
@@ -1836,7 +1836,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                         }
                         ?>
                             <button type="button" class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn" id="actionBtn"
-                                onclick="if (window.history.length > 1) { window.history.back(); } else { location.href = <?= htmlspecialchars(json_encode($redirect_page), ENT_QUOTES, 'UTF-8') ?>; }">Back</button>
+                                onclick="if (window.history.length > 1) { window.history.back(); } else { location.href = <?= htmlspecialchars(json_encode($redirectPage), ENT_QUOTES, 'UTF-8') ?>; }">Back</button>
                     </div>
                 </form>
             </div>
@@ -1853,7 +1853,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
     if (isset($_SESSION['tempValConfirmBox'])) {
         unset($_SESSION['tempValConfirmBox']);
         echo $clearLocalStorage;
-        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
     }
     ?>
     <script>

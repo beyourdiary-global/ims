@@ -5,7 +5,7 @@ $currentPagePin = 82;
 include_once '../include/list_page_header.php';
 
 
-$redirect_page = $SITEURL . '/shopee/shopee_sg_setting.php';
+$redirectPage = $SITEURL . '/shopee/shopee_sg_setting.php';
 $deleteRedirectPage = $SITEURL . '/shopee/shopee_sg_setting_table.php';
 $result = getData('*', '', '', SHOPEE_SG_SETT, $finance_connect);
 
@@ -40,7 +40,7 @@ $result = getData('*', '', '', SHOPEE_SG_SETT, $finance_connect);
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         Setting </a>
                                 <?php endif; ?>
                             </div>
@@ -75,9 +75,9 @@ $result = getData('*', '', '', SHOPEE_SG_SETT, $finance_connect);
                                     <th scope="row"><?= $num++; ?></th>
                                     <td scope="row" class="btn-container">
                                         <div class="d-flex align-items-center">
-                                            <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                            <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                            <?php renderDeleteButton($pinAccess, $row['id'], $row['commission'], $row['service'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                            <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                            <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
+                                            <?php renderDeleteButton($pinAccess, $row['id'], $row['commission'], $row['service'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                         </div>
                                     </td>
                                     <td scope="row"><?php if (isset($row['commission']))

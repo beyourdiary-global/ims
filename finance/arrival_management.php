@@ -73,7 +73,7 @@ $buildArrivalAuditStatusMessage = function ($platformLabel, $orderCode, $oldStat
     return $arrivalAuditSafeUserName . " updated " . htmlspecialchars((string) $platformLabel, ENT_QUOTES, 'UTF-8') . " order [ <b>ID = " . htmlspecialchars((string) $orderCode, ENT_QUOTES, 'UTF-8') . "</b> ] status from <b>" . htmlspecialchars((string) $oldStatus, ENT_QUOTES, 'UTF-8') . "</b> to <b>" . htmlspecialchars((string) $newStatus, ENT_QUOTES, 'UTF-8') . "</b>.";
 };
 
-$logArrivalEstimatedDate = function ($platformLabel, $tableName, $orderId, $orderCode, $assignedDate, $oldStatus, $newStatus) use ($pageTitle, $connect, $cdate, $ctime, $arrivalAuditSafeUserName) {
+$logArrivalEstimatedDate = function ($platformLabel, $tblName, $orderId, $orderCode, $assignedDate, $oldStatus, $newStatus) use ($pageTitle, $connect, $cdate, $ctime, $arrivalAuditSafeUserName) {
     $changeSummary = 'estimated_received_date: ' . $assignedDate;
     if ($oldStatus !== '' && $newStatus !== '' && $oldStatus !== $newStatus) {
         $changeSummary = 'order_status: ' . $oldStatus . ' -> ' . $newStatus . ', ' . $changeSummary;
@@ -82,7 +82,7 @@ $logArrivalEstimatedDate = function ($platformLabel, $tableName, $orderId, $orde
         'log_act' => 'edit',
         'page' => $pageTitle,
         'query_rec' => 'estimated_received_date=' . $assignedDate,
-        'query_table' => $tableName,
+        'query_table' => $tblName,
         'oldval' => $oldStatus !== '' ? ('order_status: ' . $oldStatus) : '',
         'changes' => $changeSummary,
         'uid' => USER_ID,
@@ -94,7 +94,7 @@ $logArrivalEstimatedDate = function ($platformLabel, $tableName, $orderId, $orde
     ));
 };
 
-$logArrivalDelayRemarkUpdate = function ($tableName, $orderId, $oldRemark, $newRemark, $queryText) use ($pageTitle, $connect, $cdate, $ctime) {
+$logArrivalDelayRemarkUpdate = function ($tblName, $orderId, $oldRemark, $newRemark, $queryText) use ($pageTitle, $connect, $cdate, $ctime) {
     $datafield = array('Delay Remark');
     $oldvalarr = array((string) $oldRemark);
     $chgvalarr = array((string) $newRemark);
@@ -105,13 +105,13 @@ $logArrivalDelayRemarkUpdate = function ($tableName, $orderId, $oldRemark, $newR
         'uid' => USER_ID,
         'cby' => USER_ID,
         'query_rec' => $queryText,
-        'query_table' => $tableName,
+        'query_table' => $tblName,
         'page' => $pageTitle,
         'connect' => $connect,
         'oldval' => implodeWithComma($oldvalarr),
         'changes' => implodeWithComma($chgvalarr),
     );
-    $log['act_msg'] = actMsgLog($orderId, $datafield, '', $oldvalarr, $chgvalarr, $tableName, 'Edit', '');
+    $log['act_msg'] = actMsgLog($orderId, $datafield, '', $oldvalarr, $chgvalarr, $tblName, 'Edit', '');
     audit_log($log);
 };
 

@@ -6,8 +6,8 @@ include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$redirect_page = $SITEURL . '/dashboard.php';
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$redirectPage = $SITEURL . '/dashboard.php';
+$redirectLink = ("<script>location.href = '$redirectPage';</script>");
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 
 if (!isActionAllowed('check', $pinAccess))

@@ -4,7 +4,7 @@ $pageTitle = 'Goal Target';
 include 'menuHeader.php';
 include 'checkCurrentPagePin.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
-$redirect_page = $SITEURL . '/goalTarget_table.php';
+$redirectPage = $SITEURL . '/goalTarget_table.php';
 
 // Get the `act` parameter (I for Insert, E for Edit)
 // Get the `act` parameter (I for Insert, E for Edit)
@@ -306,7 +306,7 @@ function generateYearlyGoalForm($goals = [], $isReadOnly = false)
 
     <form method="POST" id="goalForm" class="container-xxl mt-5">
         <div class="d-flex flex-column my-3">
-            <p><a href="<?= $redirect_page ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i>
+            <p><a href="<?= $redirectPage ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i>
                 <?php echo $pageActionTitle ?>
             </p>
         </div>

@@ -7,7 +7,7 @@ include_once 'include/list_page_header.php';
 
 $tblName = YEARLYGOAL;
 
-$redirect_page = $SITEURL . '/goalTarget.php';
+$redirectPage = $SITEURL . '/goalTarget.php';
 $deleteRedirectPage = $SITEURL . '/goalTarget_table.php';
 
 $result = getData(' year,sum(total_goal) as goal ', '  status = "A" group by year ', '', $tblName, $connect);
@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'delete') {
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         <?php echo $pageTitle ?> </a>
                                 <?php endif; ?>
                             </div>
@@ -93,17 +93,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'delete') {
                                     <td scope="row"><?= $num++; ?></td>
                                     <td scope="row" class="btn-container">
                                         <?php if (isActionAllowed("View", $pinAccess)): ?>
-                                            <a class="btn btn-primary me-1" href="<?= $redirect_page . "?id=" . $row['year'] ?>"><i
+                                            <a class="btn btn-primary me-1" href="<?= $redirectPage . "?id=" . $row['year'] ?>"><i
                                                     class="fas fa-eye"></i></a>
                                         <?php endif; ?>
                                         <?php if (isActionAllowed("Edit", $pinAccess)): ?>
                                             <a class="btn btn-warning me-1"
-                                                href="<?= $redirect_page . "?id=" . $row['year'] . '&act=' . $act_2 ?>"><i
+                                                href="<?= $redirectPage . "?id=" . $row['year'] . '&act=' . $act_2 ?>"><i
                                                     class="fas fa-edit"></i></a>
                                         <?php endif; ?>
                                         <?php if (isActionAllowed("Delete", $pinAccess)): ?>
                                             <a class="btn btn-danger"
-                                                onclick="confirmationDialogGoalYear('<?= $row['year'] ?>','Are you sure want to delete','<?php echo $pageTitle ?>','<?= $redirect_page ?>','<?= $deleteRedirectPage ?>','D')"><i
+                                                onclick="confirmationDialogGoalYear('<?= $row['year'] ?>','Are you sure want to delete','<?php echo $pageTitle ?>','<?= $redirectPage ?>','<?= $deleteRedirectPage ?>','D')"><i
                                                     class="fas fa-trash-alt"></i></a>
                                         <?php endif; ?>
                                     </td>

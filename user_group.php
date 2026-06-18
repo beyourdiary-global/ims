@@ -9,13 +9,13 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 $tblName = USR_GRP;
 
 //Current Page Action And Data ID
-$dataID = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
 //Page Redirect Link , Clean LocalStorage , Error Alert Msg 
-$redirect_page = $SITEURL . '/user_group_table.php';
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$redirectPage = $SITEURL . '/user_group_table.php';
+$redirectLink = ("<script>location.href = '$redirectPage';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
 //Check a current page pin is exist or not
@@ -24,14 +24,14 @@ $pageActionTitle = $pageAction . " " . $pageTitle;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 
 //Checking The Page ID , Action , Pin Access Exist Or Not
-if (!($dataID) && !($act) || !isActionAllowed($pageAction, $pinAccess))
+if (!($dataId) && !($act) || !isActionAllowed($pageAction, $pinAccess))
     echo $redirectLink;
 
 //Get The Data From Database
-$rst = getData('*', "id = '$dataID'", '', $tblName, $connect);
+$result = getData('*', "id = '$dataId'", '', $tblName, $connect);
 
 //Checking Data Error When Retrieved From Database
-if (($act != 'I') && (!$rst || !($row = $rst->fetch_assoc()))) {
+if (($act != 'I') && (!$result || !($row = $result->fetch_assoc()))) {
     $errorExist = 1;
     $_SESSION['tempValConfirmBox'] = true;
     $act = "F";
@@ -81,8 +81,8 @@ if ($pinGrpResult) {
     }
 }
 
-if ($dataID) {
-    $userGroupResult = getData('*', "id = '$dataID'", '', USR_GRP, $connect);
+if ($dataId) {
+    $userGroupResult = getData('*', "id = '$dataId'", '', USR_GRP, $connect);
 
     if ($userGroupResult) {
         $row = $userGroupResult->fetch_assoc();
@@ -113,19 +113,19 @@ if ($dataID) {
 
 //Delete Data
 if ($act == 'D') {
-    deleteRecord($tblName, '', $dataID, $row['name'], $connect, $connect, $cdate, $ctime, $pageTitle);
+    deleteRecord($tblName, '', $dataId, $row['name'], $connect, $connect, $cdate, $ctime, $pageTitle);
     $_SESSION['delChk'] = 1;
 }
 
 //View Data
-if ($dataID && !$act && USER_ID && !$_SESSION['viewChk'] && !$_SESSION['delChk']) {
+if ($dataId && !$act && USER_ID && !$_SESSION['viewChk'] && !$_SESSION['delChk']) {
 
     $_SESSION['viewChk'] = 1;
 
     if (isset($errorExist)) {
-        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataID . "</b> ] from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataId . "</b> ] from <b><i>$tblName Table</i></b>.";
     } else {
-        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataID . "</b> ] <b>" . $row['name'] . "</b> from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataId . "</b> ] <b>" . $row['name'] . "</b> from <b><i>$tblName Table</i></b>.";
     }
 
     $log = [
@@ -158,7 +158,7 @@ if (post('actionBtn')) {
 
             $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
-            if (isDuplicateRecord("name", $currentDataName, $tblName, $connect, $dataID)) {
+            if (isDuplicateRecord("name", $currentDataName, $tblName, $connect, $dataId)) {
                 $err = "Duplicate record found for " . $pageTitle . " name.";
                 break;
             }
@@ -218,7 +218,7 @@ if (post('actionBtn')) {
                     $safeCreateByUserId = mysqli_real_escape_string($connect, (string) USER_ID);
                     $query = "INSERT INTO " . $tblName . "(name,badge_color,badge_icon_class,pins,remark,create_by,create_date,create_time) VALUES ('" . $safeCurrentDataName . "','" . $safeBadgeColor . "','" . $safeBadgeIconClass . "','" . $safePermissionGrp . "','" . $safeDataRemark . "','" . $safeCreateByUserId . "',curdate(),curtime())";
                     $returnData = mysqli_query($connect, $query);
-                    $dataID = $connect->insert_id;
+                    $dataId = $connect->insert_id;
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
                     $act = "F";
@@ -347,7 +347,7 @@ if (post('actionBtn')) {
                         $safePermissionGrp = mysqli_real_escape_string($connect, (string) $permission_grp);
                         $safeDataRemark = mysqli_real_escape_string($connect, (string) $dataRemark);
                         $safeUpdateByUserId = mysqli_real_escape_string($connect, (string) USER_ID);
-                        $safeDataId = (int) $dataID;
+                        $safeDataId = (int) $dataId;
                         $query = "UPDATE " . $tblName . " SET name = '" . $safeCurrentDataName . "', badge_color = '" . $safeEffectiveBadgeColor . "', badge_icon_class = '" . $safeEffectiveBadgeIconClass . "', pins = '" . $safePermissionGrp . "', remark = '" . $safeDataRemark . "', update_date = curdate(), update_time = curtime(), update_by = '" . $safeUpdateByUserId . "' WHERE id = " . $safeDataId;
                         $returnData = mysqli_query($connect, $query);
                     } else {
@@ -376,11 +376,11 @@ if (post('actionBtn')) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval']  = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
             }
@@ -399,7 +399,7 @@ if (post('actionBtn')) {
 if (isset($_SESSION['tempValConfirmBox'])) {
     unset($_SESSION['tempValConfirmBox']);
     echo $clearLocalStorage;
-    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
 }
 
 $defaultBadgeIconClass = 'fa-solid fa-user-group';
@@ -710,7 +710,7 @@ if (!$selectedBadgeIconExists) {
 
     <div class="page-load-cover">
         <div class="d-flex flex-column my-3 ms-3">
-            <p><a href="<?= $redirect_page ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i>
+            <p><a href="<?= $redirectPage ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i>
                 <?php echo $pageActionTitle ?>
             </p>
         </div>

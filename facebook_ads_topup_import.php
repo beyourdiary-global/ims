@@ -43,7 +43,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
 }
 
 $module = 'fb_ads_topup';
-$redirect_page = $SITEURL . '/common_import.php';
+$redirectPage = $SITEURL . '/common_import.php';
 $facebookRedirectPage = $SITEURL . '/finance/fb_ads_topup_trans_table.php';
 
 $action = post('actionBtn');
@@ -116,7 +116,7 @@ if ($action === 'parseFacebookAdsTopup') {
                     throw new Exception('Unable to insert Facebook Ads import record #' . ($index + 1) . '.');
                 }
 
-                $dataID = mysqli_insert_id($finance_connect);
+                $dataId = mysqli_insert_id($finance_connect);
                 $newvalarr = [
                     getMetaAdsAccountLabelById($metaAccounts, $record['meta_acc']),
                     $record['transaction_id'],
@@ -136,7 +136,7 @@ if ($action === 'parseFacebookAdsTopup') {
                     'query_rec' => $query,
                     'query_table' => FB_ADS_TOPUP,
                     'newval' => implodeWithComma($newvalarr),
-                    'act_msg' => USER_NAME . " imported the data [ <b> ID = " . $dataID . " </b> ] from <b><i>" . FB_ADS_TOPUP . " Table</i></b>.",
+                    'act_msg' => USER_NAME . " imported the data [ <b> ID = " . $dataId . " </b> ] from <b><i>" . FB_ADS_TOPUP . " Table</i></b>.",
                     'page' => $pageTitle,
                     'connect' => $connect,
                 ];
@@ -695,7 +695,7 @@ function validateFacebookPreviewRecords($records, &$errors, $metaAccounts, $user
                             <h2><?= htmlspecialchars($pageHeading, ENT_QUOTES, 'UTF-8') ?></h2>
                             <div class="d-flex gap-2 flex-wrap">
                                 <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $facebookRedirectPage ?>">Back To Facebook Ads Page</a>
-                                <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $redirect_page ?>">Back To Shortcuts</a>
+                                <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $redirectPage ?>">Back To Shortcuts</a>
                             </div>
                         </div>
                     </div>

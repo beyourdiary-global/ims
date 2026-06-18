@@ -197,43 +197,43 @@ if (!function_exists('messageShortcutsAuditValue')) {
     }
 }
 
-$dataID = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
-$redirect_page = $SITEURL . '/message_shortcuts_table.php';
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$redirectPage = $SITEURL . '/message_shortcuts_table.php';
+$redirectLink = ("<script>location.href = '$redirectPage';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
 $pageAction = getPageAction($act);
 $pageActionTitle = $pageAction . " " . $pageTitle;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 
-if (!($dataID) && !($act) || !isActionAllowed($pageAction, $pinAccess)) {
+if (!($dataId) && !($act) || !isActionAllowed($pageAction, $pinAccess)) {
     echo $redirectLink;
 }
 
-$rst = getData('*', "id = '$dataID'", '', $tblName, $connect);
+$result = getData('*', "id = '$dataId'", '', $tblName, $connect);
 
-if ($act != 'I' && (!$rst || !($row = $rst->fetch_assoc()))) {
+if ($act != 'I' && (!$result || !($row = $result->fetch_assoc()))) {
     $errorExist = 1;
     $act = "F";
 }
 
 if ($act == 'D') {
-    deleteRecord($tblName, '', $dataID, isset($row['shortcuts_tag']) ? $row['shortcuts_tag'] : '', $connect, $connect, $cdate, $ctime, $pageTitle);
+    deleteRecord($tblName, '', $dataId, isset($row['shortcuts_tag']) ? $row['shortcuts_tag'] : '', $connect, $connect, $cdate, $ctime, $pageTitle);
     $_SESSION['delChk'] = 1;
 }
 
-if ($dataID && !$act && USER_ID && !$_SESSION['viewChk'] && !$_SESSION['delChk']) {
+if ($dataId && !$act && USER_ID && !$_SESSION['viewChk'] && !$_SESSION['delChk']) {
     $_SESSION['viewChk'] = 1;
 
     if (isset($errorExist)) {
-        $viewActMsg = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8') . " fail to viewed the data [<b> ID = " . $dataID . "</b> ] from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8') . " fail to viewed the data [<b> ID = " . $dataId . "</b> ] from <b><i>$tblName Table</i></b>.";
     } else {
         $safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
         $safeTag = htmlspecialchars(isset($row['shortcuts_tag']) ? (string) $row['shortcuts_tag'] : '', ENT_QUOTES, 'UTF-8');
-        $viewActMsg = $safeUserName . " viewed the data [<b> ID = " . $dataID . "</b> ] <b>" . $safeTag . "</b> from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = $safeUserName . " viewed the data [<b> ID = " . $dataId . "</b> ] <b>" . $safeTag . "</b> from <b><i>$tblName Table</i></b>.";
     }
 
     $log = [
@@ -266,7 +266,7 @@ if (post('actionBtn')) {
             if ($shortcutsTag === '') {
                 $tagErr = "Message Shortcuts Tag is required.";
                 $errorCount = 1;
-            } else if (isDuplicateRecord("shortcuts_tag", $shortcutsTag, $tblName, $connect, $dataID)) {
+            } else if (isDuplicateRecord("shortcuts_tag", $shortcutsTag, $tblName, $connect, $dataId)) {
                 $tagErr = "Duplicate record found for Message Shortcuts Tag.";
                 $errorCount = 1;
             }
@@ -299,7 +299,7 @@ if (post('actionBtn')) {
 
                     $query = "INSERT INTO `" . $tblName . "` (`shortcuts_tag`, `shortcuts_message`, `create_by`, `create_date`, `create_time`) VALUES ('" . $safeShortcutsTag . "', '" . $safeShortcutsMessage . "', '" . USER_ID . "', CURDATE(), CURTIME())";
                     $returnData = mysqli_query($connect, $query);
-                    $dataID = $connect->insert_id;
+                    $dataId = $connect->insert_id;
                     $act = $returnData ? 'I' : 'F';
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
@@ -322,7 +322,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if ($oldvalarr && $chgvalarr) {
-                        $query = "UPDATE `" . $tblName . "` SET `shortcuts_tag` = '" . $safeShortcutsTag . "', `shortcuts_message` = '" . $safeShortcutsMessage . "', `update_date` = CURDATE(), `update_time` = CURTIME(), `update_by` = '" . USER_ID . "' WHERE `id` = '" . mysqli_real_escape_string($connect, (string) $dataID) . "'";
+                        $query = "UPDATE `" . $tblName . "` SET `shortcuts_tag` = '" . $safeShortcutsTag . "', `shortcuts_message` = '" . $safeShortcutsMessage . "', `update_date` = CURDATE(), `update_time` = CURTIME(), `update_by` = '" . USER_ID . "' WHERE `id` = '" . mysqli_real_escape_string($connect, (string) $dataId) . "'";
                         $returnData = mysqli_query($connect, $query);
                         $act = $returnData ? 'E' : 'F';
                     } else {
@@ -349,11 +349,11 @@ if (post('actionBtn')) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval'] = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
 
                 audit_log($log);
@@ -369,7 +369,7 @@ if (post('actionBtn')) {
 if (isset($_SESSION['tempValConfirmBox'])) {
     unset($_SESSION['tempValConfirmBox']);
     echo $clearLocalStorage;
-    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
 }
 
 $formTagValue = post('actionBtn') && post('actionBtn') !== 'back'
@@ -410,7 +410,7 @@ $viewMessageHtml = isset($row['shortcuts_message']) ? messageShortcutsSanitizeHt
 
     <div class="page-load-cover">
         <div class="d-flex flex-column my-3 ms-3">
-            <p><a href="<?= $redirect_page ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i>
+            <p><a href="<?= $redirectPage ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i>
                 <?php echo $pageActionTitle ?>
             </p>
         </div>

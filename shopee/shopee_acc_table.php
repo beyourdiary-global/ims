@@ -5,7 +5,7 @@ $currentPagePin = 58;
 include_once '../include/list_page_header.php';
 
 
-$redirect_page = $SITEURL . '/shopee/shopee_acc.php';
+$redirectPage = $SITEURL . '/shopee/shopee_acc.php';
 $deleteRedirectPage = $SITEURL . '/shopee/shopee_acc_table.php';
 $result = getData('*', '', '', SHOPEE_ACC, $finance_connect);
 if (!$result) {
@@ -49,7 +49,7 @@ if (!$result) {
                         <h2><?php echo $pageTitle ?></h2>
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Account </a>
+                                <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Account </a>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -84,9 +84,9 @@ if (!$result) {
                                 <th scope="row"><?= $num++; ?></th>
                                 <td scope="row" class="btn-container">
                                 <div class="d-flex align-items-center">
-                                <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess);?>
-                                <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2) ?>
-                                <?php renderDeleteButton($pinAccess, $row['id'], '', '', $pageTitle, $redirect_page, $deleteRedirectPage) ?>
+                                <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess);?>
+                                <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2) ?>
+                                <?php renderDeleteButton($pinAccess, $row['id'], '', '', $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                 </div>
                                 </td>
                                 <td scope="row"><?= isset($row['name']) ? $row['name']  : '' ?></td>

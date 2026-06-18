@@ -9,7 +9,7 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 $tblName = SHOPEE_WDL_TRANS;
 
 //Current Page Action And Data ID
-$dataID = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addTransaction' : 'updTransaction';
 
@@ -19,8 +19,8 @@ $pinAccess = checkCurrentPin($connect, $pageTitle);
 $allowed_ext = array("png", "jpg", "jpeg", "svg", "pdf");
 
 
-$redirect_page = $SITEURL . '/shopee/shopee_withdrawal_transactions_table.php';
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$redirectPage = $SITEURL . '/shopee/shopee_withdrawal_transactions_table.php';
+$redirectLink = ("<script>location.href = '$redirectPage';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
 $img_path = '../' . img_server . 'finance/shopee_withdrawal_transactions/';
@@ -29,22 +29,22 @@ if (!file_exists($img_path)) {
 }
 
 // to display data to input
-if ($dataID) { //edit/remove/view
-    $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $finance_connect);
+if ($dataId) { //edit/remove/view
+    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $finance_connect);
 
-    if ($rst != false && $rst->num_rows > 0) {
+    if ($result != false && $result->num_rows > 0) {
         $dataExisted = 1;
-        $row = $rst->fetch_assoc();
+        $row = $result->fetch_assoc();
     } else {
-        // If $rst is false or no data found ($act==null)
+        // If $result is false or no data found ($act==null)
         $errorExist = 1;
         $_SESSION['tempValConfirmBox'] = true;
         $act = "F";
     }
 }
 
-if (!($dataID) && !($act)) {
-    renderNotificationScript('Invalid action.', 'error', $redirect_page);
+if (!($dataId) && !($act)) {
+    renderNotificationScript('Invalid action.', 'error', $redirectPage);
 
 }
 
@@ -52,7 +52,7 @@ $cur_list_result = getData('*', '', '', CUR_UNIT, $connect);
 
 //Delete Data
 if ($act == 'D') {
-    deleteRecord($tblName, '',$dataID, $row['swt_id'], $finance_connect, $connect, $cdate, $ctime, $pageTitle);
+    deleteRecord($tblName, '',$dataId, $row['swt_id'], $finance_connect, $connect, $cdate, $ctime, $pageTitle);
     $_SESSION['delChk'] = 1;
 }
 
@@ -81,7 +81,7 @@ if (post('actionBtn')) {
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
 
-    if (isDuplicateRecord("swt_id", $swt_id, $tblName,  $finance_connect, $dataID)) {
+    if (isDuplicateRecord("swt_id", $swt_id, $tblName,  $finance_connect, $dataId)) {
         $swt_id_err = "Duplicate record found for " . $pageTitle . " withdrawal ID.";
         break;
     }
@@ -95,17 +95,17 @@ if (post('actionBtn')) {
 
                 if (in_array($img_ext_lc, $allowed_ext)) {
                     $highestNumber = 0;
-                    $files = glob($img_path . $dataID . '_*.' . $img_ext);
+                    $files = glob($img_path . $dataId . '_*.' . $img_ext);
                     foreach ($files as $file) {
                         $filename = basename($file);
-                        if (preg_match('/' . preg_quote($dataID, '/') . '_(\d+)\.' . preg_quote($img_ext, '/') . '$/', $filename, $matches)) {
+                        if (preg_match('/' . preg_quote($dataId, '/') . '_(\d+)\.' . preg_quote($img_ext, '/') . '$/', $filename, $matches)) {
                             $number = (int)$matches[1];
                             $highestNumber = max($highestNumber, $number);
                         }
                     }
 
                     $unique_id = $highestNumber + 1;
-                    $new_file_name = $dataID . '_' . $unique_id . '.' . $img_ext_lc;
+                    $new_file_name = $dataId . '_' . $unique_id . '.' . $img_ext_lc;
 
                     // Move the uploaded file
                     if (move_uploaded_file($swt_file_tmp_name, $img_path . $new_file_name)) {
@@ -172,7 +172,7 @@ if (post('actionBtn')) {
                     $query = "INSERT INTO " . $tblName  . "(date,swt_id,currency_unit,amount,pic,attachment,remark,create_by,create_date,create_time) VALUES ('$swt_date','$swt_id','$curr','$swt_amt','$swt_pic','$swt_attach','$swt_remark','" . USER_ID . "',curdate(),curtime())";
                     // Execute the query
                     $returnData = mysqli_query($finance_connect, $query);
-                    $dataID = $finance_connect->insert_id;
+                    $dataId = $finance_connect->insert_id;
                     $_SESSION['tempValConfirmBox'] = true;
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
@@ -181,8 +181,8 @@ if (post('actionBtn')) {
             } else {
                 try {
                      // take old value
-                     $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName , $finance_connect);
-                     $row = $rst->fetch_assoc();
+                     $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName , $finance_connect);
+                     $row = $result->fetch_assoc();
 
                     // check value
                     if ($row['date'] != $swt_date) {
@@ -235,7 +235,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {                      
-                        $query = "UPDATE " . $tblName  . " SET date = '$swt_date', swt_id = '$swt_id', currency_unit = '$curr', amount = '$swt_amt', pic = '$swt_pic', attachment = '$swt_attach', remark ='$swt_remark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
+                        $query = "UPDATE " . $tblName  . " SET date = '$swt_date', swt_id = '$swt_id', currency_unit = '$curr', amount = '$swt_amt', pic = '$swt_pic', attachment = '$swt_attach', remark ='$swt_remark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($finance_connect, $query);
 
                      
@@ -265,11 +265,11 @@ if (post('actionBtn')) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval']  = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
             }
@@ -285,13 +285,13 @@ if (post('actionBtn')) {
 if (post('act') == 'D') {
     try {
         // take name
-        $rst = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $finance_connect);
-        $row = $rst->fetch_assoc();
+        $result = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $finance_connect);
+        $row = $result->fetch_assoc();
 
-        $dataID = $row['id'];
+        $dataId = $row['id'];
         
         //SET the record status to 'D'
-        deleteRecord($tblName, '', $dataID, $dataID, $finance_connect, $connect, $cdate, $ctime, $pageTitle);
+        deleteRecord($tblName, '', $dataId, $dataId, $finance_connect, $connect, $cdate, $ctime, $pageTitle);
         $_SESSION['delChk'] = 1;
     } catch (Exception $e) {
         echo 'Message: ' . $e->getMessage();
@@ -299,13 +299,13 @@ if (post('act') == 'D') {
 }
 
 //view
-if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
+if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
     $_SESSION['viewChk'] = 1;
 
     if (isset($errorExist)) {
-        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataID . "</b> ] from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataId . "</b> ] from <b><i>$tblName Table</i></b>.";
     } else {
-        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataID . "</b> ] </b>.";
+        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataId . "</b> ] </b>.";
     }
 
     $log = [
@@ -339,7 +339,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 
     <div class="page-load-cover">
         <div class="d-flex flex-column my-3 ms-3">
-            <p><a href="<?= $redirect_page ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?php
+            <p><a href="<?= $redirectPage ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?php
                                                                                                                     echo displayPageAction($act, $pageTitle);
                                                                                                                     ?>
             </p>
@@ -554,7 +554,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
     if (isset($_SESSION['tempValConfirmBox'])) {
         unset($_SESSION['tempValConfirmBox']);
         echo $clearLocalStorage;
-        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
     }
     ?>
     <script>

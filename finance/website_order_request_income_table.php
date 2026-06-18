@@ -175,7 +175,7 @@ if (!empty($checkboxValues)) {
 }
 
 $tblName = WEB_ORDER_REQ;
-$redirect_page = $SITEURL . '/finance/website_order_request.php';
+$redirectPage = $SITEURL . '/finance/website_order_request.php';
 $deleteRedirectPage = $SITEURL . '/finance/website_order_request_table.php';
 $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
 ?>
@@ -215,7 +215,7 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         Request </a>
                                 <?php endif; ?>
                                 <?php if (isActionAllowed("Export", $pinAccess)): ?>

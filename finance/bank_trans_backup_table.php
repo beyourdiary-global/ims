@@ -117,7 +117,7 @@ if (!empty($checkboxValues)) {
     }
 }
 
-$redirect_page = $SITEURL . '/finance/bank_trans_backup.php';
+$redirectPage = $SITEURL . '/finance/bank_trans_backup.php';
 
 $result = getData('*', '', '', BANK_TRANS_BACKUP, $finance_connect);
 
@@ -169,7 +169,7 @@ $img_path = SITEURL . img_server . 'finance/bank_trans_backup/';
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         Transaction </a>
                                 <?php endif; ?>
                                 <?php if (isActionAllowed("Export", $pinAccess)): ?>
@@ -222,9 +222,9 @@ $img_path = SITEURL . img_server . 'finance/bank_trans_backup/';
                                         <?= $num++; ?>
                                     </th>
                                     <td scope="row" class="btn-container">
-                                        <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess);?>
-                                        <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2) ?>
-                                        <?php renderDeleteButton($pinAccess, $row['id'], $row['year'], $row['month'], $pageTitle, $redirect_page, $deleteRedirectPage) ?>
+                                        <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess);?>
+                                        <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2) ?>
+                                        <?php renderDeleteButton($pinAccess, $row['id'], $row['year'], $row['month'], $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                     </td>
                                     <td scope="row">
                                         <?php if (isset($row['year']))

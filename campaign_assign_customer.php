@@ -378,7 +378,7 @@ function campaignAssignSplitCsvValues($value)
     return $values;
 }
 
-function campaignAssignResolveLookupValues($connect, $tableName, $value)
+function campaignAssignResolveLookupValues($connect, $tblName, $value)
 {
     $value = trim((string) $value);
     if ($value === '') {
@@ -390,7 +390,7 @@ function campaignAssignResolveLookupValues($connect, $tableName, $value)
         return array($value);
     }
 
-    if (!campaignTableExists($connect, $tableName) || !campaignColumnExists($connect, $tableName, 'name')) {
+    if (!campaignTableExists($connect, $tblName) || !campaignColumnExists($connect, $tblName, 'name')) {
         return customerRecordNormalizeFilterValues($parts);
     }
 
@@ -412,8 +412,8 @@ function campaignAssignResolveLookupValues($connect, $tableName, $value)
     }
 
     $rows = array();
-    $sql = "SELECT `id`, `name` FROM `" . str_replace('`', '``', $tableName) . "` WHERE `id` IN (" . implode(',', $ids) . ")";
-    if (campaignColumnExists($connect, $tableName, 'status')) {
+    $sql = "SELECT `id`, `name` FROM `" . str_replace('`', '``', $tblName) . "` WHERE `id` IN (" . implode(',', $ids) . ")";
+    if (campaignColumnExists($connect, $tblName, 'status')) {
         $sql .= " AND `status`='A'";
     }
     $result = mysqli_query($connect, $sql);

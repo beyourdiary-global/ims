@@ -7,7 +7,7 @@ include_once 'include/list_page_header.php';
 
 $tblName = HOLIDAY;
 
-$redirect_page = $SITEURL . '/holiday.php';
+$redirectPage = $SITEURL . '/holiday.php';
 $deleteRedirectPage = $SITEURL . '/holiday_table.php';
 
 $result = getData('*', '', '', $tblName, $connect);
@@ -48,7 +48,7 @@ $result = getData('*', '', '', $tblName, $connect);
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         <?php echo $pageTitle ?> </a>
                                 <?php endif; ?>
                             </div>
@@ -80,9 +80,9 @@ $result = getData('*', '', '', $tblName, $connect);
                                         <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
                                         <th scope="row"><?= $num++; ?></th>
                                         <td scope="row" class="btn-container">
-                                            <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                            <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                            <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['date'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                            <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                            <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
+                                            <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['date'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                         </td>
                                         <td scope="row"><?= $row['name'] ?></td>
                                         <td scope="row">

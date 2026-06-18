@@ -267,9 +267,9 @@ if (!function_exists('commonResolvePaymentMethodName')) {
             return $payMethodId;
         }
 
-        $rst = getData('name', "id='" . mysqli_real_escape_string($financeConnect, $payMethodId) . "'", 'LIMIT 1', FIN_PAY_METH, $financeConnect);
-        if ($rst && $rst->num_rows > 0) {
-            $row = $rst->fetch_assoc();
+        $result = getData('name', "id='" . mysqli_real_escape_string($financeConnect, $payMethodId) . "'", 'LIMIT 1', FIN_PAY_METH, $financeConnect);
+        if ($result && $result->num_rows > 0) {
+            $row = $result->fetch_assoc();
             return isset($row['name']) ? (string) $row['name'] : $payMethodId;
         }
 
@@ -619,7 +619,7 @@ function isDuplicateRecord($fieldName, $fieldValue, $tbl, $connect, $primaryKeyV
 	return false;
 }
 
-//example: isDuplicateRecordWithConditions(['month', 'year'], [$btb_month, $btb_year], $tblName, $finance_connect, $dataID)
+//example: isDuplicateRecordWithConditions(['month', 'year'], [$btb_month, $btb_year], $tblName, $finance_connect, $dataId)
 function isDuplicateRecordWithConditions($fields, $values, $tbl, $connect, $primaryKeyValue)
 {
 	if (count($fields) !== count($values) || empty($fields)) {
@@ -671,12 +671,12 @@ function isRecordExist($tblName, $idType, $id, $connect)
 }
 
 
-function tableExists($tableName, $conn)
+function tableExists($tblName, $conn)
 {
 	if (!$conn) {
 		die("Database connection is not initialized.");
 	}
-	$result = $conn->query("SHOW TABLES LIKE '$tableName'");
+	$result = $conn->query("SHOW TABLES LIKE '$tblName'");
 	if (!$result)
 		return;
 	return $result && $result->num_rows > 0;
@@ -729,9 +729,9 @@ if (!function_exists('getPinGroupNameById')) {
             return '';
         }
 
-        $rst = getData('name', "id = '$pinGroupId'", 'LIMIT 1', 'pin_group', $connect);
-        if ($rst && $rst->num_rows > 0) {
-            $row = $rst->fetch_assoc();
+        $result = getData('name', "id = '$pinGroupId'", 'LIMIT 1', 'pin_group', $connect);
+        if ($result && $result->num_rows > 0) {
+            $row = $result->fetch_assoc();
             if (isset($row['name']) && trim((string) $row['name']) !== '') {
                 return (string) $row['name'];
             }
@@ -744,10 +744,10 @@ if (!function_exists('getPinGroupNameById')) {
 
 function generateDBData($tblname, $conn)
 {
-	$rst = getData('*', '', '', $tblname, $conn);
+	$result = getData('*', '', '', $tblname, $conn);
 
-	// Check if $rst is a valid result set
-	if ($rst === false) {
+	// Check if $result is a valid result set
+	if ($result === false) {
 		// Log the error or output debug information
 		error_log("Error in getData() for table $tblname: " . $conn->error);
 		return;
@@ -756,7 +756,7 @@ function generateDBData($tblname, $conn)
 	}
 
 	$data = array();
-	while ($row = $rst->fetch_assoc()) {
+	while ($row = $result->fetch_assoc()) {
 		$data[] = $row;
 	}
 
@@ -1485,34 +1485,34 @@ if (!function_exists('commonRenderCreateUpdateInfo')) {
     }
 }
 
-function renderViewEditButton($action, $redirect_page, $row, $pinAccess, $act_2 = null)
+function renderViewEditButton($action, $redirectPage, $row, $pinAccess, $act_2 = null)
 {
 	switch ($action) {
 		case "View":
 			if (isActionAllowed("View", $pinAccess)) {
-				echo '<a class="btn btn-primary me-1" href="' . $redirect_page . '?id=' . $row['id'] . '"><i class="fas fa-eye"></i></a>';
+				echo '<a class="btn btn-primary me-1" href="' . $redirectPage . '?id=' . $row['id'] . '"><i class="fas fa-eye"></i></a>';
 			}
 			break;
 		case "Edit":
 			if (isActionAllowed("Edit", $pinAccess)) {
-				echo '<a class="btn btn-warning me-1" href="' . $redirect_page . '?id=' . $row['id'] . '&act=' . $act_2 . '"><i class="fas fa-edit"></i></a>';
+				echo '<a class="btn btn-warning me-1" href="' . $redirectPage . '?id=' . $row['id'] . '&act=' . $act_2 . '"><i class="fas fa-edit"></i></a>';
 			}
 			break;
 	}
 
 }
 
-function renderViewEditButtonByPin($action, $redirect_page, $row, $pinAccess, $act_2 = null)
+function renderViewEditButtonByPin($action, $redirectPage, $row, $pinAccess, $act_2 = null)
 {
 	switch ($action) {
 		case "1":
 			if (in_array(1, $pinAccess)) {
-				echo '<a class="btn btn-primary me-1" href="' . $redirect_page . '?id=' . $row['id'] . '"><i class="fas fa-eye"></i></a>';
+				echo '<a class="btn btn-primary me-1" href="' . $redirectPage . '?id=' . $row['id'] . '"><i class="fas fa-eye"></i></a>';
 			}
 			break;
 		case "2":
 			if (in_array(2, $pinAccess)) {
-				echo '<a class="btn btn-warning me-1" href="' . $redirect_page . '?id=' . $row['id'] . '&act=' . $act_2 . '"><i class="fas fa-edit"></i></a>';
+				echo '<a class="btn btn-warning me-1" href="' . $redirectPage . '?id=' . $row['id'] . '&act=' . $act_2 . '"><i class="fas fa-edit"></i></a>';
 			}
 			break;
 	}
@@ -1922,11 +1922,11 @@ if (!function_exists('customerDailyReportResolveDbConnect')) {
 }
 
 if (!function_exists('customerDailyReportGetPlatformConfigByTable')) {
-    function customerDailyReportGetPlatformConfigByTable($tableName)
+    function customerDailyReportGetPlatformConfigByTable($tblName)
     {
-        $tableName = trim((string) $tableName);
+        $tblName = trim((string) $tblName);
         foreach (customerDailyReportGetPlatformConfigs() as $platformConfig) {
-            if (isset($platformConfig['table']) && (string) $platformConfig['table'] === $tableName) {
+            if (isset($platformConfig['table']) && (string) $platformConfig['table'] === $tblName) {
                 return $platformConfig;
             }
         }
@@ -2140,10 +2140,10 @@ if (!function_exists('customerDailyReportGetPrimaryCustomerFieldLabel')) {
 }
 
 if (!function_exists('customerDailyReportResolveLookupValueById')) {
-    function customerDailyReportResolveLookupValueById($dbConnect, $tableName, $rawValue, $displayField = 'name', $altDisplayField = '')
+    function customerDailyReportResolveLookupValueById($dbConnect, $tblName, $rawValue, $displayField = 'name', $altDisplayField = '')
     {
         $rawValue = trim((string) $rawValue);
-        if ($rawValue === '' || !($dbConnect instanceof mysqli) || $tableName === '') {
+        if ($rawValue === '' || !($dbConnect instanceof mysqli) || $tblName === '') {
             return $rawValue;
         }
 
@@ -2157,7 +2157,7 @@ if (!function_exists('customerDailyReportResolveLookupValueById')) {
 
             $resolvedValue = $valuePart;
             if (preg_match('/^\d+$/', $valuePart)) {
-                $result = getData('*', "id = '" . mysqli_real_escape_string($dbConnect, $valuePart) . "'", 'LIMIT 1', $tableName, $dbConnect);
+                $result = getData('*', "id = '" . mysqli_real_escape_string($dbConnect, $valuePart) . "'", 'LIMIT 1', $tblName, $dbConnect);
                 if ($result && $result->num_rows > 0) {
                     $row = $result->fetch_assoc();
                     if (isset($row[$displayField]) && trim((string) $row[$displayField]) !== '') {
@@ -2601,13 +2601,13 @@ if (!function_exists('customerDailyReportGetCustomerMeta')) {
             return $meta;
         }
 
-        $tableName = isset($platformConfig['table']) ? (string) $platformConfig['table'] : '';
-        if ($tableName === '') {
+        $tblName = isset($platformConfig['table']) ? (string) $platformConfig['table'] : '';
+        if ($tblName === '') {
             $customerMetaCache[$cacheKey] = $meta;
             return $meta;
         }
 
-        $result = getData('*', "id = '" . $recordId . "'", 'LIMIT 1', $tableName, $dbConnect);
+        $result = getData('*', "id = '" . $recordId . "'", 'LIMIT 1', $tblName, $dbConnect);
         if ($result && $result->num_rows > 0) {
             $row = $result->fetch_assoc();
             $displayName = customerDailyReportGetDisplayNameFromRow($row, $platformConfig['display_fields'] ?? array());
@@ -2737,15 +2737,15 @@ if (!function_exists('shopeeOmsGetOrderSourceConfig')) {
 }
 
 if (!function_exists('shopeeOmsResolvePlatformFromTableName')) {
-    function shopeeOmsResolvePlatformFromTableName($tableName)
+    function shopeeOmsResolvePlatformFromTableName($tblName)
     {
-        $tableName = trim((string) $tableName);
-        if ($tableName === '') {
+        $tblName = trim((string) $tblName);
+        if ($tblName === '') {
             return '';
         }
 
         foreach (shopeeOmsGetOrderSourceConfigs() as $platform => $config) {
-            if (isset($config['table']) && (string) $config['table'] === $tableName) {
+            if (isset($config['table']) && (string) $config['table'] === $tblName) {
                 return $platform;
             }
         }
@@ -2792,12 +2792,12 @@ if (!function_exists('shopeeOmsBuildQualifiedTableName')) {
     {
         $sourceConfig = is_array($sourceConfig) ? $sourceConfig : array();
         $dbName = isset($sourceConfig['db_name']) ? trim((string) $sourceConfig['db_name']) : '';
-        $tableName = isset($sourceConfig['table']) ? trim((string) $sourceConfig['table']) : '';
-        if ($dbName === '' || $tableName === '') {
+        $tblName = isset($sourceConfig['table']) ? trim((string) $sourceConfig['table']) : '';
+        if ($dbName === '' || $tblName === '') {
             return '';
         }
 
-        return '`' . str_replace('`', '``', $dbName) . '`.`' . str_replace('`', '``', $tableName) . '`';
+        return '`' . str_replace('`', '``', $dbName) . '`.`' . str_replace('`', '``', $tblName) . '`';
     }
 }
 
@@ -2835,24 +2835,24 @@ if (!function_exists('shopeeOmsGetOrderSourcePlatform')) {
 }
 
 if (!function_exists('shopeeOmsTableHasColumn')) {
-    function shopeeOmsTableHasColumn($connect, $dbName, $tableName, $columnName)
+    function shopeeOmsTableHasColumn($connect, $dbName, $tblName, $columnName)
     {
         static $cache = array();
 
         $dbName = trim((string) $dbName);
-        $tableName = trim((string) $tableName);
+        $tblName = trim((string) $tblName);
         $columnName = trim((string) $columnName);
-        if (!($connect instanceof mysqli) || $dbName === '' || $tableName === '' || $columnName === '') {
+        if (!($connect instanceof mysqli) || $dbName === '' || $tblName === '' || $columnName === '') {
             return false;
         }
 
-        $cacheKey = $dbName . '|' . $tableName . '|' . $columnName;
+        $cacheKey = $dbName . '|' . $tblName . '|' . $columnName;
         if (array_key_exists($cacheKey, $cache)) {
             return $cache[$cacheKey];
         }
 
         $safeDbName = mysqli_real_escape_string($connect, $dbName);
-        $safeTableName = mysqli_real_escape_string($connect, $tableName);
+        $safeTableName = mysqli_real_escape_string($connect, $tblName);
         $safeColumnName = mysqli_real_escape_string($connect, $columnName);
         $sql = "SELECT 1
             FROM information_schema.columns
@@ -2870,10 +2870,10 @@ if (!function_exists('shopeeOmsSourceHasColumn')) {
     function shopeeOmsSourceHasColumn($cmsConnect, $financeConnect, $sourceConfig, $columnName)
     {
         $sourceConfig = is_array($sourceConfig) ? $sourceConfig : array();
-        $tableName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : '';
+        $tblName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : '';
         $dbName = isset($sourceConfig['db_name']) ? (string) $sourceConfig['db_name'] : '';
         $conn = shopeeOmsGetOrderSourceDbConnection($cmsConnect, $financeConnect, $sourceConfig);
-        return shopeeOmsTableHasColumn($conn, $dbName, $tableName, $columnName);
+        return shopeeOmsTableHasColumn($conn, $dbName, $tblName, $columnName);
     }
 }
 
@@ -3028,9 +3028,9 @@ if (!function_exists('customerLabelFetchRows')) {
 }
 
 if (!function_exists('customerLabelFetchActiveRows')) {
-    function customerLabelFetchActiveRows($conn, $tableName, $columns = '*', $extraWhere = '', $orderBy = 'ORDER BY id ASC')
+    function customerLabelFetchActiveRows($conn, $tblName, $columns = '*', $extraWhere = '', $orderBy = 'ORDER BY id ASC')
     {
-        if (!($conn instanceof mysqli) || $tableName === '' || !tableExists($tableName, $conn)) {
+        if (!($conn instanceof mysqli) || $tblName === '' || !tableExists($tblName, $conn)) {
             return array();
         }
 
@@ -3039,7 +3039,7 @@ if (!function_exists('customerLabelFetchActiveRows')) {
             $where .= " AND " . $extraWhere;
         }
 
-        $sql = "SELECT " . $columns . " FROM `" . $tableName . "` " . $where . " " . $orderBy;
+        $sql = "SELECT " . $columns . " FROM `" . $tblName . "` " . $where . " " . $orderBy;
         return customerLabelFetchRows($conn, $sql);
     }
 }
@@ -4554,10 +4554,10 @@ if (!function_exists('shouldShowEstimatedReceivedDateButton')) {
 }
 
 if (!function_exists('assignEstimatedReceivedDate')) {
-    function assignEstimatedReceivedDate($connect, $tableName, $orderId, $date, $currentUserId)
+    function assignEstimatedReceivedDate($connect, $tblName, $orderId, $date, $currentUserId)
     {
         return function_exists('shopeeOmsAssignEstimatedReceivedDate')
-            ? shopeeOmsAssignEstimatedReceivedDate($connect, $tableName, $orderId, $date, $currentUserId)
+            ? shopeeOmsAssignEstimatedReceivedDate($connect, $tblName, $orderId, $date, $currentUserId)
             : array(
                 'success' => false,
                 'message' => 'OMS date assignment helper is unavailable.',
@@ -5100,8 +5100,8 @@ if (!function_exists('shopeeOmsLoadOrder')) {
         }
 
         $sourceConfig = shopeeOmsResolveOrderSourceConfig($source);
-        $tableName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
-        $sql = "SELECT * FROM `" . $tableName . "` WHERE id = " . $orderId . " LIMIT 1";
+        $tblName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
+        $sql = "SELECT * FROM `" . $tblName . "` WHERE id = " . $orderId . " LIMIT 1";
         $result = mysqli_query($connect, $sql);
         if ($result && mysqli_num_rows($result) > 0) {
             return shopeeOmsAttachOrderSourceMeta((array) mysqli_fetch_assoc($result), isset($sourceConfig['platform']) ? $sourceConfig['platform'] : 'shopee', $sourceConfig);
@@ -5120,11 +5120,11 @@ if (!function_exists('shopeeOmsLoadOrderByCode')) {
         }
 
         $sourceConfig = shopeeOmsResolveOrderSourceConfig($source);
-        $tableName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
+        $tblName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
         $fieldName = isset($sourceConfig['order_code_field']) ? trim((string) $sourceConfig['order_code_field']) : '';
         $safeOrderCode = mysqli_real_escape_string($connect, $orderCode);
         if ($fieldName !== '') {
-            $sql = "SELECT * FROM `" . $tableName . "` WHERE `" . $fieldName . "` = '" . $safeOrderCode . "' LIMIT 1";
+            $sql = "SELECT * FROM `" . $tblName . "` WHERE `" . $fieldName . "` = '" . $safeOrderCode . "' LIMIT 1";
         } else {
             $platform = isset($sourceConfig['platform']) ? (string) $sourceConfig['platform'] : 'shopee';
             $prefix = strtoupper(trim((string) (isset($sourceConfig['fallback_code_prefix']) ? $sourceConfig['fallback_code_prefix'] : '')));
@@ -5141,7 +5141,7 @@ if (!function_exists('shopeeOmsLoadOrderByCode')) {
                 return array();
             }
 
-            $sql = "SELECT * FROM `" . $tableName . "` WHERE id = " . $numericId . " LIMIT 1";
+            $sql = "SELECT * FROM `" . $tblName . "` WHERE id = " . $numericId . " LIMIT 1";
         }
         $result = mysqli_query($connect, $sql);
         if ($result && mysqli_num_rows($result) > 0) {
@@ -5334,22 +5334,22 @@ if (!function_exists('shopeeOmsBuildPackageQtySnapshotFromInputs')) {
 }
 
 if (!function_exists('shopeeOmsLoadTableSnapshotRows')) {
-    function shopeeOmsLoadTableSnapshotRows($tableName)
+    function shopeeOmsLoadTableSnapshotRows($tblName)
     {
-        $tableName = trim((string) $tableName);
-        if ($tableName === '' || !preg_match('/^[A-Za-z0-9_]+$/', $tableName) || !defined('ROOT')) {
+        $tblName = trim((string) $tblName);
+        if ($tblName === '' || !preg_match('/^[A-Za-z0-9_]+$/', $tblName) || !defined('ROOT')) {
             return array();
         }
 
         static $snapshotCache = array();
-        if (array_key_exists($tableName, $snapshotCache)) {
-            return $snapshotCache[$tableName];
+        if (array_key_exists($tblName, $snapshotCache)) {
+            return $snapshotCache[$tblName];
         }
 
         $rootPath = rtrim((string) ROOT, '/\\');
         $candidatePaths = array(
-            $rootPath . '/data/' . $tableName . '.json',
-            $rootPath . '/' . $tableName . '.json',
+            $rootPath . '/data/' . $tblName . '.json',
+            $rootPath . '/' . $tblName . '.json',
         );
 
         foreach ($candidatePaths as $path) {
@@ -5364,13 +5364,13 @@ if (!function_exists('shopeeOmsLoadTableSnapshotRows')) {
 
             $rows = json_decode($json, true);
             if (is_array($rows)) {
-                $snapshotCache[$tableName] = $rows;
-                return $snapshotCache[$tableName];
+                $snapshotCache[$tblName] = $rows;
+                return $snapshotCache[$tblName];
             }
         }
 
-        $snapshotCache[$tableName] = array();
-        return $snapshotCache[$tableName];
+        $snapshotCache[$tblName] = array();
+        return $snapshotCache[$tblName];
     }
 }
 
@@ -6478,12 +6478,12 @@ if (!function_exists('shopeeOmsFindTokenSettingPageConflicts')) {
             $sql .= " AND id <> '" . $excludeId . "'";
         }
         $sql .= " ORDER BY id DESC";
-        $rst = mysqli_query($connect, $sql);
-        if (!$rst) {
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
             return $conflicts;
         }
 
-        while ($row = mysqli_fetch_assoc($rst)) {
+        while ($row = mysqli_fetch_assoc($result)) {
             $rowPages = shopeeOmsNormalizeTokenSettingPageValues(isset($row['page_used']) ? $row['page_used'] : '');
             $overlap = array_values(array_intersect($selectedPages, $rowPages));
             if (!empty($overlap)) {
@@ -7877,7 +7877,7 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
         }
         $sourceConfig = shopeeOmsResolveOrderSourceConfig($resolvedSource, 'shopee');
         $platform = isset($sourceConfig['platform']) ? (string) $sourceConfig['platform'] : 'shopee';
-        $tableName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
+        $tblName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
         $tableDbName = isset($sourceConfig['db_name']) ? (string) $sourceConfig['db_name'] : dbFinance;
         $orderConnect = shopeeOmsGetOrderSourceDbConnection($cmsConnect, $financeConnect, $sourceConfig);
         $actorUserId = trim((string) (isset($options['actor_user_id']) ? $options['actor_user_id'] : (defined('USER_ID') ? USER_ID : 'SYSTEM')));
@@ -7942,14 +7942,14 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
             "update_date = CURDATE()",
             "update_time = CURTIME()"
         );
-        if (shopeeOmsTableHasColumn($orderConnect, $tableDbName, $tableName, 'latest_transition_at')) {
+        if (shopeeOmsTableHasColumn($orderConnect, $tableDbName, $tblName, 'latest_transition_at')) {
             $assignments[] = "latest_transition_at = NOW()";
         }
         foreach ($fieldUpdates as $fieldName => $fieldValue) {
             if (!preg_match('/^[A-Za-z0-9_]+$/', (string) $fieldName)) {
                 continue;
             }
-            if (!shopeeOmsTableHasColumn($orderConnect, $tableDbName, $tableName, $fieldName)) {
+            if (!shopeeOmsTableHasColumn($orderConnect, $tableDbName, $tblName, $fieldName)) {
                 continue;
             }
 
@@ -7962,7 +7962,7 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
             }
         }
 
-        $updateSql = "UPDATE `" . $tableName . "` SET " . implode(', ', $assignments) . " WHERE id = " . $orderId . " LIMIT 1";
+        $updateSql = "UPDATE `" . $tblName . "` SET " . implode(', ', $assignments) . " WHERE id = " . $orderId . " LIMIT 1";
         if (!mysqli_query($orderConnect, $updateSql)) {
             if ($targetStatus === 'TP' && trim((string) (isset($orderRow[$airbillField]) ? $orderRow[$airbillField] : '')) === '') {
                 return array('success' => false, 'message' => 'Airbill is required when Order Status is To Pack.');
@@ -7992,8 +7992,8 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
             if (!empty($tokenResult['success']) && !empty($tokenResult['token_row']) && !empty($tokenResult['notification'])) {
                 $notifyResult = shopeeOmsSendWarehouseNotification($cmsConnect, $financeConnect, $tokenResult['token_row'], $tokenResult['notification'], $sourcePage);
                 if (!empty($notifyResult['sent'])) {
-                    if (shopeeOmsTableHasColumn($orderConnect, $tableDbName, $tableName, 'step_a_sent_at')) {
-                        mysqli_query($orderConnect, "UPDATE `" . $tableName . "` SET `step_a_sent_at` = NOW() WHERE id = " . $orderId . " LIMIT 1");
+                    if (shopeeOmsTableHasColumn($orderConnect, $tableDbName, $tblName, 'step_a_sent_at')) {
+                        mysqli_query($orderConnect, "UPDATE `" . $tblName . "` SET `step_a_sent_at` = NOW() WHERE id = " . $orderId . " LIMIT 1");
                     }
                 }
                 $stepAResult = array(
@@ -8030,10 +8030,10 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
 }
 
 if (!function_exists('shopeeOmsAssignEstimatedReceivedDate')) {
-    function shopeeOmsAssignEstimatedReceivedDate($connect, $tableName, $orderId, $date, $currentUserId)
+    function shopeeOmsAssignEstimatedReceivedDate($connect, $tblName, $orderId, $date, $currentUserId)
     {
-        $tableName = trim((string) $tableName);
-        $sourceConfig = shopeeOmsResolveOrderSourceConfig($tableName, 'shopee');
+        $tblName = trim((string) $tblName);
+        $sourceConfig = shopeeOmsResolveOrderSourceConfig($tblName, 'shopee');
         $platform = isset($sourceConfig['platform']) ? (string) $sourceConfig['platform'] : 'shopee';
 
         global $finance_connect;
@@ -8104,10 +8104,10 @@ if (!function_exists('shopeeOmsAssignEstimatedReceivedDate')) {
             "`update_date` = CURDATE()",
             "`update_time` = CURTIME()",
         );
-        if (shopeeOmsTableHasColumn($orderDb, isset($sourceConfig['db_name']) ? $sourceConfig['db_name'] : dbFinance, isset($sourceConfig['table']) ? $sourceConfig['table'] : $tableName, 'latest_transition_at')) {
+        if (shopeeOmsTableHasColumn($orderDb, isset($sourceConfig['db_name']) ? $sourceConfig['db_name'] : dbFinance, isset($sourceConfig['table']) ? $sourceConfig['table'] : $tblName, 'latest_transition_at')) {
             $assignments[] = "`latest_transition_at` = NOW()";
         }
-        $updateSql = "UPDATE `" . (isset($sourceConfig['table']) ? $sourceConfig['table'] : $tableName) . "`
+        $updateSql = "UPDATE `" . (isset($sourceConfig['table']) ? $sourceConfig['table'] : $tblName) . "`
             SET " . implode(",\n                ", $assignments) . "
             WHERE id = " . (int) $orderId . "
             LIMIT 1";
@@ -8156,10 +8156,10 @@ if (!function_exists('shopeeOmsMoveToWafcWithReceivedDate')) {
         $resolvedSource = isset($options['platform']) ? $options['platform'] : (isset($options['table_name']) ? $options['table_name'] : 'shopee');
         $sourceConfig = shopeeOmsResolveOrderSourceConfig($resolvedSource, 'shopee');
         $orderConnect = shopeeOmsGetOrderSourceDbConnection($cmsConnect, $financeConnect, $sourceConfig);
-        $tableName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
+        $tblName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
         $dbName = isset($sourceConfig['db_name']) ? (string) $sourceConfig['db_name'] : dbFinance;
 
-        if (!shopeeOmsTableHasColumn($orderConnect, $dbName, $tableName, 'received_date')) {
+        if (!shopeeOmsTableHasColumn($orderConnect, $dbName, $tblName, 'received_date')) {
             return array(
                 'success' => false,
                 'message' => 'Received Date column is not available yet. Please run insert_table.php first.',
@@ -8405,7 +8405,7 @@ if (!function_exists('shopeeOmsRenderReceivedDateModalScript')) {
 }
 
 if (!function_exists('shopeeOmsResolveIdCsvToNames')) {
-    function shopeeOmsResolveIdCsvToNames($connect, $tableName, $csvValue)
+    function shopeeOmsResolveIdCsvToNames($connect, $tblName, $csvValue)
     {
         $csvValue = trim((string) $csvValue);
         if ($csvValue === '' || !($connect instanceof mysqli)) {
@@ -8423,7 +8423,7 @@ if (!function_exists('shopeeOmsResolveIdCsvToNames')) {
             return $csvValue;
         }
 
-        $result = mysqli_query($connect, "SELECT id, name FROM `" . $tableName . "` WHERE id IN (" . implode(',', $idMap) . ")");
+        $result = mysqli_query($connect, "SELECT id, name FROM `" . $tblName . "` WHERE id IN (" . implode(',', $idMap) . ")");
         $nameMap = array();
         if ($result) {
             while ($row = mysqli_fetch_assoc($result)) {
@@ -8848,22 +8848,22 @@ if (!function_exists('shopeeOmsRunOverduePostponedAutoMove')) {
                 continue;
             }
 
-            $tableName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : '';
+            $tblName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : '';
             $delayRemarkField = isset($sourceConfig['delay_remark_field']) && trim((string) $sourceConfig['delay_remark_field']) !== ''
                 ? trim((string) $sourceConfig['delay_remark_field'])
                 : 'delay_remark';
             $statusCondition = shopeeOmsBuildOrderStatusInCondition($orderConnect, 'order_status', array('WR'));
-            if ($tableName === '' || $statusCondition === '') {
+            if ($tblName === '' || $statusCondition === '') {
                 continue;
             }
 
             $selectFields = array('id', 'estimated_received_date');
-            if (shopeeOmsTableHasColumn($orderConnect, isset($sourceConfig['db_name']) ? $sourceConfig['db_name'] : dbFinance, $tableName, $delayRemarkField)) {
+            if (shopeeOmsTableHasColumn($orderConnect, isset($sourceConfig['db_name']) ? $sourceConfig['db_name'] : dbFinance, $tblName, $delayRemarkField)) {
                 $selectFields[] = $delayRemarkField;
             }
 
             $sql = "SELECT " . implode(', ', $selectFields) . "
-                FROM `" . $tableName . "`
+                FROM `" . $tblName . "`
                 WHERE status = 'A'
                   AND " . $statusCondition;
             $result = mysqli_query($orderConnect, $sql);
@@ -9175,7 +9175,7 @@ if (!function_exists('shopeeOmsBulkMoveCurrentShippedOrdersToWaerd')) {
         $sourceConfig = shopeeOmsResolveOrderSourceConfig(isset($options['platform']) ? $options['platform'] : 'shopee');
         $platform = isset($sourceConfig['platform']) ? (string) $sourceConfig['platform'] : 'shopee';
         $orderConnect = shopeeOmsGetOrderSourceDbConnection($cmsConnect, $financeConnect, $sourceConfig);
-        $tableName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
+        $tblName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
 
         if (!($cmsConnect instanceof mysqli) || !($orderConnect instanceof mysqli)) {
             return array(
@@ -9203,7 +9203,7 @@ if (!function_exists('shopeeOmsBulkMoveCurrentShippedOrdersToWaerd')) {
         $orderCodeField = isset($sourceConfig['order_code_field']) && trim((string) $sourceConfig['order_code_field']) !== ''
             ? '`' . $sourceConfig['order_code_field'] . '` AS order_code'
             : "CONCAT('" . mysqli_real_escape_string($orderConnect, strtoupper((string) (isset($sourceConfig['fallback_code_prefix']) ? $sourceConfig['fallback_code_prefix'] : 'OMS'))) . "-', id) AS order_code";
-        $sql = "SELECT id, " . $orderCodeField . ", order_status FROM `" . $tableName . "` WHERE status = 'A' AND " . $statusCondition . " ORDER BY id ASC";
+        $sql = "SELECT id, " . $orderCodeField . ", order_status FROM `" . $tblName . "` WHERE status = 'A' AND " . $statusCondition . " ORDER BY id ASC";
         $result = mysqli_query($orderConnect, $sql);
         if (!$result) {
             return array(
@@ -10158,9 +10158,9 @@ if (!function_exists('siLoadWarehouses')) {
     function siLoadWarehouses($connect)
     {
         $rows = array();
-        $rst = mysqli_query($connect, "SELECT id, name FROM " . WHSE . " WHERE status='A' ORDER BY name ASC");
-        if ($rst) {
-            while ($r = mysqli_fetch_assoc($rst)) {
+        $result = mysqli_query($connect, "SELECT id, name FROM " . WHSE . " WHERE status='A' ORDER BY name ASC");
+        if ($result) {
+            while ($r = mysqli_fetch_assoc($result)) {
                 $rows[] = array('id' => (int) $r['id'], 'name' => (string) $r['name']);
             }
         }
@@ -10172,9 +10172,9 @@ if (!function_exists('siLoadProducts')) {
     function siLoadProducts($connect)
     {
         $rows = array();
-        $rst = mysqli_query($connect, "SELECT id, name FROM " . PROD . " WHERE status='A' ORDER BY name ASC");
-        if ($rst) {
-            while ($r = mysqli_fetch_assoc($rst)) {
+        $result = mysqli_query($connect, "SELECT id, name FROM " . PROD . " WHERE status='A' ORDER BY name ASC");
+        if ($result) {
+            while ($r = mysqli_fetch_assoc($result)) {
                 $rows[] = array('id' => (int) $r['id'], 'name' => (string) $r['name']);
             }
         }
@@ -10186,9 +10186,9 @@ if (!function_exists('siLoadPackages')) {
     function siLoadPackages($connect)
     {
         $rows = array();
-        $rst = mysqli_query($connect, "SELECT id, name, product FROM " . PKG . " WHERE status='A' ORDER BY name ASC");
-        if ($rst) {
-            while ($r = mysqli_fetch_assoc($rst)) {
+        $result = mysqli_query($connect, "SELECT id, name, product FROM " . PKG . " WHERE status='A' ORDER BY name ASC");
+        if ($result) {
+            while ($r = mysqli_fetch_assoc($result)) {
                 $productIds = array();
                 $csv = isset($r['product']) ? (string) $r['product'] : '';
                 if ($csv !== '') {
@@ -10360,44 +10360,44 @@ if (!function_exists('siBuildProductQtyMap')) {
 }
 
 if (!function_exists('siTableExistsByName')) {
-    function siTableExistsByName($connect, $tableName)
+    function siTableExistsByName($connect, $tblName)
     {
-        $tableName = trim((string) $tableName);
-        if (!($connect instanceof mysqli) || $tableName === '') {
+        $tblName = trim((string) $tblName);
+        if (!($connect instanceof mysqli) || $tblName === '') {
             return false;
         }
 
-        $sql = "SHOW TABLES LIKE '" . mysqli_real_escape_string($connect, $tableName) . "'";
+        $sql = "SHOW TABLES LIKE '" . mysqli_real_escape_string($connect, $tblName) . "'";
         $result = mysqli_query($connect, $sql);
         return ($result instanceof mysqli_result && mysqli_num_rows($result) > 0);
     }
 }
 
 if (!function_exists('siColumnExistsByName')) {
-    function siColumnExistsByName($connect, $tableName, $columnName)
+    function siColumnExistsByName($connect, $tblName, $columnName)
     {
-        $tableName = trim((string) $tableName);
+        $tblName = trim((string) $tblName);
         $columnName = trim((string) $columnName);
-        if (!($connect instanceof mysqli) || $tableName === '' || $columnName === '') {
+        if (!($connect instanceof mysqli) || $tblName === '' || $columnName === '') {
             return false;
         }
 
-        $sql = "SHOW COLUMNS FROM `" . str_replace('`', '``', $tableName) . "` LIKE '" . mysqli_real_escape_string($connect, $columnName) . "'";
+        $sql = "SHOW COLUMNS FROM `" . str_replace('`', '``', $tblName) . "` LIKE '" . mysqli_real_escape_string($connect, $columnName) . "'";
         $result = mysqli_query($connect, $sql);
         return ($result instanceof mysqli_result && mysqli_num_rows($result) > 0);
     }
 }
 
 if (!function_exists('siIndexExistsByName')) {
-    function siIndexExistsByName($connect, $tableName, $indexName)
+    function siIndexExistsByName($connect, $tblName, $indexName)
     {
-        $tableName = trim((string) $tableName);
+        $tblName = trim((string) $tblName);
         $indexName = trim((string) $indexName);
-        if (!($connect instanceof mysqli) || $tableName === '' || $indexName === '') {
+        if (!($connect instanceof mysqli) || $tblName === '' || $indexName === '') {
             return false;
         }
 
-        $sql = "SHOW INDEX FROM `" . str_replace('`', '``', $tableName) . "` WHERE Key_name = '" . mysqli_real_escape_string($connect, $indexName) . "'";
+        $sql = "SHOW INDEX FROM `" . str_replace('`', '``', $tblName) . "` WHERE Key_name = '" . mysqli_real_escape_string($connect, $indexName) . "'";
         $result = mysqli_query($connect, $sql);
         return ($result instanceof mysqli_result && mysqli_num_rows($result) > 0);
     }
@@ -10422,8 +10422,8 @@ if (!function_exists('siEnsureStockOutBatchUsageTable')) {
             return true;
         }
 
-        $tableName = STOCK_OUT_BATCH_USAGE;
-        $createSql = "CREATE TABLE IF NOT EXISTS `" . $tableName . "` (
+        $tblName = STOCK_OUT_BATCH_USAGE;
+        $createSql = "CREATE TABLE IF NOT EXISTS `" . $tblName . "` (
             `id` INT AUTO_INCREMENT PRIMARY KEY,
             `stock_out_order_id` INT NOT NULL,
             `stock_out_item_id` INT NOT NULL,
@@ -10446,21 +10446,21 @@ if (!function_exists('siEnsureStockOutBatchUsageTable')) {
         }
 
         $columnSqlMap = array(
-            'stock_out_order_id' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `stock_out_order_id` INT NOT NULL AFTER `id`",
-            'stock_out_item_id' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `stock_out_item_id` INT NOT NULL AFTER `stock_out_order_id`",
-            'stock_in_order_id' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `stock_in_order_id` INT NOT NULL AFTER `stock_out_item_id`",
-            'stock_in_item_id' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `stock_in_item_id` INT NOT NULL AFTER `stock_in_order_id`",
-            'product_id' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `product_id` INT NOT NULL DEFAULT 0 AFTER `stock_in_item_id`",
-            'package_id' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `package_id` INT NOT NULL DEFAULT 0 AFTER `product_id`",
-            'used_quantity' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `used_quantity` INT NOT NULL DEFAULT 0 AFTER `package_id`",
-            'create_by' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `create_by` VARCHAR(30) DEFAULT NULL AFTER `used_quantity`",
-            'create_date' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `create_date` DATE DEFAULT NULL AFTER `create_by`",
-            'create_time' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `create_time` TIME DEFAULT NULL AFTER `create_date`",
-            'status' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A' AFTER `create_time`",
+            'stock_out_order_id' => "ALTER TABLE `" . $tblName . "` ADD COLUMN `stock_out_order_id` INT NOT NULL AFTER `id`",
+            'stock_out_item_id' => "ALTER TABLE `" . $tblName . "` ADD COLUMN `stock_out_item_id` INT NOT NULL AFTER `stock_out_order_id`",
+            'stock_in_order_id' => "ALTER TABLE `" . $tblName . "` ADD COLUMN `stock_in_order_id` INT NOT NULL AFTER `stock_out_item_id`",
+            'stock_in_item_id' => "ALTER TABLE `" . $tblName . "` ADD COLUMN `stock_in_item_id` INT NOT NULL AFTER `stock_in_order_id`",
+            'product_id' => "ALTER TABLE `" . $tblName . "` ADD COLUMN `product_id` INT NOT NULL DEFAULT 0 AFTER `stock_in_item_id`",
+            'package_id' => "ALTER TABLE `" . $tblName . "` ADD COLUMN `package_id` INT NOT NULL DEFAULT 0 AFTER `product_id`",
+            'used_quantity' => "ALTER TABLE `" . $tblName . "` ADD COLUMN `used_quantity` INT NOT NULL DEFAULT 0 AFTER `package_id`",
+            'create_by' => "ALTER TABLE `" . $tblName . "` ADD COLUMN `create_by` VARCHAR(30) DEFAULT NULL AFTER `used_quantity`",
+            'create_date' => "ALTER TABLE `" . $tblName . "` ADD COLUMN `create_date` DATE DEFAULT NULL AFTER `create_by`",
+            'create_time' => "ALTER TABLE `" . $tblName . "` ADD COLUMN `create_time` TIME DEFAULT NULL AFTER `create_date`",
+            'status' => "ALTER TABLE `" . $tblName . "` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A' AFTER `create_time`",
         );
 
         foreach ($columnSqlMap as $columnName => $alterSql) {
-            if (!siColumnExistsByName($financeConnect, $tableName, $columnName)) {
+            if (!siColumnExistsByName($financeConnect, $tblName, $columnName)) {
                 if (!mysqli_query($financeConnect, $alterSql)) {
                     return false;
                 }
@@ -10468,13 +10468,13 @@ if (!function_exists('siEnsureStockOutBatchUsageTable')) {
         }
 
         $indexSqlMap = array(
-            'idx_sobu_stock_out_order_item' => "ALTER TABLE `" . $tableName . "` ADD INDEX `idx_sobu_stock_out_order_item` (`stock_out_order_id`, `stock_out_item_id`, `status`)",
-            'idx_sobu_stock_in_order_item' => "ALTER TABLE `" . $tableName . "` ADD INDEX `idx_sobu_stock_in_order_item` (`stock_in_order_id`, `stock_in_item_id`, `status`)",
-            'idx_sobu_product_package_status' => "ALTER TABLE `" . $tableName . "` ADD INDEX `idx_sobu_product_package_status` (`product_id`, `package_id`, `status`)",
+            'idx_sobu_stock_out_order_item' => "ALTER TABLE `" . $tblName . "` ADD INDEX `idx_sobu_stock_out_order_item` (`stock_out_order_id`, `stock_out_item_id`, `status`)",
+            'idx_sobu_stock_in_order_item' => "ALTER TABLE `" . $tblName . "` ADD INDEX `idx_sobu_stock_in_order_item` (`stock_in_order_id`, `stock_in_item_id`, `status`)",
+            'idx_sobu_product_package_status' => "ALTER TABLE `" . $tblName . "` ADD INDEX `idx_sobu_product_package_status` (`product_id`, `package_id`, `status`)",
         );
 
         foreach ($indexSqlMap as $indexName => $alterSql) {
-            if (!siIndexExistsByName($financeConnect, $tableName, $indexName)) {
+            if (!siIndexExistsByName($financeConnect, $tblName, $indexName)) {
                 if (!mysqli_query($financeConnect, $alterSql)) {
                     return false;
                 }
@@ -10578,9 +10578,9 @@ if (!function_exists('siFetchFlatRows')) {
                 INNER JOIN `" . $itemTable . "` i ON i.stock_in_order_id=o.id AND i.status='A'
                 " . $whereSql . "
                 ORDER BY o.id DESC, i.id ASC";
-        $rst = mysqli_query($financeConnect, $sql);
-        if ($rst) {
-            while ($r = mysqli_fetch_assoc($rst)) {
+        $result = mysqli_query($financeConnect, $sql);
+        if ($result) {
+            while ($r = mysqli_fetch_assoc($result)) {
                 $productRaw = isset($r['product_id']) ? trim((string) $r['product_id']) : '';
                 $qtyRaw = isset($r['product_quantity']) ? trim((string) $r['product_quantity']) : '';
                 $productParts = array_map('trim', explode(',', $productRaw));
@@ -11188,9 +11188,9 @@ if (!function_exists('siFetchFlatRows')) {
                 INNER JOIN `" . $itemTable . "` i ON i.stock_in_order_id=o.id AND i.status='A'
                 WHERE o.status='A'
                 ORDER BY o.id DESC, i.id ASC";
-        $rst = mysqli_query($financeConnect, $sql);
-        if ($rst) {
-            while ($r = mysqli_fetch_assoc($rst)) {
+        $result = mysqli_query($financeConnect, $sql);
+        if ($result) {
+            while ($r = mysqli_fetch_assoc($result)) {
                 $productRaw = isset($r['product_id']) ? trim((string) $r['product_id']) : '';
                 $qtyRaw = isset($r['product_quantity']) ? trim((string) $r['product_quantity']) : '';
                 $productParts = array_map('trim', explode(',', $productRaw));
@@ -11502,8 +11502,8 @@ if (!function_exists('siFindOrderIdByFields')) {
         $safeDate = mysqli_real_escape_string($financeConnect, (string) $stockInDate);
         $safeOrderNo = mysqli_real_escape_string($financeConnect, (string) $orderNumber);
         $sql = "SELECT id FROM `" . $orderTable . "` WHERE status='A' AND warehouse_id='" . $warehouseId . "' AND stock_in_date='" . $safeDate . "' AND order_number='" . $safeOrderNo . "' AND COALESCE(NULLIF(TRIM(stock_type), ''), 'Stock In')='Stock In' LIMIT 1";
-        $rst = mysqli_query($financeConnect, $sql);
-        if ($rst && ($row = mysqli_fetch_assoc($rst))) {
+        $result = mysqli_query($financeConnect, $sql);
+        if ($result && ($row = mysqli_fetch_assoc($result))) {
             return (int) $row['id'];
         }
         return 0;

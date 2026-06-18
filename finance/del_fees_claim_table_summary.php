@@ -128,7 +128,7 @@ $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 
 $deleteRedirectPage = $SITEURL . '/finance/del_fees_claim_table.php';
-$redirect_page = $SITEURL . '/finance/del_fees_claim.php';
+$redirectPage = $SITEURL . '/finance/del_fees_claim.php';
 $result = getData('*', '', '', DEL_FEES_CLAIM, $finance_connect);
 ?>
 
@@ -162,7 +162,7 @@ $result = getData('*', '', '', DEL_FEES_CLAIM, $finance_connect);
                         
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
+                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
                                 <?php endif; ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="if (exportData()) { showExportNotification(); }"><i class="fa-solid fa-file-export"></i> Export</a>
                             </div>

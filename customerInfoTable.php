@@ -15,7 +15,7 @@ $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 
-$redirect_page = $SITEURL . '/customerInfo.php';
+$redirectPage = $SITEURL . '/customerInfo.php';
 $deleteRedirectPage = $SITEURL . '/customerInfoTable.php';
 
 $result = getData('*', '', '', $tblName, $connect);
@@ -88,7 +88,7 @@ $customerTagMap = customerTagGetCustomerTagMap($connect, 'customer_info', $custo
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         <?php echo $pageTitle ?> </a>
                                 <?php endif; ?>
                             </div>
@@ -199,9 +199,9 @@ $customerTagMap = customerTagGetCustomerTagMap($connect, 'customer_info', $custo
                                         <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
                                         <th scope="row"><?= $num++; ?></th>
                                         <td scope="row" class="btn-container">
-                                            <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                            <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                            <?php renderDeleteButton($pinAccess, $row['id'], $row['last_name'], $row['email'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                            <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                            <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
+                                            <?php renderDeleteButton($pinAccess, $row['id'], $row['last_name'], $row['email'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                             <?php
                                             $urbanismAction = getUrbanismMemberActionData(
                                                 $connect,

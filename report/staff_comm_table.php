@@ -4,7 +4,7 @@ $currentPagePin = 124;
 include_once '../include/list_page_header.php';
 include ROOT . '/include/access.php';
 
-$redirect_page = $SITEURL . '/finance/agent.php';
+$redirectPage = $SITEURL . '/finance/agent.php';
 $deleteRedirectPage = $SITEURL . '/finance/agent_table.php';
 $result = getData('*', '', '', AGENT, $finance_connect);
 

@@ -9,13 +9,13 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 $tblName = PROD;
 
 //Current Page Action And Data ID
-$dataID = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
 //Page Redirect Link , Clean LocalStorage , Error Alert Msg 
-$redirect_page = $SITEURL . '/product_table.php';
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$redirectPage = $SITEURL . '/product_table.php';
+$redirectLink = ("<script>location.href = '$redirectPage';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
 //Check a current page pin is exist or not
@@ -24,14 +24,14 @@ $pageActionTitle = $pageAction . " " . $pageTitle;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 generateDBData(PROD, $connect);
 //Checking The Page ID , Action , Pin Access Exist Or Not
-if (!($dataID) && !($act) || !isActionAllowed($pageAction, $pinAccess))
+if (!($dataId) && !($act) || !isActionAllowed($pageAction, $pinAccess))
     echo $redirectLink;
 
 //Get The Data From Database
-$rst = getData('*', "id = '$dataID'", '', $tblName, $connect);
+$result = getData('*', "id = '$dataId'", '', $tblName, $connect);
 
 //Checking Data Error When Retrieved From Database
-if ($act != 'I' && (!$rst || !($row = $rst->fetch_assoc()))) {
+if ($act != 'I' && (!$result || !($row = $result->fetch_assoc()))) {
     $errorExist = 1;
     $_SESSION['tempValConfirmBox'] = true;
     $act = "F";
@@ -39,19 +39,19 @@ if ($act != 'I' && (!$rst || !($row = $rst->fetch_assoc()))) {
 
 //Delete Data
 if ($act == 'D') {
-    deleteRecord($tblName, '', $dataID, $row['name'], $connect, $connect, $cdate, $ctime, $pageTitle);
+    deleteRecord($tblName, '', $dataId, $row['name'], $connect, $connect, $cdate, $ctime, $pageTitle);
     $_SESSION['delChk'] = 1;
 }
 
 //View Data
-if ($dataID && !$act && USER_ID && !$_SESSION['viewChk'] && !$_SESSION['delChk']) {
+if ($dataId && !$act && USER_ID && !$_SESSION['viewChk'] && !$_SESSION['delChk']) {
 
     $_SESSION['viewChk'] = 1;
 
     if (isset($errorExist)) {
-        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataID . "</b> ] from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataId . "</b> ] from <b><i>$tblName Table</i></b>.";
     } else {
-        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataID . "</b> ] <b>" . $row['name'] . "</b> from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataId . "</b> ] <b>" . $row['name'] . "</b> from <b><i>$tblName Table</i></b>.";
     }
 
     $log = [
@@ -128,15 +128,15 @@ if (post('actionBtn')) {
             }
 
             $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
-            $check_duplicate_record = isDuplicateRecord("name", $prod_name, $tblName, $connect, $dataID)
-                && isDuplicateRecord("brand", $prod_brand, $tblName, $connect, $dataID)
-                && isDuplicateRecord("weight", $prod_wgt, $tblName, $connect, $dataID)
-                && isDuplicateRecord("weight_unit", $prod_wgt_unit, $tblName, $connect, $dataID)
-                && isDuplicateRecord("cost", $prod_cost, $tblName, $connect, $dataID)
-                && isDuplicateRecord("currency_unit", $prod_cur_unit, $tblName, $connect, $dataID)
-                && isDuplicateRecord("barcode_status", $prod_barcode_status, $tblName, $connect, $dataID)
-                && isDuplicateRecord("barcode_slot", $prod_barcode_slot, $tblName, $connect, $dataID)
-                && isDuplicateRecord("product_category", $prod_category, $tblName, $connect, $dataID);
+            $check_duplicate_record = isDuplicateRecord("name", $prod_name, $tblName, $connect, $dataId)
+                && isDuplicateRecord("brand", $prod_brand, $tblName, $connect, $dataId)
+                && isDuplicateRecord("weight", $prod_wgt, $tblName, $connect, $dataId)
+                && isDuplicateRecord("weight_unit", $prod_wgt_unit, $tblName, $connect, $dataId)
+                && isDuplicateRecord("cost", $prod_cost, $tblName, $connect, $dataId)
+                && isDuplicateRecord("currency_unit", $prod_cur_unit, $tblName, $connect, $dataId)
+                && isDuplicateRecord("barcode_status", $prod_barcode_status, $tblName, $connect, $dataId)
+                && isDuplicateRecord("barcode_slot", $prod_barcode_slot, $tblName, $connect, $dataId)
+                && isDuplicateRecord("product_category", $prod_category, $tblName, $connect, $dataId);
 
             if ($check_duplicate_record) {
                 $err = "Duplicate record found for current " . $pageTitle;
@@ -206,7 +206,7 @@ if (post('actionBtn')) {
                     $query = "INSERT INTO " . $tblName . "(name, brand, weight, weight_unit, cost, currency_unit, barcode_status, barcode_slot, product_category, expire_date, parent_product, create_by, create_date, create_time) VALUES ('$prod_name', '$prod_brand', '$prod_wgt', '$prod_wgt_unit', '$prod_cost', '$prod_cur_unit', '$prod_barcode_status', '$prod_barcode_slot', '$prod_category', '$prod_expire_date', '$parent_prod', '" . USER_ID . "', curdate(), curtime())";
                     $returnData = mysqli_query($connect, $query);
                     generateDBData(PROD, $connect);
-                    $dataID = $connect->insert_id;
+                    $dataId = $connect->insert_id;
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
                     var_dump($errorMsg);
@@ -282,7 +282,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if ($oldvalarr && $chgvalarr) {
-                        $query = "UPDATE " . $tblName . " SET name ='$prod_name', brand ='$prod_brand', weight ='$prod_wgt', weight_unit ='$prod_wgt_unit', cost ='$prod_cost', currency_unit ='$prod_cur_unit', barcode_status ='$prod_barcode_status', barcode_slot ='$prod_barcode_slot',product_category ='$prod_category', expire_date ='$prod_expire_date', parent_product ='$parent_prod', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
+                        $query = "UPDATE " . $tblName . " SET name ='$prod_name', brand ='$prod_brand', weight ='$prod_wgt', weight_unit ='$prod_wgt_unit', cost ='$prod_cost', currency_unit ='$prod_cur_unit', barcode_status ='$prod_barcode_status', barcode_slot ='$prod_barcode_slot',product_category ='$prod_category', expire_date ='$prod_expire_date', parent_product ='$parent_prod', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         
                         $returnData = mysqli_query($connect, $query);
                         generateDBData(PROD, $connect);
@@ -313,11 +313,11 @@ if (post('actionBtn')) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval']  = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
             }
@@ -336,7 +336,7 @@ if (post('actionBtn')) {
 if (isset($_SESSION['tempValConfirmBox'])) {
     unset($_SESSION['tempValConfirmBox']);
     echo $clearLocalStorage;
-    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
 }
 
 ?>
@@ -354,7 +354,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
     <div class="page-load-cover">
 
         <div class="d-flex flex-column my-3 ms-3">
-            <p><a href="<?= $redirect_page ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i>
+            <p><a href="<?= $redirectPage ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i>
                 <?php echo $pageActionTitle ?>
             </p>
         </div>

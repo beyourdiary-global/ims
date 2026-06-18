@@ -12,7 +12,7 @@ $pinAccess = checkCurrentPin($connect, $pageTitle);
 
 $viewOnly = (!isActionAllowed("Edit", $pinAccess)) ? 'readonly disabled' : '';
 
-$redirect_page = $SITEURL . '/dashboard.php';
+$redirectPage = $SITEURL . '/dashboard.php';
 
 $allowed_ext = array("png", "jpg", "jpeg", "svg");
 $projects_id = input('id');
@@ -178,7 +178,7 @@ if (post('actionBtn')) {
 
 if (isset($_SESSION['tempValConfirmBox'])) {
     unset($_SESSION['tempValConfirmBox']);
-    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
 }
 ?>
 
@@ -195,7 +195,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
     <div class="page-load-cover">
 
         <div class="d-flex flex-column my-3 ms-3">
-            <p><a href="<?= $redirect_page ?>">Dashboard</a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?= $pageTitle ?></p>
+            <p><a href="<?= $redirectPage ?>">Dashboard</a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?= $pageTitle ?></p>
         </div>
 
         <div id="Container" class="container-fluid d-flex justify-content-center mt-2">

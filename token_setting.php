@@ -38,31 +38,31 @@ if ($pageUsedColumnRst instanceof mysqli_result && $pageUsedColumnRst->num_rows 
     $tokenSettingPageUsedAvailable = $pageUsedColumnRst instanceof mysqli_result && $pageUsedColumnRst->num_rows > 0;
 }
 
-$dataID = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
-$redirect_page = $SITEURL . '/token_setting_table.php';
-$redirectLink = "<script>location.href = '$redirect_page';</script>";
+$redirectPage = $SITEURL . '/token_setting_table.php';
+$redirectLink = "<script>location.href = '$redirectPage';</script>";
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
 $pageAction = getPageAction($act);
 $pageActionTitle = $pageAction . " " . $pageTitle;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 
-if ((!$dataID && !$act) || !isActionAllowed($pageAction, $pinAccess)) {
+if ((!$dataId && !$act) || !isActionAllowed($pageAction, $pinAccess)) {
     echo $redirectLink;
 }
 
-$rst = getData('*', "id = '$dataID'", '', $tblName, $connect);
+$result = getData('*', "id = '$dataId'", '', $tblName, $connect);
 
-if ((!$rst || !($row = $rst->fetch_assoc())) && $act !== 'I') {
+if ((!$result || !($row = $result->fetch_assoc())) && $act !== 'I') {
     $errorExist = 1;
     $act = 'F';
 }
 
 if ($act === 'D') {
-    $safeDeleteId = (int) $dataID;
+    $safeDeleteId = (int) $dataId;
     $deleteName = isset($row['name']) ? $row['name'] : '';
     $deleteQuery = "UPDATE " . $tblName . " SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $safeDeleteId . "'";
     mysqli_query($connect, $deleteQuery);
@@ -83,13 +83,13 @@ if ($act === 'D') {
     $_SESSION['delChk'] = 1;
 }
 
-if ($dataID && !$act && USER_ID && !$_SESSION['viewChk'] && !$_SESSION['delChk']) {
+if ($dataId && !$act && USER_ID && !$_SESSION['viewChk'] && !$_SESSION['delChk']) {
     $_SESSION['viewChk'] = 1;
 
     if (isset($errorExist)) {
-        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataID . "</b> ] from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataId . "</b> ] from <b><i>$tblName Table</i></b>.";
     } else {
-        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataID . "</b> ] <b>" . $row['name'] . "</b> from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataId . "</b> ] <b>" . $row['name'] . "</b> from <b><i>$tblName Table</i></b>.";
     }
 
     $log = [
@@ -130,7 +130,7 @@ if (post('actionBtn')) {
             }
 
             // Pass raw values here because isDuplicateRecord() escapes internally.
-            if (isDuplicateRecord('name', $currentDataName, $tblName, $connect, $dataID)) {
+            if (isDuplicateRecord('name', $currentDataName, $tblName, $connect, $dataId)) {
                 $err = 'Duplicate record found for Token Setting name.';
                 break;
             }
@@ -152,7 +152,7 @@ if (post('actionBtn')) {
                     $safeRemark = mysqli_real_escape_string($connect, $remark);
                     $query = "INSERT INTO " . $tblName . "(name,page_used,bot_token,chat_id,remark,create_by,create_date,create_time,update_by,update_date,update_time,status) VALUES ('$safeName','$safePageUsed','$safeToken','$safeChatId','$safeRemark','" . USER_ID . "',CURDATE(),CURTIME(),'" . USER_ID . "',CURDATE(),CURTIME(),'A')";
                     $returnData = mysqli_query($connect, $query);
-                    $dataID = $connect->insert_id;
+                    $dataId = $connect->insert_id;
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
                     $act = 'F';
@@ -190,7 +190,7 @@ if (post('actionBtn')) {
                         $safeToken = mysqli_real_escape_string($connect, $botToken);
                         $safeChatId = mysqli_real_escape_string($connect, $chatId);
                         $safeRemark = mysqli_real_escape_string($connect, $remark);
-                        $query = "UPDATE " . $tblName . " SET name ='$safeName', page_used='$safePageUsed', bot_token='$safeToken', chat_id='$safeChatId', remark='$safeRemark', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id = '$dataID' AND status='A'";
+                        $query = "UPDATE " . $tblName . " SET name ='$safeName', page_used='$safePageUsed', bot_token='$safeToken', chat_id='$safeChatId', remark='$safeRemark', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id = '$dataId' AND status='A'";
                         $returnData = mysqli_query($connect, $query);
                     } else {
                         $act = 'NC';
@@ -216,11 +216,11 @@ if (post('actionBtn')) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval'] = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
             }
@@ -235,7 +235,7 @@ if (post('actionBtn')) {
 if (isset($_SESSION['tempValConfirmBox'])) {
     unset($_SESSION['tempValConfirmBox']);
     echo $clearLocalStorage;
-    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
 }
 ?>
 
@@ -333,7 +333,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 
     <div class="page-load-cover">
         <div class="d-flex flex-column my-3 ms-3">
-            <p><a href="<?= $redirect_page ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?= $pageActionTitle ?></p>
+            <p><a href="<?= $redirectPage ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?= $pageActionTitle ?></p>
         </div>
 
         <div id="formContainer" class="container d-flex justify-content-center">

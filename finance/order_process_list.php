@@ -25,16 +25,16 @@ if (post('order_status')) {
     // Assuming you have a database connection established
     $id = post('orderid');
     $newStatus = post('order_status');
-    $tableName = post('table_name');
+    $tblName = post('table_name');
 
     $datafield = $oldvalarr = $chgvalarr = array();
-    if ($tableName == 'lazada_order_request') {
-        $rst = getData('*', "id = '$id'", '', $tableName, $connect);
+    if ($tblName == 'lazada_order_request') {
+        $result = getData('*', "id = '$id'", '', $tblName, $connect);
     } else {
-        $rst = getData('*', "id = '$id'", '', $tableName, $finance_connect);
+        $result = getData('*', "id = '$id'", '', $tblName, $finance_connect);
     
     }
-    $rowInv = $rst->fetch_assoc();
+    $rowInv = $result->fetch_assoc();
     if ($rowInv['order_status'] !== $newStatus) {
         array_push($oldvalarr, $rowInv['order_status']);
         array_push($chgvalarr, $newStatus);
@@ -43,15 +43,15 @@ if (post('order_status')) {
 
     if ($oldvalarr && $chgvalarr) {
         try {
-            $query = "UPDATE " . $tableName . " SET order_status = '$newStatus' WHERE id = '$id'";
-            if ($tableName == 'lazada_order_request') {
+            $query = "UPDATE " . $tblName . " SET order_status = '$newStatus' WHERE id = '$id'";
+            if ($tblName == 'lazada_order_request') {
                 mysqli_query($connect, $query);
                  
-                generateDBData($tableName, $connect);
+                generateDBData($tblName, $connect);
             }else{
                 mysqli_query($finance_connect, $query);
                  
-                generateDBData($tableName, $finance_connect);
+                generateDBData($tblName, $finance_connect);
             }
            
         } catch (Exception $e) {
@@ -71,7 +71,7 @@ if (post('order_status')) {
             'connect'      => $connect,
             'oldval'       => implodeWithComma($oldvalarr),
             'changes'      => implodeWithComma($chgvalarr),
-            'act_msg'      => actMsgLog($id, $datafield, '', $oldvalarr, $chgvalarr, $tableName, 'edit', (isset($returnData) ? '' : $errorMsg))
+            'act_msg'      => actMsgLog($id, $datafield, '', $oldvalarr, $chgvalarr, $tblName, 'edit', (isset($returnData) ? '' : $errorMsg))
         ];
         echo "<script>console.log('TEST5')</script>";
 
@@ -252,20 +252,20 @@ if (post('order_status')) {
                                    
                                     case 'result':
                                         $tableKey = SHOPEE_SG_ORDER_REQ;
-                                        $redirect_page = $SITEURL . '/shopee/shopee_order_req.php';
+                                        $redirectPage = $SITEURL . '/shopee/shopee_order_req.php';
                                        
                                         break;
                                     case 'result2':
                                         $tableKey = FB_ORDER_REQ;
-                                        $redirect_page = $SITEURL . '/finance/fb_order_req.php';
+                                        $redirectPage = $SITEURL . '/finance/fb_order_req.php';
                                         break;
                                     case 'result3':
                                         $tableKey = WEB_ORDER_REQ;
-                                        $redirect_page = $SITEURL . '/finance/website_order_request.php';
+                                        $redirectPage = $SITEURL . '/finance/website_order_request.php';
                                         break;
                                     case 'result4':
                                         $tableKey = LAZADA_ORDER_REQ;
-                                        $redirect_page = $SITEURL . '/finance/lazada_order_req.php';
+                                        $redirectPage = $SITEURL . '/finance/lazada_order_req.php';
                                         break;
                                     default:
                                         $tableKey = '';
@@ -273,7 +273,7 @@ if (post('order_status')) {
                                 }
                               
                               
-                                echo'<a class="btn btn-primary me-1" href="' . $redirect_page . '?id=' . $row['id'] . '" title="View order"><i class="fas fa-eye" title="View order"></i></a>';
+                                echo'<a class="btn btn-primary me-1" href="' . $redirectPage . '?id=' . $row['id'] . '" title="View order"><i class="fas fa-eye" title="View order"></i></a>';
                                 echo'<a class="btn btn-warning me-1" href="' . $redirect_page2 . '?id=' . $row['id'] . '&act=' . $act_1 .'&channel=' . $channelid . '&orderid=' . $orderId .'" title="Update shipment"><i class="fas fa-edit" title="Update shipment"></i></a>';
                                 echo '<a class="btn btn-danger me-1" href="#" onclick="updateOrderStatus('.$row['id'].', \'WP\', \''.$tableKey.'\')" title="Process shipment"><i class="fa fa-cog" title="Process shipment"></i></a>'
                                  ?>

@@ -8,30 +8,30 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = COURIER;
 
-$dataID = input('id');
+$dataId = input('id');
 $act = input('act');
 $pageAction = getPageAction($act);
 
-$redirect_page = $SITEURL . '/courier_table.php';
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$redirectPage = $SITEURL . '/courier_table.php';
+$redirectLink = ("<script>location.href = '$redirectPage';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
 // to display data to input
-if ($dataID) { //edit/remove/view
-    $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $connect);
+if ($dataId) { //edit/remove/view
+    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $connect);
 
-    if ($rst != false && $rst->num_rows > 0) {
+    if ($result != false && $result->num_rows > 0) {
         $dataExisted = 1;
-        $row = $rst->fetch_assoc();
+        $row = $result->fetch_assoc();
     } else {
-        // If $rst is false or no data found ($act==null)
+        // If $result is false or no data found ($act==null)
         $errorExist = 1;
         $_SESSION['tempValConfirmBox'] = true;
         $act = "F";
     }
 }
-if (!($dataID) && !($act)) {
-    renderNotificationScript('Invalid action.', 'error', $redirect_page);
+if (!($dataId) && !($act)) {
+    renderNotificationScript('Invalid action.', 'error', $redirectPage);
 
 }
 
@@ -66,7 +66,7 @@ if (post('actionBtn')) {
                     $tracking_link_err = "Please specify the Courier Tracking Link.";
                     break;
             }
-            else if ($courier_id && $courier_name && $courier_country && isDuplicateRecord("id", $courier_id, $tblName,  $connect, $dataID) && isDuplicateRecord("name", $courier_name, $tblName,  $connect, $dataID) && isDuplicateRecord("country", $courier_country, $tblName,  $connect, $dataID)) {
+            else if ($courier_id && $courier_name && $courier_country && isDuplicateRecord("id", $courier_id, $tblName,  $connect, $dataId) && isDuplicateRecord("name", $courier_name, $tblName,  $connect, $dataId) && isDuplicateRecord("country", $courier_country, $tblName,  $connect, $dataId)) {
                 $id_err = "Duplicate record found for " . $pageTitle . " ID, Name and Country.";
                 break;
             } else if ($action == 'addCourier') {
@@ -110,8 +110,8 @@ if (post('actionBtn')) {
             } else {
                 try {
                     // take old value
-                    $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $connect);
-                    $row = $rst->fetch_assoc();
+                    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $connect);
+                    $row = $result->fetch_assoc();
 
                     // check value
                     if ($row['id'] != $courier_id) {
@@ -150,7 +150,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
-                        $query = "UPDATE " . $tblName  . " SET id = '$courier_id',name = '$courier_name',country = '$courier_country',tracking_link ='$courier_tracking_link',taxable = '$courier_tax', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
+                        $query = "UPDATE " . $tblName  . " SET id = '$courier_id',name = '$courier_name',country = '$courier_country',tracking_link ='$courier_tracking_link',taxable = '$courier_tax', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
 
                         $returnData = mysqli_query($connect, $query);
                       
@@ -183,11 +183,11 @@ if (post('actionBtn')) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval']  = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
             }
@@ -206,13 +206,13 @@ if (post('act') == 'D') {
     if ($id) {
         try {
             // take name
-            $rst = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $connect);
-            $row = $rst->fetch_assoc();
+            $result = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $connect);
+            $row = $result->fetch_assoc();
 
-            $dataID = $row['id'];
+            $dataId = $row['id'];
 
             //SET the record status to 'D'
-            deleteRecord($tblName, 'id', $dataID, $row['name'], $connect, $connect, $cdate, $ctime, $pageTitle);
+            deleteRecord($tblName, 'id', $dataId, $row['name'], $connect, $connect, $cdate, $ctime, $pageTitle);
             generateDBData(COURIER, $connect);
             $_SESSION['delChk'] = 1;
             
@@ -223,14 +223,14 @@ if (post('act') == 'D') {
 }
 
 //view
-if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
+if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
     $acc_id = isset($dataExisted) ? $row['id'] : '';
     $_SESSION['viewChk'] = 1;
 
     if (isset($errorExist)) {
-        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataID . "</b> ] from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataId . "</b> ] from <b><i>$tblName Table</i></b>.";
     } else {
-        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataID . "</b> ] <b>" . $acc_id . "</b> from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataId . "</b> ] <b>" . $acc_id . "</b> from <b><i>$tblName Table</i></b>.";
     }
 
     $log = [
@@ -258,7 +258,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 
 <body>
     <div class="d-flex flex-column my-3 ms-3">
-        <p><a href="<?= $redirect_page ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?php
+        <p><a href="<?= $redirectPage ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?php
                                                                                                                     echo displayPageAction($act, 'Courier');
                                                                                                                     ?>
         </p>
@@ -286,9 +286,9 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                             <label class="form-label form_lbl" id="courier_id_lbl" for="courier_id">Courier
                                 ID<span class="requireRed">*</span></label>
                             <input class="form-control" type="text" name="courier_id" id="courier_id" value="<?php
-                                                                                                        if (isset($dataExisted) && isset($dataID) && !isset($courier_id)) {
-                                                                                                            echo $dataID;
-                                                                                                        } else if (isset($dataExisted) && isset($dataID) && isset($courier_id)) {
+                                                                                                        if (isset($dataExisted) && isset($dataId) && !isset($courier_id)) {
+                                                                                                            echo $dataId;
+                                                                                                        } else if (isset($dataExisted) && isset($dataId) && isset($courier_id)) {
                                                                                                             echo $courier_id;
                                                                                                         } else {
                                                                                                             echo '';
@@ -448,7 +448,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
     if (isset($_SESSION['tempValConfirmBox'])) {
         unset($_SESSION['tempValConfirmBox']);
         echo $clearLocalStorage;
-        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
     }
     ?>
     <script>

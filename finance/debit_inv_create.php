@@ -8,26 +8,26 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = DEBIT_NOTES_INV;
 //Current Page Action And Data ID
-$dataID = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? input('id') : post('id');
 
 //Page Redirect Link , Clean LocalStorage , Error Alert Msg 
-$redirect_page = $SITEURL . '/finance/debit_notes_inv_table.php';
+$redirectPage = $SITEURL . '/finance/debit_notes_inv_table.php';
 $edit_page = $SITEURL . '/finance/debit_notes_inv.php';
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$redirectLink = ("<script>location.href = '$redirectPage';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
 //Checking The Page ID , Action , Pin Access Exist Or Not
-if (!($dataID)) {
+if (!($dataId)) {
     echo $redirectLink;
     exit;
 }
 
 //Get The Data From Database
-$rst = getData('*', "id = '$dataID'", '', $tblName, $finance_connect);
+$result = getData('*', "id = '$dataId'", '', $tblName, $finance_connect);
 
 //Checking Data Error When Retrieved From Database
-if (!$rst || !($row = $rst->fetch_assoc())) {
-    echo "<script>alert('Invoice record not found.');location.href = '$redirect_page';</script>";
+if (!$result || !($row = $result->fetch_assoc())) {
+    echo "<script>alert('Invoice record not found.');location.href = '$redirectPage';</script>";
     exit;
 }
 
@@ -66,7 +66,7 @@ $pic_row = ($pic_result && $pic_result->num_rows > 0) ? $pic_result->fetch_assoc
     <div class="page-load-cover">
 
         <div class="d-flex flex-column my-3 ms-3">
-            <p><a href="<?= $redirect_page ?>">
+            <p><a href="<?= $redirectPage ?>">
                     <?= $pageTitle ?>
                 </a> <i class="fa-solid fa-chevron-right fa-xs"></i>
                 Create Invoice
@@ -387,15 +387,15 @@ $pic_row = ($pic_result && $pic_result->num_rows > 0) ? $pic_result->fetch_assoc
                             <div class="col-lg-3 col-12 invoice-actions hide mb-4">
                                 <div class="card mb-4">
                                     <div class="card-body">
-                                        <a href="generate_pdf.php<?= "?id=" . $dataID . '&act=' . $act_2  . '&isDebit=1' ?>"
+                                        <a href="generate_pdf.php<?= "?id=" . $dataId . '&act=' . $act_2  . '&isDebit=1' ?>"
                                             target="_blank" class="btn btn-primary d-grid w-100 mb-2 download"
                                             name="actionBtn" id="actionBtn"><span>Print/Download</span>
                                         </a>
-                                        <a href="<?= $edit_page . "?id=" . $dataID . '&act=' . $act_2 ?>"
+                                        <a href="<?= $edit_page . "?id=" . $dataId . '&act=' . $act_2 ?>"
                                             class="btn btn-primary d-grid w-100 mb-2 cancel" name="actionBtn"
                                             id="actionBtn"><span>Edit Invoice</span>
                                         </a>
-                                        <a href="<?= $redirect_page ?>" class="btn btn-primary d-grid w-100 mb-2 cancel"
+                                        <a href="<?= $redirectPage ?>" class="btn btn-primary d-grid w-100 mb-2 cancel"
                                             name="actionBtn" id="actionBtn"><span>Back</span>
                                         </a>
 

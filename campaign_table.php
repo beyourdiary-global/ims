@@ -6,7 +6,7 @@ include_once 'include/list_page_header.php';
 include_once ROOT . '/include/campaign_common.php';
 
 $tblName = CAMPAIGN;
-$redirect_page = $SITEURL . '/campaign.php';
+$redirectPage = $SITEURL . '/campaign.php';
 $deleteRedirectPage = $SITEURL . '/campaign_table.php';
 
 if (!isActionAllowed('View', $pinAccess)) {
@@ -287,7 +287,7 @@ foreach ($picAutocompleteOptions as $picOption) {
                             <h2><?php echo campaignH($pageTitle); ?></h2>
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
-                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Campaign</a>
+                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Campaign</a>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -330,10 +330,10 @@ foreach ($picAutocompleteOptions as $picOption) {
                                 <th scope="row"><?= $num++; ?></th>
                                 <td scope="row" class="btn-container campaign-action-btns">
                                     <?php if (isActionAllowed("View", $pinAccess)): ?>
-                                        <a class="btn btn-primary me-1" href="<?= $redirect_page ?>?id=<?= $campaignId ?>" title="View"><i class="fas fa-eye"></i></a>
+                                        <a class="btn btn-primary me-1" href="<?= $redirectPage ?>?id=<?= $campaignId ?>" title="View"><i class="fas fa-eye"></i></a>
                                     <?php endif; ?>
                                     <?php if (isActionAllowed("Edit", $pinAccess)): ?>
-                                        <a class="btn btn-warning me-1" href="<?= $redirect_page ?>?id=<?= $campaignId ?>&act=<?= $act_2 ?>" title="Edit"><i class="fas fa-edit"></i></a>
+                                        <a class="btn btn-warning me-1" href="<?= $redirectPage ?>?id=<?= $campaignId ?>&act=<?= $act_2 ?>" title="Edit"><i class="fas fa-edit"></i></a>
                                     <?php endif; ?>
                                     <?php if (isActionAllowed("Delete", $pinAccess)): ?>
                                         <button class="btn btn-danger me-1" type="button" onclick='confirmCampaignDelete(<?= campaignJson((string) $campaignId . '|' . (string) $csrfToken) ?>, <?= campaignJson((string) ($row['campaign_name'] ?? '')) ?>)' title="Delete"><i class="fas fa-trash-alt"></i></button>

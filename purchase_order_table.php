@@ -9,7 +9,7 @@ include_once 'include/list_page_header.php';
 $tblName = PURCHASE_ORDER;
 $companyTbl = COMPANY;
 
-$redirect_page = $SITEURL . '/purchase_order.php';
+$redirectPage = $SITEURL . '/purchase_order.php';
 $deleteRedirectPage = $SITEURL . '/purchase_order_table.php';
 $import_page = $SITEURL . '/purchase_order_import.php';
 
@@ -211,7 +211,7 @@ if (!$result) {
                             <h2><?= $pageTitle ?></h2>
                             <div class="mt-auto mb-auto d-flex gap-2">
                                 <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                    <a class="btn btn-sm btn-rounded btn-primary" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add <?= $pageTitle ?></a>
+                                    <a class="btn btn-sm btn-rounded btn-primary" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add <?= $pageTitle ?></a>
                                 <?php endif; ?>
                                 <?php if (isActionAllowed("Import", $pinAccess)) : ?>
                                     <a class="btn btn-sm btn-rounded btn-info text-white" id="addBtn" href="<?= $import_page ?>"><i class="fa-solid fa-file-import"></i> Import</a>
@@ -256,9 +256,9 @@ if (!$result) {
                                 <td class="text-center"><input type="checkbox" class="export" value="<?= (int) $row['id'] ?>"></td>
                                 <th scope="row"><?= $num++; ?></th>
                                 <td scope="row" class="btn-container">
-                                    <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                    <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                    <?php renderDeleteButton($pinAccess, $row['id'], $row['doc_no'], isset($row['remark']) ? $row['remark'] : '', $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                    <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                    <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
+                                    <?php renderDeleteButton($pinAccess, $row['id'], $row['doc_no'], isset($row['remark']) ? $row['remark'] : '', $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                 </td>
                                 <td><?= htmlspecialchars((string) (isset($row['doc_date']) ? $row['doc_date'] : ''), ENT_QUOTES, 'UTF-8') ?></td>
                                 <td><?= htmlspecialchars((string) (isset($row['doc_no']) ? $row['doc_no'] : ''), ENT_QUOTES, 'UTF-8') ?></td>

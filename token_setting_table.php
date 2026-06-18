@@ -10,7 +10,7 @@ if (function_exists('isStatusFieldAvailable') && !isStatusFieldAvailable($tblNam
     @mysqli_query($connect, "ALTER TABLE `" . $tblName . "` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A'");
 }
 
-$redirect_page = $SITEURL . '/token_setting.php';
+$redirectPage = $SITEURL . '/token_setting.php';
 $deleteRedirectPage = $SITEURL . '/token_setting_table.php';
 $warehouseUsageByTokenSettingId = function_exists('shopeeOmsBuildWarehouseUsageByTokenSettingId')
     ? shopeeOmsBuildWarehouseUsageByTokenSettingId($connect)
@@ -57,7 +57,7 @@ if (!$result) {
                             <h2><?= $pageTitle ?></h2>
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . '?act=' . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add <?= $pageTitle ?></a>
+                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . '?act=' . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add <?= $pageTitle ?></a>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -84,9 +84,9 @@ if (!$result) {
                                     <th class="hideColumn" scope="row"><?= (int) $row['id'] ?></th>
                                     <th scope="row"><?= $num++; ?></th>
                                     <td scope="row" class="btn-container">
-                                        <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                        <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                        <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], '', $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                        <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                        <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
+                                        <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], '', $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                     </td>
                                     <td scope="row"><?= htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') ?></td>
                                     <td scope="row"><?= htmlspecialchars(isset($warehouseUsageByTokenSettingId[(int) $row['id']]) ? implode(', ', $warehouseUsageByTokenSettingId[(int) $row['id']]) : '-', ENT_QUOTES, 'UTF-8') ?></td>

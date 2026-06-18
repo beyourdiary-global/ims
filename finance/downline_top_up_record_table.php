@@ -115,7 +115,7 @@ if (!empty($checkboxValues)) {
     }
 }
 
-$redirect_page = $SITEURL . '/finance/downline_top_up_record.php';
+$redirectPage = $SITEURL . '/finance/downline_top_up_record.php';
 $deleteRedirectPage = $SITEURL . '/finance/downline_top_up_record_table.php';
 $result = getData('*', '', '', DW_TOP_UP_RECORD, $finance_connect);
 $tblName = DW_TOP_UP_RECORD;
@@ -145,7 +145,7 @@ $tblName = DW_TOP_UP_RECORD;
                             <h2><?php echo $pageTitle ?></h2>
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed('Add', $pinAccess)): ?>
-                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . '?act=' . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add <?php echo $pageTitle ?> </a>
+                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . '?act=' . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add <?php echo $pageTitle ?> </a>
                                 <?php endif; ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>
                             </div>
@@ -282,9 +282,9 @@ $tblName = DW_TOP_UP_RECORD;
                                     <td scope="row" class="btn-container">
                                     <div class="d-flex align-items-center">' 
                                     ?>
-                                        <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess);?>
-                                        <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2) ?>
-                                        <?php renderDeleteButton($pinAccess, $row['id'],  $agentName, $brandName, $pageTitle, $redirect_page, $deleteRedirectPage) ?>
+                                        <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess);?>
+                                        <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2) ?>
+                                        <?php renderDeleteButton($pinAccess, $row['id'],  $agentName, $brandName, $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                     <?php echo'</div>
                                     </td>
                                     <td scope="row">' . (isset($row3['name']) ? $row3['name'] : '') . '</td>

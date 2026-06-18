@@ -9,7 +9,7 @@ include_once ROOT . '/include/user_record_log.php';
 $tblName = FB_CUST_DEALS;
 $reg_tblName = URBAN_CUST_REG;
 
-$dataID = input('id');
+$dataId = input('id');
 $act = input('act');
 
 $pageAction = getPageAction($act);
@@ -33,9 +33,9 @@ if ($returnLabelInput !== '') {
     $returnLabelInput = trim((string) $_SESSION['urbanism_member_return_label']);
 }
 
-if ((isset($_GET['return_page']) || isset($_GET['return_label'])) && $dataID !== '' && $act !== '') {
+if ((isset($_GET['return_page']) || isset($_GET['return_label'])) && $dataId !== '' && $act !== '') {
     $cleanParams = array(
-        'id' => $dataID,
+        'id' => $dataId,
         'act' => $act,
     );
 
@@ -79,8 +79,8 @@ if ($returnPageInput !== '') {
 
 $initial_page_raw = $returnLabelInput !== '' ? $returnLabelInput : $default_initial_page;
 $initial_page = htmlspecialchars($initial_page_raw, ENT_QUOTES, 'UTF-8');
-$redirect_page = $SITEURL . $redirect_path;
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$redirectPage = $SITEURL . $redirect_path;
+$redirectLink = ("<script>location.href = '$redirectPage';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
 $img_path = img_server . 'urbanism_member_registration/';
@@ -91,23 +91,23 @@ if (!file_exists($img_fs_path)) {
     mkdir($img_fs_path, 0777, true);
 }
 
-$urbanismSeedName = trim((string) $dataID);
+$urbanismSeedName = trim((string) $dataId);
 $urbanismSeedFbLink = '';
 
-if ($dataID && $act== 'I') { //add mode
+if ($dataId && $act== 'I') { //add mode
     $lookupCondition = "";
     $sourceRowFound = false;
-    if (ctype_digit((string) $dataID)) {
-        $lookupCondition = "id='" . ((int) $dataID) . "'";
+    if (ctype_digit((string) $dataId)) {
+        $lookupCondition = "id='" . ((int) $dataId) . "'";
     } else {
-        $escapedSeed = mysqli_real_escape_string($connect, (string) $dataID);
+        $escapedSeed = mysqli_real_escape_string($connect, (string) $dataId);
         $lookupCondition = "name='" . $escapedSeed . "'";
     }
 
-    $rst = getData('*', $lookupCondition, 'LIMIT 1', $tblName, $connect);
-    if ($rst != false && $rst->num_rows > 0) {
+    $result = getData('*', $lookupCondition, 'LIMIT 1', $tblName, $connect);
+    if ($result != false && $result->num_rows > 0) {
         $sourceRowFound = true;
-        $sourceRow = $rst->fetch_assoc();
+        $sourceRow = $result->fetch_assoc();
         if (isset($sourceRow['name']) && trim((string) $sourceRow['name']) !== '') {
             $urbanismSeedName = trim((string) $sourceRow['name']);
         }
@@ -118,10 +118,10 @@ if ($dataID && $act== 'I') { //add mode
 
     $existingMemberWhere = '';
     $normalizedSeedName = strtolower(trim((string) $urbanismSeedName));
-    if ($normalizedSeedName !== '' && ($sourceRowFound || !ctype_digit((string) $dataID))) {
+    if ($normalizedSeedName !== '' && ($sourceRowFound || !ctype_digit((string) $dataId))) {
         $existingMemberWhere = "LOWER(TRIM(name))='" . mysqli_real_escape_string($connect, $normalizedSeedName) . "'";
-    } else if (ctype_digit((string) $dataID)) {
-        $existingMemberWhere = "id='" . ((int) $dataID) . "'";
+    } else if (ctype_digit((string) $dataId)) {
+        $existingMemberWhere = "id='" . ((int) $dataId) . "'";
     }
 
     if ($existingMemberWhere !== '') {
@@ -129,7 +129,7 @@ if ($dataID && $act== 'I') { //add mode
         if ($existingMemberRst != false && $existingMemberRst->num_rows > 0) {
             $existingMemberRow = $existingMemberRst->fetch_assoc();
             $editParams = array(
-                'id' => isset($existingMemberRow['id']) ? (int) $existingMemberRow['id'] : $dataID,
+                'id' => isset($existingMemberRow['id']) ? (int) $existingMemberRow['id'] : $dataId,
                 'act' => 'E',
             );
 
@@ -138,36 +138,36 @@ if ($dataID && $act== 'I') { //add mode
             exit;
         }
     }
-}else if ($dataID) { //edit/remove/view
+}else if ($dataId) { //edit/remove/view
     $lookupCondition = '';
-    if (ctype_digit((string) $dataID)) {
-        $lookupCondition = "id='" . ((int) $dataID) . "'";
+    if (ctype_digit((string) $dataId)) {
+        $lookupCondition = "id='" . ((int) $dataId) . "'";
     } else {
-        $escapedDataID = mysqli_real_escape_string($connect, (string) $dataID);
+        $escapedDataID = mysqli_real_escape_string($connect, (string) $dataId);
         $lookupCondition = "name='" . $escapedDataID . "'";
     }
 
-    $rst = getData('*', $lookupCondition, 'LIMIT 1', $reg_tblName, $connect);
+    $result = getData('*', $lookupCondition, 'LIMIT 1', $reg_tblName, $connect);
 
-    if (($rst == false || $rst->num_rows === 0) && !ctype_digit((string) $dataID)) {
-        $normalizedDataID = strtolower(trim((string) $dataID));
+    if (($result == false || $result->num_rows === 0) && !ctype_digit((string) $dataId)) {
+        $normalizedDataID = strtolower(trim((string) $dataId));
         if ($normalizedDataID !== '') {
-            $rst = getData('*', "LOWER(TRIM(name))='" . mysqli_real_escape_string($connect, $normalizedDataID) . "'", 'LIMIT 1', $reg_tblName, $connect);
+            $result = getData('*', "LOWER(TRIM(name))='" . mysqli_real_escape_string($connect, $normalizedDataID) . "'", 'LIMIT 1', $reg_tblName, $connect);
         }
     }
  
-    if ($rst != false && $rst->num_rows > 0) {
+    if ($result != false && $result->num_rows > 0) {
         $dataExisted = 1;
-        $row = $rst->fetch_assoc();
+        $row = $result->fetch_assoc();
         $urbanismSeedName = trim((string) $row['name']);
     } else {
-        echo '<script>alert("Urbanism member record not found.");window.location.replace(' . json_encode($redirect_page) . ');</script>';
+        echo '<script>alert("Urbanism member record not found.");window.location.replace(' . json_encode($redirectPage) . ');</script>';
         exit;
     }
 }
 
-if (!($dataID) && !($act)) {
-    renderNotificationScript('Invalid action.', 'error', $redirect_page);
+if (!($dataId) && !($act)) {
+    renderNotificationScript('Invalid action.', 'error', $redirectPage);
 
 }
 
@@ -182,7 +182,7 @@ if ($urbanismSeedFbLink === '' && $urbanismSeedName !== '') {
     }
 }
 
-if ($dataID && isset($_GET['open_order_id'])) {
+if ($dataId && isset($_GET['open_order_id'])) {
     $openOrderId = (int) $_GET['open_order_id'];
     if ($openOrderId > 0) {
         $orderWhere = "id='" . $openOrderId . "' AND status='A'";
@@ -334,19 +334,19 @@ if (post('actionBtn')) {
             } else {
                 try {
                     // take old value
-                    $escapedDataID = mysqli_real_escape_string($connect, (string) $dataID);
+                    $escapedDataID = mysqli_real_escape_string($connect, (string) $dataId);
                     $currentWhere = '';
-                    if (ctype_digit((string) $dataID)) {
-                        $currentWhere = "id='" . ((int) $dataID) . "'";
+                    if (ctype_digit((string) $dataId)) {
+                        $currentWhere = "id='" . ((int) $dataId) . "'";
                     } else {
                         $currentWhere = "name='" . $escapedDataID . "'";
                     }
 
-                    $rst = getData('*', $currentWhere, 'LIMIT 1', $reg_tblName, $connect);
-                    if (!$rst || $rst->num_rows === 0) {
+                    $result = getData('*', $currentWhere, 'LIMIT 1', $reg_tblName, $connect);
+                    if (!$result || $result->num_rows === 0) {
                         throw new Exception('Urbanism member record not found.');
                     }
-                    $row = $rst->fetch_assoc();
+                    $row = $result->fetch_assoc();
                     $currentRowId = isset($row['id']) ? (int) $row['id'] : 0;
                     if ($currentRowId <= 0) {
                         throw new Exception('Urbanism member record id is invalid.');
@@ -417,11 +417,11 @@ if (post('actionBtn')) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $reg_tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $reg_tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval'] = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $reg_tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, '', $oldvalarr, $chgvalarr, $reg_tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
             }
@@ -469,7 +469,7 @@ if ($urbanismOrderFbLink === '' && $urbanismFormName !== '') {
     
     <div class="page-load-cover">
         <div class="d-flex flex-column my-3 ms-3">
-            <p><a href="<?= $redirect_page ?>">
+            <p><a href="<?= $redirectPage ?>">
                     <?= $initial_page ?>
                 </a> <i class="fa-solid fa-chevron-right fa-xs"></i>
                 <?php
@@ -643,7 +643,7 @@ if ($urbanismOrderFbLink === '' && $urbanismFormName !== '') {
                     </div>
 
                     <?php
-                    if ($act === 'E' && $dataID && $urbanismFormName !== '') {
+                    if ($act === 'E' && $dataId && $urbanismFormName !== '') {
                         $orderRows = array();
                         $sumFinalAmount = 0.00;
                         $normalizedUrbanName = trim((string) $urbanismFormName);
@@ -899,7 +899,7 @@ if ($urbanismOrderFbLink === '' && $urbanismFormName !== '') {
     if (isset($_SESSION['tempValConfirmBox'])) {
         unset($_SESSION['tempValConfirmBox']);
         echo $clearLocalStorage;
-        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
     }
     ?>
     <script>

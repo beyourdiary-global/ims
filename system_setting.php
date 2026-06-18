@@ -12,7 +12,7 @@ $pinAccess = checkCurrentPin($connect, $pageTitle);
 
 $viewOnly = (!isActionAllowed("Edit", $pinAccess)) ? 'readonly disabled' : '';
 
-$redirect_page = $SITEURL . '/dashboard.php';
+$redirectPage = $SITEURL . '/dashboard.php';
 
 // to display data to input
 $query_display = "SELECT * from " . $tblName . " WHERE id = 1 ";
@@ -108,7 +108,7 @@ if ($action) {
 
 if (isset($_SESSION['tempValConfirmBox'])) {
     unset($_SESSION['tempValConfirmBox']);
-    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
 }
 ?>
 
@@ -125,7 +125,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
     <div class="page-load-cover">
 
         <div class="d-flex flex-column my-3 ms-3">
-            <p><a href="<?= $redirect_page ?>">Dashboard</a> <i class="fa-solid fa-chevron-right fa-xs"></i>
+            <p><a href="<?= $redirectPage ?>">Dashboard</a> <i class="fa-solid fa-chevron-right fa-xs"></i>
                 <?= $pageTitle ?></p>
         </div>
 

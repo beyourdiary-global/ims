@@ -177,7 +177,7 @@ $whereCondition = "";
 if (input('ids')) {
     $whereCondition = "id IN (" . input('ids') . ")";
 }
-$redirect_page = $SITEURL . '/finance/lazada_order_req.php';
+$redirectPage = $SITEURL . '/finance/lazada_order_req.php';
 $deleteRedirectPage = $SITEURL . '/finance/lazada_order_req_table.php';
 $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
 
@@ -228,7 +228,7 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                    href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                    href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                     Record </a>
                             <?php endif; ?>
                         </div>
@@ -309,11 +309,11 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
                                     <?= $num++; ?>
                                 </th>
                                 <td scope="row" class="btn-container">
-                                    <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                    <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
+                                    <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                    <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
                                     <?php if (isActionAllowed("Delete", $pinAccess)): ?>
                                         <a class="btn btn-danger"
-                                            onclick="confirmationDialog('<?= $row['id'] ?>',['<?= $row['curr_unit'] ?>','<?= $row['country'] ?>'],'<?php echo $pageTitle ?>','<?= $redirect_page ?>','<?= $deleteRedirectPage ?>','D')"><i
+                                            onclick="confirmationDialog('<?= $row['id'] ?>',['<?= $row['curr_unit'] ?>','<?= $row['country'] ?>'],'<?php echo $pageTitle ?>','<?= $redirectPage ?>','<?= $deleteRedirectPage ?>','D')"><i
                                                 class="fas fa-trash-alt"></i></a>
                                     <?php endif; ?>
                                     <?php

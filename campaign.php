@@ -12,10 +12,10 @@ if (!empty($resolvedPageTitle)) {
 }
 
 $tblName = CAMPAIGN;
-$redirect_page = $SITEURL . '/campaign_table.php';
+$redirectPage = $SITEURL . '/campaign_table.php';
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 
-$dataID = (int) (!empty(input('id')) ? input('id') : post('id'));
+$dataId = (int) (!empty(input('id')) ? input('id') : post('id'));
 $act = !empty(input('act')) ? input('act') : post('act');
 $isAdd = $act === $act_1;
 $isEdit = $act === $act_2;
@@ -24,12 +24,12 @@ $pageAction = $isAdd ? 'Add' : ($isEdit ? 'Edit' : 'View');
 $pageActionTitle = displayPageAction($act, $pageTitle);
 
 if (($isAdd && !isActionAllowed('Add', $pinAccess)) || ($isEdit && !isActionAllowed('Edit', $pinAccess)) || ($isView && !isActionAllowed('View', $pinAccess))) {
-    echo '<script>location.href = "' . $redirect_page . '";</script>';
+    echo '<script>location.href = "' . $redirectPage . '";</script>';
     exit();
 }
 
-if (!$isAdd && $dataID <= 0) {
-    echo '<script>location.href = "' . $redirect_page . '";</script>';
+if (!$isAdd && $dataId <= 0) {
+    echo '<script>location.href = "' . $redirectPage . '";</script>';
     exit();
 }
 
@@ -157,13 +157,13 @@ function campaignReplacePicRows($connect, $campaignId, $picIds)
     return true;
 }
 
-$row = $isAdd ? array() : campaignFetchRow($connect, $dataID);
+$row = $isAdd ? array() : campaignFetchRow($connect, $dataId);
 if (!$isAdd && empty($row)) {
-    echo '<script>location.href = "' . $redirect_page . '";</script>';
+    echo '<script>location.href = "' . $redirectPage . '";</script>';
     exit();
 }
 
-$selectedPicIds = $isAdd ? array() : campaignFetchPicIds($connect, $dataID);
+$selectedPicIds = $isAdd ? array() : campaignFetchPicIds($connect, $dataId);
 $selectedPicId = !empty($selectedPicIds) ? (int) $selectedPicIds[0] : 0;
 $selectedPicName = '';
 $userRows = campaignFetchUsers($connect);
@@ -237,7 +237,7 @@ if (post('actionBtn') === 'saveCampaign') {
                 $createBy = (string) USER_ID;
                 $stmt->bind_param('sssss', $formValues['campaign_name'], $formValues['period_start_date'], $formValues['period_end_date'], $formValues['description'], $createBy);
                 $saveSuccess = $stmt->execute();
-                $dataID = $connect->insert_id;
+                $dataId = $connect->insert_id;
                 $stmt->close();
                 $queryForAudit = 'INSERT INTO ' . CAMPAIGN . ' campaign_name=' . $formValues['campaign_name'];
             } else {
@@ -247,13 +247,13 @@ if (post('actionBtn') === 'saveCampaign') {
                 }
 
                 $updateBy = (string) USER_ID;
-                $stmt->bind_param('sssssi', $formValues['campaign_name'], $formValues['period_start_date'], $formValues['period_end_date'], $formValues['description'], $updateBy, $dataID);
+                $stmt->bind_param('sssssi', $formValues['campaign_name'], $formValues['period_start_date'], $formValues['period_end_date'], $formValues['description'], $updateBy, $dataId);
                 $saveSuccess = $stmt->execute();
                 $stmt->close();
-                $queryForAudit = 'UPDATE ' . CAMPAIGN . ' id=' . $dataID;
+                $queryForAudit = 'UPDATE ' . CAMPAIGN . ' id=' . $dataId;
             }
 
-            if (!$saveSuccess || $dataID <= 0 || !campaignReplacePicRows($connect, $dataID, array($selectedPicId))) {
+            if (!$saveSuccess || $dataId <= 0 || !campaignReplacePicRows($connect, $dataId, array($selectedPicId))) {
                 throw new Exception('Unable to save Campaign PIC rows.');
             }
 
@@ -262,15 +262,15 @@ if (post('actionBtn') === 'saveCampaign') {
                 $connect,
                 $pageTitle,
                 $isAdd ? 'add' : 'edit',
-                USER_NAME . ' ' . strtolower($isAdd ? 'added' : 'edited') . ' Campaign [<b> ID = ' . $dataID . '</b> ] <b>' . campaignH($formValues['campaign_name']) . '</b>.',
+                USER_NAME . ' ' . strtolower($isAdd ? 'added' : 'edited') . ' Campaign [<b> ID = ' . $dataId . '</b> ] <b>' . campaignH($formValues['campaign_name']) . '</b>.',
                 $queryForAudit,
                 '',
                 $isAdd ? implode(', ', $formValues) : '',
                 $isEdit ? implode(', ', $formValues) : ''
             );
 
-            campaignSetPopup('Successful ' . ($isAdd ? 'Add' : 'Edit') . ' Campaign', $redirect_page, 'ErrMO');
-            echo '<script>location.href = "' . $redirect_page . '";</script>';
+            campaignSetPopup('Successful ' . ($isAdd ? 'Add' : 'Edit') . ' Campaign', $redirectPage, 'ErrMO');
+            echo '<script>location.href = "' . $redirectPage . '";</script>';
             exit();
         } catch (Exception $e) {
             $connect->rollback();
@@ -280,9 +280,9 @@ if (post('actionBtn') === 'saveCampaign') {
     }
 }
 
-if ($isView && $dataID > 0 && USER_ID && empty($_SESSION['campaign_view_' . $dataID])) {
-    $_SESSION['campaign_view_' . $dataID] = 1;
-    campaignFormAudit($connect, $pageTitle, 'view', USER_NAME . " viewed the data [<b> ID = " . $dataID . "</b> ] <b>" . campaignH($formValues['campaign_name']) . "</b> from <b><i>" . CAMPAIGN . " Table</i></b>.");
+if ($isView && $dataId > 0 && USER_ID && empty($_SESSION['campaign_view_' . $dataId])) {
+    $_SESSION['campaign_view_' . $dataId] = 1;
+    campaignFormAudit($connect, $pageTitle, 'view', USER_NAME . " viewed the data [<b> ID = " . $dataId . "</b> ] <b>" . campaignH($formValues['campaign_name']) . "</b> from <b><i>" . CAMPAIGN . " Table</i></b>.");
 }
 
 $readonlyAttr = $isView ? 'readonly' : '';
@@ -301,7 +301,7 @@ $readonlyAttr = $isView ? 'readonly' : '';
     <div class="page-load-cover">
         <div class="d-flex flex-column my-3 ms-3">
             <p>
-                <a href="<?= $redirect_page ?>"><?= campaignH($pageTitle) ?></a>
+                <a href="<?= $redirectPage ?>"><?= campaignH($pageTitle) ?></a>
                 <i class="fa-solid fa-chevron-right fa-xs"></i>
                 <?= campaignH($pageActionTitle) ?>
             </p>
@@ -311,7 +311,7 @@ $readonlyAttr = $isView ? 'readonly' : '';
             <div class="col-12 col-md-8 formWidthAdjust">
                 <form id="form" method="post" novalidate>
                     <input type="hidden" name="csrf_token" value="<?= campaignH($csrfToken) ?>">
-                    <input type="hidden" name="id" value="<?= (int) $dataID ?>">
+                    <input type="hidden" name="id" value="<?= (int) $dataId ?>">
                     <input type="hidden" name="act" value="<?= campaignH($act) ?>">
 
                     <div class="form-group mb-4">
@@ -363,7 +363,7 @@ $readonlyAttr = $isView ? 'readonly' : '';
                         <?php if (!$isView): ?>
                             <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" type="submit" name="actionBtn" id="actionBtn" value="saveCampaign"><?= $isAdd ? 'Add Campaign' : 'Edit Campaign' ?></button>
                         <?php endif; ?>
-                        <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" type="button" name="actionBtn" id="backBtn" value="back" onclick="<?= campaignH(campaignBackButtonJs($redirect_page)) ?>">Back</button>
+                        <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" type="button" name="actionBtn" id="backBtn" value="back" onclick="<?= campaignH(campaignBackButtonJs($redirectPage)) ?>">Back</button>
                     </div>
                 </form>
             </div>
@@ -387,7 +387,7 @@ $readonlyAttr = $isView ? 'readonly' : '';
         ),
     ));
     if (!empty($errors)) {
-        echo '<script>confirmationDialog("", ' . campaignJson(implode("\\n", $errors)) . ', ' . campaignJson($pageTitle) . ', "", ' . campaignJson($redirect_page) . ', "ErrMO");</script>';
+        echo '<script>confirmationDialog("", ' . campaignJson(implode("\\n", $errors)) . ', ' . campaignJson($pageTitle) . ', "", ' . campaignJson($redirectPage) . ', "ErrMO");</script>';
     }
     ?>
 </body>

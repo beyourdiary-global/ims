@@ -18,10 +18,10 @@ if (!empty($resolvedPageTitle)) {
 }
 
 $tblName = CAMPAIGN_RULE_SETTING;
-$redirect_page = $SITEURL . '/campaign_rule_setting_table.php';
+$redirectPage = $SITEURL . '/campaign_rule_setting_table.php';
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 
-$dataID = (int) (!empty(input('id')) ? input('id') : post('id'));
+$dataId = (int) (!empty(input('id')) ? input('id') : post('id'));
 $act = !empty(input('act')) ? input('act') : post('act');
 $isAdd = $act === $act_1;
 $isEdit = $act === $act_2;
@@ -34,12 +34,12 @@ $canEdit = isActionAllowed('Edit', $pinAccess);
 $canDelete = isActionAllowed('Delete', $pinAccess);
 
 if (($isAdd && !$canAdd) || ($isEdit && !$canEdit) || ($isView && !isActionAllowed('View', $pinAccess))) {
-    echo '<script>location.href = "' . $redirect_page . '";</script>';
+    echo '<script>location.href = "' . $redirectPage . '";</script>';
     exit();
 }
 
-if (!$isAdd && $dataID <= 0) {
-    echo '<script>location.href = "' . $redirect_page . '";</script>';
+if (!$isAdd && $dataId <= 0) {
+    echo '<script>location.href = "' . $redirectPage . '";</script>';
     exit();
 }
 
@@ -122,8 +122,8 @@ if ($deleteRequested) {
             exit();
         }
 
-        campaignSetPopup('Unable to delete Campaign Rule Setting.', $redirect_page, 'ErrMO');
-        echo '<script>location.href = "' . $redirect_page . '";</script>';
+        campaignSetPopup('Unable to delete Campaign Rule Setting.', $redirectPage, 'ErrMO');
+        echo '<script>location.href = "' . $redirectPage . '";</script>';
         exit();
     }
 
@@ -135,7 +135,7 @@ if ($deleteRequested) {
             exit();
         }
 
-        campaignSetPopup('Successful Delete Campaign Rule Setting', $redirect_page, 'ErrMO');
+        campaignSetPopup('Successful Delete Campaign Rule Setting', $redirectPage, 'ErrMO');
     } else {
         campaignRuleSettingAudit($connect, $pageTitle, 'delete', USER_NAME . ' failed to delete campaign rule setting [<b> ID = ' . $ruleId . '</b>].', $deleteSql);
         if ($deleteUsesCommonDialog) {
@@ -144,16 +144,16 @@ if ($deleteRequested) {
             exit();
         }
 
-        campaignSetPopup('Failed to delete Campaign Rule Setting.', $redirect_page, 'ErrMO');
+        campaignSetPopup('Failed to delete Campaign Rule Setting.', $redirectPage, 'ErrMO');
     }
 
-    echo '<script>location.href = "' . $redirect_page . '";</script>';
+    echo '<script>location.href = "' . $redirectPage . '";</script>';
     exit();
 }
 
-$row = $isAdd ? array() : campaignFetchRuleById($connect, $dataID);
+$row = $isAdd ? array() : campaignFetchRuleById($connect, $dataId);
 if (!$isAdd && empty($row)) {
-    echo '<script>location.href = "' . $redirect_page . '";</script>';
+    echo '<script>location.href = "' . $redirectPage . '";</script>';
     exit();
 }
 
@@ -234,12 +234,12 @@ if (post('actionBtn') === 'saveRule') {
             if ($stmt) {
                 $stmt->bind_param('sssssssssss', $formValues['rule_name'], $formValues['generate_schedule'], $formValues['generate_day'], $formValues['campaign_name_template'], $formValues['campaign_period_rule'], $formValues['customer_condition_json'], $defaultPicJson, $defaultMessageJson, $formValues['rule_status'], $formValues['remark'], $userId);
                 if ($stmt->execute()) {
-                    $dataID = (int) $stmt->insert_id;
-                    $queryForAudit = 'INSERT INTO ' . CAMPAIGN_RULE_SETTING . ' id=' . $dataID;
-                    campaignRuleSettingAudit($connect, $pageTitle, 'add', USER_NAME . ' added campaign rule setting [<b> ID = ' . $dataID . '</b>] <b>' . campaignH($formValues['rule_name']) . '</b>.', $queryForAudit);
+                    $dataId = (int) $stmt->insert_id;
+                    $queryForAudit = 'INSERT INTO ' . CAMPAIGN_RULE_SETTING . ' id=' . $dataId;
+                    campaignRuleSettingAudit($connect, $pageTitle, 'add', USER_NAME . ' added campaign rule setting [<b> ID = ' . $dataId . '</b>] <b>' . campaignH($formValues['rule_name']) . '</b>.', $queryForAudit);
                     $stmt->close();
-                    campaignSetPopup('Campaign Rule Setting added successfully.', $redirect_page, 'ErrMO');
-                    echo '<script>location.href = "' . $redirect_page . '";</script>';
+                    campaignSetPopup('Campaign Rule Setting added successfully.', $redirectPage, 'ErrMO');
+                    echo '<script>location.href = "' . $redirectPage . '";</script>';
                     exit();
                 }
                 $stmt->close();
@@ -249,13 +249,13 @@ if (post('actionBtn') === 'saveRule') {
         } else {
             $stmt = $connect->prepare("UPDATE " . campaignTableName(CAMPAIGN_RULE_SETTING) . " SET `rule_name`=?, `generate_schedule`=?, `generate_day`=?, `campaign_name_template`=?, `campaign_period_rule`=?, `customer_condition_json`=?, `default_pic_json`=?, `default_message_json`=?, `rule_status`=?, `remark`=?, `update_by`=?, `update_date`=CURDATE(), `update_time`=CURTIME() WHERE `id`=? AND `status`='A'");
             if ($stmt) {
-                $stmt->bind_param('sssssssssssi', $formValues['rule_name'], $formValues['generate_schedule'], $formValues['generate_day'], $formValues['campaign_name_template'], $formValues['campaign_period_rule'], $formValues['customer_condition_json'], $defaultPicJson, $defaultMessageJson, $formValues['rule_status'], $formValues['remark'], $userId, $dataID);
+                $stmt->bind_param('sssssssssssi', $formValues['rule_name'], $formValues['generate_schedule'], $formValues['generate_day'], $formValues['campaign_name_template'], $formValues['campaign_period_rule'], $formValues['customer_condition_json'], $defaultPicJson, $defaultMessageJson, $formValues['rule_status'], $formValues['remark'], $userId, $dataId);
                 if ($stmt->execute()) {
-                    $queryForAudit = 'UPDATE ' . CAMPAIGN_RULE_SETTING . ' id=' . $dataID;
-                    campaignRuleSettingAudit($connect, $pageTitle, 'edit', USER_NAME . ' edited campaign rule setting [<b> ID = ' . $dataID . '</b>] <b>' . campaignH($formValues['rule_name']) . '</b>.', $queryForAudit);
+                    $queryForAudit = 'UPDATE ' . CAMPAIGN_RULE_SETTING . ' id=' . $dataId;
+                    campaignRuleSettingAudit($connect, $pageTitle, 'edit', USER_NAME . ' edited campaign rule setting [<b> ID = ' . $dataId . '</b>] <b>' . campaignH($formValues['rule_name']) . '</b>.', $queryForAudit);
                     $stmt->close();
-                    campaignSetPopup('Campaign Rule Setting saved successfully.', $redirect_page, 'ErrMO');
-                    echo '<script>location.href = "' . $redirect_page . '";</script>';
+                    campaignSetPopup('Campaign Rule Setting saved successfully.', $redirectPage, 'ErrMO');
+                    echo '<script>location.href = "' . $redirectPage . '";</script>';
                     exit();
                 }
                 $stmt->close();
@@ -267,13 +267,13 @@ if (post('actionBtn') === 'saveRule') {
 }
 
 if (post('actionBtn') === 'duplicateRule') {
-    if (!campaignVerifyCsrf('campaign_rule_setting', post('csrf_token')) || !$canAdd || $dataID <= 0) {
-        campaignSetPopup('Unable to duplicate Campaign Rule Setting.', $redirect_page, 'ErrMO');
-        echo '<script>location.href = "' . $redirect_page . '";</script>';
+    if (!campaignVerifyCsrf('campaign_rule_setting', post('csrf_token')) || !$canAdd || $dataId <= 0) {
+        campaignSetPopup('Unable to duplicate Campaign Rule Setting.', $redirectPage, 'ErrMO');
+        echo '<script>location.href = "' . $redirectPage . '";</script>';
         exit();
     }
 
-    $rule = campaignFetchRuleById($connect, $dataID);
+    $rule = campaignFetchRuleById($connect, $dataId);
     if (!empty($rule)) {
         $userId = campaignCurrentUserId();
         $ruleName = 'Copy of ' . ($rule['rule_name'] ?? 'Rule');
@@ -283,32 +283,32 @@ if (post('actionBtn') === 'duplicateRule') {
             $stmt->execute();
             $newRuleId = (int) $stmt->insert_id;
             $stmt->close();
-            campaignRuleSettingAudit($connect, $pageTitle, 'add', USER_NAME . ' duplicated campaign rule setting [<b> ID = ' . $dataID . '</b>] to [<b> ID = ' . $newRuleId . '</b>].');
+            campaignRuleSettingAudit($connect, $pageTitle, 'add', USER_NAME . ' duplicated campaign rule setting [<b> ID = ' . $dataId . '</b>] to [<b> ID = ' . $newRuleId . '</b>].');
         }
     }
 
-    campaignSetPopup('Campaign Rule Setting duplicated successfully.', $redirect_page, 'ErrMO');
-    echo '<script>location.href = "' . $redirect_page . '";</script>';
+    campaignSetPopup('Campaign Rule Setting duplicated successfully.', $redirectPage, 'ErrMO');
+    echo '<script>location.href = "' . $redirectPage . '";</script>';
     exit();
 }
 
 if (post('actionBtn') === 'runRule') {
-    if (!campaignVerifyCsrf('campaign_rule_setting', post('csrf_token')) || !$canAdd || $dataID <= 0) {
-        campaignSetPopup('Unable to run Campaign Rule.', $redirect_page, 'ErrMO');
-        echo '<script>location.href = "' . $redirect_page . '";</script>';
+    if (!campaignVerifyCsrf('campaign_rule_setting', post('csrf_token')) || !$canAdd || $dataId <= 0) {
+        campaignSetPopup('Unable to run Campaign Rule.', $redirectPage, 'ErrMO');
+        echo '<script>location.href = "' . $redirectPage . '";</script>';
         exit();
     }
 
-    $result = campaignRuleGenerateCampaign($connect, $finance_connect, $dataID, true);
-    campaignRuleSettingAudit($connect, $pageTitle, 'add', USER_NAME . ' ran campaign rule setting [<b> ID = ' . $dataID . '</b>]. ' . ($result['message'] ?? ''));
-    campaignSetPopup($result['message'] !== '' ? $result['message'] : 'Campaign rule run completed.', $redirect_page, 'ErrMO');
-    echo '<script>location.href = "' . $redirect_page . '";</script>';
+    $result = campaignRuleGenerateCampaign($connect, $finance_connect, $dataId, true);
+    campaignRuleSettingAudit($connect, $pageTitle, 'add', USER_NAME . ' ran campaign rule setting [<b> ID = ' . $dataId . '</b>]. ' . ($result['message'] ?? ''));
+    campaignSetPopup($result['message'] !== '' ? $result['message'] : 'Campaign rule run completed.', $redirectPage, 'ErrMO');
+    echo '<script>location.href = "' . $redirectPage . '";</script>';
     exit();
 }
 
-if ($isView && $dataID > 0 && USER_ID && empty($_SESSION['campaign_rule_setting_view_' . $dataID])) {
-    $_SESSION['campaign_rule_setting_view_' . $dataID] = 1;
-    campaignRuleSettingAudit($connect, $pageTitle, 'view', USER_NAME . ' viewed campaign rule setting [<b> ID = ' . $dataID . '</b>] <b>' . campaignH($formValues['rule_name']) . '</b>.');
+if ($isView && $dataId > 0 && USER_ID && empty($_SESSION['campaign_rule_setting_view_' . $dataId])) {
+    $_SESSION['campaign_rule_setting_view_' . $dataId] = 1;
+    campaignRuleSettingAudit($connect, $pageTitle, 'view', USER_NAME . ' viewed campaign rule setting [<b> ID = ' . $dataId . '</b>] <b>' . campaignH($formValues['rule_name']) . '</b>.');
 }
 
 $readonlyAttr = $isView ? 'readonly' : '';
@@ -544,7 +544,7 @@ $estimatedCustomers = campaignRuleEstimateMatchedCustomers($connect, $finance_co
     <div class="page-load-cover">
         <div class="d-flex flex-column my-3 ms-3">
             <p>
-                <a href="<?= $redirect_page ?>"><?= campaignH($pageTitle) ?></a>
+                <a href="<?= $redirectPage ?>"><?= campaignH($pageTitle) ?></a>
                 <i class="fa-solid fa-chevron-right fa-xs"></i>
                 <?= campaignH($pageActionTitle) ?>
             </p>
@@ -554,7 +554,7 @@ $estimatedCustomers = campaignRuleEstimateMatchedCustomers($connect, $finance_co
             <div class="col-12 col-md-8 formWidthAdjust">
                 <form id="form" method="post" novalidate>
                     <input type="hidden" name="csrf_token" value="<?= campaignH($csrfToken) ?>">
-                    <input type="hidden" name="id" value="<?= (int) $dataID ?>">
+                    <input type="hidden" name="id" value="<?= (int) $dataId ?>">
                     <input type="hidden" name="act" value="<?= campaignH($act) ?>">
 
                     <div class="form-group mb-4">
@@ -790,7 +790,7 @@ $estimatedCustomers = campaignRuleEstimateMatchedCustomers($connect, $finance_co
                         <?php if (!$isView): ?>
                             <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" type="submit" name="actionBtn" id="actionBtn" value="saveRule"><?= $isAdd ? 'Add Rule' : 'Edit Rule' ?></button>
                         <?php endif; ?>
-                        <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" type="button" name="actionBtn" id="backBtn" value="back" onclick="<?= campaignH(campaignBackButtonJs($redirect_page)) ?>">Back</button>
+                        <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" type="button" name="actionBtn" id="backBtn" value="back" onclick="<?= campaignH(campaignBackButtonJs($redirectPage)) ?>">Back</button>
                     </div>
                 </form>
             </div>
@@ -1108,7 +1108,7 @@ $estimatedCustomers = campaignRuleEstimateMatchedCustomers($connect, $finance_co
         ),
     ));
     if (!empty($errors)) {
-        echo '<script>confirmationDialog("", ' . campaignJson(implode("\\n", $errors)) . ', ' . campaignJson($pageTitle) . ', "", ' . campaignJson($redirect_page) . ', "ErrMO");</script>';
+        echo '<script>confirmationDialog("", ' . campaignJson(implode("\\n", $errors)) . ', ' . campaignJson($pageTitle) . ', "", ' . campaignJson($redirectPage) . ', "ErrMO");</script>';
     }
     ?>
 </body>

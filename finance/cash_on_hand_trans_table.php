@@ -4,7 +4,7 @@ $currentPagePin = 47;
 
 include_once '../include/list_page_header.php';
 
-$redirect_page = $SITEURL . '/finance/cash_on_hand_trans.php';
+$redirectPage = $SITEURL . '/finance/cash_on_hand_trans.php';
 $result = getData('*', '', '', CAONHD, $finance_connect);
 ?>
 
@@ -39,7 +39,7 @@ $result = getData('*', '', '', CAONHD, $finance_connect);
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                    href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                    href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                     Transaction </a>
                             <?php endif; ?>
                         </div>
@@ -90,9 +90,9 @@ $result = getData('*', '', '', CAONHD, $finance_connect);
                                     <th scope="row"><?= $num++; ?></th>
                                     <td scope="row" class="btn-container">
                                         <div class="d-flex align-items-center">
-                                            <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                            <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2) ?>
-                                            <?php renderDeleteButton($pinAccess, $row['id'], $row['transactionID'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage) ?>
+                                            <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                            <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2) ?>
+                                            <?php renderDeleteButton($pinAccess, $row['id'], $row['transactionID'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                         </div>
                                     </td>
                                     <td scope="row"><?= $row['transactionID'] ?></td>

@@ -37,7 +37,7 @@ if (isset($_GET['verify_id'])) {
 
 
 
-$redirect_page = $SITEURL . '/shopee/shopee_order_req.php';
+$redirectPage = $SITEURL . '/shopee/shopee_order_req.php';
 $deleteRedirectPage = $SITEURL . '/shopee/shopee_finance_verified_table.php';
 $result = getData('*', 'order_status="OC"', '', SHOPEE_SG_ORDER_REQ, $finance_connect);
 $shopeeBuyerMetaMap = array();
@@ -117,7 +117,7 @@ if ($result instanceof mysqli_result) {
                             
                                 <div class="mt-auto mb-auto">
                                     <?php if (isActionAllowed("Add", $pinAccess)): ?>
-                                        <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . " ?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . " ?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         Request </a>
                                         <?php endif; ?>
                                 </div>

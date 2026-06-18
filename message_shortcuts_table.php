@@ -7,7 +7,7 @@ include_once 'include/list_page_header.php';
 
 $tblName = MESSAGE_SHORTCUTS;
 
-$redirect_page = $SITEURL . '/message_shortcuts.php';
+$redirectPage = $SITEURL . '/message_shortcuts.php';
 $deleteRedirectPage = $SITEURL . '/message_shortcuts_table.php';
 
 $result = getData('*', '', '', $tblName, $connect);
@@ -67,7 +67,7 @@ if (!function_exists('messageShortcutsTablePreview')) {
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         <?php echo $pageTitle ?></a>
                                 <?php endif; ?>
                             </div>
@@ -99,9 +99,9 @@ if (!function_exists('messageShortcutsTablePreview')) {
                                         <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
                                         <th scope="row"><?= $num++; ?></th>
                                         <td scope="row" class="btn-container">
-                                            <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                            <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                            <?php renderDeleteButton($pinAccess, $row['id'], $row['shortcuts_tag'], $messagePreview, $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                            <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                            <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
+                                            <?php renderDeleteButton($pinAccess, $row['id'], $row['shortcuts_tag'], $messagePreview, $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                         </td>
                                         <td scope="row"><?= htmlspecialchars((string) $row['shortcuts_tag'], ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row" class="message-shortcuts-preview-cell">

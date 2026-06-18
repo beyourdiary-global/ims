@@ -121,7 +121,7 @@ if (!empty($checkboxValues)) {
 }
 
 $deleteRedirectPage = $SITEURL . '/finance/del_fees_claim_table.php';
-$redirect_page = $SITEURL . '/finance/del_fees_claim.php';
+$redirectPage = $SITEURL . '/finance/del_fees_claim.php';
 $result = getData('*', '', '', DEL_FEES_CLAIM, $finance_connect);
 $tblName = DEL_FEES_CLAIM;
 ?>
@@ -156,7 +156,7 @@ $tblName = DEL_FEES_CLAIM;
                         
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
+                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
                                 <?php endif; ?>
                                 <?php if (isActionAllowed("Export", $pinAccess)) : ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>
@@ -292,9 +292,9 @@ $tblName = DEL_FEES_CLAIM;
                                     <td scope="row" class="btn-container">
                                     <div class="d-flex align-items-center">'    
                                     ?>
-                                        <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess);?>
-                                        <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2) ?>
-                                        <?php renderDeleteButton($pinAccess, $row['id'],'', '', $pageTitle, $redirect_page, $deleteRedirectPage) ?>
+                                        <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess);?>
+                                        <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2) ?>
+                                        <?php renderDeleteButton($pinAccess, $row['id'],'', '', $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                     <?php echo'</div>
                                     </td>
                                     <td scope="row">' . (isset($row['claim_date']) ? $row['claim_date'] : '') . '</td>

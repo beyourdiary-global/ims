@@ -33,7 +33,7 @@ if (!is_array($pinAccess)) {
 }
 
 $legacyItemId = !empty(input('item_id')) ? (int) input('item_id') : 0;
-$dataID = !empty(input('order_id')) ? (int) input('order_id') : (!empty(input('id')) ? (int) input('id') : ((int) post('order_id') > 0 ? (int) post('order_id') : (int) post('id')));
+$dataId = !empty(input('order_id')) ? (int) input('order_id') : (!empty(input('id')) ? (int) input('id') : ((int) post('order_id') > 0 ? (int) post('order_id') : (int) post('id')));
 $act = !empty(input('act')) ? strtoupper(trim((string) input('act'))) : strtoupper(trim((string) post('act')));
 $token = trim((string) input('t'));
 
@@ -53,7 +53,7 @@ $pageAction = getPageAction($act);
 $pageActionTitle = $pageAction . ' ' . $pageTitle;
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
-if ((!$dataID && !$act && $token === '') || !isActionAllowed($pageAction, $pinAccess)) {
+if ((!$dataId && !$act && $token === '') || !isActionAllowed($pageAction, $pinAccess)) {
     echo $redirectLink;
     exit;
 }
@@ -230,13 +230,13 @@ foreach (siFetchFlatRows($finance_connect, $stockInOrderTable, $stockInItemTable
         'product_quantity' => (int) $row['product_quantity'],
     );
 
-    if ($dataID <= 0 && $legacyItemId > 0 && (int) $row['item_id'] === $legacyItemId) {
-        $dataID = $orderId;
+    if ($dataId <= 0 && $legacyItemId > 0 && (int) $row['item_id'] === $legacyItemId) {
+        $dataId = $orderId;
     }
 }
 
-if ($dataID > 0 && isset($orderById[$dataID])) {
-    $selectedStockType = siNormalizeStockType(isset($orderById[$dataID]['stock_type']) ? $orderById[$dataID]['stock_type'] : 'Stock In');
+if ($dataId > 0 && isset($orderById[$dataId])) {
+    $selectedStockType = siNormalizeStockType(isset($orderById[$dataId]['stock_type']) ? $orderById[$dataId]['stock_type'] : 'Stock In');
     if ($selectedStockType === 'Stock Out') {
         $redirectTable = $SITEURL . '/stock_list_table.php';
         $redirectLink = "<script>location.href='" . $redirectTable . "';</script>";
@@ -244,14 +244,14 @@ if ($dataID > 0 && isset($orderById[$dataID])) {
     }
 }
 
-if ($dataID > 0 && $act !== 'I') {
-    if (!isset($orderById[$dataID])) {
+if ($dataId > 0 && $act !== 'I') {
+    if (!isset($orderById[$dataId])) {
         $err = 'Stock In row not found.';
         $act = 'F';
         $pageAction = getPageAction($act);
         $pageActionTitle = $pageAction . ' ' . $pageTitle;
     } else {
-        $r = $orderById[$dataID];
+        $r = $orderById[$dataId];
         $formData['order_id'] = (int) $r['order_id'];
         $formData['item_id'] = isset($r['items'][0]['item_id']) ? (int) $r['items'][0]['item_id'] : 0;
         $formData['warehouse_id'] = (int) $r['warehouse_id'];
@@ -289,7 +289,7 @@ if ($dataID > 0 && $act !== 'I') {
 }
 
 if ($act === 'D') {
-    if ($dataID <= 0 || !isset($orderById[$dataID])) {
+    if ($dataId <= 0 || !isset($orderById[$dataId])) {
         if (post('act') === 'D') {
             echo 'Invalid stock in order.';
         } else {
@@ -298,19 +298,19 @@ if ($act === 'D') {
         exit;
     }
 
-    $orderNo = (string) $orderById[$dataID]['order_number'];
-    $orderStockType = siNormalizeStockType(isset($orderById[$dataID]['stock_type']) ? $orderById[$dataID]['stock_type'] : 'Stock In');
-    $deleteOrderQuery = "UPDATE `" . $stockInOrderTable . "` SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . (int) $dataID . "' AND status='A'";
-    $deleteItemsQuery = "UPDATE `" . $stockInItemTable . "` SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE stock_in_order_id='" . (int) $dataID . "' AND status='A'";
+    $orderNo = (string) $orderById[$dataId]['order_number'];
+    $orderStockType = siNormalizeStockType(isset($orderById[$dataId]['stock_type']) ? $orderById[$dataId]['stock_type'] : 'Stock In');
+    $deleteOrderQuery = "UPDATE `" . $stockInOrderTable . "` SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . (int) $dataId . "' AND status='A'";
+    $deleteItemsQuery = "UPDATE `" . $stockInItemTable . "` SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE stock_in_order_id='" . (int) $dataId . "' AND status='A'";
 
     mysqli_begin_transaction($finance_connect);
     try {
         if ($orderStockType === 'Stock Out') {
-            if (!siDeactivateStockOutBatchUsageRowsByOrder($finance_connect, (int) $dataID)) {
+            if (!siDeactivateStockOutBatchUsageRowsByOrder($finance_connect, (int) $dataId)) {
                 throw new Exception('Failed to remove stock out batch usage.');
             }
         } else {
-            $usedQtyMap = siGetStockInUsedQtyMap($finance_connect, (int) $dataID);
+            $usedQtyMap = siGetStockInUsedQtyMap($finance_connect, (int) $dataId);
             if (!empty($usedQtyMap)) {
                 throw new Exception('This Stock In batch is already used by Stock Out records and cannot be deleted.');
             }
@@ -334,7 +334,7 @@ if ($act === 'D') {
             'ctime' => $ctime,
             'uid' => USER_ID,
             'cby' => USER_ID,
-            'query_rec' => 'OrderID=' . (int) $dataID,
+            'query_rec' => 'OrderID=' . (int) $dataId,
             'query_table' => $tblName,
             'act_msg' => USER_NAME . " deleted stock in data [ <b>Order No = " . htmlspecialchars($orderNo, ENT_QUOTES, 'UTF-8') . "</b> ] under <b><i>" . $stockInItemTable . " Table</i></b>.",
             'page' => $pageTitle,
@@ -349,7 +349,7 @@ if ($act === 'D') {
         }
     } catch (Exception $ex) {
         mysqli_rollback($finance_connect);
-        error_log('Stock in delete failed for order ID ' . (int) $dataID . ': ' . $ex->getMessage());
+        error_log('Stock in delete failed for order ID ' . (int) $dataId . ': ' . $ex->getMessage());
         if (post('act') === 'D') {
             echo 'Failed to delete row. Please try again later.';
         } else {
@@ -523,7 +523,7 @@ if (post('actionBtn')) {
             } else {
                 $orderId = (int) postSpaceFilter('order_id');
                 if ($orderId <= 0) {
-                    $orderId = (int) $dataID;
+                    $orderId = (int) $dataId;
                 }
 
                 if ($orderId <= 0) {
@@ -795,22 +795,22 @@ if (isset($_SESSION['tempValConfirmBox'])) {
     echo '<script>confirmationDialog("","","' . addslashes($pageTitle) . '","","' . $redirectTable . '","' . addslashes($act) . '");</script>';
 }
 
-$isViewMode = ($act === '' && $dataID > 0 && isset($orderById[$dataID]));
-$isEditMode = ($act === 'E' && $dataID > 0 && isset($orderById[$dataID]));
+$isViewMode = ($act === '' && $dataId > 0 && isset($orderById[$dataId]));
+$isEditMode = ($act === 'E' && $dataId > 0 && isset($orderById[$dataId]));
 $isAddMode = ($act === 'I');
 
 $warehouseDisabledAttr = $isViewMode ? ' disabled' : '';
 $inputReadonlyAttr = $isViewMode ? ' readonly' : '';
 
-if ($isViewMode && $dataID > 0 && isset($orderById[$dataID])) {
-    $viewRow = $orderById[$dataID];
+if ($isViewMode && $dataId > 0 && isset($orderById[$dataId])) {
+    $viewRow = $orderById[$dataId];
     $log = [
         'log_act' => getPageAction(''),
         'cdate' => $cdate,
         'ctime' => $ctime,
         'uid' => USER_ID,
         'cby' => USER_ID,
-        'query_rec' => 'OrderID=' . (int) $dataID,
+        'query_rec' => 'OrderID=' . (int) $dataId,
         'query_table' => $tblName,
         'act_msg' => USER_NAME . " viewed stock in data [ <b>Order No = " . htmlspecialchars((string) $viewRow['order_number'], ENT_QUOTES, 'UTF-8') . "</b> ] from <b><i>" . $stockInOrderTable . " Table</i></b>.",
         'page' => $pageTitle,

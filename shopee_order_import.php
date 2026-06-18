@@ -66,7 +66,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
 }
 
 $module = 'shopee_order_req';
-$redirect_page = $SITEURL . '/common_import.php';
+$redirectPage = $SITEURL . '/common_import.php';
 $shopeeOrderRedirectPage = $SITEURL . '/shopee/shopee_processing_order.php';
 if ($parentPagePinGroupId === 130) {
     $shopeeOrderRedirectPage = $SITEURL . '/shopee/shopee_order_req_table.php';
@@ -627,7 +627,7 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
 } else if ($action === 'insertShopeeOrderReq') { // NEW: Shopee Order Insert
     $module = 'shopee_order_req';
 
-    $resolveMultiIds = function ($hiddenInput, $nameInput, $tableName) use ($connect) {
+    $resolveMultiIds = function ($hiddenInput, $nameInput, $tblName) use ($connect) {
         $resolved = array();
         if (!is_array($hiddenInput)) $hiddenInput = explode(',', (string) $hiddenInput);
         foreach ($hiddenInput as $idVal) {
@@ -641,7 +641,7 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
             $nameVal = trim((string) $nameVal);
             if ($nameVal === '') continue;
             $escapedName = mysqli_real_escape_string($connect, $nameVal);
-            $nameRst = getData('id', "name = '$escapedName'", 'LIMIT 1', $tableName, $connect);
+            $nameRst = getData('id', "name = '$escapedName'", 'LIMIT 1', $tblName, $connect);
             if ($nameRst && $nameRst->num_rows > 0) {
                 $nameRow = $nameRst->fetch_assoc();
                 $resolvedId = (int) $nameRow['id'];
@@ -909,15 +909,15 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
                 throw new Exception('Database Error: ' . mysqli_error($finance_connect));
             }
 
-            $dataID = mysqli_insert_id($finance_connect);
+            $dataId = mysqli_insert_id($finance_connect);
             if (function_exists('shopeeOmsRememberWarehouseDeliveryInfo') && ($customerNameSafe !== '' || $customerAddressSafe !== '')) {
-                shopeeOmsRememberWarehouseDeliveryInfo('shopee', (int) $dataID, array(
+                shopeeOmsRememberWarehouseDeliveryInfo('shopee', (int) $dataId, array(
                     'customer_name' => isset($previewData['customer_name']) ? (string) $previewData['customer_name'] : '',
                     'customer_address' => isset($previewData['customer_address']) ? (string) $previewData['customer_address'] : '',
                 ));
             }
             shopeeOmsLogTransition($finance_connect, array(
-                'order_id' => (int) $dataID,
+                'order_id' => (int) $dataId,
                 'order_code' => $previewData['order_id'],
                 'from_status' => '',
                 'to_status' => $previewData['order_status'],
@@ -929,17 +929,17 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
             ));
 
             if (shopeeOmsNormalizeStatusCode($previewData['order_status']) === 'TP') {
-                $freshOrderRow = shopeeOmsLoadOrder($finance_connect, (int) $dataID);
+                $freshOrderRow = shopeeOmsLoadOrder($finance_connect, (int) $dataId);
                 $tokenResult = shopeeOmsCreateWarehouseToken($connect, $finance_connect, $freshOrderRow, USER_ID);
                 if (!empty($tokenResult['success']) && !empty($tokenResult['token_row']) && !empty($tokenResult['notification'])) {
                     $notifyResult = shopeeOmsSendWarehouseNotification($connect, $finance_connect, $tokenResult['token_row'], $tokenResult['notification'], $parentPageTitle);
                     $importLocalTelegramFailureMessage = $importBuildLocalTelegramFailureMessage($notifyResult);
                     if (!empty($notifyResult['sent'])) {
-                        mysqli_query($finance_connect, "UPDATE `" . SHOPEE_SG_ORDER_REQ . "` SET `step_a_sent_at` = NOW() WHERE id = " . (int) $dataID . " LIMIT 1");
+                        mysqli_query($finance_connect, "UPDATE `" . SHOPEE_SG_ORDER_REQ . "` SET `step_a_sent_at` = NOW() WHERE id = " . (int) $dataId . " LIMIT 1");
                     }
                 }
             } else if ($requiresInitialShippedAutoMove) {
-                $initialShippedResult = shopeeOmsFinalizeInitialShippedOrder($connect, $finance_connect, (int) $dataID, USER_ID, USER_GROUP, $pageTitle);
+                $initialShippedResult = shopeeOmsFinalizeInitialShippedOrder($connect, $finance_connect, (int) $dataId, USER_ID, USER_GROUP, $pageTitle);
                 if (empty($initialShippedResult['success'])) {
                     throw new Exception(isset($initialShippedResult['message']) ? $initialShippedResult['message'] : 'Unable to process initial Shipped status.');
                 }
@@ -959,7 +959,7 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
                 'query_rec' => $query,
                 'query_table' => SHOPEE_SG_ORDER_REQ,
                 'newval' => 'OrderID=' . $previewData['order_id'],
-                'act_msg' => USER_NAME . " imported the data [ <b> ID = " . (int) $dataID . " </b> ] from <b><i>" . SHOPEE_SG_ORDER_REQ . " Table</i></b>.",
+                'act_msg' => USER_NAME . " imported the data [ <b> ID = " . (int) $dataId . " </b> ] from <b><i>" . SHOPEE_SG_ORDER_REQ . " Table</i></b>.",
                 'page' => $pageTitle,
                 'connect' => $connect,
             ];
@@ -4271,7 +4271,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                             <h2><?= htmlspecialchars($pageHeading, ENT_QUOTES, 'UTF-8') ?></h2>
                             <div class="d-flex gap-2 flex-wrap">
                                 <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $shopeeOrderRedirectPage ?>">Back To Shopee Order Page</a>
-                                <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $redirect_page ?>">Back To Shortcuts</a>
+                                <a class="btn btn-lg btn-rounded btn-primary px-4" href="<?= $redirectPage ?>">Back To Shortcuts</a>
                             </div>
                         </div>
                     </div>

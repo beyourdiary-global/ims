@@ -10,7 +10,7 @@ if (!is_array($pinAccess)) {
     $pinAccess = array();
 }
 
-$redirect_page = $SITEURL . '/finance/stock_order_request.php';
+$redirectPage = $SITEURL . '/finance/stock_order_request.php';
 $deleteRedirectPage = $SITEURL . '/finance/stock_order_request_table.php';
 
 // 1. Refactored Main Query using a SUBQUERY (No JOINs)
@@ -248,7 +248,7 @@ function sorQrHref($path, $siteUrl)
                             <h2><?= $pageTitle ?></h2>
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed('Add', is_array($pinAccess) ? $pinAccess : array())) { ?>
-                                    <a class="btn btn-sm btn-rounded btn-primary" id="addBtn" href="<?= $redirect_page . '?act=' . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Request</a>
+                                    <a class="btn btn-sm btn-rounded btn-primary" id="addBtn" href="<?= $redirectPage . '?act=' . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Request</a>
                                     <a class="btn btn-sm btn-rounded btn-primary" id="addBtn" href="<?= $SITEURL ?>/finance/stock_order_request_import.php"><i class="fa-solid fa-file-import"></i> Import</a>
                                 <?php } ?>
                             </div>
@@ -373,9 +373,9 @@ function sorQrHref($path, $siteUrl)
                                 <td class="hideColumn"><?= (int) $row['id'] ?></td>
                                 <td><?= $num++ ?></td>
                                 <td class="btn-container">
-                                    <?php renderViewEditButton('View', $redirect_page, $row, $pinAccess); ?>
-                                    <?php renderViewEditButton('Edit', $redirect_page, $row, $pinAccess, $act_2); ?>
-                                    <?php renderDeleteButton($pinAccess, $row['id'], isset($row['invoice_no']) ? $row['invoice_no'] : '', '', $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                    <?php renderViewEditButton('View', $redirectPage, $row, $pinAccess); ?>
+                                    <?php renderViewEditButton('Edit', $redirectPage, $row, $pinAccess, $act_2); ?>
+                                    <?php renderDeleteButton($pinAccess, $row['id'], isset($row['invoice_no']) ? $row['invoice_no'] : '', '', $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                     <?php
                                     $resolvedOrderNumber = strtolower(trim((string) (isset($row['_resolved_order_number']) ? $row['_resolved_order_number'] : '')));
                                     $isStockedInOrder = ($resolvedOrderNumber !== '' && isset($stockedInOrderMap[$resolvedOrderNumber]));

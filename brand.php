@@ -10,16 +10,16 @@ $tblName = BRAND;
 
 //Current Page Action And Data ID
 $rawDataID = !empty(input('id')) ? input('id') : post('id');
-$dataID = '';
+$dataId = '';
 if ($rawDataID !== '' && ctype_digit((string) $rawDataID)) {
-    $dataID = (string) ((int) $rawDataID);
+    $dataId = (string) ((int) $rawDataID);
 }
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
 //Page Redirect Link , Clean LocalStorage , Error Alert Msg 
-$redirect_page = $SITEURL . '/brand_table.php';
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$redirectPage = $SITEURL . '/brand_table.php';
+$redirectLink = ("<script>location.href = '$redirectPage';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
 //Check a current page pin is exist or not
@@ -28,14 +28,14 @@ $pageActionTitle = $pageAction . " " . $pageTitle;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 
 //Checking The Page ID , Action , Pin Access Exist Or Not
-if (($rawDataID !== '' && $dataID === '') || (!($dataID) && !($act)) || !isActionAllowed($pageAction, $pinAccess))
+if (($rawDataID !== '' && $dataId === '') || (!($dataId) && !($act)) || !isActionAllowed($pageAction, $pinAccess))
     echo $redirectLink;
 
 //Get The Data From Database
 $row = [];
-$rst = false;
-if ($dataID) {
-    $rst = getData('*', "id = '$dataID'", '', $tblName, $connect);
+$result = false;
+if ($dataId) {
+    $result = getData('*', "id = '$dataId'", '', $tblName, $connect);
 }
 
 $companyOptions = [];
@@ -47,7 +47,7 @@ if ($companyResult) {
 }
 
 //Checking Data Error When Retrieved From Database
-if ($dataID && (!$rst || !($row = $rst->fetch_assoc())) && $act != 'I') {
+if ($dataId && (!$result || !($row = $result->fetch_assoc())) && $act != 'I') {
     $errorExist = 1;
     // $_SESSION['tempValConfirmBox'] = true;
     $act = "F";
@@ -92,17 +92,17 @@ if ($retainFormInput) {
 
 //Delete Data
 if ($act == 'D') {
-    deleteRecord($tblName, '', $dataID, $row['name'], $connect, $connect, $cdate, $ctime, $pageTitle);
+    deleteRecord($tblName, '', $dataId, $row['name'], $connect, $connect, $cdate, $ctime, $pageTitle);
     $_SESSION['delChk'] = 1;
 }
 
 //View Data
-if ($dataID && !$act && USER_ID && !$_SESSION['viewChk'] && !$_SESSION['delChk']) {
+if ($dataId && !$act && USER_ID && !$_SESSION['viewChk'] && !$_SESSION['delChk']) {
 
     $_SESSION['viewChk'] = 1;
 
     $safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
-    $safeDataID = htmlspecialchars((string) $dataID, ENT_QUOTES, 'UTF-8');
+    $safeDataID = htmlspecialchars((string) $dataId, ENT_QUOTES, 'UTF-8');
     $safeTblName = htmlspecialchars((string) $tblName, ENT_QUOTES, 'UTF-8');
 
     if (isset($errorExist)) {
@@ -182,7 +182,7 @@ if (post('actionBtn')) {
 
             $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
-            if (isDuplicateRecord("name", $currentDataName, $tblName, $connect, $dataID)) {
+            if (isDuplicateRecord("name", $currentDataName, $tblName, $connect, $dataId)) {
                 $err = "Duplicate record found for " . $pageTitle . " name.";
                 break;
             }
@@ -214,7 +214,7 @@ if (post('actionBtn')) {
                     $query = "INSERT INTO " . $tblName . "(name,company,remark,create_by,create_date,create_time) VALUES ('$safeName','$safeCompany','$safeRemark','" . USER_ID . "',curdate(),curtime())";
                     $returnData = mysqli_query($connect, $query);
                     if ($returnData) {
-                        $dataID = $connect->insert_id;
+                        $dataId = $connect->insert_id;
                         generateDBData($tblName, $connect);
                     }
                 } catch (Exception $e) {
@@ -248,7 +248,7 @@ if (post('actionBtn')) {
                         $safeName = mysqli_real_escape_string($connect, $currentDataName);
                         $safeCompany = mysqli_real_escape_string($connect, $company);
                         $safeRemark = mysqli_real_escape_string($connect, $dataRemark);
-                        $safeID = (int)$dataID; // Cast ID to int for safety
+                        $safeID = (int)$dataId; // Cast ID to int for safety
 
                         $query = "UPDATE " . $tblName . " SET name ='$safeName', company ='$safeCompany', remark ='$safeRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$safeID'";
                         $returnData = mysqli_query($connect, $query);
@@ -281,11 +281,11 @@ if (post('actionBtn')) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval']  = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
             }
@@ -304,7 +304,7 @@ if (post('actionBtn')) {
 if (isset($_SESSION['tempValConfirmBox'])) {
     unset($_SESSION['tempValConfirmBox']);
     echo $clearLocalStorage;
-    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
 }
 
 $submittedForSave = in_array((string)post('actionBtn'), array('addData', 'updData'), true);
@@ -332,7 +332,7 @@ if ($submittedForSave) {
     <div class="page-load-cover">
 
         <div class="d-flex flex-column my-3 ms-3">
-            <p><a href="<?= $redirect_page ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i>
+            <p><a href="<?= $redirectPage ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i>
                 <?php echo $pageActionTitle ?>
             </p>
         </div>

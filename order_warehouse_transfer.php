@@ -177,15 +177,15 @@ if (!function_exists('owtGetTransferLogTableName')) {
 }
 
 if (!function_exists('owtTableExists')) {
-    function owtTableExists($dbConnect, $tableName)
+    function owtTableExists($dbConnect, $tblName)
     {
         if (!($dbConnect instanceof mysqli)) {
             return false;
         }
 
-        $safeTable = mysqli_real_escape_string($dbConnect, (string) $tableName);
-        $rst = mysqli_query($dbConnect, "SHOW TABLES LIKE '" . $safeTable . "'");
-        return $rst && mysqli_num_rows($rst) > 0;
+        $safeTable = mysqli_real_escape_string($dbConnect, (string) $tblName);
+        $result = mysqli_query($dbConnect, "SHOW TABLES LIKE '" . $safeTable . "'");
+        return $result && mysqli_num_rows($result) > 0;
     }
 }
 
@@ -225,12 +225,12 @@ if (!function_exists('owtGetTransferLogRows')) {
             WHERE `status` = 'A'
             ORDER BY `id` DESC";
 
-        $rst = mysqli_query($financeConnect, $sql);
-        if (!$rst) {
+        $result = mysqli_query($financeConnect, $sql);
+        if (!$result) {
             return $rows;
         }
 
-        while ($row = mysqli_fetch_assoc($rst)) {
+        while ($row = mysqli_fetch_assoc($result)) {
             $platform = isset($row['platform']) ? shopeeOmsNormalizePlatformKey($row['platform'], true) : '';
             $orderId = isset($row['order_id']) ? (int) $row['order_id'] : 0;
             $detailUrl = '';

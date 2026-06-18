@@ -11,11 +11,11 @@ $act = input('act');
 $tblname = STK_COST;
 $pageAction = getPageAction($act);
 
-$redirect_page = $SITEURL . '/stockCosting.php';
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$redirectPage = $SITEURL . '/stockCosting.php';
+$redirectLink = ("<script>location.href = '$redirectPage';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 if (!($act)) {
-    renderNotificationScript('Invalid action.', 'error', $redirect_page);
+    renderNotificationScript('Invalid action.', 'error', $redirectPage);
 
 }
 $stock_cost = getData('*', '', '', $tblname, $connect);
@@ -130,7 +130,7 @@ if (post('actionBtn')) {
  if (isset($_SESSION['tempValConfirmBox'])) {
     unset($_SESSION['tempValConfirmBox']);
     echo $clearLocalStorage;
-    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","I");</script>';
+    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","I");</script>';
 }
 ?>
 <script>

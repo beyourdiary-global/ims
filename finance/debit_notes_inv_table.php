@@ -7,7 +7,7 @@ include_once '../include/list_page_header.php';
 
 $tblName = DEBIT_NOTES_INV;
 
-$redirect_page = $SITEURL . '/finance/debit_notes_inv.php';
+$redirectPage = $SITEURL . '/finance/debit_notes_inv.php';
 $result = getData('*', '', '', $tblName, $finance_connect);
 
 if (post('pay_status_option')) {
@@ -16,15 +16,15 @@ if (post('pay_status_option')) {
 
     $datafield = $oldvalarr = $chgvalarr = array();
 
-    $rst = getData('*', "id = '$inv_id'", '', $tblName, $finance_connect);
+    $result = getData('*', "id = '$inv_id'", '', $tblName, $finance_connect);
 
 
-    if (!$rst) {
+    if (!$result) {
         renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
         echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
     }
 
-    $rowInv = $rst->fetch_assoc();
+    $rowInv = $result->fetch_assoc();
 
     echo "<script>console.log('TEST3')</script>";
 
@@ -103,7 +103,7 @@ if (post('pay_status_option')) {
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         <?php echo $pageTitle ?>
                                     </a>
                                 <?php endif; ?>
@@ -215,13 +215,13 @@ if (post('pay_status_option')) {
                                         <div style="text-align: center;">
                                             <?php if (isActionAllowed("View", $pinAccess)): ?>
                                                 <a class="icon-buttons rounded p-1 bg-label-success"
-                                                    href="<?= $redirect_page . "?id=" . $row['id'] ?>" title="View"><i
+                                                    href="<?= $redirectPage . "?id=" . $row['id'] ?>" title="View"><i
                                                         class="fas fa-eye bg-label-success"></i></a>
                                             <?php endif; ?>
 
                                             <?php if (isActionAllowed("Edit", $pinAccess)): ?>
                                                 <a class="icon-buttons rounded p-1 bg-label-warning"
-                                                    href="<?= $redirect_page . "?id=" . $row['id'] . '&act=' . $act_2 ?>"
+                                                    href="<?= $redirectPage . "?id=" . $row['id'] . '&act=' . $act_2 ?>"
                                                     title="Edit"><i class="fas fa-edit bg-label-warning"></i></a>
                                             <?php endif; ?>
 
@@ -231,7 +231,7 @@ if (post('pay_status_option')) {
 
                                             <?php if (isActionAllowed("Delete", $pinAccess)): ?>
                                                 <a class="icon-buttons rounded p-1 bg-label-danger"
-                                                    onclick="confirmationDialog('<?= $row['id'] ?>',['<?= $row['invoice'] ?>'],'<?php echo $pageTitle ?>','<?= $redirect_page ?>','<?= $SITEURL ?>/debit_notes_inv_table.php','D')"
+                                                    onclick="confirmationDialog('<?= $row['id'] ?>',['<?= $row['invoice'] ?>'],'<?php echo $pageTitle ?>','<?= $redirectPage ?>','<?= $SITEURL ?>/debit_notes_inv_table.php','D')"
                                                     title="Delete"><i class="fas fa-trash-alt bg-label-danger"></i></a>
                                             <?php endif; ?>
                                         </div>

@@ -10,13 +10,13 @@ $tblName = 'jt_transaction_backup';
 $itemTable = JT_TRANS_ITEM;
 $gstTable = JT_TRANS_GST;
 
-$dataID = input('id');
+$dataId = input('id');
 $act = input('act');
 $pageAction = getPageAction($act);
 $allowed_ext = array("png", "jpg", "jpeg", "svg", "pdf");
 
-$redirect_page = $SITEURL . '/finance/j&t_trans_backup_table.php';
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$redirectPage = $SITEURL . '/finance/j&t_trans_backup_table.php';
+$redirectLink = ("<script>location.href = '$redirectPage';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
 $legacyImgPath = '../' . img_server . 'finance/j&t_trans_backup/';
@@ -61,15 +61,15 @@ foreach ($currencyOptions as $currencyOption) {
 }
 
 // to display data to input
-if ($dataID) { //edit/remove/view
-    $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $finance_connect);
+if ($dataId) { //edit/remove/view
+    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $finance_connect);
 
-    if ($rst != false && $rst->num_rows > 0) {
+    if ($result != false && $result->num_rows > 0) {
         $dataExisted = 1;
-        $row = $rst->fetch_assoc();
+        $row = $result->fetch_assoc();
 
         $deliveryRows = array();
-        $deliveryRst = mysqli_query($finance_connect, "SELECT service_type, shipments_count, total_weight_kg, standard_charge, extra_charges, nett_charge FROM `" . $itemTable . "` WHERE transaction_id='" . (int) $dataID . "' ORDER BY id ASC");
+        $deliveryRst = mysqli_query($finance_connect, "SELECT service_type, shipments_count, total_weight_kg, standard_charge, extra_charges, nett_charge FROM `" . $itemTable . "` WHERE transaction_id='" . (int) $dataId . "' ORDER BY id ASC");
         if ($deliveryRst) {
             while ($deliveryRow = mysqli_fetch_assoc($deliveryRst)) {
                 $deliveryRows[] = array(
@@ -95,7 +95,7 @@ if ($dataID) { //edit/remove/view
         }
 
         $gstRows = array();
-        $gstRst = mysqli_query($finance_connect, "SELECT type, rate, amount, gst_paid FROM `" . $gstTable . "` WHERE transaction_id='" . (int) $dataID . "' ORDER BY id ASC");
+        $gstRst = mysqli_query($finance_connect, "SELECT type, rate, amount, gst_paid FROM `" . $gstTable . "` WHERE transaction_id='" . (int) $dataId . "' ORDER BY id ASC");
         if ($gstRst) {
             while ($gstRow = mysqli_fetch_assoc($gstRst)) {
                 $gstRows[] = array(
@@ -116,15 +116,15 @@ if ($dataID) { //edit/remove/view
             );
         }
     } else {
-        // If $rst is false or no data found ($act==null)
+        // If $result is false or no data found ($act==null)
         $errorExist = 1;
         $_SESSION['tempValConfirmBox'] = true;
         $act = "F";
     }
 }
 
-if (!($dataID) && !($act)) {
-    renderNotificationScript('Invalid action.', 'error', $redirect_page);
+if (!($dataId) && !($act)) {
+    renderNotificationScript('Invalid action.', 'error', $redirectPage);
 
 }
 
@@ -429,8 +429,8 @@ if (post('actionBtn')) {
 
             $isDuplicate = false;
             $shouldCheckDuplicate = ($action === 'addTransaction');
-            if ($action === 'updTransaction' && !empty($dataID)) {
-                $existingDupRst = getData('number, date', "id = '" . mysqli_real_escape_string($finance_connect, $dataID) . "'", 'LIMIT 1', $tblName, $finance_connect);
+            if ($action === 'updTransaction' && !empty($dataId)) {
+                $existingDupRst = getData('number, date', "id = '" . mysqli_real_escape_string($finance_connect, $dataId) . "'", 'LIMIT 1', $tblName, $finance_connect);
                 if ($existingDupRst && $existingDupRst->num_rows > 0) {
                     $existingDupRow = $existingDupRst->fetch_assoc();
                     $oldInvNumber = isset($existingDupRow['number']) ? trim((string) $existingDupRow['number']) : '';
@@ -443,8 +443,8 @@ if (post('actionBtn')) {
                 $safe_inv_number = mysqli_real_escape_string($finance_connect, $jt_inv_number);
                 $safe_inv_date = mysqli_real_escape_string($finance_connect, $jt_inv_date);
                 $dupQuery = "SELECT id FROM `" . $tblName . "` WHERE number = '$safe_inv_number' AND date = '$safe_inv_date' AND status = 'A'";
-                if (!empty($dataID)) {
-                    $dupQuery .= " AND id != '" . mysqli_real_escape_string($finance_connect, $dataID) . "'";
+                if (!empty($dataId)) {
+                    $dupQuery .= " AND id != '" . mysqli_real_escape_string($finance_connect, $dataId) . "'";
                 }
                 $dupResult = mysqli_query($finance_connect, $dupQuery);
                 if ($dupResult && $dupResult->num_rows > 0) {
@@ -509,7 +509,7 @@ if (post('actionBtn')) {
                         throw new Exception(mysqli_error($finance_connect));
                     }
 
-                    $dataID = mysqli_insert_id($finance_connect);
+                    $dataId = mysqli_insert_id($finance_connect);
 
                     for ($i = 0; $i < count($serviceTypeArr); $i++) {
                         $serviceType = isset($serviceTypeArr[$i]) ? trim((string) $serviceTypeArr[$i]) : '';
@@ -525,7 +525,7 @@ if (post('actionBtn')) {
 
                         $safeServiceType = mysqli_real_escape_string($finance_connect, $serviceType);
 
-                        $insertItemSql = "INSERT INTO `jt_transaction_items` (transaction_id, service_type, shipments_count, total_weight_kg, standard_charge, extra_charges, nett_charge) VALUES ('" . (int) $dataID . "', '" . $safeServiceType . "', '" . $shipmentsCount . "', '" . $totalWeightKg . "', '" . $standardCharge . "', '" . $extraCharges . "', '" . $nettCharge . "')";
+                        $insertItemSql = "INSERT INTO `jt_transaction_items` (transaction_id, service_type, shipments_count, total_weight_kg, standard_charge, extra_charges, nett_charge) VALUES ('" . (int) $dataId . "', '" . $safeServiceType . "', '" . $shipmentsCount . "', '" . $totalWeightKg . "', '" . $standardCharge . "', '" . $extraCharges . "', '" . $nettCharge . "')";
                         $insertItemRst = mysqli_query($finance_connect, $insertItemSql);
                         if (!$insertItemRst) {
                             throw new Exception(mysqli_error($finance_connect));
@@ -544,7 +544,7 @@ if (post('actionBtn')) {
 
                         $safeGstType = mysqli_real_escape_string($finance_connect, $gstType);
 
-                        $insertGstSql = "INSERT INTO `jt_transaction_extra_charges` (transaction_id, type, rate, amount, gst_paid) VALUES ('" . (int) $dataID . "', '" . $safeGstType . "', '" . $gstRate . "', '" . $gstAmount . "', '" . $gstPaid . "')";
+                        $insertGstSql = "INSERT INTO `jt_transaction_extra_charges` (transaction_id, type, rate, amount, gst_paid) VALUES ('" . (int) $dataId . "', '" . $safeGstType . "', '" . $gstRate . "', '" . $gstAmount . "', '" . $gstPaid . "')";
                         $insertGstRst = mysqli_query($finance_connect, $insertGstSql);
                         if (!$insertGstRst) {
                             throw new Exception(mysqli_error($finance_connect));
@@ -561,8 +561,8 @@ if (post('actionBtn')) {
             } else {
                 try {
                     // take old value
-                    $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $finance_connect);
-                    $row = $rst->fetch_assoc();
+                    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $finance_connect);
+                    $row = $result->fetch_assoc();
 
                     // check value
                     if ($row['number'] != $jt_inv_number) {
@@ -608,7 +608,7 @@ if (post('actionBtn')) {
                     }
 
                     $oldDeliverySnapshot = array();
-                    $oldDeliveryRst = mysqli_query($finance_connect, "SELECT service_type, shipments_count, total_weight_kg, standard_charge, extra_charges, nett_charge FROM `" . $itemTable . "` WHERE transaction_id='" . (int) $dataID . "' ORDER BY id ASC");
+                    $oldDeliveryRst = mysqli_query($finance_connect, "SELECT service_type, shipments_count, total_weight_kg, standard_charge, extra_charges, nett_charge FROM `" . $itemTable . "` WHERE transaction_id='" . (int) $dataId . "' ORDER BY id ASC");
                     if ($oldDeliveryRst) {
                         while ($oldDeliveryRow = mysqli_fetch_assoc($oldDeliveryRst)) {
                             $oldDeliverySnapshot[] =
@@ -642,7 +642,7 @@ if (post('actionBtn')) {
                     }
 
                     $oldGstSnapshot = array();
-                    $oldGstRst = mysqli_query($finance_connect, "SELECT type, rate, amount, gst_paid FROM `" . $gstTable . "` WHERE transaction_id='" . (int) $dataID . "' ORDER BY id ASC");
+                    $oldGstRst = mysqli_query($finance_connect, "SELECT type, rate, amount, gst_paid FROM `" . $gstTable . "` WHERE transaction_id='" . (int) $dataId . "' ORDER BY id ASC");
                     if ($oldGstRst) {
                         while ($oldGstRow = mysqli_fetch_assoc($oldGstRst)) {
                             $oldGstSnapshot[] =
@@ -684,13 +684,13 @@ if (post('actionBtn')) {
                         $safeAttach = mysqli_real_escape_string($finance_connect, $jt_attach);
                         $safeCurrency = mysqli_real_escape_string($finance_connect, $currency);
 
-                        $query = "UPDATE " . $tblName  . " SET number = '$safeNumber', date = '$safeDate', attachment ='$safeAttach', currency='$safeCurrency', total_gst='" . $newTotalGst . "', total_amount='" . $newTotalAmount . "', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '" . (int) $dataID . "'";
+                        $query = "UPDATE " . $tblName  . " SET number = '$safeNumber', date = '$safeDate', attachment ='$safeAttach', currency='$safeCurrency', total_gst='" . $newTotalGst . "', total_amount='" . $newTotalAmount . "', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '" . (int) $dataId . "'";
                         $returnData = mysqli_query($finance_connect, $query);
                         if (!$returnData) {
                             throw new Exception(mysqli_error($finance_connect));
                         }
 
-$deleteItemsSql = "DELETE FROM `" . $itemTable . "` WHERE transaction_id='" . (int) $dataID . "'";
+$deleteItemsSql = "DELETE FROM `" . $itemTable . "` WHERE transaction_id='" . (int) $dataId . "'";
                         if (!mysqli_query($finance_connect, $deleteItemsSql)) {
                             throw new Exception(mysqli_error($finance_connect));
                         }
@@ -708,13 +708,13 @@ $deleteItemsSql = "DELETE FROM `" . $itemTable . "` WHERE transaction_id='" . (i
                             $nettCharge = isset($nettChargeArr[$i]) ? (float) $nettChargeArr[$i] : 0;
 
                             $safeServiceType = mysqli_real_escape_string($finance_connect, $serviceType);
-                            $insertItemSql = "INSERT INTO `" . $itemTable . "` (transaction_id, service_type, shipments_count, total_weight_kg, standard_charge, extra_charges, nett_charge) VALUES ('" . (int) $dataID . "', '" . $safeServiceType . "', '" . $shipmentsCount . "', '" . $totalWeightKg . "', '" . $standardCharge . "', '" . $extraCharges . "', '" . $nettCharge . "')";
+                            $insertItemSql = "INSERT INTO `" . $itemTable . "` (transaction_id, service_type, shipments_count, total_weight_kg, standard_charge, extra_charges, nett_charge) VALUES ('" . (int) $dataId . "', '" . $safeServiceType . "', '" . $shipmentsCount . "', '" . $totalWeightKg . "', '" . $standardCharge . "', '" . $extraCharges . "', '" . $nettCharge . "')";
                             if (!mysqli_query($finance_connect, $insertItemSql)) {
                                 throw new Exception(mysqli_error($finance_connect));
                             }
                         }
 
-                        $deleteGstSql = "DELETE FROM `" . $gstTable . "` WHERE transaction_id='" . (int) $dataID . "'";
+                        $deleteGstSql = "DELETE FROM `" . $gstTable . "` WHERE transaction_id='" . (int) $dataId . "'";
                         if (!mysqli_query($finance_connect, $deleteGstSql)) {
                             throw new Exception(mysqli_error($finance_connect));
                         }
@@ -730,7 +730,7 @@ $deleteItemsSql = "DELETE FROM `" . $itemTable . "` WHERE transaction_id='" . (i
                             $gstPaid = isset($gstPaidArr[$i]) ? (float) $gstPaidArr[$i] : 0;
 
                             $safeGstType = mysqli_real_escape_string($finance_connect, $gstType);
-                            $insertGstSql = "INSERT INTO `" . $gstTable . "` (transaction_id, type, rate, amount, gst_paid) VALUES ('" . (int) $dataID . "', '" . $safeGstType . "', '" . $gstRate . "', '" . $gstAmount . "', '" . $gstPaid . "')";
+                            $insertGstSql = "INSERT INTO `" . $gstTable . "` (transaction_id, type, rate, amount, gst_paid) VALUES ('" . (int) $dataId . "', '" . $safeGstType . "', '" . $gstRate . "', '" . $gstAmount . "', '" . $gstPaid . "')";
                             if (!mysqli_query($finance_connect, $insertGstSql)) {
                                 throw new Exception(mysqli_error($finance_connect));
                             }
@@ -765,11 +765,11 @@ $deleteItemsSql = "DELETE FROM `" . $itemTable . "` WHERE transaction_id='" . (i
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval']  = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
             }
@@ -787,13 +787,13 @@ if (post('act') == 'D') {
     if ($id) {
         try {
             // take name
-            $rst = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $finance_connect);
-            $row = $rst->fetch_assoc();
+            $result = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $finance_connect);
+            $row = $result->fetch_assoc();
 
-            $dataID = $row['id'];
+            $dataId = $row['id'];
 
             //SET the record status to 'D'
-            deleteRecord($tblName, '', $dataID, $dataID, $finance_connect, $connect, $cdate, $ctime, $pageTitle);
+            deleteRecord($tblName, '', $dataId, $dataId, $finance_connect, $connect, $cdate, $ctime, $pageTitle);
             $_SESSION['delChk'] = 1;
         } catch (Exception $e) {
             echo 'Message: ' . $e->getMessage();
@@ -802,13 +802,13 @@ if (post('act') == 'D') {
 }
 
 //view
-if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
+if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
     $_SESSION['viewChk'] = 1;
 
     if (isset($errorExist)) {
-        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataID . "</b> ] from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataId . "</b> ] from <b><i>$tblName Table</i></b>.";
     } else {
-        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataID . "</b> ] from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataId . "</b> ] from <b><i>$tblName Table</i></b>.";
     }
 
     $log = [
@@ -900,7 +900,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 
 <body>
     <div class="d-flex flex-column my-3 ms-3">
-        <p><a href="<?= $redirect_page ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?php
+        <p><a href="<?= $redirectPage ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?php
                                                                                                                     echo displayPageAction($act, $pageTitle);
                                                                                                                     ?>
         </p>
@@ -1200,7 +1200,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
     if (isset($_SESSION['tempValConfirmBox'])) {
         unset($_SESSION['tempValConfirmBox']);
         echo $clearLocalStorage;
-        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
     }
     ?>
     <script>

@@ -90,9 +90,9 @@ if (!function_exists('siFetchAssocRows')) {
                 ORDER BY o.id DESC, i.id ASC";
 
         $rows = array();
-        $rst = mysqli_query($financeConnect, $sql);
-        if ($rst) {
-            while ($row = mysqli_fetch_assoc($rst)) {
+        $result = mysqli_query($financeConnect, $sql);
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
                 if (isset($row['order_warehouse_id'])) {
                     $wid = (int) $row['order_warehouse_id'];
                     if (isset($warehouseNameMap[$wid])) {

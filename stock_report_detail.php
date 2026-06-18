@@ -14,7 +14,7 @@ $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 
-$redirect_page = $SITEURL . '/stock_list_table.php';
+$redirectPage = $SITEURL . '/stock_list_table.php';
 $deleteRedirectPage = $SITEURL . '/stock_list_table.php';
 
 $result = getData('*', '', '', $tblName, $connect);
@@ -151,9 +151,9 @@ if (!$result) {
                                     <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
                                     <th scope="row"><?= $num++; ?></th>
                                     <td scope="row" class="btn-container">
-                                    <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                    <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                    <?php renderDeleteButton($pinAccess, $row['id'], $brd_name, $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                    <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                    <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
+                                    <?php renderDeleteButton($pinAccess, $row['id'], $brd_name, $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                     </td>
                                     <td scope="row"><?php if (isset($brd_name)) echo $brd_name ?></td>
                                     <td scope="row"><?php if (isset($prod_name)) echo $prod_name ?></td>

@@ -5,7 +5,7 @@
  * Page can set before include:
  * $currentPagePin
  * $pageTitle
- * $redirect_page
+ * $redirectPage
  * $deleteRedirectPage
  * $listPageRedirectPage
  * $listPageDeleteRedirectPage
@@ -64,15 +64,15 @@ if (empty($listPageSkipNumbering)) {
 }
 
 if (isset($listPageRedirectPage) && trim((string) $listPageRedirectPage) !== '') {
-    $redirect_page = $listPageRedirectPage;
-} else if (!isset($redirect_page)) {
-    $redirect_page = '';
+    $redirectPage = $listPageRedirectPage;
+} else if (!isset($redirectPage)) {
+    $redirectPage = '';
 }
 
 if (isset($listPageDeleteRedirectPage) && trim((string) $listPageDeleteRedirectPage) !== '') {
     $deleteRedirectPage = $listPageDeleteRedirectPage;
 } else if (!isset($deleteRedirectPage)) {
-    $deleteRedirectPage = $redirect_page;
+    $deleteRedirectPage = $redirectPage;
 }
 
 $networkFailRedirect = isset($listPageNetworkFailRedirect) && trim((string) $listPageNetworkFailRedirect) !== ''

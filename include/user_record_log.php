@@ -55,9 +55,9 @@ if (!function_exists('urlGetUserName')) {
         }
 
         $safeUserTable = defined('USR_USER') ? USR_USER : 'user';
-        $rst = getData('name,username', "id='" . urlEsc($connect, $uid) . "'", 'LIMIT 1', $safeUserTable, $connect);
-        if ($rst && $rst->num_rows > 0) {
-            $row = $rst->fetch_assoc();
+        $result = getData('name,username', "id='" . urlEsc($connect, $uid) . "'", 'LIMIT 1', $safeUserTable, $connect);
+        if ($result && $result->num_rows > 0) {
+            $row = $result->fetch_assoc();
             if (!empty($row['name'])) {
                 $cache[$uid] = $row['name'];
                 return $row['name'];
@@ -97,7 +97,7 @@ if (!function_exists('urlGetUserRecordLogTableName')) {
 }
 
 if (!function_exists('urlGetUserRecordLogCustomerColumn')) {
-    function urlGetUserRecordLogCustomerColumn($dbConnect, $tableName, $preferredColumn = '')
+    function urlGetUserRecordLogCustomerColumn($dbConnect, $tblName, $preferredColumn = '')
     {
         static $cache = array();
 
@@ -111,7 +111,7 @@ if (!function_exists('urlGetUserRecordLogCustomerColumn')) {
             return $preferredColumn !== '' ? $preferredColumn : 'shopee_cust_id';
         }
 
-        $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', (string) $tableName);
+        $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', (string) $tblName);
         if ($safeTable === '') {
             return $preferredColumn !== '' ? $preferredColumn : 'shopee_cust_id';
         }
@@ -222,7 +222,7 @@ if (!function_exists('urlBuildUserRecordLogAttachmentUrl')) {
 }
 
 if (!function_exists('urlUserRecordLogColumnExists')) {
-    function urlUserRecordLogColumnExists($dbConnect, $tableName, $columnName)
+    function urlUserRecordLogColumnExists($dbConnect, $tblName, $columnName)
     {
         static $cache = array();
 
@@ -230,7 +230,7 @@ if (!function_exists('urlUserRecordLogColumnExists')) {
             return false;
         }
 
-        $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', (string) $tableName);
+        $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', (string) $tblName);
         $safeColumn = preg_replace('/[^A-Za-z0-9_]/', '', (string) $columnName);
         if ($safeTable === '' || $safeColumn === '') {
             return false;
@@ -241,8 +241,8 @@ if (!function_exists('urlUserRecordLogColumnExists')) {
             return $cache[$cacheKey];
         }
 
-        $rst = mysqli_query($dbConnect, "SHOW COLUMNS FROM `" . $safeTable . "` LIKE '" . $safeColumn . "'");
-        $cache[$cacheKey] = ($rst && $rst->num_rows > 0);
+        $result = mysqli_query($dbConnect, "SHOW COLUMNS FROM `" . $safeTable . "` LIKE '" . $safeColumn . "'");
+        $cache[$cacheKey] = ($result && $result->num_rows > 0);
         return $cache[$cacheKey];
     }
 }
@@ -553,10 +553,10 @@ if (!function_exists('urlFetchShopeeCustomerRow')) {
             return array();
         }
 
-        $tableName = defined('SHOPEE_CUST_INFO') ? SHOPEE_CUST_INFO : 'shopee_customer_info';
-        $rst = getData('*', "id='" . $customerId . "'", 'LIMIT 1', $tableName, $financeConnect);
-        if ($rst && $rst->num_rows > 0) {
-            return $rst->fetch_assoc();
+        $tblName = defined('SHOPEE_CUST_INFO') ? SHOPEE_CUST_INFO : 'shopee_customer_info';
+        $result = getData('*', "id='" . $customerId . "'", 'LIMIT 1', $tblName, $financeConnect);
+        if ($result && $result->num_rows > 0) {
+            return $result->fetch_assoc();
         }
 
         return array();
@@ -725,8 +725,8 @@ if (!function_exists('urlBuildListHtml')) {
             $effectivePageSize = $pageSize;
             $sql = "SELECT * FROM " . $tblName . " WHERE " . $whereSql . " ORDER BY created_at DESC, id DESC LIMIT " . $pageSize . " OFFSET " . $offset;
         }
-        $rst = mysqli_query($dbConnect, $sql);
-        if (!$rst || $rst->num_rows === 0) {
+        $result = mysqli_query($dbConnect, $sql);
+        if (!$result || $result->num_rows === 0) {
             return array(
                 'count' => 0,
                 'total' => $totalCount,
@@ -740,7 +740,7 @@ if (!function_exists('urlBuildListHtml')) {
         $html = '';
         $displayNo = $offset + 1;
         $count = 0;
-        while ($row = $rst->fetch_assoc()) {
+        while ($row = $result->fetch_assoc()) {
             $count++;
             $recordId = isset($row['id']) ? (int) $row['id'] : 0;
             $content = isset($row['content']) ? $row['content'] : '';

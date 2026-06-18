@@ -20,19 +20,19 @@ function poFieldValue($row, $field)
     return isset($row[$field]) ? (string) $row[$field] : '';
 }
 
-$dataID = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
-$redirect_page = $SITEURL . '/purchase_order_table.php';
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$redirectPage = $SITEURL . '/purchase_order_table.php';
+$redirectLink = ("<script>location.href = '$redirectPage';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
 $pageAction = getPageAction($act);
 $pageActionTitle = $pageAction . " " . $pageTitle;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 
-if ((!$dataID && !$act) || !isActionAllowed($pageAction, $pinAccess)) {
+if ((!$dataId && !$act) || !isActionAllowed($pageAction, $pinAccess)) {
     echo $redirectLink;
 }
 
@@ -87,28 +87,28 @@ if ($companyRst) {
 }
 
 $row = array();
-$rst = false;
-if ($dataID) {
-    $rst = getData('*', "id = '" . (int) $dataID . "'", '', $tblName, $connect);
+$result = false;
+if ($dataId) {
+    $result = getData('*', "id = '" . (int) $dataId . "'", '', $tblName, $connect);
 }
 
-if ($dataID && (!$rst || !($row = $rst->fetch_assoc())) && $act != 'I') {
+if ($dataId && (!$result || !($row = $result->fetch_assoc())) && $act != 'I') {
     $errorExist = 1;
     $act = "F";
 }
 
 if ($act == 'D') {
-    deleteRecord($tblName, '', $dataID, isset($row['doc_no']) ? $row['doc_no'] : '', $connect, $connect, $cdate, $ctime, $pageTitle);
+    deleteRecord($tblName, '', $dataId, isset($row['doc_no']) ? $row['doc_no'] : '', $connect, $connect, $cdate, $ctime, $pageTitle);
     $_SESSION['delChk'] = 1;
 }
 
-if ($dataID && !$act && USER_ID && !$_SESSION['viewChk'] && !$_SESSION['delChk']) {
+if ($dataId && !$act && USER_ID && !$_SESSION['viewChk'] && !$_SESSION['delChk']) {
     $_SESSION['viewChk'] = 1;
 
     if (isset($errorExist)) {
-        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataID . "</b> ] from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataId . "</b> ] from <b><i>$tblName Table</i></b>.";
     } else {
-        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataID . "</b> ] <b>" . (isset($row['doc_no']) ? $row['doc_no'] : '') . "</b> from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataId . "</b> ] <b>" . (isset($row['doc_no']) ? $row['doc_no'] : '') . "</b> from <b><i>$tblName Table</i></b>.";
     }
 
     $log = array(
@@ -202,7 +202,7 @@ if (post('actionBtn')) {
             $seqNo = (int) $fields['seq'];
             $dupSql = "SELECT id FROM " . $tblName . " WHERE status='A' AND doc_no='" . $docNoEsc . "' AND seq='" . $seqNo . "' AND item_code='" . $itemCodeEsc . "'";
             if ($action === 'updData') {
-                $dupSql .= " AND id != '" . (int) $dataID . "'";
+                $dupSql .= " AND id != '" . (int) $dataId . "'";
             }
             $dupRst = mysqli_query($connect, $dupSql);
             if ($dupRst && mysqli_num_rows($dupRst) > 0) {
@@ -240,7 +240,7 @@ if (post('actionBtn')) {
                         curdate(), curtime()
                     )";
                     $returnData = mysqli_query($connect, $query);
-                    $dataID = $connect->insert_id;
+                    $dataId = $connect->insert_id;
 
                     foreach ($fields as $k => $v) {
                         if ((string) $v !== '') {
@@ -294,7 +294,7 @@ if (post('actionBtn')) {
                             sql_account_id='" . (int) $fields['sql_account_id'] . "',
                             remark='" . poEsc($connect, $fields['remark']) . "',
                             update_date=curdate(), update_time=curtime(), update_by='" . USER_ID . "'
-                            WHERE id='" . (int) $dataID . "'";
+                            WHERE id='" . (int) $dataId . "'";
                         $returnData = mysqli_query($connect, $query);
                     } else {
                         $act = 'NC';
@@ -320,11 +320,11 @@ if (post('actionBtn')) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : (isset($errorMsg) ? $errorMsg : '')));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : (isset($errorMsg) ? $errorMsg : '')));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval']  = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : (isset($errorMsg) ? $errorMsg : '')));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : (isset($errorMsg) ? $errorMsg : '')));
                 }
                 audit_log($log);
             }
@@ -339,7 +339,7 @@ if (post('actionBtn')) {
 if (isset($_SESSION['tempValConfirmBox'])) {
     unset($_SESSION['tempValConfirmBox']);
     echo $clearLocalStorage;
-    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
 }
 
 $isReadonly = ($act == '');
@@ -362,7 +362,7 @@ $currentCompanyName = poFieldValue($row, 'company_name');
 
     <div class="page-load-cover">
         <div class="d-flex flex-column my-3 ms-3">
-            <p><a href="<?= $redirect_page ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i><?= $pageActionTitle ?></p>
+            <p><a href="<?= $redirectPage ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i><?= $pageActionTitle ?></p>
         </div>
 
         <div id="formContainer" class="container d-flex justify-content-center">

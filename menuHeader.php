@@ -50,13 +50,13 @@
 
 
     $img_path = $SITEURL . '/' . img_server . 'themes/';
-    $rst = getData('*', "id = '1'", '', 'projects', $connect);
+    $result = getData('*', "id = '1'", '', 'projects', $connect);
 
-    if (!$rst) {
+    if (!$result) {
         renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error', $SITEURL . '/index.php');
     } else {
         $dataExisted = 1;
-        $row = $rst->fetch_assoc();
+        $row = $result->fetch_assoc();
     }
 
     // --- ADD THIS NEW PART ---

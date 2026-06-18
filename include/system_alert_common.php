@@ -353,7 +353,7 @@ if (!function_exists('systemAlertUserHasAccessToModule')) {
 if (!function_exists('systemAlertCreate')) {
     function systemAlertCreate($connect, $data)
     {
-        $tableName = systemAlertGetTableName();
+        $tblName = systemAlertGetTableName();
         $targetUserId = isset($data['target_user_id']) ? (int) $data['target_user_id'] : 0;
         if (!($connect instanceof mysqli) || $targetUserId <= 0) {
             return 0;
@@ -364,7 +364,7 @@ if (!function_exists('systemAlertCreate')) {
         $displayDate = trim((string) (isset($data['display_date']) ? $data['display_date'] : $createDate));
         $actorUserId = trim((string) (isset($data['create_by']) ? $data['create_by'] : (defined('USER_ID') ? USER_ID : 'SYSTEM')));
 
-        $sql = "INSERT INTO `" . $tableName . "` (
+        $sql = "INSERT INTO `" . $tblName . "` (
                     `module_key`,
                     `notification_type`,
                     `target_user_id`,
@@ -419,7 +419,7 @@ if (!function_exists('systemAlertCreate')) {
 if (!function_exists('systemAlertCreateOnce')) {
     function systemAlertCreateOnce($connect, $data)
     {
-        $tableName = systemAlertGetTableName();
+        $tblName = systemAlertGetTableName();
         $targetUserId = isset($data['target_user_id']) ? (int) $data['target_user_id'] : 0;
         if (!($connect instanceof mysqli) || $targetUserId <= 0) {
             return 0;
@@ -438,7 +438,7 @@ if (!function_exists('systemAlertCreateOnce')) {
             : "`display_date` IS NULL";
 
         $sql = "SELECT `id`
-                FROM `" . $tableName . "`
+                FROM `" . $tblName . "`
                 WHERE `module_key` = '" . systemAlertEscape($connect, $moduleKey) . "'
                   AND `notification_type` = '" . systemAlertEscape($connect, $notificationType) . "'
                   AND `target_user_id` = " . $targetUserId . "
@@ -460,14 +460,14 @@ if (!function_exists('systemAlertCreateOnce')) {
 if (!function_exists('systemAlertGetUnreadCount')) {
     function systemAlertGetUnreadCount($connect, $userId)
     {
-        $tableName = systemAlertGetTableName();
+        $tblName = systemAlertGetTableName();
         $userId = systemAlertNormalizeUserId($userId);
         if (!($connect instanceof mysqli) || $userId <= 0) {
             return 0;
         }
 
         $sql = "SELECT COUNT(*) AS `total`
-                FROM `" . $tableName . "`
+                FROM `" . $tblName . "`
                 WHERE `target_user_id` = " . $userId . "
                   AND `is_read` = 'N'
                   AND `status` = 'A'
@@ -485,14 +485,14 @@ if (!function_exists('systemAlertGetUnreadCount')) {
 if (!function_exists('systemAlertGetTotalCount')) {
     function systemAlertGetTotalCount($connect, $userId)
     {
-        $tableName = systemAlertGetTableName();
+        $tblName = systemAlertGetTableName();
         $userId = systemAlertNormalizeUserId($userId);
         if (!($connect instanceof mysqli) || $userId <= 0) {
             return 0;
         }
 
         $sql = "SELECT COUNT(*) AS `total`
-                FROM `" . $tableName . "`
+                FROM `" . $tblName . "`
                 WHERE `target_user_id` = " . $userId . "
                   AND `status` = 'A'
                   AND (`expire_date` IS NULL OR `expire_date` >= CURDATE())";
@@ -509,7 +509,7 @@ if (!function_exists('systemAlertGetTotalCount')) {
 if (!function_exists('systemAlertFetchForUser')) {
     function systemAlertFetchForUser($connect, $userId, $limit = 10)
     {
-        $tableName = systemAlertGetTableName();
+        $tblName = systemAlertGetTableName();
         $userId = systemAlertNormalizeUserId($userId);
         $limit = max(1, (int) $limit);
         if (!($connect instanceof mysqli) || $userId <= 0) {
@@ -517,7 +517,7 @@ if (!function_exists('systemAlertFetchForUser')) {
         }
 
         $sql = "SELECT *
-                FROM `" . $tableName . "`
+                FROM `" . $tblName . "`
                 WHERE `target_user_id` = " . $userId . "
                   AND `status` = 'A'
                   AND (`expire_date` IS NULL OR `expire_date` >= CURDATE())
@@ -573,7 +573,7 @@ if (!function_exists('systemAlertGetModuleFilterOptions')) {
 if (!function_exists('systemAlertFetchListForUser')) {
     function systemAlertFetchListForUser($connect, $userId, $filters = array())
     {
-        $tableName = systemAlertGetTableName();
+        $tblName = systemAlertGetTableName();
         $userId = systemAlertNormalizeUserId($userId);
         if (!($connect instanceof mysqli) || $userId <= 0) {
             return array();
@@ -619,7 +619,7 @@ if (!function_exists('systemAlertFetchListForUser')) {
         }
 
         $sql = "SELECT *
-                FROM `" . $tableName . "`
+                FROM `" . $tblName . "`
                 WHERE " . implode(' AND ', $where) . "
                 ORDER BY
                     CASE WHEN `is_read` = 'N' THEN 0 ELSE 1 END ASC,
@@ -641,7 +641,7 @@ if (!function_exists('systemAlertFetchListForUser')) {
 if (!function_exists('systemAlertReadRow')) {
     function systemAlertReadRow($connect, $alertId, $userId = 0)
     {
-        $tableName = systemAlertGetTableName();
+        $tblName = systemAlertGetTableName();
         $alertId = (int) $alertId;
         $userId = systemAlertNormalizeUserId($userId);
         if (!($connect instanceof mysqli) || $alertId <= 0) {
@@ -657,7 +657,7 @@ if (!function_exists('systemAlertReadRow')) {
         }
 
         $sql = "SELECT *
-                FROM `" . $tableName . "`
+                FROM `" . $tblName . "`
                 WHERE " . implode(' AND ', $conditions) . "
                 LIMIT 1";
         $result = mysqli_query($connect, $sql);
@@ -672,14 +672,14 @@ if (!function_exists('systemAlertReadRow')) {
 if (!function_exists('systemAlertMarkRead')) {
     function systemAlertMarkRead($connect, $alertId, $userId)
     {
-        $tableName = systemAlertGetTableName();
+        $tblName = systemAlertGetTableName();
         $alertId = (int) $alertId;
         $userId = systemAlertNormalizeUserId($userId);
         if (!($connect instanceof mysqli) || $alertId <= 0 || $userId <= 0) {
             return false;
         }
 
-        $sql = "UPDATE `" . $tableName . "`
+        $sql = "UPDATE `" . $tblName . "`
                 SET `is_read` = 'Y',
                     `read_date` = CURDATE(),
                     `read_time` = CURTIME()
@@ -694,13 +694,13 @@ if (!function_exists('systemAlertMarkRead')) {
 if (!function_exists('systemAlertMarkAllRead')) {
     function systemAlertMarkAllRead($connect, $userId)
     {
-        $tableName = systemAlertGetTableName();
+        $tblName = systemAlertGetTableName();
         $userId = systemAlertNormalizeUserId($userId);
         if (!($connect instanceof mysqli) || $userId <= 0) {
             return false;
         }
 
-        $sql = "UPDATE `" . $tableName . "`
+        $sql = "UPDATE `" . $tblName . "`
                 SET `is_read` = 'Y',
                     `read_date` = CURDATE(),
                     `read_time` = CURTIME()
@@ -806,9 +806,9 @@ if (!function_exists('systemAlertSyncFollowUpNotificationsForUser')) {
 }
 
 if (!function_exists('systemAlertCountOrdersByStatuses')) {
-    function systemAlertCountOrdersByStatuses($dbConnect, $tableName, $statuses)
+    function systemAlertCountOrdersByStatuses($dbConnect, $tblName, $statuses)
     {
-        if (!($dbConnect instanceof mysqli) || trim((string) $tableName) === '' || empty($statuses)) {
+        if (!($dbConnect instanceof mysqli) || trim((string) $tblName) === '' || empty($statuses)) {
             return 0;
         }
 
@@ -826,7 +826,7 @@ if (!function_exists('systemAlertCountOrdersByStatuses')) {
         }
 
         $sql = "SELECT COUNT(*) AS `total`
-                FROM `" . $tableName . "`
+                FROM `" . $tblName . "`
                 WHERE `status` = 'A'
                   AND (" . implode(' OR ', $statusConditions) . ")";
         $result = mysqli_query($dbConnect, $sql);
@@ -1129,8 +1129,8 @@ if (!function_exists('systemAlertGenerateCampaignFollowUpAlerts')) {
         }
 
         $requiredTables = array(CAMPAIGN_FOLLOW_UP, CAMPAIGN, CAMPAIGN_CUSTOMER, CAMPAIGN_MESSAGE);
-        foreach ($requiredTables as $tableName) {
-            if (!tableExists($tableName, $connect)) {
+        foreach ($requiredTables as $tblName) {
+            if (!tableExists($tblName, $connect)) {
                 return 0;
             }
         }
