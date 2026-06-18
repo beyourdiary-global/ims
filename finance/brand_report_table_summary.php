@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 0;
 $pageTitle = "Brand Report";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
@@ -494,7 +493,7 @@ $result4 = getData('*', '', '', SHOPEE_SG_ORDER_REQ ,$finance_connect);
 </body>
 <script>
   $(document).ready(function() {
-    var groupOption = '<?php echo $groupOption; ?>'; // Get the group option value from PHP
+    const groupOption = '<?php echo $groupOption; ?>'; // Get the group option value from PHP
 
     // Loop through each option in the select dropdown
     $('#group2 option').each(function() {

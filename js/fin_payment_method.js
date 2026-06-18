@@ -6,7 +6,7 @@ $("#pmf_name").on("input", function() {
 $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
-    var name_chk = 0;;
+    let name_chk = 0;;
 
     if ($('#pmf_name').val() === '' || $('#pmf_name').val() === null || $('#pmf_name')
         .val() === undefined) {

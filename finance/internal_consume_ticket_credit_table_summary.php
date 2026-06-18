@@ -2,7 +2,6 @@
 $currentPagePin = 65;
 ob_start();
 $pageTitle = "Internal Consume Ticket/Credit ";
-$isFinance = 1;
 
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
@@ -127,7 +126,7 @@ $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 
-$redirect_page = $SITEURL . '/finance/internal_consume_ticket_credit.php';
+$redirectPage = $SITEURL . '/finance/internal_consume_ticket_credit.php';
 $deleteRedirectPage = $SITEURL . '/finance/internal_consume_ticket_credit_table.php';
 
 $result = getData('*', '', '', $tblName, $finance_connect);
@@ -145,10 +144,7 @@ if (!$result) {
       <link rel="stylesheet" href="../css/main.css">
 </head>
 
-<script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
-
-
-<body>
+<script src="<?= $SITEURL ?>/js/list_page_common.js"></script><body>
 
     <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
 
@@ -164,7 +160,7 @@ if (!$result) {
                         <h2><?php echo $pageTitle . " Summary"; ?></h2>
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
+                                <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
                             <?php endif; ?>
                             <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="if (exportData()) { showExportNotification(); }"><i class="fa-solid fa-file-export"></i> Export</a>
                         </div>
@@ -208,13 +204,13 @@ if (!$result) {
                             
 
                                 <tr onclick="window.location='internal_consume_ticket_credit_table_detail.php?ids=<?= urlencode($row['id']) ?>';" style="cursor:pointer;">
-                                    <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
-                                    <th class="text-center"><input type="checkbox" class="export" value="<?= $row['id'] ?>"></th>
+                                    <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
+                                    <th class="text-center"><input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>"></th>
                                     <th scope="row"><?= $num++; ?></th>
-                                    <td scope="row"><?php if (isset($picRow['name'])) echo $picRow['name'] ?></td>
-                                    <td scope="row"><?php if (isset($brandRow['name'])) echo $brandRow['name'] ?></td>
-                                    <td scope="row"><?php if (isset($currRow['unit'])) echo $currRow['unit'] ?></td>
-                                    <td scope="row"><?php if (isset($row['amount'])) echo $row['amount'] ?></td>
+                                    <td scope="row"><?php if (isset($picRow['name'])) echo htmlspecialchars((string) $picRow['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($brandRow['name'])) echo htmlspecialchars((string) $brandRow['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($currRow['unit'])) echo htmlspecialchars((string) $currRow['unit'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['amount'])) echo htmlspecialchars((string) $row['amount'], ENT_QUOTES, 'UTF-8') ?></td>
                     
                     </tr>
                     <?php }

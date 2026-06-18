@@ -252,10 +252,12 @@ $(document).ready(function ($) {
           "shopee_ads_topup_trans_table.php?export_ids=" +
           encodeURIComponent(checkboxValues.join(","));
         console.log("[shopee_ads_topup_export] redirect_url:", exportUrl);
-        alert("Export successful!");
-        window.location.assign(exportUrl);
+        showNotification("Export successful!", "success");
+        window.setTimeout(function () {
+          window.location.assign(exportUrl);
+        }, 600);
       } else {
-        alert("Please select data to export.");
+        showNotification("Please select data to export.", "warning");
       }
     },
   );

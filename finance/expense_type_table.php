@@ -1,12 +1,11 @@
 <?php
 $pageTitle = "Expense Type";
 $currentPagePin = 49;
-$isFinance = 1;
 
 include_once '../include/list_page_header.php';
 
 
-$redirect_page = $SITEURL . '/finance/expense_type.php';
+$redirectPage = $SITEURL . '/finance/expense_type.php';
 $deleteRedirectPage = $SITEURL . '/finance/expense_type_table.php';
 $result = getData('*', '', '', EXPENSE_TYPE, $finance_connect);
 ?>
@@ -41,7 +40,7 @@ $result = getData('*', '', '', EXPENSE_TYPE, $finance_connect);
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                    href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                    href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                     Expense Type </a>
                             <?php endif; ?>
                         </div>
@@ -68,18 +67,18 @@ $result = getData('*', '', '', EXPENSE_TYPE, $finance_connect);
                         <?php while ($row = $result->fetch_assoc()) {
                             if (isset($row['name'], $row['id']) && !empty($row['name'])) { ?>
                                 <tr>
-                                    <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                    <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                     <th scope="row"><?= $num++; ?></th>
                                     <td scope="row" class="btn-container">
-                                        <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                        <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                        <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                        <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                        <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
+                                        <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                     </td>
-                                    <td scope="row"><?= $row['name'] ?></td>
+                                    <td scope="row"><?= htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') ?></td>
                                     <td scope="row"><?php if (isset($row['code']))
-                                        echo $row['code'] ?></td>
+                                        echo htmlspecialchars((string) $row['code'], ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row"><?php if (isset($row['remark']))
-                                        echo $row['remark'] ?></td>
+                                        echo htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') ?></td>
                                     </tr>
                             <?php }
                         } ?>
@@ -103,8 +102,8 @@ $result = getData('*', '', '', EXPENSE_TYPE, $finance_connect);
 </body>
 <script>
     //Initial Page And Action Value
-    var page = "<?= $pageTitle ?>";
-    var action = "<?php echo isset($act) ? $act : ' '; ?>";
+    const page = "<?= $pageTitle ?>";
+    const action = "<?php echo isset($act) ? $act : ' '; ?>";
 
     checkCurrentPage(page, action);
     /**

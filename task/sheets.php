@@ -3,7 +3,6 @@ $taskParentPin = 139;
 $currentPagePin = 138;
 $pageTitle = 'Sheets';
 $taskParentTitle = 'Project Task';
-$isFinance = 1;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     include_once '../include/connection.php';
@@ -266,7 +265,7 @@ $taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParen
 
 $pinAccess = taskGetPinAccessByGroupId($connect, $currentPagePin);
 if (!taskIsActionAllowed('view', $pinAccess)) {
-    echo "<script>alert('You do not have permission to view Project Task.'); location.replace('../dashboard.php');</script>";
+    renderNotificationScript('You do not have permission to view Project Task.', 'error', '../dashboard.php', 1200, true);
     exit;
 }
 
@@ -274,7 +273,7 @@ $currentUserId = USER_ID;
 $currentProjectId = taskResolveCurrentProjectId($connect, 0);
 $currentProject = $currentProjectId > 0 ? taskGetProjectById($connect, $currentProjectId) : array();
 if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $currentPagePin)) {
-    echo "<script>alert('You do not have access to this project sheets.'); location.replace('../dashboard.php');</script>";
+    renderNotificationScript('You do not have access to this project sheets.', 'error', '../dashboard.php', 1200, true);
     exit;
 }
 $taskParentTitle = !empty($currentProject) && isset($currentProject['name']) && trim((string) $currentProject['name']) !== ''

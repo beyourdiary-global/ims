@@ -2,7 +2,6 @@
 ob_start();
 $pageTitle = "Facebook Order Request";
 $currentPagePin = 69;
-$isFinance = 1;
 
 
 include_once '../include/list_page_header.php';
@@ -145,7 +144,7 @@ if (!empty($checkboxValues)) {
 }
 
 $tblName = FB_ORDER_REQ;
-$redirect_page = $SITEURL . '/finance/fb_order_req.php';
+$redirectPage = $SITEURL . '/finance/fb_order_req.php';
 $deleteRedirectPage = $SITEURL . '/finance/fb_order_req_income_table.php';
 $result = getData('*', '', '', FB_ORDER_REQ, $finance_connect);
 ?>
@@ -185,7 +184,7 @@ $result = getData('*', '', '', FB_ORDER_REQ, $finance_connect);
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         Request </a>
                                 <?php endif; ?>
                                 <?php if (isActionAllowed("Export", $pinAccess)): ?>

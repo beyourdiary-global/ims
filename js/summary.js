@@ -1726,12 +1726,15 @@
           refreshAll(); 
         } else {
           $btn.prop("disabled", false).find(".summary-hover-status-text").text(previousStatusLabel);
-          alert((resp && (resp.message || resp.error)) || "Failed to update status");
+          showNotification(
+            (resp && (resp.message || resp.error)) || "Failed to update status",
+            "error",
+          );
         }
       },
       error: function() {
         $btn.prop("disabled", false).find(".summary-hover-status-text").text(previousStatusLabel);
-        alert("Server error");
+        showNotification("Server error", "error");
       }
     });
   });

@@ -2,7 +2,6 @@
 $currentPagePin = 92;
 ob_start();
 $pageTitle = "Website Order Request";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
@@ -189,19 +188,20 @@ if (empty($_SESSION['csrf_token'])) {
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceivedDateBtn')) {
     $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
-        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', (string) $_SERVER['REQUEST_URI'], 1200, true);
         exit;
     }
 
     if (!$canAssignEstimatedReceivedDate) {
-        echo "<script>alert('Security Error: You do not have permission to assign Estimate Received Dates.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+        renderNotificationScript('Security Error: You do not have permission to assign Estimate Received Dates.', 'error', (string) $_SERVER['REQUEST_URI'], 1200, true);
         exit;
     }
 
     $assignOrderId = postSpaceFilter('estimated_received_order_id');
     $assignDate = postSpaceFilter('estimated_received_date');
     $assignmentResult = assignEstimatedReceivedDate($finance_connect, WEB_ORDER_REQ, $assignOrderId, $assignDate, USER_ID);
-    echo "<script>alert('" . addslashes($assignmentResult['message']) . "'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+    $assignmentMessage = (string) $assignmentResult['message'];
+    renderNotificationScript($assignmentMessage, resolveNotificationType($assignmentMessage, 'info'), (string) $_SERVER['REQUEST_URI'], 1200, true);
     exit;
 }
 $_SESSION['act'] = '';
@@ -211,7 +211,7 @@ unset($_SESSION['resetChk']);
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 $tblName = WEB_ORDER_REQ;
-$redirect_page = $SITEURL . '/finance/website_order_request.php';
+$redirectPage = $SITEURL . '/finance/website_order_request.php';
 $deleteRedirectPage = $SITEURL . '/finance/website_order_request_table.php';
 $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
 ?>
@@ -262,7 +262,7 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         Request </a>
                                 <?php endif; ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>
@@ -342,17 +342,17 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
 
                             <tr>
                                 <th class="hideColumn" scope="row">
-                                    <?= $row['id'] ?>
+                                    <?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>
                                 </th>
-                                <th class="text-center"><input type="checkbox" class="export" value="<?= $row['id'] ?>"></th>
+                                <th class="text-center"><input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>"></th>
                                 <th scope="row">
                                     <?= $num++; ?>
                                 </th>
                                 
                                 <td scope="row" class="btn-container">
-                                <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                <?php renderDeleteButton($pinAccess, $row['id'], $row['order_id'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
+                                <?php renderDeleteButton($pinAccess, $row['id'], $row['order_id'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                 <?php if (shouldShowEstimatedReceivedDateButton($row) && $canAssignEstimatedReceivedDate) { ?>
                                     <button type="button" class="btn btn-sm btn-warning btn-assign-estimated-date"
                                         data-order-id="<?= (int) $row['id'] ?>"
@@ -365,73 +365,73 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
                                 <td scope="row"><?= getMarketplaceRequestStatusLabel(isset($row['order_status']) ? $row['order_status'] : '') ?></td>
                                 <td scope="row"><?= !empty($row['estimated_received_date']) ? htmlspecialchars((string) $row['estimated_received_date'], ENT_QUOTES, 'UTF-8') : '' ?></td>
                                 <td scope="row">
-                                    <?= $row['order_id'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['order_id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['brand'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['brand'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['series'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['series'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                
                                 <td scope="row">
-                                    <?= $package['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($package['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $country['nicename'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($country['nicename'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
 
                                 <td scope="row">
-                                    <?= $currency['unit'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($currency['unit'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                               
                                 <td scope="row">
-                                    <?= $row['price'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['price'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
 
                                 <td scope="row">
-                                    <?= $row['shipping'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['shipping'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
 
                                 <td scope="row">
-                                    <?= $row['discount'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['discount'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
 
                                 <td scope="row">
-                                    <?= $row['total'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['total'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
 
                                 <td scope="row">
-                                    <?= $pay['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($pay['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['pic'] ?? '' ?>
-                                </td>
-
-                                <td scope="row">
-                                    <?= $cust_id['cust_id'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['pic'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
 
                                 <td scope="row">
-                                    <?= $row['cust_name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($cust_id['cust_id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                                </td>
+
+                                <td scope="row">
+                                    <?= htmlspecialchars((string) ($row['cust_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['cust_email'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['cust_email'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['cust_birthday'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['cust_birthday'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['shipping_name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['shipping_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['shipping_address'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['shipping_address'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['shipping_contact'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['shipping_contact'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['remark'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['remark'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                             </tr>
                         <?php }}}} ?>

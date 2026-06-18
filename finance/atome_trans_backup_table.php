@@ -2,7 +2,6 @@
 ob_start();
 $pageTitle = "Atome Transaction Backup Record";
 $currentPagePin = 87;
-$isFinance = 1;
 include_once '../include/list_page_header.php';
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . "_list.xlsx";
@@ -118,7 +117,7 @@ if (!empty($checkboxValues)) {
 
 $_SESSION['expChk'] = '';
 $deleteRedirectPage = $SITEURL . '/atome_trans_backup_table.php';
-$redirect_page = $SITEURL . '/finance/atome_trans_backup.php';
+$redirectPage = $SITEURL . '/finance/atome_trans_backup.php';
 
 $result = getData('*', '', '', ATOME_TRANS_BACKUP, $finance_connect);
 
@@ -171,7 +170,7 @@ $img_path = SITEURL . img_server . 'finance/atome_trans_backup/';
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         Transaction </a>
                                 <?php endif; ?>
                                 <?php if (isActionAllowed("Export", $pinAccess)): ?>
@@ -301,9 +300,9 @@ $img_path = SITEURL . img_server . 'finance/atome_trans_backup/';
                                     <div class="d-flex align-items-center">' 
                                 
                                 ?>
-                                    <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess);?>
-                                    <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2) ?>
-                                    <?php renderDeleteButton($pinAccess, $row['id'], $row['trans_id'], $row['atome_id'], $pageTitle, $redirect_page, $deleteRedirectPage) ?>
+                                    <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess);?>
+                                    <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2) ?>
+                                    <?php renderDeleteButton($pinAccess, $row['id'], $row['trans_id'], $row['atome_id'], $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                 <?php echo'</div>
                                 </td>
                                     <td scope="row">' . (isset($row['trans_id']) ? $row['trans_id'] : '') . '</td>
@@ -493,8 +492,8 @@ $img_path = SITEURL . img_server . 'finance/atome_trans_backup/';
 </body>
 <script>
     //Initial Page And Action Value
-    var page = "<?= $pageTitle ?>";
-    var action = "<?php echo isset($act) ? $act : ' '; ?>";
+    const page = "<?= $pageTitle ?>";
+    const action = "<?php echo isset($act) ? $act : ' '; ?>";
     checkCurrentPage(page, action);
     /**
   oufei 20231014

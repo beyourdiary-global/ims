@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 62;
 $pageTitle = "Agent";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
@@ -10,13 +9,13 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 $tblName = AGENT;
 
 //Current Page Action And Data ID
-$dataID = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
 
-$redirect_page = $SITEURL . '/finance/agent_table.php';
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$redirectPage = $SITEURL . '/finance/agent_table.php';
+$redirectLink = ("<script>location.href = '$redirectPage';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
 //Check a current page pin is exist or not
@@ -25,14 +24,14 @@ $pageActionTitle = $pageAction . " " . $pageTitle;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 
 // to display data to input
-if ($dataID) { //edit/remove/view
-    $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $finance_connect);
+if ($dataId) { //edit/remove/view
+    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $finance_connect);
 
-    if ($rst != false && $rst->num_rows > 0) {
+    if ($result != false && $result->num_rows > 0) {
         $dataExisted = 1;
-        $row = $rst->fetch_assoc();
+        $row = $result->fetch_assoc();
     } else {
-        // If $rst is false or no data found ($act==null)
+        // If $result is false or no data found ($act==null)
         $errorExist = 1;
         $_SESSION['tempValConfirmBox'] = true;
         $act = "F";
@@ -41,15 +40,13 @@ if ($dataID) { //edit/remove/view
 
 //Delete Data
 if ($act == 'D') {
-    deleteRecord($tblName, '',$dataID, $row['name'], $finance_connect, $connect, $cdate, $ctime, $pageTitle);
+    deleteRecord($tblName, '',$dataId, $row['name'], $finance_connect, $connect, $cdate, $ctime, $pageTitle);
     $_SESSION['delChk'] = 1;
 }
 
-if (!($dataID) && !($act)) {
-    echo '<script>
-    alert("Invalid action.");
-    window.location.href = "' . $redirect_page . '"; // Redirect to previous page
-    </script>';
+if (!($dataId) && !($act)) {
+    renderNotificationScript('Invalid action.', 'error', $redirectPage);
+
 }
 
 function isDuplicateRecordForNameAndBrand($name, $agt_brand, $tbl, $connect, $primaryKeyValue)
@@ -97,7 +94,7 @@ if (post('actionBtn')) {
         break;
     }
 
-    if (isDuplicateRecordForNameAndBrand($name, $agt_brand, $tblName, $finance_connect, $dataID)) {
+    if (isDuplicateRecordForNameAndBrand($name, $agt_brand, $tblName, $finance_connect, $dataId)) {
         $name_err = "Duplicate record found for the combination of name and brand.";
         break;
     }    
@@ -156,7 +153,7 @@ if (post('actionBtn')) {
                     $query = "INSERT INTO " . $tblName  . "(name,brand,pic,contact,email,country,remark,create_by,create_date,create_time) VALUES ('$name','$agt_brand','$agt_pic','$contact','$email','$agt_country','$remark','" . USER_ID . "',curdate(),curtime())";
                     // Execute the query
                     $returnData = mysqli_query($finance_connect, $query);
-                    $dataID = $finance_connect->insert_id;
+                    $dataId = $finance_connect->insert_id;
                     $_SESSION['tempValConfirmBox'] = true;
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
@@ -165,8 +162,8 @@ if (post('actionBtn')) {
             } else {
                 try {
                     // take old value
-                    $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $finance_connect);
-                    $row = $rst->fetch_assoc();
+                    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $finance_connect);
+                    $row = $result->fetch_assoc();
 
                     // check value
                     if ($row['name'] != $name) {
@@ -216,7 +213,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {                      
-                        $query = "UPDATE " . $tblName  . " SET name = '$name', brand = '$agt_brand', pic = '$agt_pic', contact = '$contact', email = '$email', country = '$agt_country', remark ='$remark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
+                        $query = "UPDATE " . $tblName  . " SET name = '$name', brand = '$agt_brand', pic = '$agt_pic', contact = '$contact', email = '$email', country = '$agt_country', remark ='$remark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($finance_connect, $query);
 
                      
@@ -246,11 +243,11 @@ if (post('actionBtn')) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval']  = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
             }
@@ -266,13 +263,13 @@ if (post('actionBtn')) {
 if (post('act') == 'D') {
         try {
             // take name
-            $rst = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $finance_connect);
-            $row = $rst->fetch_assoc();
+            $result = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $finance_connect);
+            $row = $result->fetch_assoc();
 
-            $dataID = $row['id'];
+            $dataId = $row['id'];
             
             //SET the record status to 'D'
-            deleteRecord($tblName, $dataID, $finance_connect, $connect, $cdate, $ctime, $pageTitle);
+            deleteRecord($tblName, $dataId, $finance_connect, $connect, $cdate, $ctime, $pageTitle);
             $_SESSION['delChk'] = 1;
         } catch (Exception $e) {
             echo 'Message: ' . $e->getMessage();
@@ -281,14 +278,14 @@ if (post('act') == 'D') {
 
 
 //view
-if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
+if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
     $name = isset($dataExisted) ? $row['name'] : '';
     $_SESSION['viewChk'] = 1;
 
     if (isset($errorExist)) {
-        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataID . "</b> ] from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataId . "</b> ] from <b><i>$tblName Table</i></b>.";
     } else {
-        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataID . "</b> ] <b>" . $name . "</b> from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataId . "</b> ] <b>" . $name . "</b> from <b><i>$tblName Table</i></b>.";
     }
 
     $log = [
@@ -320,7 +317,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
     <div class="page-load-cover">
 
         <div class="d-flex flex-column my-3 ms-3">
-        <p><a href="<?= $redirect_page ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?php
+        <p><a href="<?= $redirectPage ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?php
             echo displayPageAction($act, $pageTitle);
             ?>
         </p>
@@ -370,7 +367,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
             if (isset($echoVal)) {
                 $brand_rst = getData('name', "id = '$echoVal'", '', BRAND, $connect);
                 if (!$brand_rst) {
-                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                 }
                 $brand_row = $brand_rst->fetch_assoc();
@@ -403,7 +400,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         if (isset($echoVal)) {
             $user_rst = getData('name', "id = '$echoVal'", '', USR_USER, $connect);
             if (!$user_rst) {
-                echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                 echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
             }
             $user_row = $user_rst->fetch_assoc();
@@ -466,7 +463,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
             if (isset($echoVal)) {
                 $country_rst = getData('name', "id = '$echoVal'", '', COUNTRIES, $connect);
                 if (!$country_rst) {
-                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                 }
                 $country_row = $country_rst->fetch_assoc();
@@ -522,15 +519,15 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
     if (isset($_SESSION['tempValConfirmBox'])) {
         unset($_SESSION['tempValConfirmBox']);
         echo $clearLocalStorage;
-        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
     }
     ?>
     <script>
         <?php include "../js/agent.js" ?>
 
         //Initial Page And Action Value
-        var page = "<?= $pageTitle ?>";
-        var action = "<?php echo isset($act) ? $act : ''; ?>";
+        const page = "<?= $pageTitle ?>";
+        const action = "<?php echo isset($act) ? $act : ''; ?>";
 
         checkCurrentPage(page, action);
         centerAlignment("formContainer");

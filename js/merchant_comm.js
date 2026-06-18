@@ -7,7 +7,7 @@ $(document).ready(function() {
 
     if (!($("#mcr_pic").attr('disabled'))) {
         $("#mcr_pic").keyup(function() {
-            var param = {
+            const param = {
                 search: $(this).val(),
                 searchType: 'name', // column of the table
                 elementID: $(this).attr('id'), // id of the input
@@ -54,9 +54,9 @@ $("#mcr_desc").on("input", function() {
 $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
-    var date_chk = 0;
-    var currency_chk = 0;
-    var amt_chk = 0;
+    let date_chk = 0;
+    let currency_chk = 0;
+    let amt_chk = 0;
 
     if (($('#mcr_date').val() === '' || $('#mcr_date').val() === null || $('#mcr_date')
             .val() === undefined)) {

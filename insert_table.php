@@ -35,57 +35,57 @@ if (!$conn->select_db($db_fin)) {
 // HELPER FUNCTIONS (FIXED)
 // ==========================================
 
-function columnExists($conn, $dbName, $tableName, $columnName)
+function columnExists($conn, $dbName, $tblName, $columnName)
 {
     $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
+    $safeTable = $conn->real_escape_string($tblName);
     $safeColumn = $conn->real_escape_string($columnName);
     $sql = "SELECT 1 FROM information_schema.columns WHERE table_schema='$safeDb' AND table_name='$safeTable' AND column_name='$safeColumn' LIMIT 1";
-    $rst = $conn->query($sql);
-    return ($rst && $rst->num_rows > 0);
+    $result = $conn->query($sql);
+    return ($result && $result->num_rows > 0);
 }
 
-function addColumnIfMissing($conn, $dbName, $tableName, $columnName, $alterSql)
+function addColumnIfMissing($conn, $dbName, $tblName, $columnName, $alterSql)
 {
-    if (!columnExists($conn, $dbName, $tableName, $columnName)) {
+    if (!columnExists($conn, $dbName, $tblName, $columnName)) {
         if ($conn->query($alterSql)) {
-            echo "<p style='color:blue;'>Added column `$columnName` to `$tableName`.</p>";
+            echo "<p style='color:blue;'>Added column `$columnName` to `$tblName`.</p>";
         } else {
-            echo "<p style='color:red;'>Failed adding `$columnName` to `$tableName`: " . $conn->error . "</p>";
+            echo "<p style='color:red;'>Failed adding `$columnName` to `$tblName`: " . $conn->error . "</p>";
         }
     } else {
-        echo "<p style='color:green;'>Verified column `$columnName` already exists in `$tableName`.</p>";
+        echo "<p style='color:green;'>Verified column `$columnName` already exists in `$tblName`.</p>";
     }
 }
 
-function dropColumnIfExists($conn, $dbName, $tableName, $columnName, $alterSql)
+function dropColumnIfExists($conn, $dbName, $tblName, $columnName, $alterSql)
 {
-    if (columnExists($conn, $dbName, $tableName, $columnName)) {
+    if (columnExists($conn, $dbName, $tblName, $columnName)) {
         if ($conn->query($alterSql)) {
-            echo "<p style='color:blue;'>Dropped column `$columnName` from `$tableName`.</p>";
+            echo "<p style='color:blue;'>Dropped column `$columnName` from `$tblName`.</p>";
         } else {
-            echo "<p style='color:red;'>Failed dropping `$columnName` from `$tableName`: " . $conn->error . "</p>";
+            echo "<p style='color:red;'>Failed dropping `$columnName` from `$tblName`: " . $conn->error . "</p>";
         }
     } else {
-        echo "<p style='color:green;'>Verified column `$columnName` is already removed from `$tableName`.</p>";
+        echo "<p style='color:green;'>Verified column `$columnName` is already removed from `$tblName`.</p>";
     }
 }
 
-function alterColumnToVarcharIfInt($conn, $dbName, $tableName, $columnName, $varcharLen = 255)
+function alterColumnToVarcharIfInt($conn, $dbName, $tblName, $columnName, $varcharLen = 255)
 {
     $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
+    $safeTable = $conn->real_escape_string($tblName);
     $safeColumn = $conn->real_escape_string($columnName);
 
     $sql = "SELECT DATA_TYPE FROM information_schema.columns WHERE table_schema='$safeDb' AND table_name='$safeTable' AND column_name='$safeColumn' LIMIT 1";
-    $rst = $conn->query($sql);
+    $result = $conn->query($sql);
 
-    if (!$rst || $rst->num_rows === 0) {
-        echo "<p style='color:orange;'>Column `$columnName` not found in `$tableName` to alter.</p>";
+    if (!$result || $result->num_rows === 0) {
+        echo "<p style='color:orange;'>Column `$columnName` not found in `$tblName` to alter.</p>";
         return;
     }
 
-    $row = $rst->fetch_assoc();
+    $row = $result->fetch_assoc();
     if ($row) {
         $row = array_change_key_case($row, CASE_LOWER);
     }
@@ -93,32 +93,32 @@ function alterColumnToVarcharIfInt($conn, $dbName, $tableName, $columnName, $var
     if (isset($row['data_type'])) {
         $dataType = strtolower((string) $row['data_type']);
         if (strpos($dataType, 'int') !== false) {
-            $alterSql = "ALTER TABLE `$tableName` MODIFY COLUMN `$columnName` VARCHAR(" . (int) $varcharLen . ") NULL";
+            $alterSql = "ALTER TABLE `$tblName` MODIFY COLUMN `$columnName` VARCHAR(" . (int) $varcharLen . ") NULL";
             if ($conn->query($alterSql)) {
-                echo "<p style='color:blue;'>Updated `$tableName`.`$columnName` to VARCHAR(" . (int) $varcharLen . ").</p>";
+                echo "<p style='color:blue;'>Updated `$tblName`.`$columnName` to VARCHAR(" . (int) $varcharLen . ").</p>";
             } else {
-                echo "<p style='color:red;'>Failed updating `$tableName`.`$columnName`: " . $conn->error . "</p>";
+                echo "<p style='color:red;'>Failed updating `$tblName`.`$columnName`: " . $conn->error . "</p>";
             }
         } else {
-            echo "<p style='color:green;'>Verified `$tableName`.`$columnName` is already non-integer ($dataType).</p>";
+            echo "<p style='color:green;'>Verified `$tblName`.`$columnName` is already non-integer ($dataType).</p>";
         }
     }
 }
 
-function alterColumnToTextIfVarchar($conn, $dbName, $tableName, $columnName)
+function alterColumnToTextIfVarchar($conn, $dbName, $tblName, $columnName)
 {
     $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
+    $safeTable = $conn->real_escape_string($tblName);
     $safeColumn = $conn->real_escape_string($columnName);
     $sql = "SELECT DATA_TYPE FROM information_schema.columns WHERE table_schema='$safeDb' AND table_name='$safeTable' AND column_name='$safeColumn' LIMIT 1";
-    $rst = $conn->query($sql);
+    $result = $conn->query($sql);
 
-    if (!$rst || $rst->num_rows === 0) {
-        echo "<p style='color:orange;'>Column `$columnName` not found in `$tableName` to alter.</p>";
+    if (!$result || $result->num_rows === 0) {
+        echo "<p style='color:orange;'>Column `$columnName` not found in `$tblName` to alter.</p>";
         return;
     }
 
-    $row = $rst->fetch_assoc();
+    $row = $result->fetch_assoc();
     if ($row) {
         $row = array_change_key_case($row, CASE_LOWER);
     }
@@ -126,35 +126,35 @@ function alterColumnToTextIfVarchar($conn, $dbName, $tableName, $columnName)
     if (isset($row['data_type'])) {
         $dataType = strtolower((string) $row['data_type']);
         if ($dataType === 'varchar') {
-            $alterSql = "ALTER TABLE `$tableName` MODIFY COLUMN `$columnName` TEXT NULL";
+            $alterSql = "ALTER TABLE `$tblName` MODIFY COLUMN `$columnName` TEXT NULL";
             if ($conn->query($alterSql)) {
-                echo "<p style='color:blue;'>Updated `$tableName`.`$columnName` to TEXT.</p>";
+                echo "<p style='color:blue;'>Updated `$tblName`.`$columnName` to TEXT.</p>";
             } else {
-                echo "<p style='color:red;'>Failed updating `$tableName`.`$columnName` to TEXT: " . $conn->error . "</p>";
+                echo "<p style='color:red;'>Failed updating `$tblName`.`$columnName` to TEXT: " . $conn->error . "</p>";
             }
         } else {
-            echo "<p style='color:green;'>Verified `$tableName`.`$columnName` is already non-varchar ($dataType).</p>";
+            echo "<p style='color:green;'>Verified `$tblName`.`$columnName` is already non-varchar ($dataType).</p>";
         }
     }
 }
 
-function ensureVarcharColumnLengthAtLeast($conn, $dbName, $tableName, $columnName, $minLength = 255, $defaultValue = '')
+function ensureVarcharColumnLengthAtLeast($conn, $dbName, $tblName, $columnName, $minLength = 255, $defaultValue = '')
 {
     $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
+    $safeTable = $conn->real_escape_string($tblName);
     $safeColumn = $conn->real_escape_string($columnName);
-    $qualifiedTable = "`" . str_replace('`', '``', $dbName) . "`.`" . str_replace('`', '``', $tableName) . "`";
-    $rst = $conn->query("SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE, COLUMN_DEFAULT
+    $qualifiedTable = "`" . str_replace('`', '``', $dbName) . "`.`" . str_replace('`', '``', $tblName) . "`";
+    $result = $conn->query("SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE, COLUMN_DEFAULT
         FROM information_schema.columns
         WHERE table_schema='$safeDb' AND table_name='$safeTable' AND column_name='$safeColumn'
         LIMIT 1");
 
-    if (!$rst || $rst->num_rows === 0) {
-        echo "<p style='color:orange;'>Column `$columnName` not found in `$tableName` to verify length.</p>";
+    if (!$result || $result->num_rows === 0) {
+        echo "<p style='color:orange;'>Column `$columnName` not found in `$tblName` to verify length.</p>";
         return;
     }
 
-    $row = $rst->fetch_assoc();
+    $row = $result->fetch_assoc();
     if ($row) {
         $row = array_change_key_case($row, CASE_LOWER);
     }
@@ -167,12 +167,12 @@ function ensureVarcharColumnLengthAtLeast($conn, $dbName, $tableName, $columnNam
     if ($dataType !== 'varchar' || $currentLength < (int) $minLength || $isNullable) {
         $alterSql = "ALTER TABLE " . $qualifiedTable . " MODIFY COLUMN `" . str_replace('`', '``', $columnName) . "` VARCHAR(" . (int) $minLength . ") " . $defaultSql;
         if ($conn->query($alterSql)) {
-            echo "<p style='color:blue;'>Verified `$tableName`.`$columnName` supports VARCHAR(" . (int) $minLength . ").</p>";
+            echo "<p style='color:blue;'>Verified `$tblName`.`$columnName` supports VARCHAR(" . (int) $minLength . ").</p>";
         } else {
-            echo "<p style='color:red;'>Failed updating `$tableName`.`$columnName` length: " . $conn->error . "</p>";
+            echo "<p style='color:red;'>Failed updating `$tblName`.`$columnName` length: " . $conn->error . "</p>";
         }
     } else {
-        echo "<p style='color:green;'>Verified `$tableName`.`$columnName` already supports VARCHAR(" . (int) $currentLength . ").</p>";
+        echo "<p style='color:green;'>Verified `$tblName`.`$columnName` already supports VARCHAR(" . (int) $currentLength . ").</p>";
     }
 }
 
@@ -229,26 +229,26 @@ if ($cmsConn->connect_error) {
     insertTableEnsureOrderReportPins($cmsConn);
 }
 
-function indexExists($conn, $dbName, $tableName, $indexName)
+function indexExists($conn, $dbName, $tblName, $indexName)
 {
     $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
+    $safeTable = $conn->real_escape_string($tblName);
     $safeIndex = $conn->real_escape_string($indexName);
     $sql = "SELECT 1 FROM information_schema.statistics WHERE table_schema='$safeDb' AND table_name='$safeTable' AND index_name='$safeIndex' LIMIT 1";
-    $rst = $conn->query($sql);
-    return ($rst && $rst->num_rows > 0);
+    $result = $conn->query($sql);
+    return ($result && $result->num_rows > 0);
 }
 
-function dropIndexIfExists($conn, $dbName, $tableName, $indexName, $alterSql)
+function dropIndexIfExists($conn, $dbName, $tblName, $indexName, $alterSql)
 {
-    if (indexExists($conn, $dbName, $tableName, $indexName)) {
+    if (indexExists($conn, $dbName, $tblName, $indexName)) {
         if ($conn->query($alterSql)) {
-            echo "<p style='color:blue;'>Dropped index `$indexName` from `$tableName`.</p>";
+            echo "<p style='color:blue;'>Dropped index `$indexName` from `$tblName`.</p>";
         } else {
-            echo "<p style='color:red;'>Failed dropping index `$indexName` from `$tableName`: " . $conn->error . "</p>";
+            echo "<p style='color:red;'>Failed dropping index `$indexName` from `$tblName`: " . $conn->error . "</p>";
         }
     } else {
-        echo "<p style='color:green;'>Verified index `$indexName` is already removed from `$tableName`.</p>";
+        echo "<p style='color:green;'>Verified index `$indexName` is already removed from `$tblName`.</p>";
     }
 }
 
@@ -1114,79 +1114,79 @@ migrationEnsureIndex($conn, $db_fin, 'stock_out_batch_usage', 'idx_sobu_product_
 
 // echo "<h3>Stock Order Request financial schema setup complete.</h3>";
 
-// function migrationTableExists($conn, $dbName, $tableName)
+// function migrationTableExists($conn, $dbName, $tblName)
 // {
 //     $safeDb = $conn->real_escape_string($dbName);
-//     $safeTable = $conn->real_escape_string($tableName);
+//     $safeTable = $conn->real_escape_string($tblName);
 //     $sql = "SELECT 1 FROM information_schema.tables WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' LIMIT 1";
-//     $rst = $conn->query($sql);
-//     return ($rst && $rst->num_rows > 0);
+//     $result = $conn->query($sql);
+//     return ($result && $result->num_rows > 0);
 // }
 
-// function migrationColumnExists($conn, $dbName, $tableName, $columnName)
+// function migrationColumnExists($conn, $dbName, $tblName, $columnName)
 // {
 //     $safeDb = $conn->real_escape_string($dbName);
-//     $safeTable = $conn->real_escape_string($tableName);
+//     $safeTable = $conn->real_escape_string($tblName);
 //     $safeColumn = $conn->real_escape_string($columnName);
 //     $sql = "SELECT 1 FROM information_schema.columns WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' AND column_name='" . $safeColumn . "' LIMIT 1";
-//     $rst = $conn->query($sql);
-//     return ($rst && $rst->num_rows > 0);
+//     $result = $conn->query($sql);
+//     return ($result && $result->num_rows > 0);
 // }
 
-// function migrationIndexExists($conn, $dbName, $tableName, $indexName)
+// function migrationIndexExists($conn, $dbName, $tblName, $indexName)
 // {
 //     $safeDb = $conn->real_escape_string($dbName);
-//     $safeTable = $conn->real_escape_string($tableName);
+//     $safeTable = $conn->real_escape_string($tblName);
 //     $safeIndex = $conn->real_escape_string($indexName);
 //     $sql = "SELECT 1 FROM information_schema.statistics WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' AND index_name='" . $safeIndex . "' LIMIT 1";
-//     $rst = $conn->query($sql);
-//     return ($rst && $rst->num_rows > 0);
+//     $result = $conn->query($sql);
+//     return ($result && $result->num_rows > 0);
 // }
 
-function migrationTableExists($conn, $dbName, $tableName)
+function migrationTableExists($conn, $dbName, $tblName)
 {
     $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
+    $safeTable = $conn->real_escape_string($tblName);
     $sql = "SELECT 1 FROM information_schema.tables WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' LIMIT 1";
-    $rst = $conn->query($sql);
-    return ($rst && $rst->num_rows > 0);
+    $result = $conn->query($sql);
+    return ($result && $result->num_rows > 0);
 }
 
-function migrationColumnExists($conn, $dbName, $tableName, $columnName)
+function migrationColumnExists($conn, $dbName, $tblName, $columnName)
 {
     $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
+    $safeTable = $conn->real_escape_string($tblName);
     $safeColumn = $conn->real_escape_string($columnName);
     $sql = "SELECT 1 FROM information_schema.columns WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' AND column_name='" . $safeColumn . "' LIMIT 1";
-    $rst = $conn->query($sql);
-    return ($rst && $rst->num_rows > 0);
+    $result = $conn->query($sql);
+    return ($result && $result->num_rows > 0);
 }
 
-function migrationIndexExists($conn, $dbName, $tableName, $indexName)
+function migrationIndexExists($conn, $dbName, $tblName, $indexName)
 {
     $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
+    $safeTable = $conn->real_escape_string($tblName);
     $safeIndex = $conn->real_escape_string($indexName);
     $sql = "SELECT 1 FROM information_schema.statistics WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' AND index_name='" . $safeIndex . "' LIMIT 1";
-    $rst = $conn->query($sql);
-    return ($rst && $rst->num_rows > 0);
+    $result = $conn->query($sql);
+    return ($result && $result->num_rows > 0);
 }
 
-function migrationEnsureColumn($conn, $dbName, $tableName, $columnName, $alterSql, $successMessage)
+function migrationEnsureColumn($conn, $dbName, $tblName, $columnName, $alterSql, $successMessage)
 {
-    if (!migrationColumnExists($conn, $dbName, $tableName, $columnName)) {
+    if (!migrationColumnExists($conn, $dbName, $tblName, $columnName)) {
         if ($conn->query($alterSql)) {
             echo "<p style='color:green;'>" . $successMessage . "</p>";
         } else {
-            echo "<p style='color:red;'>Failed altering `" . $tableName . "` for column `" . $columnName . "`: " . $conn->error . "</p>";
+            echo "<p style='color:red;'>Failed altering `" . $tblName . "` for column `" . $columnName . "`: " . $conn->error . "</p>";
         }
     }
 }
 
-function migrationEnsureColumnAfter($conn, $dbName, $tableName, $columnName, $afterColumnName, $modifySql, $successMessage)
+function migrationEnsureColumnAfter($conn, $dbName, $tblName, $columnName, $afterColumnName, $modifySql, $successMessage)
 {
     $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
+    $safeTable = $conn->real_escape_string($tblName);
     $safeColumn = $conn->real_escape_string($columnName);
     $safeAfterColumn = $conn->real_escape_string($afterColumnName);
     $sql = "SELECT c.ORDINAL_POSITION AS column_position, a.ORDINAL_POSITION AS after_position
@@ -1199,13 +1199,13 @@ function migrationEnsureColumnAfter($conn, $dbName, $tableName, $columnName, $af
             AND c.table_name = '$safeTable'
             AND c.column_name = '$safeColumn'
         LIMIT 1";
-    $rst = $conn->query($sql);
+    $result = $conn->query($sql);
 
-    if (!$rst || $rst->num_rows === 0) {
+    if (!$result || $result->num_rows === 0) {
         return;
     }
 
-    $row = $rst->fetch_assoc();
+    $row = $result->fetch_assoc();
     $columnPosition = isset($row['column_position']) ? (int) $row['column_position'] : 0;
     $afterPosition = isset($row['after_position']) ? (int) $row['after_position'] : 0;
 
@@ -1213,26 +1213,26 @@ function migrationEnsureColumnAfter($conn, $dbName, $tableName, $columnName, $af
         if ($conn->query($modifySql)) {
             echo "<p style='color:blue;'>" . $successMessage . "</p>";
         } else {
-            echo "<p style='color:red;'>Failed repositioning `" . $tableName . "`.`" . $columnName . "`: " . $conn->error . "</p>";
+            echo "<p style='color:red;'>Failed repositioning `" . $tblName . "`.`" . $columnName . "`: " . $conn->error . "</p>";
         }
     }
 }
 
-function migrationEnsureIndex($conn, $dbName, $tableName, $indexName, $alterSql, $successMessage)
+function migrationEnsureIndex($conn, $dbName, $tblName, $indexName, $alterSql, $successMessage)
 {
-    if (!migrationIndexExists($conn, $dbName, $tableName, $indexName)) {
+    if (!migrationIndexExists($conn, $dbName, $tblName, $indexName)) {
         if ($conn->query($alterSql)) {
             echo "<p style='color:green;'>" . $successMessage . "</p>";
         } else {
-            echo "<p style='color:red;'>Failed altering `" . $tableName . "` for index `" . $indexName . "`: " . $conn->error . "</p>";
+            echo "<p style='color:red;'>Failed altering `" . $tblName . "` for index `" . $indexName . "`: " . $conn->error . "</p>";
         }
     }
 }
 
-function migrationGetSettingValue($conn, $dbName, $tableName, $settingKey)
+function migrationGetSettingValue($conn, $dbName, $tblName, $settingKey)
 {
     $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
+    $safeTable = $conn->real_escape_string($tblName);
     $safeKey = $conn->real_escape_string($settingKey);
     $sql = "SELECT `setting_value` FROM `" . $safeDb . "`.`" . $safeTable . "` WHERE `setting_key` = '" . $safeKey . "' LIMIT 1";
     $result = $conn->query($sql);
@@ -1245,10 +1245,10 @@ function migrationGetSettingValue($conn, $dbName, $tableName, $settingKey)
     return isset($row['setting_value']) ? (string) $row['setting_value'] : null;
 }
 
-function migrationUpsertSetting($conn, $dbName, $tableName, $settingKey, $settingValue, $remark, $actorUserId)
+function migrationUpsertSetting($conn, $dbName, $tblName, $settingKey, $settingValue, $remark, $actorUserId)
 {
     $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
+    $safeTable = $conn->real_escape_string($tblName);
     $safeKey = $conn->real_escape_string($settingKey);
     $safeValue = $conn->real_escape_string($settingValue);
     $safeRemark = $conn->real_escape_string($remark);

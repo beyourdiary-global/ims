@@ -9,7 +9,7 @@ $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
     
-    var name_chk = 0;
+    let name_chk = 0;
 
     if (($('#csm_name').val() === '' || $('#csm_name').val() === null || $('#csm_name')
             .val() === undefined)) {

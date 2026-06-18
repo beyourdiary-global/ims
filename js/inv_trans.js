@@ -1,13 +1,13 @@
 //show text field when "create new merchant" is selected from dropdown list
 document.getElementById('ivs_mrcht').addEventListener('change', function() {
-    var create_mrcht_sect = document.getElementById('createMerchant');
+    const create_mrcht_sect = document.getElementById('createMerchant');
     create_mrcht_sect.hidden = this.value !== 'other';
 })
 
 // Trigger the check on page load
 window.onload = function() {
-    var create_mrcht_sect = document.getElementById('createMerchant');
-    var ivs_mrcht_value = document.getElementById('ivs_mrcht').value;
+    const create_mrcht_sect = document.getElementById('createMerchant');
+    const ivs_mrcht_value = document.getElementById('ivs_mrcht').value;
     create_mrcht_sect.hidden = ivs_mrcht_value !== 'other';
 };
 
@@ -40,11 +40,11 @@ $("#ivs_amt").on("input", function() {
 $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
-    var type_chk = 0;
-    var date_chk = 0;
-    var amt_chk = 0;
-    var mrcht_chk = 0;
-    var mrcht_other_chk = 0;
+    let type_chk = 0;
+    let date_chk = 0;
+    let amt_chk = 0;
+    let mrcht_chk = 0;
+    let mrcht_other_chk = 0;
 
     if ($('#ivs_type').val() === '' || $('#ivs_type').val() === null || $('#ivs_type')
         .val() === undefined) {

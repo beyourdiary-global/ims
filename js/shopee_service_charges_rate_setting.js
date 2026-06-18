@@ -19,10 +19,10 @@ $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
     
-    var curr_chk = 0;
-    var commission_chk = 0;
-    var service_chk = 0;
-    var transaction_chk = 0;
+    let curr_chk = 0;
+    let commission_chk = 0;
+    let service_chk = 0;
+    let transaction_chk = 0;
 
     if (($('#curr').val() === '' || $('#curr').val() === null || $('#curr')
             .val() === undefined)) {

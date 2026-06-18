@@ -9,7 +9,7 @@ $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
     
-    var name_chk = 0;
+    let name_chk = 0;
 
     if (($('#fb_name').val() === '' || $('#fb_name').val() === null || $('#fb_name')
             .val() === undefined)) {

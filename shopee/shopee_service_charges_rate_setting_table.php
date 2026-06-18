@@ -1,11 +1,10 @@
 <?php
 $pageTitle = "Shopee Service Charges Rate Setting";
 $currentPagePin = 83;
-$isFinance = 1;
 
 include_once '../include/list_page_header.php';
 
-$redirect_page = $SITEURL . '/shopee/shopee_service_charges_rate_setting.php';
+$redirectPage = $SITEURL . '/shopee/shopee_service_charges_rate_setting.php';
 $deleteRedirectPage = $SITEURL . '/shopee/shopee_service_charges_rate_setting_table.php';
 $result = getData('*', '', '', SHOPEE_SCR_SETT, $finance_connect);
 // if (!$result) {
@@ -22,10 +21,7 @@ $result = getData('*', '', '', SHOPEE_SCR_SETT, $finance_connect);
     <link rel="stylesheet" href="../css/main.css">
 </head>
 
-<script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
-
-
-<body>
+<script src="<?= $SITEURL ?>/js/list_page_common.js"></script><body>
     
 
     <div class="page-load-cover">
@@ -43,7 +39,7 @@ $result = getData('*', '', '', SHOPEE_SCR_SETT, $finance_connect);
                             <h2><?php echo $pageTitle ?></h2>
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Setting </a>
+                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Setting </a>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -76,19 +72,19 @@ $result = getData('*', '', '', SHOPEE_SCR_SETT, $finance_connect);
                         ?>
     
                                 <tr>
-                                <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                     <th scope="row"><?= $num++; ?></th>
                                     <td scope="row" class="btn-container">
                                     <div class="d-flex align-items-center">
-                                    <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess);?>
-                                    <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2) ?>
-                                    <?php renderDeleteButton($pinAccess, $row['id'], $currencyUnit,$row['commission'], $pageTitle, $redirect_page, $deleteRedirectPage) ?>
+                                    <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess);?>
+                                    <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2) ?>
+                                    <?php renderDeleteButton($pinAccess, $row['id'], $currencyUnit,$row['commission'], $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                     </div>
                                     </td>
-                                    <td scope="row"><?php if (isset($row2['unit'])) echo $row2['unit'] ?></td>
-                                    <td scope="row"><?php if (isset($row['commission'])) echo $row['commission'] ?></td>
-                                    <td scope="row"><?php if (isset($row['service'])) echo $row['service'] ?></td>
-                                    <td scope="row"><?php if (isset($row['transaction'])) echo $row['transaction'] ?></td>
+                                    <td scope="row"><?php if (isset($row2['unit'])) echo htmlspecialchars((string) $row2['unit'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['commission'])) echo htmlspecialchars((string) $row['commission'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['service'])) echo htmlspecialchars((string) $row['service'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['transaction'])) echo htmlspecialchars((string) $row['transaction'], ENT_QUOTES, 'UTF-8') ?></td>
                                 </tr>
                         <?php }
                          }
@@ -111,8 +107,8 @@ $result = getData('*', '', '', SHOPEE_SCR_SETT, $finance_connect);
     </div>
 
     <script>
-        var page = "<?= $pageTitle ?>";
-        var action = "<?php echo isset($act) ? $act : ' '; ?>";
+        const page = "<?= $pageTitle ?>";
+        const action = "<?php echo isset($act) ? $act : ' '; ?>";
 
         checkCurrentPage(page, action);
         //to solve the issue of dropdown menu displaying inside the table when table class include table-responsive

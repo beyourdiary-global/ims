@@ -111,7 +111,7 @@
         return;
       }
 
-      window.alert(message);
+      showNotification(message, "success");
     }
 
     function setLoading(on) {

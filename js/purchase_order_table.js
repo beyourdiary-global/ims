@@ -1,9 +1,9 @@
 ﻿
 
 $(document).ready(function () {
-  var cfg = window.__PURCHASE_ORDER_TABLE_CONFIG || {};
-  var page = cfg.page || "Purchase Order";
-  var action = cfg.action || "";
+  const cfg = window.__PURCHASE_ORDER_TABLE_CONFIG || {};
+  const page = cfg.page || "Purchase Order";
+  const action = cfg.action || "";
 
   createSortingTable("table");
   checkCurrentPage(page, action);
@@ -14,7 +14,7 @@ $(document).ready(function () {
   $(document).on("change", ".exportAll", function (event) {
     event.preventDefault();
 
-    var isChecked = $(this).prop("checked");
+    const isChecked = $(this).prop("checked");
     $(this)
       .closest("table")
       .find("tbody tr:visible .export")
@@ -30,7 +30,7 @@ $(document).ready(function () {
     function (event) {
       event.preventDefault();
 
-      var checkboxValues = [];
+      const checkboxValues = [];
 
       if ($.fn.DataTable.isDataTable("#table")) {
         $("#table")
@@ -39,7 +39,7 @@ $(document).ready(function () {
           .nodes()
           .to$()
           .each(function () {
-            var checkbox = $(this).find(".export:checked");
+            const checkbox = $(this).find(".export:checked");
             if (checkbox.length > 0) {
               checkbox.each(function () {
                 checkboxValues.push($(this).val());
@@ -53,7 +53,7 @@ $(document).ready(function () {
       }
 
       if (checkboxValues.length <= 0) {
-        alert("Please select data to export.");
+        showNotification("Please select data to export.", "warning");
         return;
       }
 
@@ -62,7 +62,11 @@ $(document).ready(function () {
         window.location.hostname === "localhost" ||
         window.location.hostname === "127.0.0.1"
       ) {
-        alert("Export succesful.");
+        showNotification("Export succesful.", "success");
+        window.setTimeout(function () {
+          $("#exportForm").trigger("submit");
+        }, 600);
+        return;
       }
       $("#exportForm").trigger("submit");
     },

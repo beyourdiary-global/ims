@@ -2,7 +2,6 @@
 $currentPagePin = 89;
 ob_start();
 $pageTitle = "Stripe Transaction Backup Record Summary";
-$isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
@@ -123,7 +122,7 @@ $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 
-$redirect_page = $SITEURL . '/finance/stripe_trans_backup.php';
+$redirectPage = $SITEURL . '/finance/stripe_trans_backup.php';
 
 $result = getData('*', '', '', STRIPE_TRANS_BACKUP, $finance_connect);
 
@@ -176,7 +175,7 @@ $img_path = SITEURL . img_server . 'finance/stripe_trans_backup/';
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         Transaction </a>
                                 <?php endif; ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn"><i
@@ -219,18 +218,18 @@ $img_path = SITEURL . img_server . 'finance/stripe_trans_backup/';
 
                                 <tr onclick="window.location='stripe_trans_backup_table_detail.php?ids=<?= urlencode($row['id']) ?>';" style="cursor:pointer;">
                                     <th class="hideColumn" scope="row">
-                                        <?= $row['id'] ?>
+                                        <?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>
                                     </th>
                                     <th class="text-center">
-                                        <input type="checkbox" class="export" value="<?= $row['id'] ?>">
+                                        <input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>">
                                     </th>
                                     <th scope="row">
                                         <?= $num++; ?>
                                     </th>
 
-                                    <td scope="row"><?php if (isset($row2['unit'])) echo $row2['unit'] ?></td>
+                                    <td scope="row"><?php if (isset($row2['unit'])) echo htmlspecialchars((string) $row2['unit'], ENT_QUOTES, 'UTF-8') ?></td>
                                     
-                                    <td scope="row"><?php if (isset($row['amount'])) echo $row['amount'] ?></td>
+                                    <td scope="row"><?php if (isset($row['amount'])) echo htmlspecialchars((string) $row['amount'], ENT_QUOTES, 'UTF-8') ?></td>
 
                                 </tr>
                             <?php }
@@ -259,8 +258,8 @@ $img_path = SITEURL . img_server . 'finance/stripe_trans_backup/';
 </body>
 <script>
     //Initial Page And Action Value
-    var page = "<?= $pageTitle ?>";
-    var action = "<?php echo isset($act) ? $act : ' '; ?>";
+    const page = "<?= $pageTitle ?>";
+    const action = "<?php echo isset($act) ? $act : ' '; ?>";
     checkCurrentPage(page, action);
     /**
   oufei 20231014

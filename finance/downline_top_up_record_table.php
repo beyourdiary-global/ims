@@ -2,7 +2,6 @@
 $currentPagePin = 0;
 ob_start();
 $pageTitle = 'Downline Top Up Record';
-$isFinance = 1;
 
 
 include_once '../include/list_page_header.php';
@@ -116,7 +115,7 @@ if (!empty($checkboxValues)) {
     }
 }
 
-$redirect_page = $SITEURL . '/finance/downline_top_up_record.php';
+$redirectPage = $SITEURL . '/finance/downline_top_up_record.php';
 $deleteRedirectPage = $SITEURL . '/finance/downline_top_up_record_table.php';
 $result = getData('*', '', '', DW_TOP_UP_RECORD, $finance_connect);
 $tblName = DW_TOP_UP_RECORD;
@@ -129,10 +128,7 @@ $tblName = DW_TOP_UP_RECORD;
 <link rel="stylesheet" href="../css/main.css">
 </head>
 
-<script src="<?= $SITEURL ?>/js/list_page_common.js"></script>
-
-
-<body>
+<script src="<?= $SITEURL ?>/js/list_page_common.js"></script><body>
     
 
     <div class="page-load-cover">
@@ -149,7 +145,7 @@ $tblName = DW_TOP_UP_RECORD;
                             <h2><?php echo $pageTitle ?></h2>
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed('Add', $pinAccess)): ?>
-                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . '?act=' . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add <?php echo $pageTitle ?> </a>
+                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . '?act=' . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add <?php echo $pageTitle ?> </a>
                                 <?php endif; ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>
                             </div>
@@ -286,9 +282,9 @@ $tblName = DW_TOP_UP_RECORD;
                                     <td scope="row" class="btn-container">
                                     <div class="d-flex align-items-center">' 
                                     ?>
-                                        <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess);?>
-                                        <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2) ?>
-                                        <?php renderDeleteButton($pinAccess, $row['id'],  $agentName, $brandName, $pageTitle, $redirect_page, $deleteRedirectPage) ?>
+                                        <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess);?>
+                                        <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2) ?>
+                                        <?php renderDeleteButton($pinAccess, $row['id'],  $agentName, $brandName, $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                     <?php echo'</div>
                                     </td>
                                     <td scope="row">' . (isset($row3['name']) ? $row3['name'] : '') . '</td>
@@ -472,8 +468,8 @@ $tblName = DW_TOP_UP_RECORD;
     <script>
         <?php include '../js/fb_ads_topup_table.js' ?>
         //Initial Page And Action Value
-        var page = "<?= $pageTitle ?>";
-        var action = "<?php echo isset($act) ? $act : ' '; ?>";
+        const page = "<?= $pageTitle ?>";
+        const action = "<?php echo isset($act) ? $act : ' '; ?>";
 
         checkCurrentPage(page, action);
         //to solve the issue of dropdown menu displaying inside the table when table class include table-responsive

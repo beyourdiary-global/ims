@@ -2,7 +2,6 @@
 $currentPagePin = 0;
 ob_start();
 $pageTitle = "Internal Consume Item";
-$isFinance = 1;
 
 include_once '../include/list_page_header.php';
 
@@ -118,7 +117,7 @@ if (!empty($checkboxValues)) {
 }
 
 $deleteRedirectPage = $SITEURL . '/finance/internal_consume_item_table.php';
-$redirect_page = $SITEURL . '/finance/internal_consume_item.php';
+$redirectPage = $SITEURL . '/finance/internal_consume_item.php';
 $result = getData('*', '', '', ITL_CSM_ITEM, $finance_connect);
 $tblName = ITL_CSM_ITEM;
 ?>
@@ -156,7 +155,7 @@ $tblName = ITL_CSM_ITEM;
                             <h2><?php echo $pageTitle ?></h2>
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Item </a>
+                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Item </a>
                                 <?php endif; ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>
                             </div>
@@ -290,9 +289,9 @@ $tblName = ITL_CSM_ITEM;
                                     <td scope="row" class="btn-container">
                                         <div class="d-flex align-items-center">' 
                                         ?>
-                                            <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess);?>
-                                            <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2) ?>
-                                            <?php renderDeleteButton($pinAccess, $row['id'],'', '', $pageTitle, $redirect_page, $deleteRedirectPage) ?>
+                                            <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess);?>
+                                            <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2) ?>
+                                            <?php renderDeleteButton($pinAccess, $row['id'],'', '', $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                         <?php echo'</div>
                                     </td>
                                     <td scope="row">' . (isset($row['date']) ? $row['date'] : '') . '</td>
@@ -472,8 +471,8 @@ $tblName = ITL_CSM_ITEM;
 <?php include "../js/internal_consume_item_table.js" ?>
 
     //Initial Page And Action Value
-    var page = "<?= $pageTitle ?>";
-    var action = "<?php echo isset($act) ? $act : ' '; ?>";
+    const page = "<?= $pageTitle ?>";
+    const action = "<?php echo isset($act) ? $act : ' '; ?>";
 
     checkCurrentPage(page, action);
     /* function(void) : to solve the issue of dropdown menu displaying inside the table when table class include table-responsive */

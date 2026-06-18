@@ -22,9 +22,10 @@ $("#initca_desc").on("input", function() {
 
 $('.submitBtn').on('click', () => {
     $(".error-message").remove();
-    var date_chk = 0;
-    var currency_chk = 0;
-    var amt_chk = 0;
+    let date_chk = 0;
+    let currency_chk = 0;
+    let amt_chk = 0;
+    let desc_chk = 0;
 
     if (($('#initca_date').val() === '' || $('#initca_date').val() === null || $('#initca_date')
             .val() === undefined)) {

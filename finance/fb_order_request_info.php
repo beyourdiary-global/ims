@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 69;
 $disablePinGroupPageTitleSync = true;
-$isFinance = 1;
 $orderRequestInfoSource = 'facebook';
 $orderRequestInfoPageTitle = 'Facebook Order Request Info';
 $orderRequestInfoAllowedPins = array(69);

@@ -2,7 +2,6 @@
 $currentPagePin = 50;
 ob_start();
 $pageTitle = "Facebook Ads Top Up Transaction";
-$isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
@@ -136,7 +135,7 @@ $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 $deleteRedirectPage = $SITEURL . '/fb_ads_topup_trans_table.php';
-$redirect_page = $SITEURL . '/finance/fb_ads_topup_trans.php';
+$redirectPage = $SITEURL . '/finance/fb_ads_topup_trans.php';
 $result = getData('*', '', '', FB_ADS_TOPUP, $finance_connect);
 $result2 = getData('*', '', '', FB_ADS_TOPUP, $finance_connect);
 
@@ -169,7 +168,7 @@ $result2 = getData('*', '', '', FB_ADS_TOPUP, $finance_connect);
                         <h2><?php echo $pageTitle . " Detail"; ?></h2>
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
+                                <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
                             <?php endif; ?>
                             <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="if (exportData()) { showExportNotification(); }"><i class="fa-solid fa-file-export"></i> Export</a>
                         </div>
@@ -214,23 +213,23 @@ $result2 = getData('*', '', '', FB_ADS_TOPUP, $finance_connect);
                             $usr = $pic->fetch_assoc();
                     ?>
                             <tr>
-                                <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
-                                <th class="text-center"><input type="checkbox" class="export" value="<?= $row['id'] ?>"></th>
+                                <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
+                                <th class="text-center"><input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>"></th>
                                 <th scope="row"><?= $num++; ?></th>
                                 <td scope="row" class="btn-container">
                                 <div class="d-flex align-items-center">
-                                    <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess);?>
-                                    <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2) ?>
-                                    <?php renderDeleteButton($pinAccess, $row['id'], $row['meta_acc'], $row['transactionID'], $pageTitle, $redirect_page, $deleteRedirectPage) ?>
+                                    <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess);?>
+                                    <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2) ?>
+                                    <?php renderDeleteButton($pinAccess, $row['id'], $row['meta_acc'], $row['transactionID'], $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                 </div>
                                 </td>
-                                <td scope="row"><?php if (isset($meta_acc['accName'])) echo  $meta_acc['accName'] ?></td>
-                                <td scope="row"><?= $row['transactionID'] ?></td>
-                                <td scope="row"><?php if (isset($row['payment_date'])) echo $row['payment_date'] ?></td>
-                                <td scope="row"><?php if (isset($usr['name'])) echo $usr['name'] ?></td>
-                                <td scope="row"><?php if (isset($row['topup_amt'])) echo  $row['topup_amt'] ?></td>
-                                <td scope="row"><?php if (isset($row['attachment'])) echo $row['attachment'] ?></td>
-                                <td scope="row"><?php if (isset($row['remark'])) echo $row['remark'] ?></td>
+                                <td scope="row"><?php if (isset($meta_acc['accName'])) echo  htmlspecialchars((string) $meta_acc['accName'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) $row['transactionID'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?php if (isset($row['payment_date'])) echo htmlspecialchars((string) $row['payment_date'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?php if (isset($usr['name'])) echo htmlspecialchars((string) $usr['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?php if (isset($row['topup_amt'])) echo  htmlspecialchars((string) $row['topup_amt'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?php if (isset($row['attachment'])) echo htmlspecialchars((string) $row['attachment'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?php if (isset($row['remark'])) echo htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') ?></td>
                            
                             </tr>
                     <?php }

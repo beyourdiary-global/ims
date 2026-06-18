@@ -1,14 +1,13 @@
 <?php
 $pageTitle = "Debit Notes (Invoice)";
 $currentPagePin = 94;
-$isFinance = 1;
 
 
 include_once '../include/list_page_header.php';
 
 $tblName = DEBIT_NOTES_INV;
 
-$redirect_page = $SITEURL . '/finance/debit_notes_inv.php';
+$redirectPage = $SITEURL . '/finance/debit_notes_inv.php';
 $result = getData('*', '', '', $tblName, $finance_connect);
 
 if (post('pay_status_option')) {
@@ -17,15 +16,15 @@ if (post('pay_status_option')) {
 
     $datafield = $oldvalarr = $chgvalarr = array();
 
-    $rst = getData('*', "id = '$inv_id'", '', $tblName, $finance_connect);
+    $result = getData('*', "id = '$inv_id'", '', $tblName, $finance_connect);
 
 
-    if (!$rst) {
-        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</>";
+    if (!$result) {
+        renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
         echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
     }
 
-    $rowInv = $rst->fetch_assoc();
+    $rowInv = $result->fetch_assoc();
 
     echo "<script>console.log('TEST3')</script>";
 
@@ -104,7 +103,7 @@ if (post('pay_status_option')) {
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         <?php echo $pageTitle ?>
                                     </a>
                                 <?php endif; ?>
@@ -140,7 +139,7 @@ if (post('pay_status_option')) {
                                 <?php $payment_status = $row['payment_status']; ?>
                                 <tr>
                                     <th class="hideColumn" scope="row">
-                                        <?= $row['id'] ?>
+                                        <?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>
                                     </th>
                                     <th scope="row">
                                         <?= $num;
@@ -148,16 +147,16 @@ if (post('pay_status_option')) {
                                     </th>
                                     <td scope="row">
                                         <?php if (isset($row2['name']))
-                                            echo $row2['name'] ?>
+                                            echo htmlspecialchars((string) $row2['name'], ENT_QUOTES, 'UTF-8') ?>
                                         </td>
                                         <td scope="row">
-                                        <?= $row['invoice'] ?>
+                                        <?= htmlspecialchars((string) $row['invoice'], ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['date'] ?>
+                                        <?= htmlspecialchars((string) $row['date'], ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['total'] ?>
+                                        <?= htmlspecialchars((string) $row['total'], ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
                                         <div class="dropdown">
@@ -190,19 +189,19 @@ if (post('pay_status_option')) {
                                             <ul class="dropdown-menu dropdown-menu-left" aria-labelledby="payStatusMenu">
                                                 <li>
                                                     <a class="dropdown-item" id="pendingOption" href=""
-                                                        onclick="updatepayStatus(<?= $row['id'] ?>,'Pending')"><span
+                                                        onclick="updatepayStatus(<?= (int) $row['id'] ?>,'Pending')"><span
                                                             class="mdi mdi-record-circle-outline" style="color:#F17FB5"></span>
                                                         Pending</a>
                                                 </li>
                                                 <li>
                                                     <a class="dropdown-item" id="paidOption" href=""
-                                                        onclick="updatepayStatus(<?= $row['id'] ?>,'Paid')"><span
+                                                        onclick="updatepayStatus(<?= (int) $row['id'] ?>,'Paid')"><span
                                                             class="mdi mdi-record-circle-outline" style="color:#008000"></span>
                                                         Paid</a>
                                                 </li>
                                                 <li>
                                                     <a class="dropdown-item" id="cancelledOption" href=""
-                                                        onclick="updatepayStatus(<?= $row['id'] ?>,'Cancelled')"><span
+                                                        onclick="updatepayStatus(<?= (int) $row['id'] ?>,'Cancelled')"><span
                                                             class="mdi mdi-record-circle-outline" style="color:#ff0000"></span>
                                                         Cancelled</a>
                                                 </li>
@@ -210,29 +209,29 @@ if (post('pay_status_option')) {
                                         </div>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['due_date'] ?>
+                                        <?= htmlspecialchars((string) $row['due_date'], ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
                                         <div style="text-align: center;">
                                             <?php if (isActionAllowed("View", $pinAccess)): ?>
                                                 <a class="icon-buttons rounded p-1 bg-label-success"
-                                                    href="<?= $redirect_page . "?id=" . $row['id'] ?>" title="View"><i
+                                                    href="<?= htmlspecialchars((string) ($redirectPage . '?id=' . (int) $row['id']), ENT_QUOTES, 'UTF-8') ?>" title="View"><i
                                                         class="fas fa-eye bg-label-success"></i></a>
                                             <?php endif; ?>
 
                                             <?php if (isActionAllowed("Edit", $pinAccess)): ?>
                                                 <a class="icon-buttons rounded p-1 bg-label-warning"
-                                                    href="<?= $redirect_page . "?id=" . $row['id'] . '&act=' . $act_2 ?>"
+                                                    href="<?= htmlspecialchars((string) ($redirectPage . '?id=' . (int) $row['id'] . '&act=' . $act_2), ENT_QUOTES, 'UTF-8') ?>"
                                                     title="Edit"><i class="fas fa-edit bg-label-warning"></i></a>
                                             <?php endif; ?>
 
                                             <a class="icon-buttons rounded p-1 bg-label-info" target="_blank"
-                                                href="generate_pdf.php?id=<?= $row['id'] . '&act=' . $act_2 . '&isDebit=1' ?>"
+                                                href="<?= htmlspecialchars((string) ('generate_pdf.php?id=' . (int) $row['id'] . '&act=' . $act_2 . '&isDebit=1'), ENT_QUOTES, 'UTF-8') ?>"
                                                 title="Download"><i class="fas fa-download bg-label-info"></i></a>
 
                                             <?php if (isActionAllowed("Delete", $pinAccess)): ?>
                                                 <a class="icon-buttons rounded p-1 bg-label-danger"
-                                                    onclick="confirmationDialog('<?= $row['id'] ?>',['<?= $row['invoice'] ?>'],'<?php echo $pageTitle ?>','<?= $redirect_page ?>','<?= $SITEURL ?>/debit_notes_inv_table.php','D')"
+                                                    onclick="confirmationDialog(<?= json_encode((string) $row['id']) ?>,[<?= json_encode((string) $row['invoice']) ?>],<?= json_encode((string) $pageTitle) ?>,<?= json_encode((string) $redirectPage) ?>,<?= json_encode((string) ($SITEURL . '/debit_notes_inv_table.php')) ?>,'D')"
                                                     title="Delete"><i class="fas fa-trash-alt bg-label-danger"></i></a>
                                             <?php endif; ?>
                                         </div>
@@ -262,8 +261,8 @@ if (post('pay_status_option')) {
 
 <script>
     //Initial Page And Action Value
-    var page = "<?= $pageTitle ?>";
-    var action = "<?php echo isset($act) ? $act : ' '; ?>";
+    const page = "<?= $pageTitle ?>";
+    const action = "<?php echo isset($act) ? $act : ' '; ?>";
 
     checkCurrentPage(page, action);
     dropdownMenuDispFix();

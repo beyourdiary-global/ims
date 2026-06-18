@@ -1,15 +1,14 @@
 <?php
 $currentPagePin = 0;
 $pageTitle = "Lazada Account";
-$isFinance = 1;
 
 include_once '../include/list_page_header.php';
 
-$redirect_page = $SITEURL . '/finance/lazada_acc.php';
+$redirectPage = $SITEURL . '/finance/lazada_acc.php';
 $deleteRedirectPage = $SITEURL . '/finance/lazada_acc_table.php';
 $result = getData('*', '', '', LAZADA_ACC, $finance_connect);
 // if (!$result) {
-//     echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+//     renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
 //     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
 // }
 ?>
@@ -49,7 +48,7 @@ $result = getData('*', '', '', LAZADA_ACC, $finance_connect);
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         Account </a>
                                 <?php endif; ?>
                             </div>
@@ -85,13 +84,13 @@ $result = getData('*', '', '', LAZADA_ACC, $finance_connect);
                                     ?>
 
                                     <tr>
-                                        <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                        <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                         <th scope="row"><?= $num++; ?></th>
                                         <td scope="row" class="btn-container">
                                             <div class="d-flex align-items-center">
-                                                <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                                <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2) ?>
-                                                <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], '', $pageTitle, $redirect_page, $deleteRedirectPage) ?>
+                                                <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                                <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2) ?>
+                                                <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], '', $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                             </div>
                                         </td>
                                         <td scope="row"><?= isset($row['name']) ? $row['name'] : '' ?></td>

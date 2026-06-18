@@ -2,7 +2,6 @@
 ob_start();
 $pageTitle = "Stock Credit Top Up Record";
 $currentPagePin = 78;
-$isFinance = 1;
 
 include_once '../include/list_page_header.php';
 
@@ -120,7 +119,7 @@ if (!empty($checkboxValues)) {
 $tblName = STK_CDT_TOPUP_RCD;
 
 
-$redirect_page = $SITEURL . '/finance/stock_credit_top_up_request.php';
+$redirectPage = $SITEURL . '/finance/stock_credit_top_up_request.php';
 $deleteRedirectPage = $SITEURL . '/finance/stock_credit_top_up_request_table.php';
 
 $result = getData('*', '', '', $tblName, $finance_connect);
@@ -155,7 +154,7 @@ $result = getData('*', '', '', $tblName, $finance_connect);
                         <h2><?php echo $pageTitle ?></h2>
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
+                                <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
                             <?php endif; ?>
                             <?php if (isActionAllowed("Export", $pinAccess)) : ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>
@@ -296,9 +295,9 @@ $result = getData('*', '', '', $tblName, $finance_connect);
                                 <td scope="row" class="btn-container">
                                 <div class="d-flex align-items-center">' 
                                 ?>
-                                    <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess);?>
-                                    <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2) ?>
-                                    <?php renderDeleteButton($pinAccess, $row['id'], $row3['name'], $rowBrand['name'], $pageTitle, $redirect_page, $deleteRedirectPage) ?>
+                                    <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess);?>
+                                    <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2) ?>
+                                    <?php renderDeleteButton($pinAccess, $row['id'], $row3['name'], $rowBrand['name'], $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                 <?php echo'</div>
                                 </td>
                                 <td scope="row">' . (isset($row3['name']) ? $row3['name'] : '') . '</td>

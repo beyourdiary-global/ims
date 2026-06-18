@@ -1,7 +1,7 @@
 (function () {
   function init() {
-    var cfg = window.labelTableConfig || {};
-    var table = document.getElementById("table");
+    const cfg = window.labelTableConfig || {};
+    const table = document.getElementById("table");
 
     if (table) {
       createSortingTable("table");

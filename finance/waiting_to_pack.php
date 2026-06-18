@@ -3,7 +3,6 @@ $currentPagePin = 146;
 $pageTitle = 'Waiting To Pack';
 $displayPageTitle = 'Waiting To Pack';
 $disablePinGroupPageTitleSync = true;
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
@@ -13,7 +12,7 @@ $legacyProcessingAccess = checkPinByGroupId($connect, 128);
 $allOrdersAccess = checkPinByGroupId($connect, 130);
 $canViewPage = isActionAllowed('View', $processingAccess) || isActionAllowed('View', $legacyProcessingAccess) || isActionAllowed('View', $allOrdersAccess);
 if (!$canViewPage) {
-    echo '<script>alert("You do not have permission to view Waiting To Pack."); location.replace("../dashboard.php");</script>';
+    renderNotificationScript('You do not have permission to view Waiting To Pack.', 'error', '../dashboard.php', 1200, true);
     exit;
 }
 
@@ -386,7 +385,7 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
                                         $orderCode = shopeeOmsGetOrderCodeValue($row, $rowSourceConfig);
                                         $tokenMapKey = $rowPlatform . '|' . (int) $row['id'];
                                         $tokenValue = isset($orderTokenMap[$tokenMapKey]) ? (string) $orderTokenMap[$tokenMapKey] : '';
-                                        $tokenLink = $tokenValue !== '' ? $SITEURL . '/warehouse_stock_in_scan.php?t=' . urlencode($tokenValue) : '';
+                                        $tokenLink = $tokenValue !== '' ? $SITEURL . '/stock/warehouse_stock_in_scan.php?t=' . urlencode($tokenValue) : '';
                                         $stockOutWarehouseName = shopeeOmsResolveStockOutWarehouseName($connect, $row, $waitingToPackDefaultWarehouseId, $waitingToPackWarehouseNameMap);
                                         $airbillField = isset($rowSourceConfig['airbill_no_field']) ? (string) $rowSourceConfig['airbill_no_field'] : 'airbill_no';
                                         $customerDisplayHtml = htmlspecialchars(shopeeOmsGetOrderCustomerNameText($connect, $finance_connect, $row, $rowSourceConfig), ENT_QUOTES, 'UTF-8');

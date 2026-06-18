@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 40;
 $pageTitle = "Investment Transaction";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
@@ -9,14 +8,14 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = INV_TRANS;
 
-$row_id = input('id');
+$row_id = (int) input('id');
 $act = input('act');
 $pageAction = getPageAction($act);
 $allowed_ext = array("png", "jpg", "jpeg", "svg", "pdf");
 
 
-$redirect_page = $SITEURL . '/finance/investment_trans_table.php';
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$redirectPage = $SITEURL . '/finance/investment_trans_table.php';
+$redirectLink = ("<script>location.href = '$redirectPage';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
 $img_path = '../' . img_server . 'finance/investment/';
@@ -26,14 +25,14 @@ if (!file_exists($img_path)) {
 
 // to display data to input
 if ($row_id) { //edit/remove/view
-    $rst = getData('*', "id = '$row_id'", '', $tblName, $finance_connect);
+    $result = getData('*', "id = '$row_id'", '', $tblName, $finance_connect);
 
-    if ($rst != false && $rst->num_rows > 0) {
+    if ($result != false && $result->num_rows > 0) {
         $dataExisted = 1;
-        $row = $rst->fetch_assoc();
+        $row = $result->fetch_assoc();
         $trans_id = $row['transactionID'];
     } else {
-        // If $rst is false or no data found ($act==null)
+        // If $result is false or no data found ($act==null)
         $errorExist = 1;
         $_SESSION['tempValConfirmBox'] = true;
         $act = "F";
@@ -58,10 +57,8 @@ if ($row_id) { //edit/remove/view
 }
 
 if (!($row_id) && !($act)) {
-    echo '<script>
-    alert("Invalid action.");
-    window.location.href = "' . $redirect_page . '"; // Redirect to previous page
-    </script>';
+    renderNotificationScript('Invalid action.', 'error', $redirectPage);
+
 }
 
 //dropdown list for merchant
@@ -78,8 +75,8 @@ if (post('actionBtn')) {
 
     if (isset($_FILES["ivs_attach"]) && $_FILES["ivs_attach"]["size"] != 0) {
         $ivs_attach = $_FILES["ivs_attach"]["name"];
-    } elseif (isset($_POST['existing_attachment'])) {
-        $ivs_attach = $_POST['existing_attachment'];
+    } elseif (post('existing_attachment') !== '') {
+        $ivs_attach = trim((string) post('existing_attachment'));
     }
 
     $ivs_prev_amt = 0;
@@ -153,13 +150,14 @@ if (post('actionBtn')) {
                         }
                     }
                     //get final_amt from prev row
+                    $sqlIvsMrcht = mysqli_real_escape_string($finance_connect, trim((string) $ivs_mrcht));
                     $query = "SELECT
                     final_amt,
                     LAG(final_amt) OVER (ORDER BY id DESC) AS prev_final_amt
                     FROM
                         " . $tblName  . "
                     WHERE
-                        merchant = '$ivs_mrcht'
+                        merchant = '$sqlIvsMrcht'
                     ORDER BY
                         id DESC
                     LIMIT 1";
@@ -233,10 +231,18 @@ if (post('actionBtn')) {
                         array_push($datafield, 'remarks');
                     }
 
-                    $query = "INSERT INTO " . $tblName  . "(transactionID,type,date,amount,prev_amt,final_amt,merchant,remarks,attachment,create_by,create_date,create_time) VALUES ('$trans_id','$ivs_type','$ivs_date','$ivs_amt','$ivs_prev_amt','$ivs_final_amt','$ivs_mrcht','$ivs_remark','$ivs_attach','" . USER_ID . "',curdate(),curtime())";
+                    $sqlTransId = mysqli_real_escape_string($finance_connect, trim((string) $trans_id));
+                    $sqlIvsType = mysqli_real_escape_string($finance_connect, trim((string) $ivs_type));
+                    $sqlIvsDate = mysqli_real_escape_string($finance_connect, trim((string) $ivs_date));
+                    $sqlIvsAmt = mysqli_real_escape_string($finance_connect, trim((string) $ivs_amt));
+                    $sqlIvsRemark = mysqli_real_escape_string($finance_connect, trim((string) $ivs_remark));
+                    $sqlIvsAttach = mysqli_real_escape_string($finance_connect, trim((string) $ivs_attach));
+                    $sqlIvsMrcht = mysqli_real_escape_string($finance_connect, trim((string) $ivs_mrcht));
+
+                    $query = "INSERT INTO " . $tblName  . "(transactionID,type,date,amount,prev_amt,final_amt,merchant,remarks,attachment,create_by,create_date,create_time) VALUES ('$sqlTransId','$sqlIvsType','$sqlIvsDate','$sqlIvsAmt','$ivs_prev_amt','$ivs_final_amt','$sqlIvsMrcht','$sqlIvsRemark','$sqlIvsAttach','" . USER_ID . "',curdate(),curtime())";
                     // Execute the query
                     $returnData = mysqli_query($finance_connect, $query);
-                    $dataID = $finance_connect->insert_id;
+                    $dataId = $finance_connect->insert_id;
                     $_SESSION['tempValConfirmBox'] = true;
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
@@ -253,9 +259,9 @@ if (post('actionBtn')) {
                         }
                     }
                     // take old value
-                    //$rst = getData('*', "id = '$row_id'", 'LIMIT 1',$tblName , $finance_connect);
-                    $rst = getData('*', "id = '$row_id'", '', $tblName, $finance_connect);
-                    $row = $rst->fetch_assoc();
+                    //$result = getData('*', "id = '$row_id'", 'LIMIT 1',$tblName , $finance_connect);
+                    $result = getData('*', "id = '$row_id'", '', $tblName, $finance_connect);
+                    $row = $result->fetch_assoc();
 
                     // check value
                     if ($row['type'] != $ivs_type) {
@@ -314,13 +320,14 @@ if (post('actionBtn')) {
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
 
                         //get final_amt from prev row
+                        $sqlIvsMrcht = mysqli_real_escape_string($finance_connect, trim((string) $ivs_mrcht));
                         $query = "SELECT
                         final_amt,
                         LAG(final_amt) OVER (ORDER BY id DESC) AS prev_final_amt
                         FROM
                             " . $tblName  . "
                         WHERE
-                            merchant = '$ivs_mrcht'
+                            merchant = '$sqlIvsMrcht'
                             AND id < '$row_id'
                             AND `status` != 'D'
                         ORDER BY
@@ -347,7 +354,13 @@ if (post('actionBtn')) {
                             $ivs_final_amt = number_format($ivs_prev_amt - $ivs_amt, 2, '.', '');
                         }
 
-                        $query = "UPDATE " . $tblName  . " SET type = '$ivs_type',date = '$ivs_date',amount = '$ivs_amt', prev_amt ='$ivs_prev_amt', final_amt ='$ivs_final_amt', merchant = '$ivs_mrcht', attachment ='$ivs_attach', remarks ='$ivs_remark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$row_id'";
+                        $sqlIvsType = mysqli_real_escape_string($finance_connect, trim((string) $ivs_type));
+                        $sqlIvsDate = mysqli_real_escape_string($finance_connect, trim((string) $ivs_date));
+                        $sqlIvsAmt = mysqli_real_escape_string($finance_connect, trim((string) $ivs_amt));
+                        $sqlIvsAttach = mysqli_real_escape_string($finance_connect, trim((string) $ivs_attach));
+                        $sqlIvsRemark = mysqli_real_escape_string($finance_connect, trim((string) $ivs_remark));
+
+                        $query = "UPDATE " . $tblName  . " SET type = '$sqlIvsType',date = '$sqlIvsDate',amount = '$sqlIvsAmt', prev_amt ='$ivs_prev_amt', final_amt ='$ivs_final_amt', merchant = '$sqlIvsMrcht', attachment ='$sqlIvsAttach', remarks ='$sqlIvsRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$row_id'";
                         $returnData = mysqli_query($finance_connect, $query);
 
                         updateTransAmt($finance_connect, $tblName, ['merchant'], ['merchant']);
@@ -377,7 +390,7 @@ if (post('actionBtn')) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval']  = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
@@ -395,13 +408,13 @@ if (post('actionBtn')) {
 
 
 if (post('act') == 'D') {
-    $id = post('id');
+    $id = (int) post('id');
     if ($id) {
         try {
             // take name
-            //$rst = getData('*', "id = '$id'", 'LIMIT 1', $tblName , $finance_connect);
-            $rst = getData('*', "id = '$id'", '', $tblName, $finance_connect);
-            $row = $rst->fetch_assoc();
+            //$result = getData('*', "id = '$id'", 'LIMIT 1', $tblName , $finance_connect);
+            $result = getData('*', "id = '$id'", '', $tblName, $finance_connect);
+            $row = $result->fetch_assoc();
 
             $row_id = $row['id'];
             $trans_id = $row['transactionID'];
@@ -454,7 +467,7 @@ if (($row_id) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 
     <div class="page-load-cover">
         <div class="d-flex flex-column my-3 ms-3">
-            <p><a href="<?= $redirect_page ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?php
+            <p><a href="<?= $redirectPage ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?php
                                                                                                                         echo displayPageAction($act, 'Transaction');
                                                                                                                         ?></p>
 
@@ -672,7 +685,7 @@ if (($row_id) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
     if (isset($_SESSION['tempValConfirmBox'])) {
         unset($_SESSION['tempValConfirmBox']);
         echo $clearLocalStorage;
-        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
     }
     ?>
 
@@ -680,8 +693,8 @@ if (($row_id) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         <?php include "../js/inv_trans.js" ?>
 
         //Initial Page And Action Value
-        var page = "<?= $pageTitle ?>";
-        var action = "<?php echo isset($act) ? $act : ''; ?>";
+        const page = "<?= $pageTitle ?>";
+        const action = "<?php echo isset($act) ? $act : ''; ?>";
 
         checkCurrentPage(page, action);
         centerAlignment("formContainer");

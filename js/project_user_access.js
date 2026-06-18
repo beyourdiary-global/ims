@@ -129,16 +129,17 @@ $(function () {
     })
       .done(function (res) {
         if (!res || !res.ok) {
-          window.alert(
+          showNotification(
             res && res.message
               ? res.message
-              : "Failed to update project user access."
+              : "Failed to update project user access.",
+            "error",
           );
           return;
         }
       })
       .fail(function () {
-        window.alert("Failed to update project user access.");
+        showNotification("Failed to update project user access.", "error");
       })
       .always(function () {
         saveInFlight = false;

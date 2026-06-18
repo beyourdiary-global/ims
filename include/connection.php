@@ -1,11 +1,6 @@
 <?php
-if (isset($isFinance) && ($isFinance ==1)) {
-    include '../init.php';
-} else if (isset($isProcess) && $isProcess == 1){
-    include '../../init.php';
-} else if (empty($isFinance) || !(isset($isFinance) || $isFinance == null) || !(isset($isProcess) || $isProcess == null) || !(isset($isFinance) || $isFinance == null)) {
-    include 'init.php';
-}
+$_ims_root = dirname(__DIR__);
+require_once $_ims_root . '/init.php';
 $path =  $_SERVER['PHP_SELF'];
 $path = explode("/", $path);
 $login_url = $SITEURL."/index.php";
@@ -46,7 +41,14 @@ include ROOT.'/include/footer.php'; */
 
 // include ROOT.'/includes/get_country.php';
 // include ROOT.'/auditlog/auditor.php';
-if(!isset($isProcess)){
-include ROOT.'/recordDelete.php';
+$currentScriptName = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+$isProcessScript = (
+    strpos($currentScriptName, '_process.php') !== false
+    || strpos($currentScriptName, '_action.php') !== false
+    || strpos($currentScriptName, '_ajax.php') !== false
+);
+
+if (!$isProcessScript) {
+    include ROOT . '/recordDelete.php';
 }
 ?>

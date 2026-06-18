@@ -1,11 +1,10 @@
 <?php
 $pageTitle = "Staff Commission Report";
-$isFinance = 1;
 $currentPagePin = 124;
 include_once '../include/list_page_header.php';
 include ROOT . '/include/access.php';
 
-$redirect_page = $SITEURL . '/finance/agent.php';
+$redirectPage = $SITEURL . '/finance/agent.php';
 $deleteRedirectPage = $SITEURL . '/finance/agent_table.php';
 $result = getData('*', '', '', AGENT, $finance_connect);
 
@@ -24,13 +23,6 @@ $result = getData('*', '', '', AGENT, $finance_connect);
         createSortingTable('agent_table');
     });
 </script>
-
-<style>
-    
-
-    
-</style>
-
 <body>
 
     
@@ -79,15 +71,15 @@ $result = getData('*', '', '', AGENT, $finance_connect);
                                 ?>
 
                                 <tr>
-                                    <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                    <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                     <th scope="row"><?= $num++; ?></th>
-                                    <td scope="row"><?= $row['name'] ?></td>
+                                    <td scope="row"><?= htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') ?></td>
                                     <td scope="row"><?= isset($row2['name']) ? $row2['name'] : '' ?></td>
                                     <td scope="row"><?= isset($usr['name']) ? $usr['name'] : '' ?></td>
-                                    <td scope="row"><?= $row['contact'] ?></td>
-                                    <td scope="row"><?= $row['email'] ?></td>
-                                    <td scope="row"><?= $row3['name'] ?></td>
-                                    <td scope="row"><?= $row['remark'] ?></td>
+                                    <td scope="row"><?= htmlspecialchars((string) $row['contact'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?= htmlspecialchars((string) $row['email'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?= htmlspecialchars((string) $row3['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?= htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') ?></td>
                                 </tr>
                             <?php } ?>
                         </tbody>

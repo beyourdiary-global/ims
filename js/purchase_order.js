@@ -1,10 +1,10 @@
 
 
 $(document).ready(function () {
-  var cfg = window.__PURCHASE_ORDER_CONFIG || {};
-  var page = cfg.page || "Purchase Order";
-  var action = cfg.action || "";
-  var companyMap = cfg.companyMap || {};
+  const cfg = window.__PURCHASE_ORDER_CONFIG || {};
+  const page = cfg.page || "Purchase Order";
+  const action = cfg.action || "";
+  const companyMap = cfg.companyMap || {};
 
   checkCurrentPage(page, action);
   centerAlignment("formContainer");
@@ -12,7 +12,7 @@ $(document).ready(function () {
   dropdownMenuDispFix();
 
   function fillCompanyDetails(companyName) {
-    var data = companyMap[companyName] || null;
+    const data = companyMap[companyName] || null;
 
     $("#company_code").val(data ? data.code || "" : "");
     $("#company_id_no").val(data ? data.id_no || "" : "");
@@ -50,8 +50,8 @@ $(document).ready(function () {
   }
 
   function recalcAmount() {
-    var qty = parseFloat($("#qty").val() || "0");
-    var unitPrice = parseFloat($("#unit_price").val() || "0");
+    const qty = parseFloat($("#qty").val() || "0");
+    const unitPrice = parseFloat($("#unit_price").val() || "0");
     if (!isNaN(qty) && !isNaN(unitPrice)) {
       $("#amount").val((qty * unitPrice).toFixed(2));
     }

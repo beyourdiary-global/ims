@@ -216,12 +216,12 @@ if (!function_exists('taskGetItemHistory')) {
             ORDER BY id DESC
             LIMIT " . $limit;
 
-        $rst = mysqli_query($connect, $sql);
-        if (!$rst) {
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
             return $rows;
         }
 
-        while ($row = $rst->fetch_assoc()) {
+        while ($row = $result->fetch_assoc()) {
             $historyRows[] = $row;
             $actorIds[] = isset($row['create_by']) ? (int) $row['create_by'] : 0;
         }
@@ -365,14 +365,14 @@ if (!function_exists('taskGetItemCommentRepliesMap')) {
             ORDER BY id ASC
             LIMIT " . (int) $limit;
 
-        $rst = mysqli_query($connect, $sql);
-        if (!$rst) {
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
             return $map;
         }
 
         $replyRows = array();
         $actorIds = array();
-        while ($row = $rst->fetch_assoc()) {
+        while ($row = $result->fetch_assoc()) {
             $replyRows[] = $row;
             $actorIds[] = isset($row['create_by']) ? (int) $row['create_by'] : 0;
         }
@@ -440,12 +440,12 @@ if (!function_exists('taskGetItemComments')) {
             ORDER BY id DESC
             LIMIT " . $limit;
 
-        $rst = mysqli_query($connect, $sql);
-        if (!$rst) {
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
             return $rows;
         }
 
-        while ($row = $rst->fetch_assoc()) {
+        while ($row = $result->fetch_assoc()) {
             $commentRows[] = $row;
             $actorIds[] = isset($row['create_by']) ? (int) $row['create_by'] : 0;
         }
@@ -902,9 +902,9 @@ if (!function_exists('taskGetActionMap')) {
         }
 
         $cache = array();
-        $rst = getData('id,name', '', '', PIN, $connect);
-        if ($rst) {
-            while ($row = $rst->fetch_assoc()) {
+        $result = getData('id,name', '', '', PIN, $connect);
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
                 $actionId = isset($row['id']) ? (int) $row['id'] : 0;
                 $actionName = isset($row['name']) ? strtolower(trim((string) $row['name'])) : '';
                 if ($actionId > 0 && $actionName !== '') {
@@ -1004,9 +1004,9 @@ if (!function_exists('taskGetPinGroupTitleById')) {
 
         if (!array_key_exists($pinGroupId, $cache)) {
             $cache[$pinGroupId] = '';
-            $rst = getData('name', "id='" . $pinGroupId . "'", 'LIMIT 1', PIN_GRP, $connect);
-            if ($rst && $rst->num_rows > 0) {
-                $row = $rst->fetch_assoc();
+            $result = getData('name', "id='" . $pinGroupId . "'", 'LIMIT 1', PIN_GRP, $connect);
+            if ($result && $result->num_rows > 0) {
+                $row = $result->fetch_assoc();
                 if (isset($row['name']) && trim((string) $row['name']) !== '') {
                     $cache[$pinGroupId] = trim((string) $row['name']);
                 }
@@ -1121,9 +1121,9 @@ if (!function_exists('taskEnsureDefaultWorkTypes')) {
 
         foreach ($defaults as $default) {
             $safeName = taskEsc($connect, $default['name']);
-            $rst = getData('id,svg_icon', "project_id='" . $projectId . "' AND LOWER(name)=LOWER('" . $safeName . "')", 'LIMIT 1', TASK_WORK_TYPE, $connect);
-            if ($rst && $rst->num_rows > 0) {
-                $row = $rst->fetch_assoc();
+            $result = getData('id,svg_icon', "project_id='" . $projectId . "' AND LOWER(name)=LOWER('" . $safeName . "')", 'LIMIT 1', TASK_WORK_TYPE, $connect);
+            if ($result && $result->num_rows > 0) {
+                $row = $result->fetch_assoc();
                 $existingId = isset($row['id']) ? (int) $row['id'] : 0;
                 $existingIcon = isset($row['svg_icon']) ? trim((string) $row['svg_icon']) : '';
                 if ($existingId > 0 && $existingIcon === '') {
@@ -1157,18 +1157,18 @@ if (!function_exists('taskGetWorkTypes')) {
             $sql .= " AND project_id='" . $projectId . "'";
         }
         $sql .= " ORDER BY id ASC";
-        $rst = mysqli_query($connect, $sql);
-        if ($rst === false) {
+        $result = mysqli_query($connect, $sql);
+        if ($result === false) {
             $sql = "SELECT id,name,remark,'' AS svg_icon FROM " . TASK_WORK_TYPE . " WHERE status='A'";
             if ($projectId > 0) {
                 $sql .= " AND project_id='" . $projectId . "'";
             }
             $sql .= " ORDER BY id ASC";
-            $rst = mysqli_query($connect, $sql);
+            $result = mysqli_query($connect, $sql);
         }
 
-        if ($rst) {
-            while ($row = $rst->fetch_assoc()) {
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
                 $rows[] = array(
                     'id' => (int) $row['id'],
                     'name' => (string) $row['name'],
@@ -1282,15 +1282,15 @@ if (!function_exists('taskGetItemProjectId')) {
             return 0;
         }
 
-        $rst = mysqli_query(
+        $result = mysqli_query(
             $connect,
             "SELECT project_id FROM " . TASK_ITEM . " WHERE id='" . $itemId . "' AND status='A' LIMIT 1"
         );
-        if (!$rst || $rst->num_rows === 0) {
+        if (!$result || $result->num_rows === 0) {
             return 0;
         }
 
-        $row = $rst->fetch_assoc();
+        $row = $result->fetch_assoc();
         return isset($row['project_id']) ? (int) $row['project_id'] : 0;
     }
 }
@@ -1307,8 +1307,8 @@ if (!function_exists('taskResolveCurrentProjectId')) {
         }
 
         if ($projectId > 0 && defined('TASK_PROJECT')) {
-            $rst = mysqli_query($connect, "SELECT id FROM " . TASK_PROJECT . " WHERE id='" . $projectId . "' AND status='A' LIMIT 1");
-            if ($rst && $rst->num_rows > 0) {
+            $result = mysqli_query($connect, "SELECT id FROM " . TASK_PROJECT . " WHERE id='" . $projectId . "' AND status='A' LIMIT 1");
+            if ($result && $result->num_rows > 0) {
                 return $projectId;
             }
         }
@@ -1326,10 +1326,10 @@ if (!function_exists('taskGetProjectList')) {
         }
 
         $sql = "SELECT id,name,owner_user_id,board_background_color FROM " . TASK_PROJECT . " WHERE status='A' ORDER BY name ASC, id ASC";
-        $rst = mysqli_query($connect, $sql);
-        if ($rst) {
+        $result = mysqli_query($connect, $sql);
+        if ($result) {
             $currentUserId = USER_ID;
-            while ($row = $rst->fetch_assoc()) {
+            while ($row = $result->fetch_assoc()) {
                 $projectId = isset($row['id']) ? (int) $row['id'] : 0;
                 if ($projectId <= 0) {
                     continue;
@@ -1360,12 +1360,12 @@ if (!function_exists('taskGetProjectById')) {
             return array();
         }
 
-        $rst = mysqli_query($connect, "SELECT id,name,owner_user_id,board_background_color,remark,create_by,create_date,create_time,update_by,update_date,update_time FROM " . TASK_PROJECT . " WHERE id='" . $projectId . "' AND status='A' LIMIT 1");
-        if (!$rst || $rst->num_rows === 0) {
+        $result = mysqli_query($connect, "SELECT id,name,owner_user_id,board_background_color,remark,create_by,create_date,create_time,update_by,update_date,update_time FROM " . TASK_PROJECT . " WHERE id='" . $projectId . "' AND status='A' LIMIT 1");
+        if (!$result || $result->num_rows === 0) {
             return array();
         }
 
-        $row = $rst->fetch_assoc();
+        $row = $result->fetch_assoc();
         $projectKey = taskGetProjectKeySetting($connect, $projectId);
 
         return array(
@@ -1458,12 +1458,12 @@ if (!function_exists('taskGetUserGroupId')) {
             return (int) USER_GROUP;
         }
 
-        $rst = mysqli_query($connect, "SELECT access_id FROM " . USR_USER . " WHERE id='" . $userId . "' AND status='A' LIMIT 1");
-        if (!$rst || $rst->num_rows === 0) {
+        $result = mysqli_query($connect, "SELECT access_id FROM " . USR_USER . " WHERE id='" . $userId . "' AND status='A' LIMIT 1");
+        if (!$result || $result->num_rows === 0) {
             return 0;
         }
 
-        $row = $rst->fetch_assoc();
+        $row = $result->fetch_assoc();
         return isset($row['access_id']) ? (int) $row['access_id'] : 0;
     }
 }
@@ -1580,9 +1580,9 @@ if (!function_exists('taskGetProjectKeySetting')) {
             $sql .= " AND project_id='" . $projectId . "'";
         }
         $sql .= " ORDER BY id DESC LIMIT 1";
-        $rst = mysqli_query($connect, $sql);
-        if ($rst && $rst->num_rows > 0) {
-            $data = $rst->fetch_assoc();
+        $result = mysqli_query($connect, $sql);
+        if ($result && $result->num_rows > 0) {
+            $data = $result->fetch_assoc();
             $row['id'] = isset($data['id']) ? (int) $data['id'] : 0;
             $row['project_key'] = taskNormalizeProjectKey(isset($data['project_key']) ? $data['project_key'] : '');
         }
@@ -2046,12 +2046,12 @@ if (!function_exists('taskSaveProjectSettings')) {
 
         $statusLabelDeleteIds = taskUniquePositiveIntIds((array) $statusLabelDeleteIds);
         foreach ($statusLabelDeleteIds as $statusLabelDeleteId) {
-            $rst = mysqli_query($connect, "SELECT id,name FROM " . TASK_STATUS_LABEL . " WHERE id='" . (int) $statusLabelDeleteId . "' AND status='A' LIMIT 1");
-            if (!$rst || $rst->num_rows === 0) {
+            $result = mysqli_query($connect, "SELECT id,name FROM " . TASK_STATUS_LABEL . " WHERE id='" . (int) $statusLabelDeleteId . "' AND status='A' LIMIT 1");
+            if (!$result || $result->num_rows === 0) {
                 continue;
             }
 
-            $row = $rst->fetch_assoc();
+            $row = $result->fetch_assoc();
             $statusName = isset($row['name']) ? trim((string) $row['name']) : '';
             $okStatus = mysqli_query($connect, "UPDATE " . TASK_STATUS_LABEL . " SET status='D', update_by='" . $safeUser . "', update_date='" . $safeDate . "', update_time='" . $safeTime . "' WHERE id='" . (int) $statusLabelDeleteId . "' AND status='A'");
             $okItem = mysqli_query($connect, "UPDATE " . TASK_ITEM . " SET
@@ -2094,10 +2094,10 @@ if (!function_exists('taskGetAssignees')) {
     {
         $rows = array();
         $sql = "SELECT id, COALESCE(NULLIF(TRIM(name), ''), username) AS display_name, email FROM " . USR_USER . " WHERE status='A' ORDER BY display_name ASC";
-        $rst = mysqli_query($connect, $sql);
+        $result = mysqli_query($connect, $sql);
 
-        if ($rst) {
-            while ($row = $rst->fetch_assoc()) {
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
                 $rows[] = array(
                     'id' => (int) $row['id'],
                     'name' => (string) $row['display_name'],
@@ -2115,10 +2115,10 @@ if (!function_exists('taskGetLabels')) {
     {
         $rows = array();
         $sql = "SELECT id,name,color FROM " . TASK_LABEL . " WHERE status='A' ORDER BY sort_order ASC, name ASC";
-        $rst = mysqli_query($connect, $sql);
+        $result = mysqli_query($connect, $sql);
 
-        if ($rst) {
-            while ($row = $rst->fetch_assoc()) {
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
                 $rows[] = array(
                     'id' => (int) $row['id'],
                     'name' => (string) $row['name'],
@@ -2136,12 +2136,12 @@ if (!function_exists('taskGetStatusLabels')) {
     {
         $rows = array();
         $sql = "SELECT id,name,color FROM " . TASK_STATUS_LABEL . " WHERE status='A' ORDER BY sort_order ASC, name ASC";
-        $rst = mysqli_query($connect, $sql);
-        if ($rst === false) {
+        $result = mysqli_query($connect, $sql);
+        if ($result === false) {
             return $rows;
         }
 
-        while ($row = $rst->fetch_assoc()) {
+        while ($row = $result->fetch_assoc()) {
             $rows[] = array(
                 'id' => isset($row['id']) ? (int) $row['id'] : 0,
                 'name' => isset($row['name']) ? (string) $row['name'] : '',
@@ -2177,12 +2177,12 @@ if (!function_exists('taskFetchUserDisplayMap')) {
             $sql .= " AND status='A'";
         }
 
-        $rst = mysqli_query($connect, $sql);
-        if (!$rst) {
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
             return $map;
         }
 
-        while ($row = $rst->fetch_assoc()) {
+        while ($row = $result->fetch_assoc()) {
             $id = isset($row['id']) ? (int) $row['id'] : 0;
             if ($id <= 0) {
                 continue;
@@ -2231,12 +2231,12 @@ if (!function_exists('taskFetchWorkTypeInfoMap')) {
             $sql .= " AND status='A'";
         }
 
-        $rst = mysqli_query($connect, $sql);
-        if (!$rst) {
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
             return $map;
         }
 
-        while ($row = $rst->fetch_assoc()) {
+        while ($row = $result->fetch_assoc()) {
             $id = isset($row['id']) ? (int) $row['id'] : 0;
             if ($id <= 0) {
                 continue;
@@ -2271,12 +2271,12 @@ if (!function_exists('taskFetchProjectKeyMap')) {
             $sql .= " AND status='A'";
         }
 
-        $rst = mysqli_query($connect, $sql);
-        if (!$rst) {
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
             return $map;
         }
 
-        while ($row = $rst->fetch_assoc()) {
+        while ($row = $result->fetch_assoc()) {
             $id = isset($row['id']) ? (int) $row['id'] : 0;
             if ($id <= 0) {
                 continue;
@@ -2302,12 +2302,12 @@ if (!function_exists('taskFetchColumnInfoMap')) {
             $sql .= " AND status='A'";
         }
 
-        $rst = mysqli_query($connect, $sql);
-        if (!$rst) {
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
             return $map;
         }
 
-        while ($row = $rst->fetch_assoc()) {
+        while ($row = $result->fetch_assoc()) {
             $id = isset($row['id']) ? (int) $row['id'] : 0;
             if ($id <= 0) {
                 continue;
@@ -2462,7 +2462,7 @@ if (!function_exists('taskGetProjectUserAccessRecord')) {
             return $empty;
         }
 
-        $rst = mysqli_query(
+        $result = mysqli_query(
             $connect,
             "SELECT can_add, can_edit, can_delete, allowed_work_type_ids
              FROM " . TASK_PROJECT_ITEM_ACCESS . "
@@ -2472,8 +2472,8 @@ if (!function_exists('taskGetProjectUserAccessRecord')) {
              LIMIT 1"
         );
 
-        if ($rst && $rst->num_rows > 0) {
-            $row = $rst->fetch_assoc();
+        if ($result && $result->num_rows > 0) {
+            $row = $result->fetch_assoc();
             $empty['work_item_add'] = isset($row['can_add']) ? (int) $row['can_add'] : 0;
             $empty['work_item_edit'] = isset($row['can_edit']) ? (int) $row['can_edit'] : 0;
             $empty['work_item_delete'] = isset($row['can_delete']) ? (int) $row['can_delete'] : 0;
@@ -2696,12 +2696,12 @@ if (!function_exists('taskGetProjectColumnAccessMap')) {
         $sql = "SELECT column_key, can_add, can_edit, can_delete
                 FROM " . TASK_PROJECT_COLUMN_ACCESS . "
                 WHERE project_id='" . $projectId . "' AND user_id='" . $userId . "' AND status='A'";
-        $rst = @mysqli_query($connect, $sql);
-        if (!$rst) {
+        $result = @mysqli_query($connect, $sql);
+        if (!$result) {
             return array();
         }
 
-        while ($row = $rst->fetch_assoc()) {
+        while ($row = $result->fetch_assoc()) {
             $fieldKey = isset($row['column_key']) ? strtolower(trim((string) $row['column_key'])) : '';
             if ($fieldKey === '' || !isset($fieldKeyMap[$fieldKey])) {
                 continue;
@@ -2901,9 +2901,9 @@ if (!function_exists('taskGetProjectAccessUsers')) {
                 LEFT JOIN " . USR_GRP . " g ON g.id = u.access_id
                 WHERE u.status='A'
                 ORDER BY display_name ASC";
-        $rst = mysqli_query($connect, $sql);
-        if ($rst) {
-            while ($row = $rst->fetch_assoc()) {
+        $result = mysqli_query($connect, $sql);
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
                 $userId = isset($row['id']) ? (int) $row['id'] : 0;
                 if ($userId <= 0 || $userId === $ownerUserId) {
                     continue;
@@ -3241,12 +3241,12 @@ if (!function_exists('taskResolveStatusLabelSelection')) {
 
         $idSql = implode(',', $ids);
         $map = array();
-        $rst = mysqli_query(
+        $result = mysqli_query(
             $connect,
             "SELECT id,name,color FROM " . TASK_STATUS_LABEL . " WHERE status='A' AND id IN (" . $idSql . ")"
         );
-        if ($rst) {
-            while ($row = $rst->fetch_assoc()) {
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
                 $id = isset($row['id']) ? (int) $row['id'] : 0;
                 $name = isset($row['name']) ? trim((string) $row['name']) : '';
                 if ($id > 0 && $name !== '') {
@@ -3339,8 +3339,8 @@ if (!function_exists('taskGetEpicChildWorkItemsSummary')) {
         }
         $sql .= " ORDER BY sort_order ASC, id ASC";
 
-        $rst = mysqli_query($connect, $sql);
-        if (!$rst) {
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
             return $summary;
         }
 
@@ -3348,7 +3348,7 @@ if (!function_exists('taskGetEpicChildWorkItemsSummary')) {
         $columnIds = array();
         $projectKeyIds = array();
         $assigneeIds = array();
-        while ($row = $rst->fetch_assoc()) {
+        while ($row = $result->fetch_assoc()) {
             $itemRows[] = $row;
             $columnIds[] = isset($row['column_id']) ? (int) $row['column_id'] : 0;
             $projectKeyIds[] = isset($row['project_key_id']) ? (int) $row['project_key_id'] : 0;
@@ -3611,20 +3611,20 @@ if (!function_exists('taskGetItemUrls')) {
                 FROM " . TASK_ITEM_URL . "
                 WHERE item_id='" . $itemId . "' AND status='A'
                 ORDER BY id DESC";
-        $rst = mysqli_query($connect, $sql);
-        if ($rst === false) {
+        $result = mysqli_query($connect, $sql);
+        if ($result === false) {
             $sql = "SELECT id,url,title AS link_text,title,create_date,create_time
                     FROM " . TASK_ITEM_URL . "
                     WHERE item_id='" . $itemId . "' AND status='A'
                     ORDER BY id DESC";
-            $rst = mysqli_query($connect, $sql);
+            $result = mysqli_query($connect, $sql);
         }
 
-        if (!$rst) {
+        if (!$result) {
             return array();
         }
 
-        while ($row = $rst->fetch_assoc()) {
+        while ($row = $result->fetch_assoc()) {
             $url = isset($row['url']) ? (string) $row['url'] : '';
             $linkText = isset($row['link_text']) ? trim((string) $row['link_text']) : '';
             $title = isset($row['title']) ? trim((string) $row['title']) : '';
@@ -3723,16 +3723,16 @@ if (!function_exists('taskDeleteItemUrl')) {
             return array('ok' => 0, 'message' => 'Invalid web link delete request.');
         }
 
-        $rst = mysqli_query($connect, "SELECT id,item_id,url,link_text,title FROM " . TASK_ITEM_URL . " WHERE id='" . $urlId . "' AND status='A' LIMIT 1");
-        if ($rst === false) {
+        $result = mysqli_query($connect, "SELECT id,item_id,url,link_text,title FROM " . TASK_ITEM_URL . " WHERE id='" . $urlId . "' AND status='A' LIMIT 1");
+        if ($result === false) {
             return array('ok' => 0, 'message' => 'Failed deleting web link. Please run insert_table.php first.');
         }
 
-        if ($rst->num_rows === 0) {
+        if ($result->num_rows === 0) {
             return array('ok' => 0, 'message' => 'Web link not found.');
         }
 
-        $row = $rst->fetch_assoc();
+        $row = $result->fetch_assoc();
         $itemId = isset($row['item_id']) ? (int) $row['item_id'] : 0;
         $url = isset($row['url']) ? trim((string) $row['url']) : '';
         $linkText = isset($row['link_text']) ? trim((string) $row['link_text']) : '';
@@ -3827,14 +3827,14 @@ if (!function_exists('taskGetEpicParentOptions')) {
         }
         $sql .= " ORDER BY id DESC";
 
-        $rst = mysqli_query($connect, $sql);
-        if (!$rst) {
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
             return $options;
         }
 
         $rows = array();
         $projectKeyIds = array();
-        while ($row = $rst->fetch_assoc()) {
+        while ($row = $result->fetch_assoc()) {
             $rows[] = $row;
             $projectKeyIds[] = isset($row['project_key_id']) ? (int) $row['project_key_id'] : 0;
         }
@@ -3934,12 +3934,12 @@ if (!function_exists('taskGetParentRelationInfo')) {
             return true;
         };
 
-        $rst = mysqli_query(
+        $result = mysqli_query(
             $connect,
             "SELECT parent_board_item_id FROM " . TASK_ITEM_RELATION . " WHERE child_board_item_id='" . $childItemId . "' AND status='A' LIMIT 1"
         );
-        if ($rst && $rst->num_rows > 0) {
-            $row = $rst->fetch_assoc();
+        if ($result && $result->num_rows > 0) {
+            $row = $result->fetch_assoc();
             $parentItemId = isset($row['parent_board_item_id']) ? (int) $row['parent_board_item_id'] : 0;
             if ($buildParentInfo($parentItemId)) {
                 return $info;
@@ -3978,9 +3978,9 @@ if (!function_exists('taskGetParentMapByChildIds')) {
                 FROM " . TASK_ITEM_RELATION . "
                 WHERE status='A' AND child_board_item_id IN (" . $idSql . ")";
         $foundChildIds = array();
-        $rst = mysqli_query($connect, $sql);
-        if ($rst) {
-            while ($row = $rst->fetch_assoc()) {
+        $result = mysqli_query($connect, $sql);
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
                 $childId = isset($row['child_board_item_id']) ? (int) $row['child_board_item_id'] : 0;
                 $parentId = isset($row['parent_board_item_id']) ? (int) $row['parent_board_item_id'] : 0;
                 if ($childId > 0 && $parentId > 0) {
@@ -4220,22 +4220,22 @@ if (!function_exists('taskGetItemDetail')) {
             FROM " . TASK_ITEM . "
             WHERE id='" . $itemId . "' AND status='A' LIMIT 1";
 
-        $rst = mysqli_query($connect, $sql);
-        if ($rst === false) {
+        $result = mysqli_query($connect, $sql);
+        if ($result === false) {
                      $sql = "SELECT id,project_id,column_id,title,'' AS description,work_type_id,0 AS project_key_id,assignee_user_id,0 AS reporter_user_id,
                          'Medium' AS priority,'' AS original_estimate,'' AS task_status,0 AS parent_item_id,'' AS time_tracking,
                          due_date,due_date AS start_date,NULL AS amendement_date,NULL AS amendement_time,NULL AS second_amendement_date,NULL AS second_amendement_time,
                          '' AS create_date,'' AS create_time,'' AS update_date,'' AS update_time
                       FROM " . TASK_ITEM . "
                       WHERE id='" . $itemId . "' AND status='A' LIMIT 1";
-            $rst = mysqli_query($connect, $sql);
+            $result = mysqli_query($connect, $sql);
         }
 
-        if (!$rst || $rst->num_rows === 0) {
+        if (!$result || $result->num_rows === 0) {
             return array('ok' => 0, 'message' => 'Work item not found.');
         }
 
-        $row = $rst->fetch_assoc();
+        $row = $result->fetch_assoc();
         $projectId = isset($row['project_id']) ? (int) $row['project_id'] : 0;
         $workTypeId = isset($row['work_type_id']) ? (int) $row['work_type_id'] : 0;
         $projectKeyId = isset($row['project_key_id']) ? (int) $row['project_key_id'] : 0;
@@ -4555,14 +4555,14 @@ if (!function_exists('taskGetItemLabelsByItemIds')) {
         $sql = "SELECT item_id,label_id
                 FROM " . TASK_ITEM_LABEL . "
                 WHERE status='A' AND item_id IN (" . $idSql . ")";
-        $rst = mysqli_query($connect, $sql);
-        if (!$rst) {
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
             return $map;
         }
 
         $pairs = array();
         $labelIds = array();
-        while ($row = $rst->fetch_assoc()) {
+        while ($row = $result->fetch_assoc()) {
             $itemId = isset($row['item_id']) ? (int) $row['item_id'] : 0;
             $labelId = isset($row['label_id']) ? (int) $row['label_id'] : 0;
             if ($itemId <= 0 || $labelId <= 0) {
@@ -4713,10 +4713,10 @@ if (!function_exists('taskGetColumns')) {
             $sql .= " AND project_id='" . $projectId . "'";
         }
         $sql .= " ORDER BY sort_order ASC, id ASC";
-        $rst = mysqli_query($connect, $sql);
+        $result = mysqli_query($connect, $sql);
 
-        if ($rst) {
-            while ($row = $rst->fetch_assoc()) {
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
                 $rows[] = array(
                     'id' => (int) $row['id'],
                     'name' => (string) $row['name'],
@@ -4753,15 +4753,15 @@ if (!function_exists('taskGetItemsGroupedByColumn')) {
         $sql .= "
                 ORDER BY column_id ASC, sort_order ASC, id ASC";
 
-        $rst = mysqli_query($connect, $sql);
-        if ($rst) {
+        $result = mysqli_query($connect, $sql);
+        if ($result) {
             $rows = array();
             $workTypeIds = array();
             $projectKeyIds = array();
             $assigneeIds = array();
             $reporterIds = array();
 
-            while ($row = $rst->fetch_assoc()) {
+            while ($row = $result->fetch_assoc()) {
                 $rows[] = $row;
                 $workTypeIds[] = isset($row['work_type_id']) ? (int) $row['work_type_id'] : 0;
                 $projectKeyIds[] = isset($row['project_key_id']) ? (int) $row['project_key_id'] : 0;
@@ -5740,13 +5740,13 @@ if (!function_exists('taskResequenceItemsInColumn')) {
             return;
         }
 
-        $rst = mysqli_query($connect, "SELECT id FROM " . TASK_ITEM . " WHERE status='A' AND column_id='" . $columnId . "' ORDER BY sort_order ASC, id ASC");
-        if (!$rst) {
+        $result = mysqli_query($connect, "SELECT id FROM " . TASK_ITEM . " WHERE status='A' AND column_id='" . $columnId . "' ORDER BY sort_order ASC, id ASC");
+        if (!$result) {
             return;
         }
 
         $seq = 1;
-        while ($row = $rst->fetch_assoc()) {
+        while ($row = $result->fetch_assoc()) {
             $itemId = (int) $row['id'];
             mysqli_query($connect, "UPDATE " . TASK_ITEM . " SET sort_order='" . $seq . "' WHERE id='" . $itemId . "'");
             $seq++;
@@ -6391,12 +6391,12 @@ if (!function_exists('taskGetItemAttachments')) {
                 FROM " . TASK_ITEM_ATTACHMENT . "
                 WHERE item_id='" . $itemId . "' AND status='A'
                 ORDER BY id DESC";
-        $rst = mysqli_query($connect, $sql);
-        if ($rst === false) {
+        $result = mysqli_query($connect, $sql);
+        if ($result === false) {
             return array();
         }
 
-        while ($row = $rst->fetch_assoc()) {
+        while ($row = $result->fetch_assoc()) {
             $rows[] = array(
                 'id' => isset($row['id']) ? (int) $row['id'] : 0,
                 'file_name' => isset($row['file_name']) ? (string) $row['file_name'] : '',
@@ -6807,16 +6807,16 @@ if (!function_exists('taskDeleteItemAttachment')) {
         }
 
         $sql = "SELECT id,item_id,file_path,file_name FROM " . TASK_ITEM_ATTACHMENT . " WHERE id='" . $attachmentId . "' AND status='A' LIMIT 1";
-        $rst = mysqli_query($connect, $sql);
-        if ($rst === false) {
+        $result = mysqli_query($connect, $sql);
+        if ($result === false) {
             return array('ok' => 0, 'message' => 'Failed deleting attachment. Please run insert_table.php first.');
         }
 
-        if ($rst->num_rows === 0) {
+        if ($result->num_rows === 0) {
             return array('ok' => 0, 'message' => 'Attachment not found.');
         }
 
-        $row = $rst->fetch_assoc();
+        $row = $result->fetch_assoc();
         $itemId = isset($row['item_id']) ? (int) $row['item_id'] : 0;
         $filePath = isset($row['file_path']) ? (string) $row['file_path'] : '';
         $fileName = isset($row['file_name']) ? (string) $row['file_name'] : '';
@@ -6876,8 +6876,8 @@ if (!function_exists('taskDeleteAllItemAttachments')) {
         }
 
         $sql = "SELECT id,file_path,file_name FROM " . TASK_ITEM_ATTACHMENT . " WHERE item_id='" . $itemId . "' AND status='A'";
-        $rst = mysqli_query($connect, $sql);
-        if ($rst === false) {
+        $result = mysqli_query($connect, $sql);
+        if ($result === false) {
             return array('ok' => 0, 'message' => 'Failed deleting attachments. Please run insert_table.php first.');
         }
 
@@ -6899,7 +6899,7 @@ if (!function_exists('taskDeleteAllItemAttachments')) {
             return array('ok' => 0, 'message' => 'Failed deleting attachments.');
         }
 
-        while ($row = $rst->fetch_assoc()) {
+        while ($row = $result->fetch_assoc()) {
             $filePath = isset($row['file_path']) ? (string) $row['file_path'] : '';
             $fileName = isset($row['file_name']) ? (string) $row['file_name'] : '';
             if ($fileName !== '') {
@@ -6997,11 +6997,11 @@ if (!function_exists('taskDeleteLabel')) {
             return array('ok' => 0, 'message' => 'Invalid label delete request.');
         }
 
-        $rst = mysqli_query($connect, "SELECT id FROM " . TASK_LABEL . " WHERE id='" . $labelId . "' AND status='A' LIMIT 1");
-        if ($rst === false) {
+        $result = mysqli_query($connect, "SELECT id FROM " . TASK_LABEL . " WHERE id='" . $labelId . "' AND status='A' LIMIT 1");
+        if ($result === false) {
             return array('ok' => 0, 'message' => 'Failed to delete label. Please run insert_table.php first.');
         }
-        if ($rst->num_rows === 0) {
+        if ($result->num_rows === 0) {
             return array('ok' => 0, 'message' => 'Label not found.');
         }
 
@@ -7048,15 +7048,15 @@ if (!function_exists('taskDeleteStatusLabel')) {
             return array('ok' => 0, 'message' => 'Invalid task status label delete request.');
         }
 
-        $rst = mysqli_query($connect, "SELECT id,name FROM " . TASK_STATUS_LABEL . " WHERE id='" . $statusLabelId . "' AND status='A' LIMIT 1");
-        if ($rst === false) {
+        $result = mysqli_query($connect, "SELECT id,name FROM " . TASK_STATUS_LABEL . " WHERE id='" . $statusLabelId . "' AND status='A' LIMIT 1");
+        if ($result === false) {
             return array('ok' => 0, 'message' => 'Failed to delete task status label. Please run insert_table.php first.');
         }
-        if ($rst->num_rows === 0) {
+        if ($result->num_rows === 0) {
             return array('ok' => 0, 'message' => 'Task status label not found.');
         }
 
-        $row = $rst->fetch_assoc();
+        $row = $result->fetch_assoc();
         $statusName = isset($row['name']) ? trim((string) $row['name']) : '';
         $safeUser = taskEsc($connect, $currentUserId);
         $safeDate = taskEsc($connect, $cdate);
@@ -7316,15 +7316,15 @@ if (!function_exists('taskGetAllItemsFlat')) {
 
         $items = array();
         $allItemIds = array();
-        $rst = mysqli_query($connect, $sql);
-        if ($rst) {
+        $result = mysqli_query($connect, $sql);
+        if ($result) {
             $rows = array();
             $workTypeIds = array();
             $projectKeyIds = array();
             $assigneeIds = array();
             $reporterIds = array();
 
-            while ($row = $rst->fetch_assoc()) {
+            while ($row = $result->fetch_assoc()) {
                 $rows[] = $row;
                 $workTypeIds[] = isset($row['work_type_id']) ? (int) $row['work_type_id'] : 0;
                 $projectKeyIds[] = isset($row['project_key_id']) ? (int) $row['project_key_id'] : 0;
@@ -7873,9 +7873,9 @@ if (!function_exists('taskGetSummaryStats')) {
                 FROM " . TASK_ITEM . " i
                 WHERE $where
                 GROUP BY i.column_id";
-        $rst = mysqli_query($connect, $sql);
-        if ($rst) {
-            while ($row = $rst->fetch_assoc()) {
+        $result = mysqli_query($connect, $sql);
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
                 $statusRows[] = $row;
                 $columnIds[] = isset($row['column_id']) ? (int) $row['column_id'] : 0;
             }

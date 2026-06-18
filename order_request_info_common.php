@@ -54,7 +54,7 @@ if (preg_match('#/[^/]+\?id=0$#', $redirectPage)) {
 
 switch ($platform) {
     case 'lazada':
-        $redirectPage = rtrim((string) $SITEURL, '/') . '/lazada_order_req_table.php';
+        $redirectPage = rtrim((string) $SITEURL, '/') . '/finance/lazada_order_req_table.php';
         break;
     case 'facebook':
         $redirectPage = rtrim((string) $SITEURL, '/') . '/finance/fb_order_req_table.php';
@@ -103,7 +103,7 @@ if ($tokenRst && mysqli_num_rows($tokenRst) > 0) {
 
 $tokenValue = trim((string) (isset($tokenRow['token']) ? $tokenRow['token'] : ''));
 $orderLink = $tokenValue !== ''
-    ? rtrim((string) $SITEURL, '/') . '/warehouse_stock_in_scan.php?t=' . urlencode($tokenValue)
+    ? rtrim((string) $SITEURL, '/') . '/stock/warehouse_stock_in_scan.php?t=' . urlencode($tokenValue)
     : '';
 
 $qrImageUrl = '';

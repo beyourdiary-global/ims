@@ -2,7 +2,6 @@
 $currentPagePin = 77;
 ob_start();
 $pageTitle = "Shopee Ads Top Up Transaction";
-$isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
@@ -124,7 +123,7 @@ $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 $deleteRedirectPage = $SITEURL . '/shopee_ads_topup_trans_table.php';
-$redirect_page = $SITEURL . '/shopee/shopee_ads_topup_trans.php';
+$redirectPage = $SITEURL . '/shopee/shopee_ads_topup_trans.php';
 $result = getData('*', '', '', SHOPEE_ADS_TOPUP, $finance_connect);
 ?>
 
@@ -157,7 +156,7 @@ $result = getData('*', '', '', SHOPEE_ADS_TOPUP, $finance_connect);
                         <h2><?php echo $pageTitle . " Summary"; ?></h2>
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
+                                <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
                             <?php endif; ?>
                             <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="if (exportData()) { showExportNotification(); }"><i class="fa-solid fa-file-export"></i> Export</a>
                         </div>
@@ -193,13 +192,13 @@ $result = getData('*', '', '', SHOPEE_ADS_TOPUP, $finance_connect);
                             $pay = $q3->fetch_assoc();
                     ?>
                             <tr onclick="window.location='shopee_ads_topup_trans_table_detail.php?ids=<?= urlencode($row['id']) ?>';" style="cursor:pointer;">
-                                <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
-                                <th class="text-center"><input type="checkbox" class="export" value="<?= $row['id'] ?>"></th>
+                                <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
+                                <th class="text-center"><input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>"></th>
                                 <th scope="row"><?= $num++; ?></th>
-                                <td scope="row"><?php if (isset($shopee_acc['name'])) echo  $shopee_acc['name'] ?></td>
-                                <td scope="row"><?php if (isset($curr['unit'])) echo $curr['unit'] ?></td>
-                                <td scope="row"><?php if (isset($row['topup_amt'])) echo  $row['topup_amt'] ?></td>
-                                <td scope="row"><?php if (isset($pay['name'])) echo  $pay['name'] ?></td>
+                                <td scope="row"><?php if (isset($shopee_acc['name'])) echo  htmlspecialchars((string) $shopee_acc['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?php if (isset($curr['unit'])) echo htmlspecialchars((string) $curr['unit'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?php if (isset($row['topup_amt'])) echo  htmlspecialchars((string) $row['topup_amt'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?php if (isset($pay['name'])) echo  htmlspecialchars((string) $pay['name'], ENT_QUOTES, 'UTF-8') ?></td>
 
                             </tr>
                             <?php }

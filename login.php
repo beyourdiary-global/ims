@@ -3,11 +3,12 @@ include "include/common.php";
 include "include/connection.php";
 include_once "include/auto_login.php";
 
-$email = post('email-addr');
+$email = trim((string) post('email-addr'));
+$safeEmail = mysqli_real_escape_string($connect, $email);
 $password = md5(post('password'));
 
 if ($email && $password) {
-     $loginquery = "SELECT * FROM " . USR_USER . " WHERE email='" . $email . "' AND status='A'";
+     $loginquery = "SELECT * FROM " . USR_USER . " WHERE email='" . $safeEmail . "' AND status='A'";
      $loginresult = mysqli_query($connect, $loginquery);
 
      if (!(mysqli_num_rows($loginresult) == 1)) {
@@ -20,11 +21,11 @@ if ($email && $password) {
           }
 
           if ($loginrows['password_alt'] != $password) {
-               mysqli_query($connect, "UPDATE " . USR_USER . " SET fail_count = fail_count + 1 WHERE email = '" . $email . "'");
+               mysqli_query($connect, "UPDATE " . USR_USER . " SET fail_count = fail_count + 1 WHERE email = '" . $safeEmail . "'");
                return header('Location: index.php?err=2');
           } else {
                if ($loginrows['fail_count'] >= 1 || $loginrows['fail_count'] <= 3)
-                    mysqli_query($connect, "UPDATE " . USR_USER . " SET fail_count = 0 WHERE email = '" . $email . "' AND password_alt = '" . $password . "'");
+                    mysqli_query($connect, "UPDATE " . USR_USER . " SET fail_count = 0 WHERE email = '" . $safeEmail . "' AND password_alt = '" . $password . "'");
                $_SESSION['userid'] = $loginrows['id'];
                $_SESSION['user_name'] = $loginrows['name'];
                $_SESSION['user_email'] = $loginrows['email'];

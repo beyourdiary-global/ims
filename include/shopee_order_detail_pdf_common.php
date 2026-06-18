@@ -37,7 +37,7 @@ if (!function_exists('shopeeOrderDetailPdfNormalizeAmount')) {
 }
 
 if (!function_exists('shopeeOrderDetailPdfLoadOptionList')) {
-    function shopeeOrderDetailPdfLoadOptionList($dbConnect, $tableName, $labelField)
+    function shopeeOrderDetailPdfLoadOptionList($dbConnect, $tblName, $labelField)
     {
         $list = array();
         if (!($dbConnect instanceof mysqli)) {
@@ -45,7 +45,7 @@ if (!function_exists('shopeeOrderDetailPdfLoadOptionList')) {
         }
 
         $query = "SELECT id, `" . mysqli_real_escape_string($dbConnect, $labelField) . "` AS option_label
-                  FROM `" . mysqli_real_escape_string($dbConnect, $tableName) . "`
+                  FROM `" . mysqli_real_escape_string($dbConnect, $tblName) . "`
                   WHERE status = 'A'
                   ORDER BY `" . mysqli_real_escape_string($dbConnect, $labelField) . "` ASC";
         $result = mysqli_query($dbConnect, $query);

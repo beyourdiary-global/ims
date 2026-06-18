@@ -7,7 +7,7 @@ $(document).ready(function() {
 
     if (!($("#coh_pic").attr('disabled'))) {
         $("#coh_pic").keyup(function() {
-            var param = {
+            const param = {
                 search: $(this).val(),
                 searchType: 'name', // column of the table
                 elementID: $(this).attr('id'), // id of the input
@@ -54,13 +54,13 @@ $("#coh_desc").on("input", function() {
 $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
-    var type_chk = 0;
-    var pic_chk = 0;
-    var date_chk = 0;
-    var bank_chk = 0;
-    var currency_chk = 0;
-    var amt_chk = 0;
-    var desc_chk = 0;
+    let type_chk = 0;
+    let pic_chk = 0;
+    let date_chk = 0;
+    let bank_chk = 0;
+    let currency_chk = 0;
+    let amt_chk = 0;
+    let desc_chk = 0;
 
     if ($('#coh_type').val() === '' || $('#coh_type').val() === null || $('#coh_type')
         .val() === undefined) {

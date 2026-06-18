@@ -434,8 +434,10 @@ if (!function_exists('shopeeOrderDetailPdfRenderVerifyModalScript')) {
 
                     function handleVerifySuccess(result) {
                         modalInstance.hide();
-                        window.alert(result && result.message ? result.message : 'Order verified successfully.');
-                        window.location.replace(config.redirectUrl || window.location.href);
+                        showNotification(result && result.message ? result.message : 'Order verified successfully.', 'success');
+                        window.setTimeout(function () {
+                            window.location.replace(config.redirectUrl || window.location.href);
+                        }, 1200);
                     }
 
                     document.querySelectorAll(config.triggerSelector).forEach(function (triggerButton) {
@@ -445,7 +447,7 @@ if (!function_exists('shopeeOrderDetailPdfRenderVerifyModalScript')) {
                             var existingPdfPath = triggerButton.getAttribute('data-existing-pdf-path') || '';
 
                             if (!orderId) {
-                                window.alert('Invalid order.');
+                                showNotification('Invalid order.', 'error');
                                 return;
                             }
 

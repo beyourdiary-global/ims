@@ -1,11 +1,10 @@
 <?php
 $pageTitle = "Initial Capital Transaction";
 $currentPagePin = 46;
-$isFinance = 1;
 
 include_once '../include/list_page_header.php';
 
-$redirect_page = $SITEURL . '/finance/initial_capital_trans.php';
+$redirectPage = $SITEURL . '/finance/initial_capital_trans.php';
 $result = getData('*', '', '', INITCA_TRANS, $finance_connect);
 ?>
 
@@ -40,7 +39,7 @@ $result = getData('*', '', '', INITCA_TRANS, $finance_connect);
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                    href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                    href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                     Transaction </a>
                             <?php endif; ?>
                         </div>
@@ -77,28 +76,28 @@ $result = getData('*', '', '', INITCA_TRANS, $finance_connect);
                                 ?>
 
                                 <tr>
-                                    <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                    <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                     <th scope="row"><?= $num++; ?></th>
                                     <td scope="row" class="btn-container">
                                         <div class="d-flex align-items-center">
-                                            <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                            <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2) ?>
-                                            <?php renderDeleteButton($pinAccess, $row['id'], $row['transactionID'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage) ?>
+                                            <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                            <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2) ?>
+                                            <?php renderDeleteButton($pinAccess, $row['id'], $row['transactionID'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                         </div>
                                     </td>
-                                    <td scope="row"><?= $row['transactionID'] ?></td>
+                                    <td scope="row"><?= htmlspecialchars((string) $row['transactionID'], ENT_QUOTES, 'UTF-8') ?></td>
                                     <td scope="row"><?php if (isset($row['date']))
-                                        echo $row['date'] ?></td>
+                                        echo htmlspecialchars((string) $row['date'], ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row"><?php if (isset($row2['unit']))
-                                        echo $row2['unit'] ?></td>
+                                        echo htmlspecialchars((string) $row2['unit'], ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row"><?php if (isset($row['amount']))
-                                        echo $row['amount'] ?></td>
+                                        echo htmlspecialchars((string) $row['amount'], ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row"><?php if (isset($row['description']))
-                                        echo $row['description'] ?></td>
+                                        echo htmlspecialchars((string) $row['description'], ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row"><?php if (isset($row['remark']))
-                                        echo $row['remark'] ?></td>
+                                        echo htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row"><?php if (isset($row['attachment']))
-                                        echo $row['attachment'] ?></td>
+                                        echo htmlspecialchars((string) $row['attachment'], ENT_QUOTES, 'UTF-8') ?></td>
                                     </tr>
                             <?php }
                         } ?>
@@ -126,8 +125,8 @@ $result = getData('*', '', '', INITCA_TRANS, $finance_connect);
 </body>
 <script>
     //Initial Page And Action Value
-    var page = "<?= $pageTitle ?>";
-    var action = "<?php echo isset($act) ? $act : ' '; ?>";
+    const page = "<?= $pageTitle ?>";
+    const action = "<?php echo isset($act) ? $act : ' '; ?>";
 
     checkCurrentPage(page, action);
     /**

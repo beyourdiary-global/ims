@@ -3,7 +3,7 @@ $(document).ready(function ($) {
     $(document).on("change", ".exportAll", function (event) { //checkbox handling
         event.preventDefault();
 
-        var isChecked = $(this).prop("checked");
+        const isChecked = $(this).prop("checked");
         $(this).closest("table").find("tbody tr:visible .export").prop("checked", isChecked);
         $(".exportAll").prop("checked", isChecked);
 
@@ -11,11 +11,11 @@ $(document).ready(function ($) {
     });
 
     $('a[name="exportBtn"]').on("click", function () {
-        var checkboxValues = [];
+        const checkboxValues = [];
 
         // Loop through all pages to collect checked checkboxes
         $('#internal_consume_item_table').DataTable().rows({ search: "applied", page: "current" }).nodes().to$().each(function () {
-            var checkbox = $(this).find('.export:checked');
+            const checkbox = $(this).find('.export:checked');
             if (checkbox.length > 0) {
                 checkbox.each(function () {
                     checkboxValues.push($(this).val());
@@ -29,12 +29,12 @@ $(document).ready(function ($) {
             setCookie('rowID', checkboxValues.join(','), 1);
 
             //uncheck checkboxes
-            var checkboxes = document.querySelectorAll('.export');
+            const checkboxes = document.querySelectorAll('.export');
             checkboxes.forEach(function (checkbox) {
                 checkbox.checked = false;
             });
 
-            var selectAllCheckbox = document.querySelector('.exportAll');
+            const selectAllCheckbox = document.querySelector('.exportAll');
             if (selectAllCheckbox) {
                 selectAllCheckbox.checked = false;
             }

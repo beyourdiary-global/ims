@@ -7,7 +7,7 @@ $(document).ready(function() {
 
     if (!($("#sc_mrcht").attr('readonly'))) {
         $("#sc_mrcht").keyup(function() {
-            var param = {
+            const param = {
                 search: $(this).val(),
                 searchType: 'name',
                 elementID: $(this).attr('id'),
@@ -24,7 +24,7 @@ $(document).ready(function() {
 
     if (!($("#brand").attr('readonly'))) {
         $("#brand").keyup(function() {
-            var param = {
+            const param = {
                 search: $(this).val(),
                 searchType: 'name',
                 elementID: $(this).attr('id'),
@@ -41,7 +41,7 @@ $(document).ready(function() {
 
     if (!($("#sc_currency").attr('disabled'))) {
         $("#sc_currency").keyup(function() {
-            var param = {
+            const param = {
                 search: $(this).val(),
                 searchType: 'unit', // column of the table
                 elementID: $(this).attr('id'), // id of the input

@@ -3,7 +3,7 @@ $(document).ready(function() {
      //Currency unit
      if (!($("#stb_curr_unit").attr('disabled'))) {
         $("#stb_curr_unit").keyup(function() {
-            var param = {
+            const param = {
                 search: $(this).val(),
                 searchType: 'unit', // column of the table
                 elementID: $(this).attr('id'), // id of the input
@@ -45,11 +45,11 @@ $("#stb_attach").on("input", function() {
 $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
-    var stb_payout_id_chk = 0;
-    var stb_date_paid_chk = 0;
-    var stb_curr_unit_chk = 0;
-    var stb_amount_chk = 0;
-    var attach_chk = 0;
+    let stb_payout_id_chk = 0;
+    let stb_date_paid_chk = 0;
+    let stb_curr_unit_chk = 0;
+    let stb_amount_chk = 0;
+    let attach_chk = 0;
 
     if (($('#stb_payout_id').val() === '' || $('#stb_payout_id').val() === null || $('#stb_payout_id')
             .val() === undefined)) {
@@ -91,7 +91,7 @@ $('.submitBtn').on('click', () => {
     stb_amount_chk = 1;
     }
 
-    var fileInput = $('#stb_attach')[0];
+    const fileInput = $('#stb_attach')[0];
     
     // Check if a new file is selected or if there is an existing attachment
     if ((fileInput.files.length === 0) && ($('#stb_attachmentValue').val() == '' || $('#stb_attachmentValue').val() == '0' || $('#stb_attachmentValue').val() === null || $('#stb_attachmentValue')

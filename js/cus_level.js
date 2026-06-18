@@ -39,7 +39,7 @@ $(document).ready(function() {
 
     if (!$("#currency").attr("disabled")) {
         $("#currency").keyup(function() {
-            var param = {
+            const param = {
                 search: $(this).val(),
                 searchType: "unit",
                 elementID: $(this).attr("id"),

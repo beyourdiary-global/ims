@@ -2,7 +2,6 @@
 $currentPagePin = 87;
 ob_start();
 $pageTitle = "Atome Transaction Backup Record Detail";
-$isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
@@ -122,7 +121,7 @@ $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 $deleteRedirectPage = $SITEURL . '/atome_trans_backup_table.php';
-$redirect_page = $SITEURL . '/finance/atome_trans_backup.php';
+$redirectPage = $SITEURL . '/finance/atome_trans_backup.php';
 
 $result = getData('*', '', '', ATOME_TRANS_BACKUP, $finance_connect);
 
@@ -175,7 +174,7 @@ $img_path = SITEURL . img_server . 'finance/atome_trans_backup/';
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         Transaction </a>
                                 <?php endif; ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="if (exportData()) { showExportNotification(); }"><i class="fa-solid fa-file-export"></i> Export</a>
@@ -221,10 +220,10 @@ $img_path = SITEURL . img_server . 'finance/atome_trans_backup/';
 
                                 <tr>
                                     <th class="hideColumn" scope="row">
-                                        <?= $row['id'] ?>
+                                        <?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>
                                     </th>
                                     <th class="text-center">
-                                        <input type="checkbox" class="export" value="<?= $row['id'] ?>">
+                                        <input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>">
                                     </th>
                                     <th scope="row">
                                         <?= $num++; ?>
@@ -233,21 +232,21 @@ $img_path = SITEURL . img_server . 'finance/atome_trans_backup/';
                                     <div class="d-flex align-items-center">
                                 
                             
-                                    <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess);?>
-                                    <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2) ?>
-                                    <?php renderDeleteButton($pinAccess, $row['id'], $row['trans_id'], $row['atome_id'], $pageTitle, $redirect_page, $deleteRedirectPage) ?>
+                                    <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess);?>
+                                    <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2) ?>
+                                    <?php renderDeleteButton($pinAccess, $row['id'], $row['trans_id'], $row['atome_id'], $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                 </div>
                                 </td>
-                                    <td scope="row"><?php if (isset($row['trans_id'])) echo $row['trans_id'] ?></td>
-                                    <td scope="row"><?php if (isset($row['atome_id'])) echo $row['atome_id'] ?></td>
-                                    <td scope="row"><?php if (isset($row['date'])) echo $row['date'] ?></td>
-                                    <td scope="row"><?php if (isset($row['trans_outlet'])) echo $row['trans_outlet'] ?></td>
-                                    <td scope="row"><?php if (isset($row['platform_id'])) echo $row['platform_id'] ?></td>
-                                    <td scope="row"><?php if (isset($row['amt_rec'])) echo $row['amt_rec'] ?></td>
+                                    <td scope="row"><?php if (isset($row['trans_id'])) echo htmlspecialchars((string) $row['trans_id'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['atome_id'])) echo htmlspecialchars((string) $row['atome_id'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['date'])) echo htmlspecialchars((string) $row['date'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['trans_outlet'])) echo htmlspecialchars((string) $row['trans_outlet'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['platform_id'])) echo htmlspecialchars((string) $row['platform_id'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['amt_rec'])) echo htmlspecialchars((string) $row['amt_rec'], ENT_QUOTES, 'UTF-8') ?></td>
                                     <td scope="row">
                                         <?php if (isset($row['attachment'])) { ?><a href="<?= $img_path . $row['attachment'] ?>"
                                                 target="_blank">
-                                                <?= $row['attachment'] ?>
+                                                <?= htmlspecialchars((string) $row['attachment'], ENT_QUOTES, 'UTF-8') ?>
                                             </a>
                                         <?php } ?>
                                     </td>
@@ -285,8 +284,8 @@ $img_path = SITEURL . img_server . 'finance/atome_trans_backup/';
 </body>
 <script>
     //Initial Page And Action Value
-    var page = "<?= $pageTitle ?>";
-    var action = "<?php echo isset($act) ? $act : ' '; ?>";
+    const page = "<?= $pageTitle ?>";
+    const action = "<?php echo isset($act) ? $act : ' '; ?>";
     checkCurrentPage(page, action);
     /**
   oufei 20231014

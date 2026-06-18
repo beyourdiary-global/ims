@@ -18,9 +18,9 @@ $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
     
-    var commission_chk = 0;
-    var service_chk = 0;
-    var transaction_chk = 0;
+    let commission_chk = 0;
+    let service_chk = 0;
+    let transaction_chk = 0;
 
     if (($('#commission').val() === '' || $('#commission').val() === null || $('#commission')
             .val() === undefined)) {

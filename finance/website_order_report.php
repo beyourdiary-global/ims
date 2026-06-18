@@ -1,7 +1,6 @@
 <?php
 $pageTitle = 'Website Order Report';
 $currentPagePin = 157;
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

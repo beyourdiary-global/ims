@@ -3,7 +3,6 @@ $taskParentPin = 139;
 $currentPagePin = 136;
 $pageTitle = 'Board';
 $taskParentTitle = 'Project Task';
-$isFinance = 1;
 
 if (!function_exists('taskBoardAuditLog')) {
     function taskBoardAuditLog($connect, $pageTitle, $pageAction, $viewActMsg, $cdate, $ctime)
@@ -1189,7 +1188,7 @@ $taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParen
 
 $pinAccess = taskGetPinAccessByGroupId($connect, $currentPagePin);
 if (!taskIsActionAllowed('view', $pinAccess)) {
-    echo "<script>alert('You do not have permission to view task board.'); location.replace('../dashboard.php');</script>";
+    renderNotificationScript('You do not have permission to view task board.', 'error', '../dashboard.php', 1200, true);
     exit;
 }
 
@@ -1198,7 +1197,7 @@ $currentUserId = USER_ID;
 $currentProjectId = taskResolveCurrentProjectId($connect, 0);
 $currentProject = $currentProjectId > 0 ? taskGetProjectById($connect, $currentProjectId) : array();
 if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $currentPagePin)) {
-    echo "<script>alert('You do not have access to this project board.'); location.replace('../dashboard.php');</script>";
+    renderNotificationScript('You do not have access to this project board.', 'error', '../dashboard.php', 1200, true);
     exit;
 }
 $taskParentTitle = !empty($currentProject) && isset($currentProject['name']) && trim((string) $currentProject['name']) !== ''

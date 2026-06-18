@@ -1,7 +1,6 @@
 <?php
 $pageTitle = 'Shopee Order Report';
 $currentPagePin = 155;
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

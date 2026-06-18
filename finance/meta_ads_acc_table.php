@@ -1,12 +1,11 @@
 <?php
 $pageTitle = "Meta Ads Account";
 $currentPagePin = 48;
-$isFinance = 1;
 
 include_once '../include/list_page_header.php';
 
 $deleteRedirectPage = $SITEURL . '/finance/meta_ads_acc_table.php';
-$redirect_page = $SITEURL . '/finance/meta_ads_acc.php';
+$redirectPage = $SITEURL . '/finance/meta_ads_acc.php';
 $result = getData('*', '', '', META_ADS_ACC, $finance_connect);
 ?>
 
@@ -41,7 +40,7 @@ $result = getData('*', '', '', META_ADS_ACC, $finance_connect);
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                    href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                    href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                     Account </a>
                             <?php endif; ?>
                         </div>
@@ -68,17 +67,17 @@ $result = getData('*', '', '', META_ADS_ACC, $finance_connect);
                             if (isset($row['accID'], $row['id'], $row['accName']) && !empty($row['accID'])) {
                                 ?>
                                 <tr>
-                                    <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                    <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                     <th scope="row"><?= $num++; ?></th>
                                     <td scope="row" class="btn-container">
                                         <div class="d-flex align-items-center">
-                                            <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                            <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2) ?>
-                                            <?php renderDeleteButton($pinAccess, $row['id'], $row['accID'], $row['accName'], $pageTitle, $redirect_page, $deleteRedirectPage) ?>
+                                            <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                            <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2) ?>
+                                            <?php renderDeleteButton($pinAccess, $row['id'], $row['accID'], $row['accName'], $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                         </div>
                                     </td>
-                                    <td scope="row"><?= $row['accID'] ?></td>
-                                    <td scope="row"><?= $row['accName'] ?></td>
+                                    <td scope="row"><?= htmlspecialchars((string) $row['accID'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?= htmlspecialchars((string) $row['accName'], ENT_QUOTES, 'UTF-8') ?></td>
                                 </tr>
                             <?php }
                         } ?>
@@ -102,8 +101,8 @@ $result = getData('*', '', '', META_ADS_ACC, $finance_connect);
 
 <script>
     //Initial Page And Action Value
-    var page = "<?= $pageTitle ?>";
-    var action = "<?php echo isset($act) ? $act : ' '; ?>";
+    const page = "<?= $pageTitle ?>";
+    const action = "<?php echo isset($act) ? $act : ' '; ?>";
 
     checkCurrentPage(page, action);
     /**

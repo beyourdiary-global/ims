@@ -2,7 +2,6 @@
 $currentPagePin = 93;
 ob_start();
 $pageTitle = "Lazada Order Request";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
@@ -226,8 +225,8 @@ $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 $tblName = LAZADA_ORDER_REQ;
 
-$redirect_page = $SITEURL . '/lazada_order_req.php';
-$deleteRedirectPage = $SITEURL . '/lazada_order_req_table.php';
+$redirectPage = $SITEURL . '/finance/lazada_order_req.php';
+$deleteRedirectPage = $SITEURL . '/finance/lazada_order_req_table.php';
 $combineShowStatement = $groupbyValue . ($groupbyValue2 ? "," . $groupbyValue2 : '');
 $result = getData("$combineShowStatement , SUM(item_price_credit) as item_price_credit, id,  GROUP_CONCAT(id) AS combined_ids ", $sqlQuery . ' GROUP BY ' . $combineShowStatement, '', $tblName, $connect);
 
@@ -267,7 +266,7 @@ $result = getData("$combineShowStatement , SUM(item_price_credit) as item_price_
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                    href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                    href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                     Request </a>
                             <?php endif; ?>
                             <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn"
