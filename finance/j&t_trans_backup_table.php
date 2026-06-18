@@ -144,7 +144,7 @@ if (!empty($checkboxIds)) {
 
 $redirectPage = $SITEURL . '/finance/j&t_trans_backup.php';
 $deleteRedirectPage = $SITEURL . '/finance/j&t_trans_backup_table.php';
-$import_page = $SITEURL . '/finance/j&t_trans_backup_import.php';
+$import_page = $SITEURL . '/import/j&t_trans_backup_import.php';
 
 $result = getData('*', '', '', $tblName, $finance_connect);
 

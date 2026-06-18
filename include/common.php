@@ -1709,7 +1709,7 @@ if (!function_exists('getUrbanismMemberActionData')) {
         $url = '#';
         $disabled = true;
         if ($targetId !== '' && defined('SITEURL')) {
-            $url = SITEURL . '/urb_cust_reg.php?' . http_build_query($params);
+            $url = SITEURL . '/customer/urb_cust_reg.php?' . http_build_query($params);
             $disabled = false;
         }
 
@@ -1818,7 +1818,7 @@ if (!function_exists('customerLabelGetPlatformConfigs')) {
             ),
             'facebook' => array(
                 'label' => 'Facebook Customer Record (Deals)',
-                'record_url' => '/fb_cust_deals_table.php',
+                'record_url' => '/customer/fb_cust_deals_table.php',
                 'customer_table' => FB_CUST_DEALS,
                 'customer_db' => 'cms',
                 'order_table' => FB_ORDER_REQ,
@@ -1832,7 +1832,7 @@ if (!function_exists('customerLabelGetPlatformConfigs')) {
             ),
             'website' => array(
                 'label' => 'Website Customer Record (Deals)',
-                'record_url' => '/website_customer_record_table.php',
+                'record_url' => '/customer/website_customer_record_table.php',
                 'customer_table' => WEB_CUST_RCD,
                 'customer_db' => 'cms',
                 'order_table' => WEB_ORDER_REQ,
@@ -1876,7 +1876,7 @@ if (!function_exists('customerDailyReportGetPlatformConfigs')) {
                 'page_title' => 'Facebook Customer Record (Deals)',
                 'table' => FB_CUST_DEALS,
                 'db' => 'cms',
-                'record_url' => '/fb_cust_deals.php',
+                'record_url' => '/customer/fb_cust_deals.php',
                 'display_fields' => array('name'),
             ),
             'website' => array(
@@ -1885,7 +1885,7 @@ if (!function_exists('customerDailyReportGetPlatformConfigs')) {
                 'page_title' => 'Website Customer Record (Deals)',
                 'table' => WEB_CUST_RCD,
                 'db' => 'cms',
-                'record_url' => '/website_customer_record.php',
+                'record_url' => '/customer/website_customer_record.php',
                 'display_fields' => array('name'),
             ),
             'customer_info' => array(
@@ -1894,7 +1894,7 @@ if (!function_exists('customerDailyReportGetPlatformConfigs')) {
                 'page_title' => 'Customer Info',
                 'table' => CUS_INFO,
                 'db' => 'cms',
-                'record_url' => '/customerInfo.php',
+                'record_url' => '/customer/customerInfo.php',
                 'display_fields' => array('name', 'last_name'),
             ),
         );
@@ -4392,7 +4392,7 @@ if (!function_exists('customerLabelBuildBreakdownUrl')) {
             return '';
         }
 
-        return $baseUrl . '/customer_label_breakdown.php?label_type=' . urlencode($labelType) . '&label_id=' . $labelId;
+        return $baseUrl . '/customer/customer_label_breakdown.php?label_type=' . urlencode($labelType) . '&label_id=' . $labelId;
     }
 }
 
@@ -6608,7 +6608,7 @@ if (!function_exists('shopeeOmsBuildWarehouseMessage')) {
             $buyerConnect = $connect;
         }
         $customerName = shopeeOmsGetOrderCustomerNameText($connect, $buyerConnect, $orderRow, $sourceConfig);
-        $link = rtrim((string) SITEURL, '/') . '/warehouse_stock_in_scan.php?t=' . rawurlencode((string) $tokenValue);
+        $link = rtrim((string) SITEURL, '/') . '/stock/warehouse_stock_in_scan.php?t=' . rawurlencode((string) $tokenValue);
         $orderCode = shopeeOmsGetOrderCodeValue($orderRow, $sourceConfig);
         $addressField = isset($sourceConfig['address_field']) ? (string) $sourceConfig['address_field'] : 'customer_address';
         $airbillField = isset($sourceConfig['airbill_no_field']) ? (string) $sourceConfig['airbill_no_field'] : 'airbill_no';

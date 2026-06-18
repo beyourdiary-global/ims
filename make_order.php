@@ -20,7 +20,7 @@ if (post('bookBtn')) {
 }
 
 $sid = $courier_info['sid'];
-$redirectPage =  $SITEURL . '/rate_checking.php';
+$redirectPage =  $SITEURL . '/stock/rate_checking.php';
 
 //CourierInfo
 $service_detail = $courier_info['service_detail'];
@@ -549,7 +549,7 @@ $country_telcode_to = getCountryTelCode($to, $connect);
                             <div class="row">
                                 <div class="col-6">
                                     <div class="d-flex justify-content-center">
-                                        <a class="btn btn-default btn-primary" onclick="localStorage.clear();" type="button" href="<?= "$SITEURL/rate_checking.php?country=" . urlencode($from) . "&postcodefrom=" . urlencode($postcode_from) . "&postcodeto=" . urlencode($postcode_to) .  "&from_full=" . urlencode($from_full) . "&to_full=" . urlencode($to_full); ?>" id="backBtn">Back</a>
+                                        <a class="btn btn-default btn-primary" onclick="localStorage.clear();" type="button" href="<?= "$SITEURL/stock/rate_checking.php?country=" . urlencode($from) . "&postcodefrom=" . urlencode($postcode_from) . "&postcodeto=" . urlencode($postcode_to) .  "&from_full=" . urlencode($from_full) . "&to_full=" . urlencode($to_full); ?>" id="backBtn">Back</a>
                                     </div>
                                 </div>
 
@@ -663,7 +663,7 @@ $country_telcode_to = getCountryTelCode($to, $connect);
                     }
 
                     if (!isset($awb) && !$rstMakeOrderPaymentFailStatus) {
-                        echo '<script>confirmationDialog("","Error Message: AWB Bill Not Exist,Please Select Other Courier And Try Again","' . $pageTitle . '","","' . $SITEURL . '/rate_checking.php","ErrMO");</script>';
+                        echo '<script>confirmationDialog("","Error Message: AWB Bill Not Exist,Please Select Other Courier And Try Again","' . $pageTitle . '","","' . $SITEURL . '/stock/rate_checking.php","ErrMO");</script>';
                     }
 
                     if (isset($parcel_no) && isset($awb)) {

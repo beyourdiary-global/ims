@@ -66,7 +66,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
 }
 
 $module = 'shopee_order_req';
-$redirectPage = $SITEURL . '/common_import.php';
+$redirectPage = $SITEURL . '/import/common_import.php';
 $shopeeOrderRedirectPage = $SITEURL . '/shopee/shopee_processing_order.php';
 if ($parentPagePinGroupId === 130) {
     $shopeeOrderRedirectPage = $SITEURL . '/shopee/shopee_order_req_table.php';
@@ -80,7 +80,7 @@ if ($action !== '' && !in_array($action, $allowedActions, true)) {
     $action = '';
 }
 if (isset($_POST['cancelImportBtn']) || $action === 'cancelImport') {
-    echo '<script>location.href = "' . $SITEURL . '/shopee_order_import.php";</script>';
+    echo '<script>location.href = "' . $SITEURL . '/import/shopee_order_import.php";</script>';
     exit;
 }
 if ($action !== '' && !isActionAllowed('Import', $pinAccess)) {
@@ -4380,7 +4380,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                             <?php } ?>
                                             <button type="button" class="btn btn-outline-primary btn-sm mt-1" id="add_pkg_btn">+ Add Package</button>
                                             <?php if ($previewData['missing_sku']) { ?>
-                                                <a href="<?= $SITEURL ?>/package.php?act=I" target="_blank" class="btn btn-sm btn-outline-danger mt-1">Add New Package</a>
+                                                <a href="<?= $SITEURL ?>/product/package.php?act=I" target="_blank" class="btn btn-sm btn-outline-danger mt-1">Add New Package</a>
                                             <?php } ?>
                                         </div>
                                     </div>
@@ -4690,7 +4690,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                             <button class="btn btn-lg btn-rounded btn-primary px-4" type="submit" name="actionBtn" value="insertShopeeOrderReq">
                                                 <i class="fa-solid fa-database"></i> INSERT
                                             </button>
-                                            <button class="btn btn-lg btn-rounded btn-secondary px-4" type="button" onclick="window.location.href='<?= $SITEURL ?>/shopee_order_import.php'">
+                                            <button class="btn btn-lg btn-rounded btn-secondary px-4" type="button" onclick="window.location.href='<?= $SITEURL ?>/import/shopee_order_import.php'">
                                                 CANCEL
                                             </button>
                                         </div>

@@ -364,7 +364,7 @@ if (!empty($packageIds)) {
 }
 
 $summary = sorInfoBuildItemsSummary($itemRows, $packageNameMap, $productNameMap);
-$orderLink = $SITEURL . '/warehouse_stock_in_scan.php?t=' . urlencode((string) (isset($requestRow['order_link_token']) ? $requestRow['order_link_token'] : ''));
+$orderLink = $SITEURL . '/stock/warehouse_stock_in_scan.php?t=' . urlencode((string) (isset($requestRow['order_link_token']) ? $requestRow['order_link_token'] : ''));
 $qrImageUrl = sorInfoQrSrc(isset($requestRow['qr_image']) ? $requestRow['qr_image'] : '', $SITEURL);
 $warehouseName = sorInfoResolveWarehouseName($connect, $requestRow);
 $telegramMsg = '';

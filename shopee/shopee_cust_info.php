@@ -768,7 +768,7 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                         'customer_column' => 'shopee_cust_id',
                         'customer_label' => isset($row['buyer_username']) ? $row['buyer_username'] : '',
                         'return_url' => $customerLogReturnUrl,
-                        'ajax_url' => $SITEURL . '/user_record_log.php',
+                        'ajax_url' => $SITEURL . '/users/user_record_log.php',
                         'customer_only' => true,
                     ));
 

@@ -590,10 +590,10 @@ if (!function_exists('urlResolveUserRecordLogContext')) {
             $returnUrl = trim((string) $_REQUEST['return_url']);
         }
         if ($returnUrl === '') {
-            $returnUrl = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '/user_record_log.php';
+            $returnUrl = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '/users/user_record_log.php';
         }
 
-        $ajaxUrl = isset($options['ajax_url']) ? trim((string) $options['ajax_url']) : (rtrim((string) $GLOBALS['SITEURL'], '/') . '/user_record_log.php');
+        $ajaxUrl = isset($options['ajax_url']) ? trim((string) $options['ajax_url']) : (rtrim((string) $GLOBALS['SITEURL'], '/') . '/users/user_record_log.php');
         $customerLabel = isset($options['customer_label']) ? trim((string) $options['customer_label']) : '';
         $customerColumn = '';
         if (isset($options['customer_column'])) {
@@ -1167,7 +1167,7 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
         $pathReturn = isset($context['return_url']) ? (string) $context['return_url'] : '';
         $initialList = urlBuildListHtml($connect, $dbConnect, $tblName, $context);
         $config = array(
-            'ajaxUrl' => isset($context['ajax_url']) ? (string) $context['ajax_url'] : (rtrim((string) $GLOBALS['SITEURL'], '/') . '/user_record_log.php'),
+            'ajaxUrl' => isset($context['ajax_url']) ? (string) $context['ajax_url'] : (rtrim((string) $GLOBALS['SITEURL'], '/') . '/users/user_record_log.php'),
             'customerId' => isset($context['customer_id']) ? (int) $context['customer_id'] : 0,
             'customerColumn' => isset($context['customer_column']) ? (string) $context['customer_column'] : '',
             'pathReturn' => $pathReturn,
@@ -1176,7 +1176,7 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
             'confirmationPageName' => 'User Record Log',
         );
         $configJson = json_encode($config);
-        $moduleActionUrl = rtrim((string) $GLOBALS['SITEURL'], '/') . '/user_record_log.php';
+        $moduleActionUrl = rtrim((string) $GLOBALS['SITEURL'], '/') . '/users/user_record_log.php';
         ?>
         <div class="user-record-log-module mt-4">
             <style>
@@ -1628,7 +1628,7 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
             window.__USER_RECORD_LOG_CONFIG = <?php echo $configJson ? $configJson : '{}'; ?>;
         </script>
         <script src="<?php echo htmlspecialchars(rtrim((string) $GLOBALS['SITEURL'], '/') . '/header/tinymce/tinymce.min.js?v=' . @filemtime(ROOT . '/header/tinymce/tinymce.min.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
-        <script src="<?php echo htmlspecialchars(rtrim((string) $GLOBALS['SITEURL'], '/') . '/js/user_record_log.js?v=' . @filemtime(ROOT . '/js/user_record_log.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
+        <script src="<?php echo htmlspecialchars(rtrim((string) $GLOBALS['SITEURL'], '/') . '/js/users/user_record_log.js?v=' . @filemtime(ROOT . '/js/user_record_log.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
         <?php
     }
 }

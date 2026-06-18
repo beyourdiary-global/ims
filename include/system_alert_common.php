@@ -53,7 +53,7 @@ if (!function_exists('systemAlertGetModuleConfigs')) {
             'customer_follow_up' => array(
                 'pin_group_id' => 151,
                 'title' => 'Customer Follow-Up',
-                'path' => '/customer_follow_up_list.php',
+                'path' => '/customer/customer_follow_up_list.php',
                 'action_label' => 'Open Follow-Up',
             ),
             'campaign_follow_up_task' => array(

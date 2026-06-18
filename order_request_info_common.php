@@ -103,7 +103,7 @@ if ($tokenRst && mysqli_num_rows($tokenRst) > 0) {
 
 $tokenValue = trim((string) (isset($tokenRow['token']) ? $tokenRow['token'] : ''));
 $orderLink = $tokenValue !== ''
-    ? rtrim((string) $SITEURL, '/') . '/warehouse_stock_in_scan.php?t=' . urlencode($tokenValue)
+    ? rtrim((string) $SITEURL, '/') . '/stock/warehouse_stock_in_scan.php?t=' . urlencode($tokenValue)
     : '';
 
 $qrImageUrl = '';

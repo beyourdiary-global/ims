@@ -212,7 +212,7 @@ $tblName = FB_ADS_TOPUP;
                                 <a class="btn btn-sm btn-rounded btn-primary px-3" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
                             <?php endif; ?>
                             <?php if (isActionAllowed("Import", $pinAccess)) : ?>
-                                <a class="btn btn-sm btn-rounded btn-primary px-3" name="importBtn" id="addBtn" href="<?= $SITEURL ?>/facebook_ads_topup_import.php"><i class="fa-solid fa-file-import"></i> Import </a>
+                                <a class="btn btn-sm btn-rounded btn-primary px-3" name="importBtn" id="addBtn" href="<?= $SITEURL ?>/import/facebook_ads_topup_import.php"><i class="fa-solid fa-file-import"></i> Import </a>
                             <?php endif; ?>
                             <?php if (isActionAllowed("Export", $pinAccess)) : ?>
                                 <a class="btn btn-sm btn-rounded btn-primary px-3" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>

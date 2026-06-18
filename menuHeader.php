@@ -556,7 +556,7 @@
                             <ul class="dropdown-menu dropdown-menu-right mt-3"
                                 aria-labelledby="navbarDropdownMenuAvatar">
                                 <li>
-                                    <a class="dropdown-item" href="<?= $SITEURL ?>/user_profile.php">My profile</a>
+                                    <a class="dropdown-item" href="<?= $SITEURL ?>/users/user_profile.php">My profile</a>
                                 </li>
                                 <li>
                                     <a class="dropdown-item" href="<?= $SITEURL ?>/changePassword.php">Settings</a>
@@ -629,7 +629,7 @@
                     </button>
                     <ul class="dropdown-menu dropdown-menu-right mt-0" aria-labelledby="navbarTogglerMenuAvatar">
                         <li>
-                            <a class="dropdown-item" href="<?= $SITEURL ?>/user_profile.php">My profile</a>
+                            <a class="dropdown-item" href="<?= $SITEURL ?>/users/user_profile.php">My profile</a>
                             <div class="dropdown-divider my-0"></div>
                         </li>
                         <li>

@@ -5,8 +5,8 @@ include_once 'menuHeader.php';
 include_once 'checkCurrentPagePin.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$redirectPage = $SITEURL . '/product_table.php';
-$shortcut_page = $SITEURL . '/common_import.php';
+$redirectPage = $SITEURL . '/product/product_table.php';
+$shortcut_page = $SITEURL . '/import/common_import.php';
 $parentPagePinGroupId = 20;
 $parentPageTitle = getPinGroupNameById($connect, $parentPagePinGroupId);
 if ($parentPageTitle === '') {

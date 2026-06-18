@@ -385,7 +385,7 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
                                         $orderCode = shopeeOmsGetOrderCodeValue($row, $rowSourceConfig);
                                         $tokenMapKey = $rowPlatform . '|' . (int) $row['id'];
                                         $tokenValue = isset($orderTokenMap[$tokenMapKey]) ? (string) $orderTokenMap[$tokenMapKey] : '';
-                                        $tokenLink = $tokenValue !== '' ? $SITEURL . '/warehouse_stock_in_scan.php?t=' . urlencode($tokenValue) : '';
+                                        $tokenLink = $tokenValue !== '' ? $SITEURL . '/stock/warehouse_stock_in_scan.php?t=' . urlencode($tokenValue) : '';
                                         $stockOutWarehouseName = shopeeOmsResolveStockOutWarehouseName($connect, $row, $waitingToPackDefaultWarehouseId, $waitingToPackWarehouseNameMap);
                                         $airbillField = isset($rowSourceConfig['airbill_no_field']) ? (string) $rowSourceConfig['airbill_no_field'] : 'airbill_no';
                                         $customerDisplayHtml = htmlspecialchars(shopeeOmsGetOrderCustomerNameText($connect, $finance_connect, $row, $rowSourceConfig), ENT_QUOTES, 'UTF-8');

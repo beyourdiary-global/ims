@@ -14,7 +14,7 @@ $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
 //Page Redirect Link , Clean LocalStorage , Error Alert Msg 
-$redirectPage = $SITEURL . '/race_table.php';
+$redirectPage = $SITEURL . '/hr/race_table.php';
 $redirectLink = ("<script>location.href = '$redirectPage';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 

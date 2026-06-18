@@ -12,7 +12,7 @@ $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 
-$redirect_page2 = $SITEURL . '/update_shipment_info.php';
+$redirect_page2 = $SITEURL . '/stock/update_shipment_info.php';
 $deleteRedirectPage = $SITEURL . '/finance/order_process_list.php';
 $result = getData('*', '', '', SHOPEE_SG_ORDER_REQ,$finance_connect
 );

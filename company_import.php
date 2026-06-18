@@ -8,8 +8,8 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = COMPANY;
 $sqlAccountTbl = SQL_ACC;
-$redirectPage = $SITEURL . '/company_table.php';
-$shortcut_page = $SITEURL . '/common_import.php';
+$redirectPage = $SITEURL . '/settings/company_table.php';
+$shortcut_page = $SITEURL . '/import/common_import.php';
 $parentPagePinGroupId = 127;
 $parentPageTitle = getPinGroupNameById($connect, $parentPagePinGroupId);
 if ($parentPageTitle === '') {

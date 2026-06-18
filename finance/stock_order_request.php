@@ -829,7 +829,7 @@ if (post('actionBtn')) {
                     }
 
                     $token = sorEncodeToken($dataId);
-                    $orderLink = $SITEURL . '/warehouse_stock_in_scan.php?t=' . urlencode($token);
+                    $orderLink = $SITEURL . '/stock/warehouse_stock_in_scan.php?t=' . urlencode($token);
 
                     $qrDir = ROOT . DIRECTORY_SEPARATOR . 'temp' . DIRECTORY_SEPARATOR . 'stock_order_request' . DIRECTORY_SEPARATOR;
                     if (!file_exists($qrDir)) {
