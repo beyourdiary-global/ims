@@ -392,8 +392,8 @@ foreach ($picAutocompleteOptions as $picOption) {
             confirmationDialog(deletePayload, [name || ''], 'Campaign', '<?= campaignH($deleteRedirectPage) ?>', '<?= campaignH($deleteRedirectPage) ?>', 'D');
         }
 
-        var page = "<?= campaignH($pageTitle) ?>";
-        var action = "<?php echo isset($act) ? $act : ' '; ?>";
+        const page = "<?= campaignH($pageTitle) ?>";
+        const action = "<?php echo isset($act) ? $act : ' '; ?>";
 
         checkCurrentPage(page, action);
         dropdownMenuDispFix();

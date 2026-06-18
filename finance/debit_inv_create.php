@@ -414,8 +414,8 @@ $pic_row = ($pic_result && $pic_result->num_rows > 0) ? $pic_result->fetch_assoc
 
     <script>
         //Initial Page And Action Value
-        var page = "<?= $pageTitle ?>";
-        var action = "<?php echo isset($act) ? $act : ''; ?>";
+        const page = "<?= $pageTitle ?>";
+        const action = "<?php echo isset($act) ? $act : ''; ?>";
 
         checkCurrentPage(page, action);
         setButtonColor();

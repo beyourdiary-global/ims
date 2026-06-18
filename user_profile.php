@@ -301,8 +301,8 @@ if (isset($_SESSION['tempValConfirmBox'])) {
     </div>
 
     <script>
-        var page = "<?= $pageTitle ?>";
-        var action = "E";
+        const page = "<?= $pageTitle ?>";
+        const action = "E";
 
         checkCurrentPage(page, action);
         centerAlignment("formContainer");

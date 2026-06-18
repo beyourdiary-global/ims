@@ -4,7 +4,7 @@ $(document).ready(function() {
 
     if (!($("#tax_country").attr('disabled'))) { 
         $("#tax_country").keyup(function() { 
-            var param = { 
+            const param = { 
                 search: $(this).val(), 
                 searchType: 'name', // column of the table
                 elementID: $(this).attr('id'), // id of the input
@@ -37,9 +37,9 @@ $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
     
-    var name_chk = 0;
-    var country_chk = 0;
-    var percentage_chk = 0;
+    let name_chk = 0;
+    let country_chk = 0;
+    let percentage_chk = 0;
 
     if (($('#name').val() === '' || $('#name').val() === null || $('#name')
             .val() === undefined)) {
@@ -63,7 +63,7 @@ $('.submitBtn').on('click', () => {
 
     if (($('#percentage').val() === '' || $('#percentage').val() === null || $('#percentage')
             .val() === undefined)) {
-        currency_chk = 0;
+        percentage_chk = 0;
         $("#percentage").after(
             '<span class="error-message percentage-err">Percentage is required!</span>');
     } else {

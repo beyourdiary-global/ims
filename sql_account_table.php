@@ -106,9 +106,9 @@ if (!$result) {
     </div>
 
     <script>
-        var page = "<?= $pageTitle ?>";
-        var action = "<?= isset($act) ? $act : ' ' ?>";
-        var hasRows = <?= $hasRows ? 'true' : 'false' ?>;
+        const page = "<?= $pageTitle ?>";
+        const action = "<?= isset($act) ? $act : ' ' ?>";
+        const hasRows = <?= $hasRows ? 'true' : 'false' ?>;
 
         checkCurrentPage(page, action);
         dropdownMenuDispFix();

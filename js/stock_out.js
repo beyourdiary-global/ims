@@ -2,19 +2,19 @@ function showNotification(message) {
     $("#notification").text(message).fadeIn().delay(3000).fadeOut();
 }
 $(document).ready(function () {
-    var barcode = '<?=$barcode?>';
-    var stock_rec_count = '<?= count($stock_rec) ?>';
-    var prod_barcode_slot_total = '<?= $prod_barcode_slot_total ?>';
+    const barcode = '<?=$barcode?>';
+    const stock_rec_count = '<?= count($stock_rec) ?>';
+    const prod_barcode_slot_total = '<?= $prod_barcode_slot_total ?>';
 
-    var pkg = getParameterByName('pkg_id');
-    var usr = getParameterByName('usr_id');
-    var whse = getParameterByName('whse_id');
+    const pkg = getParameterByName('pkg_id');
+    const usr = getParameterByName('usr_id');
+    const whse = getParameterByName('whse_id');
   
     if (!($("#order_id").attr('disabled'))) {
         $("#order_id").keyup(function () {
-            var searchValue = $(this).val();
+            const searchValue = $(this).val();
     
-            var searchParams = {
+            const searchParams = {
                 search: searchValue,
                 searchTypes: 'orderID', // Array of search types
                 elementID: $(this).attr('id'),
@@ -35,8 +35,8 @@ $(document).ready(function () {
 
 // Form submission 
 $('#submitBtn').on('click', function () {
-    var barcodeInputs = $('[name="barcode_input[]"]').toArray();
-    var isValid = true;
+    const barcodeInputs = $('[name="barcode_input[]"]').toArray();
+    const isValid = true;
 
     if (isValid) {
         $('#stockForm').submit();
@@ -54,8 +54,8 @@ $("#expire_date").on("input", function() {
 $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
-    var expire_chk = 0;
-    var date_chk = 0;
+    let expire_chk = 0;
+    let date_chk = 0;
 
     
    

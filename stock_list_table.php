@@ -309,8 +309,8 @@ $transferLogRow = isset($transferLogMap[$transferMapKey]) ? $transferLogMap[$tra
     </div>
 
     <script>
-        var page = <?= json_encode($pageTitle) ?>;
-        var action = '';
+        const page = <?= json_encode($pageTitle) ?>;
+        const action = '';
 
         checkCurrentPage(page, action);
         dropdownMenuDispFix();

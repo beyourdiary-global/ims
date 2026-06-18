@@ -1,13 +1,13 @@
 //show text field when "create new merchant" is selected from dropdown list
 document.getElementById('invtr_mrcht').addEventListener('change', function() {
-    var create_mrcht_sect = document.getElementById('INVTR_CreateMerchant');
+    const create_mrcht_sect = document.getElementById('INVTR_CreateMerchant');
     create_mrcht_sect.hidden = this.value !== 'Create New Merchant';
 })
 
 // Trigger the check on page load
 window.onload = function() {
-    var create_mrcht_sect = document.getElementById('INVTR_CreateMerchant');
-    var invtr_mrcht_value = document.getElementById('invtr_mrcht').value;
+    const create_mrcht_sect = document.getElementById('INVTR_CreateMerchant');
+    const invtr_mrcht_value = document.getElementById('invtr_mrcht').value;
     create_mrcht_sect.hidden = invtr_mrcht_value !== 'Create New Merchant';
 };
 
@@ -15,10 +15,10 @@ window.onload = function() {
 $(document).ready(function() {
 
     if (!($("#invtr_mrcht").attr('readonly'))) {
-        var selectedValue = '';
+        let selectedValue = '';
         $("#invtr_mrcht").keyup(function() {
             console.log("Keyup event triggered");
-            var param = {
+            const param = {
                 search: $(this).val(),
                 searchType: 'name', // column of the table
                 elementID: $(this).attr('id'), // id of the input
@@ -36,7 +36,7 @@ $(document).ready(function() {
             selectedValue = $(this).val();
             console.log("Selected value:", selectedValue);
             console.log("Site URL:", '<?= $SITEURL ?>');
-            var create_mrcht_sect = document.getElementById('INVTR_CreateMerchant');
+            const create_mrcht_sect = document.getElementById('INVTR_CreateMerchant');
 
             // Check if the selected value is 'Create New Merchant'
             if (selectedValue == 'Create New Merchant') {
@@ -80,11 +80,11 @@ $("#invtr_amt").on("input", function() {
 $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
-    var date_chk = 0;
-    var amt_chk = 0;
-    var item_chk = 0;
-    var mrcht_chk = 0;
-    var mrcht_other_chk = 0;
+    let date_chk = 0;
+    let amt_chk = 0;
+    let item_chk = 0;
+    let mrcht_chk = 0;
+    let mrcht_other_chk = 0;
 
     if (($('#invtr_date').val() === '' || $('#invtr_date').val() === null || $('#invtr_date')
             .val() === undefined)) {

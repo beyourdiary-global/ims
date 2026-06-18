@@ -798,8 +798,8 @@ $estimatedCustomers = campaignRuleEstimateMatchedCustomers($connect, $finance_co
     </div>
 
     <script>
-        var page = "<?= campaignH($pageTitle) ?>";
-        var action = "<?= campaignH($act) ?>";
+        const page = "<?= campaignH($pageTitle) ?>";
+        const action = "<?= campaignH($act) ?>";
         var customerTargetRuleUrl = "<?= campaignH($SITEURL . '/campaign_rule_setting.php') ?>";
         var customerTargetRuleLabels = {
             platforms: <?= campaignJson($platformOptions) ?>,

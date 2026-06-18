@@ -430,8 +430,8 @@ function sorQrHref($path, $siteUrl)
     </div>
 
     <script>
-        var page = "<?= $pageTitle ?>";
-        var action = "";
+        const page = "<?= $pageTitle ?>";
+        const action = "";
         checkCurrentPage(page, action);
         dropdownMenuDispFix();
         if (document.getElementById('sorTable')) {

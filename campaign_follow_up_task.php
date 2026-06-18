@@ -1238,8 +1238,8 @@ if ($stmt) {
         });
     }
 
-    var page = "Campaign";
-    var action = "";
+    const page = "Campaign";
+    const action = "";
     checkCurrentPage(page, action);
     dropdownMenuDispFix();
     datatableAlignment('campaign_follow_up_table');

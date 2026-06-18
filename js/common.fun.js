@@ -17,13 +17,13 @@ function toggle(str) {
 }
 
 function isEmail(str) {
-  var filter =
+  const filter =
     /^[_a-zA-Z0-9-]+(\.[_a-zA-Z0-9-]+)*@[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*(\.[a-zA-Z]{2,})$/;
   return filter.test(str);
 }
 
 function isNumber(str) {
-  var filter = /^[0-9]+$/;
+  const filter = /^[0-9]+$/;
   return filter.test(str);
 }
 
@@ -69,7 +69,7 @@ function MM_swapImgRestore() {
 }
 
 function isNumberKey(evt) {
-  var charCode = evt.which ? evt.which : event.keyCode;
+  const charCode = evt.which ? evt.which : event.keyCode;
   if (charCode > 31 && (charCode < 48 || charCode > 57)) return false;
 
   return true;
@@ -90,7 +90,7 @@ function clearDefaultText(ele, style1, style2, txt) {
 }
 
 function popUp(webaddy, title, x, y) {
-  var features =
+  const features =
     "toolbars=0, scrollbars=1, location=0, statusbars=0, menubars=0, resizable=0, width=" +
     x +
     ", height=" +
@@ -120,7 +120,7 @@ function removeColorInput(ob, ob_des) {
 }
 
 function convertSpecialChars() {
-  var chars = [
+  const chars = [
     "Â©",
     "Ã›",
     "Â®",
@@ -303,7 +303,7 @@ function convertSpecialChars() {
     "Å“",
     "Ãš",
   ];
-  var codes = [
+  const codes = [
     "&copy;",
     "&#219;",
     "&reg;",
@@ -498,8 +498,8 @@ function convertSpecialChars() {
 }
 
 function isScrolledVisible(elem) {
-  var docViewTop = jQuery(window).scrollTop();
-  var elemTop = jQuery(elem).offset().top + jQuery(elem).height();
+  const docViewTop = jQuery(window).scrollTop();
+  const elemTop = jQuery(elem).offset().top + jQuery(elem).height();
   if (elemTop < docViewTop)
     //scroll to elem
     return docViewTop - elemTop < 0 ? true : false;

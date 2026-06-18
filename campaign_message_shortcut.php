@@ -797,8 +797,8 @@ $autocompleteConfigs = array(
         });
     });
 
-    var page = "Campaign";
-    var action = "";
+    const page = "Campaign";
+    const action = "";
     checkCurrentPage(page, action);
     dropdownMenuDispFix();
     datatableAlignment('campaign_message_table');

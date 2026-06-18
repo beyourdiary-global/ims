@@ -1298,8 +1298,8 @@ ksort($platformFilterOptions, SORT_NATURAL | SORT_FLAG_CASE);
             updateCampaignTableCheckAll($('#campaign_customer_search_table'));
         });
 
-        var page = "Campaign";
-        var action = "";
+        const page = "Campaign";
+        const action = "";
         checkCurrentPage(page, action);
         dropdownMenuDispFix();
         datatableAlignment('campaign_customer_search_table');

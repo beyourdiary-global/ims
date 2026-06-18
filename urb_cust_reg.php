@@ -936,8 +936,8 @@ if ($urbanismOrderFbLink === '' && $urbanismFormName !== '') {
         })();
     </script>
     <script>
-        var page = "<?= $pageTitle ?>";
-        var action = "<?php echo isset($act) ? $act : ' '; ?>";
+        const page = "<?= $pageTitle ?>";
+        const action = "<?php echo isset($act) ? $act : ' '; ?>";
 
         if (typeof checkCurrentPage === 'function') {
             checkCurrentPage(page, action);

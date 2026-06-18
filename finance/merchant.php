@@ -442,8 +442,8 @@ if (isset($_SESSION['tempValConfirmBox'])) {
         include "../js/merchant.js"
             ?>
         //Initial Page And Action Value
-        var page = "<?= $pageTitle ?>";
-        var action = "<?php echo isset($act) ? $act : ''; ?>";
+        const page = "<?= $pageTitle ?>";
+        const action = "<?php echo isset($act) ? $act : ''; ?>";
 
         checkCurrentPage(page, action);
         setButtonColor();

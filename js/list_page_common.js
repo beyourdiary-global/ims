@@ -11,7 +11,7 @@
     }
 
     function initDefaultSortingTable() {
-        var table = document.getElementById('table');
+        const table = document.getElementById('table');
 
         if (!table) {
             return;

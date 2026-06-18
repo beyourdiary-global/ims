@@ -256,8 +256,8 @@ $result = getData('*', '', '', ITL_CSM_ITEM, $finance_connect);
 <?php include "../js/internal_consume_item_table.js" ?>
 
     //Initial Page And Action Value
-    var page = "<?= $pageTitle ?>";
-    var action = "<?php echo isset($act) ? $act : ' '; ?>";
+    const page = "<?= $pageTitle ?>";
+    const action = "<?php echo isset($act) ? $act : ' '; ?>";
 
     checkCurrentPage(page, action);
     /* function(void) : to solve the issue of dropdown menu displaying inside the table when table class include table-responsive */

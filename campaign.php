@@ -370,8 +370,8 @@ $readonlyAttr = $isView ? 'readonly' : '';
         </div>
     </div>
     <script>
-        var page = "<?= campaignH($pageTitle) ?>";
-        var action = "<?= campaignH($act) ?>";
+        const page = "<?= campaignH($pageTitle) ?>";
+        const action = "<?= campaignH($act) ?>";
 
         checkCurrentPage(page, action);
         centerAlignment("formContainer");

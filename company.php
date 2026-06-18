@@ -491,8 +491,8 @@ function cmpFieldValue($row, $field)
     </div>
 
     <script>
-        var page = "<?= $pageTitle ?>";
-        var action = "<?= isset($act) ? $act : '' ?>";
+        const page = "<?= $pageTitle ?>";
+        const action = "<?= isset($act) ? $act : '' ?>";
 
         checkCurrentPage(page, action);
         centerAlignment("formContainer");

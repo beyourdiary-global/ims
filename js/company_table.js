@@ -1,9 +1,9 @@
 ﻿
 
 $(document).ready(function () {
-  var cfg = window.__COMPANY_TABLE_CONFIG || {};
-  var page = cfg.page || "Company";
-  var action = cfg.action || "";
+  const cfg = window.__COMPANY_TABLE_CONFIG || {};
+  const page = cfg.page || "Company";
+  const action = cfg.action || "";
 
   createSortingTable("table");
   checkCurrentPage(page, action);
@@ -14,7 +14,7 @@ $(document).ready(function () {
   $(document).on("change", ".exportAll", function (event) {
     event.preventDefault();
 
-    var isChecked = $(this).prop("checked");
+    const isChecked = $(this).prop("checked");
     $(this)
       .closest("table")
       .find("tbody tr:visible .export")
@@ -30,7 +30,7 @@ $(document).ready(function () {
     function (event) {
       event.preventDefault();
 
-      var checkboxValues = [];
+      const checkboxValues = [];
 
       if ($.fn.DataTable.isDataTable("#table")) {
         $("#table")
@@ -39,7 +39,7 @@ $(document).ready(function () {
           .nodes()
           .to$()
           .each(function () {
-            var checkbox = $(this).find(".export:checked");
+            const checkbox = $(this).find(".export:checked");
             if (checkbox.length > 0) {
               checkbox.each(function () {
                 checkboxValues.push($(this).val());

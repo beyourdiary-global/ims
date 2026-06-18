@@ -465,8 +465,8 @@ $viewMessageHtml = isset($row['shortcuts_message']) ? messageShortcutsSanitizeHt
             siteUrl: <?= json_encode($SITEURL, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>
         };
 
-        var page = "<?= $pageTitle ?>";
-        var action = "<?php echo isset($act) ? $act : ''; ?>";
+        const page = "<?= $pageTitle ?>";
+        const action = "<?php echo isset($act) ? $act : ''; ?>";
 
         checkCurrentPage(page, action);
         centerAlignment("formContainer");

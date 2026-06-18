@@ -251,8 +251,8 @@ $result = getData('*', '', '', DW_TOP_UP_RECORD, $finance_connect);
     <script>
         <?php include '../js/fb_ads_topup_table.js' ?>
         //Initial Page And Action Value
-        var page = "<?= $pageTitle ?>";
-        var action = "<?php echo isset($act) ? $act : ' '; ?>";
+        const page = "<?= $pageTitle ?>";
+        const action = "<?php echo isset($act) ? $act : ' '; ?>";
 
         checkCurrentPage(page, action);
         //to solve the issue of dropdown menu displaying inside the table when table class include table-responsive

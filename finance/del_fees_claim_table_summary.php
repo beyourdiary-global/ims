@@ -249,8 +249,8 @@ $result = getData('*', '', '', DEL_FEES_CLAIM, $finance_connect);
 <?php include "../js/fb_ads_topup_table.js" ?>
 <?php include "../js/del_fees_claim_table.js" ?>
     //Initial Page And Action Value
-    var page = "<?= $pageTitle ?>";
-    var action = "<?php echo isset($act) ? $act : ' '; ?>";
+    const page = "<?= $pageTitle ?>";
+    const action = "<?php echo isset($act) ? $act : ' '; ?>";
 
     checkCurrentPage(page, action);
     /**

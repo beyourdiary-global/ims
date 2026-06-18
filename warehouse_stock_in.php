@@ -1070,8 +1070,8 @@ if ($isViewMode && $dataID > 0 && isset($orderById[$dataID])) {
 </div>
 
 <script>
-    var page = <?= json_encode($pageTitle) ?>;
-    var action = <?= json_encode($act) ?>;
+    const page = <?= json_encode($pageTitle) ?>;
+    const action = <?= json_encode($act) ?>;
     var stockInSiteUrl = <?= json_encode($SITEURL) ?>;
     var stockInBackButtonTitle = <?= json_encode($backButtonTitle) ?>;
     checkCurrentPage(page, action);

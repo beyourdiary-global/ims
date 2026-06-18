@@ -193,7 +193,7 @@ if (!$result) {
     $(document).on("change", ".exportAll", function (event) { //checkbox handling
         event.preventDefault();
 
-        var isChecked = $(this).prop("checked");
+        const isChecked = $(this).prop("checked");
         $(".export").prop("checked", isChecked);
         $(".exportAll").prop("checked", isChecked);
 
@@ -201,11 +201,11 @@ if (!$result) {
     });
 
     $('a[name="exportBtn"]').on("click", function () {
-        var checkboxValues = [];
+        const checkboxValues = [];
 
         // Loop through all pages to collect checked checkboxes
         $('#stock_report').DataTable().$('tr', { "filter": "applied" }).each(function () {
-            var checkbox = $(this).find('.export:checked');
+            const checkbox = $(this).find('.export:checked');
             if (checkbox.length > 0) {
                 checkbox.each(function () {
                     checkboxValues.push($(this).val());
@@ -219,12 +219,12 @@ if (!$result) {
             setCookie('rowID', checkboxValues.join(','), 1);
 
             //uncheck checkboxes
-            var checkboxes = document.querySelectorAll('.export');
+            const checkboxes = document.querySelectorAll('.export');
             checkboxes.forEach(function (checkbox) {
                 checkbox.checked = false;
             });
 
-            var selectAllCheckbox = document.querySelector('.exportAll');
+            const selectAllCheckbox = document.querySelector('.exportAll');
             if (selectAllCheckbox) {
                 selectAllCheckbox.checked = false;
             }
@@ -238,8 +238,8 @@ if (!$result) {
 
     <?php include "js/fb_ads_topup_table.js" ?>
         //Initial Page And Action Value
-        var page = "<?= $pageTitle ?>";
-        var action = "<?php echo isset($act) ? $act : ' '; ?>";
+        const page = "<?= $pageTitle ?>";
+        const action = "<?php echo isset($act) ? $act : ' '; ?>";
 
         checkCurrentPage(page, action);
         //to solve the issue of dropdown menu displaying inside the table when table class include table-responsive

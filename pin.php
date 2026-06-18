@@ -203,8 +203,8 @@ if (post('actionBtn')) {
 </div>
 
 <script>
-    var page = "<?= $pageTitle ?>";
-    var action = "<?= $act ?>";
+    const page = "<?= $pageTitle ?>";
+    const action = "<?= $act ?>";
     checkCurrentPage(page, action);
     centerAlignment("formContainer");
     setButtonColor();

@@ -584,8 +584,8 @@ foreach ($listRows as $row) {
 </div>
 
 <script>
-    var page = <?= json_encode($pageTitle) ?>;
-    var action = '';
+    const page = <?= json_encode($pageTitle) ?>;
+    const action = '';
     checkCurrentPage(page, action);
     dropdownMenuDispFix();
     // Bypass the custom wrapper and initialize DataTables directly so options apply correctly

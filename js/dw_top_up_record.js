@@ -7,7 +7,7 @@ $(document).ready(function() {
     
     if (!($("#dtur_brand").attr('disabled'))) { 
         $("#dtur_brand").keyup(function() { 
-            var param = { 
+            const param = { 
                 search: $(this).val(), 
                 searchType: 'name', // column of the table
                 elementID: $(this).attr('id'), // id of the input
@@ -21,7 +21,7 @@ $(document).ready(function() {
 
     if (!($("#dtur_agent").attr('disabled'))) { 
         $("#dtur_agent").keyup(function() { 
-            var param = { 
+            const param = { 
                 search: $(this).val(), 
                 searchType: 'name', // column of the table
                 elementID: $(this).attr('id'), // id of the input
@@ -56,10 +56,10 @@ $("#dtur_brand").on("input", function() {
 $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
-    var agent_chk = 0;
-    var amount_chk = 0;
-    var curr_chk = 0;
-    var brand_chk = 0;
+    let agent_chk = 0;
+    let amount_chk = 0;
+    let curr_chk = 0;
+    let brand_chk = 0;
 
     if (($('#dtur_agent').val() === '' || $('#dtur_agent').val() === null || $('#dtur_agent')
             .val() === undefined)) {
@@ -110,7 +110,7 @@ $('.submitBtn').on('click', () => {
 
 function calculateBrand() {
 
-    var paramAgent = {
+    const paramAgent = {
         search: $("#dtur_agent_hidden").val(),
         searchCol: 'id',
         searchType: '*',
@@ -125,9 +125,9 @@ function calculateBrand() {
 
     function getBrand(result) {
         if (result && result.length > 0) {
-            brand = result[0]['brand'];
+            const brand = result[0]['brand'];
             
-                var paramBrand = {
+                const paramBrand = {
                     search: brand,
                     searchCol: 'id',
                     searchType: '*',

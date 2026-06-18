@@ -79,11 +79,11 @@ $estimatedDateModalCsrfToken = isset($_SESSION['csrf_token']) ? (string) $_SESSI
 
 <script>
     function openEstimatedReceivedDateModal(firstArg, secondArg, thirdArg, fourthArg, fifthArg) {
-        var platformKey = '';
-        var orderId = firstArg;
-        var orderCode = secondArg;
-        var minDate = thirdArg;
-        var maxDate = fourthArg;
+        let platformKey = '';
+        let orderId = firstArg;
+        let orderCode = secondArg;
+        let minDate = thirdArg;
+        let maxDate = fourthArg;
 
         if (arguments.length >= 5) {
             platformKey = firstArg || '';
@@ -93,12 +93,12 @@ $estimatedDateModalCsrfToken = isset($_SESSION['csrf_token']) ? (string) $_SESSI
             maxDate = fifthArg;
         }
 
-        var modal = document.getElementById('estimatedReceivedDateModal');
-        var title = document.getElementById('estimatedReceivedDateTitle');
-        var platformInput = document.getElementById('estimated_received_platform');
-        var orderIdInput = document.getElementById('estimated_received_order_id');
-        var dateInput = document.getElementById('estimated_received_date');
-        var dateHint = document.getElementById('estimated_received_date_hint');
+        const modal = document.getElementById('estimatedReceivedDateModal');
+        const title = document.getElementById('estimatedReceivedDateTitle');
+        const platformInput = document.getElementById('estimated_received_platform');
+        const orderIdInput = document.getElementById('estimated_received_order_id');
+        const dateInput = document.getElementById('estimated_received_date');
+        const dateHint = document.getElementById('estimated_received_date_hint');
 
         if (!modal || !orderIdInput || !dateInput) {
             return;
@@ -125,7 +125,7 @@ $estimatedDateModalCsrfToken = isset($_SESSION['csrf_token']) ? (string) $_SESSI
     }
 
     function closeEstimatedReceivedDateModal() {
-        var modal = document.getElementById('estimatedReceivedDateModal');
+        const modal = document.getElementById('estimatedReceivedDateModal');
         if (modal) {
             modal.classList.remove('is-open');
             modal.setAttribute('aria-hidden', 'true');

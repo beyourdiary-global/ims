@@ -381,17 +381,17 @@ if (post('usrBtn')) {
 
 
     $(document).ready(function () {
-        var barcode = '<?=$barcode?>';
-        var prod_id = '<?=$prod_id?>';
-        var whse_id = '<?=$whse_id?>';
-        var usr_id = '<?=$usr_id?>';
+        const barcode = '<?=$barcode?>';
+        const prod_id = '<?=$prod_id?>';
+        const whse_id = '<?=$whse_id?>';
+        const usr_id = '<?=$usr_id?>';
 
         if (!barcode || !prod_id || !whse_id || !usr_id) {
             alert('Invalid request for stock-in. Please provide valid data.');
             window.location.href = '<?=$SITEURL?>/dashboard.php';
         }
 
-        var isBarcodeRequired = <?=$prod_barcode_slot_required ? 'true' : 'false'?>;
+        const isBarcodeRequired = <?=$prod_barcode_slot_required ? 'true' : 'false'?>;
         if (isBarcodeRequired) {
             showNotification('Barcode is required for this product.');
             <?php for ($x = 1; $x <= $prod_barcode_slot_total; $x++) : ?>

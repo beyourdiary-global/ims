@@ -188,8 +188,8 @@ $userOptions = campaignFetchUsers($connect);
     </div>
 
     <script>
-        var page = "<?= campaignH($pageTitle) ?>";
-        var action = "View";
+        const page = "<?= campaignH($pageTitle) ?>";
+        const action = "View";
 
         checkCurrentPage(page, action);
         dropdownMenuDispFix();

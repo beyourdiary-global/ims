@@ -259,8 +259,8 @@ if ($isStockBalanceView) {
         </div>
 
         <script>
-            var page = "Warehouse";
-            var action = "View";
+            const page = "Warehouse";
+            const action = "View";
 
             checkCurrentPage(page, action);
             centerAlignment("formContainer");
@@ -555,8 +555,8 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 
     <script>
         //Initial Page And Action Value
-        var page = "<?= $pageTitle ?>";
-        var action = "<?php echo isset($act) ? $act : ''; ?>";
+        const page = "<?= $pageTitle ?>";
+        const action = "<?php echo isset($act) ? $act : ''; ?>";
 
         checkCurrentPage(page, action);
         centerAlignment("formContainer");

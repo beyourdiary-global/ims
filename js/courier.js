@@ -3,7 +3,7 @@ $(document).ready(function() {
 
     if (!($("#courier_country").attr('disabled'))) {
         $("#courier_country").keyup(function() {
-            var param = {
+            const param = {
                 search: $(this).val(),
                 searchType: 'nicename', // column of the table
                 elementID: $(this).attr('id'), // id of the input
@@ -38,11 +38,11 @@ $("#courier_tax").on("input", function() {
 $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
-    var id_chk = 0;
-    var name_chk = 0;
-    var country_chk = 0;
-    var tax_chk = 0;
-    var tracking_chk = 1;
+    let id_chk = 0;
+    let name_chk = 0;
+    let country_chk = 0;
+    let tax_chk = 0;
+    let tracking_chk = 1;
 
     if (($('#courier_id').val() == '' ||  $('#courier_id').val() == '0' || $('#courier_id').val() === null || $('#courier_id')
     .val() === undefined)) {
