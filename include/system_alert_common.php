@@ -59,7 +59,7 @@ if (!function_exists('systemAlertGetModuleConfigs')) {
             'campaign_follow_up_task' => array(
                 'pin_group_id' => 153,
                 'title' => 'Campaign Follow-Up Task',
-                'path' => '/campaign_follow_up_task.php',
+                'path' => '/campaign/campaign_follow_up_task.php',
                 'action_label' => 'Open Follow-Up',
             ),
             'waiting_admin_final_check' => array(

@@ -2,7 +2,7 @@
 $pageTitle = "Campaign Rule Setting";
 $currentPagePin = 154;
 
-include_once 'include/list_page_header.php';
+include_once '../include/list_page_header.php';
 include_once ROOT . '/include/campaign_common.php';
 
 
@@ -11,8 +11,8 @@ if (!isActionAllowed('View', $pinAccess)) {
     exit();
 }
 
-$redirectPage = $SITEURL . '/campaign_rule_setting.php';
-$deleteRedirectPage = $SITEURL . '/campaign_rule_setting_table.php';
+$redirectPage = $SITEURL . '/campaign/campaign_rule_setting.php';
+$deleteRedirectPage = $SITEURL . '/campaign/campaign_rule_setting_table.php';
 $ruleRows = campaignRuleSettingFetchRows($connect, array());
 $userOptions = campaignFetchUsers($connect);
 ?>

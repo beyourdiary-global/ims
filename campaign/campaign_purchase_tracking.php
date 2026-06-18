@@ -2,8 +2,8 @@
 $pageTitle = "Campaign Purchase Tracking";
 $currentPagePin = 153;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
+include '../menuHeader.php';
+include '../checkCurrentPagePin.php';
 include_once ROOT . '/include/campaign_common.php';
 
 
@@ -24,14 +24,14 @@ if ($campaignId <= 0) {
 
 $campaign = campaignFetchCampaign($connect, $campaignId);
 if (empty($campaign)) {
-    echo '<script>location.href = "' . $SITEURL . '/campaign_table.php";</script>';
+    echo '<script>location.href = "' . $SITEURL . '/campaign/campaign_table.php";</script>';
     exit();
 }
 
 $canRefresh = isActionAllowed('Edit', $pinAccess);
 $csrfToken = campaignCsrfToken('purchase_tracking');
-$pageUrl = $SITEURL . '/campaign_purchase_tracking.php?campaign_id=' . (int) $campaignId;
-$backUrl = $SITEURL . '/campaign.php?id=' . (int) $campaignId;
+$pageUrl = $SITEURL . '/campaign/campaign_purchase_tracking.php?campaign_id=' . (int) $campaignId;
+$backUrl = $SITEURL . '/campaign/campaign.php?id=' . (int) $campaignId;
 
 $filterPlatform = trim((string) input('platform'));
 $filterPurchaseStatus = trim((string) input('purchase_status'));
@@ -242,7 +242,7 @@ $customerTypeOptions = array('New Customer', 'Return Customer');
             <div class="row mt-3">
                 <div class="col-12">
                     <p>
-                        <a href="<?= $SITEURL ?>/campaign_table.php">Campaign</a>
+                        <a href="<?= $SITEURL ?>/campaign/campaign_table.php">Campaign</a>
                         <i class="fa-solid fa-chevron-right fa-xs"></i>
                         Purchase Tracking
                     </p>

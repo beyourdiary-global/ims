@@ -3,8 +3,8 @@ ob_start();
 $pageTitle = "Campaign Rule Setting";
 $currentPagePin = 154;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
+include '../menuHeader.php';
+include '../checkCurrentPagePin.php';
 include_once ROOT . '/include/campaign_common.php';
 
 
@@ -18,7 +18,7 @@ if (!empty($resolvedPageTitle)) {
 }
 
 $tblName = CAMPAIGN_RULE_SETTING;
-$redirectPage = $SITEURL . '/campaign_rule_setting_table.php';
+$redirectPage = $SITEURL . '/campaign/campaign_rule_setting_table.php';
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 
 $dataId = (int) (!empty(input('id')) ? input('id') : post('id'));
@@ -800,7 +800,7 @@ $estimatedCustomers = campaignRuleEstimateMatchedCustomers($connect, $finance_co
     <script>
         const page = "<?= campaignH($pageTitle) ?>";
         const action = "<?= campaignH($act) ?>";
-        var customerTargetRuleUrl = "<?= campaignH($SITEURL . '/campaign_rule_setting.php') ?>";
+        var customerTargetRuleUrl = "<?= campaignH($SITEURL . '/campaign/campaign_rule_setting.php') ?>";
         var customerTargetRuleLabels = {
             platforms: <?= campaignJson($platformOptions) ?>,
             tags: <?= campaignJson(campaignRuleBuildOptionNameMap($tagOptions)) ?>,

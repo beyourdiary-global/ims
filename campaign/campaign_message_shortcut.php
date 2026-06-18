@@ -2,8 +2,8 @@
 $pageTitle = "Campaign Message Shortcut";
 $currentPagePin = 153;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
+include '../menuHeader.php';
+include '../checkCurrentPagePin.php';
 include_once ROOT . '/include/campaign_common.php';
 
 
@@ -15,7 +15,7 @@ if ($campaignId <= 0) {
 
 $campaign = campaignFetchCampaign($connect, $campaignId);
 if (empty($campaign)) {
-    echo '<script>location.href = "' . $SITEURL . '/campaign_table.php";</script>';
+    echo '<script>location.href = "' . $SITEURL . '/campaign/campaign_table.php";</script>';
     exit();
 }
 
@@ -28,8 +28,8 @@ if (!isActionAllowed('View', $pinAccess)) {
 $canSave = isActionAllowed('Add', $pinAccess) || isActionAllowed('Edit', $pinAccess);
 $canDelete = isActionAllowed('Delete', $pinAccess);
 $csrfToken = campaignCsrfToken('message_shortcut');
-$backUrl = $SITEURL . '/campaign_table.php';
-$pageUrl = $SITEURL . '/campaign_message_shortcut.php?campaign_id=' . $campaignId;
+$backUrl = $SITEURL . '/campaign/campaign_table.php';
+$pageUrl = $SITEURL . '/campaign/campaign_message_shortcut.php?campaign_id=' . $campaignId;
 
 function campaignMessageShortcutOptions($connect)
 {
@@ -418,7 +418,7 @@ $autocompleteConfigs = array(
             <div class="d-flex flex-column mb-3">
                 <div class="row">
                     <p>
-                        <a href="<?= $SITEURL ?>/campaign_table.php">Campaign</a>
+                        <a href="<?= $SITEURL ?>/campaign/campaign_table.php">Campaign</a>
                         <i class="fa-solid fa-chevron-right fa-xs"></i>
                         Message Shortcut
                     </p>

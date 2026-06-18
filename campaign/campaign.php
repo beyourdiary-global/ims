@@ -2,8 +2,8 @@
 $pageTitle = "Campaign";
 $currentPagePin = 153;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
+include '../menuHeader.php';
+include '../checkCurrentPagePin.php';
 include_once ROOT . '/include/campaign_common.php';
 
 $resolvedPageTitle = getPinGroupNameById($connect, $currentPagePin);
@@ -12,7 +12,7 @@ if (!empty($resolvedPageTitle)) {
 }
 
 $tblName = CAMPAIGN;
-$redirectPage = $SITEURL . '/campaign_table.php';
+$redirectPage = $SITEURL . '/campaign/campaign_table.php';
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 
 $dataId = (int) (!empty(input('id')) ? input('id') : post('id'));

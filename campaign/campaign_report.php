@@ -2,8 +2,8 @@
 $pageTitle = "Campaign Report";
 $currentPagePin = 153;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
+include '../menuHeader.php';
+include '../checkCurrentPagePin.php';
 include_once ROOT . '/include/campaign_common.php';
 
 
@@ -24,14 +24,14 @@ if ($campaignId <= 0) {
 
 $campaign = campaignFetchCampaign($connect, $campaignId);
 if (empty($campaign)) {
-    echo '<script>location.href = "' . $SITEURL . '/campaign_table.php";</script>';
+    echo '<script>location.href = "' . $SITEURL . '/campaign/campaign_table.php";</script>';
     exit();
 }
 
 $canRefresh = isActionAllowed('Edit', $pinAccess);
 $csrfToken = campaignCsrfToken('campaign_report');
-$pageUrl = $SITEURL . '/campaign_report.php?campaign_id=' . (int) $campaignId;
-$backUrl = $SITEURL . '/campaign.php?id=' . (int) $campaignId;
+$pageUrl = $SITEURL . '/campaign/campaign_report.php?campaign_id=' . (int) $campaignId;
+$backUrl = $SITEURL . '/campaign/campaign.php?id=' . (int) $campaignId;
 
 function campaignReportBuildData($connect, $campaignId)
 {
@@ -210,7 +210,7 @@ if (input('export') === '1') {
             <div class="row mt-3">
                 <div class="col-12">
                     <p>
-                        <a href="<?= $SITEURL ?>/campaign_table.php">Campaign</a>
+                        <a href="<?= $SITEURL ?>/campaign/campaign_table.php">Campaign</a>
                         <i class="fa-solid fa-chevron-right fa-xs"></i>
                         Campaign Report
                     </p>

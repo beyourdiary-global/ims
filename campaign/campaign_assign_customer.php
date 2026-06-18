@@ -2,8 +2,8 @@
 $pageTitle = "Assign Customer";
 $currentPagePin = 153;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
+include '../menuHeader.php';
+include '../checkCurrentPagePin.php';
 include_once ROOT . '/include/campaign_common.php';
 include_once ROOT . '/include/customer_tag.php';
 
@@ -14,7 +14,7 @@ if ($campaignId <= 0) {
 
 $campaign = campaignFetchCampaign($connect, $campaignId);
 if (empty($campaign)) {
-    echo '<script>location.href = "' . $SITEURL . '/campaign_table.php";</script>';
+    echo '<script>location.href = "' . $SITEURL . '/campaign/campaign_table.php";</script>';
     exit();
 }
 
@@ -26,8 +26,8 @@ if (!isActionAllowed('View', $pinAccess)) {
 
 $canManage = isActionAllowed('Add', $pinAccess) || isActionAllowed('Edit', $pinAccess);
 $csrfToken = campaignCsrfToken('assign_customer');
-$backUrl = $SITEURL . '/campaign_table.php';
-$pageUrl = $SITEURL . '/campaign_assign_customer.php?campaign_id=' . $campaignId;
+$backUrl = $SITEURL . '/campaign/campaign_table.php';
+$pageUrl = $SITEURL . '/campaign/campaign_assign_customer.php?campaign_id=' . $campaignId;
 
 if (!function_exists('customerRecordNormalizeFilterValues')) {
     function customerRecordNormalizeFilterValues($values)
@@ -1012,7 +1012,7 @@ ksort($platformFilterOptions, SORT_NATURAL | SORT_FLAG_CASE);
             <div class="col-12 col-md-11">
                 <div class="d-flex flex-column mb-3">
                     <div class="row">
-                        <p><a href="<?= $SITEURL ?>/campaign_table.php">Campaign</a> <i class="fa-solid fa-chevron-right fa-xs"></i> Assign Customer</p>
+                        <p><a href="<?= $SITEURL ?>/campaign/campaign_table.php">Campaign</a> <i class="fa-solid fa-chevron-right fa-xs"></i> Assign Customer</p>
                     </div>
                     <div class="row">
                         <div class="col-12 d-flex justify-content-between flex-wrap">

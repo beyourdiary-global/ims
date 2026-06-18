@@ -217,7 +217,7 @@ if (!function_exists('campaignBackButtonJs')) {
         if ($fallbackUrl === '') {
             $fallbackUrl = isset($_SERVER['HTTP_REFERER']) && trim((string) $_SERVER['HTTP_REFERER']) !== ''
                 ? trim((string) $_SERVER['HTTP_REFERER'])
-                : ($SITEURL . '/campaign_table.php');
+                : ($SITEURL . '/campaign/campaign_table.php');
         }
 
         if (!$preferHistory) {

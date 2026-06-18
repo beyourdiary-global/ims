@@ -2,8 +2,8 @@
 $pageTitle = "Campaign Follow-Up Task";
 $currentPagePin = 153;
 
-include 'menuHeader.php';
-include 'checkCurrentPagePin.php';
+include '../menuHeader.php';
+include '../checkCurrentPagePin.php';
 include_once ROOT . '/include/campaign_common.php';
 include_once ROOT . '/include/customer_tag.php';
 
@@ -21,8 +21,8 @@ if (!isActionAllowed('View', $pinAccess)) {
 $canSave = isActionAllowed('Add', $pinAccess) || isActionAllowed('Edit', $pinAccess);
 $canDelete = isActionAllowed('Delete', $pinAccess);
 $csrfToken = campaignCsrfToken('follow_up_task');
-$backUrl = $SITEURL . '/campaign_table.php';
-$pageUrl = $SITEURL . '/campaign_follow_up_task.php' . ($campaignId > 0 ? '?campaign_id=' . $campaignId : '');
+$backUrl = $SITEURL . '/campaign/campaign_table.php';
+$pageUrl = $SITEURL . '/campaign/campaign_follow_up_task.php' . ($campaignId > 0 ? '?campaign_id=' . $campaignId : '');
 $campaign = $campaignId > 0 ? campaignFetchCampaign($connect, $campaignId) : array();
 
 function campaignFollowUpStatusLabel($row)
@@ -390,7 +390,7 @@ function campaignFollowUpUploadScreenshot($fieldName, $task)
     $followUpDate = campaignFollowUpSanitizePathSegment($task['follow_up_date'] ?? date('Y-m-d'));
     $customerName = campaignFollowUpSanitizePathSegment($task['customer_name'] ?? '');
 
-    $relativeDir = 'attachment/campaign/' . $campaignName . '/' . $followUpDate . '/' . $customerName;
+    $relativeDir = 'attachment/campaign/campaign/' . $campaignName . '/' . $followUpDate . '/' . $customerName;
     $absoluteDir = ROOT . '/' . str_replace('/', DIRECTORY_SEPARATOR, $relativeDir);
     if (!is_dir($absoluteDir) && !mkdir($absoluteDir, 0777, true) && !is_dir($absoluteDir)) {
         throw new Exception('Unable to create screenshot folder.');
@@ -790,7 +790,7 @@ if ($stmt) {
     <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
         <div class="col-12 col-md-11">
             <div class="d-flex flex-column mb-3">
-                <div class="row"><p><a href="<?= $SITEURL ?>/campaign_table.php">Campaign</a> <i class="fa-solid fa-chevron-right fa-xs"></i> Follow-Up Task</p></div>
+                <div class="row"><p><a href="<?= $SITEURL ?>/campaign/campaign_table.php">Campaign</a> <i class="fa-solid fa-chevron-right fa-xs"></i> Follow-Up Task</p></div>
                 <div class="row">
                     <div class="col-12 d-flex justify-content-between flex-wrap">
                         <div><h2>Campaign Follow-Up Task</h2><?php if (!empty($campaign)) campaignRenderBadge($campaign); ?></div>
