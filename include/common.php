@@ -1869,7 +1869,7 @@ if (!function_exists('customerDailyReportGetPlatformConfigs')) {
                 'page_title' => 'Lazada Customer Record (Deals)',
                 'table' => LAZADA_CUST_RCD,
                 'db' => 'cms',
-                'record_url' => '/lazada_cust_rcd.php',
+                'record_url' => '/finance/lazada_cust_rcd.php',
                 'display_fields' => array('name'),
             ),
             'facebook' => array(
@@ -2666,7 +2666,7 @@ if (!function_exists('shopeeOmsGetOrderSourceConfigs')) {
                 'delay_remark_field' => 'delay_remark',
                 'date_field' => 'create_date',
                 'fallback_code_prefix' => 'LAZ',
-                'view_url' => '/lazada_order_req.php',
+                'view_url' => '/finance/lazada_order_req.php',
                 'info_url' => '/finance/lazada_order_request_info.php',
                 'attachment_page_name' => 'lazada_order_request',
             ),
@@ -9754,16 +9754,54 @@ if (!function_exists('sorDecodeToken')) {
 
 if (!function_exists('sorResolveTrackingMySlug')) {
     /**
-     * Map courier name (from DB) to tracking.my URL slug.
-     * Also tries to auto-detect from tracking number prefix.
+     * Map courier name/tracking number to tracking.my URL slug.
+     * Tracking number pattern is checked first because imported/scanned labels
+     * may have the wrong courier selected in CMS.
      */
     function sorResolveTrackingMySlug($courierName, $trackingNo)
     {
         $courierName = strtolower(trim((string) $courierName));
         $trackingNo = strtoupper(trim((string) $trackingNo));
 
-        // Map courier names to tracking.my slugs
+        // SPX Malaysia airbill format, example: MY064857959876.
+        // Check this before courier name because CMS courier may be selected as J&T.
+        if (preg_match('/^MY\d{10,14}$/', $trackingNo)) {
+            return 'shopee';
+        }
+
+        if (preg_match('/^SPXMY|^SPX/i', $trackingNo)) {
+            return 'shopee';
+        }
+
+        if (preg_match('/^MYJZ/i', $trackingNo)) {
+            return 'dhl-ecommerce';
+        }
+
+        if (preg_match('/^JT/i', $trackingNo)) {
+            return 'jt';
+        }
+
+        if (preg_match('/^NV/i', $trackingNo)) {
+            return 'ninjavan';
+        }
+
+        if (preg_match('/^MY[A-Z]{2}\d/i', $trackingNo)) {
+            return 'dhl-ecommerce';
+        }
+
+        if (preg_match('/^[A-Z]{2}\d{9}[A-Z]{2}$/', $trackingNo)) {
+            return 'pos';
+        }
+
+        if (preg_match('/^\d{10,}$/', $trackingNo)) {
+            return 'pos';
+        }
+
         $nameMap = array(
+            'spx' => 'shopee',
+            'spx express' => 'shopee',
+            'shopee express' => 'shopee',
+            'shopee' => 'shopee',
             'dhl' => 'dhl-ecommerce',
             'dhl ecommerce' => 'dhl-ecommerce',
             'dhl e-commerce' => 'dhl-ecommerce',
@@ -9774,8 +9812,6 @@ if (!function_exists('sorResolveTrackingMySlug')) {
             'j&t express' => 'jt',
             'jnt' => 'jt',
             'jnt express' => 'jt',
-            'shopee express' => 'shopee',
-            'shopee' => 'shopee',
             'best express' => 'best',
             'citylink' => 'citylink',
             'citylink express' => 'citylink',
@@ -9791,30 +9827,6 @@ if (!function_exists('sorResolveTrackingMySlug')) {
             if (strpos($courierName, $key) !== false) {
                 return $slug;
             }
-        }
-
-        // Auto-detect from tracking number prefix
-        if (preg_match('/^MYJZ/i', $trackingNo)) {
-            return 'dhl-ecommerce';
-        }
-        if (preg_match('/^SPXMY|^SPX/i', $trackingNo)) {
-            return 'shopee';
-        }
-        if (preg_match('/^MY[A-Z]{2}\d/i', $trackingNo)) {
-            // Generic MY prefix â†’ DHL eCommerce (most common)
-            return 'dhl-ecommerce';
-        }
-        if (preg_match('/^JT/i', $trackingNo)) {
-            return 'jt';
-        }
-        if (preg_match('/^NV/i', $trackingNo)) {
-            return 'ninjavan';
-        }
-        if (preg_match('/^[A-Z]{2}\d{9}[A-Z]{2}$/', $trackingNo)) {
-            return 'pos'; // Pos Malaysia international format
-        }
-        if (preg_match('/^\d{10,}$/', $trackingNo)) {
-            return 'pos'; // Pos Malaysia uses long numeric tracking numbers
         }
 
         return '';
@@ -9996,120 +10008,194 @@ if (!function_exists('sorWsDecode')) {
 
 if (!function_exists('sorFetchTrackingMyWebSocket')) {
     /**
-     * Fetch actual tracking status from tracking.my via its WebSocket API.
-     * 1. GET the tracking.my page to extract the pre-built WebSocket message
-     *    (contains a server-computed verify hash).
-     * 2. Open a WebSocket connection and send the message.
-     * 3. Parse the JSON response for the latest tracking event.
+     * Fetch tracking status from tracking.my WebSocket.
+     * More compatible with live hosting by trying tls:// and ssl://,
+     * adding SNI headers, and reading multiple WebSocket frames.
      */
     function sorFetchTrackingMyWebSocket($courierName, $trackingNo, &$rawJson = null)
     {
+        $rawJson = null;
         $trackingNo = trim((string) $trackingNo);
-        if ($trackingNo === '') return '';
+        if ($trackingNo === '') {
+            return '';
+        }
 
         $slug = sorResolveTrackingMySlug($courierName, $trackingNo);
-        if ($slug === '') return '';
+        if ($slug === '') {
+            return '';
+        }
 
         $pageUrl = 'https://www.tracking.my/' . $slug . '/' . rawurlencode($trackingNo);
         $opts = array(
             'http' => array(
                 'method' => 'GET',
                 'header' => "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36\r\n" .
-                            "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n",
-                'timeout' => 15,
+                            "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n" .
+                            "Accept-Language: en-US,en;q=0.9\r\n" .
+                            "Connection: close\r\n",
+                'timeout' => 20,
+                'ignore_errors' => true,
             ),
-            'ssl' => array('verify_peer' => false, 'verify_peer_name' => false),
+            'ssl' => array(
+                'verify_peer' => false,
+                'verify_peer_name' => false,
+                'SNI_enabled' => true,
+                'SNI_server_name' => 'www.tracking.my',
+                'peer_name' => 'www.tracking.my',
+            ),
         );
+
         $body = @file_get_contents($pageUrl, false, stream_context_create($opts));
-        if ($body === false || $body === '') return '';
-
-        // The page embeds: socket.send("{&quot;action&quot;:...&quot;verify&quot;:&quot;HASH&quot;}")
-        if (!preg_match('/socket\.send\(\s*"([^"]+)"\s*\)/', $body, $m)) return '';
-
-        $wsMessage = html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
-        $wsCheck = json_decode($wsMessage, true);
-        if (!is_array($wsCheck) || !isset($wsCheck['action'])) return '';
-
-        // Open WebSocket connection
-        $wsKey = base64_encode(openssl_random_pseudo_bytes(16));
-        $ctx = stream_context_create(array(
-            'ssl' => array('verify_peer' => false, 'verify_peer_name' => false),
-        ));
-        $sock = @stream_socket_client('ssl://www.tracking.my:443', $errno, $errstr, 10, STREAM_CLIENT_CONNECT, $ctx);
-        if (!$sock) return '';
-
-        stream_set_timeout($sock, 10);
-
-        // WebSocket upgrade handshake
-        $handshake = "GET /websocket HTTP/1.1\r\n" .
-            "Host: www.tracking.my\r\n" .
-            "Upgrade: websocket\r\n" .
-            "Connection: Upgrade\r\n" .
-            "Sec-WebSocket-Key: $wsKey\r\n" .
-            "Sec-WebSocket-Version: 13\r\n" .
-            "Origin: https://www.tracking.my\r\n" .
-            "\r\n";
-        @fwrite($sock, $handshake);
-
-        // Read upgrade response
-        $resp = '';
-        while (!feof($sock)) {
-            $line = @fgets($sock, 1024);
-            if ($line === false) break;
-            $resp .= $line;
-            if ($line === "\r\n") break;
-        }
-        if (strpos($resp, '101') === false) {
-            @fclose($sock);
+        if ($body === false || trim((string) $body) === '') {
             return '';
         }
 
-        // Send the tracking request
-        @fwrite($sock, sorWsEncode($wsMessage));
-
-        // Read the tracking response
-        $data = sorWsDecode($sock);
-        @fclose($sock);
-
-        if ($data === '') return '';
-
-        $result = json_decode($data, true);
-        $rawJson = $data; // expose raw response for diagnostics
-        if (!is_array($result) || !isset($result['result']) || !is_array($result['result'])) return '';
-
-        // tracking.my response: { result: [ {status, content, date, location, ...}, ... ] }
-        // 'status' is a CATEGORY (e.g. "delivered", "exception", "in_transit")
-        // 'content' is the human-readable description (e.g. "Parcel has been delivered", "Shipment cancelled")
-        // result[0] is the LATEST event.
-
-        // First, find the latest non-sponsored event
-        $latestStatus = '';
-        $latestContent = '';
-        foreach ($result['result'] as $event) {
-            if (!is_array($event)) continue;
-            $evStatus = isset($event['status']) ? trim((string) $event['status']) : '';
-            if ($evStatus === '' || $evStatus === 'sponsored') continue;
-            $latestStatus = $evStatus;
-            $latestContent = isset($event['content']) ? trim((string) $event['content']) : '';
-            break; // first non-sponsored = latest
+        $wsMessage = '';
+        if (preg_match('/socket\.send\(\s*"([^"]+)"\s*\)/', $body, $m)) {
+            $wsMessage = html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
+        } else if (preg_match("/socket\.send\(\s*'([^']+)'\s*\)/", $body, $m)) {
+            $wsMessage = html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
         }
 
-        if ($latestStatus === '') return '';
+        $wsCheck = json_decode($wsMessage, true);
+        if (!is_array($wsCheck) || !isset($wsCheck['action'])) {
+            return '';
+        }
 
-        // Try to derive a more specific status from the content text
+        $socketTargets = array(
+            'tls://www.tracking.my:443',
+            'ssl://www.tracking.my:443',
+        );
+
+        $data = '';
+        foreach ($socketTargets as $socketTarget) {
+            $wsKey = base64_encode(openssl_random_pseudo_bytes(16));
+            $ctx = stream_context_create(array(
+                'ssl' => array(
+                    'verify_peer' => false,
+                    'verify_peer_name' => false,
+                    'SNI_enabled' => true,
+                    'SNI_server_name' => 'www.tracking.my',
+                    'peer_name' => 'www.tracking.my',
+                ),
+            ));
+
+            $errno = 0;
+            $errstr = '';
+            $sock = @stream_socket_client($socketTarget, $errno, $errstr, 15, STREAM_CLIENT_CONNECT, $ctx);
+            if (!$sock) {
+                continue;
+            }
+
+            stream_set_timeout($sock, 15);
+
+            $handshake = "GET /websocket HTTP/1.1\r\n" .
+                "Host: www.tracking.my\r\n" .
+                "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36\r\n" .
+                "Upgrade: websocket\r\n" .
+                "Connection: Upgrade\r\n" .
+                "Sec-WebSocket-Key: " . $wsKey . "\r\n" .
+                "Sec-WebSocket-Version: 13\r\n" .
+                "Origin: https://www.tracking.my\r\n" .
+                "Pragma: no-cache\r\n" .
+                "Cache-Control: no-cache\r\n" .
+                "\r\n";
+
+            @fwrite($sock, $handshake);
+
+            $resp = '';
+            while (!feof($sock)) {
+                $line = @fgets($sock, 2048);
+                if ($line === false) {
+                    break;
+                }
+
+                $resp .= $line;
+                if ($line === "\r\n") {
+                    break;
+                }
+            }
+
+            if (strpos($resp, '101') === false) {
+                @fclose($sock);
+                continue;
+            }
+
+            @fwrite($sock, sorWsEncode($wsMessage));
+
+            $startedAt = time();
+            for ($i = 0; $i < 8; $i++) {
+                if ((time() - $startedAt) > 15) {
+                    break;
+                }
+
+                $frameData = sorWsDecode($sock);
+                if ($frameData === '') {
+                    continue;
+                }
+
+                $decoded = json_decode($frameData, true);
+                if (is_array($decoded) && isset($decoded['result']) && is_array($decoded['result'])) {
+                    $data = $frameData;
+                    break;
+                }
+            }
+
+            @fclose($sock);
+
+            if ($data !== '') {
+                break;
+            }
+        }
+
+        if ($data === '') {
+            return '';
+        }
+
+        $result = json_decode($data, true);
+        $rawJson = $data;
+
+        if (!is_array($result) || !isset($result['result']) || !is_array($result['result'])) {
+            return '';
+        }
+
+        $latestStatus = '';
+        $latestContent = '';
+
+        foreach ($result['result'] as $event) {
+            if (!is_array($event)) {
+                continue;
+            }
+
+            $evStatus = isset($event['status']) ? strtolower(trim((string) $event['status'])) : '';
+            if ($evStatus === '' || $evStatus === 'sponsored') {
+                continue;
+            }
+
+            $latestStatus = $evStatus;
+            $latestContent = isset($event['content']) ? trim((string) $event['content']) : '';
+            break;
+        }
+
+        if ($latestStatus === '') {
+            return '';
+        }
+
         $contentLower = strtolower($latestContent);
         $contentKeywords = array(
-            'cancel' => 'Cancelled',
-            'returned to sender' => 'Returned to Sender',
+            'parcel has been delivered' => 'Delivered',
             'delivered' => 'Delivered',
             'out for delivery' => 'Out for Delivery',
             'in transit' => 'In Transit',
             'picked up' => 'Picked Up',
+            'returned to sender' => 'Returned to Sender',
+            'return' => 'Returned',
+            'cancel' => 'Cancelled',
             'preparing' => 'Shipment Information Received',
             'information received' => 'Shipment Information Received',
         );
 
-        $displayStatus = ucfirst($latestStatus); // default: use category name
+        $displayStatus = ucwords(str_replace('_', ' ', $latestStatus));
         foreach ($contentKeywords as $needle => $label) {
             if (strpos($contentLower, $needle) !== false) {
                 $displayStatus = $label;
@@ -10268,8 +10354,18 @@ if (!function_exists('sorRefreshTrackingStatus')) {
             return false;
         }
 
-        $statusText = sorFetchTrackingStatusEasyParcel($trackingNo, $courierCountryCode);
         $trackingUrl = sorBuildTrackingUrl($trackingLink, $trackingNo);
+        $statusText = '';
+
+        // SPX Malaysia tracking numbers can be scanned/imported while the CMS courier is still wrong.
+        // Try tracking.my first for this pattern.
+        if (preg_match('/^MY\d{10,14}$/i', $trackingNo)) {
+            $statusText = sorFetchTrackingMyWebSocket($courierNameForSlug, $trackingNo);
+        }
+
+        if ($statusText === '') {
+            $statusText = sorFetchTrackingStatusEasyParcel($trackingNo, $courierCountryCode);
+        }
 
         // Fallback to courier tracking page scrape when EasyParcel cannot provide a usable status.
         $epFailed = ($statusText === '' || stripos($statusText, 'failed:') !== false || stripos($statusText, 'unavailable') !== false || stripos($statusText, 'no status') !== false);
@@ -10284,13 +10380,12 @@ if (!function_exists('sorRefreshTrackingStatus')) {
         $statusIsError = (stripos($statusText, 'Unable to retrieve') !== false)
             || (stripos($statusText, 'unavailable') !== false)
             || (stripos($statusText, 'failed') !== false);
+
         if ((!$statusIsUsable || $statusIsError) && $trackingNo !== '') {
-            // Resolve courier name for tracking.my slug (already fetched from DB above)
             $wsStatus = sorFetchTrackingMyWebSocket($courierNameForSlug, $trackingNo);
             if ($wsStatus !== '') {
                 $statusText = $wsStatus;
             } else {
-                // Final fallback: keyword scrape on tracking.my page
                 $slug = sorResolveTrackingMySlug($courierNameForSlug, $trackingNo);
                 if ($slug !== '') {
                     $altUrl = 'https://www.tracking.my/' . $slug . '/' . rawurlencode($trackingNo);
@@ -10299,8 +10394,8 @@ if (!function_exists('sorRefreshTrackingStatus')) {
                         $statusText = $altStatus . ' | Source: tracking.my';
                     }
                 }
-                // If all fallbacks failed and the current status is an error, clear it
-                if ($statusIsError && stripos($statusText, 'Unable to retrieve') !== false) {
+
+                if ($statusText === '' || stripos($statusText, 'Unable to retrieve') !== false) {
                     $statusText = 'Tracking unavailable | Synced: ' . date('Y-m-d H:i:s');
                 }
             }

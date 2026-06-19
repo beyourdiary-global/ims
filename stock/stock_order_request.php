@@ -687,6 +687,8 @@ if (post('actionBtn')) {
         } else {
             $existingAttachment = sorNormalizeAttachmentRelativePath(postSpaceFilter('existing_attachment'));
             $sor_attachment = $existingAttachment;
+            $existingStockOrderImage = sorNormalizeAttachmentRelativePath(postSpaceFilter('existing_stock_order_image'));
+            $sor_stock_order_image = $existingStockOrderImage;
 
             if (isset($_FILES['sor_attachment']) && $_FILES['sor_attachment']['error'] === UPLOAD_ERR_OK) {
                 $sqlAccountFolder = sorResolveSqlAccountFolderFromCompany($requestCompanyId, $companySqlAccountFolderMap);
@@ -719,6 +721,49 @@ if (post('actionBtn')) {
                 }
             }
 
+            if (!isset($err) && isset($_FILES['sor_stock_order_image'])) {
+                $stockOrderImageError = isset($_FILES['sor_stock_order_image']['error']) ? (int) $_FILES['sor_stock_order_image']['error'] : UPLOAD_ERR_NO_FILE;
+                if ($stockOrderImageError === UPLOAD_ERR_OK) {
+                    $stockOrderImageRelativeDir = 'attachment/stock_order_request_image/';
+                    $stockOrderImageFsDir = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . ltrim($stockOrderImageRelativeDir, '/\\');
+
+                    if (!file_exists($stockOrderImageFsDir) && !mkdir($stockOrderImageFsDir, 0777, true)) {
+                        $err = 'Failed to prepare stock order image folder.';
+                    } else {
+                        $stockOrderImageOriginal = isset($_FILES['sor_stock_order_image']['name']) ? (string) $_FILES['sor_stock_order_image']['name'] : '';
+                        $stockOrderImageTmp = isset($_FILES['sor_stock_order_image']['tmp_name']) ? (string) $_FILES['sor_stock_order_image']['tmp_name'] : '';
+                        $stockOrderImageExt = strtolower((string) pathinfo($stockOrderImageOriginal, PATHINFO_EXTENSION));
+                        $allowedImageExt = array('jpg', 'jpeg', 'png', 'webp');
+                        $allowedImageMimeByExt = array(
+                            'jpg' => array('image/jpeg'),
+                            'jpeg' => array('image/jpeg'),
+                            'png' => array('image/png'),
+                            'webp' => array('image/webp'),
+                        );
+
+                        if (!in_array($stockOrderImageExt, $allowedImageExt, true)) {
+                            $err = 'Stock order image format not supported. Allowed: jpg, jpeg, png, webp.';
+                        } else {
+                            $detectedImageMime = sorDetectUploadMimeType($stockOrderImageTmp);
+                            $allowedImageMime = isset($allowedImageMimeByExt[$stockOrderImageExt]) ? $allowedImageMimeByExt[$stockOrderImageExt] : array();
+                            if ($detectedImageMime !== '' && !empty($allowedImageMime) && !in_array($detectedImageMime, $allowedImageMime, true)) {
+                                $err = 'Stock order image MIME type is not allowed.';
+                            } else {
+                                $stockOrderImageName = sorGenerateSafeUploadName('stock_order_image', $stockOrderImageExt);
+                                $stockOrderImageTargetFile = $stockOrderImageFsDir . $stockOrderImageName;
+                                if (!move_uploaded_file($stockOrderImageTmp, $stockOrderImageTargetFile)) {
+                                    $err = 'Failed to upload stock order image.';
+                                } else {
+                                    $sor_stock_order_image = sorNormalizeAttachmentRelativePath($stockOrderImageRelativeDir . $stockOrderImageName);
+                                }
+                            }
+                        }
+                    }
+                } else if ($stockOrderImageError !== UPLOAD_ERR_NO_FILE) {
+                    $err = 'Failed to upload stock order image.';
+                }
+            }
+
             if (!isset($err)) {
                 $auditDataField = array();
                 $auditOldValArr = array();
@@ -735,11 +780,12 @@ if (post('actionBtn')) {
                 $safeTrackingNo = mysqli_real_escape_string($finance_connect, $sor_tracking_no);
                 $safeTotalPrice = number_format((float) $computedTotal, 2, '.', '');
                 $safeAttachment = mysqli_real_escape_string($finance_connect, (string) $sor_attachment);
+                $safeStockOrderImage = mysqli_real_escape_string($finance_connect, (string) $sor_stock_order_image);
                 $safeRemark = mysqli_real_escape_string($finance_connect, $sor_remark);
                 $courierSqlValue = ($safeCourier === '' ? "NULL" : "'" . $safeCourier . "'");
 
                 if ($action === 'addRecord') {
-                    $auditDataField = array('warehouse_id', 'company_id', 'brand_id', 'invoice_no', 'invoice_date', 'request_date', 'courier_id', 'tracking_no', 'total_price', 'attachment', 'remark', 'item_snapshot');
+                    $auditDataField = array('warehouse_id', 'company_id', 'brand_id', 'invoice_no', 'invoice_date', 'request_date', 'courier_id', 'tracking_no', 'total_price', 'attachment', 'stock_order_image', 'remark', 'item_snapshot');
                     $auditNewValArr = array(
                         normalizeAuditLogValue($sor_warehouse),
                         normalizeAuditLogValue($requestCompanyId),
@@ -751,14 +797,15 @@ if (post('actionBtn')) {
                         normalizeAuditLogValue($sor_tracking_no),
                         normalizeAuditLogValue($safeTotalPrice),
                         normalizeAuditLogValue($sor_attachment),
+                        normalizeAuditLogValue($sor_stock_order_image),
                         normalizeAuditLogValue($sor_remark),
                         normalizeAuditLogValue(sorBuildAuditItemSnapshot($items, $packageNameMap, $productNameMap)),
                     );
 
                     $query = "INSERT INTO " . STOCK_ORDER_REQ . "
-                                                                (warehouse_id, company_id, brand_id, invoice_no, invoice_date, request_date, courier_id, tracking_no, total_price, attachment, remark, create_by, create_date, create_time)
+                                                                (warehouse_id, company_id, brand_id, invoice_no, invoice_date, request_date, courier_id, tracking_no, total_price, attachment, stock_order_image, remark, create_by, create_date, create_time)
                               VALUES
-                                                                ('$safeWarehouse', '" . $requestCompanyId . "', '" . $requestBrandId . "', '$safeInvoiceNo', '$safeInvoiceDate', '$safeRequestDate', " . $courierSqlValue . ", '$safeTrackingNo', '$safeTotalPrice', '$safeAttachment', '$safeRemark', '" . USER_ID . "', CURDATE(), CURTIME())";
+                                                                ('$safeWarehouse', '" . $requestCompanyId . "', '" . $requestBrandId . "', '$safeInvoiceNo', '$safeInvoiceDate', '$safeRequestDate', " . $courierSqlValue . ", '$safeTrackingNo', '$safeTotalPrice', '$safeAttachment', '$safeStockOrderImage', '$safeRemark', '" . USER_ID . "', CURDATE(), CURTIME())";
                     $returnData = mysqli_query($finance_connect, $query);
                     $dataId = $finance_connect->insert_id;
                 } else {
@@ -773,6 +820,7 @@ if (post('actionBtn')) {
                                   tracking_no = '$safeTrackingNo',
                                   total_price = '$safeTotalPrice',
                                   attachment = '$safeAttachment',
+                                  stock_order_image = '$safeStockOrderImage',
                                   remark = '$safeRemark',
                                   update_by = '" . USER_ID . "',
                                   update_date = CURDATE(),
@@ -790,6 +838,7 @@ if (post('actionBtn')) {
                         'tracking_no' => array(isset($auditOldRow['tracking_no']) ? $auditOldRow['tracking_no'] : '', $sor_tracking_no),
                         'total_price' => array(isset($auditOldRow['total_price']) ? $auditOldRow['total_price'] : '', $safeTotalPrice),
                         'attachment' => array(isset($auditOldRow['attachment']) ? $auditOldRow['attachment'] : '', $sor_attachment),
+                        'stock_order_image' => array(isset($auditOldRow['stock_order_image']) ? $auditOldRow['stock_order_image'] : '', $sor_stock_order_image),
                         'remark' => array(isset($auditOldRow['remark']) ? $auditOldRow['remark'] : '', $sor_remark),
                         'item_snapshot' => array($auditOldItemSnapshot, sorBuildAuditItemSnapshot($items, $packageNameMap, $productNameMap)),
                     );
@@ -1081,6 +1130,41 @@ function sorNormalizeAttachmentRelativePath($path)
     return $path;
 }
 
+function sorDetectUploadMimeType($filePath)
+{
+    $filePath = trim((string) $filePath);
+    if ($filePath === '' || !function_exists('finfo_open') || !defined('FILEINFO_MIME_TYPE')) {
+        return '';
+    }
+
+    $finfo = finfo_open(FILEINFO_MIME_TYPE);
+    if (!$finfo) {
+        return '';
+    }
+
+    $detectedMime = finfo_file($finfo, $filePath);
+    finfo_close($finfo);
+
+    if ($detectedMime === false) {
+        return '';
+    }
+
+    return trim((string) $detectedMime);
+}
+
+function sorGenerateSafeUploadName($prefix, $ext)
+{
+    $prefix = preg_replace('/[^a-zA-Z0-9_-]/', '_', (string) $prefix);
+    if ($prefix === '') {
+        $prefix = 'upload';
+    }
+
+    $ext = strtolower(trim((string) $ext));
+    $randomSuffix = function_exists('random_int') ? random_int(1000, 9999) : mt_rand(1000, 9999);
+
+    return $prefix . '_' . date('Ymd_His') . '_' . USER_ID . '_' . $randomSuffix . ($ext !== '' ? '.' . $ext : '');
+}
+
 function sorBuildAuditItemSnapshot($rows, $packageNameMap = array(), $productNameMap = array())
 {
     if (!is_array($rows) || empty($rows)) {
@@ -1272,11 +1356,32 @@ function sorAttachmentUrl($relativePath, $siteUrl)
             border-color: #ff0000 !important;
         }
 
+        .formWidthAdjust {
+            width: 100%;
+            max-width: 1280px;
+        }
+
+        #sorForm {
+            width: 100%;
+        }
+
         .sor-item-panel {
             border: 0;
             border-radius: 0;
             padding: 0;
             margin-bottom: 16px;
+            width: 100%;
+        }
+
+        #sorItemTable {
+            min-width: 900px;
+        }
+
+        .sor-scan-airbill-btn {
+            white-space: nowrap;
+            text-transform: none;
+            padding-left: 12px;
+            padding-right: 12px;
         }
 
         .action_menu_btn {
@@ -1622,7 +1727,7 @@ function sorAttachmentUrl($relativePath, $siteUrl)
                     </div>
 
                     </div>
-
+                    
                     <div class="row">
                         <div class="col-md-4 mb-3">
                             <label class="form-label form_lbl" for="sor_total_price">Total Price</label>
@@ -1639,6 +1744,23 @@ function sorAttachmentUrl($relativePath, $siteUrl)
                             <?php } ?>
                         </div>
                         <div class="col-md-4 mb-3">
+                            <label class="form-label form_lbl" for="sor_stock_order_image">Stock Order Image / Airbill Photo</label>
+                            <input class="form-control" type="file" id="sor_stock_order_image" name="sor_stock_order_image" accept="image/png,image/jpeg,image/jpg,image/webp" capture="environment" <?= ($act == '') ? 'disabled' : '' ?>>
+                            <div class="sor-airbill-loading mt-2" id="sorScanAirbillStatus" style="display:none;">
+                                <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                Extracting tracking number...
+                            </div>
+                            <input type="hidden" name="existing_stock_order_image" value="<?= sorEcho(sorNormalizeAttachmentRelativePath(isset($row['stock_order_image']) ? $row['stock_order_image'] : '')) ?>">
+                            <?php if (isset($row['stock_order_image']) && $row['stock_order_image'] !== '') { ?>
+                                <div class="mt-2">
+                                    <a href="<?= sorAttachmentUrl(sorNormalizeAttachmentRelativePath($row['stock_order_image']), $SITEURL) ?>" target="_blank">View Current Stock Order Image</a>
+                                </div>
+                            <?php } ?>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
                             <label class="form-label form_lbl" for="sor_remark">Remark</label>
                             <textarea class="form-control" id="sor_remark" name="sor_remark" rows="3" <?= ($act == '') ? 'readonly' : '' ?> autocomplete="off"><?= sorEcho(isset($_POST['sor_remark']) ? $_POST['sor_remark'] : (($act === 'I') ? '' : (isset($row['remark']) ? $row['remark'] : ''))) ?></textarea>
                         </div>
@@ -1670,6 +1792,7 @@ function sorAttachmentUrl($relativePath, $siteUrl)
             packages: <?= json_encode(array_values($packages)) ?>
         };
     </script>
+    <script src="<?= htmlspecialchars(rtrim((string) $SITEURL, '/') . '/header/js/zxing-browser.min.js?v=' . @filemtime(ROOT . '/header/js/zxing-browser.min.js'), ENT_QUOTES, 'UTF-8') ?>"></script>
     <script src="../js/stock_order_req.js"></script>
 </body>
 </html>

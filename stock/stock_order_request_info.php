@@ -32,6 +32,44 @@ function sorInfoQrSrc($path, $siteUrl)
     return rtrim((string) $siteUrl, '/') . '/' . ltrim($path, '/');
 }
 
+function sorInfoNormalizeAttachmentRelativePath($path)
+{
+    $path = trim((string) $path);
+    if ($path === '') {
+        return '';
+    }
+
+    $path = str_replace('\\', '/', $path);
+    $path = preg_replace('#^https?://[^/]+/#i', '', $path);
+    $path = preg_replace('#^/?images_server/#i', '', $path);
+    $path = ltrim((string) $path, '/');
+
+    if (stripos($path, 'attachment/') !== 0 && strpos($path, 'attachment/') !== false) {
+        $path = substr($path, strpos($path, 'attachment/'));
+    }
+
+    if (strpos($path, 'attachment/') === false) {
+        return '';
+    }
+
+    return $path;
+}
+
+function sorInfoAttachmentUrl($relativePath, $siteUrl)
+{
+    $relativePath = sorInfoNormalizeAttachmentRelativePath($relativePath);
+    if ($relativePath === '') {
+        return '';
+    }
+
+    $newAbsPath = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . ltrim($relativePath, '/\\');
+    if (is_file($newAbsPath)) {
+        return rtrim((string) $siteUrl, '/') . '/' . ltrim($relativePath, '/');
+    }
+
+    return rtrim((string) $siteUrl, '/') . '/' . ltrim((string) img_server, '/') . ltrim($relativePath, '/');
+}
+
 function sorInfoBuildItemsSummary($items, $packageNameMap, $productNameMap)
 {
     $packageSummary = array();
@@ -366,6 +404,7 @@ if (!empty($packageIds)) {
 $summary = sorInfoBuildItemsSummary($itemRows, $packageNameMap, $productNameMap);
 $orderLink = $SITEURL . '/stock/warehouse_stock_in_scan.php?t=' . urlencode((string) (isset($requestRow['order_link_token']) ? $requestRow['order_link_token'] : ''));
 $qrImageUrl = sorInfoQrSrc(isset($requestRow['qr_image']) ? $requestRow['qr_image'] : '', $SITEURL);
+$stockOrderImageUrl = sorInfoAttachmentUrl(isset($requestRow['stock_order_image']) ? $requestRow['stock_order_image'] : '', $SITEURL);
 $warehouseName = sorInfoResolveWarehouseName($connect, $requestRow);
 $telegramMsg = '';
 $telegramErr = '';
@@ -576,6 +615,19 @@ if (post('actionBtn') === 'sendTelegramStockInBot') {
                                     <input type="text" class="form-control" id="sorOrderLink" readonly value="<?= htmlspecialchars((string) $orderLink, ENT_QUOTES, 'UTF-8') ?>">
                                     <button type="button" class="btn sor-copy-btn" id="copyOrderLinkBtn" title="Copy Link" aria-label="Copy Link"><i class="fa-regular fa-copy"></i></button>
                                 </div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label form_lbl">Stock Order Image</label>
+                                <?php if ($stockOrderImageUrl !== '') { ?>
+                                    <div class="d-flex flex-column gap-2">
+                                        <a href="<?= htmlspecialchars($stockOrderImageUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer">View Stock Order Image</a>
+                                        <a href="<?= htmlspecialchars($stockOrderImageUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer">
+                                            <img class="img-fluid border rounded p-2 bg-white" style="max-width:220px;" src="<?= htmlspecialchars($stockOrderImageUrl, ENT_QUOTES, 'UTF-8') ?>" alt="Stock Order Image">
+                                        </a>
+                                    </div>
+                                <?php } else { ?>
+                                    <div class="form-control bg-light">-</div>
+                                <?php } ?>
                             </div>
                             <form method="post">
                                 <input type="hidden" name="id" value="<?= (int) $requestId ?>">
