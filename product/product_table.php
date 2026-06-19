@@ -182,7 +182,7 @@ if (!$result) {
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add <?php echo $pageTitle ?> </a>
                                 <?php endif; ?>
                                 <?php if (isActionAllowed("Import", $pinAccess)) : ?>
-                                    <a class="btn btn-sm btn-rounded btn-info text-white" id="addBtn" href="product_import.php"><i class="fa-solid fa-file-import"></i> Import</a>
+                                    <a class="btn btn-sm btn-rounded btn-info text-white" id="addBtn" href="../import/product_import.php"><i class="fa-solid fa-file-import"></i> Import</a>
                                 <?php endif; ?>
                                 <?php if (isActionAllowed("Export", $pinAccess)) : ?>
                                     <a class="btn btn-sm btn-rounded btn-success text-white" id="addBtn" name="exportBtn" href="product_table.php"><i class="fa-solid fa-file-export"></i> Export</a>

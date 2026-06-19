@@ -68,6 +68,12 @@ if (!function_exists('systemAlertGetModuleConfigs')) {
                 'path' => '/shopee/shopee_verify.php',
                 'action_label' => 'Open Page',
             ),
+            'order_delete_approval' => array(
+                'pin_group_id' => 0,
+                'title' => 'Order Delete Approval',
+                'path' => '/dashboard.php',
+                'action_label' => 'Review Request',
+            ),
         );
     }
 }
@@ -182,7 +188,7 @@ if (!function_exists('systemAlertReadUserRow')) {
             return array();
         }
 
-        $sql = "SELECT `id`, `access_id`, `status`
+        $sql = "SELECT *
                 FROM `" . USR_USER . "`
                 WHERE `id` = " . $userId . "
                 LIMIT 1";

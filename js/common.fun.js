@@ -2725,6 +2725,79 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
     document.body.style.removeProperty("padding-right");
   }
 
+  function extractNotificationResponseMeta(responsePayload) {
+    let meta = {
+      message: "",
+      type: "info",
+      redirectUrl: "",
+      useReplace: false,
+      reload: false,
+    };
+
+    if (responsePayload == null) {
+      return meta;
+    }
+
+    if (typeof responsePayload === "object") {
+      if (typeof responsePayload.message === "string") {
+        meta.message = responsePayload.message;
+      }
+      if (typeof responsePayload.type === "string") {
+        meta.type = responsePayload.type;
+      }
+      if (typeof responsePayload.redirectUrl === "string") {
+        meta.redirectUrl = responsePayload.redirectUrl;
+      }
+      if (typeof responsePayload.redirect_url === "string") {
+        meta.redirectUrl = responsePayload.redirect_url;
+      }
+      meta.useReplace =
+        responsePayload.useReplace === true || responsePayload.use_replace === true;
+      meta.reload =
+        responsePayload.reload === true || responsePayload.shouldReload === true;
+      return meta;
+    }
+
+    let responseText = String(responsePayload).trim();
+    if (!responseText) {
+      return meta;
+    }
+
+    let messageMatch = responseText.match(/var message=(.*?);var type=/s);
+    let typeMatch = responseText.match(/var type=(.*?);var redirectUrl=/s);
+    let redirectMatch = responseText.match(/var redirectUrl=(.*?);var delayMs=/s);
+    let useReplaceMatch = responseText.match(/var useReplace=(true|false);/);
+    let reloadMatch = responseText.match(/var shouldReload=(true|false);/);
+
+    try {
+      if (messageMatch && messageMatch[1]) {
+        meta.message = JSON.parse(messageMatch[1]);
+      }
+    } catch (error) {}
+
+    try {
+      if (typeMatch && typeMatch[1]) {
+        meta.type = JSON.parse(typeMatch[1]);
+      }
+    } catch (error) {}
+
+    try {
+      if (redirectMatch && redirectMatch[1]) {
+        meta.redirectUrl = JSON.parse(redirectMatch[1]);
+      }
+    } catch (error) {}
+
+    if (useReplaceMatch && useReplaceMatch[1]) {
+      meta.useReplace = useReplaceMatch[1] === "true";
+    }
+
+    if (reloadMatch && reloadMatch[1]) {
+      meta.reload = reloadMatch[1] === "true";
+    }
+
+    return meta;
+  }
+
   let title = "";
   let title2 = "";
   let btn = "";
@@ -2788,19 +2861,23 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
   }
 
   let message = "";
-  if (msg.length >= 1) {
-    for (let i = 0; i < msg.length; i++)
-      message += `<p class="mt-n3" style="text-align:center; font-weight:bold;">${msg[i]}</p>`;
+  let messageItems = [];
+  if (Array.isArray(msg)) {
+    messageItems = msg;
+  } else if (typeof msg === "string" && msg.trim() !== "" && act !== "ErrMO") {
+    messageItems = [msg];
   }
 
-  if (act == "D" || act == "LD" || act == "LA" || act == "LC") {
-    let firstContent = title2;
-  } else {
-    let firstContent = title;
+  if (messageItems.length >= 1) {
+    for (let i = 0; i < messageItems.length; i++)
+      message += `<p class="mt-n3" style="text-align:center; font-weight:bold;">${messageItems[i]}</p>`;
   }
+
+  let firstContent =
+    act == "D" || act == "LD" || act == "LA" || act == "LC" ? title2 : title;
 
   const modalElem = document.createElement("div");
-  modalElem.id = "modal-confirm";
+  modalElem.id = "modal-confirm-action";
   modalElem.className = "modal fade";
   modalElem.innerHTML = `
   <div class="modal-dialog modal-dialog-centered" style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
@@ -2824,7 +2901,7 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
 `;
 
   const modelResult = document.createElement("div");
-  modelResult.id = "modal-confirm";
+  modelResult.id = "modal-confirm-result";
   modelResult.className = "modal fade";
   modelResult.innerHTML = `
         <div class="modal-dialog modal-dialog-centered " style="font-family:'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;">
@@ -2840,6 +2917,7 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
     </div>
     `;
   if (act == "D" || act == "LD" || act == "LA" || act == "LC") {
+    document.body.appendChild(modalElem);
     const myModal = new bootstrap.Modal(modalElem, {
       keyboard: false,
       backdrop: "static",
@@ -2871,7 +2949,25 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
 
         cache: false,
         success: (result) => {
-          console.log(path);
+          let responseMeta = extractNotificationResponseMeta(result);
+          let responseMessageText = String(
+            responseMeta.message == null ? "" : responseMeta.message
+          ).trim();
+          let resultTitle = title;
+
+          if (
+            responseMessageText &&
+            !/deleted successfully/i.test(responseMessageText) &&
+            !/order deleted successfully/i.test(responseMessageText)
+          ) {
+            resultTitle = responseMessageText;
+          }
+
+          document.body.appendChild(modelResult);
+          let resultTitleNode = modelResult.querySelector("p");
+          if (resultTitleNode) {
+            resultTitleNode.textContent = resultTitle;
+          }
           const myModal2 = new bootstrap.Modal(modelResult, {
             keyboard: false,
             backdrop: "static",
@@ -2885,7 +2981,19 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
               document.body.removeEventListener("click", response);
               cleanupConfirmationModal(myModal2, modelResult);
               resolve(true);
-              location.reload();
+              if (responseMeta.reload) {
+                location.reload();
+              } else if (responseMeta.redirectUrl) {
+                if (responseMeta.useReplace) {
+                  window.location.replace(responseMeta.redirectUrl);
+                } else {
+                  window.location.href = responseMeta.redirectUrl;
+                }
+              } else if (pathreturn) {
+                window.location.href = pathreturn;
+              } else {
+                location.reload();
+              }
             }, 5000);
 
             function response(e) {
@@ -2900,7 +3008,19 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
               document.body.removeEventListener("click", response);
               cleanupConfirmationModal(myModal2, modelResult);
               resolve(bool);
-              location.reload();
+              if (responseMeta.reload) {
+                location.reload();
+              } else if (responseMeta.redirectUrl) {
+                if (responseMeta.useReplace) {
+                  window.location.replace(responseMeta.redirectUrl);
+                } else {
+                  window.location.href = responseMeta.redirectUrl;
+                }
+              } else if (pathreturn) {
+                window.location.href = pathreturn;
+              } else {
+                location.reload();
+              }
             }
           });
         },
@@ -2917,6 +3037,7 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
     act == "F" ||
     act == "ErrMO"
   ) {
+    document.body.appendChild(modelResult);
     const myModal2 = new bootstrap.Modal(modelResult, {
       keyboard: false,
       backdrop: "static",

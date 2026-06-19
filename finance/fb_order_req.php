@@ -8,8 +8,13 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = FB_ORDER_REQ;
 
-$dataId = input('id');
-$act = input('act');
+$orderDeleteApprovalModuleKey = 'facebook_order_request';
+$orderDeleteApprovalState = orderDeleteApprovalInitPageState();
+$orderDeleteApprovalMode = !empty($orderDeleteApprovalState['approval_mode']);
+$orderDeleteApprovalRequestId = isset($orderDeleteApprovalState['request_id']) ? (int) $orderDeleteApprovalState['request_id'] : 0;
+$dataId = isset($orderDeleteApprovalState['data_id']) ? $orderDeleteApprovalState['data_id'] : '';
+$act = isset($orderDeleteApprovalState['act']) ? $orderDeleteApprovalState['act'] : '';
+$orderDeleteApprovalPanelHtml = isset($orderDeleteApprovalState['panel_html']) ? (string) $orderDeleteApprovalState['panel_html'] : '';
 $pageAction = getPageAction($act);
 $allowed_ext = array("png", "jpg", "jpeg", "svg", "pdf");
 
@@ -94,8 +99,30 @@ if ($pendingStatusUpdate !== '' && !$forShouldSaveBeforeStatusUpdate) {
 
 if (!($dataId) && !($act)) {
     renderNotificationScript('Invalid action.', 'error', $redirectPage);
-
+    exit;
 }
+
+$forExecuteDeleteOrder = orderDeleteApprovalBuildStandardDeleteCallback(array(
+    'data_connect' => $finance_connect,
+    'audit_connect' => $connect,
+    'table_name' => $tblName,
+    'page_title' => $pageTitle,
+    'fallback_data_id' => (int) $dataId,
+    'label_field' => 'name',
+));
+
+$orderDeleteApprovalPanelHtml = orderDeleteApprovalHandlePageFlow(array(
+    'connect' => $connect,
+    'request_id' => $orderDeleteApprovalRequestId,
+    'module_key' => $orderDeleteApprovalModuleKey,
+    'data_id' => (int) $dataId,
+    'current_user_id' => (int) USER_ID,
+    'page_title' => $pageTitle,
+    'redirect_page' => $redirectPage,
+    'clear_local_storage' => $clearLocalStorage,
+    'approval_mode' => $orderDeleteApprovalMode,
+    'delete_callback' => $forExecuteDeleteOrder,
+));
 
 if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
     $action = post('actionBtn');
@@ -647,23 +674,52 @@ if (post('act') == 'D') {
     $id = post('id');
     if ($id) {
         try {
-            // take name
             $result = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $finance_connect);
+            if (!$result || $result->num_rows === 0) {
+                renderNotificationScript('Order record was not found.', 'error', $redirectPage, 1200, true);
+                exit;
+            }
+
             $row = $result->fetch_assoc();
+            $dataId = (int) $row['id'];
+            $deleteLabel = isset($row['name']) ? trim((string) $row['name']) : '';
+            if ($deleteLabel === '') {
+                $deleteLabel = 'Order #' . $dataId;
+            }
 
-            $dataId = $row['id'];
+            $deleteApprovalResult = orderDeleteApprovalRequestDelete($connect, $orderDeleteApprovalModuleKey, $dataId, $deleteLabel, $pageTitle);
+            if (!empty($deleteApprovalResult['direct_delete'])) {
+                $deleteResult = $forExecuteDeleteOrder(array(
+                    'source_order_id' => $dataId,
+                    'source_order_label' => $deleteLabel,
+                ));
+                renderNotificationScript(
+                    $deleteResult['message'],
+                    !empty($deleteResult['success']) ? 'success' : 'error',
+                    $redirectPage,
+                    1200,
+                    true
+                );
+                exit;
+            }
 
-            //SET the record status to 'D'
-            deleteRecord($tblName, '', $dataId, $for_name, $finance_connect, $connect, $cdate, $ctime, $pageTitle);
-            $_SESSION['delChk'] = 1;
+            renderNotificationScript(
+                $deleteApprovalResult['message'],
+                isset($deleteApprovalResult['notification_type']) ? $deleteApprovalResult['notification_type'] : (!empty($deleteApprovalResult['success']) ? 'success' : 'error'),
+                $redirectPage,
+                1200,
+                true
+            );
+            exit;
         } catch (Exception $e) {
-            echo 'Message: ' . $e->getMessage();
+            renderNotificationScript($e->getMessage(), 'error', $redirectPage, 1200, true);
+            exit;
         }
     }
 }
 
 //view
-if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
+if (($dataId) && !($act) && (USER_ID != '') && empty($_SESSION['viewChk']) && empty($_SESSION['delChk'])) {
     $_SESSION['viewChk'] = 1;
 
     if (isset($errorExist)) {
@@ -890,6 +946,8 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                             echo $err1; ?>
                     </span>
                 </div>
+
+                <?php echo $orderDeleteApprovalPanelHtml; ?>
 
                 <div class="form-group">
                     <div class="row">

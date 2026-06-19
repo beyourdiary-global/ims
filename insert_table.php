@@ -1598,6 +1598,51 @@ migrationEnsureIndex($conn, $db_cms, $systemAlertMessageTable, 'idx_sam_display_
 migrationEnsureIndex($conn, $db_cms, $systemAlertMessageTable, 'idx_sam_related_record', "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD INDEX `idx_sam_related_record` (`related_table`, `related_id`)", "Verified `{$systemAlertMessageTable}` related record index.");
 migrationEnsureIndex($conn, $db_cms, $systemAlertMessageTable, 'idx_sam_notification_type', "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD INDEX `idx_sam_notification_type` (`notification_type`)", "Verified `{$systemAlertMessageTable}` notification type index.");
 
+$createOrderDeleteApprovalRequestSql = "CREATE TABLE IF NOT EXISTS `{$db_cms}`.`{$orderDeleteApprovalRequestTable}` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `module_key` VARCHAR(80) NOT NULL DEFAULT '',
+    `platform` VARCHAR(30) DEFAULT NULL,
+    `source_db` VARCHAR(20) NOT NULL DEFAULT '',
+    `source_table` VARCHAR(120) NOT NULL DEFAULT '',
+    `source_order_id` INT NOT NULL DEFAULT 0,
+    `source_order_label` VARCHAR(255) DEFAULT NULL,
+    `request_user_id` INT NOT NULL DEFAULT 0,
+    `request_user_group_id` INT DEFAULT NULL,
+    `supervisor_user_ids` VARCHAR(255) DEFAULT NULL,
+    `request_status` VARCHAR(20) NOT NULL DEFAULT 'pending',
+    `approval_remark` TEXT DEFAULT NULL,
+    `reject_reason` TEXT DEFAULT NULL,
+    `decision_user_id` INT DEFAULT NULL,
+    `decision_date` DATE DEFAULT NULL,
+    `decision_time` TIME DEFAULT NULL,
+    `executed_user_id` INT DEFAULT NULL,
+    `executed_date` DATE DEFAULT NULL,
+    `executed_time` TIME DEFAULT NULL,
+    `create_by` VARCHAR(30) DEFAULT NULL,
+    `create_date` DATE DEFAULT NULL,
+    `create_time` TIME DEFAULT NULL,
+    `update_by` VARCHAR(30) DEFAULT NULL,
+    `update_date` DATE DEFAULT NULL,
+    `update_time` TIME DEFAULT NULL,
+    `status` CHAR(1) NOT NULL DEFAULT 'A',
+    PRIMARY KEY (`id`),
+    KEY `idx_odar_source_pending` (`module_key`, `source_order_id`, `request_status`, `status`),
+    KEY `idx_odar_request_user_pending` (`request_user_id`, `request_status`, `status`),
+    KEY `idx_odar_request_status` (`request_status`, `status`),
+    KEY `idx_odar_decision_user` (`decision_user_id`, `request_status`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+if ($conn->query($createOrderDeleteApprovalRequestSql)) {
+    echo "<p style='color:green;'>Verified `{$orderDeleteApprovalRequestTable}` is ready in `{$db_cms}`.</p>";
+} else {
+    echo "<p style='color:red;'>Failed creating `{$orderDeleteApprovalRequestTable}`: " . $conn->error . "</p>";
+}
+
+migrationEnsureIndex($conn, $db_cms, $orderDeleteApprovalRequestTable, 'idx_odar_source_pending', "ALTER TABLE `{$db_cms}`.`{$orderDeleteApprovalRequestTable}` ADD INDEX `idx_odar_source_pending` (`module_key`, `source_order_id`, `request_status`, `status`)", "Verified `{$orderDeleteApprovalRequestTable}` source pending index.");
+migrationEnsureIndex($conn, $db_cms, $orderDeleteApprovalRequestTable, 'idx_odar_request_user_pending', "ALTER TABLE `{$db_cms}`.`{$orderDeleteApprovalRequestTable}` ADD INDEX `idx_odar_request_user_pending` (`request_user_id`, `request_status`, `status`)", "Verified `{$orderDeleteApprovalRequestTable}` requester pending index.");
+migrationEnsureIndex($conn, $db_cms, $orderDeleteApprovalRequestTable, 'idx_odar_request_status', "ALTER TABLE `{$db_cms}`.`{$orderDeleteApprovalRequestTable}` ADD INDEX `idx_odar_request_status` (`request_status`, `status`)", "Verified `{$orderDeleteApprovalRequestTable}` request status index.");
+migrationEnsureIndex($conn, $db_cms, $orderDeleteApprovalRequestTable, 'idx_odar_decision_user', "ALTER TABLE `{$db_cms}`.`{$orderDeleteApprovalRequestTable}` ADD INDEX `idx_odar_decision_user` (`decision_user_id`, `request_status`, `status`)", "Verified `{$orderDeleteApprovalRequestTable}` decision user index.");
+
 function removePinAccessIds($pinList, $removeIds = array(7, 8))
 {
     $values = array_filter(array_map('trim', explode(',', (string) $pinList)), 'strlen');
