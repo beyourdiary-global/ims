@@ -1012,9 +1012,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
     <div id="formContainer" class="container-fluid px-3 px-md-4 fb-order-req-container">
         <div class="fb-order-req-form-wrap mx-auto">
             <form id="FORForm" method="post" action="" enctype="multipart/form-data">
-                            <form id="FORForm" method="post" action="" enctype="multipart/form-data">
-                <input type="hidden" name="return_url" value="<?= htmlspecialchars((string) $back_redirect_page, ENT_QUOTES, 'UTF-8') ?>"></div>
-                <div class="form-group mb-5">
+                <input type="hidden" name="return_url" value="<?= htmlspecialchars((string) $back_redirect_page, ENT_QUOTES, 'UTF-8') ?>">
                 <div class="form-group mb-5">
                     <div class="order-title-row">
                         <h2 class="mb-0"><?php echo displayPageAction($act, $pageTitle); ?></h2>
