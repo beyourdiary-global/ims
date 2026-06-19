@@ -435,6 +435,10 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
                     createSortingTable('lazada_order_req');
                 }
 
+                if (typeof datatableAlignment === 'function') {
+                    datatableAlignment('lazada_order_req');
+                }
+
                 $(document).on('click', '.btn-assign-estimated-date', function () {
                     if (typeof openEstimatedReceivedDateModal === 'function') {
                         openEstimatedReceivedDateModal(
