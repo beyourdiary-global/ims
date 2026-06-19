@@ -4123,9 +4123,9 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
 <head>
     <title><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></title>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
-    <script src="/finance/header/js/pdf.min.js"></script>
-    <script src="/js/pdf_airbill_parser.js"></script>
-    <script src="/finance/header/js/tesseract.min.js"></script>
+    <script src="<?= $SITEURL ?>/finance/header/js/pdf.min.js"></script>
+    <script src="<?= $SITEURL ?>/js/pdf_airbill_parser.js"></script>
+    <script src="<?= $SITEURL ?>/finance/header/js/tesseract.min.js"></script>
     <style>
         .shopee-airbill-row {
             align-items: flex-start;
