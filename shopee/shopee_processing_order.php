@@ -307,7 +307,13 @@ if (!empty($accGroup)) { $groupByFields[] = "shopee_acc"; }
 $groupBySql = !empty($groupByFields) ? "GROUP BY " . implode(", ", $groupByFields) : "";
 $whereSql = implode(" AND ", $whereConditions);
 
-$currentQueueUrl = rtrim((string) $SITEURL, '/') . (isset($_SERVER['REQUEST_URI']) && trim((string) $_SERVER['REQUEST_URI']) !== '' ? (string) $_SERVER['REQUEST_URI'] : '/shopee/shopee_processing_order.php');
+$siteBaseUrl = rtrim((string) $SITEURL, '/');
+$requestUri = isset($_SERVER['REQUEST_URI']) ? trim((string) $_SERVER['REQUEST_URI']) : '';
+$basePath = rtrim((string) parse_url($siteBaseUrl, PHP_URL_PATH), '/');
+if ($basePath !== '' && strpos($requestUri, $basePath . '/') === 0) {
+    $requestUri = substr($requestUri, strlen($basePath));
+}
+$currentQueueUrl = $siteBaseUrl . ($requestUri !== '' ? $requestUri : '/shopee/shopee_processing_order.php');
 $redirectPage = $SITEURL . '/shopee/shopee_order_req.php?return_url=' . rawurlencode($currentQueueUrl);
 $deleteRedirectPage = $currentQueueUrl;
 $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_connect);
