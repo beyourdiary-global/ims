@@ -14,9 +14,13 @@ if (!is_array($pinAccess) || count($pinAccess) === 0) {
 }
 
 $tblName = STOCK_ORDER_REQ;
-
-$dataId = !empty(input('id')) ? input('id') : post('id');
-$act = !empty(input('act')) ? input('act') : post('act');
+$orderDeleteApprovalModuleKey = 'stock_order_request';
+$orderDeleteApprovalState = orderDeleteApprovalInitPageState();
+$orderDeleteApprovalMode = !empty($orderDeleteApprovalState['approval_mode']);
+$orderDeleteApprovalRequestId = isset($orderDeleteApprovalState['request_id']) ? (int) $orderDeleteApprovalState['request_id'] : 0;
+$dataId = isset($orderDeleteApprovalState['data_id']) ? $orderDeleteApprovalState['data_id'] : '';
+$act = isset($orderDeleteApprovalState['act']) ? $orderDeleteApprovalState['act'] : '';
+$orderDeleteApprovalPanelHtml = isset($orderDeleteApprovalState['panel_html']) ? (string) $orderDeleteApprovalState['panel_html'] : '';
 $pageAction = getPageAction($act);
 $pageActionTitle = $pageAction . ' ' . $pageTitle;
 $actionBtnValue = ($act === 'I') ? 'addRecord' : 'updRecord';
@@ -211,35 +215,100 @@ if (!empty($itemRows)) {
     $packageItemRows = $itemRows;
 }
 
-if ($act == 'D' && $dataId) {
-    $deleteHeaderQuery = "UPDATE " . STOCK_ORDER_REQ . " SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . (int) $dataId . "'";
-    $deleteItemQuery = "UPDATE " . STOCK_ORDER_REQ_ITEM . " SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE request_id='" . (int) $dataId . "'";
+$sorExecuteDeleteOrder = function ($requestRow = array()) use ($finance_connect, $connect, $cdate, $ctime, $dataId, $tblName, $pageAction, $pageTitle) {
+    $deleteDataId = 0;
+    if (is_array($requestRow) && isset($requestRow['source_order_id'])) {
+        $deleteDataId = (int) $requestRow['source_order_id'];
+    }
+    if ($deleteDataId <= 0) {
+        $deleteDataId = (int) $dataId;
+    }
+    if ($deleteDataId <= 0) {
+        return array('success' => false, 'message' => 'Invalid order delete request.');
+    }
+
+    $deleteRowResult = getData('*', "id = '" . $deleteDataId . "'", 'LIMIT 1', STOCK_ORDER_REQ, $finance_connect);
+    if (!$deleteRowResult || $deleteRowResult->num_rows === 0) {
+        return array('success' => false, 'message' => 'Stock order request was not found.');
+    }
+
+    $deleteRow = $deleteRowResult->fetch_assoc();
+    $deleteHeaderQuery = "UPDATE " . STOCK_ORDER_REQ . " SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE id='" . $deleteDataId . "'";
+    $deleteItemQuery = "UPDATE " . STOCK_ORDER_REQ_ITEM . " SET status='D', update_by='" . USER_ID . "', update_date=CURDATE(), update_time=CURTIME() WHERE request_id='" . $deleteDataId . "'";
     $deleteHeaderResult = mysqli_query($finance_connect, $deleteHeaderQuery);
     $deleteItemResult = mysqli_query($finance_connect, $deleteItemQuery);
 
-    $orderNoForLog = isset($row['invoice_no']) ? normalizeAuditLogValue($row['invoice_no']) : 'SOR-' . (int) $dataId;
+    $orderNoForLog = isset($deleteRow['invoice_no']) ? normalizeAuditLogValue($deleteRow['invoice_no']) : 'SOR-' . $deleteDataId;
     $delErrMsg = '';
     if (!$deleteHeaderResult || !$deleteItemResult) {
         $delErrMsg = mysqli_error($finance_connect);
     }
 
+    $actor = orderDeleteApprovalResolveActor($connect, $requestRow);
     $log = [
         'log_act' => $pageAction,
         'cdate' => $cdate,
         'ctime' => $ctime,
-        'uid' => USER_ID,
-        'cby' => USER_ID,
+        'uid' => $actor['user_id'],
+        'cby' => $actor['user_id'],
         'query_rec' => $deleteHeaderQuery . '; ' . $deleteItemQuery,
         'query_table' => $tblName . ', ' . STOCK_ORDER_REQ_ITEM,
         'oldval' => 'Order No: ' . $orderNoForLog,
-        'act_msg' => USER_NAME . ' ' . (!$deleteHeaderResult || !$deleteItemResult ? 'failed to delete' : 'deleted') . ' Stock Order Request [<b>ID = ' . (int) $dataId . '</b>] from <b><i>' . $tblName . '</i></b>' . ($delErrMsg !== '' ? ' (' . $delErrMsg . ')' : '.') ,
+        'act_msg' => $actor['user_name'] . ' ' . (!$deleteHeaderResult || !$deleteItemResult ? 'failed to delete' : 'deleted') . ' the data [<b> ID = ' . $deleteDataId . '</b> ] <b>' . htmlspecialchars($orderNoForLog, ENT_QUOTES, 'UTF-8') . '</b> from <b><i>' . htmlspecialchars($tblName, ENT_QUOTES, 'UTF-8') . ' Table</i></b>.' . ($delErrMsg !== '' ? ' ( ' . htmlspecialchars($delErrMsg, ENT_QUOTES, 'UTF-8') . ' )' : ''),
         'page' => $pageTitle,
         'connect' => $connect,
     ];
     audit_log($log);
 
+    if (!$deleteHeaderResult || !$deleteItemResult) {
+        return array('success' => false, 'message' => $delErrMsg !== '' ? $delErrMsg : 'Unable to delete stock order request.');
+    }
+
     $_SESSION['delChk'] = 1;
-    echo "<script>location.href='$redirectPage';</script>";
+    return array('success' => true, 'message' => 'Stock order request deleted successfully.');
+};
+
+$orderDeleteApprovalPanelHtml = orderDeleteApprovalHandlePageFlow(array(
+    'connect' => $connect,
+    'request_id' => $orderDeleteApprovalRequestId,
+    'module_key' => $orderDeleteApprovalModuleKey,
+    'data_id' => (int) $dataId,
+    'current_user_id' => (int) USER_ID,
+    'page_title' => $pageTitle,
+    'redirect_page' => $redirectPage,
+    'approval_mode' => $orderDeleteApprovalMode,
+    'delete_callback' => $sorExecuteDeleteOrder,
+));
+
+if ($act == 'D' && $dataId) {
+    $deleteLabel = isset($row['invoice_no']) ? trim((string) $row['invoice_no']) : '';
+    if ($deleteLabel === '') {
+        $deleteLabel = 'SOR-' . (int) $dataId;
+    }
+
+    $deleteApprovalResult = orderDeleteApprovalRequestDelete($connect, $orderDeleteApprovalModuleKey, (int) $dataId, $deleteLabel, $pageTitle);
+    if (!empty($deleteApprovalResult['direct_delete'])) {
+        $deleteResult = $sorExecuteDeleteOrder(array(
+            'source_order_id' => (int) $dataId,
+            'source_order_label' => $deleteLabel,
+        ));
+        renderNotificationScript(
+            $deleteResult['message'],
+            !empty($deleteResult['success']) ? 'success' : 'error',
+            $redirectPage,
+            1200,
+            true
+        );
+        exit;
+    }
+
+    renderNotificationScript(
+        $deleteApprovalResult['message'],
+        isset($deleteApprovalResult['notification_type']) ? $deleteApprovalResult['notification_type'] : (!empty($deleteApprovalResult['success']) ? 'success' : 'error'),
+        $redirectPage,
+        1200,
+        true
+    );
     exit;
 }
 
@@ -1265,6 +1334,8 @@ function sorAttachmentUrl($relativePath, $siteUrl)
                     <?php if (isset($err)) { ?>
                         <div id="err_msg" class="mb-3"><span><?= sorEcho($err) ?></span></div>
                     <?php } ?>
+
+                    <?php echo $orderDeleteApprovalPanelHtml; ?>
 
                     <?php if ($showQrPanel) { ?>
                         <script>

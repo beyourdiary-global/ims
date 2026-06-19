@@ -712,9 +712,9 @@ $previewSummary = ($previewBundle && isset($previewBundle['summary']) && is_arra
 <head>
     <title><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></title>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
-    <script src="header/js/pdf.min.js"></script>
-    <script src="header/js/tesseract.min.js"></script>
-    <script src="header/js/jszip.min.js"></script>
+    <script src="<?= $SITEURL ?>/finance/header/js/pdf.min.js"></script>
+    <script src="<?= $SITEURL ?>/finance/header/js/tesseract.min.js"></script>
+    <script src="<?= $SITEURL ?>/finance/header/js/jszip.min.js"></script>
     <style>
         .jt-import .record-card {
             border: 1px solid #d1d5db;

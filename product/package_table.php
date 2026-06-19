@@ -185,7 +185,7 @@ if (!$result) {
                                 <?php endif; ?>
                                 
                                 <?php if (isActionAllowed("Import", $pinAccess)): ?>
-                                    <a class="btn btn-sm btn-rounded btn-info text-white" id="addBtn" href="package_import.php">
+                                    <a class="btn btn-sm btn-rounded btn-info text-white" id="addBtn" href="../import/package_import.php">
                                         <i class="fa-solid fa-file-import"></i> Import
                                     </a>
                                 <?php endif; ?>

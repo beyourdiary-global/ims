@@ -190,22 +190,6 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
     <link rel="stylesheet" href="../css/main.css">
 </head>
 
-<script>
-
-    $(document).ready(() => {
-        createSortingTable('lazada_order_req');
-
-        $(document).on('click', '.btn-assign-estimated-date', function () {
-            openEstimatedReceivedDateModal(
-                $(this).data('orderId'),
-                $(this).data('orderCode'),
-                $(this).data('minDate'),
-                $(this).data('maxDate')
-            );
-        });
-
-    });
-</script>
 <body>
 
     <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
@@ -311,11 +295,7 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
                                 <td scope="row" class="btn-container">
                                     <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
                                     <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
-                                    <?php if (isActionAllowed("Delete", $pinAccess)): ?>
-                                        <a class="btn btn-danger"
-                                            onclick="confirmationDialog(<?= json_encode((string) $row['id']) ?>,[<?= json_encode((string) $row['curr_unit']) ?>,<?= json_encode((string) $row['country']) ?>],<?= json_encode((string) $pageTitle) ?>,<?= json_encode((string) $redirectPage) ?>,<?= json_encode((string) $deleteRedirectPage) ?>,'D')"><i
-                                                class="fas fa-trash-alt"></i></a>
-                                    <?php endif; ?>
+                                    <?php renderDeleteButton($pinAccess, $row['id'], $row['curr_unit'], $row['country'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                     <?php
                                     $statusCode = shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '');
                                     $canAssignThisOrder = $canAssignEstimatedReceivedDate && shopeeOmsPassesAssignmentScope($connect, $row, USER_ID, USER_GROUP);
@@ -444,24 +424,40 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
     <?php include_once ROOT . '/include/estimated_date_modal.php'; ?>
     <?php shopeeOmsRenderReceivedDateModal(array('wrapper_attributes' => 'aria-hidden="true"')); ?>
 
-</body>
-<script>
-    /**
-    oufei 20231014
-    common.fun.js
-    function(void)
-    to solve the issue of dropdown menu displaying inside the table when table class include table-responsive
-    */
-    dropdownMenuDispFix();
+    <script>
+        document.addEventListener('DOMContentLoaded', function () {
+            if (window.jQuery) {
+                const $ = window.jQuery;
+                const tableSelector = '#lazada_order_req';
+                const isDataTableReady = $.fn.DataTable && typeof $.fn.DataTable.isDataTable === 'function';
 
-    /**
-    oufei 20231014
-    common.fun.js
-    function(id)
-    to resize table with bootstrap 5 classes
-    */
-    datatableAlignment('lazada_order_req');
-</script>
-<?php shopeeOmsRenderReceivedDateModalScript(); ?>
+                if (typeof createSortingTable === 'function' && (!isDataTableReady || !$.fn.DataTable.isDataTable(tableSelector))) {
+                    createSortingTable('lazada_order_req');
+                }
+
+                if (typeof datatableAlignment === 'function') {
+                    datatableAlignment('lazada_order_req');
+                }
+
+                $(document).on('click', '.btn-assign-estimated-date', function () {
+                    if (typeof openEstimatedReceivedDateModal === 'function') {
+                        openEstimatedReceivedDateModal(
+                            $(this).data('orderId'),
+                            $(this).data('orderCode'),
+                            $(this).data('minDate'),
+                            $(this).data('maxDate')
+                        );
+                    }
+                });
+            }
+
+            if (typeof dropdownMenuDispFix === 'function') {
+                dropdownMenuDispFix();
+            }
+        });
+    </script>
+    <?php shopeeOmsRenderReceivedDateModalScript(); ?>
+
+</body>
 
 </html>

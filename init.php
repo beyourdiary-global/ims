@@ -246,6 +246,7 @@ define('CAMPAIGN_PURCHASE_RECORD', 'campaign_purchase_record');
 define('CAMPAIGN_RULE_SETTING', 'campaign_rule_setting');
 define('CAMPAIGN_RULE_GENERATED_LOG', 'campaign_rule_generated_log');
 define('SYSTEM_ALERT_MESSAGE', 'system_alert_message');
+define('ORDER_DELETE_APPROVAL_REQUEST', 'order_delete_approval_request');
 define('TASK_COLUMN', 'task_board_status');
 define('TASK_WORK_TYPE', 'task_work_type');
 define('TASK_ITEM', 'task_board_item');

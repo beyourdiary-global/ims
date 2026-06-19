@@ -1,13 +1,13 @@
 <?php
 $pageTitle = "Brand";
 $currentPagePin = 9;
-$tblName = BRAND;
-
 
 include_once '../include/list_page_header.php';
 
 $redirectPage = $SITEURL . '/product/brand.php';
 $deleteRedirectPage = $SITEURL . '/product/brand_table.php';
+
+$tblName = BRAND;
 
 $result = getData('*', '', '', $tblName, $connect);
 
