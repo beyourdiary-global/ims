@@ -188,7 +188,12 @@ if (!function_exists('systemAlertReadUserRow')) {
             return array();
         }
 
-        $sql = "SELECT *
+        $selectFields = array('`id`', '`name`', '`access_id`', '`status`');
+        foreach (systemAlertGetAvailableSupervisorFields($connect) as $fieldName) {
+            $selectFields[] = "`" . $fieldName . "`";
+        }
+
+        $sql = "SELECT " . implode(', ', $selectFields) . "
                 FROM `" . USR_USER . "`
                 WHERE `id` = " . $userId . "
                 LIMIT 1";
