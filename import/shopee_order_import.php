@@ -92,6 +92,8 @@ $importWarnings = [];
 $previewData = [];
 $orderIdFieldError = '';
 $importLocalTelegramFailureMessage = '';
+$importPopupErrorMessage = '';
+$stock_out_warehouse_err = '';
 $allowedAttachmentExt = array("png", "jpg", "jpeg", "pdf");
 $sorAirbillAttachmentPath = img_server . 'shopee_airbill_attachment/';
 $sorAirbillAttachmentUrl = rtrim((string) $SITEURL, '/') . '/' . trim((string) $sorAirbillAttachmentPath, '/\\') . '/';
@@ -733,9 +735,9 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
         $importErrors[] = 'Shopee Buyer Username is required.';
     }
     if ((int) $previewData['stock_out_warehouse_id'] <= 0) {
-        $importErrors[] = 'Stock Out Warehouse cannot be empty.';
+        $stock_out_warehouse_err = 'Stock Out Warehouse cannot be empty.';
     } else if (!isset($sorWarehouseOptionMap[(int) $previewData['stock_out_warehouse_id']])) {
-        $importErrors[] = 'Please select a valid active Stock Out Warehouse.';
+        $stock_out_warehouse_err = 'Please select a valid active Stock Out Warehouse.';
     }
     if ($previewData['update_airbill'] === 'no') {
         $previewData['airbill_no'] = '';
@@ -863,7 +865,20 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
         }
     }
 
-    if (empty($importErrors) && $orderIdFieldError === '') {
+    if (empty($importErrors) && $orderIdFieldError === '' && $stock_out_warehouse_err === '' && shopeeOmsNormalizeStatusCode($previewData['order_status_val']) === 'TP') {
+        $importWarehouseStockValidation = shopeeOmsValidateWarehouseStockForOrder($connect, $finance_connect, array(
+            'package' => isset($previewData['package_id']) ? $previewData['package_id'] : '',
+            'package_qty_json' => isset($previewData['package_qty_json']) ? $previewData['package_qty_json'] : '',
+            'stock_out_warehouse_id' => isset($previewData['stock_out_warehouse_id']) ? $previewData['stock_out_warehouse_id'] : 0,
+        ), array(
+            'platform' => 'shopee',
+        ));
+        if (empty($importWarehouseStockValidation['success'])) {
+            $stock_out_warehouse_err = isset($importWarehouseStockValidation['message']) ? (string) $importWarehouseStockValidation['message'] : 'Selected warehouse does not have enough stock.';
+        }
+    }
+
+    if (empty($importErrors) && $orderIdFieldError === '' && $stock_out_warehouse_err === '') {
         $orderId = mysqli_real_escape_string($finance_connect, $previewData['order_id']);
         $pkgId = mysqli_real_escape_string($connect, $previewData['package_id']);
         $price = mysqli_real_escape_string($finance_connect, $previewData['product_price']);
@@ -4283,6 +4298,13 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                             <?php } ?>
                         </div>
                     <?php } ?>
+                    <?php if ($importPopupErrorMessage !== '') { ?>
+                        <script>
+                            document.addEventListener('DOMContentLoaded', function () {
+                                confirmationDialog("", <?= json_encode($importPopupErrorMessage) ?>, <?= json_encode((string) $pageTitle) ?>, "", "", "ErrMO");
+                            });
+                        </script>
+                    <?php } ?>
 
                     <div class="card mb-4 shadow-sm">
                         <div class="card-body">
@@ -4605,6 +4627,11 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                                     </option>
                                                 <?php } ?>
                                             </select>
+                                            <?php if ($stock_out_warehouse_err !== '') { ?>
+                                                <div id="err_msg">
+                                                    <span class="mt-n1"><?= htmlspecialchars($stock_out_warehouse_err, ENT_QUOTES, 'UTF-8') ?></span>
+                                                </div>
+                                            <?php } ?>
                                         </div>
                                     </div>
 
@@ -4886,7 +4913,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                 customerNameSelector: '#customer_name',
                 customerAddressSelector: '#customer_address',
                 statusSelector: '#airbill_extract_status',
-                workerSrc: 'finance/header/js/pdf.worker.min.js',
+                workerSrc: '<?= $SITEURL ?>/finance/header/js/pdf.worker.min.js',
                 errorClass: 'text-danger',
                 normalClass: 'text-muted'
             });
@@ -5076,7 +5103,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
             return;
         }
 
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'finance/header/js/pdf.worker.min.js';
+        pdfjsLib.GlobalWorkerOptions.workerSrc = '<?= $SITEURL ?>/finance/header/js/pdf.worker.min.js';
 
         var clientPdfSubmitReady = false;
 

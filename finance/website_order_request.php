@@ -20,6 +20,11 @@ $pageAction = getPageAction($act);
 
 $redirectPage = $SITEURL . '/finance/website_order_request_table.php';
 $back_redirect_page = commonResolveBackUrl($redirectPage);
+$websiteCurrentRequestPath = isset($_SERVER['REQUEST_URI']) ? (string) parse_url((string) $_SERVER['REQUEST_URI'], PHP_URL_PATH) : '';
+$websiteBackRedirectPath = (string) parse_url((string) $back_redirect_page, PHP_URL_PATH);
+if ($websiteBackRedirectPath === '' || ($websiteCurrentRequestPath !== '' && $websiteBackRedirectPath === $websiteCurrentRequestPath)) {
+    $back_redirect_page = $redirectPage;
+}
 $redirectLink = '<script>location.href=' . json_encode($redirectPage) . ';</script>';
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 $pendingStatusUpdate = shopeeOmsNormalizeStatusCode(post('updateStatusBtn'));
@@ -56,9 +61,10 @@ $worHandleStatusTransition = function ($newStatus) use ($connect, $finance_conne
         echo '<script>alert(' . json_encode((string) $transitionRemark) . '); window.location.replace(' . json_encode((string) $redirectPage) . ');</script>';
         exit;
     }
-
-    echo '<script>alert(' . json_encode((string) (isset($transitionResult['message']) ? $transitionResult['message'] : 'Unable to update order status.')) . ');</script>';
-    exit;
+    return array(
+        'success' => false,
+        'message' => (string) (isset($transitionResult['message']) ? $transitionResult['message'] : 'Unable to update order status.'),
+    );
 };
 generateDBData(WEB_CUST_RCD, $connect);
 $worStatusOptions = shopeeOmsGetEditableStatusOptions();
@@ -72,6 +78,7 @@ foreach ($worWarehouseRows as $worWarehouseRow) {
         $worWarehouseOptionMap[$worWarehouseId] = isset($worWarehouseRow['name']) ? (string) $worWarehouseRow['name'] : ('Warehouse #' . $worWarehouseId);
     }
 }
+$worPopupErrorMessage = '';
 
 // to display data to input
 if ($dataId) { //edit/remove/view
@@ -89,7 +96,18 @@ if ($dataId) { //edit/remove/view
 }
 
 if ($pendingStatusUpdate !== '' && !$worShouldSaveBeforeStatusUpdate) {
-    $worHandleStatusTransition($pendingStatusUpdate);
+    $worTransitionResult = $worHandleStatusTransition($pendingStatusUpdate);
+    if (is_array($worTransitionResult) && empty($worTransitionResult['success'])) {
+        $transitionErrorState = shopeeOmsResolveStatusTransitionErrorState(
+            $pendingStatusUpdate,
+            isset($worTransitionResult['message']) ? $worTransitionResult['message'] : '',
+            'Unable to update order status.'
+        );
+        if ($transitionErrorState['stock_out_warehouse_err'] !== '') {
+            $stock_out_warehouse_err = $transitionErrorState['stock_out_warehouse_err'];
+        }
+        $worPopupErrorMessage = $transitionErrorState['popup_error_message'];
+    }
 }
 
 if (!($dataId) && !($act)) {
@@ -383,6 +401,20 @@ if (post('actionBtn') || $worShouldSaveBeforeStatusUpdate) {
 
             if ($error) {
                 break;
+            }
+
+            if ($action === 'addRecord' && $wor_order_status === 'TP') {
+                $worWarehouseStockValidation = shopeeOmsValidateWarehouseStockForOrder($connect, $finance_connect, array(
+                    'pkg' => $wor_pkg,
+                    'stock_out_warehouse_id' => $wor_stock_out_warehouse_id,
+                ), array(
+                    'platform' => 'website',
+                ));
+                if (empty($worWarehouseStockValidation['success'])) {
+                    $stock_out_warehouse_err = isset($worWarehouseStockValidation['message']) ? (string) $worWarehouseStockValidation['message'] : 'Selected warehouse does not have enough stock.';
+                    $error = 1;
+                    break;
+                }
             }
 
             if ($action == 'addRecord') {
@@ -730,7 +762,23 @@ if (post('actionBtn') || $worShouldSaveBeforeStatusUpdate) {
 
             if ($action === 'updRecord' && $worShouldSaveBeforeStatusUpdate) {
                 if ($worTriggerStatusTransitionAfterSave) {
-                    $worHandleStatusTransition($pendingStatusUpdate);
+                    unset($_SESSION['tempValConfirmBox']);
+                    $worTransitionResult = $worHandleStatusTransition($pendingStatusUpdate);
+                    if (is_array($worTransitionResult) && empty($worTransitionResult['success'])) {
+                        $transitionErrorState = shopeeOmsResolveStatusTransitionErrorState(
+                            $pendingStatusUpdate,
+                            isset($worTransitionResult['message']) ? $worTransitionResult['message'] : '',
+                            'Unable to update order status.'
+                        );
+                        if ($act === 'NC') {
+                            $act = 'E';
+                        }
+                        if ($transitionErrorState['stock_out_warehouse_err'] !== '') {
+                            $stock_out_warehouse_err = $transitionErrorState['stock_out_warehouse_err'];
+                        }
+                        $worPopupErrorMessage = $transitionErrorState['popup_error_message'];
+                        break;
+                    }
                 }
 
                 $worSaveErrorMessage = trim((string) $errorMsg) !== '' ? trim((string) $errorMsg) : 'Unable to save edited order details.';
@@ -994,6 +1042,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
     <div id="formContainer" class="container d-flex justify-content-center">
         <div class="col-6 col-md-6 formWidthAdjust">
             <form id="FORForm" method="post" action="" enctype="multipart/form-data">
+                <input type="hidden" name="return_url" value="<?= htmlspecialchars((string) $back_redirect_page, ENT_QUOTES, 'UTF-8') ?>">
                 <div class="form-group mb-5">
                     <div class="order-title-row">
                         <h2 class="mb-0"><?php echo displayPageAction($act, $pageTitle); ?></h2>
@@ -1722,8 +1771,8 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                         }
                     }
                     ?>
-                    <button type="button" class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn" id="actionBtn"
-                        onclick="if (window.history.length > 1) { window.history.back(); } else { location.href = <?= htmlspecialchars(json_encode($redirectPage), ENT_QUOTES, 'UTF-8') ?>; }">Back</button>
+                    <button type="button" class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="backBtn" id="backBtn"
+                        onclick="location.href = <?= htmlspecialchars(json_encode($back_redirect_page), ENT_QUOTES, 'UTF-8') ?>;">Back</button>
                 </div>
             </form>
         </div>
@@ -1739,6 +1788,9 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
         unset($_SESSION['tempValConfirmBox']);
         echo $clearLocalStorage;
         echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
+    }
+    if ($worPopupErrorMessage !== '') {
+        echo '<script>document.addEventListener("DOMContentLoaded", function () { confirmationDialog("", ' . json_encode($worPopupErrorMessage) . ', ' . json_encode((string) $pageTitle) . ', "", "", "ErrMO"); });</script>';
     }
     ?>
     <script>

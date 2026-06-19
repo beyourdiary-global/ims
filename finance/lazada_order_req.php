@@ -59,9 +59,10 @@ $lorHandleStatusTransition = function ($newStatus) use ($connect, $finance_conne
         echo '<script>alert(' . json_encode((string) $transitionRemark) . '); window.location.replace(' . json_encode((string) $redirectPage) . ');</script>';
         exit;
     }
-
-    echo '<script>alert(' . json_encode((string) (isset($transitionResult['message']) ? $transitionResult['message'] : 'Unable to update order status.')) . ');</script>';
-    exit;
+    return array(
+        'success' => false,
+        'message' => (string) (isset($transitionResult['message']) ? $transitionResult['message'] : 'Unable to update order status.'),
+    );
 };
 
 // to display data to input
@@ -118,9 +119,21 @@ foreach ($lorWarehouseRows as $lorWarehouseRow) {
         $lorWarehouseOptionMap[$lorWarehouseId] = isset($lorWarehouseRow['name']) ? (string) $lorWarehouseRow['name'] : ('Warehouse #' . $lorWarehouseId);
     }
 }
+$lorPopupErrorMessage = '';
 
 if ($pendingStatusUpdate !== '' && !$lorShouldSaveBeforeStatusUpdate) {
-    $lorHandleStatusTransition($pendingStatusUpdate);
+    $lorTransitionResult = $lorHandleStatusTransition($pendingStatusUpdate);
+    if (is_array($lorTransitionResult) && empty($lorTransitionResult['success'])) {
+        $transitionErrorState = shopeeOmsResolveStatusTransitionErrorState(
+            $pendingStatusUpdate,
+            isset($lorTransitionResult['message']) ? $lorTransitionResult['message'] : '',
+            'Unable to update order status.'
+        );
+        if ($transitionErrorState['stock_out_warehouse_err'] !== '') {
+            $stock_out_warehouse_err = $transitionErrorState['stock_out_warehouse_err'];
+        }
+        $lorPopupErrorMessage = $transitionErrorState['popup_error_message'];
+    }
 }
 
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
@@ -297,6 +310,20 @@ if (post('actionBtn') || $lorShouldSaveBeforeStatusUpdate) {
 
             if ($error) {
                 break;
+            }
+
+            if ($action === 'addRequest' && $lor_order_status === 'TP') {
+                $lorWarehouseStockValidation = shopeeOmsValidateWarehouseStockForOrder($connect, $finance_connect, array(
+                    'pkg' => $lor_pkg,
+                    'stock_out_warehouse_id' => $lor_stock_out_warehouse_id,
+                ), array(
+                    'platform' => 'lazada',
+                ));
+                if (empty($lorWarehouseStockValidation['success'])) {
+                    $stock_out_warehouse_err = isset($lorWarehouseStockValidation['message']) ? (string) $lorWarehouseStockValidation['message'] : 'Selected warehouse does not have enough stock.';
+                    $error = 1;
+                    break;
+                }
             }
 
             if ($action == 'addRequest') {
@@ -660,7 +687,20 @@ if (post('actionBtn') || $lorShouldSaveBeforeStatusUpdate) {
 
             if ($action === 'updRequest' && $lorShouldSaveBeforeStatusUpdate) {
                 if ($lorTriggerStatusTransitionAfterSave) {
-                    $lorHandleStatusTransition($pendingStatusUpdate);
+                    unset($_SESSION['tempValConfirmBox']);
+                    $lorTransitionResult = $lorHandleStatusTransition($pendingStatusUpdate);
+                    if (is_array($lorTransitionResult) && empty($lorTransitionResult['success'])) {
+                        $transitionErrorState = shopeeOmsResolveStatusTransitionErrorState(
+                            $pendingStatusUpdate,
+                            isset($lorTransitionResult['message']) ? $lorTransitionResult['message'] : '',
+                            'Unable to update order status.'
+                        );
+                        if ($transitionErrorState['stock_out_warehouse_err'] !== '') {
+                            $stock_out_warehouse_err = $transitionErrorState['stock_out_warehouse_err'];
+                        }
+                        $lorPopupErrorMessage = $transitionErrorState['popup_error_message'];
+                        break;
+                    }
                 }
 
                 $lorSaveErrorMessage = trim((string) $errorMsg) !== '' ? trim((string) $errorMsg) : 'Unable to save edited order details.';
@@ -768,6 +808,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
 <head>
     <link rel="stylesheet" href="../css/main.css">
     <script src="header/js/pdf.min.js"></script>
+    <script src="../js/pdf_airbill_parser.js"></script>
     <style>
         .shopee-airbill-row {
             align-items: flex-start;
@@ -925,6 +966,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
         <div id="formContainer" class="container d-flex justify-content-center">
             <div class="col-6 col-md-6 formWidthAdjust">
                 <form id="FORForm" method="post" action="" enctype="multipart/form-data">
+                <input type="hidden" name="return_url" value="<?= htmlspecialchars((string) $back_redirect_page, ENT_QUOTES, 'UTF-8') ?>">
                     <div class="form-group mb-5">
                         <div class="order-title-row">
                             <h2 class="mb-0"><?php echo displayPageAction($act, $pageTitle); ?></h2>
@@ -1912,6 +1954,9 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
         echo $clearLocalStorage;
         echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
     }
+    if ($lorPopupErrorMessage !== '') {
+        echo '<script>document.addEventListener("DOMContentLoaded", function () { confirmationDialog("", ' . json_encode($lorPopupErrorMessage) . ', ' . json_encode((string) $pageTitle) . ', "", "", "ErrMO"); });</script>';
+    }
     ?>
     <script>
         <?php
@@ -1940,13 +1985,23 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
         const action = <?= json_encode((string) (isset($act) ? $act : ' '), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 
         checkCurrentPage(page, action);
-        setButtonColor();
+        if (typeof setButtonColor === 'function') {
+            setButtonColor();
+        }
         preloader(300, action);
 
         <?php
-        $lazadaOrderReqJsPath = __DIR__ . '/js/lazada_order_req.js';
-        if (is_file($lazadaOrderReqJsPath)) {
-            include $lazadaOrderReqJsPath;
+        $lazadaOrderReqJsPaths = array(
+            __DIR__ . '/../js/lazada_order_req.js',
+            __DIR__ . '/js/lazada_order_req.js',
+            __DIR__ . '/lazada_order_req.js',
+        );
+
+        foreach ($lazadaOrderReqJsPaths as $lazadaOrderReqJsPath) {
+            if (is_file($lazadaOrderReqJsPath)) {
+                include $lazadaOrderReqJsPath;
+                break;
+            }
         }
         ?>
 
