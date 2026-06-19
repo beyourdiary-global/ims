@@ -4629,7 +4629,7 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                             </select>
                                             <?php if ($stock_out_warehouse_err !== '') { ?>
                                                 <div id="err_msg">
-                                                    <span class="mt-n1"><?= htmlspecialchars($stock_out_warehouse_err) ?></span>
+                                                    <span class="mt-n1"><?= htmlspecialchars($stock_out_warehouse_err, ENT_QUOTES, 'UTF-8') ?></span>
                                                 </div>
                                             <?php } ?>
                                         </div>
