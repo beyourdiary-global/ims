@@ -2530,9 +2530,9 @@ if ($existingInvoiceRst) {
 <head>
     <title><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></title>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
-    <script src="/finance/header/js/pdf.min.js"></script>
-    <script src="/finance/header/js/tesseract.min.js"></script>
-    <script src="/finance/header/js/jszip.min.js"></script>
+    <script src="<?= $SITEURL ?>/finance/header/js/pdf.min.js"></script>
+    <script src="<?= $SITEURL ?>/finance/header/js/tesseract.min.js"></script>
+    <script src="<?= $SITEURL ?>/finance/header/js/jszip.min.js"></script>
     <style>
         .sor-import .card { border: 0; box-shadow: 0 .125rem .5rem rgba(0,0,0,.08); }
         .sor-import .preview-file-card { border: 1px solid #d1d5db; border-radius: .5rem; padding: 1rem; margin-bottom: 1rem; background: #fff; }
