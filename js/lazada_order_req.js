@@ -19,128 +19,123 @@ $(document).ready(function () {
       navigator.clipboard.writeText(trackingNumber);
     });
   }
-  //lazada_acc
   if (!$("#lor_lazada_acc").attr("disabled")) {
     $("#lor_lazada_acc").keyup(function () {
       var param = {
         search: $(this).val(),
-        searchType: "name", // column of the table
-        elementID: $(this).attr("id"), // id of the input
-        hiddenElementID: $(this).attr("id") + "_hidden", // hidden input for storing the value
-        dbTable: "<?= LAZADA_ACC ?>", // json filename (generated when login)
+        searchType: "name",
+        elementID: $(this).attr("id"),
+        hiddenElementID: $(this).attr("id") + "_hidden",
+        dbTable: "<?= LAZADA_ACC ?>",
       };
       searchInput(param, "<?= $SITEURL ?>");
     });
   }
+
   if (!$("#lor_sales_pic").attr("disabled")) {
     $("#lor_sales_pic").keyup(function () {
       var param = {
         search: $(this).val(),
-        searchType: "name", // column of the table
-        elementID: $(this).attr("id"), // id of the input
-        hiddenElementID: $(this).attr("id") + "_hidden", // hidden input for storing the value
-        dbTable: "<?= USR_USER ?>", // json filename (generated when login)
+        searchType: "name",
+        elementID: $(this).attr("id"),
+        hiddenElementID: $(this).attr("id") + "_hidden",
+        dbTable: "<?= USR_USER ?>",
       };
       searchInput(param, "<?= $SITEURL ?>");
     });
   }
-  //Currency unit
+
   if (!$("#lor_curr_unit").attr("disabled")) {
     $("#lor_curr_unit").keyup(function () {
       var param = {
         search: $(this).val(),
-        searchType: "unit", // column of the table
-        elementID: $(this).attr("id"), // id of the input
-        hiddenElementID: $(this).attr("id") + "_hidden", // hidden input fcb storing the value
-        dbTable: "<?= CUR_UNIT ?>", // json filename (generated when login)
+        searchType: "unit",
+        elementID: $(this).attr("id"),
+        hiddenElementID: $(this).attr("id") + "_hidden",
+        dbTable: "<?= CUR_UNIT ?>",
       };
       searchInput(param, "<?= $SITEURL ?>");
     });
   }
 
-  //lzd country
   if (!$("#lor_lzd_country").attr("disabled")) {
     $("#lor_lzd_country").keyup(function () {
       var param = {
         search: $(this).val(),
-        searchType: "name", // column of the table
-        elementID: $(this).attr("id"), // id of the input
-        hiddenElementID: $(this).attr("id") + "_hidden", // hidden input fcb storing the value
-        dbTable: "<?= COUNTRIES ?>", // json filename (generated when login)
+        searchType: "nicename",
+        elementID: $(this).attr("id"),
+        hiddenElementID: $(this).attr("id") + "_hidden",
+        dbTable: "<?= COUNTRIES ?>",
       };
       searchInput(param, "<?= $SITEURL ?>");
     });
   }
 
-  //customer id
   if (!$("#lor_cust_id").attr("disabled")) {
     $("#lor_cust_id").keyup(function () {
       var param = {
         search: $(this).val(),
-        searchType: "lcr_id", // column of the table
-        elementID: $(this).attr("id"), // id of the input
-        hiddenElementID: $(this).attr("id") + "_hidden", // hidden input for storing the value
-        dbTable: "<?= LAZADA_CUST_RCD ?>", // json filename (generated when login)
+        searchType: "lcr_id",
+        elementID: $(this).attr("id"),
+        hiddenElementID: $(this).attr("id") + "_hidden",
+        dbTable: "<?= LAZADA_CUST_RCD ?>",
       };
       searchInput(param, "<?= $SITEURL ?>");
     });
   }
 
-  //country
   if (!$("#lor_country").attr("disabled")) {
     $("#lor_country").keyup(function () {
       var param = {
         search: $(this).val(),
-        searchType: "name", // column of the table
-        elementID: $(this).attr("id"), // id of the input
-        hiddenElementID: $(this).attr("id") + "_hidden", // hidden input fcb storing the value
-        dbTable: "<?= COUNTRIES ?>", // json filename (generated when login)
+        searchType: "nicename",
+        elementID: $(this).attr("id"),
+        hiddenElementID: $(this).attr("id") + "_hidden",
+        dbTable: "<?= COUNTRIES ?>",
       };
       searchInput(param, "<?= $SITEURL ?>");
     });
   }
 
-  //brand
   if (!$("#lor_brand").attr("disabled")) {
     $("#lor_brand").keyup(function () {
       var param = {
         search: $(this).val(),
-        searchType: "name", // column of the table
-        elementID: $(this).attr("id"), // id of the input
-        hiddenElementID: $(this).attr("id") + "_hidden", // hidden input fcb storing the value
-        dbTable: "<?= BRAND ?>", // json filename (generated when login)
+        searchType: "name",
+        elementID: $(this).attr("id"),
+        hiddenElementID: $(this).attr("id") + "_hidden",
+        dbTable: "<?= BRAND ?>",
       };
       searchInput(param, "<?= $SITEURL ?>");
     });
   }
 
-  //series
   if (!$("#lor_series").attr("disabled")) {
     $("#lor_series").keyup(function () {
       var param = {
         search: $(this).val(),
-        searchType: "name", // column of the table
-        elementID: $(this).attr("id"), // id of the input
-        hiddenElementID: $(this).attr("id") + "_hidden", // hidden input fcb storing the value
-        dbTable: "<?= BRD_SERIES ?>", // json filename (generated when login)
+        searchType: "name",
+        elementID: $(this).attr("id"),
+        hiddenElementID: $(this).attr("id") + "_hidden",
+        dbTable: "<?= BRD_SERIES ?>",
       };
       searchInput(param, "<?= $SITEURL ?>");
     });
   }
 
-  //package
   if (!$("#lor_pkg").attr("disabled")) {
     $("#lor_pkg").keyup(function () {
       var param = {
         search: $(this).val(),
-        searchType: "name", // column of the table
-        elementID: $(this).attr("id"), // id of the input
-        hiddenElementID: $(this).attr("id") + "_hidden", // hidden input for storing the value
-        dbTable: "<?= PKG ?>", // json filename (generated when login)
+        searchType: "name",
+        elementID: $(this).attr("id"),
+        hiddenElementID: $(this).attr("id") + "_hidden",
+        dbTable: "<?= PKG ?>",
       };
       searchInput(param, "<?= $SITEURL ?>");
     });
   }
+
   $("#lor_cust_id").change(autofill);
 
   $("#lor_lazada_acc").change(calculateCurrUnit);
@@ -241,7 +236,8 @@ $("#lor_pay_meth").on("input", function () {
   $(".lor-pay-meth-err").remove();
 });
 
-$(".submitBtn").on("click", () => {
+$(".submitBtn").on("click", function (event) {
+  event.preventDefault();
   $(".error-message").remove();
   var lazada_acc_chk = 0;
   var curr_unit_chk = 0;
@@ -615,9 +611,34 @@ $(".submitBtn").on("click", () => {
     pay_fee_chk == 1 &&
     final_income_chk == 1 &&
     pay_meth_chk == 1
-  )
-    $(this).closest("fcbm").submit();
-  else return false;
+  ) {
+    var form = document.getElementById("FORForm");
+
+    if (!form) {
+      if (typeof showNotification === "function") {
+        showNotification("Form is not found. Please refresh the page and try again.", "error");
+      } else {
+        alert("Form is not found. Please refresh the page and try again.");
+      }
+      return false;
+    }
+
+    if (this.name) {
+      $(form).find('input.js-submit-action-value[name="' + this.name + '"]').remove();
+
+      $("<input>")
+        .attr("type", "hidden")
+        .attr("name", this.name)
+        .attr("class", "js-submit-action-value")
+        .val(this.value)
+        .appendTo(form);
+    }
+
+    HTMLFormElement.prototype.submit.call(form);
+    return true;
+  }
+
+  return false;
 });
 
 //currency_unit

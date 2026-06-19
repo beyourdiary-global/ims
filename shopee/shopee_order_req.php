@@ -46,7 +46,7 @@ if ($requestedReturnUrl === '') {
 if ($requestedReturnUrl !== '') {
     $redirectPage = commonSafeBackUrl($requestedReturnUrl, $redirectPage);
 }
-$back_redirect_page = $requestedReturnUrl !== '' ? commonSafeBackUrl($requestedReturnUrl, $redirectPage) : commonResolveBackUrl($redirectPage);
+$back_redirect_page = $requestedReturnUrl !== '' ? commonSafeBackUrl($requestedReturnUrl, $redirectPage) : $redirectPage;
 $redirectLink = '<script>location.href=' . json_encode($redirectPage) . ';</script>';
 $clearLocalStorage = <<<'HTML'
 <script>
@@ -77,6 +77,7 @@ $sorStatusOptions = function_exists('shopeeOmsGetEditableStatusOptions') ? shope
 $sorAirbillAttachmentPath = img_server . 'shopee_airbill_attachment/';
 $sorAirbillAttachmentUrl = rtrim((string) $SITEURL, '/') . '/' . trim((string) $sorAirbillAttachmentPath, '/\\') . '/';
 $sorLocalTelegramFailureMessage = '';
+$sorPopupErrorMessage = '';
 $sorIsLiveSite = isset($siteOrlocalMode) ? (bool) $siteOrlocalMode : true;
 $sorPrepareAjaxJsonResponse = function () use ($sorIsAjaxRequest) {
     if (!$sorIsAjaxRequest) {
@@ -173,9 +174,10 @@ $sorHandleStatusTransition = function ($newStatus) use ($connect, $finance_conne
         ));
         exit;
     }
-
-    echo '<script>alert(' . json_encode((string) (isset($transitionResult['message']) ? $transitionResult['message'] : $statusUpdateFallbackMessage)) . ');</script>';
-    exit;
+    return array(
+        'success' => false,
+        'message' => (string) (isset($transitionResult['message']) ? $transitionResult['message'] : $statusUpdateFallbackMessage),
+    );
 };
 $sorLogOmsTransitionAudit = function ($transitionResult) use ($pageTitle, $cdate, $ctime, $tblName, $connect, $dataId) {
     $oldStatus = isset($transitionResult['old_status']) ? (string) $transitionResult['old_status'] : '';
@@ -643,7 +645,18 @@ if ($pendingStatusUpdate !== '' && !$sorShouldSaveBeforeStatusUpdate) {
     if ($pendingStatusUpdate === 'PR' && $sorConfirmReceiveWithFollowUp) {
         $sorHandleConfirmReceiveWithFollowUp();
     }
-    $sorHandleStatusTransition($pendingStatusUpdate);
+    $sorTransitionResult = $sorHandleStatusTransition($pendingStatusUpdate);
+    if (is_array($sorTransitionResult) && empty($sorTransitionResult['success'])) {
+        $transitionErrorState = shopeeOmsResolveStatusTransitionErrorState(
+            $pendingStatusUpdate,
+            isset($sorTransitionResult['message']) ? $sorTransitionResult['message'] : '',
+            'Unable to update order status.'
+        );
+        if ($transitionErrorState['stock_out_warehouse_err'] !== '') {
+            $stock_out_warehouse_err = $transitionErrorState['stock_out_warehouse_err'];
+        }
+        $sorPopupErrorMessage = $transitionErrorState['popup_error_message'];
+    }
 }
 
 $sorExecuteDeleteOrder = orderDeleteApprovalBuildStandardDeleteCallback(array(
@@ -841,11 +854,26 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
             'customer_address' => $sor_customer_address,
         ));
     }
-    $sor_airbill_attachment = null;
-    if (isset($_FILES["sor_airbill_attachment"]) && $_FILES["sor_airbill_attachment"]["size"] != 0) {
-        $sor_airbill_attachment = $_FILES["sor_airbill_attachment"]["name"];
-    } elseif (isset($_POST['sor_airbill_attachment_value'])) {
-        $sor_airbill_attachment = $_POST['sor_airbill_attachment_value'];
+    $sorAirbillHasPendingUpload = isset($_FILES["sor_airbill_attachment"])
+        && isset($_FILES["sor_airbill_attachment"]["size"])
+        && (int) $_FILES["sor_airbill_attachment"]["size"] > 0;
+    $sorAirbillPendingUploadName = $sorAirbillHasPendingUpload && isset($_FILES["sor_airbill_attachment"]["name"])
+        ? basename((string) $_FILES["sor_airbill_attachment"]["name"])
+        : '';
+    $sorExistingAirbillAttachmentValue = isset($row['airbill_attachment']) ? trim((string) $row['airbill_attachment']) : '';
+    $sorPostedAirbillAttachmentValue = isset($_POST['sor_airbill_attachment_value']) ? trim((string) $_POST['sor_airbill_attachment_value']) : '';
+    $sor_airbill_attachment = '';
+
+    if ($action === 'updRecord' && $sorExistingAirbillAttachmentValue !== '') {
+        $sor_airbill_attachment = $sorExistingAirbillAttachmentValue;
+    }
+
+    if (
+        $action === 'updRecord'
+        && $sorPostedAirbillAttachmentValue !== ''
+        && $sorPostedAirbillAttachmentValue === $sorExistingAirbillAttachmentValue
+    ) {
+        $sor_airbill_attachment = $sorPostedAirbillAttachmentValue;
     }
     $packageQtySnapshot = shopeeOmsBuildPackageQtySnapshotFromInputs(
         isset($_POST['sor_pkg_hidden']) ? $_POST['sor_pkg_hidden'] : array(),
@@ -859,22 +887,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
     switch ($action) {
         case 'addRecord':
         case 'updRecord':
-            if ($sor_update_airbill === 'yes' && isset($_FILES["sor_airbill_attachment"]) && $_FILES["sor_airbill_attachment"]["size"] != 0) {
-                $uploadResult = shopeeOmsStoreAirbillAttachmentUpload(
-                    $_FILES["sor_airbill_attachment"],
-                    $connect,
-                    $sor_brand,
-                    $sor_pkg,
-                    'shopee_order_request',
-                    $allowed_ext
-                );
-                if (!empty($uploadResult['success'])) {
-                    $sor_airbill_attachment = isset($uploadResult['path']) ? (string) $uploadResult['path'] : '';
-                } else {
-                    $airbill_attachment_err = isset($uploadResult['message']) ? (string) $uploadResult['message'] : "Failed to upload the airbill attachment.";
-                    $error = 1;
-                }
-            }
+            $sorAirbillUploadReady = $sor_update_airbill === 'yes' && $sorAirbillHasPendingUpload;
 
             if ($sor_update_airbill !== 'yes') {
                 if ($action === 'updRecord') {
@@ -962,8 +975,38 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                     $customer_address_err = "Customer Address cannot be empty when Update Airbill is enabled.";
                     $error = 1;
                 }
-                if (trim((string) $sor_airbill_attachment) === '') {
+                $sorEffectiveAirbillAttachmentForValidation = $sor_airbill_attachment;
+                if ($sorAirbillHasPendingUpload && $sorAirbillPendingUploadName !== '') {
+                    $sorEffectiveAirbillAttachmentForValidation = $sorAirbillPendingUploadName;
+                }
+
+                if (trim((string) $sorEffectiveAirbillAttachmentForValidation) === '') {
                     $airbill_attachment_err = "Airbill Attachment cannot be empty when Update Airbill is enabled.";
+                    $error = 1;
+                }
+            }
+
+            $sorShouldValidateWarehouseStockBeforeSave = false;
+            $sorCurrentOrderStatusForValidation = isset($row['order_status']) ? shopeeOmsNormalizeStatusCode($row['order_status']) : '';
+
+            if ($action === 'addRecord' && $sor_order_status === 'TP') {
+                $sorShouldValidateWarehouseStockBeforeSave = true;
+            } else if ($action === 'updRecord' && $pendingStatusUpdate === 'TP') {
+                $sorShouldValidateWarehouseStockBeforeSave = true;
+            } else if ($action === 'updRecord' && $sorCurrentOrderStatusForValidation === 'TP') {
+                $sorShouldValidateWarehouseStockBeforeSave = true;
+            }
+
+            if (!isset($error) && $sorShouldValidateWarehouseStockBeforeSave) {
+                $sorWarehouseStockValidation = shopeeOmsValidateWarehouseStockForOrder($connect, $finance_connect, array(
+                    'package' => $sor_pkg,
+                    'package_qty_json' => $packageQtySnapshotJson,
+                    'stock_out_warehouse_id' => $sor_stock_out_warehouse_id,
+                ), array(
+                    'platform' => 'shopee',
+                ));
+                if (empty($sorWarehouseStockValidation['success'])) {
+                    $stock_out_warehouse_err = isset($sorWarehouseStockValidation['message']) ? (string) $sorWarehouseStockValidation['message'] : 'Selected warehouse does not have enough stock.';
                     $error = 1;
                 }
             }
@@ -995,6 +1038,53 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                 }
                 break;
             }
+
+            if ($sorAirbillUploadReady) {
+                $uploadResult = shopeeOmsStoreAirbillAttachmentUpload(
+                    $_FILES["sor_airbill_attachment"],
+                    $connect,
+                    $sor_brand,
+                    $sor_pkg,
+                    'shopee_order_request',
+                    $allowed_ext
+                );
+
+                if (!empty($uploadResult['success'])) {
+                    $sor_airbill_attachment = isset($uploadResult['path']) ? (string) $uploadResult['path'] : '';
+                } else {
+                    $airbill_attachment_err = isset($uploadResult['message']) ? (string) $uploadResult['message'] : "Failed to upload the airbill attachment.";
+                    $error = 1;
+                }
+            }
+
+            if (isset($error)) {
+                if ($action === 'updRecord' && $sorSaveBeforeStatusOnly) {
+                    $sorPrepareAjaxJsonResponse();
+                    echo json_encode(array(
+                        'success' => false,
+                        'message' => $buildShopeeOrderReqSaveErrorMessage(array(
+                            isset($airbill_err) ? $airbill_err : '',
+                            isset($airbill_attachment_err) ? $airbill_attachment_err : '',
+                            isset($customer_address_err) ? $customer_address_err : '',
+                            isset($stock_out_warehouse_err) ? $stock_out_warehouse_err : '',
+                            isset($pkg_err) ? $pkg_err : '',
+                            isset($brand_err) ? $brand_err : '',
+                            isset($user_err) ? $user_err : '',
+                            isset($pay_err) ? $pay_err : '',
+                            isset($pic_err) ? $pic_err : '',
+                            isset($price_err) ? $price_err : '',
+                            isset($order_err) ? $order_err : '',
+                            isset($date_err) ? $date_err : '',
+                            isset($time_err) ? $time_err : '',
+                            isset($curr_err) ? $curr_err : '',
+                            isset($acc_err) ? $acc_err : '',
+                        ), $errorMsg),
+                    ));
+                    exit;
+                }
+                break;
+            }
+
             if ($action == 'addRecord') {
                 try {
                     $requiresInitialShippedAutoMove = ($sor_order_status === 'SP');
@@ -1531,7 +1621,19 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                     if ($pendingStatusUpdate === 'PR' && $sorConfirmReceiveWithFollowUp) {
                         $sorHandleConfirmReceiveWithFollowUp();
                     }
-                    $sorHandleStatusTransition($pendingStatusUpdate);
+                    $sorTransitionResult = $sorHandleStatusTransition($pendingStatusUpdate);
+                    if (is_array($sorTransitionResult) && empty($sorTransitionResult['success'])) {
+                        $transitionErrorState = shopeeOmsResolveStatusTransitionErrorState(
+                            $pendingStatusUpdate,
+                            isset($sorTransitionResult['message']) ? $sorTransitionResult['message'] : '',
+                            'Unable to update order status.'
+                        );
+                        if ($transitionErrorState['stock_out_warehouse_err'] !== '') {
+                            $stock_out_warehouse_err = $transitionErrorState['stock_out_warehouse_err'];
+                        }
+                        $sorPopupErrorMessage = $transitionErrorState['popup_error_message'];
+                        break;
+                    }
                 }
 
                 $statusSaveErrorMessage = $buildShopeeOrderReqSaveErrorMessage(array(
@@ -1901,6 +2003,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
     <div id="formContainer" class="container d-flex justify-content-center">
         <div class="col-6 col-md-6 formWidthAdjust">
             <form id="FORForm" method="post" action="" enctype="multipart/form-data">
+                <input type="hidden" name="return_url" value="<?= htmlspecialchars((string) $back_redirect_page, ENT_QUOTES, 'UTF-8') ?>">
                 <div class="form-group mb-5">
                     <div class="order-title-row">
                         <h2 class="mb-0"><?php echo displayPageAction($act, $pageTitle); ?></h2>
@@ -2295,11 +2398,33 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                             <label class="form-label form_lbl" for="sor_airbill_attachment">Airbill Attachment<span class="requireRed">*</span></label>
                             <input class="form-control" type="file" name="sor_airbill_attachment" id="sor_airbill_attachment" <?= $act == '' ? 'disabled' : '' ?>>
                             <small id="sor_airbill_extract_status" class="shopee-airbill-extract-status"></small>
-                            <?php if (isset($row['airbill_attachment']) && $row['airbill_attachment']) { ?>
+                            <?php
+                            $currentAirbillAttachmentValue = '';
+                            $currentAirbillAttachmentHiddenValue = '';
+                            $currentAirbillAttachmentLabel = 'Current Attachment:';
+                            $currentAirbillAttachmentIsPendingUpload = false;
+                            $savedAirbillAttachmentValue = isset($row['airbill_attachment']) ? trim((string) $row['airbill_attachment']) : '';
+
+                            if ($savedAirbillAttachmentValue !== '') {
+                                $currentAirbillAttachmentValue = $savedAirbillAttachmentValue;
+                                $currentAirbillAttachmentHiddenValue = $savedAirbillAttachmentValue;
+                            }
+
+                            if (
+                                isset($sorAirbillPendingUploadName)
+                                && trim((string) $sorAirbillPendingUploadName) !== ''
+                                && isset($error)
+                            ) {
+                                $currentAirbillAttachmentValue = (string) $sorAirbillPendingUploadName;
+                                $currentAirbillAttachmentLabel = 'Selected Attachment:';
+                                $currentAirbillAttachmentIsPendingUpload = true;
+                            }
+                            ?>
+                            <?php if ($currentAirbillAttachmentValue !== '') { ?>
                                 <div id="err_msg">
                                     <span class="mt-n1 shopee-airbill-current-attachment">
-                                        <span class="shopee-airbill-current-attachment-label">Current Attachment:</span>
-                                        <span class="shopee-airbill-current-attachment-value"><?php echo htmlspecialchars($row['airbill_attachment']); ?></span>
+                                        <span class="shopee-airbill-current-attachment-label"><?php echo htmlspecialchars($currentAirbillAttachmentLabel, ENT_QUOTES, 'UTF-8'); ?></span>
+                                        <span class="shopee-airbill-current-attachment-value"><?php echo htmlspecialchars($currentAirbillAttachmentValue, ENT_QUOTES, 'UTF-8'); ?></span>
                                     </span>
                                 </div>
                             <?php } ?>
@@ -2313,19 +2438,8 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                             <div class="d-flex justify-content-center justify-content-md-end px-4">
                                 <?php
                                 $sorAirbillAttachmentSrc = '';
-                                if (isset($dataExisted) && isset($row['airbill_attachment']) && !isset($sor_airbill_attachment)) {
-                                    if ($row['airbill_attachment'] == '' || $row['airbill_attachment'] == NULL) {
-                                        $sorAirbillAttachmentSrc = '';
-                                    } else {
-                                        $storedAttachment = trim(str_replace('\\', '/', (string) $row['airbill_attachment']), '/');
-                                        if (strpos($storedAttachment, 'attachment/') === 0) {
-                                            $sorAirbillAttachmentSrc = rtrim((string) $SITEURL, '/') . '/' . $storedAttachment;
-                                        } else {
-                                            $sorAirbillAttachmentSrc = $sorAirbillAttachmentUrl . basename($storedAttachment);
-                                        }
-                                    }
-                                } else if (isset($sor_airbill_attachment)) {
-                                    $storedAttachment = trim(str_replace('\\', '/', (string) $sor_airbill_attachment), '/');
+                                if (!$currentAirbillAttachmentIsPendingUpload && $currentAirbillAttachmentHiddenValue !== '') {
+                                    $storedAttachment = trim(str_replace('\\', '/', $currentAirbillAttachmentHiddenValue), '/');
                                     if ($storedAttachment !== '') {
                                         if (strpos($storedAttachment, 'attachment/') === 0) {
                                             $sorAirbillAttachmentSrc = rtrim((string) $SITEURL, '/') . '/' . $storedAttachment;
@@ -2334,8 +2448,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                                         }
                                     }
                                 }
-                                ?>
-                                                                <?php
+
                                 $sorAirbillAttachmentExt = '';
                                 if ($sorAirbillAttachmentSrc !== '') {
                                     $sorAirbillAttachmentExt = strtolower(pathinfo(parse_url($sorAirbillAttachmentSrc, PHP_URL_PATH), PATHINFO_EXTENSION));
@@ -2358,7 +2471,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                                     <div id="sor_airbill_attachment_preview_wrap" class="shopee-airbill-preview-media" style="display:none;"></div>
                                 <?php } ?>
 
-                                <input type="hidden" name="sor_airbill_attachment_value" id="sor_airbill_attachment_value" value="<?php if (isset($row['airbill_attachment'])) echo htmlspecialchars($row['airbill_attachment'], ENT_QUOTES, 'UTF-8'); ?>">
+                                <input type="hidden" name="sor_airbill_attachment_value" id="sor_airbill_attachment_value" value="<?php echo htmlspecialchars($currentAirbillAttachmentHiddenValue, ENT_QUOTES, 'UTF-8'); ?>">
                                 <input type="hidden" name="sor_customer_name" id="sor_customer_name" value="<?php
                                     if (isset($sor_customer_name)) {
                                         echo htmlspecialchars($sor_customer_name, ENT_QUOTES, 'UTF-8');
@@ -3134,8 +3247,8 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                     </div>
                     <input type="hidden" name="return_type" id="return_type" value="">
                     <input type="hidden" name="return_remark" id="return_remark" value="">
-                    <button type="button" class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn" id="actionBtn"
-                        onclick="if (window.history.length > 1) { window.history.back(); } else { location.href = <?= htmlspecialchars(json_encode($redirectPage), ENT_QUOTES, 'UTF-8') ?>; }">Back</button>
+                    <button type="button" class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="backBtn" id="backBtn"
+                        onclick="location.href = <?= htmlspecialchars(json_encode($back_redirect_page), ENT_QUOTES, 'UTF-8') ?>;">Back</button>
                 </div>
             </form>
         </div>
@@ -3155,6 +3268,9 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
             echo '<script>alert(' . json_encode($sorLocalTelegramFailureMessage) . ');</script>';
         }
         echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
+    }
+    if ($sorPopupErrorMessage !== '') {
+        echo '<script>document.addEventListener("DOMContentLoaded", function () { confirmationDialog("", ' . json_encode($sorPopupErrorMessage) . ', ' . json_encode((string) $pageTitle) . ', "", "", "ErrMO"); });</script>';
     }
     ?>
     <script>
@@ -3876,6 +3992,9 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
             var airbillFileInput = document.getElementById('sor_airbill_attachment');
             var airbillPreviewWrap = document.getElementById('sor_airbill_attachment_preview_wrap');
             var currentAirbillPreviewUrl = null;
+            var airbillPreviewStorageKey = 'shopee_order_req_airbill_preview_<?= (int) $dataId > 0 ? (int) $dataId : 'new' ?>';
+            var shouldRestorePendingAirbillPreview = <?= (!empty($currentAirbillAttachmentIsPendingUpload) && isset($error)) ? 'true' : 'false' ?>;
+            var pendingAirbillPreviewFileName = <?= json_encode(!empty($currentAirbillAttachmentIsPendingUpload) ? (string) $currentAirbillAttachmentValue : '') ?>;
 
             if (airbillFileInput && airbillPreviewWrap) {
                 var clearAirbillPreviewObjectUrl = function () {
@@ -3885,36 +4004,127 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                     }
                 };
 
-                airbillFileInput.addEventListener('change', function () {
-                    var file = airbillFileInput.files && airbillFileInput.files[0] ? airbillFileInput.files[0] : null;
+                var hideAirbillPreview = function () {
+                    airbillPreviewWrap.innerHTML = '';
+                    airbillPreviewWrap.style.display = 'none';
+                };
 
-                    if (!file) {
-                        clearAirbillPreviewObjectUrl();
-                        airbillPreviewWrap.innerHTML = '';
-                        airbillPreviewWrap.style.display = 'none';
+                var renderAirbillPreview = function (fileUrl, fileType, fileName) {
+                    var resolvedType = String(fileType || '').toLowerCase();
+                    var resolvedName = String(fileName || '').toLowerCase();
+
+                    airbillPreviewWrap.innerHTML = '';
+                    airbillPreviewWrap.style.display = 'block';
+
+                    if (resolvedType.indexOf('image/') === 0 || /\.(png|jpg|jpeg|webp|gif|svg)$/i.test(resolvedName)) {
+                        var imageNode = document.createElement('img');
+                        imageNode.id = 'sor_airbill_attachment_preview_img';
+                        imageNode.src = fileUrl;
+                        imageNode.alt = 'Airbill Attachment Preview';
+                        airbillPreviewWrap.appendChild(imageNode);
+                        return true;
+                    }
+
+                    if (resolvedType === 'application/pdf' || /\.pdf$/i.test(resolvedName)) {
+                        var iframeNode = document.createElement('iframe');
+                        iframeNode.id = 'sor_airbill_attachment_preview_pdf';
+                        iframeNode.src = fileUrl;
+                        iframeNode.title = 'Airbill Attachment Preview';
+                        airbillPreviewWrap.appendChild(iframeNode);
+                        return true;
+                    }
+
+                    hideAirbillPreview();
+                    return false;
+                };
+
+                var saveAirbillPreviewToSession = function (file) {
+                    if (!file || typeof FileReader === 'undefined' || typeof window.sessionStorage === 'undefined') {
                         return;
                     }
 
+                    var fileName = file.name || '';
+                    var fileType = file.type || '';
+                    var isSupportedPreview = fileType.indexOf('image/') === 0 || fileType === 'application/pdf' || /\.(png|jpg|jpeg|webp|gif|svg|pdf)$/i.test(fileName);
+
+                    if (!isSupportedPreview) {
+                        return;
+                    }
+
+                    var reader = new FileReader();
+                    reader.onload = function (event) {
+                        try {
+                            window.sessionStorage.setItem(airbillPreviewStorageKey, JSON.stringify({
+                                name: fileName,
+                                type: fileType,
+                                dataUrl: event.target.result
+                            }));
+                        } catch (storageError) {
+                            // Browser storage may be full. Current-page preview still works.
+                        }
+                    };
+                    reader.readAsDataURL(file);
+                };
+
+                var restoreAirbillPreviewFromSession = function () {
+                    if (!shouldRestorePendingAirbillPreview || typeof window.sessionStorage === 'undefined') {
+                        return;
+                    }
+
+                    try {
+                        var storedPreview = window.sessionStorage.getItem(airbillPreviewStorageKey);
+                        if (!storedPreview) {
+                            return;
+                        }
+
+                        var previewData = JSON.parse(storedPreview);
+                        if (!previewData || !previewData.dataUrl) {
+                            return;
+                        }
+
+                        if (
+                            pendingAirbillPreviewFileName &&
+                            previewData.name &&
+                            String(previewData.name) !== String(pendingAirbillPreviewFileName)
+                        ) {
+                            return;
+                        }
+
+                        renderAirbillPreview(previewData.dataUrl, previewData.type || '', previewData.name || pendingAirbillPreviewFileName);
+                    } catch (restoreError) {
+                        // Ignore invalid stored preview data.
+                    }
+                };
+
+                airbillFileInput.addEventListener('change', function () {
+                    var file = airbillFileInput.files && airbillFileInput.files[0] ? airbillFileInput.files[0] : null;
+
                     clearAirbillPreviewObjectUrl();
+
+                    if (typeof window.sessionStorage !== 'undefined') {
+                        try {
+                            window.sessionStorage.removeItem(airbillPreviewStorageKey);
+                        } catch (storageError) {
+                        }
+                    }
+
+                    if (!file) {
+                        hideAirbillPreview();
+                        return;
+                    }
+
                     var fileUrl = URL.createObjectURL(file);
                     currentAirbillPreviewUrl = fileUrl;
-                    var fileName = file.name.toLowerCase();
 
-                    airbillPreviewWrap.style.display = 'block';
-
-                    if (file.type.indexOf('image/') === 0) {
-                        airbillPreviewWrap.innerHTML =
-                            '<img id="sor_airbill_attachment_preview_img" src="' + fileUrl + '" alt="Airbill Attachment Preview">';
-                    } else if (file.type === 'application/pdf' || fileName.endsWith('.pdf')) {
-                        airbillPreviewWrap.innerHTML =
-                            '<iframe id="sor_airbill_attachment_preview_pdf" src="' + fileUrl + '" title="Airbill Attachment Preview"></iframe>';
-                    } else {
+                    if (!renderAirbillPreview(fileUrl, file.type || '', file.name || '')) {
                         clearAirbillPreviewObjectUrl();
-                        airbillPreviewWrap.innerHTML = '';
-                        airbillPreviewWrap.style.display = 'none';
+                        return;
                     }
+
+                    saveAirbillPreviewToSession(file);
                 });
 
+                restoreAirbillPreviewFromSession();
                 window.addEventListener('beforeunload', clearAirbillPreviewObjectUrl);
             }
 

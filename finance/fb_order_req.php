@@ -21,6 +21,11 @@ $allowed_ext = array("png", "jpg", "jpeg", "svg", "pdf");
 
 $redirectPage = $SITEURL . '/finance/fb_order_req_table.php';
 $back_redirect_page = commonResolveBackUrl($redirectPage);
+$fbCurrentRequestPath = isset($_SERVER['REQUEST_URI']) ? (string) parse_url((string) $_SERVER['REQUEST_URI'], PHP_URL_PATH) : '';
+$fbBackRedirectPath = (string) parse_url((string) $back_redirect_page, PHP_URL_PATH);
+if ($fbBackRedirectPath === '' || ($fbCurrentRequestPath !== '' && $fbBackRedirectPath === $fbCurrentRequestPath)) {
+    $back_redirect_page = $redirectPage;
+}
 $redirectLink = '<script>location.href=' . json_encode($redirectPage) . ';</script>';
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 $pendingStatusUpdate = shopeeOmsNormalizeStatusCode(post('updateStatusBtn'));
@@ -57,9 +62,10 @@ $forHandleStatusTransition = function ($newStatus) use ($connect, $finance_conne
         echo '<script>alert(' . json_encode((string) $transitionRemark) . '); window.location.replace(' . json_encode((string) $redirectPage) . ');</script>';
         exit;
     }
-
-    echo '<script>alert(' . json_encode((string) (isset($transitionResult['message']) ? $transitionResult['message'] : 'Unable to update order status.')) . ');</script>';
-    exit;
+    return array(
+        'success' => false,
+        'message' => (string) (isset($transitionResult['message']) ? $transitionResult['message'] : 'Unable to update order status.'),
+    );
 };
 
 $img_path = '../' . img_server . 'finance/fb_order_req/';
@@ -77,6 +83,7 @@ foreach ($forWarehouseRows as $forWarehouseRow) {
         $forWarehouseOptionMap[$forWarehouseId] = isset($forWarehouseRow['name']) ? (string) $forWarehouseRow['name'] : ('Warehouse #' . $forWarehouseId);
     }
 }
+$forPopupErrorMessage = '';
 
 // to display data to input
 if ($dataId) { //edit/remove/view
@@ -94,7 +101,18 @@ if ($dataId) { //edit/remove/view
 }
 
 if ($pendingStatusUpdate !== '' && !$forShouldSaveBeforeStatusUpdate) {
-    $forHandleStatusTransition($pendingStatusUpdate);
+    $forTransitionResult = $forHandleStatusTransition($pendingStatusUpdate);
+    if (is_array($forTransitionResult) && empty($forTransitionResult['success'])) {
+        $transitionErrorState = shopeeOmsResolveStatusTransitionErrorState(
+            $pendingStatusUpdate,
+            isset($forTransitionResult['message']) ? $forTransitionResult['message'] : '',
+            'Unable to update order status.'
+        );
+        if ($transitionErrorState['stock_out_warehouse_err'] !== '') {
+            $stock_out_warehouse_err = $transitionErrorState['stock_out_warehouse_err'];
+        }
+        $forPopupErrorMessage = $transitionErrorState['popup_error_message'];
+    }
 }
 
 if (!($dataId) && !($act)) {
@@ -173,6 +191,8 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
     $for_attach = null;
     if (isset($_FILES["for_attach"]) && $_FILES["for_attach"]["size"] != 0) {
         $for_attach = $_FILES["for_attach"]["name"];
+    } elseif (isset($_POST['for_attachmentValue'])) {
+        $for_attach = $_POST['for_attachmentValue'];
     } elseif (isset($_POST['existing_attachment'])) {
         $for_attach = $_POST['existing_attachment'];
     }
@@ -336,6 +356,20 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
                 break;
             }
 
+            if ($action === 'addRecord' && $for_order_status === 'TP') {
+                $forWarehouseStockValidation = shopeeOmsValidateWarehouseStockForOrder($connect, $finance_connect, array(
+                    'package' => $for_pkg,
+                    'stock_out_warehouse_id' => $for_stock_out_warehouse_id,
+                ), array(
+                    'platform' => 'facebook',
+                ));
+                if (empty($forWarehouseStockValidation['success'])) {
+                    $stock_out_warehouse_err = isset($forWarehouseStockValidation['message']) ? (string) $forWarehouseStockValidation['message'] : 'Selected warehouse does not have enough stock.';
+                    $error = 1;
+                    break;
+                }
+            }
+
             if ($action == 'addRecord') {
                 try {
                     //check values
@@ -444,22 +478,24 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
                    
                     $result2 = getData('*', "name = '$for_name' AND fb_link = '$for_link'", '', $tblName2, $connect);
                     
-                    if($result2->num_rows == 0){
+                    if (!$result2 || $result2->num_rows == 0) {
                         $query2 = "INSERT INTO " . $tblName2 . " (name, fb_link, contact, sales_pic, country, brand, fb_page, channel, series,ship_rec_name, ship_rec_add, ship_rec_contact, remark, create_by, create_date,create_time)  VALUES ('$for_name','$for_link','$for_ctc','$for_pic','$for_country','$for_brand','$for_fbpage','$for_channel','$for_series','$for_rec_name','$for_rec_add','$for_rec_ctc','$for_remark','" . USER_ID . "',curdate(),curtime())";
                         $returnData2 = mysqli_query($connect, $query2);
                     }
                     // Execute the query
                     $returnData = mysqli_query($finance_connect, $query);
-                    if ($returnData) {
-                        $dataId = (int) mysqli_insert_id($finance_connect);
-                        if ($for_order_status === 'TP' && $dataId > 0) {
-                            $freshOrderRow = shopeeOmsLoadOrder($finance_connect, $dataId, 'facebook');
-                            $tokenResult = shopeeOmsCreateWarehouseToken($connect, $finance_connect, $freshOrderRow, USER_ID, 'facebook');
-                            if (!empty($tokenResult['success']) && !empty($tokenResult['token_row']) && !empty($tokenResult['notification'])) {
-                                $notifyResult = shopeeOmsSendWarehouseNotification($connect, $finance_connect, $tokenResult['token_row'], $tokenResult['notification'], $pageTitle);
-                                if (!empty($notifyResult['sent']) && shopeeOmsTableHasColumn($finance_connect, dbFinance, $tblName, 'step_a_sent_at')) {
-                                    mysqli_query($finance_connect, "UPDATE `" . $tblName . "` SET `step_a_sent_at` = NOW() WHERE id = " . $dataId . " LIMIT 1");
-                                }
+                    if (!$returnData) {
+                        throw new Exception(mysqli_error($finance_connect));
+                    }
+
+                    $dataId = (int) mysqli_insert_id($finance_connect);
+                    if ($for_order_status === 'TP' && $dataId > 0) {
+                        $freshOrderRow = shopeeOmsLoadOrder($finance_connect, $dataId, 'facebook');
+                        $tokenResult = shopeeOmsCreateWarehouseToken($connect, $finance_connect, $freshOrderRow, USER_ID, 'facebook');
+                        if (!empty($tokenResult['success']) && !empty($tokenResult['token_row']) && !empty($tokenResult['notification'])) {
+                            $notifyResult = shopeeOmsSendWarehouseNotification($connect, $finance_connect, $tokenResult['token_row'], $tokenResult['notification'], $pageTitle);
+                            if (!empty($notifyResult['sent']) && shopeeOmsTableHasColumn($finance_connect, dbFinance, $tblName, 'step_a_sent_at')) {
+                                mysqli_query($finance_connect, "UPDATE `" . $tblName . "` SET `step_a_sent_at` = NOW() WHERE id = " . $dataId . " LIMIT 1");
                             }
                         }
                     }
@@ -467,6 +503,7 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
                     $_SESSION['tempValConfirmBox'] = true;
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
+                    $forPopupErrorMessage = trim((string) $errorMsg) !== '' ? trim((string) $errorMsg) : 'Unable to save Facebook order request.';
                     $act = "F";
                 }
             } else {
@@ -621,6 +658,7 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
                     }
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
+                    $forPopupErrorMessage = trim((string) $errorMsg) !== '' ? trim((string) $errorMsg) : 'Unable to save Facebook order request.';
                     $act = "F";
                 }
             }
@@ -657,7 +695,23 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
 
             if ($action === 'updRecord' && $forShouldSaveBeforeStatusUpdate) {
                 if ($forTriggerStatusTransitionAfterSave) {
-                    $forHandleStatusTransition($pendingStatusUpdate);
+                    unset($_SESSION['tempValConfirmBox']);
+                    $forTransitionResult = $forHandleStatusTransition($pendingStatusUpdate);
+                    if (is_array($forTransitionResult) && empty($forTransitionResult['success'])) {
+                        $transitionErrorState = shopeeOmsResolveStatusTransitionErrorState(
+                            $pendingStatusUpdate,
+                            isset($forTransitionResult['message']) ? $forTransitionResult['message'] : '',
+                            'Unable to update order status.'
+                        );
+                        if ($act === 'NC') {
+                            $act = 'E';
+                        }
+                        if ($transitionErrorState['stock_out_warehouse_err'] !== '') {
+                            $stock_out_warehouse_err = $transitionErrorState['stock_out_warehouse_err'];
+                        }
+                        $forPopupErrorMessage = $transitionErrorState['popup_error_message'];
+                        break;
+                    }
                 }
 
                 $forSaveErrorMessage = trim((string) $errorMsg) !== '' ? trim((string) $errorMsg) : 'Unable to save edited order details.';
@@ -906,6 +960,37 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
         .shopee-airbill-preview-media iframe {
             min-height: 520px;
         }
+
+        .fb-order-req-container {
+            max-width: 1280px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .fb-order-req-form-wrap {
+            width: 100%;
+            max-width: 1100px;
+        }
+
+        .fb-order-req-form-wrap .form-control,
+        .fb-order-req-form-wrap .form-select {
+            width: 100%;
+            min-width: 0;
+        }
+
+        .fb-order-req-form-wrap .row {
+            --bs-gutter-x: 1.5rem;
+        }
+
+        .fb-order-req-form-wrap .autocomplete {
+            position: relative;
+        }
+
+        @media (max-width: 767px) {
+            .fb-order-req-form-wrap {
+                max-width: 100%;
+            }
+        }
     </style>
 
 </head>
@@ -924,9 +1009,12 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
 
     </div>
 
-    <div id="formContainer" class="container d-flex justify-content-center">
-        <div class="col-6 col-md-6 formWidthAdjust">
+    <div id="formContainer" class="container-fluid px-3 px-md-4 fb-order-req-container">
+        <div class="fb-order-req-form-wrap mx-auto">
             <form id="FORForm" method="post" action="" enctype="multipart/form-data">
+                            <form id="FORForm" method="post" action="" enctype="multipart/form-data">
+                <input type="hidden" name="return_url" value="<?= htmlspecialchars((string) $back_redirect_page, ENT_QUOTES, 'UTF-8') ?>"></div>
+                <div class="form-group mb-5">
                 <div class="form-group mb-5">
                     <div class="order-title-row">
                         <h2 class="mb-0"><?php echo displayPageAction($act, $pageTitle); ?></h2>
@@ -1682,8 +1770,9 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                             
                             <a href="<?php echo $tracking_link; ?>" id="trackOrderBtn" class="track-order-btn" data-tracking-id="<?php echo $tracking_id; ?>" target="_blank">Track Order</a>
                             
+                            </div>
+                        </div>
                     </div>
-                </div>
                 <?php } }?>
                 <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
                     <?php
@@ -1703,8 +1792,8 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                         }
                     }
                     ?>
-                    <button type="button" class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn" id="actionBtn"
-                        onclick="if (window.history.length > 1) { window.history.back(); } else { location.href = <?= htmlspecialchars(json_encode($redirectPage), ENT_QUOTES, 'UTF-8') ?>; }">Back</button>
+                    <button type="button" class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="backBtn" id="backBtn"
+                        onclick="location.href = <?= htmlspecialchars(json_encode($back_redirect_page), ENT_QUOTES, 'UTF-8') ?>;">Back</button>
                 </div>
             </form>
         </div>
@@ -1723,6 +1812,9 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
         echo $clearLocalStorage;
         echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
     }
+    if ($forPopupErrorMessage !== '') {
+        echo '<script>document.addEventListener("DOMContentLoaded", function () { confirmationDialog("", ' . json_encode($forPopupErrorMessage) . ', ' . json_encode((string) $pageTitle) . ', "", "", "ErrMO"); });</script>';
+    }
     ?>
     <script>
         <?php echo shopeeOmsRenderAirbillAttachmentPreviewScript(); ?>
@@ -1731,7 +1823,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
         var action = "<?php echo isset($act) ? $act : ' '; ?>";
 
         checkCurrentPage(page, action);
-        centerAlignment("formContainer");
+
         setButtonColor();
         preloader(300, action);
 

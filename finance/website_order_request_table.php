@@ -227,7 +227,7 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)) : ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                    href="<?= $redirectPage . "?act=I&pageTitle=" . $pageTitle ?>">
+                                    href="<?= $redirectPage . "?act=I" ?>">
                                     <i class="fa-solid fa-plus"></i> Add Request
                                 </a>
                             <?php endif; ?>

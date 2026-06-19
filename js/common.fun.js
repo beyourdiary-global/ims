@@ -164,8 +164,15 @@ function MM_swapImgRestore() {
 }
 
 function isNumberKey(evt) {
-  const charCode = evt.which ? evt.which : event.keyCode;
-  if (charCode > 31 && (charCode < 48 || charCode > 57)) return false;
+  let keyEvent = evt || window.event;
+  if (!keyEvent) {
+    return true;
+  }
+
+  let charCode = keyEvent.which ? keyEvent.which : keyEvent.keyCode;
+  if (charCode > 31 && (charCode < 48 || charCode > 57)) {
+    return false;
+  }
 
   return true;
 }
@@ -583,8 +590,8 @@ function convertSpecialChars() {
     "&#218;",
   ];
 
-  for (i = 0; i < arguments.length; i++) {
-    for (x = 0; x < chars.length; x++) {
+  for (let i = 0; i < arguments.length; i++) {
+    for (let x = 0; x < chars.length; x++) {
       arguments[i].value = arguments[i].value.replace(
         new RegExp(chars[x], "g"),
         codes[x],
@@ -2566,8 +2573,13 @@ function createSortingLeaveTransactionTable(tableid) {
 function setWidth(id, id2) {
   let one = document.getElementById(id);
   let two = document.getElementById(id2);
-  const style = window.getComputedStyle(one);
-  const width = style.getPropertyValue("width");
+
+  if (!one || !two) {
+    return;
+  }
+
+  let style = window.getComputedStyle(one);
+  let width = style.getPropertyValue("width");
   two.style.width = width;
 }
 
@@ -3047,12 +3059,17 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
     return new Promise((resolve, reject) => {
       document.body.addEventListener("click", response);
 
-      let myTimeout = setTimeout(() => {
-        document.body.removeEventListener("click", response);
-        cleanupConfirmationModal(myModal2, modelResult);
-        resolve(true);
-        window.location.href = pathreturn;
-      }, 5000);
+      let shouldAutoClose = !(act == "ErrMO" && !pathreturn);
+      let myTimeout = shouldAutoClose
+        ? setTimeout(() => {
+            document.body.removeEventListener("click", response);
+            cleanupConfirmationModal(myModal2, modelResult);
+            resolve(true);
+            if (pathreturn) {
+              window.location.href = pathreturn;
+            }
+          }, 5000)
+        : null;
 
       function response(e) {
         let bool = false;
@@ -3060,13 +3077,17 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
 
         if (e.target.id == "contBtn") {
           bool = true;
-          clearTimeout(myTimeout);
+          if (myTimeout) {
+            clearTimeout(myTimeout);
+          }
         } else return;
 
         document.body.removeEventListener("click", response);
         cleanupConfirmationModal(myModal2, modelResult);
         resolve(bool);
-        window.location.href = pathreturn;
+        if (pathreturn) {
+          window.location.href = pathreturn;
+        }
       }
     });
   }
@@ -3093,15 +3114,18 @@ function getUrlParameter(sParam) {
 
 /* fix issue of dropdown menu display inside table responsive */
 function dropdownMenuDispFix() {
-  const dropdowns = document.querySelectorAll(".dropdown-toggle");
-  const dropdown = [...dropdowns].map(
-    (dropdownToggleEl) =>
-      new bootstrap.Dropdown(dropdownToggleEl, {
-        popperConfig(defaultBsPopperConfig) {
-          return { ...defaultBsPopperConfig, strategy: "fixed" };
-        },
-      }),
-  );
+  if (typeof bootstrap === "undefined" || !bootstrap.Dropdown) {
+    return;
+  }
+
+  let dropdowns = document.querySelectorAll(".dropdown-toggle");
+  dropdowns.forEach(function (dropdownToggleEl) {
+    new bootstrap.Dropdown(dropdownToggleEl, {
+      popperConfig(defaultBsPopperConfig) {
+        return { ...defaultBsPopperConfig, strategy: "fixed" };
+      },
+    });
+  });
 }
 
 //autocomplete
@@ -3133,6 +3157,7 @@ function ensureAutocompleteResultShell(elementID) {
 function positionAutocompleteResult(elementID) {
   let input = document.getElementById(elementID);
   let result = document.getElementById("searchResult_" + elementID);
+
   if (!input || !result) {
     return;
   }
@@ -3140,20 +3165,24 @@ function positionAutocompleteResult(elementID) {
   result.style.left = input.offsetLeft + "px";
   result.style.top = input.offsetTop + input.offsetHeight + 4 + "px";
   result.style.width = input.offsetWidth + "px";
+  result.style.display = "block";
 }
 
 function searchInput(param, siteURL) {
+  param = param || {};
+
   let elementID = param["elementID"];
   let hiddenElementID = param["hiddenElementID"];
-  let search = param["search"];
+  let search = param["search"] == null ? "" : String(param["search"]);
   let type = param["searchType"];
   let dbTable = param["dbTable"];
-  if (param["addSelection"]) {
-    let addSelection = param["addSelection"];
+  let addSelection = param["addSelection"] ? String(param["addSelection"]) : "";
+
+  if (!elementID || !hiddenElementID) {
+    return;
   }
 
-  if (search != "") {
-    console.log(siteURL);
+  if (search !== "") {
     $.ajax({
       url: siteURL + "/getSearch.php",
       type: "post",
@@ -3164,49 +3193,58 @@ function searchInput(param, siteURL) {
       },
       dataType: "json",
       success: (result) => {
-        // console.log(result);
         ensureAutocompleteResultShell(elementID);
 
-        // set width same as input
         setWidth(elementID, "searchResult_" + elementID);
         positionAutocompleteResult(elementID);
 
-        let dataArr = [];
+        let resultList = $("#searchResult_" + elementID);
+        let resultRows = Array.isArray(result) ? result : [];
 
-        // loop result
-        let len = result.length;
-        $("#searchResult_" + elementID).empty();
-        for (let i = 0; i < len; i++) {
-          if (result[i]["desc"] != undefined) {
-            let desc = result[i]["desc"];
-            let value = result[i]["val"];
-            $("#searchResult_" + elementID).append(
-              "<li value='" + value + "'>" + desc + "</li>",
+        resultList.empty();
+
+        for (let i = 0; i < resultRows.length; i++) {
+          let row = resultRows[i] || {};
+
+          if (row["desc"] != undefined) {
+            let desc = row["desc"];
+            let value = row["val"];
+
+            resultList.append(
+              $("<li></li>")
+                .attr("value", String(value == null ? "" : value))
+                .text(String(desc == null ? "" : desc)),
             );
           } else {
-            let id = result[i]["id"];
-            let name = result[i][type];
-            $("#searchResult_" + elementID).append(
-              "<li value='" + id + "'>" + name + "</li>",
+            let id = row["id"];
+            let name = row[type];
+
+            resultList.append(
+              $("<li></li>")
+                .attr("value", String(id == null ? "" : id))
+                .text(String(name == null ? "" : name)),
             );
-            dataArr[id] = result[i];
           }
         }
 
-        if (addSelection) {
-          $("#searchResult_" + elementID).append(
-            "<li value='" + addSelection + "'>" + addSelection + "</li>",
+        if (addSelection !== "") {
+          resultList.append(
+            $("<li></li>")
+              .attr("value", addSelection)
+              .text(addSelection),
           );
         }
 
-        // binding click event to li
-        $("#searchResult_" + elementID + " li").bind("click", function () {
-          setText(this, "#" + elementID, "#" + hiddenElementID);
-          $("#" + elementID).change();
-          $("#searchResult_" + elementID).empty();
-          $("#searchResult_" + elementID).remove();
-          $("#clear_" + elementID).remove();
-        });
+        resultList
+          .find("li")
+          .off("click.searchInput")
+          .on("click.searchInput", function () {
+            setText(this, "#" + elementID, "#" + hiddenElementID);
+            $("#" + elementID).change();
+            $("#searchResult_" + elementID).empty();
+            $("#searchResult_" + elementID).remove();
+            $("#clear_" + elementID).remove();
+          });
       },
     });
   } else {
@@ -3216,19 +3254,22 @@ function searchInput(param, siteURL) {
   }
 }
 function searchInput2(param, siteURL) {
+  param = param || {};
+
   let elementID = param["elementID"];
   let hiddenElementID = param["hiddenElementID"];
-  let search = param["search"];
+  let search = param["search"] == null ? "" : String(param["search"]);
   let type = param["searchTypes"];
   let pkg = param["pkgID"];
   let usr = param["usrID"];
   let whse = param["whseID"];
+  let addSelection = param["addSelection"] ? String(param["addSelection"]) : "";
 
-  if (param["addSelection"]) {
-    let addSelection = param["addSelection"];
+  if (!elementID || !hiddenElementID) {
+    return;
   }
 
-  if (search != "") {
+  if (search !== "") {
     $.ajax({
       url: siteURL + "/getSearch2.php",
       type: "post",
@@ -3242,49 +3283,58 @@ function searchInput2(param, siteURL) {
       },
       dataType: "json",
       success: (result) => {
-        // create div
         ensureAutocompleteResultShell(elementID);
 
-        // set width same as input
         setWidth(elementID, "searchResult_" + elementID);
         positionAutocompleteResult(elementID);
 
-        let dataArr = [];
+        let resultList = $("#searchResult_" + elementID);
+        let resultRows = Array.isArray(result) ? result : [];
 
-        // loop result
-        let len = result.length;
-        $("#searchResult_" + elementID).empty();
-        for (let i = 0; i < len; i++) {
-          if (result[i]["desc"] != undefined) {
-            let desc = result[i]["desc"];
-            let value = result[i]["val"];
-            $("#searchResult_" + elementID).append(
-              "<li value='" + value + "'>" + desc + "</li>",
+        resultList.empty();
+
+        for (let i = 0; i < resultRows.length; i++) {
+          let row = resultRows[i] || {};
+
+          if (row["desc"] != undefined) {
+            let desc = row["desc"];
+            let value = row["val"];
+
+            resultList.append(
+              $("<li></li>")
+                .attr("value", String(value == null ? "" : value))
+                .text(String(desc == null ? "" : desc)),
             );
           } else {
-            let id = result[i]["id"];
-            let name = result[i][type];
-            $("#searchResult_" + elementID).append(
-              "<li value='" + id + "'>" + name + "</li>",
+            let id = row["id"];
+            let name = row[type];
+
+            resultList.append(
+              $("<li></li>")
+                .attr("value", String(id == null ? "" : id))
+                .text(String(name == null ? "" : name)),
             );
-            dataArr[id] = result[i];
           }
         }
 
-        if (addSelection) {
-          $("#searchResult_" + elementID).append(
-            "<li value='" + addSelection + "'>" + addSelection + "</li>",
+        if (addSelection !== "") {
+          resultList.append(
+            $("<li></li>")
+              .attr("value", addSelection)
+              .text(addSelection),
           );
         }
 
-        // binding click event to li
-        $("#searchResult_" + elementID + " li").bind("click", function () {
-          setText(this, "#" + elementID, "#" + hiddenElementID);
-          $("#" + elementID).change();
-          $("#searchResult_" + elementID).empty();
-          $("#searchResult_" + elementID).remove();
-          $("#clear_" + elementID).remove();
-        });
+        resultList
+          .find("li")
+          .off("click.searchInput2")
+          .on("click.searchInput2", function () {
+            setText(this, "#" + elementID, "#" + hiddenElementID);
+            $("#" + elementID).change();
+            $("#searchResult_" + elementID).empty();
+            $("#searchResult_" + elementID).remove();
+            $("#clear_" + elementID).remove();
+          });
       },
     });
   } else {
@@ -3450,10 +3500,20 @@ document.addEventListener("DOMContentLoaded", function () {
     );
 
     requiredInputs.forEach(function (input) {
-      if (input.value.trim() === "") {
-        let labelContent = document.querySelector(
-          'label[for="' + input.id + '"]',
-        ).textContent;
+      if (String(input.value == null ? "" : input.value).trim() === "") {
+        let labelNode = null;
+        let labels = document.querySelectorAll("label");
+
+        for (let i = 0; i < labels.length; i++) {
+          if (labels[i].getAttribute("for") === input.id) {
+            labelNode = labels[i];
+            break;
+          }
+        }
+
+        let labelContent = labelNode
+          ? labelNode.textContent
+          : input.getAttribute("name") || input.id || "This field";
 
         labelContent = labelContent.replace(/\*/g, "");
 
@@ -3462,9 +3522,10 @@ document.addEventListener("DOMContentLoaded", function () {
         alertMessage.style.color = "red";
         alertMessage.setAttribute("role", "alert");
 
-        input.parentNode.appendChild(alertMessage);
+        if (input.parentNode) {
+          input.parentNode.appendChild(alertMessage);
+        }
 
-        // Save the current value as the previous value
         input.setAttribute("data-previous-value", input.value);
       }
     });
@@ -3477,7 +3538,7 @@ document.addEventListener("DOMContentLoaded", function () {
   let currentDataNameInput = document.getElementById("currentDataName");
   let errorSpan = document.getElementById("errorSpan");
 
-  if (currentDataNameInput) {
+  if (currentDataNameInput && errorSpan) {
     // Function to toggle error message visibility
     function toggleErrorMessage() {
       let inputValue = currentDataNameInput.value.trim();

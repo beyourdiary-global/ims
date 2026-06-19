@@ -7867,6 +7867,36 @@ if (!function_exists('shopeeOmsBuildLogPlatformCondition')) {
     }
 }
 
+if (!function_exists('shopeeOmsResolveStatusTransitionErrorDisplay')) {
+    function shopeeOmsResolveStatusTransitionErrorDisplay($targetStatus, $message, $fallbackMessage = 'Unable to update order status.')
+    {
+        $resolvedMessage = trim((string) $message);
+        if ($resolvedMessage === '') {
+            $resolvedMessage = trim((string) $fallbackMessage);
+        }
+        if ($resolvedMessage === '') {
+            $resolvedMessage = 'Unable to update order status.';
+        }
+
+        return array(
+            'show_inline_stock_error' => shopeeOmsNormalizeStatusCode($targetStatus) === 'TP',
+            'message' => $resolvedMessage,
+        );
+    }
+}
+
+if (!function_exists('shopeeOmsResolveStatusTransitionErrorState')) {
+    function shopeeOmsResolveStatusTransitionErrorState($targetStatus, $message, $fallbackMessage = 'Unable to update order status.')
+    {
+        $display = shopeeOmsResolveStatusTransitionErrorDisplay($targetStatus, $message, $fallbackMessage);
+
+        return array(
+            'stock_out_warehouse_err' => !empty($display['show_inline_stock_error']) ? (string) $display['message'] : '',
+            'popup_error_message' => !empty($display['show_inline_stock_error']) ? '' : (string) $display['message'],
+        );
+    }
+}
+
 if (!function_exists('shopeeOmsExecuteTransition')) {
     function shopeeOmsExecuteTransition($cmsConnect, $financeConnect, $orderId, $targetStatus, $options = array())
     {
@@ -7935,6 +7965,15 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
         $airbillValidation = shopeeOmsValidateInitialStatusAndAirbill($targetStatus, $effectiveAirbill);
         if (!$airbillValidation['valid']) {
             return array('success' => false, 'message' => $airbillValidation['message']);
+        }
+
+        if ($targetStatus === 'TP') {
+            $warehouseStockValidation = shopeeOmsValidateWarehouseStockForOrder($cmsConnect, $financeConnect, $orderRow, array(
+                'platform' => $platform,
+            ));
+            if (empty($warehouseStockValidation['success'])) {
+                return $warehouseStockValidation;
+            }
         }
 
         $safeActorUserId = mysqli_real_escape_string($orderConnect, $actorUserId);
@@ -8997,6 +9036,146 @@ if (!function_exists('shopeeOmsRunFourteenDayAutoMove')) {
         }
 
         return $movedCount;
+    }
+}
+
+if (!function_exists('shopeeOmsBuildWarehouseStockShortageMessage')) {
+    function shopeeOmsBuildWarehouseStockShortageMessage($warehouseName, $shortages)
+    {
+        $shortages = is_array($shortages) ? $shortages : array();
+        if (empty($shortages)) {
+            return '';
+        }
+
+        $warehouseName = trim((string) $warehouseName);
+        $warehouseSubject = $warehouseName !== ''
+            ? 'Selected warehouse "' . $warehouseName . '"'
+            : 'Selected warehouse';
+
+        $parts = array();
+        foreach ($shortages as $shortage) {
+            if (!is_array($shortage)) {
+                continue;
+            }
+
+            $productLabel = trim((string) (isset($shortage['product_label']) ? $shortage['product_label'] : ''));
+            $productId = isset($shortage['product_id']) ? (int) $shortage['product_id'] : 0;
+            if ($productLabel === '') {
+                $productLabel = $productId > 0 ? ('Product #' . $productId) : 'this product';
+            }
+
+            $requiredQty = isset($shortage['required_qty']) ? (int) $shortage['required_qty'] : 0;
+            $availableQty = isset($shortage['available_qty']) ? (int) $shortage['available_qty'] : 0;
+            if ($availableQty < 0) {
+                $availableQty = 0;
+            }
+
+            $parts[] = $productLabel . ' (required: ' . $requiredQty . ', available: ' . $availableQty . ')';
+        }
+
+        if (empty($parts)) {
+            return $warehouseSubject . ' does not have enough stock.';
+        }
+
+        return $warehouseSubject . ' does not have enough stock for ' . implode(', ', $parts) . '.';
+    }
+}
+
+if (!function_exists('shopeeOmsValidateWarehouseStockForOrder')) {
+    function shopeeOmsValidateWarehouseStockForOrder($cmsConnect, $financeConnect, $orderRow, $options = array())
+    {
+        if (!($cmsConnect instanceof mysqli) || !($financeConnect instanceof mysqli) || !is_array($orderRow)) {
+            return array('success' => false, 'message' => 'Unable to connect to warehouse inventory.');
+        }
+
+        $options = is_array($options) ? $options : array();
+        $resolvedSource = isset($options['platform']) ? $options['platform'] : shopeeOmsGetOrderSourcePlatform($orderRow, 'shopee');
+        if (!empty($orderRow['__oms_platform'])) {
+            $resolvedSource = $orderRow['__oms_platform'];
+        }
+
+        $sourceConfig = shopeeOmsResolveOrderSourceConfig($resolvedSource, 'shopee');
+        $productSummary = shopeeOmsBuildOrderProductSummaryBySource($cmsConnect, $orderRow, $sourceConfig);
+        $productQtyMap = isset($productSummary['product_qty_map']) && is_array($productSummary['product_qty_map'])
+            ? $productSummary['product_qty_map']
+            : array();
+        if (empty($productQtyMap)) {
+            return array('success' => false, 'message' => 'No product item found for this order package.');
+        }
+
+        $defaultWarehouseId = shopeeOmsGetDefaultWarehouseId($cmsConnect);
+        $warehouseId = isset($options['warehouse_id'])
+            ? shopeeOmsNormalizeWarehouseId($options['warehouse_id'])
+            : shopeeOmsResolveStockOutWarehouseId($cmsConnect, $orderRow, $defaultWarehouseId);
+        if ($warehouseId <= 0) {
+            return array('success' => false, 'message' => 'Stock Out Warehouse cannot be empty.');
+        }
+
+        $warehouseName = shopeeOmsResolveWarehouseNameById($cmsConnect, $warehouseId, $defaultWarehouseId);
+        $productNameMap = array();
+        $productIds = array();
+        foreach (array_keys($productQtyMap) as $productId) {
+            $productId = (int) $productId;
+            if ($productId > 0) {
+                $productIds[$productId] = $productId;
+            }
+        }
+
+        if (!empty($productIds)) {
+            $productResult = mysqli_query($cmsConnect, "SELECT id, name FROM `" . PROD . "` WHERE id IN (" . implode(',', $productIds) . ")");
+            if ($productResult) {
+                while ($productRow = mysqli_fetch_assoc($productResult)) {
+                    $resolvedProductId = isset($productRow['id']) ? (int) $productRow['id'] : 0;
+                    if ($resolvedProductId > 0) {
+                        $productNameMap[$resolvedProductId] = isset($productRow['name']) ? trim((string) $productRow['name']) : '';
+                    }
+                }
+            }
+        }
+
+        $shortages = array();
+        foreach ($productQtyMap as $productId => $requiredQty) {
+            $productId = (int) $productId;
+            $requiredQty = (int) $requiredQty;
+            if ($productId <= 0 || $requiredQty <= 0) {
+                continue;
+            }
+
+            $availableQty = 0;
+            $batches = siGetAvailableFifoStockInBatches($financeConnect, $warehouseId, $productId, 0, 0);
+            foreach ($batches as $batch) {
+                $availableQty += isset($batch['available_quantity']) ? (int) $batch['available_quantity'] : 0;
+            }
+
+            if ($availableQty < $requiredQty) {
+                $shortages[] = array(
+                    'product_id' => $productId,
+                    'product_label' => isset($productNameMap[$productId]) && $productNameMap[$productId] !== ''
+                        ? $productNameMap[$productId]
+                        : ('Product #' . $productId),
+                    'required_qty' => $requiredQty,
+                    'available_qty' => $availableQty,
+                );
+            }
+        }
+
+        if (!empty($shortages)) {
+            return array(
+                'success' => false,
+                'message' => shopeeOmsBuildWarehouseStockShortageMessage($warehouseName, $shortages),
+                'shortages' => $shortages,
+                'warehouse_id' => $warehouseId,
+                'warehouse_name' => $warehouseName,
+            );
+        }
+
+        return array(
+            'success' => true,
+            'message' => '',
+            'shortages' => array(),
+            'warehouse_id' => $warehouseId,
+            'warehouse_name' => $warehouseName,
+        );
     }
 }
 

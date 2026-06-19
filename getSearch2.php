@@ -40,7 +40,7 @@ if($searchType == 'buyer_username'){
 }else{
     if(sizeof($rstArr) == 0)
     {
-        $rstArr[0]['desc'] = '<i>No result</i>';
+        $rstArr[0]['desc'] = 'No Result';
         $rstArr[0]['val'] = "emptyValue";
     }
 
