@@ -43,10 +43,12 @@ $requestedReturnUrl = trim((string) input('return_url'));
 if ($requestedReturnUrl === '') {
     $requestedReturnUrl = trim((string) post('return_url'));
 }
+$back_redirect_page = $requestedReturnUrl !== ''
+    ? commonSafeBackUrl($requestedReturnUrl, $redirectPage)
+    : commonResolveBackUrl($redirectPage);
 if ($requestedReturnUrl !== '') {
-    $redirectPage = commonSafeBackUrl($requestedReturnUrl, $redirectPage);
+    $redirectPage = $back_redirect_page;
 }
-$back_redirect_page = $requestedReturnUrl !== '' ? commonSafeBackUrl($requestedReturnUrl, $redirectPage) : $redirectPage;
 $redirectLink = '<script>location.href=' . json_encode($redirectPage) . ';</script>';
 $clearLocalStorage = <<<'HTML'
 <script>

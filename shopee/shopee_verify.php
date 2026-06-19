@@ -281,8 +281,9 @@ if ($basePath !== '' && strpos($requestUri, $basePath . '/') === 0) {
     $requestUri = substr($requestUri, strlen($basePath));
 }
 $currentQueueUrl = $siteBaseUrl . ($requestUri !== '' ? $requestUri : '/shopee/shopee_verify.php');
-$redirectPage = $SITEURL . '/shopee/shopee_order_req.php';
-$addRequestUrl = $SITEURL . '/shopee/shopee_order_req.php?act=' . $act_1;
+$queueReturnUrl = rawurlencode($currentQueueUrl);
+$redirectPage = $SITEURL . '/shopee/shopee_order_req.php?return_url=' . $queueReturnUrl;
+$addRequestUrl = $redirectPage . '&act=' . $act_1;
 $deleteRedirectPage = $currentQueueUrl;
 $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_connect);
 $shopeeBuyerMetaMap = array();
@@ -789,8 +790,8 @@ if ($result instanceof mysqli_result) {
 shopeeOrderDetailPdfRenderVerifyModalScript(array(
     'modal_id' => 'sorVerifyOrderModal',
     'trigger_selector' => '.sor-verify-order-trigger',
-    'endpoint_template' => '../shopee/shopee_order_req.php?id=__ORDER_ID__&act=E',
-    'redirect_url' => rtrim((string) $SITEURL, '/') . '/shopee/shopee_verify.php',
+    'endpoint_template' => '../shopee/shopee_order_req.php?id=__ORDER_ID__&act=E&return_url=' . $queueReturnUrl,
+    'redirect_url' => $currentQueueUrl,
     'site_url' => rtrim((string) $SITEURL, '/'),
 ));
 ?>
