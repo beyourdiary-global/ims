@@ -555,8 +555,9 @@ if (!function_exists('taskDeleteRemovedEditorAttachments')) {
             }
 
             $safePath = taskEsc($connect, $previousPath);
+            $shouldDeleteFile = false;
             if (defined('TASK_ITEM_ATTACHMENT')) {
-                mysqli_query(
+                $deleteRst = mysqli_query(
                     $connect,
                     "UPDATE " . TASK_ITEM_ATTACHMENT . " SET
                         status='D',
@@ -565,10 +566,12 @@ if (!function_exists('taskDeleteRemovedEditorAttachments')) {
                         update_time='" . $safeTime . "'
                      WHERE item_id='" . $itemId . "' AND file_path='" . $safePath . "' AND status='A'"
                 );
+                $shouldDeleteFile = $deleteRst && mysqli_affected_rows($connect) > 0;
             }
 
-            taskDeleteEditorAttachmentFileByPath($previousPath);
-        }
+            if ($shouldDeleteFile) {
+                taskDeleteEditorAttachmentFileByPath($previousPath);
+            }
     }
 }
 
