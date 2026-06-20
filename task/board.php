@@ -627,6 +627,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
     if ($taskAction === 'get_item_worklogs') {
         $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        if ($itemId <= 0 || taskGetItemProjectId($connect, $itemId) !== $currentProjectId) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'Work item not found.'));
+        }
+
         taskJsonResponse(array(
             'ok' => 1,
             'worklogs' => taskGetItemWorklogs($connect, $itemId, 200),
