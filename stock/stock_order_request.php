@@ -724,9 +724,9 @@ if (post('actionBtn')) {
             if (!isset($err) && isset($_FILES['sor_stock_order_image'])) {
                 $stockOrderImageError = isset($_FILES['sor_stock_order_image']['error']) ? (int) $_FILES['sor_stock_order_image']['error'] : UPLOAD_ERR_NO_FILE;
                 if ($stockOrderImageError === UPLOAD_ERR_OK) {
-                    $stockOrderImageRelativeDir = 'attachment/stock_order_request_image/';
+                    $sqlAccountFolder = sorResolveSqlAccountFolderFromCompany($requestCompanyId, $companySqlAccountFolderMap);
+                    $stockOrderImageRelativeDir = 'attachment/' . $sqlAccountFolder . '/' . substr((string) comYMD, 0, 4) . '/' . substr((string) comYMD, 4, 2) . '/stock_order_request_image/';
                     $stockOrderImageFsDir = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . ltrim($stockOrderImageRelativeDir, '/\\');
-
                     if (!file_exists($stockOrderImageFsDir) && !mkdir($stockOrderImageFsDir, 0777, true)) {
                         $err = 'Failed to prepare stock order image folder.';
                     } else {
