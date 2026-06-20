@@ -62,6 +62,12 @@ if (!function_exists('systemAlertGetModuleConfigs')) {
                 'path' => '/campaign/campaign_follow_up_task.php',
                 'action_label' => 'Open Follow-Up',
             ),
+            'project_task' => array(
+                'pin_group_id' => 136,
+                'title' => 'Project Task',
+                'path' => '/task/board.php',
+                'action_label' => 'Open Work Item',
+            ),
             'waiting_admin_final_check' => array(
                 'pin_group_id' => 129,
                 'title' => 'Waiting Admin Final Check',

@@ -23,6 +23,9 @@ if (!function_exists('taskRenderBoardItemHistorySection')) {
                         <li class="nav-item" role="presentation">
                             <button id="taskItemActivityTabHistory" class="nav-link task-item-activity-tab" type="button" role="tab" aria-selected="false" aria-controls="taskItemActivityPanelHistory" data-tab-target="history">History</button>
                         </li>
+                        <li class="nav-item" role="presentation">
+                            <button id="taskItemActivityTabWorklog" class="nav-link task-item-activity-tab" type="button" role="tab" aria-selected="false" aria-controls="taskItemActivityPanelWorklog" data-tab-target="worklog">Work log</button>
+                        </li>
                     </ul>
                     <div class="task-item-activity-panel-head">
                         <button type="button" class="btn task-item-activity-sort-btn" title="Reverse sort direction" aria-label="Reverse sort direction">
@@ -31,13 +34,13 @@ if (!function_exists('taskRenderBoardItemHistorySection')) {
                     </div>
                 </div>
 
-                <div id="taskItemActivityPanelAll" class="task-item-activity-panel" role="tabpanel" aria-labelledby="taskItemActivityTabAll">
+                <div id="taskItemActivityPanelAll" class="task-item-activity-panel task-item-activity-tab-panel is-active" role="tabpanel" aria-labelledby="taskItemActivityTabAll">
                 <div id="taskItemActivityAllList" class="task-item-activity-feed">
                     <div class="task-item-activity-empty">No activity yet.</div>
                 </div>
                 </div>
 
-                <div id="taskItemActivityPanelComment" class="task-item-activity-panel d-none" role="tabpanel" aria-labelledby="taskItemActivityTabComment">
+                <div id="taskItemActivityPanelComment" class="task-item-activity-panel task-item-activity-tab-panel d-none" role="tabpanel" aria-labelledby="taskItemActivityTabComment">
                 <div id="taskItemCommentDraftNotice" class="task-item-comment-draft-line d-none">
                     <span id="taskItemCommentDraftRestoreBtn" class="task-item-comment-draft-link" role="button" tabindex="0">• You have an unsaved comment</span>
                 </div>
@@ -56,9 +59,15 @@ if (!function_exists('taskRenderBoardItemHistorySection')) {
                 </div>
                 </div>
 
-                <div id="taskItemActivityPanelHistory" class="task-item-activity-panel d-none" role="tabpanel" aria-labelledby="taskItemActivityTabHistory">
+                <div id="taskItemActivityPanelHistory" class="task-item-activity-panel task-item-activity-tab-panel d-none" role="tabpanel" aria-labelledby="taskItemActivityTabHistory">
                 <div id="taskItemActivityHistoryList" class="task-item-activity-feed">
                     <div class="task-item-activity-empty">No history yet.</div>
+                </div>
+                </div>
+
+                <div id="taskItemActivityPanelWorklog" class="task-item-activity-panel task-item-activity-tab-panel d-none" role="tabpanel" aria-labelledby="taskItemActivityTabWorklog">
+                <div id="taskItemActivityWorklogList" class="task-item-activity-feed">
+                    <div class="task-item-activity-empty">No work log yet.</div>
                 </div>
                 </div>
             </div>

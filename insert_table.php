@@ -2432,6 +2432,152 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Failed creating `" . TASK_ITEM_RELATION . "`: " . $conn->error . "</p>";
     }
 
+    $createTaskItemLinkSql = "CREATE TABLE IF NOT EXISTS `" . TASK_ITEM_LINK . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `project_id` INT NOT NULL,
+        `source_item_id` INT NOT NULL,
+        `target_item_id` INT NOT NULL,
+        `relation_type` VARCHAR(80) NOT NULL,
+        `remark` VARCHAR(255) DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_project_source_status` (`project_id`, `source_item_id`, `status`),
+        KEY `idx_project_target_status` (`project_id`, `target_item_id`, `status`),
+        KEY `idx_relation_type` (`relation_type`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+
+    if ($conn->query($createTaskItemLinkSql)) {
+        echo "<p style='color:green;'>Verified table `" . TASK_ITEM_LINK . "` for task item linked-work-item relations.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . TASK_ITEM_LINK . "`: " . $conn->error . "</p>";
+    }
+
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'project_id',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD COLUMN `project_id` INT NOT NULL AFTER `id`",
+        "Verified `" . TASK_ITEM_LINK . "` includes `project_id`."
+    );
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'source_item_id',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD COLUMN `source_item_id` INT NOT NULL AFTER `project_id`",
+        "Verified `" . TASK_ITEM_LINK . "` includes `source_item_id`."
+    );
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'target_item_id',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD COLUMN `target_item_id` INT NOT NULL AFTER `source_item_id`",
+        "Verified `" . TASK_ITEM_LINK . "` includes `target_item_id`."
+    );
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'relation_type',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD COLUMN `relation_type` VARCHAR(80) NOT NULL AFTER `target_item_id`",
+        "Verified `" . TASK_ITEM_LINK . "` includes `relation_type`."
+    );
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'remark',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD COLUMN `remark` VARCHAR(255) DEFAULT NULL AFTER `relation_type`",
+        "Verified `" . TASK_ITEM_LINK . "` includes `remark`."
+    );
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'create_by',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD COLUMN `create_by` VARCHAR(30) DEFAULT NULL AFTER `remark`",
+        "Verified `" . TASK_ITEM_LINK . "` includes `create_by`."
+    );
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'create_date',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD COLUMN `create_date` DATE DEFAULT NULL AFTER `create_by`",
+        "Verified `" . TASK_ITEM_LINK . "` includes `create_date`."
+    );
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'create_time',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD COLUMN `create_time` TIME DEFAULT NULL AFTER `create_date`",
+        "Verified `" . TASK_ITEM_LINK . "` includes `create_time`."
+    );
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'update_by',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD COLUMN `update_by` VARCHAR(30) DEFAULT NULL AFTER `create_time`",
+        "Verified `" . TASK_ITEM_LINK . "` includes `update_by`."
+    );
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'update_date',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD COLUMN `update_date` DATE DEFAULT NULL AFTER `update_by`",
+        "Verified `" . TASK_ITEM_LINK . "` includes `update_date`."
+    );
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'update_time',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD COLUMN `update_time` TIME DEFAULT NULL AFTER `update_date`",
+        "Verified `" . TASK_ITEM_LINK . "` includes `update_time`."
+    );
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'status',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A' AFTER `update_time`",
+        "Verified `" . TASK_ITEM_LINK . "` includes `status`."
+    );
+    migrationEnsureIndex(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'idx_project_source_status',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD INDEX `idx_project_source_status` (`project_id`, `source_item_id`, `status`)",
+        "Verified `" . TASK_ITEM_LINK . "` includes `idx_project_source_status`."
+    );
+    migrationEnsureIndex(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'idx_project_target_status',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD INDEX `idx_project_target_status` (`project_id`, `target_item_id`, `status`)",
+        "Verified `" . TASK_ITEM_LINK . "` includes `idx_project_target_status`."
+    );
+    migrationEnsureIndex(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'idx_relation_type',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD INDEX `idx_relation_type` (`relation_type`)",
+        "Verified `" . TASK_ITEM_LINK . "` includes `idx_relation_type`."
+    );
+
     $createTaskItemHistorySql = "CREATE TABLE IF NOT EXISTS `" . TASK_ITEM_HISTORY . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `item_id` INT NOT NULL,
@@ -2504,6 +2650,32 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Failed creating `" . TASK_ITEM_COMMENT_REPLY . "`: " . $conn->error . "</p>";
     }
 
+    $createTaskItemWorklogSql = "CREATE TABLE IF NOT EXISTS `" . TASK_ITEM_WORKLOG . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `item_id` INT NOT NULL,
+        `duration_seconds` INT NOT NULL DEFAULT 0,
+        `started_date` DATE DEFAULT NULL,
+        `started_time` TIME DEFAULT NULL,
+        `work_description_html` MEDIUMTEXT DEFAULT NULL,
+        `work_description_text` TEXT DEFAULT NULL,
+        `remaining_seconds_snapshot` INT DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_task_item_worklog_main` (`item_id`, `status`, `started_date`, `started_time`),
+        KEY `idx_task_item_worklog_created` (`create_date`, `create_time`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createTaskItemWorklogSql)) {
+        echo "<p style='color:green;'>Verified table `" . TASK_ITEM_WORKLOG . "` for task item worklogs.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . TASK_ITEM_WORKLOG . "`: " . $conn->error . "</p>";
+    }
+
     // MIGRATION: Update indexes for existing Task Item Comment tables
 
     // 1. Migration for TASK_ITEM_COMMENT
@@ -2567,6 +2739,7 @@ if ($conn->select_db($db_cms)) {
     migrationEnsureIndex($conn, $db_cms, TASK_PROJECT_KEY, 'idx_task_project_key_project', "ALTER TABLE `" . TASK_PROJECT_KEY . "` ADD INDEX `idx_task_project_key_project` (`project_id`, `status`)", "Verified `" . TASK_PROJECT_KEY . "` project index.");
 
     migrationEnsureColumn($conn, $db_cms, TASK_ITEM, 'project_id', "ALTER TABLE `" . TASK_ITEM . "` ADD COLUMN `project_id` INT DEFAULT NULL AFTER `id`", "Verified `" . TASK_ITEM . "` includes `project_id`.");
+    migrationEnsureColumn($conn, $db_cms, TASK_ITEM, 'remaining_estimate_seconds', "ALTER TABLE `" . TASK_ITEM . "` ADD COLUMN `remaining_estimate_seconds` INT DEFAULT NULL AFTER `original_estimate`", "Verified `" . TASK_ITEM . "` includes `remaining_estimate_seconds`.");
     migrationEnsureIndex($conn, $db_cms, TASK_ITEM, 'idx_task_item_project', "ALTER TABLE `" . TASK_ITEM . "` ADD INDEX `idx_task_item_project` (`project_id`, `column_id`, `sort_order`)", "Verified `" . TASK_ITEM . "` project index.");
 
     migrationEnsureColumn($conn, $db_cms, TASK_SHEETS, 'project_id', "ALTER TABLE `" . TASK_SHEETS . "` ADD COLUMN `project_id` INT DEFAULT NULL AFTER `id`", "Verified `" . TASK_SHEETS . "` includes `project_id`.");

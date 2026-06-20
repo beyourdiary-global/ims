@@ -8,6 +8,7 @@
   var $ = window.jQuery;
   var COMMENT_EDITOR_ID = "taskItemCommentEditor";
   var DESCRIPTION_EDITOR_ID = "taskItemDetailDescriptionInput";
+  var WORKLOG_EDITOR_ID = "taskItemWorklogDescriptionInput";
   var REPLY_EDITOR_PREFIX = "taskItemReplyEditor_";
   var REPLY_EDIT_EDITOR_PREFIX = "taskItemReplyEditEditor_";
   var EDIT_EDITOR_PREFIX = "taskItemEditEditor_";
@@ -32,6 +33,7 @@
   var editCommentDraftTimerByCommentId = {};
   var editReplyDraftTimerByReplyId = {};
   var descriptionDraftTimer = 0;
+  var uploadedEditorAttachmentPaths = {};
   var draftItemContextId = 0;
   var descriptionDraftClearedByUser = false; // set when user explicitly saves or cancels
   var capturedInitialDescription = ""; // captured at modal open, before task_board.js clears it
@@ -284,7 +286,10 @@
       seen[key] = true;
       result.push({
         type: "autocompleteitem",
-        value: "@" + displayName,
+        value: JSON.stringify({
+          userId: Number(row.id || 0),
+          name: displayName,
+        }),
         text: displayName,
       });
 
@@ -294,6 +299,24 @@
     }
 
     return result;
+  }
+
+  function buildMentionInsertHtml(userId, displayName) {
+    var resolvedUserId = Number(userId || 0);
+    var resolvedName = String(displayName || "").trim();
+    if (!resolvedName) {
+      return "";
+    }
+
+    return (
+      '<span class="task-editor-mention" data-mention-user-id="' +
+      escAttr(String(resolvedUserId > 0 ? resolvedUserId : 0)) +
+      '" data-mention-user-name="' +
+      escAttr(resolvedName) +
+      '" contenteditable="false">@' +
+      escHtml(resolvedName) +
+      "</span>"
+    );
   }
 
   function registerMentionAutocompleter(editor) {
@@ -310,8 +333,23 @@
           return Promise.resolve(buildMentionSuggestions(pattern, maxResults));
         },
         onAction: function (autocompleteApi, rng, value) {
+          var payload = {};
+          try {
+            payload = JSON.parse(String(value || "{}"));
+          } catch (err) {
+            payload = {};
+          }
+
+          var mentionHtml = buildMentionInsertHtml(
+            payload.userId,
+            payload.name,
+          );
+          if (!mentionHtml) {
+            mentionHtml = String(value || "");
+          }
+
           editor.selection.setRng(rng);
-          editor.insertContent(String(value || "") + "&nbsp;");
+          editor.insertContent(mentionHtml + "&nbsp;");
           autocompleteApi.hide();
         },
       });
@@ -421,6 +459,67 @@
     );
   }
 
+  function getEditorAttachmentTrackKey(opts) {
+    var settings = opts && typeof opts === "object" ? opts : {};
+    if (settings.isDescription) {
+      return "description";
+    }
+    if (settings.isEditReply) {
+      return "reply_edit_" + String(Number(settings.replyId || 0));
+    }
+    if (settings.isReply) {
+      return "reply_" + String(Number(settings.commentId || 0));
+    }
+    if (settings.isEditComment) {
+      return "comment_edit_" + String(Number(settings.commentId || 0));
+    }
+    return "comment";
+  }
+
+  function rememberEditorUploadedAttachmentPath(opts, filePath) {
+    var path = String(filePath || "").trim();
+    if (!path) {
+      return;
+    }
+
+    var key = getEditorAttachmentTrackKey(opts);
+    if (!uploadedEditorAttachmentPaths[key]) {
+      uploadedEditorAttachmentPaths[key] = [];
+    }
+
+    if (uploadedEditorAttachmentPaths[key].indexOf(path) === -1) {
+      uploadedEditorAttachmentPaths[key].push(path);
+    }
+  }
+
+  function getEditorUploadedAttachmentPaths(key) {
+    var resolvedKey = String(key || "comment");
+    return uploadedEditorAttachmentPaths[resolvedKey]
+      ? uploadedEditorAttachmentPaths[resolvedKey].slice()
+      : [];
+  }
+
+  function clearEditorUploadedAttachmentPaths(key) {
+    var resolvedKey = String(key || "comment");
+    uploadedEditorAttachmentPaths[resolvedKey] = [];
+  }
+
+  window.getDescriptionUploadedAttachmentPaths = function () {
+    return getEditorUploadedAttachmentPaths("description");
+  };
+
+  window.clearDescriptionUploadedAttachmentPaths = function () {
+    clearEditorUploadedAttachmentPaths("description");
+  };
+
+  function isVideoMimeType(mimeType) {
+    return (
+      String(mimeType || "")
+        .toLowerCase()
+        .indexOf("video/") === 0
+    );
+  }
+
   function normalizeAttachmentUrl(filePath, fallbackUrl) {
     var direct = String(fallbackUrl || "").trim();
     if (/^https?:\/\//i.test(direct)) {
@@ -474,6 +573,17 @@
             filePath,
             String(attachment.file_url || "").trim(),
           );
+          rememberEditorUploadedAttachmentPath(
+            {
+              isDescription: isDescription,
+              isReply: isReply,
+              isEditComment: opts && opts.isEditComment,
+              isEditReply: opts && opts.isEditReply,
+              commentId: opts && opts.commentId,
+              replyId: opts && opts.replyId,
+            },
+            filePath,
+          );
           if (!fileUrl) {
             reject(new Error("Attachment URL is empty."));
             return;
@@ -516,6 +626,18 @@
       return;
     }
 
+    if (isVideoMimeType(mimeType)) {
+      editor.insertContent(
+        '<p><a href="' +
+          escAttr(fileUrl) +
+          '" target="_blank" rel="noopener noreferrer">' +
+          '<i class="fa-regular fa-file-video"></i> ' +
+          escHtml(fileName) +
+          "</a></p>",
+      );
+      return;
+    }
+
     editor.insertContent(
       '<p><a href="' +
         escAttr(fileUrl) +
@@ -535,7 +657,7 @@
     var input = document.createElement("input");
     input.type = "file";
     input.accept =
-      ".jpg,.jpeg,.png,.gif,.webp,.bmp,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip";
+      ".jpg,.jpeg,.png,.gif,.webp,.bmp,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip,.mp4,.mov,.webm,.avi,.mkv,video/mp4,video/quicktime,video/webm,video/x-msvideo,video/x-matroska";
 
     input.onchange = function () {
       var file = input.files && input.files[0] ? input.files[0] : null;
@@ -962,6 +1084,21 @@
       return String(editor.getContent() || "");
     }
     return String($("#" + DESCRIPTION_EDITOR_ID).val() || "");
+  }
+
+  function getWorklogEditorInstance() {
+    if (!window.tinymce || typeof window.tinymce.get !== "function") {
+      return null;
+    }
+    return window.tinymce.get(WORKLOG_EDITOR_ID);
+  }
+
+  function getWorklogEditorHtml() {
+    var editor = getWorklogEditorInstance();
+    if (editor) {
+      return String(editor.getContent() || "");
+    }
+    return String($("#" + WORKLOG_EDITOR_ID).val() || "");
   }
 
   function getDraftContextItemId() {
@@ -1502,6 +1639,10 @@
         return uploadCommentAttachment(blobInfo.blob(), {
           isDescription: isDescription,
           isReply: isReply,
+          isEditComment: opts && opts.isEditComment,
+          isEditReply: opts && opts.isEditReply,
+          commentId: opts && opts.commentId,
+          replyId: opts && opts.replyId,
         }).then(function (attachment) {
           return String(attachment.fileUrl || "");
         });
@@ -1509,7 +1650,14 @@
       content_style:
         "body { font-family: Segoe UI, Arial, sans-serif; font-size: 14px; line-height: 1.45; color: #24364d; } ul.task-editor-checklist { list-style: none; margin-left: 0; padding-left: 0; } ul.task-editor-checklist li { list-style: none; display: flex; align-items: flex-start; gap: 0.4rem; } ul.task-editor-checklist li input.task-editor-checkbox { margin-top: 0.28rem; flex: 0 0 auto; cursor: pointer; pointer-events: auto; }",
       setup: function (editor) {
-        editor._taskEditorContext = { isDescription: isDescription, isReply: isReply };
+        editor._taskEditorContext = {
+          isDescription: isDescription,
+          isReply: isReply,
+          isEditComment: opts && opts.isEditComment,
+          isEditReply: opts && opts.isEditReply,
+          commentId: opts && opts.commentId,
+          replyId: opts && opts.replyId,
+        };
         function findChecklistRowCheckbox(target) {
           if (!target || !target.closest) {
             return null;
@@ -1667,6 +1815,7 @@
           createBaseEditorConfig(
             selector,
             function (editor) {
+              registerMentionAutocompleter(editor);
               registerEditorToolbarControls(editor);
               editor.on("init", function () {
                 updateDescriptionDraftNotice();
@@ -1687,6 +1836,55 @@
       .then(function (editors) {
         return editors && editors.length ? editors[0] : null;
       });
+  };
+
+  window.ensureWorklogEditorReady = function () {
+    if (!window.tinymce || typeof window.tinymce.init !== "function") {
+      return Promise.resolve(null);
+    }
+
+    var existing = getWorklogEditorInstance();
+    if (existing) {
+      return Promise.resolve(existing);
+    }
+
+    return window.tinymce
+      .init(
+        Object.assign(
+          createBaseEditorConfig(
+            "#" + WORKLOG_EDITOR_ID,
+            function (editor) {
+              registerMentionAutocompleter(editor);
+              registerEditorToolbarControls(editor);
+            },
+            {},
+          ),
+          {
+            height: 170,
+            toolbar:
+              "blocks bold styles taskListControl forecolor taskSimpleLink undo redo",
+          },
+        ),
+      )
+      .then(function (editors) {
+        return editors && editors.length ? editors[0] : null;
+      });
+  };
+
+  window.getWorklogEditorContent = function () {
+    return getWorklogEditorHtml();
+  };
+
+  window.setWorklogEditorContent = function (html) {
+    var value = String(html || "");
+    var editor = getWorklogEditorInstance();
+    if (editor) {
+      editor.setContent(value);
+      editor.undoManager.clear();
+      editor.setDirty(false);
+      return;
+    }
+    $("#" + WORKLOG_EDITOR_ID).val(value);
   };
 
   function ensureCommentEditorReady() {
@@ -1771,7 +1969,7 @@
         editor.on("keyup input undo redo paste", function () {
           scheduleReplyDraftSave(id);
         });
-      }, { isReply: true });
+      }, { isReply: true, commentId: id });
       config.height = 120;
       config.toolbar =
         "blocks bold styles taskListControl forecolor taskFileUpload taskSimpleLink undo redo";
@@ -1834,7 +2032,7 @@
         editor.on("keyup input undo redo paste", function () {
           scheduleEditCommentDraftSave(id);
         });
-      });
+      }, { isEditComment: true, commentId: id });
       config.height = 140;
       config.toolbar =
         "blocks bold styles taskListControl forecolor taskFileUpload taskSimpleLink undo redo";
@@ -1894,7 +2092,7 @@
         editor.on("keyup input undo redo paste", function () {
           scheduleEditReplyDraftSave(id);
         });
-      }, { isReply: true });
+      }, { isReply: true, isEditReply: true, replyId: id });
       config.height = 130;
       config.toolbar =
         "blocks bold styles taskListControl forecolor taskFileUpload taskSimpleLink undo redo";
@@ -2231,12 +2429,14 @@
         task_action: "create_item_comment",
         item_id: itemId,
         comment_html: commentHtml,
+        comment_attachment_paths: getEditorUploadedAttachmentPaths("comment").join(","),
       },
       function (res) {
         commentSaving = false;
         itemDetailModalState.comments = Array.isArray(res.comments)
           ? res.comments.slice()
           : itemDetailModalState.comments;
+        clearEditorUploadedAttachmentPaths("comment");
         clearCommentDraft();
         closeCommentActionMenus();
         renderItemHistoryPanels();
@@ -2292,12 +2492,14 @@
         item_id: itemId,
         comment_id: id,
         reply_html: replyHtml,
+        reply_attachment_paths: getEditorUploadedAttachmentPaths("reply_" + String(id)).join(","),
       },
       function (res) {
         commentSaving = false;
         itemDetailModalState.comments = Array.isArray(res.comments)
           ? res.comments.slice()
           : itemDetailModalState.comments;
+        clearEditorUploadedAttachmentPaths("reply_" + String(id));
         clearReplyDraft(id);
         closeCommentActionMenus();
         renderItemHistoryPanels();
@@ -2348,12 +2550,14 @@
         item_id: itemId,
         comment_id: id,
         comment_html: commentHtml,
+        comment_attachment_paths: getEditorUploadedAttachmentPaths("comment_edit_" + String(id)).join(","),
       },
       function (res) {
         commentSaving = false;
         itemDetailModalState.comments = Array.isArray(res.comments)
           ? res.comments.slice()
           : itemDetailModalState.comments;
+        clearEditorUploadedAttachmentPaths("comment_edit_" + String(id));
         clearDraftCookie(getEditCommentDraftKey(id));
         clearDraftNoticeFlag(getEditCommentDraftNoticeKey(id));
         closeCommentActionMenus();
@@ -2428,12 +2632,14 @@
         item_id: itemId,
         reply_id: id,
         reply_html: replyHtml,
+        reply_attachment_paths: getEditorUploadedAttachmentPaths("reply_edit_" + String(id)).join(","),
       },
       function (res) {
         commentSaving = false;
         itemDetailModalState.comments = Array.isArray(res.comments)
           ? res.comments.slice()
           : itemDetailModalState.comments;
+        clearEditorUploadedAttachmentPaths("reply_edit_" + String(id));
         clearDraftCookie(getEditReplyDraftKey(id));
         clearDraftNoticeFlag(getEditReplyDraftNoticeKey(id));
         closeCommentActionMenus();

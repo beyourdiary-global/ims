@@ -62,6 +62,71 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     $safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
     $safePageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
 
+    $taskAttachmentVideoExts = array('mp4', 'mov', 'webm', 'avi', 'mkv');
+    $taskAttachmentAllowedExts = array('jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt', 'zip', 'mp4', 'mov', 'webm', 'avi', 'mkv');
+    $taskAttachmentAllowedMimes = array(
+        'image/jpeg',
+        'image/png',
+        'image/gif',
+        'image/webp',
+        'image/bmp',
+        'application/pdf',
+        'application/msword',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/vnd.ms-excel',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'text/csv',
+        'text/plain',
+        'application/zip',
+        'application/x-zip-compressed',
+        'video/mp4',
+        'video/quicktime',
+        'video/webm',
+        'video/x-msvideo',
+        'video/x-matroska',
+        'application/octet-stream'
+    );
+
+    $validateTaskAttachmentUpload = function ($file, $normalMaxSizeBytes, $normalMaxSizeLabel) use ($taskAttachmentAllowedExts, $taskAttachmentAllowedMimes, $taskAttachmentVideoExts) {
+        if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'File upload failed or no file selected.'));
+        }
+
+        $ext = strtolower(pathinfo((string) $file['name'], PATHINFO_EXTENSION));
+        if (!in_array($ext, $taskAttachmentAllowedExts, true)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'Invalid file extension. Allowed types: ' . implode(', ', $taskAttachmentAllowedExts) . '.'));
+        }
+
+        $isVideoFile = in_array($ext, $taskAttachmentVideoExts, true);
+        $maxSizeBytes = $isVideoFile ? 1073741824 : (int) $normalMaxSizeBytes;
+        if ((int) $file['size'] > $maxSizeBytes) {
+            taskJsonResponse(array(
+                'ok' => 0,
+                'message' => $isVideoFile ? 'Video files must not exceed 1GB.' : 'File exceeds the ' . $normalMaxSizeLabel . ' size limit.'
+            ));
+        }
+
+        $finfo = finfo_open(FILEINFO_MIME_TYPE);
+        $mime = $finfo ? finfo_file($finfo, $file['tmp_name']) : '';
+        if ($finfo) {
+            finfo_close($finfo);
+        }
+
+        if (!in_array((string) $mime, $taskAttachmentAllowedMimes, true)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'Invalid file format detected by server.'));
+        }
+
+        if ((string) $mime === 'application/octet-stream' && !$isVideoFile) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'Invalid file format detected by server.'));
+        }
+
+        return array(
+            'extension' => $ext,
+            'mime' => (string) $mime,
+            'is_video' => $isVideoFile,
+        );
+    };
+
     if ($taskAction === 'create_project') {
         if (!taskCanCreateProject($connect)) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to create project task.'));
@@ -147,9 +212,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         'upload_item_reply_attachment',
         'update_item_detail',
         'save_item_worklog',
+        'update_item_worklog',
+        'delete_item_worklog',
         'set_item_parent',
+        'search_child_work_items',
+        'create_child_work_item',
+        'link_existing_child_work_item',
         'create_item_web_link',
         'delete_item_web_link',
+        'search_link_work_items',
+        'create_item_link',
+        'delete_item_link',
         'upload_item_attachment',
         'delete_item_attachment',
         'delete_all_item_attachments',
@@ -160,6 +233,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     }
 
     if ($taskAction === 'create_item' && !$projectWorkItemCanAdd) {
+        taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to create work items in this project.'));
+    }
+
+    if ($taskAction === 'create_child_work_item' && !$projectWorkItemCanAdd) {
         taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to create work items in this project.'));
     }
 
@@ -188,6 +265,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have access to create work items in that status.'));
         }
         if ($targetWorkTypeId <= 0 || empty($projectAllowedWorkTypeIds) || !in_array($targetWorkTypeId, $projectAllowedWorkTypeIds, true)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have access to use that task type in this project.'));
+        }
+    }
+
+    if ($taskAction === 'create_child_work_item' && !$projectHasFullAccess) {
+        $targetWorkTypeId = isset($_POST['work_type_id']) ? (int) $_POST['work_type_id'] : 0;
+        if ($targetWorkTypeId > 0 && (empty($projectAllowedWorkTypeIds) || !in_array($targetWorkTypeId, $projectAllowedWorkTypeIds, true))) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have access to use that task type in this project.'));
         }
     }
@@ -439,7 +523,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             isset($_POST['description']) ? $_POST['description'] : null,
             $currentUserId,
             $cdate,
-            $ctime
+            $ctime,
+            isset($_POST['description_attachment_paths']) ? $_POST['description_attachment_paths'] : ''
         );
         taskJsonResponse($result);
     }
@@ -449,6 +534,78 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             $connect,
             isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0
         );
+        taskJsonResponse($result);
+    }
+
+    if ($taskAction === 'search_child_work_items') {
+        if (!taskIsActionAllowed('edit', $pinAccess)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to search child work items.'));
+        }
+
+        $parentItemId = isset($_POST['parent_item_id']) ? (int) $_POST['parent_item_id'] : 0;
+        taskJsonResponse(array(
+            'ok' => 1,
+            'items' => taskSearchChildWorkItems(
+                $connect,
+                $currentProjectId,
+                $parentItemId,
+                isset($_POST['keyword']) ? $_POST['keyword'] : ''
+            ),
+        ));
+    }
+
+    if ($taskAction === 'create_child_work_item') {
+        if (!taskIsActionAllowed('add', $pinAccess)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to create work item.'));
+        }
+
+        $parentItemId = isset($_POST['parent_item_id']) ? (int) $_POST['parent_item_id'] : 0;
+        $result = taskCreateChildWorkItem(
+            $connect,
+            $currentProjectId,
+            $parentItemId,
+            isset($_POST['title']) ? $_POST['title'] : '',
+            isset($_POST['work_type_id']) ? (int) $_POST['work_type_id'] : 0,
+            $currentUserId
+        );
+
+        if (!empty($result['ok']) && $parentItemId > 0) {
+            $detailResult = taskGetItemDetail($connect, $parentItemId);
+            if (!empty($detailResult['ok'])) {
+                $result['detail'] = isset($detailResult['detail']) ? $detailResult['detail'] : array();
+            }
+        }
+
+        taskJsonResponse($result);
+    }
+
+    if ($taskAction === 'link_existing_child_work_item') {
+        if (!taskIsActionAllowed('edit', $pinAccess)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to link child work items.'));
+        }
+
+        $parentItemId = isset($_POST['parent_item_id']) ? (int) $_POST['parent_item_id'] : 0;
+        $childItemId = isset($_POST['child_item_id']) ? (int) $_POST['child_item_id'] : 0;
+        if ($childItemId <= 0 && isset($_POST['child_value']) && trim((string) $_POST['child_value']) !== '') {
+            $resolvedChild = taskResolveWorkItemFromUrlOrKey($connect, $currentProjectId, isset($_POST['child_value']) ? $_POST['child_value'] : '');
+            $childItemId = isset($resolvedChild['id']) ? (int) $resolvedChild['id'] : 0;
+        }
+
+        $result = taskLinkExistingChildWorkItem(
+            $connect,
+            $currentProjectId,
+            $parentItemId,
+            $childItemId,
+            $currentUserId
+        );
+
+        if (!empty($result['ok']) && $parentItemId > 0) {
+            $detailResult = taskGetItemDetail($connect, $parentItemId);
+            if (!empty($detailResult['ok'])) {
+                $result['detail'] = isset($detailResult['detail']) ? $detailResult['detail'] : array();
+            }
+        }
+
         taskJsonResponse($result);
     }
 
@@ -468,6 +625,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         ));
     }
 
+    if ($taskAction === 'get_item_worklogs') {
+        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        taskJsonResponse(array(
+            'ok' => 1,
+            'worklogs' => taskGetItemWorklogs($connect, $itemId, 200),
+        ));
+    }
+
     if ($taskAction === 'create_item_comment') {
         if (!taskIsActionAllowed('edit', $pinAccess)) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to add comments.'));
@@ -479,7 +644,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             isset($_POST['comment_html']) ? $_POST['comment_html'] : '',
             $currentUserId,
             $cdate,
-            $ctime
+            $ctime,
+            isset($_POST['comment_attachment_paths']) ? $_POST['comment_attachment_paths'] : ''
         );
         taskJsonResponse($result);
     }
@@ -496,7 +662,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             isset($_POST['reply_html']) ? $_POST['reply_html'] : '',
             $currentUserId,
             $cdate,
-            $ctime
+            $ctime,
+            isset($_POST['reply_attachment_paths']) ? $_POST['reply_attachment_paths'] : ''
         );
         taskJsonResponse($result);
     }
@@ -513,7 +680,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             isset($_POST['comment_html']) ? $_POST['comment_html'] : '',
             $currentUserId,
             $cdate,
-            $ctime
+            $ctime,
+            isset($_POST['comment_attachment_paths']) ? $_POST['comment_attachment_paths'] : ''
         );
         taskJsonResponse($result);
     }
@@ -530,7 +698,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             isset($_POST['reply_html']) ? $_POST['reply_html'] : '',
             $currentUserId,
             $cdate,
-            $ctime
+            $ctime,
+            isset($_POST['reply_attachment_paths']) ? $_POST['reply_attachment_paths'] : ''
         );
         taskJsonResponse($result);
     }
@@ -575,47 +744,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
         $file = isset($_FILES['attachment']) ? $_FILES['attachment'] : null;
 
-        if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
-            taskJsonResponse(array('ok' => 0, 'message' => 'File upload failed or no file selected.'));
-        }
-
-        $maxSizeBytes = 50 * 1024 * 1024;
-        if ((int) $file['size'] > $maxSizeBytes) {
-            taskJsonResponse(array('ok' => 0, 'message' => 'File exceeds the 50MB size limit.'));
-        }
-
-        $allowedExts = array('jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt', 'zip');
-        $ext = strtolower(pathinfo((string) $file['name'], PATHINFO_EXTENSION));
-        if (!in_array($ext, $allowedExts, true)) {
-            taskJsonResponse(array('ok' => 0, 'message' => 'Invalid file extension. Allowed types: ' . implode(', ', $allowedExts) . '.'));
-        }
-
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-        $mime = $finfo ? finfo_file($finfo, $file['tmp_name']) : '';
-        if ($finfo) {
-            finfo_close($finfo);
-        }
-
-        $allowedMimes = array(
-            'image/jpeg',
-            'image/png',
-            'image/gif',
-            'image/webp',
-            'image/bmp',
-            'application/pdf',
-            'application/msword',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'application/vnd.ms-excel',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'text/csv',
-            'text/plain',
-            'application/zip',
-            'application/x-zip-compressed'
-        );
-
-        if (!in_array((string) $mime, $allowedMimes, true)) {
-            taskJsonResponse(array('ok' => 0, 'message' => 'Invalid file format detected by server.'));
-        }
+        $validateTaskAttachmentUpload($file, 50 * 1024 * 1024, '50MB');
 
         $result = taskUploadItemCommentAttachment(
             $connect,
@@ -637,47 +766,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
         $file = isset($_FILES['attachment']) ? $_FILES['attachment'] : null;
 
-        if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
-            taskJsonResponse(array('ok' => 0, 'message' => 'File upload failed or no file selected.'));
-        }
-
-        $maxSizeBytes = 50 * 1024 * 1024;
-        if ((int) $file['size'] > $maxSizeBytes) {
-            taskJsonResponse(array('ok' => 0, 'message' => 'File exceeds the 50MB size limit.'));
-        }
-
-        $allowedExts = array('jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt', 'zip');
-        $ext = strtolower(pathinfo((string) $file['name'], PATHINFO_EXTENSION));
-        if (!in_array($ext, $allowedExts, true)) {
-            taskJsonResponse(array('ok' => 0, 'message' => 'Invalid file extension. Allowed types: ' . implode(', ', $allowedExts) . '.'));
-        }
-
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-        $mime = $finfo ? finfo_file($finfo, $file['tmp_name']) : '';
-        if ($finfo) {
-            finfo_close($finfo);
-        }
-
-        $allowedMimes = array(
-            'image/jpeg',
-            'image/png',
-            'image/gif',
-            'image/webp',
-            'image/bmp',
-            'application/pdf',
-            'application/msword',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'application/vnd.ms-excel',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'text/csv',
-            'text/plain',
-            'application/zip',
-            'application/x-zip-compressed'
-        );
-
-        if (!in_array((string) $mime, $allowedMimes, true)) {
-            taskJsonResponse(array('ok' => 0, 'message' => 'Invalid file format detected by server.'));
-        }
+        $validateTaskAttachmentUpload($file, 50 * 1024 * 1024, '50MB');
 
         $result = taskUploadItemDescriptionAttachment(
             $connect,
@@ -699,47 +788,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
         $file = isset($_FILES['attachment']) ? $_FILES['attachment'] : null;
 
-        if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
-            taskJsonResponse(array('ok' => 0, 'message' => 'File upload failed or no file selected.'));
-        }
-
-        $maxSizeBytes = 50 * 1024 * 1024;
-        if ((int) $file['size'] > $maxSizeBytes) {
-            taskJsonResponse(array('ok' => 0, 'message' => 'File exceeds the 50MB size limit.'));
-        }
-
-        $allowedExts = array('jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt', 'zip');
-        $ext = strtolower(pathinfo((string) $file['name'], PATHINFO_EXTENSION));
-        if (!in_array($ext, $allowedExts, true)) {
-            taskJsonResponse(array('ok' => 0, 'message' => 'Invalid file extension. Allowed types: ' . implode(', ', $allowedExts) . '.'));
-        }
-
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-        $mime = $finfo ? finfo_file($finfo, $file['tmp_name']) : '';
-        if ($finfo) {
-            finfo_close($finfo);
-        }
-
-        $allowedMimes = array(
-            'image/jpeg',
-            'image/png',
-            'image/gif',
-            'image/webp',
-            'image/bmp',
-            'application/pdf',
-            'application/msword',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'application/vnd.ms-excel',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'text/csv',
-            'text/plain',
-            'application/zip',
-            'application/x-zip-compressed'
-        );
-
-        if (!in_array((string) $mime, $allowedMimes, true)) {
-            taskJsonResponse(array('ok' => 0, 'message' => 'Invalid file format detected by server.'));
-        }
+        $validateTaskAttachmentUpload($file, 50 * 1024 * 1024, '50MB');
 
         $result = taskUploadItemReplyAttachment(
             $connect,
@@ -855,6 +904,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             $durationSeconds,
             $currentUserId,
             $cdate,
+            $ctime,
+            array(
+                'started_date' => isset($_POST['started_date']) ? $_POST['started_date'] : '',
+                'started_time' => isset($_POST['started_time']) ? $_POST['started_time'] : '',
+                'work_description_html' => isset($_POST['work_description_html']) ? $_POST['work_description_html'] : '',
+                'remaining_seconds' => isset($_POST['remaining_seconds']) ? (int) $_POST['remaining_seconds'] : null,
+            )
+        );
+
+        taskJsonResponse($result);
+    }
+
+    if ($taskAction === 'update_item_worklog') {
+        if (!taskIsActionAllowed('edit', $pinAccess)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to edit worklog.'));
+        }
+
+        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $worklogId = isset($_POST['worklog_id']) ? (int) $_POST['worklog_id'] : 0;
+        $detail = $loadItemDetailForPermission($itemId);
+        $durationSeconds = isset($_POST['duration_seconds']) ? (int) $_POST['duration_seconds'] : 0;
+        $oldSeconds = isset($detail['own_time_tracking_seconds']) ? (int) $detail['own_time_tracking_seconds'] : 0;
+        $requireColumnTransition('time_tracking', $oldSeconds, max(0, $oldSeconds));
+
+        $result = taskUpdateItemWorklog(
+            $connect,
+            $itemId,
+            $worklogId,
+            $durationSeconds,
+            $currentUserId,
+            $cdate,
+            $ctime,
+            array(
+                'started_date' => isset($_POST['started_date']) ? $_POST['started_date'] : '',
+                'started_time' => isset($_POST['started_time']) ? $_POST['started_time'] : '',
+                'work_description_html' => isset($_POST['work_description_html']) ? $_POST['work_description_html'] : '',
+                'remaining_seconds' => isset($_POST['remaining_seconds']) ? (int) $_POST['remaining_seconds'] : null,
+            )
+        );
+
+        taskJsonResponse($result);
+    }
+
+    if ($taskAction === 'delete_item_worklog') {
+        if (!taskIsActionAllowed('edit', $pinAccess)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to delete worklog.'));
+        }
+
+        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $worklogId = isset($_POST['worklog_id']) ? (int) $_POST['worklog_id'] : 0;
+        $detail = $loadItemDetailForPermission($itemId);
+        $oldSeconds = isset($detail['own_time_tracking_seconds']) ? (int) $detail['own_time_tracking_seconds'] : 0;
+        $requireColumnTransition('time_tracking', $oldSeconds, max(0, $oldSeconds));
+
+        $result = taskDeleteItemWorklog(
+            $connect,
+            $itemId,
+            $worklogId,
+            isset($_POST['adjust_remaining']) ? (int) $_POST['adjust_remaining'] : 1,
+            isset($_POST['remaining_seconds']) ? (int) $_POST['remaining_seconds'] : 0,
+            $currentUserId,
+            $cdate,
             $ctime
         );
 
@@ -910,6 +1021,88 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         }
 
         taskJsonResponse($result);
+    }
+
+    if ($taskAction === 'search_link_work_items') {
+        if (!taskIsActionAllowed('edit', $pinAccess)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to search linked work items.'));
+        }
+
+        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        taskJsonResponse(array(
+            'ok' => 1,
+            'items' => taskSearchLinkWorkItems(
+                $connect,
+                $currentProjectId,
+                $itemId,
+                isset($_POST['keyword']) ? $_POST['keyword'] : '',
+                isset($_POST['relation_type']) ? $_POST['relation_type'] : ''
+            ),
+        ));
+    }
+
+    if ($taskAction === 'create_item_link') {
+        if (!taskIsActionAllowed('edit', $pinAccess)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to add linked work items.'));
+        }
+
+        $sourceItemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $targetItemId = isset($_POST['target_item_id']) ? (int) $_POST['target_item_id'] : 0;
+        if ($targetItemId <= 0 && isset($_POST['target_value']) && trim((string) $_POST['target_value']) !== '') {
+            $resolvedTarget = taskResolveWorkItemFromUrlOrKey($connect, $currentProjectId, isset($_POST['target_value']) ? $_POST['target_value'] : '');
+            $targetItemId = isset($resolvedTarget['id']) ? (int) $resolvedTarget['id'] : 0;
+        }
+
+        $result = taskCreateItemLink(
+            $connect,
+            $currentProjectId,
+            $sourceItemId,
+            $targetItemId,
+            isset($_POST['relation_type']) ? $_POST['relation_type'] : '',
+            $currentUserId
+        );
+
+        if (!empty($result['ok']) && $sourceItemId > 0) {
+            $result['itemLinks'] = taskGetItemLinks($connect, $currentProjectId, $sourceItemId);
+            $detailResult = taskGetItemDetail($connect, $sourceItemId);
+            if (!empty($detailResult['ok'])) {
+                $result['detail'] = isset($detailResult['detail']) ? $detailResult['detail'] : array();
+            }
+        }
+
+        taskJsonResponse($result);
+    }
+
+    if ($taskAction === 'delete_item_link') {
+        if (!taskIsActionAllowed('edit', $pinAccess)) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to remove linked work items.'));
+        }
+
+        $currentItemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $result = taskDeleteItemLink(
+            $connect,
+            $currentProjectId,
+            isset($_POST['link_id']) ? (int) $_POST['link_id'] : 0,
+            $currentUserId
+        );
+
+        if (!empty($result['ok']) && $currentItemId > 0) {
+            $result['itemLinks'] = taskGetItemLinks($connect, $currentProjectId, $currentItemId);
+            $detailResult = taskGetItemDetail($connect, $currentItemId);
+            if (!empty($detailResult['ok'])) {
+                $result['detail'] = isset($detailResult['detail']) ? $detailResult['detail'] : array();
+            }
+        }
+
+        taskJsonResponse($result);
+    }
+
+    if ($taskAction === 'get_item_links') {
+        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        taskJsonResponse(array(
+            'ok' => 1,
+            'itemLinks' => taskGetItemLinks($connect, $currentProjectId, $itemId),
+        ));
     }
 
     if ($taskAction === 'delete_item_web_link') {
@@ -988,45 +1181,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $file = isset($_FILES['attachment']) ? $_FILES['attachment'] : null;
 
-        if (!$file || $file['error'] !== UPLOAD_ERR_OK) {
-            taskJsonResponse(array('ok' => 0, 'message' => 'File upload failed or no file selected.'));
-        }
-
-        // 1. Enforce max file size (e.g., 100MB)
-        $maxSizeBytes = 100 * 1024 * 1024; 
-        if ($file['size'] > $maxSizeBytes) {
-            taskJsonResponse(array('ok' => 0, 'message' => 'File exceeds the 100MB size limit.'));
-        }
-
-        // 2. Enforce extension allowlist
-        $allowedExts = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt', 'jpg', 'jpeg', 'png', 'gif', 'zip'];
-        $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
-        if (!in_array($ext, $allowedExts, true)) {
-            taskJsonResponse(array('ok' => 0, 'message' => 'Invalid file extension. Allowed types: ' . implode(', ', $allowedExts) . '.'));
-        }
-
-        // 3. Enforce MIME type validation (to prevent extension spoofing)
-        $finfo = finfo_open(FILEINFO_MIME_TYPE);
-        $mime = finfo_file($finfo, $file['tmp_name']);
-        finfo_close($finfo);
-
-        $allowedMimes = [
-            'application/pdf',
-            'application/msword',
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'application/vnd.ms-excel',
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            'application/zip',
-            'text/csv',
-            'text/plain',
-            'image/jpeg',
-            'image/png',
-            'image/gif'
-        ];
-
-        if (!in_array($mime, $allowedMimes, true)) {
-            taskJsonResponse(array('ok' => 0, 'message' => 'Invalid file format detected by server.'));
-        }
+        $validateTaskAttachmentUpload($file, 100 * 1024 * 1024, '100MB');
 
         $result = taskUploadItemAttachment(
             $connect,
@@ -1476,6 +1631,7 @@ window.taskBoardConfig = {
     assignees: <?= json_encode($assignees, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     labels: <?= json_encode($labels, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     statusLabels: <?= json_encode($statusLabels, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    linkRelationTypes: <?= json_encode(taskGetLinkRelationTypes(), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     columns: <?= json_encode($columns, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>
 };
 </script>

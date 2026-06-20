@@ -765,6 +765,7 @@ $(document).on("input", "#taskWorkTypeNameInput", function () {
 $(document).on("show.bs.modal", "#taskWorkTypeModal", function () {
   var $modal = $(this);
   var zIndex = 1080;
+  suspendTaskItemDetailModalInteraction();
   $modal.css("z-index", String(zIndex));
 
   window.setTimeout(function () {
@@ -783,6 +784,59 @@ $(document).on("hidden.bs.modal", "#taskWorkTypeModal", function () {
     .last()
     .removeClass("task-work-type-modal-backdrop")
     .css("z-index", "");
+  resumeTaskItemDetailModalInteraction();
+
+  if ($("#taskItemDetailModal").hasClass("show")) {
+    $("body").addClass("modal-open").css("overflow", "hidden");
+  }
+});
+
+$(document).on("show.bs.modal", "#taskItemWorklogModal, #taskItemWorklogDeleteModal", function () {
+  var $modal = $(this);
+  var zIndex = 1085;
+  suspendTaskItemDetailModalInteraction();
+  $modal.css("z-index", String(zIndex));
+
+  window.setTimeout(function () {
+    var $backdrop = $(".modal-backdrop").last();
+    if ($backdrop.length) {
+      $backdrop
+        .addClass("task-item-worklog-modal-backdrop")
+        .css("z-index", String(zIndex - 5));
+    }
+  }, 0);
+});
+
+$(document).on("shown.bs.modal", "#taskItemWorklogModal", function () {
+  var initialHtml = String($(this).attr("data-editor-html") || "");
+  if (typeof window.ensureWorklogEditorReady === "function") {
+    window.ensureWorklogEditorReady().then(function () {
+      if (typeof window.setWorklogEditorContent === "function") {
+        window.setWorklogEditorContent(initialHtml);
+      }
+      if (window.tinymce && typeof window.tinymce.get === "function") {
+        var editor = window.tinymce.get("taskItemWorklogDescriptionInput");
+        if (editor) {
+          editor.focus();
+          return;
+        }
+      }
+      $("#taskItemWorklogDescriptionInput").trigger("focus");
+    });
+    return;
+  }
+
+  $("#taskItemWorklogDescriptionInput").trigger("focus");
+});
+
+$(document).on("hidden.bs.modal", "#taskItemWorklogModal, #taskItemWorklogDeleteModal", function () {
+  $(this).css("z-index", "");
+  $(this).removeAttr("data-editor-html");
+  $(".modal-backdrop.task-item-worklog-modal-backdrop")
+    .last()
+    .removeClass("task-item-worklog-modal-backdrop")
+    .css("z-index", "");
+  resumeTaskItemDetailModalInteraction();
 
   if ($("#taskItemDetailModal").hasClass("show")) {
     $("body").addClass("modal-open").css("overflow", "hidden");
@@ -1819,6 +1873,406 @@ function getItemDetailModalInstance() {
   return bootstrap.Modal.getOrCreateInstance(modalEl);
 }
 
+function getTaskItemDetailFocusTrap(instance) {
+  if (!instance || typeof instance !== "object") {
+    return null;
+  }
+
+  return instance._focustrap || instance._focusTrap || null;
+}
+
+function suspendTaskItemDetailModalInteraction() {
+  var modalEl = document.getElementById("taskItemDetailModal");
+  if (!modalEl || !modalEl.classList.contains("show")) {
+    return;
+  }
+
+  var modal = getItemDetailModalInstance();
+  var focusTrap = getTaskItemDetailFocusTrap(modal);
+  if (focusTrap && typeof focusTrap.deactivate === "function") {
+    focusTrap.deactivate();
+  }
+}
+
+function resumeTaskItemDetailModalInteraction() {
+  var modalEl = document.getElementById("taskItemDetailModal");
+  if (!modalEl) {
+    return;
+  }
+
+  var hasChildModalOpen =
+    $("#taskWorkTypeModal.show, #taskItemWorklogModal.show, #taskItemWorklogDeleteModal.show")
+      .length > 0;
+  if (hasChildModalOpen) {
+    return;
+  }
+
+  if (!modalEl.classList.contains("show")) {
+    return;
+  }
+
+  var modal = getItemDetailModalInstance();
+  var focusTrap = getTaskItemDetailFocusTrap(modal);
+  if (focusTrap && typeof focusTrap.activate === "function") {
+    window.setTimeout(function () {
+      focusTrap.activate();
+    }, 0);
+  }
+}
+
+var worklogModalMode = "create";
+var worklogSaveInFlight = false;
+var worklogDeleteInFlight = false;
+
+function getItemWorklogModalInstance() {
+  var modalEl = document.getElementById("taskItemWorklogModal");
+  if (!modalEl || typeof bootstrap === "undefined" || !bootstrap.Modal) {
+    return null;
+  }
+  return bootstrap.Modal.getOrCreateInstance(modalEl);
+}
+
+function getItemWorklogDeleteModalInstance() {
+  var modalEl = document.getElementById("taskItemWorklogDeleteModal");
+  if (!modalEl || typeof bootstrap === "undefined" || !bootstrap.Modal) {
+    return null;
+  }
+  return bootstrap.Modal.getOrCreateInstance(modalEl);
+}
+
+function getCurrentWorklogRemainingSeconds() {
+  return Math.max(
+    0,
+    Number((itemDetailModalState.timeTracking || {}).ownRemainingSeconds || 0),
+  );
+}
+
+function getTaskWorklogById(worklogId) {
+  var id = Number(worklogId || 0);
+  var rows = Array.isArray(itemDetailModalState.worklogs)
+    ? itemDetailModalState.worklogs
+    : [];
+
+  for (var i = 0; i < rows.length; i++) {
+    if (Number((rows[i] || {}).id || 0) === id) {
+      return rows[i] || null;
+    }
+  }
+
+  return null;
+}
+
+function localDateInputValue(dateObj) {
+  var dt = dateObj instanceof Date ? dateObj : new Date();
+  var year = dt.getFullYear();
+  var month = String(dt.getMonth() + 1).padStart(2, "0");
+  var day = String(dt.getDate()).padStart(2, "0");
+  return year + "-" + month + "-" + day;
+}
+
+function localTimeInputValue(dateObj) {
+  var dt = dateObj instanceof Date ? dateObj : new Date();
+  var hours = String(dt.getHours()).padStart(2, "0");
+  var minutes = String(dt.getMinutes()).padStart(2, "0");
+  return hours + ":" + minutes;
+}
+
+function normalizeTimeInputValue(value, fallback) {
+  var text = String(value || "").trim();
+  if (!text) {
+    return String(fallback || "").trim();
+  }
+  if (/^\d{2}:\d{2}:\d{2}$/.test(text)) {
+    return text.substring(0, 5);
+  }
+  if (/^\d{2}:\d{2}$/.test(text)) {
+    return text;
+  }
+  return String(fallback || "").trim();
+}
+
+function setTaskWorklogModalBusy(isBusy) {
+  worklogSaveInFlight = !!isBusy;
+  $("#taskItemWorklogModal")
+    .find("input, textarea, button")
+    .prop("disabled", !!isBusy);
+}
+
+function setTaskWorklogDeleteModalBusy(isBusy) {
+  worklogDeleteInFlight = !!isBusy;
+  $("#taskItemWorklogDeleteModal")
+    .find("input, button")
+    .prop("disabled", !!isBusy);
+}
+
+function refreshWorklogDeleteRemainingPanel() {
+  var checked = $("#taskItemWorklogDeleteAdjustRemainingInput").is(":checked");
+  $("#taskItemWorklogDeleteRemainingPanel").toggleClass("d-none", !checked);
+}
+
+function updateWorklogDeleteDefaults() {
+  var deletedSeconds = Number($("#taskItemWorklogDeleteDurationSeconds").val() || 0);
+  var currentRemaining = getCurrentWorklogRemainingSeconds();
+  var nextRemaining = currentRemaining + Math.max(0, deletedSeconds);
+
+  $("#taskItemWorklogDeleteCurrentRemainingText").text(
+    formatDurationInputText(currentRemaining),
+  );
+  $("#taskItemWorklogDeleteRemainingInput").val(
+    formatDurationInputText(nextRemaining),
+  );
+  $("#taskItemWorklogDeleteHelpText").text(
+    "By default, deleted time (" +
+      formatDurationInputText(deletedSeconds) +
+      ") is added to the time remaining.",
+  );
+}
+
+function openTaskWorklogModal(mode, worklogRow, prefillDurationSeconds) {
+  var itemId = Number(itemDetailModalState.itemId || 0);
+  if (!itemId) {
+    return;
+  }
+  if (!canEdit) {
+    notify("You do not have permission to manage work logs.");
+    return;
+  }
+
+  var row = worklogRow && typeof worklogRow === "object" ? worklogRow : {};
+  var now = new Date();
+  var isEdit = String(mode || "create") === "edit";
+  var durationSeconds = isEdit
+    ? Number(row.duration_seconds || 0)
+    : Math.max(0, Number(prefillDurationSeconds || currentWorklogSeconds()));
+  var remainingSeconds = isEdit
+    ? Number(
+        row.remaining_seconds_snapshot != null
+          ? row.remaining_seconds_snapshot
+          : getCurrentWorklogRemainingSeconds(),
+      )
+    : Math.max(0, getCurrentWorklogRemainingSeconds() - durationSeconds);
+  var startedDate = isEdit
+    ? String(row.started_date || "").trim()
+    : localDateInputValue(now);
+  var startedTime = isEdit
+    ? normalizeTimeInputValue(row.started_time, localTimeInputValue(now))
+    : localTimeInputValue(now);
+  var descriptionHtml = isEdit
+    ? String(row.work_description_html || "").trim()
+    : "";
+
+  worklogModalMode = isEdit ? "edit" : "create";
+  $("#taskItemWorklogEntryId").val(isEdit ? Number(row.id || 0) : 0);
+  $("#taskItemWorklogModalTitle").text(isEdit ? "Edit work log" : "Log work");
+  $("#taskItemWorklogModalSummary")
+    .toggleClass("d-none", !isEdit)
+    .text(isEdit ? "Update the selected worklog entry." : "");
+  $("#taskItemWorklogDurationInput").val(
+    formatDurationInputText(durationSeconds),
+  );
+  $("#taskItemWorklogRemainingInput").val(
+    formatDurationInputText(remainingSeconds),
+  );
+  $("#taskItemWorklogStartedDateInput").val(startedDate);
+  $("#taskItemWorklogStartedTimeInput").val(startedTime);
+  $("#taskItemWorklogDescriptionInput").val(descriptionHtml);
+  $("#taskItemWorklogModal").attr("data-editor-html", descriptionHtml);
+  if (typeof window.setWorklogEditorContent === "function") {
+    window.setWorklogEditorContent(descriptionHtml);
+  }
+
+  setTaskWorklogModalBusy(false);
+  var modal = getItemWorklogModalInstance();
+  if (modal) {
+    modal.show();
+  }
+}
+
+window.openTaskWorklogCreateModal = function (prefillDurationSeconds) {
+  openTaskWorklogModal("create", null, prefillDurationSeconds);
+};
+
+function openTaskWorklogDeleteModal(worklogRow) {
+  var row = worklogRow && typeof worklogRow === "object" ? worklogRow : null;
+  if (!row || !Number(row.id || 0)) {
+    return;
+  }
+  if (!canEdit) {
+    notify("You do not have permission to manage work logs.");
+    return;
+  }
+
+  $("#taskItemWorklogDeleteEntryId").val(Number(row.id || 0));
+  $("#taskItemWorklogDeleteDurationSeconds").val(
+    Number(row.duration_seconds || 0),
+  );
+  $("#taskItemWorklogDeleteAdjustRemainingInput").prop("checked", true);
+  updateWorklogDeleteDefaults();
+  refreshWorklogDeleteRemainingPanel();
+  setTaskWorklogDeleteModalBusy(false);
+
+  var modal = getItemWorklogDeleteModalInstance();
+  if (modal) {
+    modal.show();
+  }
+}
+
+function syncWorklogResponse(res, options) {
+  var settings = options && typeof options === "object" ? options : {};
+  if (Array.isArray(res && res.worklogs)) {
+    itemDetailModalState.worklogs = res.worklogs.slice();
+  }
+  if (Array.isArray(res && res.history)) {
+    itemDetailModalState.history = res.history.slice();
+  }
+  if (res && res.detail && typeof res.detail === "object") {
+    updateCardFromDetail(res.detail);
+    renderDetailTimeTracking(
+      res.detail,
+      Number($("#taskItemDetailEstimateValueInput").val() || 0),
+      String($("#taskItemDetailEstimateUnitInput").val() || "minutes"),
+    );
+    if (typeof renderDetailMeta === "function") {
+      renderDetailMeta(res.detail);
+    }
+  } else if (!settings.skipDetailReload) {
+    loadItemDetail(Number(itemDetailModalState.itemId || 0));
+  }
+  renderItemHistoryPanels();
+}
+
+function getTaskWorklogEditorHtml() {
+  if (typeof window.getWorklogEditorContent === "function") {
+    return String(window.getWorklogEditorContent() || "");
+  }
+  return String($("#taskItemWorklogDescriptionInput").val() || "");
+}
+
+function submitTaskWorklogModal() {
+  if (worklogSaveInFlight) {
+    return;
+  }
+
+  var itemId = Number(itemDetailModalState.itemId || 0);
+  var worklogId = Number($("#taskItemWorklogEntryId").val() || 0);
+  var durationText = String($("#taskItemWorklogDurationInput").val() || "").trim();
+  var remainingText = String($("#taskItemWorklogRemainingInput").val() || "").trim();
+  var startedDate = String($("#taskItemWorklogStartedDateInput").val() || "").trim();
+  var startedTime = String($("#taskItemWorklogStartedTimeInput").val() || "").trim();
+  var durationSeconds = parseDurationTextToSeconds(durationText);
+  var remainingSeconds = remainingText
+    ? parseDurationTextToSeconds(remainingText)
+    : 0;
+
+  if (!itemId) {
+    return;
+  }
+  if (durationSeconds <= 0) {
+    notify("Time spent must be greater than 0.");
+    return;
+  }
+  if (!startedDate) {
+    notify("Date started is required.");
+    return;
+  }
+  if (!startedTime) {
+    notify("Time started is required.");
+    return;
+  }
+
+  setTaskWorklogModalBusy(true);
+  postAction(
+    {
+      task_action:
+        worklogModalMode === "edit"
+          ? "update_item_worklog"
+          : "save_item_worklog",
+      item_id: itemId,
+      worklog_id: worklogId,
+      duration_seconds: durationSeconds,
+      remaining_seconds: Math.max(0, remainingSeconds),
+      started_date: startedDate,
+      started_time: startedTime,
+      work_description_html: getTaskWorklogEditorHtml(),
+    },
+    function (res) {
+      setTaskWorklogModalBusy(false);
+      syncWorklogResponse(res);
+      setItemActivityTab("worklog");
+
+      if (worklogModalMode === "create") {
+        worklogTimerState.elapsedSeconds = 0;
+        worklogTimerState.running = false;
+        worklogTimerState.startedAtMs = 0;
+        persistWorklogTimerState();
+        applyWorklogTimerUi();
+      }
+
+      var modal = getItemWorklogModalInstance();
+      if (modal) {
+        modal.hide();
+      }
+
+      showBoardToast(
+        worklogModalMode === "edit" ? "Work log updated" : "Work log saved",
+        worklogModalMode === "edit"
+          ? "The work log entry was updated successfully."
+          : "The work log entry was saved successfully.",
+      );
+    },
+    function () {
+      setTaskWorklogModalBusy(false);
+    },
+  );
+}
+
+function submitTaskWorklogDelete() {
+  if (worklogDeleteInFlight) {
+    return;
+  }
+
+  var itemId = Number(itemDetailModalState.itemId || 0);
+  var worklogId = Number($("#taskItemWorklogDeleteEntryId").val() || 0);
+  var adjustRemaining = $("#taskItemWorklogDeleteAdjustRemainingInput").is(":checked");
+  var remainingText = String($("#taskItemWorklogDeleteRemainingInput").val() || "").trim();
+  var remainingSeconds = remainingText
+    ? parseDurationTextToSeconds(remainingText)
+    : 0;
+
+  if (!itemId || !worklogId) {
+    return;
+  }
+
+  setTaskWorklogDeleteModalBusy(true);
+  postAction(
+    {
+      task_action: "delete_item_worklog",
+      item_id: itemId,
+      worklog_id: worklogId,
+      adjust_remaining: adjustRemaining ? 1 : 0,
+      remaining_seconds: Math.max(0, remainingSeconds),
+    },
+    function (res) {
+      setTaskWorklogDeleteModalBusy(false);
+      syncWorklogResponse(res);
+      setItemActivityTab("worklog");
+
+      var modal = getItemWorklogDeleteModalInstance();
+      if (modal) {
+        modal.hide();
+      }
+
+      showBoardToast(
+        "Work log deleted",
+        "The work log entry was deleted successfully.",
+      );
+    },
+    function () {
+      setTaskWorklogDeleteModalBusy(false);
+    },
+  );
+}
+
 function buildAttachmentUrl(filePath) {
   var path = String(filePath || "")
     .trim()
@@ -1846,7 +2300,27 @@ function formatAttachmentSize(bytes) {
   if (size < 1024 * 1024) {
     return Math.max(1, Math.round(size / 1024)) + " KB";
   }
-  return (size / (1024 * 1024)).toFixed(1).replace(/\.0$/, "") + " MB";
+  if (size < 1024 * 1024 * 1024) {
+    return (size / (1024 * 1024)).toFixed(1).replace(/\.0$/, "") + " MB";
+  }
+  return (size / (1024 * 1024 * 1024)).toFixed(2).replace(/\.00$/, "") + " GB";
+}
+
+function isTaskAttachmentVideoFile(item) {
+  var mimeType = String((item && item.mime_type) || "").toLowerCase();
+  var fileName = String((item && item.file_name) || "").toLowerCase();
+  return (
+    mimeType.indexOf("video/") === 0 ||
+    /\.(mp4|mov|webm|avi|mkv)$/i.test(fileName)
+  );
+}
+
+function getTaskAttachmentIconHtml(item) {
+  if (isTaskAttachmentVideoFile(item)) {
+    return '<i class="fa-regular fa-file-video"></i>';
+  }
+
+  return '<i class="fa-regular fa-file-lines"></i>';
 }
 
 function attachmentTimestamp(item) {
@@ -2044,7 +2518,9 @@ function renderItemAttachments(attachments) {
         '" target="_blank" rel="noopener" title="' +
         escHtml(fileName) +
         '">' +
-        '<span class="task-item-attachment-tile-preview"><i class="fa-regular fa-file-lines"></i></span>' +
+        '<span class="task-item-attachment-tile-preview">' +
+        getTaskAttachmentIconHtml(item) +
+        "</span>" +
         '<span class="task-item-attachment-tile-name">' +
         escHtml(fileName) +
         "</span>" +
@@ -2333,6 +2809,10 @@ function saveItemCoreFromModal(closeAfterSave) {
       item_id: itemId,
       title: title,
       description: description,
+      description_attachment_paths:
+        typeof window.getDescriptionUploadedAttachmentPaths === "function"
+          ? window.getDescriptionUploadedAttachmentPaths().join(",")
+          : "",
     },
     function () {
       var $card = $(itemDetailModalState.cardEl || null);
@@ -2385,6 +2865,10 @@ function saveItemCoreFromModal(closeAfterSave) {
         typeof window.taskBoardDescriptionDraft.clear === "function"
       ) {
         window.taskBoardDescriptionDraft.clear();
+      }
+
+      if (typeof window.clearDescriptionUploadedAttachmentPaths === "function") {
+        window.clearDescriptionUploadedAttachmentPaths();
       }
 
       if (closeAfterSave) {
@@ -2504,8 +2988,11 @@ function openItemDetailModal($card) {
   itemDetailModalState.timeTracking = {
     ownText: "No time logged",
     ownSeconds: 0,
+    ownRemainingSeconds: 0,
+    ownEstimateSeconds: 0,
     childText: "No time logged",
     childSeconds: 0,
+    childRemainingSeconds: 0,
     canIncludeChild: false,
     includeChild: false,
   };
@@ -2514,6 +3001,9 @@ function openItemDetailModal($card) {
   $("#taskItemDetailDescriptionInput").val(description);
   setItemDetailTitleEditMode(false);
   setDescriptionPanelCollapsed(false);
+  if (typeof window.clearDescriptionUploadedAttachmentPaths === "function") {
+    window.clearDescriptionUploadedAttachmentPaths();
+  }
   renderItemDetailDescriptionPreview(description);
   setItemDetailDescriptionEditMode(false, {
     skipPreviewUpdate: true,
@@ -2533,12 +3023,31 @@ function openItemDetailModal($card) {
   itemDetailModalState.selectedLabelIds = [];
   itemDetailModalState.comments = [];
   itemDetailModalState.commentsLoading = false;
+  itemDetailModalState.worklogs = [];
+  itemDetailModalState.worklogsLoading = false;
+  itemDetailModalState.historyRequestSeq = 0;
+  itemDetailModalState.worklogRequestSeq = 0;
   itemDetailModalState.childWorkItems = {
     items: [],
     total: 0,
     done: 0,
     progress_percent: 0,
   };
+  itemDetailModalState.isParentType = false;
+  itemDetailModalState.childCreatePanelOpen = false;
+  itemDetailModalState.childCreateMode = "create";
+  itemDetailModalState.childCreateSelectedItemId = 0;
+  itemDetailModalState.childCreateSearchResults = [];
+  clearChildCreateSearchTimer();
+  itemDetailModalState.itemLinks = {
+    groups: [],
+    total: 0,
+  };
+  itemDetailModalState.linkEditorOpen = false;
+  itemDetailModalState.linkRelationType = "";
+  itemDetailModalState.linkSelectedItemId = 0;
+  itemDetailModalState.linkSearchResults = [];
+  clearLinkSearchTimer();
   itemDetailModalState.childTitleEditingItemId = 0;
   itemDetailModalState.childPickerItemId = 0;
   itemDetailModalState.childPickerField = "";
@@ -2572,6 +3081,8 @@ function openItemDetailModal($card) {
   renderModalLabelChips();
   renderModalLabelOptions();
   renderChildWorkItemsSection();
+  renderChildCreatePanel();
+  renderLinkedWorkItemsSection();
   setChildWorkItemsCollapsed(false);
   setActivitySectionCollapsed(false);
   applyDetailFieldVisibility();
@@ -2586,8 +3097,11 @@ function openItemDetailModal($card) {
     {
       own_time_tracking: "No time logged",
       own_time_tracking_seconds: 0,
+      own_remaining_seconds: 0,
+      own_estimate_seconds: 0,
       child_time_tracking: "No time logged",
       child_time_tracking_seconds: 0,
+      child_remaining_seconds: 0,
       can_include_child_time_tracking: 0,
       include_child_time_tracking: 0,
     },
@@ -2606,10 +3120,135 @@ function openItemDetailModal($card) {
   loadItemAttachments(itemId);
   loadItemDetail(itemId);
   loadItemHistory(itemId);
+  loadItemWorklogs(itemId);
   if (typeof loadItemComments === "function") {
     loadItemComments(itemId);
   }
   modal.show();
+}
+
+function buildWorkItemPermalink(itemId) {
+  var baseUrl = String(window.location.href || "").split("#")[0];
+  return baseUrl + "#task-item-" + String(Number(itemId || 0));
+}
+
+function copyTextToClipboard(text, successMessage) {
+  var value = String(text || "").trim();
+  if (!value) {
+    return;
+  }
+
+  var fallbackCopy = function () {
+    var $temp = $('<input type="text" readonly>');
+    $("body").append($temp);
+    $temp.val(value).trigger("focus").trigger("select");
+    document.execCommand("copy");
+    $temp.remove();
+    notify(successMessage || "Copied.");
+  };
+
+  if (
+    navigator.clipboard &&
+    typeof navigator.clipboard.writeText === "function"
+  ) {
+    navigator.clipboard
+      .writeText(value)
+      .then(function () {
+        notify(successMessage || "Copied.");
+      })
+      .catch(function () {
+        fallbackCopy();
+      });
+    return;
+  }
+
+  fallbackCopy();
+}
+
+function copyCurrentWorkItemUrl() {
+  var itemId = Number(itemDetailModalState.itemId || 0);
+  if (itemId <= 0) {
+    return;
+  }
+
+  copyTextToClipboard(
+    buildWorkItemPermalink(itemId),
+    "Work item URL copied.",
+  );
+}
+
+function hideItemDetailAddDropdown() {
+  var dropdownBtn = document.getElementById("taskItemDetailAddBtn");
+  if (
+    !dropdownBtn ||
+    typeof bootstrap === "undefined" ||
+    !bootstrap.Dropdown
+  ) {
+    return;
+  }
+
+  bootstrap.Dropdown.getOrCreateInstance(dropdownBtn).hide();
+}
+
+function createFallbackWorkItemCard(itemId, fallbackData) {
+  var info = fallbackData && typeof fallbackData === "object" ? fallbackData : {};
+  var workTypeName = String(info.work_type_name || "Task").trim() || "Task";
+  var workTypeIcon = normalizeWorkTypeIcon(
+    info.work_type_svg_icon || info.work_type_icon || "",
+    workTypeName,
+  );
+  var $card = $(
+    '<article class="task-item-card"><span class="task-item-title"></span></article>',
+  );
+
+  $card
+    .attr("data-item-id", Number(itemId || 0))
+    .attr("data-item-description", "")
+    .attr("data-work-item-key", String(info.work_item_key || "").trim())
+    .attr("data-work-type-name", workTypeName)
+    .attr("data-work-type-icon", workTypeIcon)
+    .attr("data-status-column-id", Number(info.column_id || 0))
+    .attr("data-status-column-name", String(info.status_name || "").trim());
+  $card.find(".task-item-title").text(String(info.title || "").trim());
+
+  return $card;
+}
+
+function openReferencedWorkItemModal(itemId, fallbackData) {
+  var targetItemId = Number(itemId || 0);
+  if (targetItemId <= 0) {
+    return;
+  }
+
+  var $card = findCardByItemId(targetItemId);
+  if (!$card.length) {
+    $card = createFallbackWorkItemCard(targetItemId, fallbackData);
+  }
+
+  var modal = getItemDetailModalInstance();
+  var $modal = $("#taskItemDetailModal");
+  if (
+    modal &&
+    $modal.hasClass("show") &&
+    Number(itemDetailModalState.itemId || 0) === targetItemId
+  ) {
+    if (typeof focusCommentFromHash === "function") {
+      focusCommentFromHash();
+    }
+    return;
+  }
+
+  if (!modal || !$modal.hasClass("show")) {
+    openItemDetailModal($card);
+    return;
+  }
+
+  $modal
+    .off("hidden.bs.modal.taskOpenRelated")
+    .one("hidden.bs.modal.taskOpenRelated", function () {
+      openItemDetailModal($card);
+    });
+  modal.hide();
 }
 
 function isTaskItemDetailMobileViewport() {
@@ -2896,39 +3535,7 @@ function setChildWorkItemPickerState(itemId, fieldName, shouldOpen) {
 }
 
 function openChildWorkItemModal(itemId) {
-  var targetItemId = Number(itemId || 0);
-  if (targetItemId <= 0) {
-    return;
-  }
-
-  var $card = findCardByItemId(targetItemId);
-  if (!$card.length) {
-    var row = childWorkItemById(targetItemId) || {};
-    $card = $(
-      '<article class="task-item-card"><span class="task-item-title"></span></article>',
-    );
-    $card
-      .attr("data-item-id", targetItemId)
-      .attr("data-item-description", "")
-      .attr("data-work-item-key", String(row.work_item_key || ""))
-      .attr("data-work-type-name", String(row.work_type_name || "Task"))
-      .attr("data-work-type-icon", String(row.work_type_svg_icon || ""));
-    $card.find(".task-item-title").text(String(row.title || ""));
-  }
-
-  var modal = getItemDetailModalInstance();
-  var $modal = $("#taskItemDetailModal");
-  if (!modal || !$modal.hasClass("show")) {
-    openItemDetailModal($card);
-    return;
-  }
-
-  $modal
-    .off("hidden.bs.modal.taskChildOpen")
-    .one("hidden.bs.modal.taskChildOpen", function () {
-      openItemDetailModal($card);
-    });
-  modal.hide();
+  openReferencedWorkItemModal(itemId, childWorkItemById(itemId) || {});
 }
 
 function buildChildDetailUpdatePayload(detail, overrides) {
@@ -2994,6 +3601,699 @@ function updateChildWorkItemCardAssignee(itemId, userId, userName) {
       .toggleClass("task-assignee-pill-unassigned", assigneeUserId <= 0)
       .html(assigneeButtonInner(assigneeUserId, assigneeName));
   }
+}
+
+function resolveBoardStatusColumnName(columnId) {
+  var targetColumnId = Number(columnId || 0);
+  if (targetColumnId <= 0) {
+    return "";
+  }
+
+  var columns = getBoardStatusColumns();
+  for (var index = 0; index < columns.length; index++) {
+    var column = columns[index] || {};
+    if (Number(column.id || 0) === targetColumnId) {
+      return String(column.name || "").trim();
+    }
+  }
+
+  columns = Array.isArray(state.columns) ? state.columns : [];
+  for (var i = 0; i < columns.length; i++) {
+    var item = columns[i] || {};
+    if (Number(item.id || 0) === targetColumnId) {
+      return String(item.name || "").trim();
+    }
+  }
+
+  return "";
+}
+
+function insertWorkItemCardIntoBoard(item) {
+  var info = item && typeof item === "object" ? item : {};
+  var itemId = Number(info.id || 0);
+  if (itemId <= 0) {
+    return $();
+  }
+
+  var $existingCard = findCardByItemId(itemId);
+  if ($existingCard.length) {
+    return $existingCard;
+  }
+
+  var $newCard = $(buildTaskCardHtml(info));
+  var columnId = Number(
+    info.column_id || info.columnId || info.status_column_id || 0,
+  );
+  var columnName =
+    String(info.column_name || info.status_name || "").trim() ||
+    resolveBoardStatusColumnName(columnId);
+
+  setCardStatusColumn($newCard, columnId, columnName);
+
+  if (isBoardGroupedByStatus()) {
+    var $column = $app.find(
+      '.task-column[data-column-id="' + columnId + '"]',
+    ).first();
+    if ($column.length) {
+      $column.find(".task-item-list").append($newCard);
+      applyBoardViewSettingsToCard($newCard);
+      scrollColumnItemListToBottom($column);
+      updateColumnCount($column);
+      applyBoardFilters();
+      refreshCardItemKeys();
+      return $newCard;
+    }
+  }
+
+  var $fallbackList = $("#taskBoardGrid .task-item-list").first();
+  if ($fallbackList.length) {
+    $fallbackList.append($newCard);
+  } else {
+    $("#taskBoardGrid").append($newCard);
+  }
+
+  renderBoardGroupingLayout();
+  applyBoardFilters();
+  refreshCardItemKeys();
+  return findCardByItemId(itemId);
+}
+
+function parseWorkItemReferenceFromText(value) {
+  var text = String(value || "").trim();
+  var result = {
+    itemId: 0,
+    key: "",
+  };
+  var match = null;
+
+  if (!text) {
+    return result;
+  }
+
+  match = text.match(/(?:^|[^0-9])task-item-(\d+)(?:$|[^0-9])/i);
+  if (match) {
+    result.itemId = Number(match[1] || 0);
+  }
+
+  if (!result.itemId) {
+    match = text.match(/(?:^|[?&#])(item_id|id)=(\d+)(?:$|[&#])/i);
+    if (match) {
+      result.itemId = Number(match[2] || 0);
+    }
+  }
+
+  match = text.match(/([A-Z][A-Z0-9\-]{0,19}-\d+)/i);
+  if (match) {
+    result.key = String(match[1] || "")
+      .trim()
+      .replace(/\s+/g, "")
+      .toUpperCase();
+    if (!result.itemId) {
+      var idMatch = result.key.match(/-(\d+)$/);
+      if (idMatch) {
+        result.itemId = Number(idMatch[1] || 0);
+      }
+    }
+  }
+
+  if (!result.itemId && /^\d+$/.test(text)) {
+    result.itemId = Number(text || 0);
+  }
+
+  return result;
+}
+
+function buildBoardSearchItems() {
+  var items = [];
+
+  $app.find(".task-item-card").each(function () {
+    var $card = $(this);
+    var itemId = Number($card.data("itemId") || 0);
+    if (itemId <= 0) {
+      return;
+    }
+
+    items.push({
+      id: itemId,
+      title: String($card.find(".task-item-title").text() || "").trim(),
+      work_item_key: String(
+        $card.attr("data-work-item-key") || buildWorkItemKey(itemId),
+      ).trim(),
+      work_type_name: String($card.attr("data-work-type-name") || "Task").trim(),
+      work_type_svg_icon: String($card.attr("data-work-type-icon") || "").trim(),
+      column_id: Number($card.attr("data-status-column-id") || 0),
+      status_name: String($card.attr("data-status-column-name") || "").trim(),
+      status_color: "",
+      assignee_user_id: Number($card.attr("data-assignee-user-id") || 0),
+      assignee_name: String($card.attr("data-assignee-name") || "").trim(),
+      parent_item_id: Number($card.attr("data-parent-item-id") || 0),
+    });
+  });
+
+  return items;
+}
+
+function buildBoardSearchItemMap() {
+  var items = buildBoardSearchItems();
+  var map = {};
+
+  for (var index = 0; index < items.length; index++) {
+    var item = items[index] || {};
+    var itemId = Number(item.id || 0);
+    if (itemId > 0) {
+      map[itemId] = item;
+    }
+  }
+
+  return map;
+}
+
+function isParentTypeName(name) {
+  return String(name || "")
+    .trim()
+    .toLowerCase() === "epic";
+}
+
+function wouldCreateParentChildCycleLocal(parentItemId, childItemId, itemMap) {
+  var targetParentId = Number(parentItemId || 0);
+  var targetChildId = Number(childItemId || 0);
+  var visited = {};
+
+  if (targetParentId <= 0 || targetChildId <= 0) {
+    return false;
+  }
+  if (targetParentId === targetChildId) {
+    return true;
+  }
+
+  while (targetParentId > 0) {
+    if (targetParentId === targetChildId) {
+      return true;
+    }
+    if (visited[targetParentId]) {
+      break;
+    }
+    visited[targetParentId] = true;
+
+    var row = itemMap[targetParentId] || {};
+    targetParentId = Number(row.parent_item_id || 0);
+  }
+
+  return false;
+}
+
+function findLocalBoardItemReference(value, itemMap) {
+  var reference = parseWorkItemReferenceFromText(value);
+  var result = null;
+  var key = String(reference.key || "").trim();
+  var itemId = Number(reference.itemId || 0);
+  var keys = Object.keys(itemMap || {});
+
+  if (itemId > 0 && itemMap && itemMap[itemId]) {
+    return itemMap[itemId];
+  }
+
+  if (!key) {
+    return null;
+  }
+
+  for (var index = 0; index < keys.length; index++) {
+    var row = itemMap[keys[index]] || {};
+    if (
+      String(row.work_item_key || "")
+        .trim()
+        .toUpperCase() === key
+    ) {
+      result = row;
+      break;
+    }
+  }
+
+  return result;
+}
+
+function localSearchChildWorkItems(parentItemId, keyword) {
+  var normalizedKeyword = String(keyword || "").trim();
+  var itemMap = buildBoardSearchItemMap();
+  var excludedIds = {};
+  var results = [];
+  var keys = Object.keys(itemMap);
+  var resolvedItem = null;
+  var searchText = normalizedKeyword.toLowerCase();
+  var childInfo = normalizeChildWorkItems(itemDetailModalState.childWorkItems);
+  var childRows = Array.isArray(childInfo.items) ? childInfo.items : [];
+
+  excludedIds[Number(parentItemId || 0)] = true;
+  for (var index = 0; index < childRows.length; index++) {
+    var childRow = childRows[index] || {};
+    var childId = Number(childRow.id || 0);
+    if (childId > 0) {
+      excludedIds[childId] = true;
+    }
+  }
+
+  resolvedItem = findLocalBoardItemReference(normalizedKeyword, itemMap);
+  if (
+    resolvedItem &&
+    !excludedIds[Number(resolvedItem.id || 0)] &&
+    !isParentTypeName(resolvedItem.work_type_name) &&
+    !wouldCreateParentChildCycleLocal(
+      parentItemId,
+      resolvedItem.id,
+      itemMap,
+    )
+  ) {
+    return [resolvedItem];
+  }
+
+  for (var itemIndex = 0; itemIndex < keys.length; itemIndex++) {
+    var item = itemMap[keys[itemIndex]] || {};
+    var itemId = Number(item.id || 0);
+    var haystack = (
+      String(item.work_item_key || "") +
+      " " +
+      String(item.title || "")
+    )
+      .trim()
+      .toLowerCase();
+
+    if (
+      itemId <= 0 ||
+      excludedIds[itemId] ||
+      isParentTypeName(item.work_type_name) ||
+      wouldCreateParentChildCycleLocal(parentItemId, itemId, itemMap) ||
+      (searchText && haystack.indexOf(searchText) === -1)
+    ) {
+      continue;
+    }
+
+    results.push(item);
+  }
+
+  results.sort(function (left, right) {
+    return Number(right.id || 0) - Number(left.id || 0);
+  });
+
+  return results.slice(0, 20);
+}
+
+function localSearchLinkedWorkItems(currentItemId, keyword) {
+  var normalizedKeyword = String(keyword || "").trim();
+  var itemMap = buildBoardSearchItemMap();
+  var results = [];
+  var keys = Object.keys(itemMap);
+  var resolvedItem = findLocalBoardItemReference(normalizedKeyword, itemMap);
+  var searchText = normalizedKeyword.toLowerCase();
+
+  if (resolvedItem && Number(resolvedItem.id || 0) !== Number(currentItemId || 0)) {
+    return [resolvedItem];
+  }
+
+  for (var index = 0; index < keys.length; index++) {
+    var item = itemMap[keys[index]] || {};
+    var itemId = Number(item.id || 0);
+    var haystack = (
+      String(item.work_item_key || "") +
+      " " +
+      String(item.title || "")
+    )
+      .trim()
+      .toLowerCase();
+
+    if (
+      itemId <= 0 ||
+      itemId === Number(currentItemId || 0) ||
+      (searchText && haystack.indexOf(searchText) === -1)
+    ) {
+      continue;
+    }
+
+    results.push(item);
+  }
+
+  results.sort(function (left, right) {
+    return Number(right.id || 0) - Number(left.id || 0);
+  });
+
+  return results.slice(0, 20);
+}
+
+function applyCurrentItemDetailResponse(res) {
+  var itemId = Number(itemDetailModalState.itemId || 0);
+  var shouldRenderActivity = false;
+  if (!itemId) {
+    return;
+  }
+
+  if (Array.isArray(res && res.worklogs)) {
+    itemDetailModalState.worklogs = res.worklogs.slice();
+    itemDetailModalState.worklogsLoading = false;
+    if (typeof nextItemDetailWorklogRequestSeq === "function") {
+      nextItemDetailWorklogRequestSeq();
+    }
+    shouldRenderActivity = true;
+  }
+  if (Array.isArray(res && res.history)) {
+    itemDetailModalState.history = res.history.slice();
+    if (typeof nextItemDetailHistoryRequestSeq === "function") {
+      nextItemDetailHistoryRequestSeq();
+    }
+    shouldRenderActivity = true;
+  }
+
+  if (shouldRenderActivity && typeof renderItemHistoryPanels === "function") {
+    renderItemHistoryPanels();
+  }
+
+  if (res && res.detail && typeof res.detail === "object") {
+    applyItemDetailToModal(
+      res.detail,
+      Array.isArray(state.statusLabels) ? state.statusLabels : [],
+      Array.isArray(itemDetailModalState.parentOptions)
+        ? itemDetailModalState.parentOptions
+        : [],
+      Array.isArray(itemDetailModalState.webLinks)
+        ? itemDetailModalState.webLinks
+        : [],
+      res.itemLinks && typeof res.itemLinks === "object"
+        ? res.itemLinks
+        : itemDetailModalState.itemLinks,
+    );
+    return;
+  }
+
+  loadItemDetail(itemId);
+}
+
+function clearChildCreateSearchTimer() {
+  if (Number(itemDetailModalState.childCreateSearchTimer || 0) > 0) {
+    window.clearTimeout(itemDetailModalState.childCreateSearchTimer);
+    itemDetailModalState.childCreateSearchTimer = 0;
+  }
+}
+
+function clearLinkSearchTimer() {
+  if (Number(itemDetailModalState.linkSearchTimer || 0) > 0) {
+    window.clearTimeout(itemDetailModalState.linkSearchTimer);
+    itemDetailModalState.linkSearchTimer = 0;
+  }
+}
+
+function resetChildCreateComposer(closePanel) {
+  clearChildCreateSearchTimer();
+  itemDetailModalState.childCreateSelectedItemId = 0;
+  itemDetailModalState.childCreateSearchResults = [];
+  itemDetailModalState.childCreateMode = "create";
+  if (closePanel) {
+    itemDetailModalState.childCreatePanelOpen = false;
+  }
+
+  $("#taskItemChildCreateInput").val("");
+  $("#taskItemChildCreateWorkTypeSelect").val("");
+  renderChildCreatePanel();
+}
+
+function openChildCreateComposer(mode) {
+  var nextMode =
+    String(mode || "").trim().toLowerCase() === "search" ? "search" : "create";
+
+  itemDetailModalState.childCreatePanelOpen = true;
+  itemDetailModalState.childCreateMode = nextMode;
+  itemDetailModalState.childCreateSelectedItemId = 0;
+  itemDetailModalState.childCreateSearchResults = [];
+  itemDetailModalState.linkEditorOpen = false;
+  clearChildCreateSearchTimer();
+  clearLinkSearchTimer();
+  $("#taskItemChildCreateInput").val("");
+  if (nextMode === "create") {
+    $("#taskItemChildCreateWorkTypeSelect").val("");
+  }
+  $("#taskItemLinkSearchInput").val("");
+  itemDetailModalState.linkSelectedItemId = 0;
+  itemDetailModalState.linkSearchResults = [];
+  renderLinkedWorkItemsSection();
+  renderChildCreatePanel();
+
+  window.setTimeout(function () {
+    $("#taskItemChildCreateInput").trigger("focus");
+  }, 40);
+}
+
+function searchChildWorkItems(keyword) {
+  var parentItemId = Number(itemDetailModalState.itemId || 0);
+  var requestKeyword = String(keyword || "").trim();
+  if (
+    parentItemId <= 0 ||
+    itemDetailModalState.childCreateMode !== "search"
+  ) {
+    return;
+  }
+
+  if (!requestKeyword) {
+    itemDetailModalState.childCreateSearchResults = [];
+    itemDetailModalState.childCreateSelectedItemId = 0;
+    renderChildCreatePanel();
+    return;
+  }
+
+  itemDetailModalState.childCreateSearchResults = localSearchChildWorkItems(
+    parentItemId,
+    requestKeyword,
+  );
+  var selectedItemId = Number(itemDetailModalState.childCreateSelectedItemId || 0);
+  if (selectedItemId > 0) {
+    var hasSelected = itemDetailModalState.childCreateSearchResults.some(function (
+      item,
+    ) {
+      return Number(item && item.id ? item.id : 0) === selectedItemId;
+    });
+    if (!hasSelected) {
+      itemDetailModalState.childCreateSelectedItemId = 0;
+    }
+  }
+  renderChildCreatePanel();
+}
+
+function queueChildWorkItemSearch() {
+  clearChildCreateSearchTimer();
+  if (itemDetailModalState.childCreateMode !== "search") {
+    return;
+  }
+
+  var keyword = String($("#taskItemChildCreateInput").val() || "").trim();
+  if (!keyword) {
+    itemDetailModalState.childCreateSearchResults = [];
+    renderChildCreatePanel();
+    return;
+  }
+
+  itemDetailModalState.childCreateSearchTimer = window.setTimeout(function () {
+    itemDetailModalState.childCreateSearchTimer = 0;
+    searchChildWorkItems($("#taskItemChildCreateInput").val() || "");
+  }, 220);
+}
+
+function submitChildWorkItemCreate() {
+  var parentItemId = Number(itemDetailModalState.itemId || 0);
+  var isSearchMode = itemDetailModalState.childCreateMode === "search";
+  var inputValue = String($("#taskItemChildCreateInput").val() || "").trim();
+  if (parentItemId <= 0) {
+    return;
+  }
+  if (!canEdit) {
+    notify("You do not have permission to update work item.");
+    return;
+  }
+  if (!inputValue) {
+    notify(
+      isSearchMode
+        ? "Please enter or search a work item."
+        : "Work item title is required.",
+    );
+    return;
+  }
+  if (!isSearchMode && !canAdd) {
+    notify("You do not have permission to create work items.");
+    return;
+  }
+
+  var payload = isSearchMode
+    ? {
+        task_action: "link_existing_child_work_item",
+        parent_item_id: parentItemId,
+        child_item_id: Number(itemDetailModalState.childCreateSelectedItemId || 0),
+        child_value: inputValue,
+      }
+    : {
+        task_action: "create_child_work_item",
+        parent_item_id: parentItemId,
+        title: inputValue,
+        work_type_id: Number($("#taskItemChildCreateWorkTypeSelect").val() || 0),
+      };
+
+  $("#taskItemChildCreateSubmitBtn").prop("disabled", true);
+  postAction(
+    payload,
+    function (res) {
+      if (res && res.item && typeof res.item === "object") {
+        insertWorkItemCardIntoBoard(res.item);
+      }
+      resetChildCreateComposer(true);
+      applyCurrentItemDetailResponse(res);
+      loadItemHistory(parentItemId);
+    },
+    function () {
+      renderChildCreatePanel();
+    },
+  );
+}
+
+function resetLinkWorkItemEditor(closeEditor) {
+  clearLinkSearchTimer();
+  itemDetailModalState.linkSelectedItemId = 0;
+  itemDetailModalState.linkSearchResults = [];
+  if (closeEditor) {
+    itemDetailModalState.linkEditorOpen = false;
+  }
+  itemDetailModalState.linkRelationType = "";
+  $("#taskItemLinkSearchInput").val("");
+  $("#taskItemLinkRelationTypeSelect").val("");
+  renderLinkedWorkItemsSection();
+}
+
+function openLinkWorkItemEditor(relationType) {
+  itemDetailModalState.linkEditorOpen = true;
+  itemDetailModalState.linkSelectedItemId = 0;
+  itemDetailModalState.linkSearchResults = [];
+  itemDetailModalState.childCreatePanelOpen = false;
+  itemDetailModalState.childCreateMode = "create";
+  itemDetailModalState.childCreateSelectedItemId = 0;
+  itemDetailModalState.childCreateSearchResults = [];
+  clearChildCreateSearchTimer();
+  clearLinkSearchTimer();
+
+  $("#taskItemChildCreateInput").val("");
+  $("#taskItemLinkSearchInput").val("");
+  if (String(relationType || "").trim()) {
+    itemDetailModalState.linkRelationType = String(relationType || "").trim();
+  }
+
+  renderChildCreatePanel();
+  renderLinkedWorkItemsSection();
+
+  window.setTimeout(function () {
+    $("#taskItemLinkSearchInput").trigger("focus");
+  }, 40);
+}
+
+function searchLinkedWorkItems(keyword) {
+  var itemId = Number(itemDetailModalState.itemId || 0);
+  var requestKeyword = String(keyword || "").trim();
+  if (itemId <= 0 || !itemDetailModalState.linkEditorOpen) {
+    return;
+  }
+
+  if (!requestKeyword) {
+    itemDetailModalState.linkSearchResults = [];
+    itemDetailModalState.linkSelectedItemId = 0;
+    renderLinkedWorkItemsSection();
+    return;
+  }
+
+  itemDetailModalState.linkSearchResults = localSearchLinkedWorkItems(
+    itemId,
+    requestKeyword,
+  );
+  var selectedItemId = Number(itemDetailModalState.linkSelectedItemId || 0);
+  if (selectedItemId > 0) {
+    var hasSelected = itemDetailModalState.linkSearchResults.some(function (item) {
+      return Number(item && item.id ? item.id : 0) === selectedItemId;
+    });
+    if (!hasSelected) {
+      itemDetailModalState.linkSelectedItemId = 0;
+    }
+  }
+  renderLinkedWorkItemsSection();
+}
+
+function queueLinkedWorkItemSearch() {
+  clearLinkSearchTimer();
+  if (!itemDetailModalState.linkEditorOpen) {
+    return;
+  }
+
+  var keyword = String($("#taskItemLinkSearchInput").val() || "").trim();
+  if (!keyword) {
+    itemDetailModalState.linkSearchResults = [];
+    renderLinkedWorkItemsSection();
+    return;
+  }
+
+  itemDetailModalState.linkSearchTimer = window.setTimeout(function () {
+    itemDetailModalState.linkSearchTimer = 0;
+    searchLinkedWorkItems($("#taskItemLinkSearchInput").val() || "");
+  }, 220);
+}
+
+function linkedWorkItemById(itemId) {
+  var targetItemId = Number(itemId || 0);
+  if (targetItemId <= 0) {
+    return null;
+  }
+
+  var groups = normalizeItemLinks(itemDetailModalState.itemLinks).groups;
+  for (var groupIndex = 0; groupIndex < groups.length; groupIndex++) {
+    var group = groups[groupIndex] || {};
+    var items = Array.isArray(group.items) ? group.items : [];
+    for (var itemIndex = 0; itemIndex < items.length; itemIndex++) {
+      var item = items[itemIndex] || {};
+      if (Number(item.id || 0) === targetItemId) {
+        return item;
+      }
+    }
+  }
+
+  return null;
+}
+
+function submitLinkedWorkItem() {
+  var itemId = Number(itemDetailModalState.itemId || 0);
+  var relationType = String(itemDetailModalState.linkRelationType || "").trim();
+  var inputValue = String($("#taskItemLinkSearchInput").val() || "").trim();
+  if (itemId <= 0) {
+    return;
+  }
+  if (!canEdit) {
+    notify("You do not have permission to add linked work items.");
+    return;
+  }
+  if (!relationType) {
+    notify("Please select a link type.");
+    return;
+  }
+  if (!inputValue) {
+    notify("Please enter or search a work item.");
+    return;
+  }
+
+  $("#taskItemLinkSaveBtn").prop("disabled", true);
+  postAction(
+    {
+      task_action: "create_item_link",
+      item_id: itemId,
+      relation_type: relationType,
+      target_item_id: Number(itemDetailModalState.linkSelectedItemId || 0),
+      target_value: inputValue,
+    },
+    function (res) {
+      resetLinkWorkItemEditor(true);
+      applyCurrentItemDetailResponse(res);
+      loadItemHistory(itemId);
+    },
+    function () {
+      renderLinkedWorkItemsSection();
+    },
+  );
 }
 
 function commitChildWorkItemTitle($input, options) {
@@ -3189,47 +4489,50 @@ function saveChildWorkItemStatus($select) {
   );
 }
 
-function parseTaskCommentPermalinkHash() {
+function parseTaskItemPermalinkHash() {
   var hash = String(window.location.hash || "").trim();
-  var matched = hash.match(/^#task-item-(\d+)-comment-(\d+)$/i);
+  var matched = hash.match(/^#task-item-(\d+)(?:-(?:comment|reply)-\d+)?$/i);
   if (!matched) {
     return null;
   }
 
   return {
     itemId: Number(matched[1] || 0),
-    commentId: Number(matched[2] || 0),
   };
 }
 
-function openCommentFromPermalinkHash(attempt) {
-  var target = parseTaskCommentPermalinkHash();
+function openWorkItemFromPermalinkHash() {
+  var target = parseTaskItemPermalinkHash();
   if (!target || Number(target.itemId || 0) <= 0) {
     return;
   }
 
-  var $card = findCardByItemId(target.itemId);
-  if ($card.length) {
-    openItemDetailModal($card);
+  var activeItemId = Number(itemDetailModalState.itemId || 0);
+  if (
+    $("#taskItemDetailModal").hasClass("show") &&
+    activeItemId > 0 &&
+    activeItemId === Number(target.itemId || 0)
+  ) {
+    if (typeof focusCommentFromHash === "function") {
+      focusCommentFromHash();
+    }
     return;
   }
 
-  var tries = Number(attempt || 0);
-  if (tries >= 10) {
-    return;
-  }
-
-  window.setTimeout(function () {
-    openCommentFromPermalinkHash(tries + 1);
-  }, 220);
+  openReferencedWorkItemModal(target.itemId, {
+    work_item_key: buildWorkItemKey(target.itemId),
+  });
 }
 
 window.setTimeout(function () {
-  openCommentFromPermalinkHash(0);
+  openWorkItemFromPermalinkHash();
 }, 150);
 
 $(window).on("hashchange", function () {
-  openCommentFromPermalinkHash(0);
+  openWorkItemFromPermalinkHash();
+  if (typeof focusCommentFromHash === "function") {
+    window.setTimeout(focusCommentFromHash, 0);
+  }
 });
 
 $app.on("click", ".task-item-card", function (e) {
@@ -3417,6 +4720,9 @@ $(document).on("click", "#taskItemDetailDescriptionCancelBtn", function () {
   ) {
     window.taskBoardDescriptionDraft.clear();
   }
+  if (typeof window.clearDescriptionUploadedAttachmentPaths === "function") {
+    window.clearDescriptionUploadedAttachmentPaths();
+  }
   setItemDetailDescriptionEditMode(false, {
     skipPreviewUpdate: false,
   });
@@ -3424,6 +4730,95 @@ $(document).on("click", "#taskItemDetailDescriptionCancelBtn", function () {
 
 $(document).on("click", "#taskItemDetailDescriptionCollapseBtn", function () {
   setDescriptionPanelCollapsed(!itemDetailModalState.descriptionCollapsed);
+});
+
+$(document).on("click", "#taskItemDetailCopyUrlBtn", function () {
+  copyCurrentWorkItemUrl();
+});
+
+$(document).on(
+  "click",
+  "#taskItemDetailCreateChildAction, #taskItemChildWorkItemsAddBtn",
+  function (e) {
+  e.preventDefault();
+  if (!canEdit) {
+    notify("You do not have permission to update work item.");
+    return;
+  }
+
+  hideItemDetailAddDropdown();
+  openChildCreateComposer("create");
+  },
+);
+
+$(document).on("click", "#taskItemChildCreateChooseExistingBtn", function () {
+  if (!canEdit) {
+    notify("You do not have permission to update work item.");
+    return;
+  }
+
+  openChildCreateComposer(
+    itemDetailModalState.childCreateMode === "search" ? "create" : "search",
+  );
+});
+
+$(document).on("click", "#taskItemChildCreateCancelBtn", function () {
+  resetChildCreateComposer(true);
+});
+
+$(document).on("click", "#taskItemChildCreateSubmitBtn", function () {
+  submitChildWorkItemCreate();
+});
+
+$(document).on("input", "#taskItemChildCreateInput", function () {
+  itemDetailModalState.childCreateSelectedItemId = 0;
+  renderChildCreatePanel();
+  queueChildWorkItemSearch();
+});
+
+$(document).on("change", "#taskItemChildCreateWorkTypeSelect", function () {
+  renderChildCreatePanel();
+});
+
+$(document).on("keydown", "#taskItemChildCreateInput", function (e) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    submitChildWorkItemCreate();
+    return;
+  }
+
+  if (e.key === "Escape") {
+    e.preventDefault();
+    resetChildCreateComposer(true);
+  }
+});
+
+$(document).on("click", ".task-item-search-result-child", function (e) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  var resultItemId = Number($(this).attr("data-result-item-id") || 0);
+  var results = normalizeItemSearchResults(
+    itemDetailModalState.childCreateSearchResults,
+  );
+
+  itemDetailModalState.childCreateSelectedItemId = resultItemId;
+  for (var index = 0; index < results.length; index++) {
+    var result = results[index] || {};
+    if (Number(result.id || 0) !== resultItemId) {
+      continue;
+    }
+
+    $("#taskItemChildCreateInput").val(
+      $.trim(
+        (result.work_item_key ? result.work_item_key + " " : "") +
+          String(result.title || ""),
+      ),
+    );
+    break;
+  }
+
+  renderChildCreatePanel();
 });
 
 $(document).on("click", ".task-item-child-open-trigger", function (e) {
@@ -3776,6 +5171,40 @@ $(document).on("click", "#taskItemWorklogSaveBtn", function () {
   saveWorklogForCurrentItem();
 });
 
+$(document).on("click", "#taskItemWorklogModalSaveBtn", function () {
+  submitTaskWorklogModal();
+});
+
+$(document).on("click", ".task-item-worklog-edit-btn", function () {
+  var row = getTaskWorklogById($(this).data("worklogId"));
+  if (!row) {
+    notify("Work log not found.");
+    return;
+  }
+  openTaskWorklogModal("edit", row, Number(row.duration_seconds || 0));
+});
+
+$(document).on("click", ".task-item-worklog-delete-btn", function () {
+  var row = getTaskWorklogById($(this).data("worklogId"));
+  if (!row) {
+    notify("Work log not found.");
+    return;
+  }
+  openTaskWorklogDeleteModal(row);
+});
+
+$(document).on(
+  "change",
+  "#taskItemWorklogDeleteAdjustRemainingInput",
+  function () {
+    refreshWorklogDeleteRemainingPanel();
+  },
+);
+
+$(document).on("click", "#taskItemWorklogDeleteConfirmBtn", function () {
+  submitTaskWorklogDelete();
+});
+
 $(document).on("click", ".task-board-toast-close", function () {
   var toastId = String($(this).data("toastId") || "").trim();
   if (!toastId) {
@@ -3997,6 +5426,121 @@ $(document).on("click", "#taskItemDetailAddWebLinkAction", function (e) {
   }
 
   openWebLinkEditor();
+});
+
+$(document).on(
+  "click",
+  "#taskItemDetailLinkWorkItemAction, #taskItemLinkedWorkItemAddBtn, #taskItemLinkedWorkItemsEmptyAction",
+  function (e) {
+    e.preventDefault();
+    if (!canEdit) {
+      notify("You do not have permission to add linked work items.");
+      return;
+    }
+
+    hideItemDetailAddDropdown();
+    openLinkWorkItemEditor();
+  },
+);
+
+$(document).on("click", "#taskItemLinkCancelBtn", function () {
+  resetLinkWorkItemEditor(true);
+});
+
+$(document).on("click", "#taskItemLinkSaveBtn", function () {
+  submitLinkedWorkItem();
+});
+
+$(document).on("input", "#taskItemLinkSearchInput", function () {
+  itemDetailModalState.linkSelectedItemId = 0;
+  renderLinkedWorkItemsSection();
+  queueLinkedWorkItemSearch();
+});
+
+$(document).on("change", "#taskItemLinkRelationTypeSelect", function () {
+  itemDetailModalState.linkRelationType = String($(this).val() || "").trim();
+  itemDetailModalState.linkSelectedItemId = 0;
+  renderLinkedWorkItemsSection();
+  queueLinkedWorkItemSearch();
+});
+
+$(document).on("keydown", "#taskItemLinkSearchInput", function (e) {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    submitLinkedWorkItem();
+    return;
+  }
+
+  if (e.key === "Escape") {
+    e.preventDefault();
+    resetLinkWorkItemEditor(true);
+  }
+});
+
+$(document).on("click", ".task-item-search-result-link", function (e) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  var resultItemId = Number($(this).attr("data-result-item-id") || 0);
+  var results = normalizeItemSearchResults(itemDetailModalState.linkSearchResults);
+
+  itemDetailModalState.linkSelectedItemId = resultItemId;
+  for (var index = 0; index < results.length; index++) {
+    var result = results[index] || {};
+    if (Number(result.id || 0) !== resultItemId) {
+      continue;
+    }
+
+    $("#taskItemLinkSearchInput").val(
+      $.trim(
+        (result.work_item_key ? result.work_item_key + " " : "") +
+          String(result.title || ""),
+      ),
+    );
+    break;
+  }
+
+  renderLinkedWorkItemsSection();
+});
+
+$(document).on("click", ".task-item-linked-open-btn", function (e) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  var linkedItemId = Number($(this).data("linkedItemId") || 0);
+  openReferencedWorkItemModal(
+    linkedItemId,
+    linkedWorkItemById(linkedItemId) || {},
+  );
+});
+
+$(document).on("click", ".task-item-linked-remove-btn", function () {
+  if (!canEdit) {
+    notify("You do not have permission to remove linked work items.");
+    return;
+  }
+
+  var currentItemId = Number(itemDetailModalState.itemId || 0);
+  var linkId = Number($(this).data("linkId") || 0);
+  if (!currentItemId || !linkId) {
+    return;
+  }
+
+  if (!window.confirm("Remove this linked work item?")) {
+    return;
+  }
+
+  postAction(
+    {
+      task_action: "delete_item_link",
+      item_id: currentItemId,
+      link_id: linkId,
+    },
+    function (res) {
+      applyCurrentItemDetailResponse(res);
+      loadItemHistory(currentItemId);
+    },
+  );
 });
 
 $(document).on("click", "#taskItemWebLinkAddBtn", function () {
@@ -4327,6 +5871,14 @@ $(document).on("change", "#taskItemAttachmentInput", function () {
 $(document).on("hidden.bs.modal", "#taskItemDetailModal", function () {
   persistWorklogTimerState();
   stopWorklogTicker();
+  var worklogModal = getItemWorklogModalInstance();
+  if (worklogModal) {
+    worklogModal.hide();
+  }
+  var worklogDeleteModal = getItemWorklogDeleteModalInstance();
+  if (worklogDeleteModal) {
+    worklogDeleteModal.hide();
+  }
   setTaskItemDetailMobileOverlayState("", false);
   syncTaskItemDetailMobileLayout();
 
@@ -4363,6 +5915,10 @@ $(document).on("hidden.bs.modal", "#taskItemDetailModal", function () {
   itemDetailModalState.selectedLabelIds = [];
   itemDetailModalState.comments = [];
   itemDetailModalState.commentsLoading = false;
+  itemDetailModalState.worklogs = [];
+  itemDetailModalState.worklogsLoading = false;
+  itemDetailModalState.historyRequestSeq = 0;
+  itemDetailModalState.worklogRequestSeq = 0;
   itemDetailModalState.parentItemId = 0;
   itemDetailModalState.parentOptions = [];
   itemDetailModalState.detailsCollapsed = false;
@@ -4375,8 +5931,11 @@ $(document).on("hidden.bs.modal", "#taskItemDetailModal", function () {
   itemDetailModalState.timeTracking = {
     ownText: "No time logged",
     ownSeconds: 0,
+    ownRemainingSeconds: 0,
+    ownEstimateSeconds: 0,
     childText: "No time logged",
     childSeconds: 0,
+    childRemainingSeconds: 0,
     canIncludeChild: false,
     includeChild: false,
   };
@@ -4386,6 +5945,21 @@ $(document).on("hidden.bs.modal", "#taskItemDetailModal", function () {
     done: 0,
     progress_percent: 0,
   };
+  itemDetailModalState.isParentType = false;
+  itemDetailModalState.childCreatePanelOpen = false;
+  itemDetailModalState.childCreateMode = "create";
+  itemDetailModalState.childCreateSelectedItemId = 0;
+  itemDetailModalState.childCreateSearchResults = [];
+  clearChildCreateSearchTimer();
+  itemDetailModalState.itemLinks = {
+    groups: [],
+    total: 0,
+  };
+  itemDetailModalState.linkEditorOpen = false;
+  itemDetailModalState.linkRelationType = "";
+  itemDetailModalState.linkSelectedItemId = 0;
+  itemDetailModalState.linkSearchResults = [];
+  clearLinkSearchTimer();
   itemDetailModalState.childTitleEditingItemId = 0;
   itemDetailModalState.childPickerItemId = 0;
   itemDetailModalState.childPickerField = "";
@@ -4406,6 +5980,12 @@ $(document).on("hidden.bs.modal", "#taskItemDetailModal", function () {
   $("#taskItemDetailKeyTrail").addClass("d-none").empty();
   $("#taskItemDetailModalTitle").text("Work item");
   $("#taskItemAttachmentInput").val("");
+  $("#taskItemChildCreateInput").val("");
+  $("#taskItemChildCreateWorkTypeSelect").val("");
+  $("#taskItemLinkSearchInput").val("");
+  $("#taskItemLinkRelationTypeSelect").val("");
+  renderChildCreatePanel();
+  renderLinkedWorkItemsSection();
 
   worklogTimerState = {
     itemId: 0,
