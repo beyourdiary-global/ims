@@ -688,6 +688,9 @@ if (post('actionBtn')) {
             $existingAttachment = sorNormalizeAttachmentRelativePath(postSpaceFilter('existing_attachment'));
             $sor_attachment = $existingAttachment;
             $existingStockOrderImage = sorNormalizeAttachmentRelativePath(postSpaceFilter('existing_stock_order_image'));
+            if ($existingStockOrderImage !== '' && (strpos($existingStockOrderImage, "\0") !== false || strpos($existingStockOrderImage, '..') !== false)) {
+                $existingStockOrderImage = '';
+            }
             $sor_stock_order_image = $existingStockOrderImage;
 
             if (isset($_FILES['sor_attachment']) && $_FILES['sor_attachment']['error'] === UPLOAD_ERR_OK) {
