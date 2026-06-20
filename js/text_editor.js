@@ -274,12 +274,16 @@
         continue;
       }
 
-      var key = displayName.toLowerCase();
+      var userId = Number(row.id || 0);
+      var key =
+        userId > 0
+          ? "id:" + String(userId)
+          : "name:" + displayName.toLowerCase();
       if (seen[key]) {
         continue;
       }
 
-      if (keyword && key.indexOf(keyword) === -1) {
+      if (keyword && displayName.toLowerCase().indexOf(keyword) === -1) {
         continue;
       }
 
@@ -287,7 +291,7 @@
       result.push({
         type: "autocompleteitem",
         value: JSON.stringify({
-          userId: Number(row.id || 0),
+          userId: userId,
           name: displayName,
         }),
         text: displayName,
