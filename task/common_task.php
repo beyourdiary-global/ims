@@ -6125,7 +6125,12 @@ if (!function_exists('taskUpdateItemDetail')) {
         $safeDate = taskEsc($connect, $cdate);
         $safeTime = taskEsc($connect, $ctime);
         $ownLoggedSeconds = taskParseWorklogDurationSeconds(isset($existingRow['time_tracking']) ? (string) $existingRow['time_tracking'] : '');
-        $newRemainingEstimateSeconds = max(0, taskEstimateToSeconds($originalEstimateValue, $estimateUnit) - $ownLoggedSeconds);
+        $estimateSeconds = taskEstimateToSeconds($originalEstimateValue, $estimateUnit);
+        $newRemainingEstimateSeconds = taskResolveOwnRemainingEstimateSeconds(
+            $estimateSeconds,
+            $ownLoggedSeconds,
+            isset($existingRow['remaining_estimate_seconds']) ? $existingRow['remaining_estimate_seconds'] : null
+        );
         $safeRemainingEstimateSeconds = taskEsc($connect, (string) $newRemainingEstimateSeconds);
 
         $updateSql = "UPDATE " . TASK_ITEM . " SET
