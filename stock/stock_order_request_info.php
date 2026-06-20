@@ -43,6 +43,9 @@ function sorInfoNormalizeAttachmentRelativePath($path)
     $path = preg_replace('#^https?://[^/]+/#i', '', $path);
     $path = preg_replace('#^/?images_server/#i', '', $path);
     $path = ltrim((string) $path, '/');
+    if (strpos($path, "\0") !== false || strpos($path, '..') !== false) {
+        return '';
+    }
 
     if (stripos($path, 'attachment/') !== 0 && strpos($path, 'attachment/') !== false) {
         $path = substr($path, strpos($path, 'attachment/'));
