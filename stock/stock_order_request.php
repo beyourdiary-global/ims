@@ -743,6 +743,8 @@ if (post('actionBtn')) {
 
                         if (!in_array($stockOrderImageExt, $allowedImageExt, true)) {
                             $err = 'Stock order image format not supported. Allowed: jpg, jpeg, png, webp.';
+                        } else if ($stockOrderImageTmp === '' || !is_uploaded_file($stockOrderImageTmp)) {
+                            $err = 'Invalid stock order image upload.';
                         } else {
                             $detectedImageMime = sorDetectUploadMimeType($stockOrderImageTmp);
                             $allowedImageMime = isset($allowedImageMimeByExt[$stockOrderImageExt]) ? $allowedImageMimeByExt[$stockOrderImageExt] : array();
