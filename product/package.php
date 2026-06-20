@@ -965,7 +965,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 </body>
 
 <script>
-<?php include './js/package.js'; ?>
+<?php include __DIR__ . '/../js/package.js'; ?>
 </script>
 
 </html>

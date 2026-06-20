@@ -1994,6 +1994,92 @@ if (!function_exists('sorImpSaveUploadedImportFile')) {
     }
 }
 
+if (!function_exists('sorImpSaveUploadedAirbillImageByReceiptKey')) {
+    function sorImpSaveUploadedAirbillImageByReceiptKey($uploadList, $receiptKey, $companyId, $companySqlAccountFolderMap, &$errorMessage)
+    {
+        $errorMessage = '';
+        $receiptKey = trim((string) $receiptKey);
+
+        if ($receiptKey === '' || !is_array($uploadList) || !isset($uploadList['error'][$receiptKey])) {
+            return '';
+        }
+
+        $uploadError = (int) $uploadList['error'][$receiptKey];
+        if ($uploadError === UPLOAD_ERR_NO_FILE) {
+            return '';
+        }
+
+        if ($uploadError !== UPLOAD_ERR_OK) {
+            $errorMessage = 'Failed to upload stock order image.';
+            return '';
+        }
+
+        $tmpName = isset($uploadList['tmp_name'][$receiptKey]) ? (string) $uploadList['tmp_name'][$receiptKey] : '';
+        $originalName = isset($uploadList['name'][$receiptKey]) ? trim((string) $uploadList['name'][$receiptKey]) : '';
+
+        if ($tmpName === '' || $originalName === '' || !is_uploaded_file($tmpName)) {
+            $errorMessage = 'Invalid stock order image upload.';
+            return '';
+        }
+
+        $ext = strtolower((string) pathinfo($originalName, PATHINFO_EXTENSION));
+        $allowedExt = array('jpg', 'jpeg', 'png', 'webp');
+        $allowedMime = array('image/jpeg', 'image/png', 'image/webp');
+
+        if (!in_array($ext, $allowedExt, true)) {
+            $errorMessage = 'Stock Order Image format not supported. Allowed: jpg, jpeg, png, webp.';
+            return '';
+        }
+
+        $detectedMime = '';
+        if (function_exists('finfo_open')) {
+            $finfo = @finfo_open(FILEINFO_MIME_TYPE);
+            if ($finfo) {
+                $detectedMime = (string) @finfo_file($finfo, $tmpName);
+                @finfo_close($finfo);
+            }
+        }
+
+        if ($detectedMime !== '' && !in_array($detectedMime, $allowedMime, true)) {
+            $errorMessage = 'Stock Order Image must be a valid image file.';
+            return '';
+        }
+
+        if ($detectedMime === '' && @getimagesize($tmpName) === false) {
+            $errorMessage = 'Stock Order Image must be a valid image file.';
+            return '';
+        }
+
+        $sqlAccountFolder = sorImpResolveSqlAccountFolderByCompany($companyId, $companySqlAccountFolderMap);
+        $relDir = 'attachment/' . $sqlAccountFolder . '/' . substr((string) comYMD, 0, 4) . '/' . substr((string) comYMD, 4, 2) . '/stock_order_request_image/';
+        $absDir = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . ltrim($relDir, '/\\');
+
+        if (!is_dir($absDir)) {
+            @mkdir($absDir, 0777, true);
+        }
+
+        if (!is_dir($absDir)) {
+            $errorMessage = 'Failed to create stock order image folder.';
+            return '';
+        }
+
+        $safeReceiptKey = preg_replace('/[^a-zA-Z0-9_-]/', '_', $receiptKey);
+        if ($safeReceiptKey === '') {
+            $safeReceiptKey = 'receipt';
+        }
+
+        $newFile = 'sor_airbill_' . $safeReceiptKey . '_' . date('Ymd_His') . '_' . mt_rand(1000, 9999) . '.' . $ext;
+        $absPath = $absDir . $newFile;
+
+        if (!move_uploaded_file($tmpName, $absPath)) {
+            $errorMessage = 'Failed to upload stock order image.';
+            return '';
+        }
+
+        return sorImpNormalizeAttachmentRelativePath($relDir . $newFile);
+    }
+}
+
 $action = post('actionBtn');
 $importErrors = array();
 $importWarnings = array();
@@ -2143,6 +2229,8 @@ if ($action === 'insertStockOrderPdf') {
             $packageGroupKey = isset($r['package_group']) ? trim((string) $r['package_group']) : '';
             $packagePrice = isset($r['package_price']) ? (float) $r['package_price'] : 0.00;
             $totalPrice = isset($r['total_price']) ? (float) $r['total_price'] : 0;
+            $trackingNo = trim((string) (isset($r['tracking_no']) ? $r['tracking_no'] : ''));
+            $receiptKey = trim((string) (isset($r['receipt_key']) ? $r['receipt_key'] : ''));
             $rowBrandId = isset($r['brand_id']) ? (int) $r['brand_id'] : 0;
             $rowCompanyId = isset($r['company_id']) ? (int) $r['company_id'] : 0;
 
@@ -2247,6 +2335,8 @@ if ($action === 'insertStockOrderPdf') {
                     'invoice_date' => $invoiceDate,
                     'request_date' => $invoiceDate,
                     'extracted_total_price' => $totalPrice,
+                    'tracking_no' => $trackingNo,
+                    'receipt_key' => $receiptKey,
                     'computed_total_price' => 0.00,
                     'counted_price_keys' => array(),
                     'brand_ids' => array(),
@@ -2259,6 +2349,14 @@ if ($action === 'insertStockOrderPdf') {
                 if ($grouped[$groupKey]['company_id'] <= 0 && $rowCompanyId > 0) {
                     $grouped[$groupKey]['company_id'] = $rowCompanyId;
                 }
+            }
+
+            if ($trackingNo !== '' && isset($grouped[$groupKey]) && trim((string) $grouped[$groupKey]['tracking_no']) === '') {
+                $grouped[$groupKey]['tracking_no'] = $trackingNo;
+            }
+
+            if ($receiptKey !== '' && isset($grouped[$groupKey]) && trim((string) $grouped[$groupKey]['receipt_key']) === '') {
+                $grouped[$groupKey]['receipt_key'] = $receiptKey;
             }
 
             if ($rowCompanyId > 0) {
@@ -2346,6 +2444,7 @@ if ($action === 'insertStockOrderPdf') {
                     $safeInvoiceDate = mysqli_real_escape_string($finance_connect, $g['invoice_date']);
                     $safeRequestDate = mysqli_real_escape_string($finance_connect, $g['request_date']);
                     $safeCourierId = mysqli_real_escape_string($finance_connect, (string) $g['courier_id']);
+                    $safeTrackingNo = mysqli_real_escape_string($finance_connect, (string) (isset($g['tracking_no']) ? $g['tracking_no'] : ''));
                     $safeRemark = mysqli_real_escape_string($finance_connect, 'Imported from PDF: ' . $g['source_file']);
                     $resolvedAttachment = sorImpRehomeAttachmentByCompany(
                         isset($g['source_attachment']) ? (string) $g['source_attachment'] : '',
@@ -2354,6 +2453,21 @@ if ($action === 'insertStockOrderPdf') {
                         basename(__FILE__, '.php')
                     );
                     $safeAttachment = mysqli_real_escape_string($finance_connect, $resolvedAttachment);
+
+                    $airbillUploadError = '';
+                    $resolvedStockOrderImage = sorImpSaveUploadedAirbillImageByReceiptKey(
+                        isset($_FILES['airbill_photo']) ? $_FILES['airbill_photo'] : array(),
+                        isset($g['receipt_key']) ? (string) $g['receipt_key'] : '',
+                        $mainCompanyId,
+                        $companySqlAccountFolderMap,
+                        $airbillUploadError
+                    );
+
+                    if ($airbillUploadError !== '') {
+                        throw new Exception($airbillUploadError);
+                    }
+
+                    $safeStockOrderImage = mysqli_real_escape_string($finance_connect, $resolvedStockOrderImage);
                     $finalTotalPrice = (float) (isset($g['computed_total_price']) ? $g['computed_total_price'] : 0);
                     if ($finalTotalPrice <= 0) {
                         $finalTotalPrice = (float) (isset($g['extracted_total_price']) ? $g['extracted_total_price'] : 0);
@@ -2368,7 +2482,7 @@ if ($action === 'insertStockOrderPdf') {
                         throw new Exception('Invoice number (' . $g['invoice_no'] . ') already exists. Import aborted.');
                     }
 
-                    $qMain = "INSERT INTO " . STOCK_ORDER_REQ . " (warehouse_id, courier_id, company_id, brand_id, invoice_no, invoice_date, request_date, total_price, attachment, remark, create_by, create_date, create_time, status) VALUES ('" . (int) $g['warehouse_id'] . "', '" . $safeCourierId . "', '" . $mainCompanyId . "', '" . $mainBrandId . "', '" . $safeInvoiceNo . "', '" . $safeInvoiceDate . "', '" . $safeRequestDate . "', '" . number_format($finalTotalPrice, 2, '.', '') . "', '" . $safeAttachment . "', '" . $safeRemark . "', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
+                    $qMain = "INSERT INTO " . STOCK_ORDER_REQ . " (warehouse_id, courier_id, company_id, brand_id, invoice_no, invoice_date, request_date, tracking_no, total_price, attachment, stock_order_image, remark, create_by, create_date, create_time, status) VALUES ('" . (int) $g['warehouse_id'] . "', '" . $safeCourierId . "', '" . $mainCompanyId . "', '" . $mainBrandId . "', '" . $safeInvoiceNo . "', '" . $safeInvoiceDate . "', '" . $safeRequestDate . "', '" . $safeTrackingNo . "', '" . number_format($finalTotalPrice, 2, '.', '') . "', '" . $safeAttachment . "', '" . $safeStockOrderImage . "', '" . $safeRemark . "', '" . USER_ID . "', CURDATE(), CURTIME(), 'A')";
 
                     if (!mysqli_query($finance_connect, $qMain)) {
                         throw new Exception('Failed to insert request: ' . mysqli_error($finance_connect));
@@ -2616,7 +2730,7 @@ if ($existingInvoiceRst) {
                         <h5 class="card-title mb-2">Step 2: Preview And Edit Before Insert</h5>
                         <p class="mb-2">Detected Files: <strong><?= (int) $previewSummary['file_count'] ?></strong> | Parsed Rows: <strong><?= (int) $previewSummary['row_count'] ?></strong></p>
 
-                        <form method="post" id="sorImportPreviewForm" autocomplete="off" novalidate>
+                        <form method="post" enctype="multipart/form-data" id="sorImportPreviewForm" autocomplete="off" novalidate>
                             <?php $sourceNo = 1; foreach ($rowsBySource as $sourceFile => $rowSet) {
                                 $firstRow = $rowSet[0]['row'];
                                 $receiptKey = 'r' . (int) $sourceNo;
@@ -2624,6 +2738,7 @@ if ($existingInvoiceRst) {
                                 $invoiceDateVal = sorImpDateToYmd(isset($firstRow['invoice_date']) ? (string) $firstRow['invoice_date'] : '');
                                 $warehouseVal = isset($firstRow['warehouse_id']) ? (int) $firstRow['warehouse_id'] : 0;
                                 $courierVal = isset($firstRow['courier_id']) ? trim((string) $firstRow['courier_id']) : '';
+                                $trackingVal = isset($firstRow['tracking_no']) ? trim((string) $firstRow['tracking_no']) : '';
                                 $totalVal = isset($firstRow['total_price']) ? (string) $firstRow['total_price'] : '0.00';
                                 $totalValNum = (float) $totalVal;
                             ?>
@@ -2674,6 +2789,18 @@ if ($existingInvoiceRst) {
                                             <?php if ($totalValNum <= 0) { ?>
                                                 <div class="err-missing">Unable to extract total price from PDF. Please fill manually.</div>
                                             <?php } ?>
+                                        </div>
+                                    </div>
+
+                                    <div class="row mb-3">
+                                        <div class="col-md-4 mb-3">
+                                            <label class="form-label form_lbl">Tracking Number</label>
+                                            <input class="form-control receipt-sync sor-server-value receipt-tracking-input" type="text" data-receipt="<?= $receiptKey ?>" data-field="tracking_no" value="<?= htmlspecialchars($trackingVal, ENT_QUOTES, 'UTF-8') ?>" data-server-value="<?= htmlspecialchars($trackingVal, ENT_QUOTES, 'UTF-8') ?>" autocomplete="off">
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label class="form-label form_lbl" for="sor_import_airbill_<?= $receiptKey ?>">Stock Order Image / Airbill Photo</label>
+                                            <input class="form-control sor-import-airbill-image" type="file" id="sor_import_airbill_<?= $receiptKey ?>" name="airbill_photo[<?= $receiptKey ?>]" data-receipt="<?= $receiptKey ?>" accept="image/png,image/jpeg,image/jpg,image/webp" capture="environment">
+                                            <div class="sor-import-airbill-status small text-muted mt-2" data-receipt="<?= $receiptKey ?>" style="display:none;"></div>
                                         </div>
                                     </div>
 
@@ -2764,6 +2891,8 @@ if ($existingInvoiceRst) {
                                                             <td>
                                                                 <input type="hidden" name="rows[<?= $idx ?>][source_file]" value="<?= htmlspecialchars((string) (isset($row['source_file']) ? $row['source_file'] : ''), ENT_QUOTES, 'UTF-8') ?>">
                                                                 <input type="hidden" name="rows[<?= $idx ?>][source_attachment]" value="<?= htmlspecialchars((string) (isset($row['source_attachment']) ? $row['source_attachment'] : ''), ENT_QUOTES, 'UTF-8') ?>">
+                                                                <input type="hidden" name="rows[<?= $idx ?>][receipt_key]" value="<?= htmlspecialchars($receiptKey, ENT_QUOTES, 'UTF-8') ?>">
+                                                                <input type="hidden" class="receipt-hidden-tracking_no-<?= $receiptKey ?>" name="rows[<?= $idx ?>][tracking_no]" value="<?= htmlspecialchars($trackingVal, ENT_QUOTES, 'UTF-8') ?>">
                                                                 <input type="hidden" class="receipt-hidden-invoice_no-<?= $receiptKey ?>" name="rows[<?= $idx ?>][invoice_no]" value="<?= htmlspecialchars($invoiceVal, ENT_QUOTES, 'UTF-8') ?>">
                                                                 <input type="hidden" class="receipt-hidden-invoice_date-<?= $receiptKey ?>" name="rows[<?= $idx ?>][invoice_date]" value="<?= htmlspecialchars($invoiceDateVal, ENT_QUOTES, 'UTF-8') ?>">
                                                                 <input type="hidden" class="receipt-hidden-warehouse_id-<?= $receiptKey ?>" name="rows[<?= $idx ?>][warehouse_id]" value="<?= (int) $warehouseVal ?>">
@@ -2825,20 +2954,20 @@ if ($existingInvoiceRst) {
     </div>
 </div>
 
+<script src="<?= htmlspecialchars(rtrim((string) $SITEURL, '/') . '/header/js/zxing-browser.min.js?v=' . @filemtime(ROOT . '/header/js/zxing-browser.min.js'), ENT_QUOTES, 'UTF-8') ?>"></script>
 <script>
-    document.title = <?= json_encode($pageTitle, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     setButtonColor();
     preloader(300, '');
 
-     window.__SOR_IMPORT_CONFIG = window.__SOR_IMPORT_CONFIG || {
-         brandToCompanyMap: <?= json_encode($brandToCompanyMap ?? new stdClass()) ?>,
-         brandNameMap: <?= json_encode($brandNameMap ?? new stdClass()) ?>,
-         companyNameMap: <?= json_encode($companyNameMap ?? new stdClass()) ?>,
-         products: <?= json_encode(array_map(function ($id, $name) { return array('id' => (int) $id, 'name' => (string) $name); }, array_keys($products), array_values($products))) ?>,
-         packages: <?= json_encode(array_values($packages)) ?>,
-         existingInvoiceNosNormalized: <?= json_encode(array_keys($existingInvoiceNosNormalized)) ?>
-     };
-     
+    window.__SOR_IMPORT_CONFIG = window.__SOR_IMPORT_CONFIG || {
+        brandToCompanyMap: <?= json_encode($brandToCompanyMap ?? new stdClass()) ?>,
+        brandNameMap: <?= json_encode($brandNameMap ?? new stdClass()) ?>,
+        companyNameMap: <?= json_encode($companyNameMap ?? new stdClass()) ?>,
+        products: <?= json_encode(array_map(function ($id, $name) { return array('id' => (int) $id, 'name' => (string) $name); }, array_keys($products), array_values($products))) ?>,
+        packages: <?= json_encode(array_values($packages)) ?>,
+        existingInvoiceNosNormalized: <?= json_encode(array_keys($existingInvoiceNosNormalized)) ?>
+    };
+
     <?php include "../js/stock_order_request_import.js"; ?>
 </script>
 </body>

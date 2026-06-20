@@ -568,6 +568,12 @@ if ($conn->select_db($db_fin)) {
 
 addColumnIfMissing($conn, $db_fin, 'stock_in_order', 'stock_type', "ALTER TABLE `stock_in_order` ADD COLUMN `stock_type` VARCHAR(20) NOT NULL DEFAULT 'Stock In' AFTER `attachment`");
 
+if ($conn->select_db($db_fin)) {
+    addColumnIfMissing($conn, $db_fin, 'stock_order_request', 'stock_order_image', "ALTER TABLE `stock_order_request` ADD COLUMN `stock_order_image` VARCHAR(255) DEFAULT NULL AFTER `attachment`");
+} else {
+    echo "<p style='color:red;'>Unable to select Finance database `" . $db_fin . "` for `stock_order_request.stock_order_image`.</p>";
+}
+
 $createStockOutBatchUsageTableSql = "CREATE TABLE IF NOT EXISTS `stock_out_batch_usage` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
     `stock_out_order_id` INT NOT NULL,
@@ -1598,6 +1604,7 @@ migrationEnsureIndex($conn, $db_cms, $systemAlertMessageTable, 'idx_sam_display_
 migrationEnsureIndex($conn, $db_cms, $systemAlertMessageTable, 'idx_sam_related_record', "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD INDEX `idx_sam_related_record` (`related_table`, `related_id`)", "Verified `{$systemAlertMessageTable}` related record index.");
 migrationEnsureIndex($conn, $db_cms, $systemAlertMessageTable, 'idx_sam_notification_type', "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD INDEX `idx_sam_notification_type` (`notification_type`)", "Verified `{$systemAlertMessageTable}` notification type index.");
 
+$orderDeleteApprovalRequestTable = defined('ORDER_DELETE_APPROVAL_REQUEST') ? ORDER_DELETE_APPROVAL_REQUEST : 'order_delete_approval_request';
 $createOrderDeleteApprovalRequestSql = "CREATE TABLE IF NOT EXISTS `{$db_cms}`.`{$orderDeleteApprovalRequestTable}` (
     `id` INT NOT NULL AUTO_INCREMENT,
     `module_key` VARCHAR(80) NOT NULL DEFAULT '',

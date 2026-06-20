@@ -1,9 +1,10 @@
 function obj(str) {
-  return document.getElementById(str);
+  return document.getElementById(str) || null;
 }
 
 function objValue(str) {
-  return document.getElementById(str).value;
+  let element = obj(str);
+  return element ? element.value : "";
 }
 
 function normalizeNotificationType(type) {
@@ -102,11 +103,16 @@ function showNotification(message, type) {
 }
 
 function toggle(str) {
-  if (obj(str).style.display == "none") {
-    obj(str).style.display = "block";
+  let element = obj(str);
+  if (!element) {
+    return false;
+  }
+
+  if (element.style.display == "none") {
+    element.style.display = "block";
     return true;
-  } else if (obj(str).style.display == "block") {
-    obj(str).style.display = "none";
+  } else if (element.style.display == "block") {
+    element.style.display = "none";
     return false;
   }
 }
@@ -3363,7 +3369,9 @@ function retrieveDBData(param, siteURL, callback) {
       },
       dataType: "json",
       success: (result) => {
-        callback(result);
+        if (typeof callback === "function") {
+          callback(result);
+        }
       },
       error: function (xhr, status, error) {
         console.error("Error fetching data:", error);

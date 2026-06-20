@@ -1,28 +1,40 @@
 async function setBarcodeSlotTotal(rowCount) {
-  var num = 1;
-  // init
-  var totalSlot_id = $("#barcode_slot_total");
-  totalSlot_id.text(0);
+  var totalSlotCell = $("#barcode_slot_total");
+  if (!totalSlotCell.length) {
+    return;
+  }
 
-  while (num <= rowCount) {
-    totalSlot = parseInt(totalSlot_id.text());
-    var barcodeSlot_id = $("#barcode_slot_" + num);
+  var totalSlot = 0;
+  var maxRows = Number.isFinite(rowCount)
+    ? rowCount
+    : $("#productList TBODY TR").length;
 
-    if (barcodeSlot_id !== 0) {
-      var barcodeSlot = parseInt(barcodeSlot_id.val());
+  for (var num = 1; num <= maxRows; num++) {
+    var barcodeSlotField = $("#barcode_slot_" + num);
+    if (!barcodeSlotField.length) {
+      continue;
+    }
 
-      if (!isNaN(barcodeSlot)) totalSlot += barcodeSlot;
-
-      totalSlot_id.text(totalSlot);
-      totalSlot_id.append(
-        '<input name="barcode_slot_total_hidden" id="barcode_slot_total_hidden" type="hidden" value="' +
-          totalSlot +
-          '">',
-      );
-
-      num++;
+    var barcodeSlot = parseInt(barcodeSlotField.val(), 10);
+    if (!isNaN(barcodeSlot)) {
+      totalSlot += barcodeSlot;
     }
   }
+
+  totalSlotCell.contents().filter(function () {
+    return this.nodeType === Node.TEXT_NODE;
+  }).remove();
+  totalSlotCell.prepend(document.createTextNode(String(totalSlot)));
+
+  var hiddenField = $("#barcode_slot_total_hidden");
+  if (!hiddenField.length) {
+    hiddenField = $(
+      '<input name="barcode_slot_total_hidden" id="barcode_slot_total_hidden" type="hidden">',
+    );
+    totalSlotCell.append(hiddenField);
+  }
+
+  hiddenField.val(totalSlot);
 }
 
 function Add() {
@@ -40,17 +52,24 @@ function Add() {
 function AddRow() {
   //Get the reference of the Table's TBODY element.
   var tBody = $("#productList > TBODY")[0];
-  var numbering = +$("#productList > TBODY > TR:last > TD:first").text();
+  if (!tBody) {
+    return;
+  }
+
+  var numbering = parseInt($("#productList > TBODY > TR:last > TD:first").text(), 10);
+  if (isNaN(numbering) || numbering < 0) {
+    numbering = $("#productList > TBODY > TR").length;
+  }
   numbering += 1;
   numbering = numbering.toFixed(0);
 
   //Add Row.
-  row = tBody.insertRow(-1);
+  var row = tBody.insertRow(-1);
 
   //Add cell.
   var cell = $(row.insertCell(-1));
   cell.html(numbering);
-  var cell = $(row.insertCell(-1));
+  cell = $(row.insertCell(-1));
   cell.html(
     '<input type="text" name="prod_name[]" id="prod_name_' +
       numbering +
@@ -98,14 +117,28 @@ function AddRow() {
 }
 
 function Remove(button) {
+  if (!button) {
+    return;
+  }
+
   //Determine the reference of the Row using the Button.
   var row = $(button).closest("TR");
+  if (!row.length) {
+    return;
+  }
+
   var name = $("TD", row).eq(0).html();
-  var rowCount = parseInt($("#productList TBODY TR:last TD").eq(0).html());
+  var rowCount = parseInt($("#productList TBODY TR:last TD").eq(0).html(), 10);
+  if (isNaN(rowCount) || rowCount < 1) {
+    rowCount = $("#productList TBODY TR").length;
+  }
 
   if (confirm("Do you want to delete: " + name)) {
     //Get the reference of the Table.
     var table = $("#productList")[0];
+    if (!table || !row[0]) {
+      return;
+    }
 
     //Delete the Table row using it's Index.
     table.deleteRow(row[0].rowIndex);
@@ -143,21 +176,39 @@ function prodInfo(element) {
 }
 
 function prodInfoAutoFill(element) {
+  if (!element) {
+    return;
+  }
+
   var id = $(element).attr("id").split("_");
   id = id[id.length - 1];
   var prodArr = [];
   var wgtArr = [];
-  var rowCount = parseInt($("#productList TBODY TR:last TD").eq(0).html());
+  var rowCount = parseInt($("#productList TBODY TR:last TD").eq(0).html(), 10);
+  if (isNaN(rowCount) || rowCount < 1) {
+    rowCount = $("#productList TBODY TR").length;
+  }
+  var productId = String($(element).val() || "").trim();
 
   var retrieveProdInfo = async () => {
-    prodArr = await retrieveJSONData(
-      $(element).attr("value"),
-      "id",
-      "<?= PROD ?>",
-    );
+    if (productId === "") {
+      prodArr = [];
+      return;
+    }
+
+    prodArr = await retrieveJSONData(productId, "id", "<?= PROD ?>");
   };
 
   var setProdInfo = async () => {
+    if (!Array.isArray(prodArr) || !prodArr.length || !prodArr[0]) {
+      $("#wgt_" + id).val("");
+      $("#wgt_unit_" + id).val("");
+      $("#wgt_unit_val_" + id).val("");
+      $("#barcode_status_" + id).val("0");
+      $("#barcode_slot_" + id).val("0");
+      return;
+    }
+
     $("#wgt_" + id).val(prodArr[0]["weight"]);
     $("#wgt_unit_val_" + id).val(prodArr[0]["weight_unit"]);
     var barcodeStatus =
@@ -177,14 +228,21 @@ function prodInfoAutoFill(element) {
   };
 
   var retrieveWgtUnit = async () => {
-    wgtArr = await retrieveJSONData(
-      $("#wgt_unit_val_" + id).attr("value"),
-      "id",
-      "<?= WGT_UNIT ?>",
-    );
+    var weightUnitId = String($("#wgt_unit_val_" + id).val() || "").trim();
+    if (weightUnitId === "") {
+      wgtArr = [];
+      return;
+    }
+
+    wgtArr = await retrieveJSONData(weightUnitId, "id", "<?= WGT_UNIT ?>");
   };
 
   var setWgtUnit = async () => {
+    if (!Array.isArray(wgtArr) || !wgtArr.length || !wgtArr[0]) {
+      $("#wgt_unit_" + id).val("");
+      return;
+    }
+
     $("#wgt_unit_" + id).val(wgtArr[0]["unit"]);
   };
 
@@ -198,6 +256,7 @@ function prodInfoAutoFill(element) {
 
   allFunc();
 }
+
 $("#package_cost").on("input", function () {
   $(".package-cost-err").remove();
 });
@@ -215,7 +274,9 @@ $(document).ready(function () {
       searchInput(param, "<?= $SITEURL ?>");
     });
     $("#cur_unit").change(function () {
-      if ($(this).val() == "") $("#" + $(this).attr("id") + "_hidden").val("");
+      if ($(this).val() == "") {
+        $("#" + $(this).attr("id") + "_hidden").val("");
+      }
     });
   }
   if (!$("#brand").attr("readonly")) {
@@ -230,7 +291,9 @@ $(document).ready(function () {
       searchInput(param, "<?= $SITEURL ?>");
     });
     $("#brand").change(function () {
-      if ($(this).val() == "") $("#" + $(this).attr("id") + "_hidden").val("");
+      if ($(this).val() == "") {
+        $("#" + $(this).attr("id") + "_hidden").val("");
+      }
     });
   }
   if (!$("#cost_curr").attr("readonly")) {
@@ -245,15 +308,17 @@ $(document).ready(function () {
       searchInput(param, "<?= $SITEURL ?>");
     });
     $("#cost_curr").change(function () {
-      if ($(this).val() == "") $("#" + $(this).attr("id") + "_hidden").val("");
+      if ($(this).val() == "") {
+        $("#" + $(this).attr("id") + "_hidden").val("");
+      }
     });
   }
 });
 
 //block "e" in input type number field
-document
-  .querySelector("#package_cost")
-  .addEventListener("keypress", function (evt) {
+var packageCostInput = document.querySelector("#package_cost");
+if (packageCostInput) {
+  packageCostInput.addEventListener("keypress", function (evt) {
     var inputValue = this.value;
 
     if (
@@ -270,8 +335,9 @@ document
       evt.preventDefault();
     }
   });
+}
 
-  function initPlatformItemIdTags() {
+function initPlatformItemIdTags() {
   var hidden = document.getElementById("platform_item_id");
   var input = document.getElementById("platform_item_id_input");
   var tagsBox = document.getElementById("platform_item_id_tags");
@@ -308,7 +374,8 @@ document
         var removeBtn = document.createElement("button");
         removeBtn.type = "button";
         removeBtn.className = "platform-item-id-remove";
-        removeBtn.textContent = "×";
+        removeBtn.setAttribute("aria-label", "Remove platform item ID");
+        removeBtn.textContent = "x";
         removeBtn.addEventListener("click", function () {
           tags.splice(index, 1);
           syncHidden();

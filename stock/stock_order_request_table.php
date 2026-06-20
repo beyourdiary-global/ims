@@ -217,6 +217,47 @@ function sorQrHref($path, $siteUrl)
     }
     return rtrim((string) $siteUrl, '/') . '/' . ltrim($path, '/');
 }
+
+function sorNormalizeAttachmentRelativePath($path)
+{
+    $path = trim((string) $path);
+    if ($path === '') {
+        return '';
+    }
+
+    $path = str_replace('\\', '/', $path);
+    $path = preg_replace('#^https?://[^/]+/#i', '', $path);
+    $path = preg_replace('#^/?images_server/#i', '', $path);
+    $path = ltrim((string) $path, '/');
+    if (strpos($path, "\0") !== false || strpos($path, '..') !== false) {
+        return '';
+    }
+
+    if (stripos($path, 'attachment/') !== 0 && strpos($path, 'attachment/') !== false) {
+        $path = substr($path, strpos($path, 'attachment/'));
+    }
+
+    if (strpos($path, 'attachment/') === false) {
+        return '';
+    }
+
+    return $path;
+}
+
+function sorAttachmentHref($relativePath, $siteUrl)
+{
+    $relativePath = sorNormalizeAttachmentRelativePath($relativePath);
+    if ($relativePath === '') {
+        return '';
+    }
+
+    $newAbsPath = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . ltrim($relativePath, '/\\');
+    if (is_file($newAbsPath)) {
+        return rtrim((string) $siteUrl, '/') . '/' . ltrim($relativePath, '/');
+    }
+
+    return rtrim((string) $siteUrl, '/') . '/' . ltrim((string) img_server, '/') . ltrim($relativePath, '/');
+}
 // Note: sorNameById and sorPackageNameById removed as N+1 logic is gone
 ?>
 <!DOCTYPE html>
@@ -364,7 +405,7 @@ function sorQrHref($path, $siteUrl)
                                 $companyName = implode(', ', array_values($companyNames));
                                 $courierName = isset($courierMap[$row['courier_id']]) ? $courierMap[$row['courier_id']] : '';
                                 $courierTrackingLink = isset($courierLinkMap[$row['courier_id']]) ? $courierLinkMap[$row['courier_id']] : '';
-                                
+                                $stockOrderImageUrl = sorAttachmentHref(isset($row['stock_order_image']) ? $row['stock_order_image'] : '', $SITEURL);
                                 $trackingUrl = sorBuildTrackingUrl($courierTrackingLink, isset($row['tracking_no']) ? $row['tracking_no'] : '');
                                 $fullStatus = isset($row['tracking_status']) ? (string) $row['tracking_status'] : '';
                                 $modalId = 'statusModal_' . (int) $row['id'];
@@ -383,6 +424,11 @@ function sorQrHref($path, $siteUrl)
                                     <?php if (!empty($row['qr_image']) && !$isStockedInOrder) { ?>
                                         <a class="btn btn-sm btn-rounded btn-primary" href="<?= $SITEURL . '/stock/stock_order_request_info.php?id=' . (int) $row['id'] ?>" title="Open QR Info">
                                             <i class="fa-solid fa-qrcode"></i>
+                                        </a>
+                                    <?php } ?>
+                                    <?php if ($stockOrderImageUrl !== '') { ?>
+                                        <a class="btn btn-sm btn-rounded btn-primary" href="<?= htmlspecialchars($stockOrderImageUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer" title="View Stock Order Image">
+                                            <i class="fa-solid fa-image"></i>
                                         </a>
                                     <?php } ?>
                                     <button type="button" class="btn btn-sm btn-rounded btn-primary sor-refresh-btn" data-id="<?= (int) $row['id'] ?>" title="Refresh Tracking">
