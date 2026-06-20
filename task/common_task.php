@@ -572,6 +572,7 @@ if (!function_exists('taskDeleteRemovedEditorAttachments')) {
             if ($shouldDeleteFile) {
                 taskDeleteEditorAttachmentFileByPath($previousPath);
             }
+        }
     }
 }
 
@@ -6990,9 +6991,9 @@ if (!function_exists('taskRenderProjectBrowserMenu')) {
         $actionIdPrefix = isset($options['action_panel_id_prefix']) ? (string) $options['action_panel_id_prefix'] : 'taskProjectActions';
 
         $menus = array(
-            'summary' => array('label' => 'Summary', 'path' => '/task/summary.php', 'pin_id' => 137),
-            'board' => array('label' => 'Board', 'path' => '/task/board.php', 'pin_id' => 136),
-            'sheets' => array('label' => 'Sheets', 'path' => '/task/sheets.php', 'pin_id' => 138),
+            'summary' => array('label' => 'Summary', 'path' => '/task/summary.php', 'pin_id' => 139),
+            'board' => array('label' => 'Board', 'path' => '/task/board.php', 'pin_id' => 139),
+            'sheets' => array('label' => 'Sheets', 'path' => '/task/sheets.php', 'pin_id' => 139),
         );
 
         $hasTaskNavView = taskIsActionAllowed('view', taskGetProjectCreatorPinAccess($connect));
@@ -7029,9 +7030,9 @@ if (!function_exists('taskRenderProjectBrowserMenu')) {
                 continue;
             }
 
-            $projectHasSummaryAccess = taskUserCanAccessProjectPageByPin($connect, $projectId, 137);
-            $projectHasBoardAccess = taskUserCanAccessProjectPageByPin($connect, $projectId, 136);
-            $projectHasSheetsAccess = taskUserCanAccessProjectPageByPin($connect, $projectId, 138);
+            $projectHasSummaryAccess = taskUserCanAccessProjectPageByPin($connect, $projectId, 139);
+            $projectHasBoardAccess = taskUserCanAccessProjectPageByPin($connect, $projectId, 139);
+            $projectHasSheetsAccess = taskUserCanAccessProjectPageByPin($connect, $projectId, 139);
             
             $isProjectOwner = isset($project['owner_user_id'])
                 && (int) $project['owner_user_id'] === $currentUserId;

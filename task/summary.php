@@ -1,8 +1,10 @@
 <?php
 $taskParentPin = 139;
-$currentPagePin = 137;
+$currentPagePin = $taskParentPin;
+$pageTitlePin = 137;
 $pageTitle = 'Summary';
 $taskParentTitle = 'Project Task';
+$taskPermissionPin = $taskParentPin;
 
 if (!function_exists('taskBoardAuditLog')) {
     function taskBoardAuditLog($connect, $pageTitle, $pageAction, $viewActMsg, $cdate, $ctime)
@@ -32,7 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['summary_action'])) {
     include_once ROOT . '/include/common.php';
     include_once ROOT . '/include/common_variable.php';
     include_once './common_task.php';
-    $pageTitle = taskGetPinGroupTitleById($connect, $currentPagePin, $pageTitle);
+    $pageTitle = taskGetPinGroupTitleById($connect, $pageTitlePin, $pageTitle);
     $taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParentTitle);
 
     if (empty($_SESSION['csrf_token'])) {
@@ -45,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['summary_action'])) {
         exit;
     }
 
-    $pinAccess = taskGetPinAccessByGroupId($connect, $currentPagePin);
+    $pinAccess = taskGetPinAccessByGroupId($connect, $taskPermissionPin);
     if (!taskIsActionAllowed('view', $pinAccess)) {
         header('Content-Type: application/json');
         echo json_encode(array('ok' => 0, 'message' => 'No permission.'));
@@ -54,7 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['summary_action'])) {
 
     $action = trim((string) $_POST['summary_action']);
     $currentProjectId = taskResolveCurrentProjectId($connect, 0);
-    if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $currentPagePin)) {
+    if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $taskPermissionPin)) {
         header('Content-Type: application/json');
         echo json_encode(array('ok' => 0, 'message' => 'You do not have access to this project summary.'));
         exit;
@@ -102,13 +104,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['summary_action'])) {
 }
 
 include_once '../menuHeader.php';
-include_once '../checkCurrentPagePin.php';
 include_once './common_task.php';
 include_once './board_item_history.php';
-$pageTitle = taskGetPinGroupTitleById($connect, $currentPagePin, $pageTitle);
+$pageTitle = taskGetPinGroupTitleById($connect, $pageTitlePin, $pageTitle);
 $taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParentTitle);
 
-$pinAccess = taskGetPinAccessByGroupId($connect, $currentPagePin);
+$pinAccess = taskGetPinAccessByGroupId($connect, $taskPermissionPin);
 if (!taskIsActionAllowed('view', $pinAccess)) {
     renderNotificationScript('You do not have permission to view Project Task.', 'error', '../dashboard.php', 1200, true);
     exit;
@@ -119,7 +120,7 @@ $currentProject = $currentProjectId > 0 ? taskGetProjectById($connect, $currentP
 $taskParentTitle = !empty($currentProject) && isset($currentProject['name']) && trim((string) $currentProject['name']) !== ''
     ? (string) $currentProject['name']
     : $taskParentTitle;
-if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $currentPagePin)) {
+if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $taskPermissionPin)) {
     renderNotificationScript('You do not have access to this project summary.', 'error', '../dashboard.php', 1200, true);
     exit;
 }
@@ -137,7 +138,7 @@ $parentOptions = taskGetEpicParentOptions($connect, 0, $currentProjectId);
 $labels = taskGetLabels($connect);
 $projectKeySetting = taskGetProjectKeySetting($connect, $currentProjectId);
 $workTypeIcons = taskGetSvgIconOptions();
-$boardPinAccess = taskGetPinAccessByGroupId($connect, 136);
+$boardPinAccess = taskGetPinAccessByGroupId($connect, $taskPermissionPin);
 $canEdit = taskIsActionAllowed('edit', $boardPinAccess) && taskUserCanWorkItemAction($connect, $currentProjectId, 'edit');
 $canAdd = taskIsActionAllowed('add', $boardPinAccess) && taskUserCanWorkItemAction($connect, $currentProjectId, 'add');
 $canDelete = taskIsActionAllowed('delete', $boardPinAccess) && taskUserCanWorkItemAction($connect, $currentProjectId, 'delete');

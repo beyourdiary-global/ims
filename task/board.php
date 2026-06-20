@@ -1,8 +1,10 @@
 <?php
 $taskParentPin = 139;
-$currentPagePin = 136;
+$currentPagePin = $taskParentPin;
+$pageTitlePin = 136;
 $pageTitle = 'Board';
 $taskParentTitle = 'Project Task';
+$taskPermissionPin = $taskParentPin;
 
 if (!function_exists('taskBoardAuditLog')) {
     function taskBoardAuditLog($connect, $pageTitle, $pageAction, $viewActMsg, $cdate, $ctime)
@@ -31,10 +33,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     include_once ROOT . '/include/common.php';
     include_once ROOT . '/include/common_variable.php';
     include_once './common_task.php';
-    $pageTitle = taskGetPinGroupTitleById($connect, $currentPagePin, $pageTitle);
+    $pageTitle = taskGetPinGroupTitleById($connect, $pageTitlePin, $pageTitle);
     $taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParentTitle);
 
-    $pinAccess = taskGetPinAccessByGroupId($connect, $currentPagePin);
+    $pinAccess = taskGetPinAccessByGroupId($connect, $taskPermissionPin);
     if (!taskIsActionAllowed('view', $pinAccess)) {
         taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to access task board.'));
     }
@@ -52,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
     $currentUserId = USER_ID;
     $currentProjectId = taskResolveCurrentProjectId($connect, 0);
-    if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $currentPagePin)) {
+    if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $taskPermissionPin)) {
         taskJsonResponse(array('ok' => 0, 'message' => 'You do not have access to this project board.'));
     }
     if ($currentProjectId > 0) {
@@ -1339,13 +1341,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 }
 
 include_once '../menuHeader.php';
-include_once '../checkCurrentPagePin.php';
 include_once './common_task.php';
 include_once './board_item_history.php';
-$pageTitle = taskGetPinGroupTitleById($connect, $currentPagePin, $pageTitle);
+$pageTitle = taskGetPinGroupTitleById($connect, $pageTitlePin, $pageTitle);
 $taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParentTitle);
 
-$pinAccess = taskGetPinAccessByGroupId($connect, $currentPagePin);
+$pinAccess = taskGetPinAccessByGroupId($connect, $taskPermissionPin);
 if (!taskIsActionAllowed('view', $pinAccess)) {
     renderNotificationScript('You do not have permission to view task board.', 'error', '../dashboard.php', 1200, true);
     exit;
@@ -1355,7 +1356,7 @@ $safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
 $currentUserId = USER_ID;
 $currentProjectId = taskResolveCurrentProjectId($connect, 0);
 $currentProject = $currentProjectId > 0 ? taskGetProjectById($connect, $currentProjectId) : array();
-if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $currentPagePin)) {
+if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $taskPermissionPin)) {
     renderNotificationScript('You do not have access to this project board.', 'error', '../dashboard.php', 1200, true);
     exit;
 }
