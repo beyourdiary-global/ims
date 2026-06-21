@@ -1055,6 +1055,447 @@ function closeWebLinkEditor() {
   renderWebLinksSection();
 }
 
+function getLinkRelationTypes() {
+  if (Array.isArray(state.linkRelationTypes) && state.linkRelationTypes.length) {
+    return state.linkRelationTypes.slice();
+  }
+
+  return [
+    "is blocked by",
+    "blocks",
+    "is cloned by",
+    "is connected to",
+    "connects to",
+    "is duplicated by",
+    "duplicates",
+    "add to idea",
+    "is idea for",
+    "merged into",
+    "merged from",
+    "is implemented by",
+    "implements",
+    "is caused by",
+    "causes",
+    "relates to",
+  ];
+}
+
+function isParentTypeWorkItem() {
+  if (itemDetailModalState.isParentType) {
+    return true;
+  }
+
+  return String(itemDetailModalState.workTypeName || "")
+    .trim()
+    .toLowerCase() === "epic";
+}
+
+function availableChildWorkTypes() {
+  return (Array.isArray(state.workTypes) ? state.workTypes : [])
+    .map(function (workType) {
+      return normalizeWorkTypeEntry(workType || {});
+    })
+    .filter(function (workType) {
+      return (
+        Number(workType.id || 0) > 0 &&
+        String(workType.name || "").trim().toLowerCase() !== "epic"
+      );
+    });
+}
+
+function normalizeItemSearchResults(list) {
+  return (Array.isArray(list) ? list : []).map(function (item) {
+    var row = item && typeof item === "object" ? item : {};
+    return {
+      id: Number(row.id || 0),
+      title: String(row.title || "").trim(),
+      work_item_key: String(row.work_item_key || "").trim(),
+      work_type_name: String(row.work_type_name || "Task").trim() || "Task",
+      work_type_svg_icon: normalizeWorkTypeIcon(
+        row.work_type_svg_icon,
+        row.work_type_name || "Task",
+      ),
+      status_name: String(row.status_name || "").trim(),
+      status_color: String(row.status_color || "").trim(),
+      assignee_name: String(row.assignee_name || "").trim(),
+    };
+  });
+}
+
+function normalizeItemLinks(raw) {
+  var info = raw && typeof raw === "object" ? raw : {};
+  var groups = Array.isArray(info.groups) ? info.groups : [];
+  var normalizedGroups = groups.map(function (group) {
+    var rows = Array.isArray(group && group.items) ? group.items : [];
+    return {
+      relation_type: String(group && group.relation_type ? group.relation_type : "relates to").trim() || "relates to",
+      items: rows.map(function (item) {
+        var row = item && typeof item === "object" ? item : {};
+        return {
+          link_id: Number(row.link_id || 0),
+          id: Number(row.id || 0),
+          relation_type: String(row.relation_type || "").trim(),
+          display_relation_type: String(
+            row.display_relation_type || group.relation_type || "relates to",
+          ).trim() || "relates to",
+          work_item_key: String(row.work_item_key || "").trim(),
+          title: String(row.title || "").trim(),
+          work_type_name: String(row.work_type_name || "Task").trim() || "Task",
+          work_type_svg_icon: normalizeWorkTypeIcon(
+            row.work_type_svg_icon,
+            row.work_type_name || "Task",
+          ),
+          column_id: Number(row.column_id || 0),
+          status_name: String(row.status_name || "").trim(),
+          status_color: String(row.status_color || "").trim(),
+          assignee_user_id: Number(row.assignee_user_id || 0),
+          assignee_name: String(row.assignee_name || "").trim(),
+        };
+      }),
+    };
+  });
+
+  var total = Number(info.total || 0);
+  if (total <= 0) {
+    total = normalizedGroups.reduce(function (sum, group) {
+      return sum + (Array.isArray(group.items) ? group.items.length : 0);
+    }, 0);
+  }
+
+  return {
+    groups: normalizedGroups,
+    total: total,
+  };
+}
+
+function itemSearchResultHtml(item, selected, extraClass) {
+  var row = item && typeof item === "object" ? item : {};
+  var itemId = Number(row.id || 0);
+  var workTypeName = String(row.work_type_name || "Task").trim() || "Task";
+  var workTypeIcon = normalizeWorkTypeIcon(
+    row.work_type_svg_icon,
+    workTypeName,
+  );
+  var fullName = String(row.work_item_key || "").trim();
+  var title = String(row.title || "").trim();
+  if (title) {
+    fullName += (fullName ? " " : "") + title;
+  }
+  if (!fullName) {
+    fullName = "Work item";
+  }
+
+  return (
+    '<button type="button" class="btn task-item-search-result' +
+    (extraClass ? " " + extraClass : "") +
+    (selected ? " active" : "") +
+    '" data-result-item-id="' +
+    itemId +
+    '">' +
+    workTypeIconHtml(workTypeIcon, workTypeName, "task-item-search-result-icon") +
+    '<span class="task-item-search-result-name">' +
+    escHtml(fullName) +
+    "</span>" +
+    "</button>"
+  );
+}
+
+function renderChildCreateWorkTypeOptions() {
+  var workTypes = availableChildWorkTypes();
+  var selectedId = Number($("#taskItemChildCreateWorkTypeSelect").val() || 0);
+  if (!selectedId && workTypes.length) {
+    for (var index = 0; index < workTypes.length; index++) {
+      var candidate = workTypes[index] || {};
+      if (
+        String(candidate.name || "")
+          .trim()
+          .toLowerCase() === "task"
+      ) {
+        selectedId = Number(candidate.id || 0);
+        break;
+      }
+    }
+  }
+  if (!selectedId && workTypes.length) {
+    selectedId = Number(workTypes[0].id || 0);
+  }
+
+  var html = "";
+  for (var i = 0; i < workTypes.length; i++) {
+    var workType = workTypes[i] || {};
+    var workTypeId = Number(workType.id || 0);
+    if (!workTypeId) {
+      continue;
+    }
+
+    html +=
+      '<option value="' +
+      workTypeId +
+      '"' +
+      (workTypeId === selectedId ? " selected" : "") +
+      ">" +
+      escHtml(String(workType.name || "Task")) +
+      "</option>";
+  }
+
+  $("#taskItemChildCreateWorkTypeSelect").html(html);
+}
+
+function renderChildCreateSearchResults() {
+  var results = normalizeItemSearchResults(
+    itemDetailModalState.childCreateSearchResults,
+  );
+  itemDetailModalState.childCreateSearchResults = results;
+
+  var isSearchMode = itemDetailModalState.childCreateMode === "search";
+  var keyword = String($("#taskItemChildCreateInput").val() || "").trim();
+  var showResults = isSearchMode && keyword !== "";
+  var html = "";
+
+  for (var i = 0; i < results.length; i++) {
+    var item = results[i] || {};
+    if (!Number(item.id || 0)) {
+      continue;
+    }
+    html += itemSearchResultHtml(
+      item,
+      Number(item.id || 0) === Number(itemDetailModalState.childCreateSelectedItemId || 0),
+      "task-item-search-result-child",
+    );
+  }
+
+  if (!html && showResults) {
+    html =
+      '<div class="task-item-search-results-empty">No matching work items found.</div>';
+  }
+
+  $("#taskItemChildCreateSearchResults")
+    .toggleClass("d-none", !showResults)
+    .html(html);
+}
+
+function renderChildCreatePanel() {
+  var isParentType = isParentTypeWorkItem();
+  var isOpen = !!itemDetailModalState.childCreatePanelOpen && isParentType;
+  var isSearchMode = itemDetailModalState.childCreateMode === "search";
+  var inputValue = String($("#taskItemChildCreateInput").val() || "").trim();
+
+  $("#taskItemChildCreatePanel").toggleClass("d-none", !isOpen);
+  $("#taskItemDetailCreateChildActionWrap").toggleClass("d-none", !isParentType);
+  if (!isOpen) {
+    $("#taskItemChildCreateSearchResults").addClass("d-none").empty();
+    return;
+  }
+
+  renderChildCreateWorkTypeOptions();
+  $("#taskItemChildCreateWorkTypeSelect").toggleClass("d-none", isSearchMode);
+  $("#taskItemChildCreateInput").attr(
+    "placeholder",
+    isSearchMode ? "Type, search or paste URL" : "Name this task",
+  );
+  $("#taskItemChildCreateSubmitBtn").text(isSearchMode ? "Add" : "Create");
+  $("#taskItemChildCreateChooseExistingBtn").text(
+    isSearchMode ? "Create new instead" : "Choose existing",
+  );
+  $("#taskItemChildCreateSubmitBtn").prop("disabled", inputValue === "");
+  renderChildCreateSearchResults();
+}
+
+function resolveStatusColor(columnId, fallbackColor) {
+  var selectedColumnId = Number(columnId || 0);
+  var fallback = String(fallbackColor || "").trim() || "#DFE1E6";
+  var columns = Array.isArray(state.columns) ? state.columns : [];
+
+  for (var i = 0; i < columns.length; i++) {
+    var column = columns[i] || {};
+    if (Number(column.id || 0) === selectedColumnId) {
+      return normalizeHexColorValue(column.color || fallback, fallback);
+    }
+  }
+
+  return normalizeHexColorValue(fallback, "#DFE1E6");
+}
+
+function linkedItemAssigneeHtml(item) {
+  var row = item && typeof item === "object" ? item : {};
+  var userId = Number(row.assignee_user_id || 0);
+  var userName = String(row.assignee_name || "").trim() || "Unassigned";
+
+  if (userId > 0) {
+    return (
+      '<span class="task-item-linked-assignee-avatar" title="' +
+      escHtml(userName) +
+      '">' +
+      escHtml(initials(userName)) +
+      "</span>"
+    );
+  }
+
+  return '<span class="task-item-linked-assignee-avatar task-item-linked-assignee-avatar-unassigned" title="Unassigned"><i class="fa-regular fa-user"></i></span>';
+}
+
+function linkedItemStatusHtml(item) {
+  var row = item && typeof item === "object" ? item : {};
+  var statusName = String(row.status_name || "").trim() || "No status";
+  var statusColor = resolveStatusColor(row.column_id, row.status_color);
+  var textColor = labelTextColor(statusColor);
+
+  return (
+    '<span class="task-item-linked-status-badge" style="background:' +
+    escHtml(statusColor) +
+    ";color:" +
+    escHtml(textColor) +
+    ';">' +
+    escHtml(statusName) +
+    "</span>"
+  );
+}
+
+function renderLinkRelationOptions() {
+  var selectedType = String(itemDetailModalState.linkRelationType || "").trim();
+  var types = getLinkRelationTypes();
+  if (!selectedType && types.length) {
+    selectedType = String(types[0] || "");
+    itemDetailModalState.linkRelationType = selectedType;
+  }
+
+  var html = "";
+  for (var i = 0; i < types.length; i++) {
+    var relationType = String(types[i] || "").trim();
+    if (!relationType) {
+      continue;
+    }
+    html +=
+      '<option value="' +
+      escHtml(relationType) +
+      '"' +
+      (relationType === selectedType ? " selected" : "") +
+      ">" +
+      escHtml(relationType) +
+      "</option>";
+  }
+
+  $("#taskItemLinkRelationTypeSelect").html(html);
+}
+
+function renderLinkSearchResults() {
+  var results = normalizeItemSearchResults(itemDetailModalState.linkSearchResults);
+  itemDetailModalState.linkSearchResults = results;
+
+  var keyword = String($("#taskItemLinkSearchInput").val() || "").trim();
+  var html = "";
+  for (var i = 0; i < results.length; i++) {
+    var item = results[i] || {};
+    if (!Number(item.id || 0)) {
+      continue;
+    }
+    html += itemSearchResultHtml(
+      item,
+      Number(item.id || 0) === Number(itemDetailModalState.linkSelectedItemId || 0),
+      "task-item-search-result-link",
+    );
+  }
+
+  if (!html && keyword !== "") {
+    html =
+      '<div class="task-item-search-results-empty">No matching work items found.</div>';
+  }
+
+  $("#taskItemLinkSearchResults")
+    .toggleClass("d-none", keyword === "")
+    .html(html);
+}
+
+function renderLinkedWorkItemsSection() {
+  var info = normalizeItemLinks(itemDetailModalState.itemLinks);
+  itemDetailModalState.itemLinks = info;
+  var keyword = String($("#taskItemLinkSearchInput").val() || "").trim();
+
+  $("#taskItemDetailLinkWorkItemActionWrap").toggleClass(
+    "d-none",
+    !isParentTypeWorkItem(),
+  );
+  $("#taskItemLinkEditor").toggleClass("d-none", !itemDetailModalState.linkEditorOpen);
+  $("#taskItemLinkedWorkItemsEmptyAction").toggleClass(
+    "d-none",
+    info.total > 0 || itemDetailModalState.linkEditorOpen,
+  );
+  $("#taskItemLinkSaveBtn").prop(
+    "disabled",
+    !itemDetailModalState.linkEditorOpen ||
+      String(itemDetailModalState.linkRelationType || "").trim() === "" ||
+      keyword === "",
+  );
+
+  renderLinkRelationOptions();
+  renderLinkSearchResults();
+
+  var html = "";
+  var groups = Array.isArray(info.groups) ? info.groups : [];
+  for (var g = 0; g < groups.length; g++) {
+    var group = groups[g] || {};
+    var relationType = String(group.relation_type || "").trim();
+    var items = Array.isArray(group.items) ? group.items : [];
+    if (!relationType || !items.length) {
+      continue;
+    }
+
+    html +=
+      '<div class="task-item-linked-group">' +
+      '<div class="task-item-linked-group-title">' +
+      escHtml(relationType) +
+      "</div>";
+
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i] || {};
+      var itemId = Number(item.id || 0);
+      var workTypeName = String(item.work_type_name || "Task");
+      var workTypeIcon = normalizeWorkTypeIcon(
+        item.work_type_svg_icon,
+        workTypeName,
+      );
+      var workKey = String(item.work_item_key || "").trim();
+      var title = String(item.title || "").trim() || "Work item";
+
+      html +=
+        '<div class="task-item-linked-row">' +
+        '<div class="task-item-linked-main">' +
+        workTypeIconHtml(workTypeIcon, workTypeName, "task-item-linked-work-type-icon") +
+        '<button type="button" class="btn task-item-linked-open-btn" data-linked-item-id="' +
+        itemId +
+        '" title="' +
+        escHtml((workKey ? workKey + " " : "") + title) +
+        '">' +
+        '<span class="task-item-linked-open-key">' +
+        escHtml(workKey || ("Item #" + itemId)) +
+        "</span>" +
+        '<span class="task-item-linked-open-title">' +
+        escHtml(title) +
+        "</span>" +
+        "</button>" +
+        "</div>" +
+        '<div class="task-item-linked-meta">' +
+        linkedItemStatusHtml(item) +
+        linkedItemAssigneeHtml(item) +
+        (canEdit
+          ? '<button type="button" class="btn task-item-linked-remove-btn" data-link-id="' +
+            Number(item.link_id || 0) +
+            '" title="Remove linked work item"><i class="fa-regular fa-trash-can"></i></button>'
+          : "") +
+        "</div>" +
+        "</div>";
+    }
+
+    html += "</div>";
+  }
+
+  if (!html && info.total > 0) {
+    html = '<div class="task-item-linked-empty">No linked work items yet.</div>';
+  }
+
+  $("#taskItemLinkedWorkItemsList").html(html);
+}
+
 function priorityIconHtml(priority) {
   var value = String(priority || "Medium");
   var iconClass = "task-priority-medium";
@@ -1645,6 +2086,18 @@ function applyDetailFieldVisibility() {
   if (showChildSection) {
     setChildWorkItemsCollapsed(false);
   }
+
+  $("#taskItemDetailCreateChildActionWrap").toggleClass("d-none", !isEpic);
+  $("#taskItemChildWorkItemsAddBtn").toggleClass("d-none", !isEpic);
+  $("#taskItemDetailLinkWorkItemActionWrap").toggleClass("d-none", !isEpic);
+  if (!isEpic) {
+    itemDetailModalState.childCreatePanelOpen = false;
+    itemDetailModalState.childCreateMode = "create";
+    itemDetailModalState.childCreateSelectedItemId = 0;
+    itemDetailModalState.childCreateSearchResults = [];
+  }
+  renderChildCreatePanel();
+  renderLinkedWorkItemsSection();
 }
 
 function renderChildWorkItemsSection() {
@@ -2213,7 +2666,13 @@ function updateCardFromDetail(detail) {
   renderBoardGroupingLayout();
 }
 
-function applyItemDetailToModal(detail, statusLabels, parentOptions, webLinks) {
+function applyItemDetailToModal(
+  detail,
+  statusLabels,
+  parentOptions,
+  webLinks,
+  itemLinks,
+) {
   var info = detail && typeof detail === "object" ? detail : {};
   if (Array.isArray(statusLabels)) {
     normalizeStatusLabels(statusLabels);
@@ -2304,12 +2763,19 @@ function applyItemDetailToModal(detail, statusLabels, parentOptions, webLinks) {
       itemDetailModalState.parentWorkTypeIcon ||
       "",
   );
+  itemDetailModalState.isParentType =
+    Number(info.is_parent_type || 0) > 0 || isParentTypeWorkItem();
+  itemDetailModalState.itemLinks = normalizeItemLinks(
+    itemLinks || info.item_links,
+  );
   renderDetailKeyTrail();
   renderDetailMeta(info);
   itemDetailModalState.childWorkItems = normalizeChildWorkItems(
     info.child_work_items,
   );
   renderChildWorkItemsSection();
+  renderChildCreatePanel();
+  renderLinkedWorkItemsSection();
   applyDetailFieldVisibility();
 
   $("#taskItemDetailDueDateInput").val(String(info.due_date || ""));
@@ -2757,6 +3223,7 @@ function loadItemDetail(itemId) {
         Array.isArray(res.statusLabels) ? res.statusLabels : null,
         Array.isArray(res.parentOptions) ? res.parentOptions : null,
         Array.isArray(res.webLinks) ? res.webLinks : null,
+        res.itemLinks && typeof res.itemLinks === "object" ? res.itemLinks : null,
       );
     },
   );

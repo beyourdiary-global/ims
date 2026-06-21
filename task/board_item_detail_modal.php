@@ -10,6 +10,9 @@
                         <div id="taskItemDetailKeyTrail" class="task-item-detail-key-trail d-none"></div>
                     </div>
                     <div class="task-item-detail-top-actions">
+                        <button id="taskItemDetailCopyUrlBtn" type="button" class="btn task-item-detail-top-icon-btn" title="Copy work item URL" aria-label="Copy work item URL">
+                            <i class="fa-regular fa-copy"></i>
+                        </button>
                         <button type="button" class="btn-close task-item-detail-close-btn" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                 </div>
@@ -30,10 +33,12 @@
                                     <i class="fa-solid fa-plus"></i>
                                 </button>
                                 <ul class="dropdown-menu task-item-detail-add-menu">
+                                    <li id="taskItemDetailCreateChildActionWrap" class="d-none"><a id="taskItemDetailCreateChildAction" class="dropdown-item" href="#">Create child work item</a></li>
+                                    <li id="taskItemDetailLinkWorkItemActionWrap" class="d-none"><a id="taskItemDetailLinkWorkItemAction" class="dropdown-item" href="#">Link work item</a></li>
                                     <li><a id="taskItemDetailAddAttachmentAction" class="dropdown-item" href="#">Add attachment</a></li>
                                     <li><a id="taskItemDetailAddWebLinkAction" class="dropdown-item" href="#">Add web link</a></li>
                                 </ul>
-                                <input id="taskItemAttachmentInput" type="file" class="d-none" multiple>
+                                <input id="taskItemAttachmentInput" type="file" class="d-none" multiple accept=".jpg,.jpeg,.png,.gif,.webp,.bmp,.pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.zip,.mp4,.mov,.webm,.avi,.mkv,video/mp4,video/quicktime,video/webm,video/x-msvideo,video/x-matroska">
                             </div>
                             <div id="taskItemDetailAutosaveStatus" class="task-item-detail-autosave-status d-none" aria-live="polite"></div>
                         </div>
@@ -64,6 +69,19 @@
                                 </div>
                         </div>
 
+                        <div id="taskItemChildCreatePanel" class="mb-3 task-item-child-create-panel d-none">
+                            <div class="task-item-child-create-row">
+                                <input id="taskItemChildCreateInput" class="form-control task-item-child-create-input" type="text" maxlength="255" placeholder="Name this task">
+                                <select id="taskItemChildCreateWorkTypeSelect" class="form-select task-item-child-create-work-type-select"></select>
+                                <button id="taskItemChildCreateSubmitBtn" type="button" class="btn btn-primary task-item-child-create-submit-btn">Create</button>
+                            </div>
+                            <div id="taskItemChildCreateSearchResults" class="task-item-search-results d-none"></div>
+                            <div class="task-item-child-create-actions">
+                                <button id="taskItemChildCreateChooseExistingBtn" type="button" class="btn task-item-inline-link-btn">Choose existing</button>
+                                <button id="taskItemChildCreateCancelBtn" type="button" class="btn btn-light btn-sm">Cancel</button>
+                            </div>
+                        </div>
+
                         <div id="taskItemChildWorkItemsSection" class="mb-3 task-item-child-section d-none">
                             <div class="task-item-child-header">
                                 <button id="taskItemChildWorkItemsCollapseBtn" type="button" class="btn task-item-child-collapse-btn" aria-expanded="true" title="Collapse child work items">
@@ -71,7 +89,12 @@
                                 </button>
                                 <span class="task-item-child-title">Child work items</span>
                                 <span id="taskItemChildWorkItemsCount" class="task-item-child-count">0</span>
-                                <span id="taskItemChildWorkItemsProgressText" class="task-item-child-progress-text ms-auto">0% Done</span>
+                                <div class="task-item-child-header-actions ms-auto">
+                                    <span id="taskItemChildWorkItemsProgressText" class="task-item-child-progress-text">0% Done</span>
+                                    <button id="taskItemChildWorkItemsAddBtn" class="btn btn-outline-primary task-item-linked-add-btn d-none" type="button" title="Add child work item" aria-label="Add child work item">
+                                        <i class="fa-solid fa-plus"></i>
+                                    </button>
+                                </div>
                             </div>
                             <div id="taskItemChildWorkItemsBody" class="task-item-child-body">
                                 <div class="task-item-child-progress-bar-wrap">
@@ -148,6 +171,28 @@
                                 </div>
                             </div>
                             <div id="taskItemWebLinkList" class="task-item-web-link-list"></div>
+                        </div>
+
+                        <div id="taskItemLinkedWorkItemsSection" class="mb-3 task-item-linked-section">
+                            <div class="task-item-linked-header">
+                                <h5 class="mb-0">Linked work items</h5>
+                                <button id="taskItemLinkedWorkItemAddBtn" class="btn btn-outline-primary task-item-linked-add-btn" type="button" title="Add linked work item">
+                                    <i class="fa-solid fa-plus"></i>
+                                </button>
+                            </div>
+                            <button id="taskItemLinkedWorkItemsEmptyAction" type="button" class="btn task-item-linked-empty-action">Add linked work item</button>
+                            <div id="taskItemLinkEditor" class="task-item-link-editor d-none">
+                                <div class="task-item-link-editor-row">
+                                    <select id="taskItemLinkRelationTypeSelect" class="form-select form-select-sm task-item-link-relation-select"></select>
+                                    <input id="taskItemLinkSearchInput" class="form-control form-control-sm task-item-link-search-input" type="text" maxlength="500" autocomplete="off" placeholder="Type, search or paste URL">
+                                </div>
+                                <div id="taskItemLinkSearchResults" class="task-item-search-results d-none"></div>
+                                <div class="task-item-link-editor-actions">
+                                    <button id="taskItemLinkSaveBtn" class="btn btn-primary btn-sm" type="button">Link</button>
+                                    <button id="taskItemLinkCancelBtn" class="btn btn-light btn-sm" type="button">Cancel</button>
+                                </div>
+                            </div>
+                            <div id="taskItemLinkedWorkItemsList" class="task-item-linked-list"></div>
                         </div>
 
                         <div id="taskItemActivityDesktopMount">
@@ -363,6 +408,93 @@
 
                         <div id="taskItemActivityMobileMount"></div>
                 </div>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<div class="modal fade" id="taskItemWorklogModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-dialog-scrollable task-item-worklog-modal-dialog">
+        <div class="modal-content task-item-worklog-modal-content">
+            <div class="modal-header">
+                <div>
+                    <h5 id="taskItemWorklogModalTitle" class="modal-title">Log work</h5>
+                    <div id="taskItemWorklogModalSummary" class="task-item-worklog-modal-summary d-none"></div>
+                </div>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body task-item-worklog-modal-body">
+                <input type="hidden" id="taskItemWorklogEntryId" value="0">
+                <div class="task-item-worklog-form-grid">
+                    <div class="task-item-worklog-form-field">
+                        <label for="taskItemWorklogDurationInput" class="form-label">Time spent</label>
+                        <input type="text" id="taskItemWorklogDurationInput" class="form-control" maxlength="80" placeholder="2d 4h 4m">
+                    </div>
+                    <div class="task-item-worklog-form-field">
+                        <label for="taskItemWorklogRemainingInput" class="form-label">Time remaining</label>
+                        <input type="text" id="taskItemWorklogRemainingInput" class="form-control" maxlength="80" placeholder="0m">
+                    </div>
+                </div>
+                <div class="task-item-worklog-form-grid task-item-worklog-form-grid-date">
+                    <div class="task-item-worklog-form-field">
+                        <label for="taskItemWorklogStartedDateInput" class="form-label">Date started</label>
+                        <input type="date" id="taskItemWorklogStartedDateInput" class="form-control">
+                    </div>
+                    <div class="task-item-worklog-form-field">
+                        <label for="taskItemWorklogStartedTimeInput" class="form-label">Time started</label>
+                        <input type="time" id="taskItemWorklogStartedTimeInput" class="form-control">
+                    </div>
+                </div>
+                <div class="task-item-worklog-form-field mb-0">
+                    <label for="taskItemWorklogDescriptionInput" class="form-label">Work description</label>
+                    <div class="task-item-worklog-editor-wrap">
+                        <textarea id="taskItemWorklogDescriptionInput" rows="5" placeholder="Add what was done."></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" id="taskItemWorklogModalSaveBtn" class="btn btn-primary">Save</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="taskItemWorklogDeleteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered task-item-worklog-delete-modal-dialog">
+        <div class="modal-content task-item-worklog-delete-modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Delete worklog entry?</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body task-item-worklog-delete-modal-body">
+                <input type="hidden" id="taskItemWorklogDeleteEntryId" value="0">
+                <input type="hidden" id="taskItemWorklogDeleteDurationSeconds" value="0">
+                <p class="task-item-worklog-delete-copy mb-3">Once you delete, it's gone for good.</p>
+                <label class="task-item-worklog-delete-check">
+                    <input type="checkbox" id="taskItemWorklogDeleteAdjustRemainingInput" checked>
+                    <span>Adjust time remaining</span>
+                </label>
+                <div id="taskItemWorklogDeleteRemainingPanel" class="task-item-worklog-delete-remaining-panel">
+                    <div class="task-item-worklog-delete-remaining-head">
+                        <span>Current</span>
+                        <span></span>
+                        <span>New time remaining</span>
+                    </div>
+                    <div class="task-item-worklog-delete-remaining-row">
+                        <div id="taskItemWorklogDeleteCurrentRemainingText" class="task-item-worklog-delete-remaining-current">0m</div>
+                        <div class="task-item-worklog-delete-remaining-arrow"><i class="fa-solid fa-arrow-right"></i></div>
+                        <div>
+                            <input type="text" id="taskItemWorklogDeleteRemainingInput" class="form-control" maxlength="80" placeholder="0m">
+                            <div id="taskItemWorklogDeleteHelpText" class="task-item-worklog-delete-help"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" id="taskItemWorklogDeleteConfirmBtn" class="btn btn-primary">Delete</button>
             </div>
         </div>
     </div>
