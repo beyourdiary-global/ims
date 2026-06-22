@@ -972,8 +972,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         $worklogId = isset($_POST['worklog_id']) ? (int) $_POST['worklog_id'] : 0;
         $detail = $loadItemDetailForPermission($itemId);
         $oldSeconds = isset($detail['own_time_tracking_seconds']) ? (int) $detail['own_time_tracking_seconds'] : 0;
-        $requireColumnTransition('time_tracking', $oldSeconds, max(0, $oldSeconds));
-
+        $deletedWorklogSeconds = 0;
+        if (defined('TASK_ITEM_WORKLOG')) {
+            $worklogRst = mysqli_query(
+                $connect,
+                "SELECT duration_seconds FROM " . TASK_ITEM_WORKLOG . " WHERE id='" . $worklogId . "' AND item_id='" . $itemId . "' AND status='A' LIMIT 1"
+            );
+            if ($worklogRst && $worklogRst->num_rows > 0) {
+                $worklogRow = $worklogRst->fetch_assoc();
+                $deletedWorklogSeconds = isset($worklogRow['duration_seconds']) ? max(0, (int) $worklogRow['duration_seconds']) : 0;
+            }
+        }
+        $requireColumnTransition('time_tracking', $oldSeconds, max(0, $oldSeconds - $deletedWorklogSeconds));
         $result = taskDeleteItemWorklog(
             $connect,
             $itemId,
