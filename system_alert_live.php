@@ -55,7 +55,7 @@ if ($limit > 20) {
 if ($currentUrl === '') {
     $currentUrl = isset($_SERVER['HTTP_REFERER']) && trim((string) $_SERVER['HTTP_REFERER']) !== ''
         ? (string) $_SERVER['HTTP_REFERER']
-        : ((defined('SITEURL') ? rtrim((string) SITEURL, '/') : '') . '/dashboard.php');
+        : systemAlertBuildDefaultUrl();
 }
 
 $nowTs = time();
@@ -88,7 +88,7 @@ foreach ($rows as $row) {
         'message' => trim((string) (isset($row['message']) ? $row['message'] : '')),
         'is_unread' => strtoupper(trim((string) (isset($row['is_read']) ? $row['is_read'] : 'N'))) !== 'Y',
         'time_label' => systemAlertLiveFormatDateLabel($row),
-        'link' => rtrim((string) SITEURL, '/') . '/system_alert_action.php?id=' . $alertId . '&redirect=' . urlencode($currentUrl),
+        'link' => systemAlertBuildOpenUrl($alertId, $currentUrl),
     );
 }
 
@@ -97,7 +97,7 @@ systemAlertLiveJsonResponse(array(
     'unread_count' => $unreadCount,
     'total_count' => $totalCount,
     'mark_all_url' => $unreadCount > 0
-        ? (rtrim((string) SITEURL, '/') . '/system_alert_action.php?action=mark_all&redirect=' . urlencode($currentUrl))
+        ? systemAlertBuildMarkAllUrl($currentUrl)
         : '',
     'items' => $items,
 ));

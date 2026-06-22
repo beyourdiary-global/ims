@@ -28,6 +28,96 @@ if (!function_exists('systemAlertGetTableName')) {
     }
 }
 
+if (!function_exists('systemAlertGetDefaultPath')) {
+    function systemAlertGetDefaultPath()
+    {
+        return ROUTE_DASHBOARD;
+    }
+}
+
+if (!function_exists('systemAlertBuildRouteUrl')) {
+    function systemAlertBuildRouteUrl($path, $params = array(), $fragment = '')
+    {
+        $path = trim((string) $path);
+        if ($path === '') {
+            $path = systemAlertGetDefaultPath();
+        }
+
+        if (function_exists('siteUrlWithQuery')) {
+            return siteUrlWithQuery($path, $params, $fragment);
+        }
+
+        $baseUrl = defined('SITEURL') ? rtrim((string) SITEURL, '/') : '';
+        $url = $baseUrl !== '' ? ($baseUrl . '/' . ltrim($path, '/')) : $path;
+        $queryString = http_build_query(array_filter((array) $params, function ($value) {
+            return $value !== null && $value !== '';
+        }));
+
+        if ($queryString !== '') {
+            $url .= (strpos($url, '?') === false ? '?' : '&') . $queryString;
+        }
+
+        $fragment = trim((string) $fragment);
+        if ($fragment !== '') {
+            $url .= '#' . ltrim($fragment, '#');
+        }
+
+        return $url;
+    }
+}
+
+if (!function_exists('systemAlertBuildDefaultUrl')) {
+    function systemAlertBuildDefaultUrl()
+    {
+        return systemAlertBuildRouteUrl(systemAlertGetDefaultPath());
+    }
+}
+
+if (!function_exists('systemAlertBuildActionHandlerUrl')) {
+    function systemAlertBuildActionHandlerUrl($params = array())
+    {
+        return systemAlertBuildRouteUrl(ROUTE_SYSTEM_ALERT_ACTION, $params);
+    }
+}
+
+if (!function_exists('systemAlertBuildLiveEndpointUrl')) {
+    function systemAlertBuildLiveEndpointUrl()
+    {
+        return systemAlertBuildRouteUrl(ROUTE_SYSTEM_ALERT_LIVE);
+    }
+}
+
+if (!function_exists('systemAlertBuildOpenUrl')) {
+    function systemAlertBuildOpenUrl($alertId, $redirectUrl = '')
+    {
+        return systemAlertBuildActionHandlerUrl(array(
+            'id' => (int) $alertId,
+            'redirect' => $redirectUrl,
+        ));
+    }
+}
+
+if (!function_exists('systemAlertBuildMarkReadUrl')) {
+    function systemAlertBuildMarkReadUrl($alertId, $redirectUrl = '')
+    {
+        return systemAlertBuildActionHandlerUrl(array(
+            'action' => 'mark_read',
+            'id' => (int) $alertId,
+            'redirect' => $redirectUrl,
+        ));
+    }
+}
+
+if (!function_exists('systemAlertBuildMarkAllUrl')) {
+    function systemAlertBuildMarkAllUrl($redirectUrl = '')
+    {
+        return systemAlertBuildActionHandlerUrl(array(
+            'action' => 'mark_all',
+            'redirect' => $redirectUrl,
+        ));
+    }
+}
+
 if (!function_exists('systemAlertGetModuleConfigs')) {
     function systemAlertGetModuleConfigs()
     {
@@ -35,49 +125,49 @@ if (!function_exists('systemAlertGetModuleConfigs')) {
             'shopee_waiting_to_pack' => array(
                 'pin_group_id' => 128,
                 'title' => 'Shopee Waiting To Pack',
-                'path' => '/finance/waiting_to_pack.php',
+                'path' => ROUTE_FINANCE_WAITING_TO_PACK,
                 'action_label' => 'View Orders',
             ),
             'shopee_arrival_management' => array(
                 'pin_group_id' => 147,
                 'title' => 'Shopee Arrival Management',
-                'path' => '/finance/arrival_management.php',
+                'path' => ROUTE_FINANCE_ARRIVAL_MANAGEMENT,
                 'action_label' => 'Open Page',
             ),
             'daily_flow_report' => array(
                 'pin_group_id' => 148,
                 'title' => 'Daily Flow Report',
-                'path' => '/finance/flow_report.php',
+                'path' => ROUTE_FINANCE_FLOW_REPORT,
                 'action_label' => 'Open Report',
             ),
             'customer_follow_up' => array(
                 'pin_group_id' => 151,
                 'title' => 'Customer Follow-Up',
-                'path' => '/customer/customer_follow_up_list.php',
+                'path' => ROUTE_CUSTOMER_FOLLOW_UP_LIST,
                 'action_label' => 'Open Follow-Up',
             ),
             'campaign_follow_up_task' => array(
                 'pin_group_id' => 153,
                 'title' => 'Campaign Follow-Up Task',
-                'path' => '/campaign/campaign_follow_up_task.php',
+                'path' => ROUTE_CAMPAIGN_FOLLOW_UP_TASK,
                 'action_label' => 'Open Follow-Up',
             ),
             'project_task' => array(
                 'pin_group_id' => 139,
                 'title' => 'Project Task',
-                'path' => '/task/board.php',
+                'path' => ROUTE_TASK_BOARD,
                 'action_label' => 'Open Work Item',
             ),
             'waiting_admin_final_check' => array(
                 'pin_group_id' => 129,
                 'title' => 'Waiting Admin Final Check',
-                'path' => '/shopee/shopee_verify.php',
+                'path' => ROUTE_SHOPEE_VERIFY,
                 'action_label' => 'Open Page',
             ),
             'order_delete_approval' => array(
                 'pin_group_id' => 0,
                 'title' => 'Order Delete Approval',
-                'path' => '/dashboard.php',
+                'path' => systemAlertGetDefaultPath(),
                 'action_label' => 'Review Request',
             ),
         );
@@ -89,18 +179,8 @@ if (!function_exists('systemAlertBuildActionUrl')) {
     {
         $configs = systemAlertGetModuleConfigs();
         $config = isset($configs[$moduleKey]) ? $configs[$moduleKey] : array();
-        $path = isset($config['path']) ? (string) $config['path'] : '/dashboard.php';
-        $baseUrl = defined('SITEURL') ? rtrim((string) SITEURL, '/') : '';
-        $url = $baseUrl !== '' ? $baseUrl . $path : $path;
-        $queryString = http_build_query(array_filter((array) $params, function ($value) {
-            return $value !== null && $value !== '';
-        }));
-
-        if ($queryString !== '') {
-            $url .= (strpos($url, '?') === false ? '?' : '&') . $queryString;
-        }
-
-        return $url;
+        $path = isset($config['path']) ? (string) $config['path'] : systemAlertGetDefaultPath();
+        return systemAlertBuildRouteUrl($path, $params);
     }
 }
 

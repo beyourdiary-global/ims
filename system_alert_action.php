@@ -8,7 +8,7 @@ include_once ROOT . '/include/system_alert_common.php';
 if (!function_exists('systemAlertActionRedirect')) {
 function systemAlertActionRedirect($targetUrl)
 {
-    $defaultUrl = defined('SITEURL') ? rtrim((string) SITEURL, '/') . '/dashboard.php' : 'dashboard.php';
+    $defaultUrl = systemAlertBuildDefaultUrl();
 
     $targetUrl = trim((string) $targetUrl);
     if ($targetUrl === '') {
@@ -57,7 +57,7 @@ if (!function_exists('systemAlertActionMarkFollowUpNotificationRead')) {
 }
 
 if (!defined('USER_ID') || !(int) USER_ID) {
-    systemAlertActionRedirect((defined('SITEURL') ? rtrim((string) SITEURL, '/') : '') . '/index.php');
+    systemAlertActionRedirect(systemAlertBuildRouteUrl(ROUTE_INDEX));
 }
 
 $userId = (int) USER_ID;
@@ -68,7 +68,7 @@ $fallbackUrl = $redirectParam !== ''
     ? $redirectParam
     : (isset($_SERVER['HTTP_REFERER']) && trim((string) $_SERVER['HTTP_REFERER']) !== ''
         ? (string) $_SERVER['HTTP_REFERER']
-        : ((defined('SITEURL') ? rtrim((string) SITEURL, '/') : '') . '/dashboard.php'));
+        : systemAlertBuildDefaultUrl());
 
 if ($action === 'mark_all') {
     systemAlertMarkAllRead($connect, $userId);

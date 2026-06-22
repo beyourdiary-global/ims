@@ -104,6 +104,53 @@ if (!function_exists('siteUrlPath')) {
     }
 }
 
+// shared internal routes
+define('ROUTE_INDEX', '/index.php');
+define('ROUTE_DASHBOARD', '/dashboard.php');
+define('ROUTE_SYSTEM_ALERT_ACTION', '/system_alert_action.php');
+define('ROUTE_SYSTEM_ALERT_LIVE', '/system_alert_live.php');
+define('ROUTE_FINANCE_WAITING_TO_PACK', '/finance/waiting_to_pack.php');
+define('ROUTE_FINANCE_ARRIVAL_MANAGEMENT', '/finance/arrival_management.php');
+define('ROUTE_FINANCE_FLOW_REPORT', '/finance/flow_report.php');
+define('ROUTE_CUSTOMER_FOLLOW_UP_LIST', '/customer/customer_follow_up_list.php');
+define('ROUTE_CAMPAIGN_FOLLOW_UP_TASK', '/campaign/campaign_follow_up_task.php');
+define('ROUTE_TASK_BOARD', '/task/board.php');
+define('ROUTE_SHOPEE_VERIFY', '/shopee/shopee_verify.php');
+define('ROUTE_FINANCE_WEBSITE_ORDER_REQUEST', '/finance/website_order_request.php');
+define('ROUTE_FINANCE_WEBSITE_ORDER_REQUEST_TABLE', '/finance/website_order_request_table.php');
+define('ROUTE_FINANCE_FB_ORDER_REQ', '/finance/fb_order_req.php');
+define('ROUTE_FINANCE_FB_ORDER_REQ_TABLE', '/finance/fb_order_req_table.php');
+define('ROUTE_FINANCE_LAZADA_ORDER_REQ', '/finance/lazada_order_req.php');
+define('ROUTE_FINANCE_LAZADA_ORDER_REQ_TABLE', '/finance/lazada_order_req_table.php');
+define('ROUTE_SHOPEE_ORDER_REQ', '/shopee/shopee_order_req.php');
+define('ROUTE_SHOPEE_ORDER_REQ_TABLE', '/shopee/shopee_order_req_table.php');
+define('ROUTE_STOCK_ORDER_REQUEST', '/stock/stock_order_request.php');
+define('ROUTE_STOCK_ORDER_REQUEST_TABLE', '/stock/stock_order_request_table.php');
+
+if (!function_exists('siteUrlWithQuery')) {
+    function siteUrlWithQuery($path = '', $params = array(), $fragment = '')
+    {
+        $url = siteUrlPath($path);
+        $params = array_filter((array) $params, function ($value) {
+            return $value !== null && $value !== '';
+        });
+
+        if (!empty($params)) {
+            $queryString = http_build_query($params);
+            if ($queryString !== '') {
+                $url .= (strpos($url, '?') === false ? '?' : '&') . $queryString;
+            }
+        }
+
+        $fragment = trim((string) $fragment);
+        if ($fragment !== '') {
+            $url .= '#' . ltrim($fragment, '#');
+        }
+
+        return $url;
+    }
+}
+
 
 // //define date time
 define('date_dis', date("Y-m-d"));
