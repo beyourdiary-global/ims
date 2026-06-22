@@ -1215,9 +1215,11 @@ if (!function_exists('orderReportBuildBreakdowns')) {
         }
 
         foreach ($breakdowns as $dimension => $rowsByGroup) {
-            uasort($rowsByGroup, function ($left, $right) {
-                $leftAmount = isset($left['final_amount']) ? (float) $left['final_amount'] : 0.0;
-                $rightAmount = isset($right['final_amount']) ? (float) $right['final_amount'] : 0.0;
+            $usesPackageSales = in_array($dimension, array('package', 'brand', 'warehouse'), true);
+            uasort($rowsByGroup, function ($left, $right) use ($usesPackageSales) {
+                $amountKey = $usesPackageSales ? 'total_price' : 'final_amount';
+                $leftAmount = isset($left[$amountKey]) ? (float) $left[$amountKey] : 0.0;
+                $rightAmount = isset($right[$amountKey]) ? (float) $right[$amountKey] : 0.0;
                 if ($leftAmount === $rightAmount) {
                     return ($right['order_count'] ?? 0) <=> ($left['order_count'] ?? 0);
                 }
@@ -1325,10 +1327,12 @@ if (!function_exists('orderReportBuildRankingChartData')) {
             $salesValues = array();
             $orderValues = array();
             $rowsByGroup = isset($breakdowns[$key]) ? (array) $breakdowns[$key] : array();
+            $salesMetricKey = in_array($key, array('package', 'brand', 'warehouse'), true) ? 'total_price' : 'final_amount';
+            $salesLabel = $salesMetricKey === 'total_price' ? 'Final Sales' : 'Final Amount';
             $count = 0;
             foreach ($rowsByGroup as $groupName => $metrics) {
                 $labels[] = (string) $groupName;
-                $salesValues[] = isset($metrics['final_amount']) ? round((float) $metrics['final_amount'], 2) : 0;
+                $salesValues[] = isset($metrics[$salesMetricKey]) ? round((float) $metrics[$salesMetricKey], 2) : 0;
                 $orderValues[] = isset($metrics['order_count']) ? (int) $metrics['order_count'] : 0;
                 $count++;
                 if ($count >= 10) {
@@ -1341,6 +1345,7 @@ if (!function_exists('orderReportBuildRankingChartData')) {
                 'labels' => $labels,
                 'sales' => $salesValues,
                 'orders' => $orderValues,
+                'sales_label' => $salesLabel,
             );
         }
 

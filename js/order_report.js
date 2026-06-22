@@ -808,6 +808,7 @@
       var labels = Array.isArray(dataset.labels) ? dataset.labels : [];
       var sales = Array.isArray(dataset.sales) ? dataset.sales : [];
       var orders = Array.isArray(dataset.orders) ? dataset.orders : [];
+      var salesLabel = dataset.sales_label || "Final Amount";
 
       if (!labels.length) {
         rankingCanvas.classList.add("d-none");
@@ -831,7 +832,7 @@
           }),
           datasets: [
             {
-              label: "Final Amount",
+              label: salesLabel,
               data: sales,
               xAxisID: "xAmount",
               backgroundColor: "rgba(234, 88, 12, 0.72)",
@@ -858,7 +859,7 @@
               position: "bottom",
               title: {
                 display: true,
-                text: "Final Amount",
+                text: salesLabel,
               },
             },
             xOrders: {
