@@ -545,6 +545,100 @@
     return base ? base + "/" + normalizedPath : normalizedPath;
   }
 
+  function getEditorUploadHost(editor) {
+    if (!editor || typeof editor.getContainer !== "function") {
+      return null;
+    }
+
+    var container = editor.getContainer();
+    if (!container || container.nodeType !== 1) {
+      return null;
+    }
+
+    return container;
+  }
+
+  function ensureEditorUploadOverlay(editor) {
+    var host = getEditorUploadHost(editor);
+    if (!host) {
+      return null;
+    }
+
+    host.classList.add("task-editor-upload-host");
+
+    var overlay = host.querySelector(".task-editor-upload-overlay");
+    if (overlay) {
+      return overlay;
+    }
+
+    overlay = document.createElement("div");
+    overlay.className = "task-editor-upload-overlay";
+    overlay.setAttribute("aria-hidden", "true");
+    overlay.innerHTML =
+      '<div class="task-editor-upload-pill" role="status" aria-live="polite">' +
+      '<span class="task-editor-upload-spinner" aria-hidden="true"></span>' +
+      '<span class="task-editor-upload-text">Uploading file...</span>' +
+      "</div>";
+
+    host.appendChild(overlay);
+    return overlay;
+  }
+
+  function setEditorUploadState(editor, isUploading, statusText) {
+    if (!editor) {
+      return;
+    }
+
+    var host = getEditorUploadHost(editor);
+    var nextCount = Number(editor._taskUploadActiveCount || 0);
+    if (isUploading) {
+      nextCount += 1;
+    } else {
+      nextCount = Math.max(0, nextCount - 1);
+    }
+    editor._taskUploadActiveCount = nextCount;
+
+    if (typeof editor.setProgressState === "function") {
+      try {
+        editor.setProgressState(nextCount > 0);
+      } catch (e) {
+        // Ignore TinyMCE progress state failures and keep the custom overlay.
+      }
+    }
+
+    if (!host) {
+      return;
+    }
+
+    var overlay = ensureEditorUploadOverlay(editor);
+    if (!overlay) {
+      return;
+    }
+
+    var textNode = overlay.querySelector(".task-editor-upload-text");
+    if (textNode) {
+      textNode.textContent = String(statusText || "Uploading file...");
+    }
+
+    host.classList.toggle("task-editor-uploading", nextCount > 0);
+    overlay.setAttribute("aria-hidden", nextCount > 0 ? "false" : "true");
+  }
+
+  function uploadCommentAttachmentWithState(editor, file, opts, statusText) {
+    setEditorUploadState(editor, true, statusText);
+
+    return uploadCommentAttachment(file, opts).then(
+      function (attachment) {
+        setEditorUploadState(editor, false);
+        return attachment;
+      },
+      function (error) {
+        setEditorUploadState(editor, false);
+        return Promise.reject(error);
+      },
+    );
+  }
+
   function uploadCommentAttachment(file, opts) {
     var itemId = Number(itemDetailModalState.itemId || 0);
     if (itemId <= 0) {
@@ -669,7 +763,12 @@
         return;
       }
 
-      uploadCommentAttachment(file, editorContext)
+      uploadCommentAttachmentWithState(
+        editor,
+        file,
+        editorContext,
+        "Uploading " + String(file.name || "file") + "...",
+      )
         .then(function (attachment) {
           insertAttachmentIntoEditor(editor, attachment);
           editor.focus();
@@ -1600,6 +1699,7 @@
     var isDescription = !!opts.isDescription;
     var isReply = !!opts.isReply;
     var isCompactMobile = window.matchMedia("(max-width: 767.98px)").matches;
+    var activeEditor = null;
     return {
       selector: selector,
       base_url: window.taskBoardConfig.siteUrl + "/header/tinymce",
@@ -1640,20 +1740,31 @@
       link_title: false,
       target_list: false,
       images_upload_handler: function (blobInfo) {
-        return uploadCommentAttachment(blobInfo.blob(), {
-          isDescription: isDescription,
-          isReply: isReply,
-          isEditComment: opts && opts.isEditComment,
-          isEditReply: opts && opts.isEditReply,
-          commentId: opts && opts.commentId,
-          replyId: opts && opts.replyId,
-        }).then(function (attachment) {
+        var fileName =
+          blobInfo && typeof blobInfo.filename === "function"
+            ? String(blobInfo.filename() || "").trim()
+            : "";
+
+        return uploadCommentAttachmentWithState(
+          activeEditor,
+          blobInfo.blob(),
+          {
+            isDescription: isDescription,
+            isReply: isReply,
+            isEditComment: opts && opts.isEditComment,
+            isEditReply: opts && opts.isEditReply,
+            commentId: opts && opts.commentId,
+            replyId: opts && opts.replyId,
+          },
+          fileName ? "Uploading " + fileName + "..." : "Uploading image...",
+        ).then(function (attachment) {
           return String(attachment.fileUrl || "");
         });
       },
       content_style:
         "body { font-family: Segoe UI, Arial, sans-serif; font-size: 14px; line-height: 1.45; color: #24364d; } ul.task-editor-checklist { list-style: none; margin-left: 0; padding-left: 0; } ul.task-editor-checklist li { list-style: none; display: flex; align-items: flex-start; gap: 0.4rem; } ul.task-editor-checklist li input.task-editor-checkbox { margin-top: 0.28rem; flex: 0 0 auto; cursor: pointer; pointer-events: auto; }",
       setup: function (editor) {
+        activeEditor = editor;
         editor._taskEditorContext = {
           isDescription: isDescription,
           isReply: isReply,
