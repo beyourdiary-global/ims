@@ -932,8 +932,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         $detail = $loadItemDetailForPermission($itemId);
         $durationSeconds = isset($_POST['duration_seconds']) ? (int) $_POST['duration_seconds'] : 0;
         $oldSeconds = isset($detail['own_time_tracking_seconds']) ? (int) $detail['own_time_tracking_seconds'] : 0;
-        $requireColumnTransition('time_tracking', $oldSeconds, max(0, $oldSeconds));
-
+        $oldWorklogSeconds = 0;
+        if (defined('TASK_ITEM_WORKLOG')) {
+            $worklogRst = mysqli_query(
+                $connect,
+                "SELECT duration_seconds FROM " . TASK_ITEM_WORKLOG . " WHERE id='" . $worklogId . "' AND item_id='" . $itemId . "' AND status='A' LIMIT 1"
+            );
+            if ($worklogRst && $worklogRst->num_rows > 0) {
+                $worklogRow = $worklogRst->fetch_assoc();
+                $oldWorklogSeconds = isset($worklogRow['duration_seconds']) ? max(0, (int) $worklogRow['duration_seconds']) : 0;
+            }
+        }
+        $requireColumnTransition('time_tracking', $oldSeconds, max(0, $oldSeconds - $oldWorklogSeconds + $durationSeconds));
         $result = taskUpdateItemWorklog(
             $connect,
             $itemId,
