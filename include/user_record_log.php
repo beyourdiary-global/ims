@@ -28,8 +28,30 @@ if (!function_exists('urlFallbackResponse')) {
             $target = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : (string) $_SERVER['PHP_SELF'];
         }
 
-        echo '<script>showNotification(' . json_encode((string) $message) . ', "success");setTimeout(function(){location.href=' . json_encode($target) . ';}, 1200);</script>';
+        $notificationType = $isSuccess ? 'success' : 'error';
+        echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Redirecting...</title></head><body><script>(function(){'
+            . 'var message=' . json_encode((string) $message) . ';'
+            . 'var target=' . json_encode($target) . ';'
+            . 'var redirect=function(){window.location.href=target;};'
+            . 'if(typeof window.showNotification==="function"){window.showNotification(message,' . json_encode($notificationType) . ');setTimeout(redirect,1200);return;}'
+            . 'if(message){window.alert(message);}redirect();'
+            . '})();</script></body></html>';
         exit;
+    }
+}
+
+if (!function_exists('urlIsAjaxRequest')) {
+    function urlIsAjaxRequest()
+    {
+        if (!empty($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+            return true;
+        }
+
+        if (!empty($_SERVER['HTTP_ACCEPT']) && strpos((string) $_SERVER['HTTP_ACCEPT'], 'application/json') !== false) {
+            return true;
+        }
+
+        return false;
     }
 }
 
@@ -834,6 +856,10 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
             $urlIsFallback = true;
         }
 
+        if ($urlAction === 'save' && !$urlIsFallback && !urlIsAjaxRequest()) {
+            $urlIsFallback = true;
+        }
+
         if ($urlAction === '') {
             return $context;
         }
@@ -1628,7 +1654,7 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
             window.__USER_RECORD_LOG_CONFIG = <?php echo $configJson ? $configJson : '{}'; ?>;
         </script>
         <script src="<?php echo htmlspecialchars(rtrim((string) $GLOBALS['SITEURL'], '/') . '/header/tinymce/tinymce.min.js?v=' . @filemtime(ROOT . '/header/tinymce/tinymce.min.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
-        <script src="<?php echo htmlspecialchars(rtrim((string) $GLOBALS['SITEURL'], '/') . '/js/users/user_record_log.js?v=' . @filemtime(ROOT . '/js/user_record_log.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
+        <script src="<?php echo htmlspecialchars(rtrim((string) $GLOBALS['SITEURL'], '/') . '/js/user_record_log.js?v=' . @filemtime(ROOT . '/js/user_record_log.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
         <?php
     }
 }
