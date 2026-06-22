@@ -45,6 +45,85 @@
     });
   }
 
+  function formatQuantity(value) {
+    var numericValue = Number(value || 0);
+    if (Number.isNaN(numericValue)) {
+      numericValue = 0;
+    }
+
+    if (Math.abs(numericValue % 1) < 0.0000001) {
+      return numericValue.toLocaleString(undefined, {
+        maximumFractionDigits: 0,
+      });
+    }
+
+    return numericValue.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    });
+  }
+
+  function getBreakdownColumns(selectedKey) {
+    if (
+      selectedKey === "package" ||
+      selectedKey === "brand" ||
+      selectedKey === "warehouse"
+    ) {
+      return [
+        { key: "group", label: "Group", formatter: null },
+        { key: "order_count", label: "Total Orders", formatter: null },
+        { key: "total_price", label: "Total Price", formatter: formatAmount },
+        { key: "total_cost", label: "Total Cost", formatter: formatAmount },
+        {
+          key: "total_agent_cost",
+          label: "Total Agent Cost",
+          formatter: formatAmount,
+        },
+        {
+          key: "total_product_quantity",
+          label: "Total Product Quantity",
+          formatter: formatQuantity,
+        },
+      ];
+    }
+
+    return [
+      { key: "group", label: "Group", formatter: null },
+      { key: "order_count", label: "Total Orders", formatter: null },
+      {
+        key: "final_amount",
+        label: "Total Sales / Final Amount",
+        formatter: formatAmount,
+      },
+      { key: "voucher", label: "Total Voucher", formatter: formatAmount },
+      {
+        key: "service_fee",
+        label: "Total Service Fee",
+        formatter: formatAmount,
+      },
+      {
+        key: "transaction_fee",
+        label: "Total Transaction Fee",
+        formatter: formatAmount,
+      },
+      {
+        key: "aws_commission_fee",
+        label: "Total AWS Commission Fee",
+        formatter: formatAmount,
+      },
+      {
+        key: "charges_and_fees",
+        label: "Total Charges & Fees",
+        formatter: formatAmount,
+      },
+      {
+        key: "final_commission_fees",
+        label: "Total Final Commission Fees",
+        formatter: formatAmount,
+      },
+    ];
+  }
+
   function destroyChart(chartRef) {
     if (chartRef && typeof chartRef.destroy === "function") {
       chartRef.destroy();
@@ -600,6 +679,7 @@
     var toolbar = document.getElementById("orderReportRankingToolbar");
     var breakdownSelect = document.getElementById("orderReportBreakdownDimension");
     var breakdownTable = document.getElementById("orderReportBreakdownTable");
+    var breakdownHeadRow = document.getElementById("orderReportBreakdownHeadRow");
     var breakdownEmpty = document.getElementById("orderReportBreakdownEmpty");
     var rankingData = (config && config.ranking) || {};
     var rankingKey = "package";
@@ -813,7 +893,16 @@
       }
 
       var rows = (config.breakdowns && config.breakdowns[selectedKey]) || [];
+      var columns = getBreakdownColumns(selectedKey);
       tbody.innerHTML = "";
+
+      if (breakdownHeadRow) {
+        breakdownHeadRow.innerHTML = columns
+          .map(function (column) {
+            return "<th>" + escapeHtml(column.label) + "</th>";
+          })
+          .join("");
+      }
 
       if (!rows.length) {
         breakdownTable.classList.add("d-none");
@@ -830,34 +919,21 @@
 
       rows.forEach(function (row) {
         var tr = document.createElement("tr");
-        tr.innerHTML =
-          "<td>" +
-          escapeHtml(row.group || "Unassigned") +
-          "</td>" +
-          "<td>" +
-          escapeHtml(row.order_count || 0) +
-          "</td>" +
-          "<td>" +
-          escapeHtml(formatAmount(row.final_amount)) +
-          "</td>" +
-          "<td>" +
-          escapeHtml(formatAmount(row.voucher)) +
-          "</td>" +
-          "<td>" +
-          escapeHtml(formatAmount(row.service_fee)) +
-          "</td>" +
-          "<td>" +
-          escapeHtml(formatAmount(row.transaction_fee)) +
-          "</td>" +
-          "<td>" +
-          escapeHtml(formatAmount(row.aws_commission_fee)) +
-          "</td>" +
-          "<td>" +
-          escapeHtml(formatAmount(row.charges_and_fees)) +
-          "</td>" +
-          "<td>" +
-          escapeHtml(formatAmount(row.final_commission_fees)) +
-          "</td>";
+        tr.innerHTML = columns
+          .map(function (column) {
+            var rawValue =
+              column.key === "group"
+                ? row.group || "Unassigned"
+                : row[column.key] != null
+                  ? row[column.key]
+                  : 0;
+            var displayValue = column.formatter
+              ? column.formatter(rawValue)
+              : rawValue;
+
+            return "<td>" + escapeHtml(displayValue) + "</td>";
+          })
+          .join("");
         tbody.appendChild(tr);
       });
     }

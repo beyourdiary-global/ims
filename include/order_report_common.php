@@ -421,6 +421,28 @@ if (!function_exists('orderReportBuildReferenceMaps')) {
             }
         }
 
+        $packageDetailMap = array();
+        if (defined('PKG') && tableExists(PKG, $connect)) {
+            $packageDetailRows = orderReportFetchRows($connect, "SELECT `id`, `name`, `brand`, `price`, `cost`, `agent_cost`, `product` FROM `" . PKG . "` WHERE `status` = 'A'");
+            foreach ($packageDetailRows as $row) {
+                $packageId = isset($row['id']) ? (int) $row['id'] : 0;
+                if ($packageId <= 0) {
+                    continue;
+                }
+
+                $brandId = isset($row['brand']) ? (int) $row['brand'] : 0;
+                $packageDetailMap[$packageId] = array(
+                    'name' => isset($row['name']) ? trim((string) $row['name']) : '',
+                    'brand_id' => $brandId,
+                    'brand_name' => $brandId > 0 ? orderReportResolveOptionLabel((string) $brandId, $brandMap) : '',
+                    'price' => orderReportSafeFloat(isset($row['price']) ? $row['price'] : 0),
+                    'cost' => orderReportSafeFloat(isset($row['cost']) ? $row['cost'] : 0),
+                    'agent_cost' => orderReportSafeFloat(isset($row['agent_cost']) ? $row['agent_cost'] : 0),
+                    'product_quantity' => count(customerLabelSplitCsv(isset($row['product']) ? $row['product'] : '')),
+                );
+            }
+        }
+
         $paymentMap = array();
         if (defined('FIN_PAY_METH') && tableExists(FIN_PAY_METH, $financeConnect)) {
             $paymentRows = orderReportFetchRows($financeConnect, "SELECT `id`, `name` FROM `" . FIN_PAY_METH . "` WHERE `status` = 'A' ORDER BY `name` ASC");
@@ -429,13 +451,35 @@ if (!function_exists('orderReportBuildReferenceMaps')) {
             }
         }
 
+        $shopeePaymentMap = array();
+        if (defined('PAY_MTHD_SHOPEE') && tableExists(PAY_MTHD_SHOPEE, $financeConnect)) {
+            $paymentRows = orderReportFetchRows($financeConnect, "SELECT `id`, `name` FROM `" . PAY_MTHD_SHOPEE . "` WHERE `status` = 'A' ORDER BY `name` ASC");
+            foreach ($paymentRows as $row) {
+                $shopeePaymentMap[(string) ((int) $row['id'])] = isset($row['name']) ? (string) $row['name'] : '';
+            }
+        }
+
         return array(
             'brand_map' => $brandMap,
             'package_map' => $packageMap,
+            'package_detail_map' => $packageDetailMap,
             'payment_map' => $paymentMap,
+            'shopee_payment_map' => $shopeePaymentMap,
             'warehouse_map' => shopeeOmsLoadWarehouseNameMap($connect),
             'default_warehouse_id' => shopeeOmsGetDefaultWarehouseId($connect),
         );
+    }
+}
+
+if (!function_exists('orderReportGetPaymentLookupMap')) {
+    function orderReportGetPaymentLookupMap($platformConfig, $referenceMaps)
+    {
+        $platform = isset($platformConfig['platform']) ? trim((string) $platformConfig['platform']) : '';
+        if ($platform === 'shopee' && !empty($referenceMaps['shopee_payment_map'])) {
+            return (array) $referenceMaps['shopee_payment_map'];
+        }
+
+        return isset($referenceMaps['payment_map']) ? (array) $referenceMaps['payment_map'] : array();
     }
 }
 
@@ -473,6 +517,89 @@ if (!function_exists('orderReportResolvePackageOptionsFromRow')) {
         }
 
         return $packageOptions;
+    }
+}
+
+if (!function_exists('orderReportInitPackageAggregateMetrics')) {
+    function orderReportInitPackageAggregateMetrics()
+    {
+        return array(
+            'total_price' => 0.0,
+            'total_cost' => 0.0,
+            'total_agent_cost' => 0.0,
+            'total_product_quantity' => 0.0,
+        );
+    }
+}
+
+if (!function_exists('orderReportAccumulatePackageAggregateMetrics')) {
+    function orderReportAccumulatePackageAggregateMetrics(&$metricMap, $groupKey, $metricValues)
+    {
+        $groupKey = trim((string) $groupKey);
+        if ($groupKey === '') {
+            $groupKey = 'Unassigned';
+        }
+
+        if (!isset($metricMap[$groupKey])) {
+            $metricMap[$groupKey] = orderReportInitPackageAggregateMetrics();
+        }
+
+        foreach ($metricMap[$groupKey] as $key => $value) {
+            $metricMap[$groupKey][$key] += isset($metricValues[$key]) ? (float) $metricValues[$key] : 0.0;
+        }
+    }
+}
+
+if (!function_exists('orderReportBuildPackageDimensionMetrics')) {
+    function orderReportBuildPackageDimensionMetrics($connect, $platform, $orderRow, $referenceMaps)
+    {
+        $result = array(
+            'package' => array(),
+            'brand' => array(),
+            'totals' => orderReportInitPackageAggregateMetrics(),
+            'has_source_package_rows' => false,
+            'has_active_package_rows' => false,
+        );
+
+        $packageDetailMap = isset($referenceMaps['package_detail_map']) ? (array) $referenceMaps['package_detail_map'] : array();
+        foreach ((array) customerLabelResolvePackageRows($connect, $platform, $orderRow) as $packageRow) {
+            $result['has_source_package_rows'] = true;
+            $packageId = isset($packageRow['package_id']) ? (int) $packageRow['package_id'] : 0;
+            $qty = isset($packageRow['qty']) ? (float) $packageRow['qty'] : 1.0;
+            if ($qty <= 0) {
+                $qty = 1.0;
+            }
+
+            $detailRow = $packageId > 0 && isset($packageDetailMap[$packageId]) ? (array) $packageDetailMap[$packageId] : array();
+            if (empty($detailRow)) {
+                continue;
+            }
+
+            $result['has_active_package_rows'] = true;
+            $packageName = trim((string) (isset($packageRow['package_name']) ? $packageRow['package_name'] : ''));
+            if ($packageName === '' && isset($detailRow['name'])) {
+                $packageName = trim((string) $detailRow['name']);
+            }
+
+            $brandName = trim((string) (isset($detailRow['brand_name']) ? $detailRow['brand_name'] : ''));
+            $metricValues = array(
+                'total_price' => (float) (isset($detailRow['price']) ? $detailRow['price'] : 0) * $qty,
+                'total_cost' => (float) (isset($detailRow['cost']) ? $detailRow['cost'] : 0) * $qty,
+                'total_agent_cost' => (float) (isset($detailRow['agent_cost']) ? $detailRow['agent_cost'] : 0) * $qty,
+                'total_product_quantity' => (float) (isset($detailRow['product_quantity']) ? $detailRow['product_quantity'] : 0) * $qty,
+            );
+            orderReportAccumulatePackageAggregateMetrics($result['totals'], 'totals', $metricValues);
+
+            if ($packageName !== '') {
+                orderReportAccumulatePackageAggregateMetrics($result['package'], $packageName, $metricValues);
+            }
+
+            if ($brandName !== '') {
+                orderReportAccumulatePackageAggregateMetrics($result['brand'], $brandName, $metricValues);
+            }
+        }
+
+        return $result;
     }
 }
 
@@ -594,7 +721,7 @@ if (!function_exists('orderReportBuildOptionSets')) {
         );
 
         $brandMap = isset($referenceMaps['brand_map']) ? $referenceMaps['brand_map'] : array();
-        $paymentMap = isset($referenceMaps['payment_map']) ? $referenceMaps['payment_map'] : array();
+        $paymentMap = orderReportGetPaymentLookupMap($platformConfig, $referenceMaps);
         $warehouseMap = isset($referenceMaps['warehouse_map']) ? $referenceMaps['warehouse_map'] : array();
         $defaultWarehouseId = isset($referenceMaps['default_warehouse_id']) ? (int) $referenceMaps['default_warehouse_id'] : 0;
 
@@ -705,7 +832,7 @@ if (!function_exists('orderReportBuildRowMeta')) {
         $customerIndexes = isset($context['customer_indexes']) ? $context['customer_indexes'] : array();
         $customerLabelMap = isset($context['customer_label_map']) ? $context['customer_label_map'] : array();
         $brandMap = isset($referenceMaps['brand_map']) ? $referenceMaps['brand_map'] : array();
-        $paymentMap = isset($referenceMaps['payment_map']) ? $referenceMaps['payment_map'] : array();
+        $paymentMap = orderReportGetPaymentLookupMap($platformConfig, $referenceMaps);
         $warehouseMap = isset($referenceMaps['warehouse_map']) ? $referenceMaps['warehouse_map'] : array();
         $defaultWarehouseId = isset($referenceMaps['default_warehouse_id']) ? (int) $referenceMaps['default_warehouse_id'] : 0;
         $packageMap = isset($referenceMaps['package_map']) ? $referenceMaps['package_map'] : array();
@@ -726,6 +853,7 @@ if (!function_exists('orderReportBuildRowMeta')) {
             $packageOptions = orderReportResolvePackageOptionsFromRow($connect, $platformConfig['platform'], $row, $packageMap);
             $packageLabels = array_values($packageOptions);
             $packageIds = array_keys($packageOptions);
+            $packageDimensionMetrics = orderReportBuildPackageDimensionMetrics($connect, $platformConfig['platform'], $row, $referenceMaps);
             $brandField = isset($platformConfig['brand_field']) ? (string) $platformConfig['brand_field'] : '';
             $brandRaw = $brandField !== '' && isset($row[$brandField]) ? trim((string) $row[$brandField]) : '';
             $brandName = orderReportResolveOptionLabel($brandRaw, $brandMap);
@@ -782,6 +910,11 @@ if (!function_exists('orderReportBuildRowMeta')) {
                 'package_ids' => $packageIds,
                 'package_names' => $packageLabels,
                 'package_text' => empty($packageLabels) ? '' : implode(', ', $packageLabels),
+                'package_breakdown_metrics' => isset($packageDimensionMetrics['package']) ? (array) $packageDimensionMetrics['package'] : array(),
+                'brand_breakdown_metrics' => isset($packageDimensionMetrics['brand']) ? (array) $packageDimensionMetrics['brand'] : array(),
+                'package_total_breakdown_metrics' => isset($packageDimensionMetrics['totals']['totals']) ? (array) $packageDimensionMetrics['totals']['totals'] : orderReportInitPackageAggregateMetrics(),
+                'package_breakdown_has_source_rows' => !empty($packageDimensionMetrics['has_source_package_rows']),
+                'package_breakdown_has_active_rows' => !empty($packageDimensionMetrics['has_active_package_rows']),
                 'brand_raw' => $brandRaw,
                 'brand_name' => $brandName,
                 'warehouse_id' => $warehouseId,
@@ -987,6 +1120,10 @@ if (!function_exists('orderReportInitBreakdownRow')) {
             'aws_commission_fee' => 0.0,
             'charges_and_fees' => 0.0,
             'final_commission_fees' => 0.0,
+            'total_price' => 0.0,
+            'total_cost' => 0.0,
+            'total_agent_cost' => 0.0,
+            'total_product_quantity' => 0.0,
         );
     }
 }
@@ -1025,17 +1162,42 @@ if (!function_exists('orderReportBuildBreakdowns')) {
 
         foreach ((array) $rows as $row) {
             $metrics = isset($row['metrics']) ? (array) $row['metrics'] : array();
-            $packageNames = isset($row['package_names']) ? (array) $row['package_names'] : array();
-            if (empty($packageNames)) {
-                orderReportAccumulateBreakdown($breakdowns['package'], 'Unassigned', $metrics);
-            } else {
-                foreach ($packageNames as $packageName) {
+            $packageBreakdownMetrics = isset($row['package_breakdown_metrics']) ? (array) $row['package_breakdown_metrics'] : array();
+            $hasSourcePackageRows = !empty($row['package_breakdown_has_source_rows']);
+            $hasActivePackageRows = !empty($row['package_breakdown_has_active_rows']);
+            if (!empty($packageBreakdownMetrics)) {
+                foreach ($packageBreakdownMetrics as $packageName => $packageMetricValues) {
                     orderReportAccumulateBreakdown($breakdowns['package'], $packageName, $metrics);
+                    orderReportAccumulateBreakdown($breakdowns['package'], $packageName, $packageMetricValues);
+                }
+            } elseif (!$hasSourcePackageRows) {
+                $packageNames = isset($row['package_names']) ? (array) $row['package_names'] : array();
+                if (empty($packageNames)) {
+                    orderReportAccumulateBreakdown($breakdowns['package'], 'Unassigned', $metrics);
+                } else {
+                    foreach ($packageNames as $packageName) {
+                        orderReportAccumulateBreakdown($breakdowns['package'], $packageName, $metrics);
+                    }
                 }
             }
 
-            orderReportAccumulateBreakdown($breakdowns['brand'], isset($row['brand_name']) ? $row['brand_name'] : '', $metrics);
-            orderReportAccumulateBreakdown($breakdowns['warehouse'], isset($row['warehouse_name']) ? $row['warehouse_name'] : '', $metrics);
+            $brandBreakdownMetrics = isset($row['brand_breakdown_metrics']) ? (array) $row['brand_breakdown_metrics'] : array();
+            if (!empty($brandBreakdownMetrics)) {
+                foreach ($brandBreakdownMetrics as $brandName => $brandMetricValues) {
+                    orderReportAccumulateBreakdown($breakdowns['brand'], $brandName, $metrics);
+                    orderReportAccumulateBreakdown($breakdowns['brand'], $brandName, $brandMetricValues);
+                }
+            } elseif (!$hasSourcePackageRows && !$hasActivePackageRows) {
+                orderReportAccumulateBreakdown($breakdowns['brand'], isset($row['brand_name']) ? $row['brand_name'] : '', $metrics);
+            }
+
+            $packageTotalBreakdownMetrics = isset($row['package_total_breakdown_metrics']) ? (array) $row['package_total_breakdown_metrics'] : array();
+            if ($hasActivePackageRows) {
+                orderReportAccumulateBreakdown($breakdowns['warehouse'], isset($row['warehouse_name']) ? $row['warehouse_name'] : '', $metrics);
+                orderReportAccumulateBreakdown($breakdowns['warehouse'], isset($row['warehouse_name']) ? $row['warehouse_name'] : '', $packageTotalBreakdownMetrics);
+            } elseif (!$hasSourcePackageRows) {
+                orderReportAccumulateBreakdown($breakdowns['warehouse'], isset($row['warehouse_name']) ? $row['warehouse_name'] : '', $metrics);
+            }
             orderReportAccumulateBreakdown($breakdowns['payment'], isset($row['payment_name']) ? $row['payment_name'] : '', $metrics);
 
             $labelNames = isset($row['customer_label_names']) ? (array) $row['customer_label_names'] : array();
@@ -1203,6 +1365,10 @@ if (!function_exists('orderReportBuildBreakdownPayload')) {
                     'aws_commission_fee' => isset($metrics['aws_commission_fee']) ? round((float) $metrics['aws_commission_fee'], 2) : 0.0,
                     'charges_and_fees' => isset($metrics['charges_and_fees']) ? round((float) $metrics['charges_and_fees'], 2) : 0.0,
                     'final_commission_fees' => isset($metrics['final_commission_fees']) ? round((float) $metrics['final_commission_fees'], 2) : 0.0,
+                    'total_price' => isset($metrics['total_price']) ? round((float) $metrics['total_price'], 2) : 0.0,
+                    'total_cost' => isset($metrics['total_cost']) ? round((float) $metrics['total_cost'], 2) : 0.0,
+                    'total_agent_cost' => isset($metrics['total_agent_cost']) ? round((float) $metrics['total_agent_cost'], 2) : 0.0,
+                    'total_product_quantity' => isset($metrics['total_product_quantity']) ? round((float) $metrics['total_product_quantity'], 2) : 0.0,
                 );
             }
         }
@@ -1712,16 +1878,13 @@ if (!function_exists('orderReportRenderPage')) {
             echo '              <div class="table-responsive">';
             echo '                  <table class="table table-striped align-middle" id="orderReportBreakdownTable">';
             echo '                      <thead>';
-            echo '                          <tr>';
+            echo '                          <tr id="orderReportBreakdownHeadRow">';
             echo '                              <th>Group</th>';
             echo '                              <th>Total Orders</th>';
-            echo '                              <th>Total Sales / Final Amount</th>';
-            echo '                              <th>Total Voucher</th>';
-            echo '                              <th>Total Service Fee</th>';
-            echo '                              <th>Total Transaction Fee</th>';
-            echo '                              <th>Total AWS Commission Fee</th>';
-            echo '                              <th>Total Charges & Fees</th>';
-            echo '                              <th>Total Final Commission Fees</th>';
+            echo '                              <th>Total Price</th>';
+            echo '                              <th>Total Cost</th>';
+            echo '                              <th>Total Agent Cost</th>';
+            echo '                              <th>Total Product Quantity</th>';
             echo '                          </tr>';
             echo '                      </thead>';
             echo '                      <tbody></tbody>';
