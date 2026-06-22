@@ -36,9 +36,9 @@ $("#btb_attach").on("input", function() {
 $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
-    var year_chk = 0;
-    var month_chk = 0;
-    var attach_chk = 0;
+    let year_chk = 0;
+    let month_chk = 0;
+    let attach_chk = 0;
 
     if (($('#btb_year').val() === '' || $('#btb_year').val() === null || $('#btb_year')
             .val() === undefined)) {
@@ -60,7 +60,7 @@ $('.submitBtn').on('click', () => {
         month_chk = 1;
     }
 
-    var fileInput = $('#btb_attach')[0];
+    const fileInput = $('#btb_attach')[0];
     
     // Check if a new file is selected or if there is an existing attachment
     if ((fileInput.files.length === 0) && ($('#btb_attachmentValue').val() == '' || $('#btb_attachmentValue').val() == '0' || $('#btb_attachmentValue').val() === null || $('#btb_attachmentValue')

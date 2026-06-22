@@ -32,12 +32,12 @@ $("#atb_attach").on("input", function() {
 $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
-    var atb_trans_id_chk = 0;
-    var atb_atome_id_chk = 0;
-    var atb_trans_outlet_chk = 0;
-    var atb_platform_id_chk = 0;
-    var atb_amt_rec_chk = 0;
-    var attach_chk = 0;
+    let atb_trans_id_chk = 0;
+    let atb_atome_id_chk = 0;
+    let atb_trans_outlet_chk = 0;
+    let atb_platform_id_chk = 0;
+    let atb_amt_rec_chk = 0;
+    let attach_chk = 0;
 
     if (($('#atb_trans_id').val() === '' || $('#atb_trans_id').val() === null || $('#atb_trans_id')
             .val() === undefined)) {
@@ -89,7 +89,7 @@ $('.submitBtn').on('click', () => {
         atb_amt_rec_chk = 1;
     }
 
-    var fileInput = $('#atb_attach')[0];
+    const fileInput = $('#atb_attach')[0];
     
     // Check if a new file is selected or if there is an existing attachment
     if ((fileInput.files.length === 0) && ($('#atb_attachmentValue').val() == '' || $('#atb_attachmentValue').val() == '0' || $('#atb_attachmentValue').val() === null || $('#atb_attachmentValue')

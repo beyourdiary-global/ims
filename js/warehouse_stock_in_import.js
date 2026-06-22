@@ -124,7 +124,7 @@ dropdownMenuDispFix();
     }
 
     if (matches.length === 0) {
-      matches.push("<i>No result</i>");
+      matches.push("No result");
     }
 
     ensureWarehouseSearchShell(input);
@@ -134,7 +134,7 @@ dropdownMenuDispFix();
 
     $("#searchResult_" + inputId).empty();
     matches.forEach(function (match) {
-      if (match === "<i>No result</i>") {
+      if (match === "No result") {
         $("#searchResult_" + inputId).append(
           "<li value='emptyValue'>" + match + "</li>",
         );

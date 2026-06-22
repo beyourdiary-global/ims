@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 0;
 $pageTitle = "Shopee Order Request";
-$isFinance = 1;
 $sorIsAjaxRequest = isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
 
 if ($sorIsAjaxRequest) {
@@ -15,6 +14,13 @@ include_once ROOT . '/include/shopee_order_detail_pdf_common.php';
 
 $tblName = SHOPEE_SG_ORDER_REQ;
 $sorCustomerNameColumnExists = shopeeOmsTableHasColumn($finance_connect, dbFinance, $tblName, 'customer_name');
+$orderDeleteApprovalModuleKey = 'shopee_order_request';
+$orderDeleteApprovalState = orderDeleteApprovalInitPageState();
+$orderDeleteApprovalMode = !empty($orderDeleteApprovalState['approval_mode']);
+$orderDeleteApprovalRequestId = isset($orderDeleteApprovalState['request_id']) ? (int) $orderDeleteApprovalState['request_id'] : 0;
+$dataId = isset($orderDeleteApprovalState['data_id']) ? $orderDeleteApprovalState['data_id'] : '';
+$act = isset($orderDeleteApprovalState['act']) ? $orderDeleteApprovalState['act'] : '';
+$orderDeleteApprovalPanelHtml = isset($orderDeleteApprovalState['panel_html']) ? (string) $orderDeleteApprovalState['panel_html'] : '';
 
 if (empty($_SESSION['shopee_order_follow_up_csrf'])) {
     $_SESSION['shopee_order_follow_up_csrf'] = bin2hex(random_bytes(32));
@@ -23,20 +29,27 @@ if (empty($_SESSION['shopee_order_verify_pdf_csrf'])) {
     $_SESSION['shopee_order_verify_pdf_csrf'] = bin2hex(random_bytes(32));
 }
 
-$dataID = input('id');
-$act = input('act');
 $pageAction = getPageAction($act);
 $allowed_ext = array("png", "jpg", "jpeg", "pdf");
 
 // Redirect directly to role page to avoid extra router history entries.
-$redirect_page = $SITEURL . '/shopee/shopee_processing_order.php';
+$redirectPage = $SITEURL . '/shopee/shopee_processing_order.php';
 if (in_array('130', GlobalPin)) {
-    $redirect_page = $SITEURL . '/shopee/shopee_order_req_table.php';
+    $redirectPage = $SITEURL . '/shopee/shopee_order_req_table.php';
 } else if (in_array('129', GlobalPin)) {
-    $redirect_page = $SITEURL . '/shopee/shopee_verify.php';
+    $redirectPage = $SITEURL . '/shopee/shopee_verify.php';
 }
-$back_redirect_page = commonResolveBackUrl($redirect_page);
-$redirectLink = '<script>location.href=' . json_encode($redirect_page) . ';</script>';
+$requestedReturnUrl = trim((string) input('return_url'));
+if ($requestedReturnUrl === '') {
+    $requestedReturnUrl = trim((string) post('return_url'));
+}
+$back_redirect_page = $requestedReturnUrl !== ''
+    ? commonSafeBackUrl($requestedReturnUrl, $redirectPage)
+    : commonResolveBackUrl($redirectPage);
+if ($requestedReturnUrl !== '') {
+    $redirectPage = $back_redirect_page;
+}
+$redirectLink = '<script>location.href=' . json_encode($redirectPage) . ';</script>';
 $clearLocalStorage = <<<'HTML'
 <script>
 (function () {
@@ -66,6 +79,7 @@ $sorStatusOptions = function_exists('shopeeOmsGetEditableStatusOptions') ? shope
 $sorAirbillAttachmentPath = img_server . 'shopee_airbill_attachment/';
 $sorAirbillAttachmentUrl = rtrim((string) $SITEURL, '/') . '/' . trim((string) $sorAirbillAttachmentPath, '/\\') . '/';
 $sorLocalTelegramFailureMessage = '';
+$sorPopupErrorMessage = '';
 $sorIsLiveSite = isset($siteOrlocalMode) ? (bool) $siteOrlocalMode : true;
 $sorPrepareAjaxJsonResponse = function () use ($sorIsAjaxRequest) {
     if (!$sorIsAjaxRequest) {
@@ -97,13 +111,13 @@ $sorBuildLocalTelegramFailureMessage = function ($notifyResult) use ($sorIsLiveS
 
     return "Telegram message failed to send.\nReason: " . $reason;
 };
-$sorHandleStatusTransition = function ($newStatus) use ($connect, $finance_connect, $dataID, $pageTitle, $cdate, $ctime, $tblName, $redirect_page, $sorBuildLocalTelegramFailureMessage, $sorIsAjaxRequest, $sorPrepareAjaxJsonResponse) {
+$sorHandleStatusTransition = function ($newStatus) use ($connect, $finance_connect, $dataId, $pageTitle, $cdate, $ctime, $tblName, $redirectPage, $sorBuildLocalTelegramFailureMessage, $sorIsAjaxRequest, $sorPrepareAjaxJsonResponse) {
     $newStatus = shopeeOmsNormalizeStatusCode($newStatus);
     $transitionRemark = 'Order Status Update to ' . shopeeOmsGetStatusLabel($newStatus);
     $statusUpdateFallbackMessage = $newStatus === 'TP'
         ? 'Airbill is required when Order Status is To Pack.'
         : 'Unable to update order status.';
-    $transitionResult = shopeeOmsExecuteTransition($connect, $finance_connect, (int) $dataID, $newStatus, array(
+    $transitionResult = shopeeOmsExecuteTransition($connect, $finance_connect, (int) $dataId, $newStatus, array(
         'actor_user_id' => USER_ID,
         'actor_user_group_id' => USER_GROUP,
         'source_page' => $pageTitle,
@@ -137,7 +151,7 @@ $sorHandleStatusTransition = function ($newStatus) use ($connect, $finance_conne
             'connect'      => $connect,
             'oldval'       => 'order_status: ' . $oldStatus,
             'changes'      => 'order_status: ' . $newStatusCode,
-            'act_msg'      => USER_NAME . " updated Shopee order #" . (int) $dataID . " from " . htmlspecialchars($oldStatus, ENT_QUOTES, 'UTF-8') . " to " . htmlspecialchars($newStatusCode, ENT_QUOTES, 'UTF-8') . ".",
+            'act_msg'      => USER_NAME . " updated Shopee order #" . (int) $dataId . " from " . htmlspecialchars($oldStatus, ENT_QUOTES, 'UTF-8') . " to " . htmlspecialchars($newStatusCode, ENT_QUOTES, 'UTF-8') . ".",
         ];
         audit_log($log);
         if ($sorIsAjaxRequest) {
@@ -145,12 +159,12 @@ $sorHandleStatusTransition = function ($newStatus) use ($connect, $finance_conne
             echo json_encode(array(
                 'success' => true,
                 'message' => (string) $transitionResult['message'],
-                'redirect_url' => (string) $redirect_page,
+                'redirect_url' => (string) $redirectPage,
             ));
             exit;
         }
 
-        echo '<script>alert(' . json_encode((string) $transitionResult['message']) . '); window.location.replace(' . json_encode((string) $redirect_page) . ');</script>';
+        echo '<script>alert(' . json_encode((string) $transitionResult['message']) . '); window.location.replace(' . json_encode((string) $redirectPage) . ');</script>';
         exit;
     }
 
@@ -162,11 +176,12 @@ $sorHandleStatusTransition = function ($newStatus) use ($connect, $finance_conne
         ));
         exit;
     }
-
-    echo '<script>alert(' . json_encode((string) (isset($transitionResult['message']) ? $transitionResult['message'] : $statusUpdateFallbackMessage)) . ');</script>';
-    exit;
+    return array(
+        'success' => false,
+        'message' => (string) (isset($transitionResult['message']) ? $transitionResult['message'] : $statusUpdateFallbackMessage),
+    );
 };
-$sorLogOmsTransitionAudit = function ($transitionResult) use ($pageTitle, $cdate, $ctime, $tblName, $connect, $dataID) {
+$sorLogOmsTransitionAudit = function ($transitionResult) use ($pageTitle, $cdate, $ctime, $tblName, $connect, $dataId) {
     $oldStatus = isset($transitionResult['old_status']) ? (string) $transitionResult['old_status'] : '';
     $newStatusCode = isset($transitionResult['new_status']) ? (string) $transitionResult['new_status'] : '';
     $queryStatusUpdate = "OMS transition " . $oldStatus . " -> " . $newStatusCode;
@@ -182,7 +197,7 @@ $sorLogOmsTransitionAudit = function ($transitionResult) use ($pageTitle, $cdate
         'connect' => $connect,
         'oldval' => 'order_status: ' . $oldStatus,
         'changes' => 'order_status: ' . $newStatusCode,
-        'act_msg' => USER_NAME . " updated Shopee order #" . (int) $dataID . " from " . htmlspecialchars($oldStatus, ENT_QUOTES, 'UTF-8') . " to " . htmlspecialchars($newStatusCode, ENT_QUOTES, 'UTF-8') . ".",
+        'act_msg' => USER_NAME . " updated Shopee order #" . (int) $dataId . " from " . htmlspecialchars($oldStatus, ENT_QUOTES, 'UTF-8') . " to " . htmlspecialchars($newStatusCode, ENT_QUOTES, 'UTF-8') . ".",
     ));
 };
 $sorWriteVerifyAuditLog = function ($queryRecord, $oldValue, $changeValue, $message) use ($pageTitle, $cdate, $ctime, $tblName, $connect) {
@@ -201,7 +216,7 @@ $sorWriteVerifyAuditLog = function ($queryRecord, $oldValue, $changeValue, $mess
         'act_msg' => (string) $message,
     ));
 };
-$sorHandleConfirmReceiveWithFollowUp = function () use ($connect, $finance_connect, $dataID, $pageTitle, $cdate, $ctime, $tblName, $redirect_page, $sorIsAjaxRequest, $sorPrepareAjaxJsonResponse) {
+$sorHandleConfirmReceiveWithFollowUp = function () use ($connect, $finance_connect, $dataId, $pageTitle, $cdate, $ctime, $tblName, $redirectPage, $sorIsAjaxRequest, $sorPrepareAjaxJsonResponse) {
     $postedCsrfToken = isset($_POST['shopee_order_follow_up_csrf']) ? (string) $_POST['shopee_order_follow_up_csrf'] : '';
     if (!hash_equals((string) $_SESSION['shopee_order_follow_up_csrf'], $postedCsrfToken)) {
         $message = 'Invalid follow-up session token. Please refresh and try again.';
@@ -219,7 +234,7 @@ $sorHandleConfirmReceiveWithFollowUp = function () use ($connect, $finance_conne
         $connect,
         $finance_connect,
         'shopee',
-        (int) $dataID,
+        (int) $dataId,
         array(
             'message_shortcut_id' => postSpaceFilter('follow_up_message_shortcut_id'),
             'next_follow_up_date' => postSpaceFilter('follow_up_next_follow_up_date'),
@@ -238,7 +253,7 @@ $sorHandleConfirmReceiveWithFollowUp = function () use ($connect, $finance_conne
         $sourceConfig = isset($submitResult['source_config']) ? $submitResult['source_config'] : shopeeOmsGetOrderSourceConfig('shopee');
         $orderRow = isset($submitResult['order_row_after']) && !empty($submitResult['order_row_after'])
             ? $submitResult['order_row_after']
-            : shopeeOmsLoadOrder(shopeeOmsGetOrderSourceDbConnection($connect, $finance_connect, $sourceConfig), (int) $dataID, $sourceConfig);
+            : shopeeOmsLoadOrder(shopeeOmsGetOrderSourceDbConnection($connect, $finance_connect, $sourceConfig), (int) $dataId, $sourceConfig);
         $transitionResult = isset($submitResult['transition_result']) ? $submitResult['transition_result'] : array();
         $oldStatus = isset($transitionResult['old_status']) ? (string) $transitionResult['old_status'] : '';
         $newStatusCode = isset($transitionResult['new_status']) ? (string) $transitionResult['new_status'] : 'PR';
@@ -255,7 +270,7 @@ $sorHandleConfirmReceiveWithFollowUp = function () use ($connect, $finance_conne
             'connect' => $connect,
             'oldval' => 'order_status: ' . $oldStatus,
             'changes' => 'order_status: ' . $newStatusCode,
-            'act_msg' => USER_NAME . " updated Shopee order #" . (int) $dataID . " from " . htmlspecialchars($oldStatus, ENT_QUOTES, 'UTF-8') . " to " . htmlspecialchars($newStatusCode, ENT_QUOTES, 'UTF-8') . ".",
+            'act_msg' => USER_NAME . " updated Shopee order #" . (int) $dataId . " from " . htmlspecialchars($oldStatus, ENT_QUOTES, 'UTF-8') . " to " . htmlspecialchars($newStatusCode, ENT_QUOTES, 'UTF-8') . ".",
         ));
 
         if ($sorIsAjaxRequest) {
@@ -263,12 +278,12 @@ $sorHandleConfirmReceiveWithFollowUp = function () use ($connect, $finance_conne
             echo json_encode(array(
                 'success' => true,
                 'message' => isset($submitResult['message']) ? (string) $submitResult['message'] : 'Follow-up submitted successfully.',
-                'redirect_url' => (string) $redirect_page,
+                'redirect_url' => (string) $redirectPage,
             ));
             exit;
         }
 
-        echo '<script>alert(' . json_encode((string) (isset($submitResult['message']) ? $submitResult['message'] : 'Follow-up submitted successfully.')) . '); window.location.replace(' . json_encode((string) $redirect_page) . ');</script>';
+        echo '<script>alert(' . json_encode((string) (isset($submitResult['message']) ? $submitResult['message'] : 'Follow-up submitted successfully.')) . '); window.location.replace(' . json_encode((string) $redirectPage) . ');</script>';
         exit;
     }
 
@@ -286,13 +301,13 @@ $sorHandleConfirmReceiveWithFollowUp = function () use ($connect, $finance_conne
 };
 
 // to display data to input
-if ($dataID) { //edit/remove/view
-    $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $finance_connect);
+if ($dataId) { //edit/remove/view
+    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $finance_connect);
 
-    if ($rst != false && $rst->num_rows > 0) {
+    if ($result != false && $result->num_rows > 0) {
         $dataExisted = 1;
-        $row = $rst->fetch_assoc();
-        $rememberedDeliveryInfo = shopeeOmsGetRememberedWarehouseDeliveryInfo('shopee', (int) $dataID);
+        $row = $result->fetch_assoc();
+        $rememberedDeliveryInfo = shopeeOmsGetRememberedWarehouseDeliveryInfo('shopee', (int) $dataId);
         if ((!isset($sor_customer_name) || trim((string) $sor_customer_name) === '') && isset($rememberedDeliveryInfo['customer_name'])) {
             $sor_customer_name = trim((string) $rememberedDeliveryInfo['customer_name']);
         }
@@ -300,7 +315,7 @@ if ($dataID) { //edit/remove/view
             $sor_customer_address = trim((string) $rememberedDeliveryInfo['customer_address']);
         }
     } else {
-        // If $rst is false or no data found ($act==null)
+        // If $result is false or no data found ($act==null)
         $errorExist = 1;
         $_SESSION['tempValConfirmBox'] = true;
         $act = "F";
@@ -308,7 +323,7 @@ if ($dataID) { //edit/remove/view
 }
 
 $sorFollowUpModalContext = isset($row) && is_array($row)
-    ? customerFollowUpBuildReceivedOrderContext($connect, $finance_connect, 'shopee', (int) $dataID, $row)
+    ? customerFollowUpBuildReceivedOrderContext($connect, $finance_connect, 'shopee', (int) $dataId, $row)
     : array();
 
 $sorWarehouseRows = shopeeOmsLoadActiveWarehouses($connect);
@@ -322,20 +337,18 @@ foreach ($sorWarehouseRows as $warehouseRow) {
 $sorWarehouseNameMap = shopeeOmsLoadWarehouseNameMap($connect);
 $sorDefaultWarehouseId = shopeeOmsGetDefaultWarehouseId($connect, $sorWarehouseRows);
 
-if (!($dataID) && !($act)) {
-    echo '<script>
-    alert("Invalid action.");
-    window.location.replace("' . $redirect_page . '");
-    </script>';
+if (!($dataId) && !($act)) {
+    renderNotificationScript('Invalid action.', 'error', $redirectPage, 1200, true);
+    exit;
 }
 
 $sorHandleVerifyWorkflowRequest = function () use (
     $connect,
     $finance_connect,
-    $dataID,
+    $dataId,
     $tblName,
     $row,
-    $redirect_page,
+    $redirectPage,
     $pageTitle,
     $sorPrepareAjaxJsonResponse,
     $sorLogOmsTransitionAudit,
@@ -361,7 +374,7 @@ $sorHandleVerifyWorkflowRequest = function () use (
     }
 
     $verifyAction = trim((string) post('sor_verify_order_action'));
-    $freshOrderRow = shopeeOmsLoadOrder($finance_connect, (int) $dataID, shopeeOmsResolveOrderSourceConfig('shopee'));
+    $freshOrderRow = shopeeOmsLoadOrder($finance_connect, (int) $dataId, shopeeOmsResolveOrderSourceConfig('shopee'));
     if (empty($freshOrderRow)) {
         echo json_encode(array('success' => false, 'message' => 'Invalid order.'));
         exit;
@@ -395,7 +408,7 @@ $sorHandleVerifyWorkflowRequest = function () use (
             exit;
         }
 
-        $latestOrderRow = shopeeOmsLoadOrder($finance_connect, (int) $dataID, shopeeOmsResolveOrderSourceConfig('shopee'));
+        $latestOrderRow = shopeeOmsLoadOrder($finance_connect, (int) $dataId, shopeeOmsResolveOrderSourceConfig('shopee'));
         $comparisonRows = shopeeOrderDetailPdfBuildComparisonRows(
             $connect,
             $finance_connect,
@@ -458,11 +471,11 @@ $sorHandleVerifyWorkflowRequest = function () use (
                 'Shopee verify workflow direct verified',
                 '',
                 'Order status update to Verify',
-                USER_NAME . " used direct verified for Shopee order #" . (int) $dataID . "."
+                USER_NAME . " used direct verified for Shopee order #" . (int) $dataId . "."
             );
         }
 
-        $transitionResult = shopeeOmsExecuteTransition($connect, $finance_connect, (int) $dataID, 'V', array(
+        $transitionResult = shopeeOmsExecuteTransition($connect, $finance_connect, (int) $dataId, 'V', array(
             'actor_user_id' => USER_ID,
             'actor_user_group_id' => USER_GROUP,
             'source_page' => $pageTitle,
@@ -482,7 +495,7 @@ $sorHandleVerifyWorkflowRequest = function () use (
         if (!empty($historyChanges)) {
             shopeeOmsLogOrderEditHistory(
                 $finance_connect,
-                (int) $dataID,
+                (int) $dataId,
                 isset($freshOrderRow['orderID']) ? $freshOrderRow['orderID'] : '',
                 $historyChanges,
                 USER_ID,
@@ -502,7 +515,7 @@ $sorHandleVerifyWorkflowRequest = function () use (
                     'Shopee verify workflow field value changes',
                     implode("\n", $oldValuePairs),
                     implode("\n", $changePairs),
-                    USER_NAME . " updated Shopee order detail values during verify workflow for order #" . (int) $dataID . "."
+                    USER_NAME . " updated Shopee order detail values during verify workflow for order #" . (int) $dataId . "."
                 );
             }
         }
@@ -514,7 +527,7 @@ $sorHandleVerifyWorkflowRequest = function () use (
             'message' => $verifyAction === 'direct_verified'
                 ? 'Order verified successfully.'
                 : 'Order Detail PDF values saved and order verified successfully.',
-            'redirect_url' => $verifyRedirectUrl !== '' ? $verifyRedirectUrl : (string) $redirect_page,
+            'redirect_url' => $verifyRedirectUrl !== '' ? $verifyRedirectUrl : (string) $redirectPage,
         ));
         exit;
     }
@@ -533,7 +546,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
     $scr_country_name = trim((string) $_POST['scr_country']);
     $scr_brand_name = trim((string) $_POST['scr_brand']);
     $scr_series_name = trim((string) $_POST['scr_series']);
-    $scr_resolve_lookup_id = function ($rawId, $displayValue, $tableName, $columnName) use ($connect) {
+    $scr_resolve_lookup_id = function ($rawId, $displayValue, $tblName, $columnName) use ($connect) {
         $rawId = trim((string) $rawId);
         if ($rawId !== '' && ctype_digit($rawId) && (int) $rawId > 0) {
             return $rawId;
@@ -545,7 +558,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
         }
 
         $safeDisplayValue = mysqli_real_escape_string($connect, $displayValue);
-        $lookupRst = getData('id', $columnName . " = '$safeDisplayValue'", 'LIMIT 1', $tableName, $connect);
+        $lookupRst = getData('id', $columnName . " = '$safeDisplayValue'", 'LIMIT 1', $tblName, $connect);
         if ($lookupRst && $lookupRst->num_rows > 0) {
             $lookupRow = $lookupRst->fetch_assoc();
             return isset($lookupRow['id']) ? trim((string) $lookupRow['id']) : '';
@@ -634,13 +647,46 @@ if ($pendingStatusUpdate !== '' && !$sorShouldSaveBeforeStatusUpdate) {
     if ($pendingStatusUpdate === 'PR' && $sorConfirmReceiveWithFollowUp) {
         $sorHandleConfirmReceiveWithFollowUp();
     }
-    $sorHandleStatusTransition($pendingStatusUpdate);
+    $sorTransitionResult = $sorHandleStatusTransition($pendingStatusUpdate);
+    if (is_array($sorTransitionResult) && empty($sorTransitionResult['success'])) {
+        $transitionErrorState = shopeeOmsResolveStatusTransitionErrorState(
+            $pendingStatusUpdate,
+            isset($sorTransitionResult['message']) ? $sorTransitionResult['message'] : '',
+            'Unable to update order status.'
+        );
+        if ($transitionErrorState['stock_out_warehouse_err'] !== '') {
+            $stock_out_warehouse_err = $transitionErrorState['stock_out_warehouse_err'];
+        }
+        $sorPopupErrorMessage = $transitionErrorState['popup_error_message'];
+    }
 }
+
+$sorExecuteDeleteOrder = orderDeleteApprovalBuildStandardDeleteCallback(array(
+    'data_connect' => $finance_connect,
+    'audit_connect' => $connect,
+    'table_name' => $tblName,
+    'page_title' => $pageTitle,
+    'fallback_data_id' => (int) $dataId,
+    'label_field' => 'orderID',
+));
+
+$orderDeleteApprovalPanelHtml = orderDeleteApprovalHandlePageFlow(array(
+    'connect' => $connect,
+    'request_id' => $orderDeleteApprovalRequestId,
+    'module_key' => $orderDeleteApprovalModuleKey,
+    'data_id' => (int) $dataId,
+    'current_user_id' => (int) USER_ID,
+    'page_title' => $pageTitle,
+    'redirect_page' => $redirectPage,
+    'clear_local_storage' => $clearLocalStorage,
+    'approval_mode' => $orderDeleteApprovalMode,
+    'delete_callback' => $sorExecuteDeleteOrder,
+));
 
 if (post('returnActionBtn')) {
     $returnType = postSpaceFilter('return_type');
     $returnRemark = postSpaceFilter('return_remark');
-    $returnResult = shopeeOmsHandleReturn($connect, $finance_connect, (int) $dataID, $returnType, $returnRemark, USER_ID, USER_GROUP, $pageTitle);
+    $returnResult = shopeeOmsHandleReturn($connect, $finance_connect, (int) $dataId, $returnType, $returnRemark, USER_ID, USER_GROUP, $pageTitle);
     if (!empty($returnResult['success'])) {
         $log = [
             'log_act' => 'edit',
@@ -653,10 +699,10 @@ if (post('returnActionBtn')) {
             'page' => $pageTitle,
             'connect' => $connect,
             'changes' => 'return_type: ' . $returnType,
-            'act_msg' => USER_NAME . " marked Shopee order #" . (int) $dataID . " as returned (" . htmlspecialchars($returnType, ENT_QUOTES, 'UTF-8') . ").",
+            'act_msg' => USER_NAME . " marked Shopee order #" . (int) $dataId . " as returned (" . htmlspecialchars($returnType, ENT_QUOTES, 'UTF-8') . ").",
         ];
         audit_log($log);
-        echo '<script>alert(' . json_encode((string) $returnResult['message']) . '); window.location.replace(' . json_encode((string) $redirect_page) . ');</script>';
+        echo '<script>alert(' . json_encode((string) $returnResult['message']) . '); window.location.replace(' . json_encode((string) $redirectPage) . ');</script>';
         exit;
     }
 
@@ -681,7 +727,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
         return 'Unable to save edited order details.';
     };
 
-    $resolveMultiIds = function ($hiddenInput, $nameInput, $tableName) use ($connect) {
+    $resolveMultiIds = function ($hiddenInput, $nameInput, $tblName) use ($connect) {
         $resolved = array();
 
         if (!is_array($hiddenInput)) {
@@ -706,7 +752,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
             }
 
             $escapedName = mysqli_real_escape_string($connect, $nameVal);
-            $nameRst = getData('id', "name = '$escapedName'", 'LIMIT 1', $tableName, $connect);
+            $nameRst = getData('id', "name = '$escapedName'", 'LIMIT 1', $tblName, $connect);
             if ($nameRst && $nameRst->num_rows > 0) {
                 $nameRow = $nameRst->fetch_assoc();
                 $resolvedId = (int) $nameRow['id'];
@@ -804,17 +850,32 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
     $sor_airbill = postSpaceFilter('sor_airbill');
     $sor_customer_name = postSpaceFilter('sor_customer_name');
     $sor_customer_address = postSpaceFilter('sor_customer_address');
-    if ((int) $dataID > 0 && ($sor_customer_name !== '' || $sor_customer_address !== '')) {
-        shopeeOmsRememberWarehouseDeliveryInfo('shopee', (int) $dataID, array(
+    if ((int) $dataId > 0 && ($sor_customer_name !== '' || $sor_customer_address !== '')) {
+        shopeeOmsRememberWarehouseDeliveryInfo('shopee', (int) $dataId, array(
             'customer_name' => $sor_customer_name,
             'customer_address' => $sor_customer_address,
         ));
     }
-    $sor_airbill_attachment = null;
-    if (isset($_FILES["sor_airbill_attachment"]) && $_FILES["sor_airbill_attachment"]["size"] != 0) {
-        $sor_airbill_attachment = $_FILES["sor_airbill_attachment"]["name"];
-    } elseif (isset($_POST['sor_airbill_attachment_value'])) {
-        $sor_airbill_attachment = $_POST['sor_airbill_attachment_value'];
+    $sorAirbillHasPendingUpload = isset($_FILES["sor_airbill_attachment"])
+        && isset($_FILES["sor_airbill_attachment"]["size"])
+        && (int) $_FILES["sor_airbill_attachment"]["size"] > 0;
+    $sorAirbillPendingUploadName = $sorAirbillHasPendingUpload && isset($_FILES["sor_airbill_attachment"]["name"])
+        ? basename((string) $_FILES["sor_airbill_attachment"]["name"])
+        : '';
+    $sorExistingAirbillAttachmentValue = isset($row['airbill_attachment']) ? trim((string) $row['airbill_attachment']) : '';
+    $sorPostedAirbillAttachmentValue = isset($_POST['sor_airbill_attachment_value']) ? trim((string) $_POST['sor_airbill_attachment_value']) : '';
+    $sor_airbill_attachment = '';
+
+    if ($action === 'updRecord' && $sorExistingAirbillAttachmentValue !== '') {
+        $sor_airbill_attachment = $sorExistingAirbillAttachmentValue;
+    }
+
+    if (
+        $action === 'updRecord'
+        && $sorPostedAirbillAttachmentValue !== ''
+        && $sorPostedAirbillAttachmentValue === $sorExistingAirbillAttachmentValue
+    ) {
+        $sor_airbill_attachment = $sorPostedAirbillAttachmentValue;
     }
     $packageQtySnapshot = shopeeOmsBuildPackageQtySnapshotFromInputs(
         isset($_POST['sor_pkg_hidden']) ? $_POST['sor_pkg_hidden'] : array(),
@@ -828,22 +889,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
     switch ($action) {
         case 'addRecord':
         case 'updRecord':
-            if ($sor_update_airbill === 'yes' && isset($_FILES["sor_airbill_attachment"]) && $_FILES["sor_airbill_attachment"]["size"] != 0) {
-                $uploadResult = shopeeOmsStoreAirbillAttachmentUpload(
-                    $_FILES["sor_airbill_attachment"],
-                    $connect,
-                    $sor_brand,
-                    $sor_pkg,
-                    'shopee_order_request',
-                    $allowed_ext
-                );
-                if (!empty($uploadResult['success'])) {
-                    $sor_airbill_attachment = isset($uploadResult['path']) ? (string) $uploadResult['path'] : '';
-                } else {
-                    $airbill_attachment_err = isset($uploadResult['message']) ? (string) $uploadResult['message'] : "Failed to upload the airbill attachment.";
-                    $error = 1;
-                }
-            }
+            $sorAirbillUploadReady = $sor_update_airbill === 'yes' && $sorAirbillHasPendingUpload;
 
             if ($sor_update_airbill !== 'yes') {
                 if ($action === 'updRecord') {
@@ -931,8 +977,38 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                     $customer_address_err = "Customer Address cannot be empty when Update Airbill is enabled.";
                     $error = 1;
                 }
-                if (trim((string) $sor_airbill_attachment) === '') {
+                $sorEffectiveAirbillAttachmentForValidation = $sor_airbill_attachment;
+                if ($sorAirbillHasPendingUpload && $sorAirbillPendingUploadName !== '') {
+                    $sorEffectiveAirbillAttachmentForValidation = $sorAirbillPendingUploadName;
+                }
+
+                if (trim((string) $sorEffectiveAirbillAttachmentForValidation) === '') {
                     $airbill_attachment_err = "Airbill Attachment cannot be empty when Update Airbill is enabled.";
+                    $error = 1;
+                }
+            }
+
+            $sorShouldValidateWarehouseStockBeforeSave = false;
+            $sorCurrentOrderStatusForValidation = isset($row['order_status']) ? shopeeOmsNormalizeStatusCode($row['order_status']) : '';
+
+            if ($action === 'addRecord' && $sor_order_status === 'TP') {
+                $sorShouldValidateWarehouseStockBeforeSave = true;
+            } else if ($action === 'updRecord' && $pendingStatusUpdate === 'TP') {
+                $sorShouldValidateWarehouseStockBeforeSave = true;
+            } else if ($action === 'updRecord' && $sorCurrentOrderStatusForValidation === 'TP') {
+                $sorShouldValidateWarehouseStockBeforeSave = true;
+            }
+
+            if (!isset($error) && $sorShouldValidateWarehouseStockBeforeSave) {
+                $sorWarehouseStockValidation = shopeeOmsValidateWarehouseStockForOrder($connect, $finance_connect, array(
+                    'package' => $sor_pkg,
+                    'package_qty_json' => $packageQtySnapshotJson,
+                    'stock_out_warehouse_id' => $sor_stock_out_warehouse_id,
+                ), array(
+                    'platform' => 'shopee',
+                ));
+                if (empty($sorWarehouseStockValidation['success'])) {
+                    $stock_out_warehouse_err = isset($sorWarehouseStockValidation['message']) ? (string) $sorWarehouseStockValidation['message'] : 'Selected warehouse does not have enough stock.';
                     $error = 1;
                 }
             }
@@ -964,6 +1040,53 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                 }
                 break;
             }
+
+            if ($sorAirbillUploadReady) {
+                $uploadResult = shopeeOmsStoreAirbillAttachmentUpload(
+                    $_FILES["sor_airbill_attachment"],
+                    $connect,
+                    $sor_brand,
+                    $sor_pkg,
+                    'shopee_order_request',
+                    $allowed_ext
+                );
+
+                if (!empty($uploadResult['success'])) {
+                    $sor_airbill_attachment = isset($uploadResult['path']) ? (string) $uploadResult['path'] : '';
+                } else {
+                    $airbill_attachment_err = isset($uploadResult['message']) ? (string) $uploadResult['message'] : "Failed to upload the airbill attachment.";
+                    $error = 1;
+                }
+            }
+
+            if (isset($error)) {
+                if ($action === 'updRecord' && $sorSaveBeforeStatusOnly) {
+                    $sorPrepareAjaxJsonResponse();
+                    echo json_encode(array(
+                        'success' => false,
+                        'message' => $buildShopeeOrderReqSaveErrorMessage(array(
+                            isset($airbill_err) ? $airbill_err : '',
+                            isset($airbill_attachment_err) ? $airbill_attachment_err : '',
+                            isset($customer_address_err) ? $customer_address_err : '',
+                            isset($stock_out_warehouse_err) ? $stock_out_warehouse_err : '',
+                            isset($pkg_err) ? $pkg_err : '',
+                            isset($brand_err) ? $brand_err : '',
+                            isset($user_err) ? $user_err : '',
+                            isset($pay_err) ? $pay_err : '',
+                            isset($pic_err) ? $pic_err : '',
+                            isset($price_err) ? $price_err : '',
+                            isset($order_err) ? $order_err : '',
+                            isset($date_err) ? $date_err : '',
+                            isset($time_err) ? $time_err : '',
+                            isset($curr_err) ? $curr_err : '',
+                            isset($acc_err) ? $acc_err : '',
+                        ), $errorMsg),
+                    ));
+                    exit;
+                }
+                break;
+            }
+
             if ($action == 'addRecord') {
                 try {
                     $requiresInitialShippedAutoMove = ($sor_order_status === 'SP');
@@ -1124,13 +1247,13 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                     }
 
                     if ($returnData) {
-                        $dataID = (int) mysqli_insert_id($finance_connect);
-                        shopeeOmsRememberWarehouseDeliveryInfo('shopee', $dataID, array(
+                        $dataId = (int) mysqli_insert_id($finance_connect);
+                        shopeeOmsRememberWarehouseDeliveryInfo('shopee', $dataId, array(
                             'customer_name' => $sor_customer_name,
                             'customer_address' => $sor_customer_address,
                         ));
                         shopeeOmsLogTransition($finance_connect, array(
-                            'order_id' => $dataID,
+                            'order_id' => $dataId,
                             'order_code' => $sor_order,
                             'from_status' => '',
                             'to_status' => $sor_order_status,
@@ -1142,7 +1265,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                         ));
 
                         if ($sor_order_status === 'TP') {
-                            $freshOrderRow = shopeeOmsLoadOrder($finance_connect, $dataID);
+                            $freshOrderRow = shopeeOmsLoadOrder($finance_connect, $dataId);
                             if ($sor_customer_name !== '') {
                                 $freshOrderRow['customer_name'] = $sor_customer_name;
                             }
@@ -1151,11 +1274,11 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                                 $notifyResult = shopeeOmsSendWarehouseNotification($connect, $finance_connect, $tokenResult['token_row'], $tokenResult['notification'], $pageTitle);
                                 $sorLocalTelegramFailureMessage = $sorBuildLocalTelegramFailureMessage($notifyResult);
                                 if (!empty($notifyResult['sent'])) {
-                                    mysqli_query($finance_connect, "UPDATE `" . $tblName . "` SET `step_a_sent_at` = NOW() WHERE id = " . $dataID . " LIMIT 1");
+                                    mysqli_query($finance_connect, "UPDATE `" . $tblName . "` SET `step_a_sent_at` = NOW() WHERE id = " . $dataId . " LIMIT 1");
                                 }
                             }
                         } else if ($requiresInitialShippedAutoMove) {
-                            $initialShippedResult = shopeeOmsFinalizeInitialShippedOrder($connect, $finance_connect, $dataID, USER_ID, USER_GROUP, $pageTitle);
+                            $initialShippedResult = shopeeOmsFinalizeInitialShippedOrder($connect, $finance_connect, $dataId, USER_ID, USER_GROUP, $pageTitle);
                             if (empty($initialShippedResult['success'])) {
                                 throw new Exception(isset($initialShippedResult['message']) ? $initialShippedResult['message'] : 'Unable to process initial Shipped status.');
                             }
@@ -1177,8 +1300,8 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
             } else {
                 try {
                     // take old value
-                    $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $finance_connect);
-                    $row = $rst->fetch_assoc();
+                    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $finance_connect);
+                    $row = $result->fetch_assoc();
                     $existingStoredStockOutWarehouseId = isset($row['stock_out_warehouse_id']) ? shopeeOmsNormalizeWarehouseId($row['stock_out_warehouse_id']) : 0;
                     $existingEffectiveStockOutWarehouseId = shopeeOmsResolveStockOutWarehouseId($connect, $row, $sorDefaultWarehouseId);
                     $updatedStoredStockOutWarehouseId = $existingStoredStockOutWarehouseId;
@@ -1386,7 +1509,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                         $query .= "update_by = '" . USER_ID . "', ";
                         $query .= "update_date = curdate(), ";
                         $query .= "update_time = curtime() ";
-                        $query .= "WHERE id = '$dataID'"; // Specify your condition here
+                        $query .= "WHERE id = '$dataId'"; // Specify your condition here
 
                         $returnData = mysqli_query($finance_connect, $query);
                         if ($returnData) {
@@ -1411,7 +1534,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                                 $newValuesForHistory['customer_name'] = $sor_customer_name;
                             }
                             $orderChanges = shopeeOmsDetectOrderChanges($connect, $row, $newValuesForHistory);
-                            shopeeOmsLogOrderEditHistory($finance_connect, (int) $dataID, $sor_order, $orderChanges, USER_ID, USER_GROUP, $pageTitle);
+                            shopeeOmsLogOrderEditHistory($finance_connect, (int) $dataId, $sor_order, $orderChanges, USER_ID, USER_GROUP, $pageTitle);
                         } else {
                             $error = 1;
                             $errorMsg = trim((string) mysqli_error($finance_connect)) !== ''
@@ -1450,11 +1573,11 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval'] = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
             }
@@ -1500,7 +1623,19 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                     if ($pendingStatusUpdate === 'PR' && $sorConfirmReceiveWithFollowUp) {
                         $sorHandleConfirmReceiveWithFollowUp();
                     }
-                    $sorHandleStatusTransition($pendingStatusUpdate);
+                    $sorTransitionResult = $sorHandleStatusTransition($pendingStatusUpdate);
+                    if (is_array($sorTransitionResult) && empty($sorTransitionResult['success'])) {
+                        $transitionErrorState = shopeeOmsResolveStatusTransitionErrorState(
+                            $pendingStatusUpdate,
+                            isset($sorTransitionResult['message']) ? $sorTransitionResult['message'] : '',
+                            'Unable to update order status.'
+                        );
+                        if ($transitionErrorState['stock_out_warehouse_err'] !== '') {
+                            $stock_out_warehouse_err = $transitionErrorState['stock_out_warehouse_err'];
+                        }
+                        $sorPopupErrorMessage = $transitionErrorState['popup_error_message'];
+                        break;
+                    }
                 }
 
                 $statusSaveErrorMessage = $buildShopeeOrderReqSaveErrorMessage(array(
@@ -1543,29 +1678,58 @@ if (post('act') == 'D') {
     $id = post('id');
     if ($id) {
         try {
-            // take name
-            $rst = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $finance_connect);
-            $row = $rst->fetch_assoc();
+            $result = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $finance_connect);
+            if (!$result || $result->num_rows === 0) {
+                renderNotificationScript('Order record was not found.', 'error', $redirectPage, 1200, true);
+                exit;
+            }
 
-            $dataID = $row['id'];
+            $row = $result->fetch_assoc();
+            $dataId = (int) $row['id'];
+            $deleteLabel = isset($row['orderID']) ? trim((string) $row['orderID']) : '';
+            if ($deleteLabel === '') {
+                $deleteLabel = 'Order #' . $dataId;
+            }
 
-            //SET the record status to 'D'
-            deleteRecord($tblName, '', $dataID, $sor_name, $finance_connect, $connect, $cdate, $ctime, $pageTitle);
-            $_SESSION['delChk'] = 1;
+            $deleteApprovalResult = orderDeleteApprovalRequestDelete($connect, $orderDeleteApprovalModuleKey, $dataId, $deleteLabel, $pageTitle);
+            if (!empty($deleteApprovalResult['direct_delete'])) {
+                $deleteResult = $sorExecuteDeleteOrder(array(
+                    'source_order_id' => $dataId,
+                    'source_order_label' => $deleteLabel,
+                ));
+                renderNotificationScript(
+                    $deleteResult['message'],
+                    !empty($deleteResult['success']) ? 'success' : 'error',
+                    $redirectPage,
+                    1200,
+                    true
+                );
+                exit;
+            }
+
+            renderNotificationScript(
+                $deleteApprovalResult['message'],
+                isset($deleteApprovalResult['notification_type']) ? $deleteApprovalResult['notification_type'] : (!empty($deleteApprovalResult['success']) ? 'success' : 'error'),
+                $redirectPage,
+                1200,
+                true
+            );
+            exit;
         } catch (Exception $e) {
-            echo 'Message: ' . $e->getMessage();
+            renderNotificationScript($e->getMessage(), 'error', $redirectPage, 1200, true);
+            exit;
         }
     }
 }
 
 //view
-if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
+if (($dataId) && !($act) && (USER_ID != '') && empty($_SESSION['viewChk']) && empty($_SESSION['delChk'])) {
     $_SESSION['viewChk'] = 1;
 
     if (isset($errorExist)) {
-        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataID . "</b> ] from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataId . "</b> ] from <b><i>$tblName Table</i></b>.";
     } else {
-        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataID . "</b> ] <b>" . (isset($row['orderID']) ? $row['orderID'] : $dataID) . "</b> from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataId . "</b> ] <b>" . (isset($row['orderID']) ? $row['orderID'] : $dataId) . "</b> from <b><i>$tblName Table</i></b>.";
     }
 
     $log = [
@@ -1612,7 +1776,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
     $connect,
     '',
     $urbanismBadgeSeedName,
-    $redirect_page,
+    $redirectPage,
     $pageTitle
 );
 
@@ -1624,583 +1788,6 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
     $editHistoryRows = shopeeOmsFetchEditHistory($finance_connect, (int) $row['id']);
 }
 
-
-
-if (!function_exists('shopeeOmsRenderSgAirbillPdfAutofillEnhancementScript')) {
-    function shopeeOmsRenderSgAirbillPdfAutofillEnhancementScript()
-    {
-        return <<<'JS'
-
-if (!window.shopeeOmsAirbillPdfAutofill || !window.shopeeOmsAirbillPdfAutofill.__sgEnhanced) {
-    window.shopeeOmsAirbillPdfAutofill = (function () {
-        function getPdfTextItemX(item) {
-            return item && item.transform ? Number(item.transform[4]) || 0 : 0;
-        }
-
-        function getPdfTextItemY(item) {
-            return item && item.transform ? Number(item.transform[5]) || 0 : 0;
-        }
-
-        function normalizePdfTextItem(item) {
-            return String(item && item.str ? item.str : '').trim();
-        }
-
-        function normalizePlainText(value) {
-            return String(value || '').replace(/\s+/g, ' ').trim();
-        }
-
-        function normalizeLookup(value) {
-            return normalizePlainText(value).toLowerCase().replace(/[^a-z0-9]+/g, '');
-        }
-
-        function sortPdfItemsForReading(items) {
-            return items.slice().sort(function (a, b) {
-                var yDiff = getPdfTextItemY(b) - getPdfTextItemY(a);
-                if (Math.abs(yDiff) > 2) {
-                    return yDiff;
-                }
-                return getPdfTextItemX(a) - getPdfTextItemX(b);
-            });
-        }
-
-        function groupPdfItemsIntoLines(items) {
-            var sortedItems = sortPdfItemsForReading(items);
-            var lines = [];
-
-            sortedItems.forEach(function (item) {
-                var text = normalizePdfTextItem(item);
-                if (text === '') {
-                    return;
-                }
-
-                var itemY = getPdfTextItemY(item);
-                var currentLine = lines.length > 0 ? lines[lines.length - 1] : null;
-                if (!currentLine || Math.abs(currentLine.y - itemY) > 2) {
-                    currentLine = { y: itemY, items: [] };
-                    lines.push(currentLine);
-                }
-
-                currentLine.items.push(item);
-            });
-
-            return lines.map(function (line) {
-                return line.items
-                    .slice()
-                    .sort(function (a, b) { return getPdfTextItemX(a) - getPdfTextItemX(b); })
-                    .map(function (item) { return normalizePdfTextItem(item); })
-                    .filter(function (text) { return text !== ''; })
-                    .join(' ')
-                    .replace(/\s+,/g, ',')
-                    .replace(/\s+:/g, ':')
-                    .trim();
-            }).filter(function (line) { return line !== ''; });
-        }
-
-        function isLikelyAirbillCode(text) {
-            var normalized = String(text || '').replace(/\s+/g, '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
-            if (normalized.length < 10 || normalized.length > 40) {
-                return false;
-            }
-            if (!/[A-Z]/.test(normalized) || !/\d/.test(normalized)) {
-                return false;
-            }
-
-            return /^(?:SPXSG|SPXMY|GDSP|GDEX|NVMY|NVSG|NJV|JNT|JT|DHL|BEST|FLASH|MY|SG)[A-Z0-9]{6,}$/.test(normalized) || /^[A-Z]{2,8}[0-9][A-Z0-9]{8,}$/.test(normalized);
-        }
-
-        function cleanAirbillCode(text) {
-            var normalized = String(text || '').replace(/\s+/g, '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
-            return isLikelyAirbillCode(normalized) ? normalized : '';
-        }
-
-        function extractAirbillCodeFromLines(lines) {
-            var bestCode = '';
-            var bestScore = -1;
-            var codePattern = /\b((?:SPXSG|SPXMY|GDSP|GDEX|NVMY|NVSG|NJV|JNT|JT|DHL|BEST|FLASH|MY|SG)[A-Z0-9]{6,}|[A-Z]{2,8}[0-9][A-Z0-9]{8,})\b/gi;
-
-            lines.forEach(function (line) {
-                var matches = line.match(codePattern) || [];
-                matches.forEach(function (match) {
-                    var code = cleanAirbillCode(match);
-                    if (code === '') {
-                        return;
-                    }
-
-                    var score = 1;
-                    if (/SPXSG|SPXMY|GDSP|GDEX|NVMY|NVSG/i.test(code)) {
-                        score += 8;
-                    }
-                    if (/airbill|waybill|tracking|awb|shipment|consignment|package|parcel|#/i.test(line)) {
-                        score += 4;
-                    }
-                    if (score > bestScore) {
-                        bestScore = score;
-                        bestCode = code;
-                    }
-                });
-            });
-
-            return bestCode;
-        }
-
-        function extractAirbillCodeFromPdfItems(items, pageHeight) {
-            var candidates = items
-                .map(function (item) {
-                    return {
-                        text: cleanAirbillCode(normalizePdfTextItem(item)),
-                        x: getPdfTextItemX(item),
-                        y: getPdfTextItemY(item)
-                    };
-                })
-                .filter(function (item) {
-                    return item.text !== '' && (item.y >= (pageHeight * 0.55) || /^(?:SPXSG|SPXMY|GDSP|GDEX)/.test(item.text));
-                })
-                .sort(function (a, b) {
-                    var aScore = /^(?:SPXSG|SPXMY|GDSP|GDEX)/.test(a.text) ? 1 : 0;
-                    var bScore = /^(?:SPXSG|SPXMY|GDSP|GDEX)/.test(b.text) ? 1 : 0;
-                    if (aScore !== bScore) {
-                        return bScore - aScore;
-                    }
-                    if (Math.abs(b.y - a.y) > 2) {
-                        return b.y - a.y;
-                    }
-                    return a.x - b.x;
-                });
-
-            return candidates.length > 0 ? candidates[0].text : '';
-        }
-
-        function isSenderLine(line) {
-            return /\b(sender|shipper|from|pickup|return\s+to|consignor)\b/i.test(String(line || ''));
-        }
-
-        function cleanNameValue(value) {
-            value = normalizePlainText(value)
-                .replace(/^(?:recipient|receiver|consignee|customer|buyer|ship\s*to|deliver\s*to|to|name)\s*[:：-]?\s*/i, '')
-                .replace(/\b(?:phone|tel|mobile|contact|address|postcode|postal\s*code)\b.*$/i, '')
-                .replace(/\s{2,}/g, ' ')
-                .trim();
-
-            if (value === '' || value.length > 80) {
-                return '';
-            }
-            if (isLikelyAirbillCode(value) || /\b(address|postcode|postal|phone|tel|mobile|tracking|waybill|airbill|parcel|order)\b/i.test(value)) {
-                return '';
-            }
-            if (/^[0-9\s+\-()]{6,}$/.test(value)) {
-                return '';
-            }
-
-            return value;
-        }
-
-        function extractTextToRightOfLabel(items, labelItem, pageWidth) {
-            var labelX = getPdfTextItemX(labelItem);
-            var labelY = getPdfTextItemY(labelItem);
-            var minX = labelX + Number(labelItem.width || 0) - 1;
-            var maxX = pageWidth * 0.78;
-
-            var sameLineItems = items.filter(function (item) {
-                var text = normalizePdfTextItem(item);
-                if (text === '' || /^(?:name|address|phone|tel|postcode|postal\s*code)\s*:?$/i.test(text)) {
-                    return false;
-                }
-                var itemX = getPdfTextItemX(item);
-                var itemY = getPdfTextItemY(item);
-                return itemX >= minX && itemX <= maxX && Math.abs(itemY - labelY) <= 2;
-            });
-
-            return groupPdfItemsIntoLines(sameLineItems).join(' ').trim();
-        }
-
-        function extractRecipientNameFromPdfItems(items, pageWidth) {
-            var nameLabels = items
-                .filter(function (item) {
-                    var text = normalizePdfTextItem(item);
-                    return /^(?:name|recipient\s*name|receiver\s*name|consignee\s*name)\s*:?$/i.test(text) && getPdfTextItemX(item) <= (pageWidth * 0.35);
-                })
-                .sort(function (a, b) { return getPdfTextItemY(b) - getPdfTextItemY(a); });
-
-            for (var i = nameLabels.length - 1; i >= 0; i--) {
-                var name = cleanNameValue(extractTextToRightOfLabel(items, nameLabels[i], pageWidth));
-                if (name !== '') {
-                    return name;
-                }
-            }
-
-            return '';
-        }
-
-        function extractRecipientNameFromLines(lines) {
-            var preferredPatterns = [
-                /\b(?:recipient|receiver|consignee|customer|buyer)\s*(?:name)?\s*[:：-]\s*(.+)$/i,
-                /\b(?:ship\s*to|deliver\s*to)\s*[:：-]\s*(.+)$/i,
-                /^to\s*[:：-]\s*(.+)$/i
-            ];
-
-            for (var i = 0; i < lines.length; i++) {
-                var line = lines[i];
-                if (isSenderLine(line)) {
-                    continue;
-                }
-
-                for (var p = 0; p < preferredPatterns.length; p++) {
-                    var match = line.match(preferredPatterns[p]);
-                    if (match && match[1]) {
-                        var inlineName = cleanNameValue(match[1]);
-                        if (inlineName !== '') {
-                            return inlineName;
-                        }
-                    }
-                }
-
-                if (/^(?:recipient|receiver|consignee|ship\s*to|deliver\s*to|to|name)\s*[:：-]?$/i.test(line)) {
-                    for (var j = i + 1; j < Math.min(lines.length, i + 4); j++) {
-                        var nextName = cleanNameValue(lines[j]);
-                        if (nextName !== '') {
-                            return nextName;
-                        }
-                    }
-                }
-
-                var genericName = line.match(/\bname\s*[:：-]\s*(.+)$/i);
-                if (genericName && genericName[1]) {
-                    var cleaned = cleanNameValue(genericName[1]);
-                    if (cleaned !== '') {
-                        return cleaned;
-                    }
-                }
-            }
-
-            return '';
-        }
-
-                function cleanAddressLine(line) {
-            line = normalizePlainText(line)
-                .replace(/^(?:delivery|recipient|receiver|consignee|shipping|ship\s*to|deliver\s*to)?\s*address\s*[:：-]?\s*/i, '')
-                .trim();
-
-            if (line === '') {
-                return '';
-            }
-
-            // Do not store postcode / postal code into customer address.
-            if (/^(?:postcode|postal\s*code)\s*[:：-]?/i.test(line)) {
-                return '';
-            }
-
-            // Do not store standalone Singapore 6-digit postcode.
-            if (/^\d{6}$/.test(line)) {
-                return '';
-            }
-
-            if (/^(?:name|phone|tel|mobile|contact|sender|shipper|from|pickup|return\s+to)\s*[:：-]?/i.test(line)) {
-                return '';
-            }
-
-            if (/\b(?:tracking|waybill|airbill|awb|parcel|order\s*id|product|weight|cod|insurance)\b/i.test(line)) {
-                return '';
-            }
-
-            if (isLikelyAirbillCode(line)) {
-                return '';
-            }
-
-            return line;
-        }
-
-        function extractRecipientAddressFromPdfItems(items, pageWidth) {
-            var addressLabels = items
-                .filter(function (item) {
-                    return /^(?:address|recipient\s*address|receiver\s*address|delivery\s*address|shipping\s*address)\s*:?$/i.test(normalizePdfTextItem(item)) && getPdfTextItemX(item) <= (pageWidth * 0.35);
-                })
-                .sort(function (a, b) { return getPdfTextItemY(b) - getPdfTextItemY(a); });
-
-            if (addressLabels.length === 0) {
-                return '';
-            }
-
-            var recipientAddressLabel = addressLabels[addressLabels.length - 1];
-            var recipientPostcodeLabel = items
-                .filter(function (item) {
-                    return /^(?:postcode|postal\s*code)\s*:?$/i.test(normalizePdfTextItem(item)) &&
-                        getPdfTextItemX(item) <= (pageWidth * 0.35) &&
-                        getPdfTextItemY(item) < getPdfTextItemY(recipientAddressLabel) - 6;
-                })
-                .sort(function (a, b) { return getPdfTextItemY(b) - getPdfTextItemY(a); })[0] || null;
-
-            var minX = getPdfTextItemX(recipientAddressLabel) + Number(recipientAddressLabel.width || 0) - 1;
-            var minY = recipientPostcodeLabel ? getPdfTextItemY(recipientPostcodeLabel) - 2 : getPdfTextItemY(recipientAddressLabel) - 85;
-            var maxY = getPdfTextItemY(recipientAddressLabel) + 2;
-            var maxX = pageWidth * 0.78;
-            var addressItems = items.filter(function (item) {
-                var text = normalizePdfTextItem(item);
-                if (text === '' || /^(?:address|phone|tel|name|postcode|postal\s*code)\s*:?$/i.test(text)) {
-                    return false;
-                }
-
-                var itemX = getPdfTextItemX(item);
-                var itemY = getPdfTextItemY(item);
-                return itemX >= minX && itemX <= maxX && itemY <= maxY && itemY >= minY;
-            });
-
-            return groupPdfItemsIntoLines(addressItems).map(cleanAddressLine).filter(function (line) { return line !== ''; }).join('\n').trim();
-        }
-
-        function extractRecipientAddressFromLines(lines) {
-            var startIndex = -1;
-            var inlineValue = '';
-
-            for (var i = 0; i < lines.length; i++) {
-                var line = lines[i];
-                if (isSenderLine(line)) {
-                    continue;
-                }
-
-                var addressMatch = line.match(/\b(?:delivery|recipient|receiver|consignee|shipping)?\s*address\s*[:：-]?\s*(.*)$/i);
-                if (addressMatch) {
-                    startIndex = i;
-                    inlineValue = cleanAddressLine(addressMatch[1] || '');
-                    break;
-                }
-
-                if (/^(?:ship\s*to|deliver\s*to)\s*[:：-]?$/i.test(line)) {
-                    startIndex = i + 1;
-                    inlineValue = '';
-                    break;
-                }
-            }
-
-            if (startIndex < 0) {
-                return '';
-            }
-
-            var addressLines = [];
-            if (inlineValue !== '') {
-                addressLines.push(inlineValue);
-            }
-
-            for (var j = startIndex + (inlineValue !== '' ? 1 : 0); j < Math.min(lines.length, startIndex + 8); j++) {
-                var currentLine = lines[j];
-                if (/^(?:phone|tel|mobile|contact|sender|shipper|from|pickup|return\s+to|tracking|waybill|airbill|awb|parcel|package|order\s*id|product|weight|cod)\b/i.test(currentLine)) {
-                    break;
-                }
-
-                var cleanedLine = cleanAddressLine(currentLine);
-                if (cleanedLine !== '') {
-                    addressLines.push(cleanedLine);
-                }
-            }
-
-            return addressLines.join('\n').trim();
-        }
-
-        function removeCustomerNameFromAddress(address, customerName) {
-            var lines = String(address || '').split(/\n+/).map(function (line) { return normalizePlainText(line); }).filter(function (line) { return line !== ''; });
-            if (lines.length === 0 || customerName === '') {
-                return address;
-            }
-            if (normalizeLookup(lines[0]) === normalizeLookup(customerName)) {
-                lines.shift();
-            }
-            return lines.join('\n').trim();
-        }
-
-        function extractShopeeAirbillDataFromPdfItems(items, pageWidth, pageHeight) {
-            var lines = groupPdfItemsIntoLines(items);
-            var airbillNo = extractAirbillCodeFromLines(lines) || extractAirbillCodeFromPdfItems(items, pageHeight);
-            var customerName = extractRecipientNameFromPdfItems(items, pageWidth) || extractRecipientNameFromLines(lines);
-            var customerAddress = extractRecipientAddressFromPdfItems(items, pageWidth) || extractRecipientAddressFromLines(lines);
-            customerAddress = removeCustomerNameFromAddress(customerAddress, customerName);
-
-            return {
-                airbillNo: airbillNo || '',
-                customerName: customerName || '',
-                customerAddress: customerAddress || ''
-            };
-        }
-
-        function dispatchInputEvent(element) {
-            if (!element) {
-                return;
-            }
-
-            try {
-                element.dispatchEvent(new Event('input', { bubbles: true }));
-                element.dispatchEvent(new Event('change', { bubbles: true }));
-            } catch (error) {
-            }
-        }
-
-        function bind(config) {
-            config = config || {};
-            var fileInput = document.querySelector(config.fileInputSelector || '');
-            var airbillNo = document.querySelector(config.airbillNoSelector || '');
-            var customerName = config.customerNameSelector ? document.querySelector(config.customerNameSelector) : null;
-            var customerAddress = document.querySelector(config.customerAddressSelector || '');
-            var statusNode = document.querySelector(config.statusSelector || '');
-            if (!fileInput || !airbillNo || !customerAddress || !statusNode) {
-                return false;
-            }
-
-            function setStatus(message, isError) {
-                statusNode.textContent = message;
-                if (config.errorClass) {
-                    statusNode.classList.toggle(config.errorClass, !!isError);
-                }
-                if (config.normalClass) {
-                    statusNode.classList.toggle(config.normalClass, !isError);
-                }
-            }
-
-            if (typeof pdfjsLib === 'undefined') {
-                setStatus('PDF extraction library failed to load on this page.', true);
-                return false;
-            }
-
-            if (config.workerSrc) {
-                pdfjsLib.GlobalWorkerOptions.workerSrc = config.workerSrc;
-            }
-
-            if (fileInput.dataset.airbillPdfAutofillBound === '1') {
-                return true;
-            }
-
-            if (config.localStorageKey) {
-                try {
-                    var storedDeliveryInfo = JSON.parse(localStorage.getItem(config.localStorageKey) || 'null');
-                    if (storedDeliveryInfo) {
-                        if (airbillNo && !String(airbillNo.value || '').trim() && String(storedDeliveryInfo.airbillNo || '').trim()) {
-                            airbillNo.value = String(storedDeliveryInfo.airbillNo || '').trim();
-                            dispatchInputEvent(airbillNo);
-                        }
-                        if (customerName && !String(customerName.value || '').trim() && String(storedDeliveryInfo.customerName || '').trim()) {
-                            customerName.value = String(storedDeliveryInfo.customerName || '').trim();
-                            dispatchInputEvent(customerName);
-                        }
-                        if (customerAddress && !String(customerAddress.value || '').trim() && String(storedDeliveryInfo.customerAddress || '').trim()) {
-                            customerAddress.value = String(storedDeliveryInfo.customerAddress || '').trim();
-                            dispatchInputEvent(customerAddress);
-                        }
-                    }
-                } catch (error) {
-                }
-            }
-
-            function readFileAsArrayBuffer(file) {
-                return new Promise(function (resolve, reject) {
-                    var reader = new FileReader();
-                    reader.onload = function (event) { resolve(event.target.result); };
-                    reader.onerror = reject;
-                    reader.readAsArrayBuffer(file);
-                });
-            }
-
-            function loadPdfTextItems(file) {
-                return readFileAsArrayBuffer(file).then(function (buffer) {
-                    return pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
-                }).then(function (pdfDoc) {
-                    var maxPages = Math.min(Number(pdfDoc.numPages) || 1, 2);
-                    var pagePromises = [];
-                    for (var pageNo = 1; pageNo <= maxPages; pageNo++) {
-                        pagePromises.push(pdfDoc.getPage(pageNo).then(function (page) {
-                            var viewport = page.getViewport({ scale: 1 });
-                            return page.getTextContent().then(function (textContent) {
-                                return {
-                                    items: (textContent.items || []).filter(function (item) { return normalizePdfTextItem(item) !== ''; }),
-                                    pageWidth: Number(viewport.width) || 0,
-                                    pageHeight: Number(viewport.height) || 0
-                                };
-                            });
-                        }));
-                    }
-
-                    return Promise.all(pagePromises).then(function (pages) {
-                        var combinedItems = [];
-                        var pageWidth = 0;
-                        var pageHeight = 0;
-                        pages.forEach(function (pageData) {
-                            combinedItems = combinedItems.concat(pageData.items || []);
-                            pageWidth = Math.max(pageWidth, Number(pageData.pageWidth) || 0);
-                            pageHeight = Math.max(pageHeight, Number(pageData.pageHeight) || 0);
-                        });
-
-                        return {
-                            items: combinedItems,
-                            pageWidth: pageWidth,
-                            pageHeight: pageHeight
-                        };
-                    });
-                });
-            }
-
-            fileInput.addEventListener('change', function () {
-                setStatus('', false);
-                if (!this.files || !this.files[0]) {
-                    return;
-                }
-
-                var selectedFile = this.files[0];
-                if (!/\.pdf$/i.test(String(selectedFile.name || ''))) {
-                    return;
-                }
-
-                setStatus('Extracting airbill number, customer name and address from PDF...', false);
-
-                loadPdfTextItems(selectedFile).then(function (pdfData) {
-                    var extractedData = extractShopeeAirbillDataFromPdfItems(pdfData.items, pdfData.pageWidth, pdfData.pageHeight);
-
-                    if (extractedData.airbillNo !== '') {
-                        airbillNo.value = extractedData.airbillNo;
-                        dispatchInputEvent(airbillNo);
-                    }
-                    if (customerName && extractedData.customerName !== '') {
-                        customerName.value = extractedData.customerName;
-                        dispatchInputEvent(customerName);
-                    }
-                    if (extractedData.customerAddress !== '') {
-                        customerAddress.value = extractedData.customerAddress;
-                        dispatchInputEvent(customerAddress);
-                    }
-
-                    if (config.localStorageKey && (extractedData.airbillNo !== '' || extractedData.customerName !== '' || extractedData.customerAddress !== '')) {
-                        try {
-                            localStorage.setItem(config.localStorageKey, JSON.stringify({
-                                airbillNo: extractedData.airbillNo || '',
-                                customerName: extractedData.customerName || '',
-                                customerAddress: extractedData.customerAddress || ''
-                            }));
-                        } catch (error) {
-                        }
-                    }
-
-                    if (extractedData.airbillNo !== '' || extractedData.customerName !== '' || extractedData.customerAddress !== '') {
-                        setStatus('Airbill PDF extracted successfully.', false);
-                    } else {
-                        setStatus('Unable to detect the airbill number, customer name or address from this PDF. Please fill them manually.', true);
-                    }
-                }).catch(function () {
-                    setStatus('Unable to read this PDF. Please fill the airbill number, customer name and address manually.', true);
-                });
-            });
-
-            fileInput.dataset.airbillPdfAutofillBound = '1';
-            return true;
-        }
-
-        var module = {
-            __sgEnhanced: true,
-            bind: bind,
-            extractShopeeAirbillDataFromPdfItems: extractShopeeAirbillDataFromPdfItems
-        };
-
-        return module;
-    })();
-}
-JS;
-    }
-}
-
 ?>
 <!DOCTYPE html>
 <html>
@@ -2208,6 +1795,7 @@ JS;
 <head>
     <link rel="stylesheet" href="../css/main.css">
     <script src="../finance/header/js/pdf.min.js"></script>
+    <script src="../js/pdf_airbill_parser.js"></script>
     <style>
         .shopee-airbill-row {
             align-items: flex-start;
@@ -2417,6 +2005,7 @@ JS;
     <div id="formContainer" class="container d-flex justify-content-center">
         <div class="col-6 col-md-6 formWidthAdjust">
             <form id="FORForm" method="post" action="" enctype="multipart/form-data">
+                <input type="hidden" name="return_url" value="<?= htmlspecialchars((string) $back_redirect_page, ENT_QUOTES, 'UTF-8') ?>">
                 <div class="form-group mb-5">
                     <div class="order-title-row">
                         <h2 class="mb-0"><?php echo displayPageAction($act, $pageTitle); ?></h2>
@@ -2440,6 +2029,8 @@ JS;
                             echo $err1; ?>
                     </span>
                 </div>
+
+                <?php echo $orderDeleteApprovalPanelHtml; ?>
 
                 <div class="form-group">
                     <div class="row">
@@ -2809,11 +2400,33 @@ JS;
                             <label class="form-label form_lbl" for="sor_airbill_attachment">Airbill Attachment<span class="requireRed">*</span></label>
                             <input class="form-control" type="file" name="sor_airbill_attachment" id="sor_airbill_attachment" <?= $act == '' ? 'disabled' : '' ?>>
                             <small id="sor_airbill_extract_status" class="shopee-airbill-extract-status"></small>
-                            <?php if (isset($row['airbill_attachment']) && $row['airbill_attachment']) { ?>
+                            <?php
+                            $currentAirbillAttachmentValue = '';
+                            $currentAirbillAttachmentHiddenValue = '';
+                            $currentAirbillAttachmentLabel = 'Current Attachment:';
+                            $currentAirbillAttachmentIsPendingUpload = false;
+                            $savedAirbillAttachmentValue = isset($row['airbill_attachment']) ? trim((string) $row['airbill_attachment']) : '';
+
+                            if ($savedAirbillAttachmentValue !== '') {
+                                $currentAirbillAttachmentValue = $savedAirbillAttachmentValue;
+                                $currentAirbillAttachmentHiddenValue = $savedAirbillAttachmentValue;
+                            }
+
+                            if (
+                                isset($sorAirbillPendingUploadName)
+                                && trim((string) $sorAirbillPendingUploadName) !== ''
+                                && isset($error)
+                            ) {
+                                $currentAirbillAttachmentValue = (string) $sorAirbillPendingUploadName;
+                                $currentAirbillAttachmentLabel = 'Selected Attachment:';
+                                $currentAirbillAttachmentIsPendingUpload = true;
+                            }
+                            ?>
+                            <?php if ($currentAirbillAttachmentValue !== '') { ?>
                                 <div id="err_msg">
                                     <span class="mt-n1 shopee-airbill-current-attachment">
-                                        <span class="shopee-airbill-current-attachment-label">Current Attachment:</span>
-                                        <span class="shopee-airbill-current-attachment-value"><?php echo htmlspecialchars($row['airbill_attachment']); ?></span>
+                                        <span class="shopee-airbill-current-attachment-label"><?php echo htmlspecialchars($currentAirbillAttachmentLabel, ENT_QUOTES, 'UTF-8'); ?></span>
+                                        <span class="shopee-airbill-current-attachment-value"><?php echo htmlspecialchars($currentAirbillAttachmentValue, ENT_QUOTES, 'UTF-8'); ?></span>
                                     </span>
                                 </div>
                             <?php } ?>
@@ -2827,19 +2440,8 @@ JS;
                             <div class="d-flex justify-content-center justify-content-md-end px-4">
                                 <?php
                                 $sorAirbillAttachmentSrc = '';
-                                if (isset($dataExisted) && isset($row['airbill_attachment']) && !isset($sor_airbill_attachment)) {
-                                    if ($row['airbill_attachment'] == '' || $row['airbill_attachment'] == NULL) {
-                                        $sorAirbillAttachmentSrc = '';
-                                    } else {
-                                        $storedAttachment = trim(str_replace('\\', '/', (string) $row['airbill_attachment']), '/');
-                                        if (strpos($storedAttachment, 'attachment/') === 0) {
-                                            $sorAirbillAttachmentSrc = rtrim((string) $SITEURL, '/') . '/' . $storedAttachment;
-                                        } else {
-                                            $sorAirbillAttachmentSrc = $sorAirbillAttachmentUrl . basename($storedAttachment);
-                                        }
-                                    }
-                                } else if (isset($sor_airbill_attachment)) {
-                                    $storedAttachment = trim(str_replace('\\', '/', (string) $sor_airbill_attachment), '/');
+                                if (!$currentAirbillAttachmentIsPendingUpload && $currentAirbillAttachmentHiddenValue !== '') {
+                                    $storedAttachment = trim(str_replace('\\', '/', $currentAirbillAttachmentHiddenValue), '/');
                                     if ($storedAttachment !== '') {
                                         if (strpos($storedAttachment, 'attachment/') === 0) {
                                             $sorAirbillAttachmentSrc = rtrim((string) $SITEURL, '/') . '/' . $storedAttachment;
@@ -2848,8 +2450,7 @@ JS;
                                         }
                                     }
                                 }
-                                ?>
-                                                                <?php
+
                                 $sorAirbillAttachmentExt = '';
                                 if ($sorAirbillAttachmentSrc !== '') {
                                     $sorAirbillAttachmentExt = strtolower(pathinfo(parse_url($sorAirbillAttachmentSrc, PHP_URL_PATH), PATHINFO_EXTENSION));
@@ -2872,7 +2473,7 @@ JS;
                                     <div id="sor_airbill_attachment_preview_wrap" class="shopee-airbill-preview-media" style="display:none;"></div>
                                 <?php } ?>
 
-                                <input type="hidden" name="sor_airbill_attachment_value" id="sor_airbill_attachment_value" value="<?php if (isset($row['airbill_attachment'])) echo htmlspecialchars($row['airbill_attachment'], ENT_QUOTES, 'UTF-8'); ?>">
+                                <input type="hidden" name="sor_airbill_attachment_value" id="sor_airbill_attachment_value" value="<?php echo htmlspecialchars($currentAirbillAttachmentHiddenValue, ENT_QUOTES, 'UTF-8'); ?>">
                                 <input type="hidden" name="sor_customer_name" id="sor_customer_name" value="<?php
                                     if (isset($sor_customer_name)) {
                                         echo htmlspecialchars($sor_customer_name, ENT_QUOTES, 'UTF-8');
@@ -3648,8 +3249,8 @@ JS;
                     </div>
                     <input type="hidden" name="return_type" id="return_type" value="">
                     <input type="hidden" name="return_remark" id="return_remark" value="">
-                    <button type="button" class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn" id="actionBtn"
-                        onclick="if (window.history.length > 1) { window.history.back(); } else { location.href = <?= htmlspecialchars(json_encode($redirect_page), ENT_QUOTES, 'UTF-8') ?>; }">Back</button>
+                    <button type="button" class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="backBtn" id="backBtn"
+                        onclick="location.href = <?= htmlspecialchars(json_encode($back_redirect_page), ENT_QUOTES, 'UTF-8') ?>;">Back</button>
                 </div>
             </form>
         </div>
@@ -3668,7 +3269,10 @@ JS;
         if ($sorLocalTelegramFailureMessage !== '') {
             echo '<script>alert(' . json_encode($sorLocalTelegramFailureMessage) . ');</script>';
         }
-        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
+    }
+    if ($sorPopupErrorMessage !== '') {
+        echo '<script>document.addEventListener("DOMContentLoaded", function () { confirmationDialog("", ' . json_encode($sorPopupErrorMessage) . ', ' . json_encode((string) $pageTitle) . ', "", "", "ErrMO"); });</script>';
     }
     ?>
     <script>
@@ -3815,15 +3419,6 @@ JS;
             var latestComparisonRows = [];
             var localPreviewUrl = '';
             var canFinalizeVerify = false;
-
-            function setStatus(message, isError) {
-                if (!statusNode) {
-                    return;
-                }
-                statusNode.textContent = message || '';
-                statusNode.classList.toggle('text-danger', !!isError);
-                statusNode.classList.toggle('text-muted', !isError);
-            }
 
             function setBusyState(isBusy) {
                 [directChoiceBtn, uploadChoiceBtn, compareBtn, reloadBtn, backBtn].forEach(function (button) {
@@ -4390,9 +3985,6 @@ JS;
             form.submit();
         }
 
-        <?= shopeeOmsRenderAirbillPdfAutofillScript() ?>
-        <?= shopeeOmsRenderSgAirbillPdfAutofillEnhancementScript() ?>
-
         document.addEventListener('DOMContentLoaded', function () {
             toggleAirbillFields();
             bindShopeeOrderReqFollowUpModal();
@@ -4402,6 +3994,9 @@ JS;
             var airbillFileInput = document.getElementById('sor_airbill_attachment');
             var airbillPreviewWrap = document.getElementById('sor_airbill_attachment_preview_wrap');
             var currentAirbillPreviewUrl = null;
+            var airbillPreviewStorageKey = 'shopee_order_req_airbill_preview_<?= (int) $dataId > 0 ? (int) $dataId : 'new' ?>';
+            var shouldRestorePendingAirbillPreview = <?= (!empty($currentAirbillAttachmentIsPendingUpload) && isset($error)) ? 'true' : 'false' ?>;
+            var pendingAirbillPreviewFileName = <?= json_encode(!empty($currentAirbillAttachmentIsPendingUpload) ? (string) $currentAirbillAttachmentValue : '') ?>;
 
             if (airbillFileInput && airbillPreviewWrap) {
                 var clearAirbillPreviewObjectUrl = function () {
@@ -4411,36 +4006,127 @@ JS;
                     }
                 };
 
-                airbillFileInput.addEventListener('change', function () {
-                    var file = airbillFileInput.files && airbillFileInput.files[0] ? airbillFileInput.files[0] : null;
+                var hideAirbillPreview = function () {
+                    airbillPreviewWrap.innerHTML = '';
+                    airbillPreviewWrap.style.display = 'none';
+                };
 
-                    if (!file) {
-                        clearAirbillPreviewObjectUrl();
-                        airbillPreviewWrap.innerHTML = '';
-                        airbillPreviewWrap.style.display = 'none';
+                var renderAirbillPreview = function (fileUrl, fileType, fileName) {
+                    var resolvedType = String(fileType || '').toLowerCase();
+                    var resolvedName = String(fileName || '').toLowerCase();
+
+                    airbillPreviewWrap.innerHTML = '';
+                    airbillPreviewWrap.style.display = 'block';
+
+                    if (resolvedType.indexOf('image/') === 0 || /\.(png|jpg|jpeg|webp|gif|svg)$/i.test(resolvedName)) {
+                        var imageNode = document.createElement('img');
+                        imageNode.id = 'sor_airbill_attachment_preview_img';
+                        imageNode.src = fileUrl;
+                        imageNode.alt = 'Airbill Attachment Preview';
+                        airbillPreviewWrap.appendChild(imageNode);
+                        return true;
+                    }
+
+                    if (resolvedType === 'application/pdf' || /\.pdf$/i.test(resolvedName)) {
+                        var iframeNode = document.createElement('iframe');
+                        iframeNode.id = 'sor_airbill_attachment_preview_pdf';
+                        iframeNode.src = fileUrl;
+                        iframeNode.title = 'Airbill Attachment Preview';
+                        airbillPreviewWrap.appendChild(iframeNode);
+                        return true;
+                    }
+
+                    hideAirbillPreview();
+                    return false;
+                };
+
+                var saveAirbillPreviewToSession = function (file) {
+                    if (!file || typeof FileReader === 'undefined' || typeof window.sessionStorage === 'undefined') {
                         return;
                     }
 
+                    var fileName = file.name || '';
+                    var fileType = file.type || '';
+                    var isSupportedPreview = fileType.indexOf('image/') === 0 || fileType === 'application/pdf' || /\.(png|jpg|jpeg|webp|gif|svg|pdf)$/i.test(fileName);
+
+                    if (!isSupportedPreview) {
+                        return;
+                    }
+
+                    var reader = new FileReader();
+                    reader.onload = function (event) {
+                        try {
+                            window.sessionStorage.setItem(airbillPreviewStorageKey, JSON.stringify({
+                                name: fileName,
+                                type: fileType,
+                                dataUrl: event.target.result
+                            }));
+                        } catch (storageError) {
+                            // Browser storage may be full. Current-page preview still works.
+                        }
+                    };
+                    reader.readAsDataURL(file);
+                };
+
+                var restoreAirbillPreviewFromSession = function () {
+                    if (!shouldRestorePendingAirbillPreview || typeof window.sessionStorage === 'undefined') {
+                        return;
+                    }
+
+                    try {
+                        var storedPreview = window.sessionStorage.getItem(airbillPreviewStorageKey);
+                        if (!storedPreview) {
+                            return;
+                        }
+
+                        var previewData = JSON.parse(storedPreview);
+                        if (!previewData || !previewData.dataUrl) {
+                            return;
+                        }
+
+                        if (
+                            pendingAirbillPreviewFileName &&
+                            previewData.name &&
+                            String(previewData.name) !== String(pendingAirbillPreviewFileName)
+                        ) {
+                            return;
+                        }
+
+                        renderAirbillPreview(previewData.dataUrl, previewData.type || '', previewData.name || pendingAirbillPreviewFileName);
+                    } catch (restoreError) {
+                        // Ignore invalid stored preview data.
+                    }
+                };
+
+                airbillFileInput.addEventListener('change', function () {
+                    var file = airbillFileInput.files && airbillFileInput.files[0] ? airbillFileInput.files[0] : null;
+
                     clearAirbillPreviewObjectUrl();
+
+                    if (typeof window.sessionStorage !== 'undefined') {
+                        try {
+                            window.sessionStorage.removeItem(airbillPreviewStorageKey);
+                        } catch (storageError) {
+                        }
+                    }
+
+                    if (!file) {
+                        hideAirbillPreview();
+                        return;
+                    }
+
                     var fileUrl = URL.createObjectURL(file);
                     currentAirbillPreviewUrl = fileUrl;
-                    var fileName = file.name.toLowerCase();
 
-                    airbillPreviewWrap.style.display = 'block';
-
-                    if (file.type.indexOf('image/') === 0) {
-                        airbillPreviewWrap.innerHTML =
-                            '<img id="sor_airbill_attachment_preview_img" src="' + fileUrl + '" alt="Airbill Attachment Preview">';
-                    } else if (file.type === 'application/pdf' || fileName.endsWith('.pdf')) {
-                        airbillPreviewWrap.innerHTML =
-                            '<iframe id="sor_airbill_attachment_preview_pdf" src="' + fileUrl + '" title="Airbill Attachment Preview"></iframe>';
-                    } else {
+                    if (!renderAirbillPreview(fileUrl, file.type || '', file.name || '')) {
                         clearAirbillPreviewObjectUrl();
-                        airbillPreviewWrap.innerHTML = '';
-                        airbillPreviewWrap.style.display = 'none';
+                        return;
                     }
+
+                    saveAirbillPreviewToSession(file);
                 });
 
+                restoreAirbillPreviewFromSession();
                 window.addEventListener('beforeunload', clearAirbillPreviewObjectUrl);
             }
 
@@ -4451,7 +4137,7 @@ JS;
                     customerNameSelector: '#sor_customer_name',
                     customerAddressSelector: '#sor_customer_address',
                     statusSelector: '#sor_airbill_extract_status',
-                    localStorageKey: <?= (int) $dataID > 0 ? "'shopee_airbill_delivery_info_" . (int) $dataID . "'" : "''" ?>,
+                    localStorageKey: <?= (int) $dataId > 0 ? "'shopee_airbill_delivery_info_" . (int) $dataId . "'" : "''" ?>,
                     workerSrc: '../finance/header/js/pdf.worker.min.js',
                     errorClass: 'is-error'
                 });
@@ -4472,26 +4158,6 @@ JS;
                         { textId: 'scr_brand', hiddenId: 'scr_brand_hidden', label: 'Brand' },
                         { textId: 'scr_series', hiddenId: 'scr_series_hidden', label: 'Series' }
                     ];
-
-                function clearNewCustomerInlineError(field) {
-                    if (!field) return;
-                    field.classList.remove('shopee-inline-invalid');
-                    var wrapper = field.parentElement;
-                    if (!wrapper) return;
-                    wrapper.querySelectorAll('.shopee-inline-error').forEach(function (node) {
-                        node.remove();
-                    });
-                }
-
-                function showNewCustomerInlineError(field, message) {
-                    if (!field) return;
-                    clearNewCustomerInlineError(field);
-                    field.classList.add('shopee-inline-invalid');
-                    var errorNode = document.createElement('small');
-                    errorNode.className = 'shopee-inline-error';
-                    errorNode.textContent = message;
-                    field.parentElement.appendChild(errorNode);
-                }
 
                 function validateNewCustomerForm() {
                     var firstInvalidField = null;

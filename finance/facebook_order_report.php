@@ -1,7 +1,6 @@
 <?php
 $pageTitle = 'Facebook Order Report';
 $currentPagePin = 156;
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';

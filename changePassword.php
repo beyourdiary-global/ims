@@ -20,7 +20,7 @@ if ($pageMode == 'emailRstPassword') {
         $dataExisted = 1;
         $row = $rstProj->fetch_assoc();
     } else {
-        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+        renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
         echo "<script>location.href ='$SITEURL/index.php';</script>";
     }
 }
@@ -32,7 +32,7 @@ if ($pageMode == 'userChgPassword') {
 }
 
 $sendEmail = '';
-$redirect_page = '';
+$redirectPage = '';
 
 if (!function_exists('cpBase64UrlDecode')) {
     function cpBase64UrlDecode($data)
@@ -85,7 +85,7 @@ if (!function_exists('cpIsValidResetToken')) {
 if ($pageMode == 'userChgPassword') {
     // menuheader
 
-    $redirect_page = $SITEURL . '/dashboard.php';
+    $redirectPage = $SITEURL . '/dashboard.php';
 
     if (post('actionBtn') == 'updpass') {
         $id = $_SESSION['userid'];
@@ -95,14 +95,14 @@ if ($pageMode == 'userChgPassword') {
 
         if ($id && $old_password && $new_password && $confirm_password) {
             if ($new_password == $confirm_password) {
-                $rst = getData('*', "id = '$id'", '', USR_USER, $connect);
-                if (!$rst) {
-                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                $result = getData('*', "id = '$id'", '', USR_USER, $connect);
+                if (!$result) {
+                    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                 }
-                $row = $rst->fetch_assoc();
+                $row = $result->fetch_assoc();
 
-                if (mysqli_num_rows($rst) == 1) {
+                if (mysqli_num_rows($result) == 1) {
                     if ($row['password_alt'] == md5($old_password)) {
                         try {
                             $_SESSION['tempValConfirmBox'] = true;
@@ -117,7 +117,7 @@ if ($pageMode == 'userChgPassword') {
         } else $commonErr = 'Field cannot be blank.';
     }
 } else if ($pageMode == 'emailRstPassword') {
-    $redirect_page = $SITEURL . '/index.php';
+    $redirectPage = $SITEURL . '/index.php';
     $email = input('email');
     $token = input('token');
     $tokenValid = false;
@@ -143,14 +143,14 @@ if ($pageMode == 'userChgPassword') {
         if ($tokenValid && $email && $token && $new_password && $confirm_password) {
             if ($new_password == $confirm_password) {
                 $safeEmail = mysqli_real_escape_string($connect, $email);
-                $rst = getData('*', "email = '" . $safeEmail . "'", '', USR_USER, $connect);
-                if (!$rst) {
-                    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                $result = getData('*', "email = '" . $safeEmail . "'", '', USR_USER, $connect);
+                if (!$result) {
+                    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                 }
-                $row = $rst->fetch_assoc();
+                $row = $result->fetch_assoc();
 
-                if (mysqli_num_rows($rst) == 1) {
+                if (mysqli_num_rows($result) == 1) {
                     try {
                         $_SESSION['tempValConfirmBox'] = true;
                         $query = "UPDATE " . USR_USER . " SET password_alt = '" . md5($new_password) . "' WHERE email = '" . $safeEmail . "'";
@@ -183,9 +183,9 @@ if ($pageMode == 'userChgPassword') {
 if (isset($_SESSION['tempValConfirmBox'])) {
     unset($_SESSION['tempValConfirmBox']);
     if ($pageMode == 'emailRstPassword') {
-        echo '<script>alert("Password updated successfully.");location.href="' . $redirect_page . '";</script>';
+        echo '<script>alert("Password updated successfully.");location.href="' . $redirectPage . '";</script>';
     } else {
-        echo '<script>confirmationDialog("","","User Password","","' . $redirect_page . '","PC");</script>';
+        echo '<script>confirmationDialog("","","User Password","","' . $redirectPage . '","PC");</script>';
     }
 }
 ?>
@@ -211,7 +211,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
     <?php if ($pageMode == 'userChgPassword') { ?>
         <div class="d-flex flex-column my-3 ms-3">
             <div class="row">
-                <p><a href="<?= $redirect_page ?>">Dashboard</a> <i class="fa-solid fa-chevron-right fa-xs"></i>
+                <p><a href="<?= $redirectPage ?>">Dashboard</a> <i class="fa-solid fa-chevron-right fa-xs"></i>
                     <?php
                     switch ($pageMode) {
                         case 'userChgPassword':
@@ -388,21 +388,6 @@ if (isset($_SESSION['tempValConfirmBox'])) {
     </div>
 
     <script>
-        function togglePassword(inputId) {
-            var input = document.getElementById(inputId);
-            var icon = document.getElementById('show' + inputId.charAt(0).toUpperCase() + inputId.slice(1));
-            if (!input || !icon) return;
-
-            if (input.getAttribute('type') === 'password') {
-                input.setAttribute('type', 'text');
-                icon.classList.remove('fa-eye-slash');
-                icon.classList.add('fa-eye');
-            } else {
-                input.setAttribute('type', 'password');
-                icon.classList.remove('fa-eye');
-                icon.classList.add('fa-eye-slash');
-            }
-        }
 
         if (typeof checkCurrentPage === 'function') {
             checkCurrentPage('invalid');

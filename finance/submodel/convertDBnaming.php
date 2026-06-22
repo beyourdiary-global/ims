@@ -14,36 +14,36 @@ function convertDbNaming($key,$value){
         return;
     }else{
         $columnName='name';
-        $tableName='';
+        $tblName='';
         $connectDB = $connect;
         switch ($key) {
             case 'pic':
-                $tableName = USR_USER;
+                $tblName = USR_USER;
                 break;
             case 'brand':
-                $tableName = BRAND;
+                $tblName = BRAND;
                 break;
             case 'package':
-                $tableName = PKG;
+                $tblName = PKG;
                 break;
             case 'shopee_acc':
-                $tableName = SHOPEE_ACC;
+                $tblName = SHOPEE_ACC;
                 $connectDB = $finance_connect;
                 break;
             case 'currency':
-                $tableName = CUR_UNIT;
+                $tblName = CUR_UNIT;
                 $columnName ='unit';
                 break;
             case 'buyer':
-                $tableName = SHOPEE_CUST_INFO;
+                $tblName = SHOPEE_CUST_INFO;
                 $columnName = 'buyer_username';
                 $connectDB = $finance_connect;
                 break;
             default:
-                $tableName = 'brand';
+                $tblName = 'brand';
                 break;
         }
-        $result = getData($columnName, "id='" . $value . "'", '', $tableName, $connectDB);
+        $result = getData($columnName, "id='" . $value . "'", '', $tblName, $connectDB);
         $row = mysqli_fetch_assoc($result);
         return $row[$columnName];
     }

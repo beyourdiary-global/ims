@@ -6,7 +6,7 @@ $("#pay_terms_name").on("input", function() {
 $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
-    var name_chk = 0;;
+    let name_chk = 0;;
 
     if ($('#pay_terms_name').val() === '' || $('#pay_terms_name').val() === null || $('#pay_terms_name')
         .val() === undefined) {

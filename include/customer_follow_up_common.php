@@ -3521,13 +3521,13 @@ if (!function_exists('customerFollowUpRollbackTransactions')) {
 }
 
 if (!function_exists('customerFollowUpFetchSingleRow')) {
-    function customerFollowUpFetchSingleRow($dbConnect, $tableName, $whereClause)
+    function customerFollowUpFetchSingleRow($dbConnect, $tblName, $whereClause)
     {
-        if (!($dbConnect instanceof mysqli) || trim((string) $tableName) === '' || trim((string) $whereClause) === '') {
+        if (!($dbConnect instanceof mysqli) || trim((string) $tblName) === '' || trim((string) $whereClause) === '') {
             return array();
         }
 
-        $result = getData('*', '(' . $whereClause . ") AND `status` = 'A'", 'LIMIT 1', $tableName, $dbConnect);
+        $result = getData('*', '(' . $whereClause . ") AND `status` = 'A'", 'LIMIT 1', $tblName, $dbConnect);
         if ($result && $result->num_rows > 0) {
             return $result->fetch_assoc();
         }

@@ -4,7 +4,7 @@ $(document).ready(function() {
 
     if (!($("#sa_country").attr('disabled'))) { 
         $("#sa_country").keyup(function() { 
-            var param = { 
+            const param = { 
                 search: $(this).val(), 
                 searchType: 'name', // column of the table
                 elementID: $(this).attr('id'), // id of the input
@@ -18,7 +18,7 @@ $(document).ready(function() {
     }
     if (!($("#sa_currency").attr('disabled'))) {
         $("#sa_currency").keyup(function() {
-            var param = {
+            const param = {
                 search: $(this).val(),
                 searchType: 'unit', // column of the table
                 elementID: $(this).attr('id'), // id of the input
@@ -34,7 +34,7 @@ $(document).ready(function() {
 //autofocus
 function setAutofocus(action) {
     if (action === "I" || action === "E") {
-      var saNameInput = $("#sa_name");
+      const saNameInput = $("#sa_name");
       saNameInput.prop("disabled", false); // Enable the input field
       saNameInput.focus();
     }
@@ -58,9 +58,9 @@ $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
     
-    var name_chk = 0;
-    var country_chk = 0;
-    var currency_chk = 0;
+    let name_chk = 0;
+    let country_chk = 0;
+    let currency_chk = 0;
 
     if (($('#sa_name').val() === '' || $('#sa_name').val() === null || $('#sa_name')
             .val() === undefined)) {

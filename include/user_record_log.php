@@ -28,7 +28,7 @@ if (!function_exists('urlFallbackResponse')) {
             $target = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : (string) $_SERVER['PHP_SELF'];
         }
 
-        echo '<script>alert(' . json_encode((string) $message) . ');location.href=' . json_encode($target) . ';</script>';
+        echo '<script>showNotification(' . json_encode((string) $message) . ', "success");setTimeout(function(){location.href=' . json_encode($target) . ';}, 1200);</script>';
         exit;
     }
 }
@@ -55,9 +55,9 @@ if (!function_exists('urlGetUserName')) {
         }
 
         $safeUserTable = defined('USR_USER') ? USR_USER : 'user';
-        $rst = getData('name,username', "id='" . urlEsc($connect, $uid) . "'", 'LIMIT 1', $safeUserTable, $connect);
-        if ($rst && $rst->num_rows > 0) {
-            $row = $rst->fetch_assoc();
+        $result = getData('name,username', "id='" . urlEsc($connect, $uid) . "'", 'LIMIT 1', $safeUserTable, $connect);
+        if ($result && $result->num_rows > 0) {
+            $row = $result->fetch_assoc();
             if (!empty($row['name'])) {
                 $cache[$uid] = $row['name'];
                 return $row['name'];
@@ -97,7 +97,7 @@ if (!function_exists('urlGetUserRecordLogTableName')) {
 }
 
 if (!function_exists('urlGetUserRecordLogCustomerColumn')) {
-    function urlGetUserRecordLogCustomerColumn($dbConnect, $tableName, $preferredColumn = '')
+    function urlGetUserRecordLogCustomerColumn($dbConnect, $tblName, $preferredColumn = '')
     {
         static $cache = array();
 
@@ -111,7 +111,7 @@ if (!function_exists('urlGetUserRecordLogCustomerColumn')) {
             return $preferredColumn !== '' ? $preferredColumn : 'shopee_cust_id';
         }
 
-        $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', (string) $tableName);
+        $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', (string) $tblName);
         if ($safeTable === '') {
             return $preferredColumn !== '' ? $preferredColumn : 'shopee_cust_id';
         }
@@ -222,7 +222,7 @@ if (!function_exists('urlBuildUserRecordLogAttachmentUrl')) {
 }
 
 if (!function_exists('urlUserRecordLogColumnExists')) {
-    function urlUserRecordLogColumnExists($dbConnect, $tableName, $columnName)
+    function urlUserRecordLogColumnExists($dbConnect, $tblName, $columnName)
     {
         static $cache = array();
 
@@ -230,7 +230,7 @@ if (!function_exists('urlUserRecordLogColumnExists')) {
             return false;
         }
 
-        $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', (string) $tableName);
+        $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', (string) $tblName);
         $safeColumn = preg_replace('/[^A-Za-z0-9_]/', '', (string) $columnName);
         if ($safeTable === '' || $safeColumn === '') {
             return false;
@@ -241,8 +241,8 @@ if (!function_exists('urlUserRecordLogColumnExists')) {
             return $cache[$cacheKey];
         }
 
-        $rst = mysqli_query($dbConnect, "SHOW COLUMNS FROM `" . $safeTable . "` LIKE '" . $safeColumn . "'");
-        $cache[$cacheKey] = ($rst && $rst->num_rows > 0);
+        $result = mysqli_query($dbConnect, "SHOW COLUMNS FROM `" . $safeTable . "` LIKE '" . $safeColumn . "'");
+        $cache[$cacheKey] = ($result && $result->num_rows > 0);
         return $cache[$cacheKey];
     }
 }
@@ -553,10 +553,10 @@ if (!function_exists('urlFetchShopeeCustomerRow')) {
             return array();
         }
 
-        $tableName = defined('SHOPEE_CUST_INFO') ? SHOPEE_CUST_INFO : 'shopee_customer_info';
-        $rst = getData('*', "id='" . $customerId . "'", 'LIMIT 1', $tableName, $financeConnect);
-        if ($rst && $rst->num_rows > 0) {
-            return $rst->fetch_assoc();
+        $tblName = defined('SHOPEE_CUST_INFO') ? SHOPEE_CUST_INFO : 'shopee_customer_info';
+        $result = getData('*', "id='" . $customerId . "'", 'LIMIT 1', $tblName, $financeConnect);
+        if ($result && $result->num_rows > 0) {
+            return $result->fetch_assoc();
         }
 
         return array();
@@ -590,10 +590,10 @@ if (!function_exists('urlResolveUserRecordLogContext')) {
             $returnUrl = trim((string) $_REQUEST['return_url']);
         }
         if ($returnUrl === '') {
-            $returnUrl = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '/user_record_log.php';
+            $returnUrl = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '/users/user_record_log.php';
         }
 
-        $ajaxUrl = isset($options['ajax_url']) ? trim((string) $options['ajax_url']) : (rtrim((string) $GLOBALS['SITEURL'], '/') . '/user_record_log.php');
+        $ajaxUrl = isset($options['ajax_url']) ? trim((string) $options['ajax_url']) : (rtrim((string) $GLOBALS['SITEURL'], '/') . '/users/user_record_log.php');
         $customerLabel = isset($options['customer_label']) ? trim((string) $options['customer_label']) : '';
         $customerColumn = '';
         if (isset($options['customer_column'])) {
@@ -725,8 +725,8 @@ if (!function_exists('urlBuildListHtml')) {
             $effectivePageSize = $pageSize;
             $sql = "SELECT * FROM " . $tblName . " WHERE " . $whereSql . " ORDER BY created_at DESC, id DESC LIMIT " . $pageSize . " OFFSET " . $offset;
         }
-        $rst = mysqli_query($dbConnect, $sql);
-        if (!$rst || $rst->num_rows === 0) {
+        $result = mysqli_query($dbConnect, $sql);
+        if (!$result || $result->num_rows === 0) {
             return array(
                 'count' => 0,
                 'total' => $totalCount,
@@ -740,7 +740,7 @@ if (!function_exists('urlBuildListHtml')) {
         $html = '';
         $displayNo = $offset + 1;
         $count = 0;
-        while ($row = $rst->fetch_assoc()) {
+        while ($row = $result->fetch_assoc()) {
             $count++;
             $recordId = isset($row['id']) ? (int) $row['id'] : 0;
             $content = isset($row['content']) ? $row['content'] : '';
@@ -1167,7 +1167,7 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
         $pathReturn = isset($context['return_url']) ? (string) $context['return_url'] : '';
         $initialList = urlBuildListHtml($connect, $dbConnect, $tblName, $context);
         $config = array(
-            'ajaxUrl' => isset($context['ajax_url']) ? (string) $context['ajax_url'] : (rtrim((string) $GLOBALS['SITEURL'], '/') . '/user_record_log.php'),
+            'ajaxUrl' => isset($context['ajax_url']) ? (string) $context['ajax_url'] : (rtrim((string) $GLOBALS['SITEURL'], '/') . '/users/user_record_log.php'),
             'customerId' => isset($context['customer_id']) ? (int) $context['customer_id'] : 0,
             'customerColumn' => isset($context['customer_column']) ? (string) $context['customer_column'] : '',
             'pathReturn' => $pathReturn,
@@ -1176,7 +1176,7 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
             'confirmationPageName' => 'User Record Log',
         );
         $configJson = json_encode($config);
-        $moduleActionUrl = rtrim((string) $GLOBALS['SITEURL'], '/') . '/user_record_log.php';
+        $moduleActionUrl = rtrim((string) $GLOBALS['SITEURL'], '/') . '/users/user_record_log.php';
         ?>
         <div class="user-record-log-module mt-4">
             <style>
@@ -1628,7 +1628,7 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
             window.__USER_RECORD_LOG_CONFIG = <?php echo $configJson ? $configJson : '{}'; ?>;
         </script>
         <script src="<?php echo htmlspecialchars(rtrim((string) $GLOBALS['SITEURL'], '/') . '/header/tinymce/tinymce.min.js?v=' . @filemtime(ROOT . '/header/tinymce/tinymce.min.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
-        <script src="<?php echo htmlspecialchars(rtrim((string) $GLOBALS['SITEURL'], '/') . '/js/user_record_log.js?v=' . @filemtime(ROOT . '/js/user_record_log.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
+        <script src="<?php echo htmlspecialchars(rtrim((string) $GLOBALS['SITEURL'], '/') . '/js/users/user_record_log.js?v=' . @filemtime(ROOT . '/js/user_record_log.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
         <?php
     }
 }

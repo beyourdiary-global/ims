@@ -12,9 +12,9 @@ $("#pms_fees").on("input", function() {
 $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
-    
-    var name_chk = 0;
-    var fees_chk = 0;
+
+    let name_chk = 0;
+    let fees_chk = 0;
 
     if (($('#pms_name').val() === '' || $('#pms_name').val() === null || $('#pms_name')
             .val() === undefined)) {

@@ -20,7 +20,7 @@ if (post('bookBtn')) {
 }
 
 $sid = $courier_info['sid'];
-$redirect_page =  $SITEURL . '/rate_checking.php';
+$redirectPage =  $SITEURL . '/stock/rate_checking.php';
 
 //CourierInfo
 $service_detail = $courier_info['service_detail'];
@@ -49,33 +49,33 @@ $country_telcode_from = getCountryTelCode($from, $connect);
 $country_telcode_to = getCountryTelCode($to, $connect);
 
 ?>
+<head>
+    <style>
+        .input-group-text {
+            max-width: 55px;
+            width: 55px;
+            display: flex;
+            justify-content: center;
+        }
 
-<style>
-    .input-group-text {
-        max-width: 55px;
-        width: 55px;
-        display: flex;
-        justify-content: center;
-    }
+        .invalid-msg {
+            color: red;
+            margin-bottom: 0;
+        }
 
-    .invalid-msg {
-        color: red;
-        margin-bottom: 0;
-    }
+        p {
+            margin-bottom: 0;
+        }
+    </style>
 
-    p {
-        margin-bottom: 0;
-    }
-</style>
+</head>
 
 <script>
     preloader(500);
 </script>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div class="my-3 container-fluid">
@@ -549,7 +549,7 @@ $country_telcode_to = getCountryTelCode($to, $connect);
                             <div class="row">
                                 <div class="col-6">
                                     <div class="d-flex justify-content-center">
-                                        <a class="btn btn-default btn-primary" onclick="localStorage.clear();" type="button" href="<?= "$SITEURL/rate_checking.php?country=" . urlencode($from) . "&postcodefrom=" . urlencode($postcode_from) . "&postcodeto=" . urlencode($postcode_to) .  "&from_full=" . urlencode($from_full) . "&to_full=" . urlencode($to_full); ?>" id="backBtn">Back</a>
+                                        <a class="btn btn-default btn-primary" onclick="localStorage.clear();" type="button" href="<?= "$SITEURL/stock/rate_checking.php?country=" . urlencode($from) . "&postcodefrom=" . urlencode($postcode_from) . "&postcodeto=" . urlencode($postcode_to) .  "&from_full=" . urlencode($from_full) . "&to_full=" . urlencode($to_full); ?>" id="backBtn">Back</a>
                                     </div>
                                 </div>
 
@@ -663,7 +663,7 @@ $country_telcode_to = getCountryTelCode($to, $connect);
                     }
 
                     if (!isset($awb) && !$rstMakeOrderPaymentFailStatus) {
-                        echo '<script>confirmationDialog("","Error Message: AWB Bill Not Exist,Please Select Other Courier And Try Again","' . $pageTitle . '","","' . $SITEURL . '/rate_checking.php","ErrMO");</script>';
+                        echo '<script>confirmationDialog("","Error Message: AWB Bill Not Exist,Please Select Other Courier And Try Again","' . $pageTitle . '","","' . $SITEURL . '/stock/rate_checking.php","ErrMO");</script>';
                     }
 
                     if (isset($parcel_no) && isset($awb)) {
@@ -705,8 +705,8 @@ $country_telcode_to = getCountryTelCode($to, $connect);
                                 // insert customer
                                 $insertCust = "INSERT INTO " . CUST . " (name,company_name,address_1,address_2,postcode,contact,alt_contact,email,country,create_date,create_time,create_by) VALUES ('" . $dataMO['send_name'] . "','" . $dataMO['send_company'] . "','" . $dataMO['send_addr1'] . "','" . $dataMO['send_addr2'] . "','" . $dataMO['send_code'] . "','" . $dataMO['send_contact'] . "','" . $dataMO['send_mobile'] . "','" . $dataMO['send_email'] . "','" . $dataMO['send_country'] . "',curdate(),curtime()," . USER_ID . ")";
                                 $connect->query($insertCust);
-                                $dataID = $connect->insert_id;
-                                $cust_id = $dataID;
+                                $dataId = $connect->insert_id;
+                                $cust_id = $dataId;
 
                                 // audit log
                                 $log = $datafield = $custNewvalarr = array();
@@ -741,7 +741,7 @@ $country_telcode_to = getCountryTelCode($to, $connect);
                                     'page'         => $pageTitle,
                                     'connect'      => $connect,
                                     'newval'       => implodeWithComma($custNewvalarr),
-                                    'act_msg'      => actMsgLog($dataID, $datafield, $custNewvalarr, '', '', CUST, $pageAction, ''),
+                                    'act_msg'      => actMsgLog($dataId, $datafield, $custNewvalarr, '', '', CUST, $pageAction, ''),
                                 ];
 
                                 audit_log($log);
@@ -749,7 +749,7 @@ $country_telcode_to = getCountryTelCode($to, $connect);
                                 // insert shipping request
                                 $insertShipReq = "INSERT INTO " . SHIPREQ . " (order_no,customer_id,courier_id,awb,shipping_cost,currency_unit,shipping_type_id,parcel_content,parcel_value,weight,pickup_date,pickup_time,create_date,create_time,create_by) VALUES ('" . $dataMOP['order_number'] . "','$cust_id','$courier_id','$awb','" . $dataMOP['price'] . "','$currency_unit_id','$service_detail','" . $dataMO['content'] . "','" . $dataMO['value'] . "','$weight','" . $dataMOP['collect_date'] . "','$pickup_time',curdate(),curtime(),'" . USER_ID . "')";
                                 $connect->query($insertShipReq);
-                                $dataID = $connect->insert_id;
+                                $dataId = $connect->insert_id;
 
                                 // audit log
                                 $log = $datafield = $shipNewvalarr = array();
@@ -787,7 +787,7 @@ $country_telcode_to = getCountryTelCode($to, $connect);
                                     'page'         => $pageTitle,
                                     'connect'      => $connect,
                                     'newval'       => implodeWithComma($shipNewvalarr),
-                                    'act_msg'      => actMsgLog($dataID, $datafield, $shipNewvalarr, '', '', SHIPREQ, $pageAction, ''),
+                                    'act_msg'      => actMsgLog($dataId, $datafield, $shipNewvalarr, '', '', SHIPREQ, $pageAction, ''),
                                 ];
 
                                 audit_log($log);
@@ -829,7 +829,7 @@ $country_telcode_to = getCountryTelCode($to, $connect);
         if (isset($_SESSION['tempValConfirmBox'])) {
             unset($_SESSION['tempValConfirmBox']);
             echo '<script>localStorage.clear();</script>';
-            echo '<script>confirmationDialog("","Shipping Request For Order Number [' . $dataMOP['order_number'] . ']","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+            echo '<script>confirmationDialog("","Shipping Request For Order Number [' . $dataMOP['order_number'] . ']","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
         }
         ?>
 
@@ -840,8 +840,8 @@ $country_telcode_to = getCountryTelCode($to, $connect);
 
 <script>
     //Initial Page And Action Value
-    var page = "<?= $pageTitle ?>";
-    var action = "<?php echo isset($act) ? $act : ''; ?>";
+    const page = "<?= $pageTitle ?>";
+    const action = "<?php echo isset($act) ? $act : ''; ?>";
 
     checkCurrentPage(page, 'makeOrder');
     setButtonColor();

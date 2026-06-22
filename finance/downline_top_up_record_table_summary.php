@@ -2,7 +2,6 @@
 $currentPagePin = 0;
 ob_start();
 $pageTitle = 'Downline Top Up Record';
-$isFinance = 1;
 
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
@@ -117,48 +116,13 @@ if (!empty($checkboxValues)) {
     }
 }
 
-function addDirToZip($dir, $zip, $basePath)
-{
-    $files = scandir($dir);
-    foreach ($files as $file) {
-        if ($file == '.' || $file == '..') {
-            continue;
-        }
-        $filePath = $dir . $file;
-        if (is_file($filePath)) {
-            // Add the file to the zip archive with a relative path
-            $relativePath = str_replace($basePath, '', $filePath);
-            $zip->addFile($filePath, $relativePath);
-        } elseif (is_dir($filePath)) {
-            // Add the directory to the zip archive
-            $zip->addEmptyDir(str_replace($basePath, '', $filePath));
-            // Recursively add files and directories inside the current directory
-            addDirToZip($filePath . '/', $zip, $basePath);
-        }
-    }
-}
-
-function deleteDir($dirPath) {
-    if (!is_dir($dirPath)) {
-        return;
-    }
-    $files = glob($dirPath . '*', GLOB_MARK);
-    foreach ($files as $file) {
-        if (is_dir($file)) {
-            deleteDir($file);
-        } else {
-            unlink($file);
-        }
-    }
-    rmdir($dirPath);
-}
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 $_SESSION['act'] = '';
 $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 $num = 1;  // numbering
 
-$redirect_page = $SITEURL . '/finance/downline_top_up_record.php';
+$redirectPage = $SITEURL . '/finance/downline_top_up_record.php';
 $deleteRedirectPage = $SITEURL . '/finance/downline_top_up_record_table.php';
 $result = getData('*', '', '', DW_TOP_UP_RECORD, $finance_connect);
 
@@ -171,18 +135,8 @@ $result = getData('*', '', '', DW_TOP_UP_RECORD, $finance_connect);
 <link rel="stylesheet" href="../css/main.css">
 </head>
 
-<script>
-    preloader(300);
-
-    $(document).ready(() => {
-        createSortingTable('table');
-    });
-</script>
-
-<body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+<script src="<?= $SITEURL ?>/js/list_page_common.js"></script><body>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
@@ -198,7 +152,7 @@ $result = getData('*', '', '', DW_TOP_UP_RECORD, $finance_connect);
                             <h2><?php echo $pageTitle . " Summary"; ?></h2>
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed('Add', $pinAccess)): ?>
-                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . '?act=' . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add <?php echo $pageTitle ?> </a>
+                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . '?act=' . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add <?php echo $pageTitle ?> </a>
                                 <?php endif; ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="if (exportData()) { showExportNotification(); }"><i class="fa-solid fa-file-export"></i> Export</a>
                             </div>
@@ -240,13 +194,13 @@ $result = getData('*', '', '', DW_TOP_UP_RECORD, $finance_connect);
                             $currRow = $currResult->fetch_assoc();
                         ?>
                                 <tr onclick="window.location='downline_top_up_record_table_detail.php?ids=<?= urlencode($row['id']) ?>';" style="cursor:pointer;">
-                                    <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
-                                    <th class="text-center"><input type="checkbox" class="export" value="<?= $row['id'] ?>"></th>
+                                    <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
+                                    <th class="text-center"><input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>"></th>
                                     <td scope="row"><?= $num++ ?></td>
-                                    <td scope="row"><?php if (isset($row3['name'])) echo  $row3['name'] ?></td>
-                                    <td scope="row"><?php if (isset($row4['name'])) echo  $row4['name'] ?></td>
-                                    <td scope="row"><?php if (isset($currRow['unit'])) echo $currRow['unit'] ?></td>
-                                    <td scope="row"><?php if (isset($row['amount'])) echo  $row['amount'] ?></td>
+                                    <td scope="row"><?php if (isset($row3['name'])) echo  htmlspecialchars((string) $row3['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row4['name'])) echo  htmlspecialchars((string) $row4['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($currRow['unit'])) echo htmlspecialchars((string) $currRow['unit'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['amount'])) echo  htmlspecialchars((string) $row['amount'], ENT_QUOTES, 'UTF-8') ?></td>
                                 </tr>
                         <?php
                             }
@@ -277,8 +231,8 @@ $result = getData('*', '', '', DW_TOP_UP_RECORD, $finance_connect);
     <script>
         <?php include '../js/fb_ads_topup_table.js' ?>
         //Initial Page And Action Value
-        var page = "<?= $pageTitle ?>";
-        var action = "<?php echo isset($act) ? $act : ' '; ?>";
+        const page = "<?= $pageTitle ?>";
+        const action = "<?php echo isset($act) ? $act : ' '; ?>";
 
         checkCurrentPage(page, action);
         //to solve the issue of dropdown menu displaying inside the table when table class include table-responsive

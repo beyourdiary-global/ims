@@ -1,13 +1,12 @@
 <?php
 $pageTitle = "Website Order Request";
 $currentPagePin = 92;
-$isFinance = 1;
+$listPageSkipSessionReset = true;
+$listPageSkipNumbering = true;
 
-include_once '../menuHeader.php';
-include_once '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
+include_once '../include/list_page_header.php';
+
 $canAssignEstimatedReceivedDate = isActionAllowed('Edit', $pinAccess);
 $estimatedDateToday = new DateTimeImmutable('today');
 $estimatedDateMin = $estimatedDateToday->modify('+1 day')->format('Y-m-d');
@@ -28,12 +27,12 @@ if (!empty($currentTableQuery)) {
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceivedDateBtn')) {
     $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
-        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', (string) $_SERVER['REQUEST_URI'], 1200, true);
         exit;
     }
 
     if (!$canAssignEstimatedReceivedDate) {
-        echo "<script>alert('Security Error: You do not have permission to assign Estimate Received Dates.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+        renderNotificationScript('Security Error: You do not have permission to assign Estimate Received Dates.', 'error', (string) $_SERVER['REQUEST_URI'], 1200, true);
         exit;
     }
 
@@ -68,14 +67,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceiv
         audit_log($auditData);
     }
 
-    echo "<script>alert('" . addslashes($assignmentResult['message']) . "'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+    $assignmentMessage = (string) $assignmentResult['message'];
+    renderNotificationScript($assignmentMessage, resolveNotificationType($assignmentMessage, 'info'), (string) $_SERVER['REQUEST_URI'], 1200, true);
     exit;
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('moveToPackBtn')) {
     $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
-        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', (string) $_SERVER['REQUEST_URI'], 1200, true);
         exit;
     }
 
@@ -89,7 +89,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('moveToPackBtn')) {
         'platform' => 'website',
     ));
 
-    echo '<script>alert(' . json_encode((string) (isset($moveToPackResult['message']) ? $moveToPackResult['message'] : 'Unable to move order to To Pack.'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . '); location.replace(' . json_encode((string) $currentTableRedirect, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ');</script>';
+    $moveToPackMessage = (string) (isset($moveToPackResult['message']) ? $moveToPackResult['message'] : 'Unable to move order to To Pack.');
+    renderNotificationScript($moveToPackMessage, resolveNotificationType($moveToPackMessage, 'info'), $currentTableRedirect, 1200, true);
     exit;
 }
 
@@ -102,7 +103,8 @@ if (isset($_GET['verify_id'])) {
         'remark' => 'Verified from Website order request table.',
         'platform' => 'website',
     ));
-    echo "<script>alert('" . addslashes(isset($verifyResult['message']) ? $verifyResult['message'] : 'Unable to verify order.') . "'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
+    $verifyMessage = (string) (isset($verifyResult['message']) ? $verifyResult['message'] : 'Unable to verify order.');
+    renderNotificationScript($verifyMessage, resolveNotificationType($verifyMessage, 'info'), $currentTableRedirect, 1200, true);
     exit;
 }
 
@@ -115,14 +117,15 @@ if (isset($_GET['complete_id'])) {
         'remark' => 'Completed from Website order request table.',
         'platform' => 'website',
     ));
-    echo "<script>alert('" . addslashes(isset($completeResult['message']) ? $completeResult['message'] : 'Unable to complete order.') . "'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
+    $completeMessage = (string) (isset($completeResult['message']) ? $completeResult['message'] : 'Unable to complete order.');
+    renderNotificationScript($completeMessage, resolveNotificationType($completeMessage, 'info'), $currentTableRedirect, 1200, true);
     exit;
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['force_wafc_id']) && !isset($_POST['move_to_wafc_with_received_date_btn'])) {
     $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
-        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
+        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', $currentTableRedirect, 1200, true);
         exit;
     }
 
@@ -137,7 +140,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['force_wafc_id
         'allow_auto_follow_up' => false,
         'platform' => 'website',
     ));
-    echo "<script>alert('" . addslashes(isset($wafcResult['message']) ? $wafcResult['message'] : 'Unable to move order to WAFC.') . "'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
+    $wafcMessage = (string) (isset($wafcResult['message']) ? $wafcResult['message'] : 'Unable to move order to WAFC.');
+    renderNotificationScript($wafcMessage, resolveNotificationType($wafcMessage, 'info'), $currentTableRedirect, 1200, true);
     exit;
 }
 
@@ -154,7 +158,7 @@ shopeeOmsHandleMoveToWafcWithReceivedDatePost($connect, $finance_connect, array(
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['return_id'])) {
     $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
-        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
+        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', $currentTableRedirect, 1200, true);
         exit;
     }
 
@@ -167,7 +171,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['return_id']))
         'action' => 'mark_return',
         'platform' => 'website',
     ));
-    echo "<script>alert('" . addslashes(isset($returnResult['message']) ? $returnResult['message'] : 'Unable to mark order as Return.') . "'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
+    $returnMessage = (string) (isset($returnResult['message']) ? $returnResult['message'] : 'Unable to mark order as Return.');
+    renderNotificationScript($returnMessage, resolveNotificationType($returnMessage, 'info'), $currentTableRedirect, 1200, true);
     exit;
 }
 
@@ -176,7 +181,7 @@ $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 
-$redirect_page = $SITEURL . '/finance/website_order_request.php';
+$redirectPage = $SITEURL . '/finance/website_order_request.php';
 $deleteRedirectPage = $SITEURL . '/finance/website_order_request_table.php';
 
 // Fetch all orders from Finance Database
@@ -188,63 +193,10 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
 
 <head>
     <link rel="stylesheet" href="../css/main.css">
-    <style>
-        .estimated-date-modal {
-            position: fixed;
-            inset: 0;
-            z-index: 2000;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            background: rgba(0, 0, 0, 0.45);
-            padding: 16px;
-        }
 
-        .estimated-date-modal.is-open {
-            display: flex;
-        }
-
-        .estimated-date-modal__dialog {
-            width: 100%;
-            max-width: 420px;
-            border-radius: 12px;
-            background: #fff;
-            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
-            padding: 20px;
-        }
-
-        .estimated-date-modal__close-btn,
-        .estimated-date-modal__action-btn {
-            text-transform: none !important;
-        }
-    </style>
 </head>
 
 <script>
-    function openEstimatedReceivedDateModal(orderId, orderCode, minDate, maxDate) {
-        const modal = document.getElementById('estimatedReceivedDateModal');
-        const title = document.getElementById('estimatedReceivedDateTitle');
-        const orderIdInput = document.getElementById('estimated_received_order_id');
-        const dateInput = document.getElementById('estimated_received_date');
-
-        if (!modal || !orderIdInput || !dateInput) {
-            return;
-        }
-
-        title.textContent = orderCode ? 'Assign Estimate Received Date for ' + orderCode : 'Assign Estimate Received Date';
-        orderIdInput.value = orderId;
-        dateInput.value = '';
-        dateInput.min = minDate;
-        dateInput.max = maxDate;
-        modal.classList.add('is-open');
-    }
-
-    function closeEstimatedReceivedDateModal() {
-        const modal = document.getElementById('estimatedReceivedDateModal');
-        if (modal) {
-            modal.classList.remove('is-open');
-        }
-    }
 
     $(document).ready(() => {
         createSortingTable('website_order_request_table');
@@ -275,7 +227,7 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)) : ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                    href="<?= $redirect_page . "?act=I&pageTitle=" . $pageTitle ?>">
+                                    href="<?= $redirectPage . "?act=I" ?>">
                                     <i class="fa-solid fa-plus"></i> Add Request
                                 </a>
                             <?php endif; ?>
@@ -399,13 +351,13 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
                                 }
                                 ?>
                                 <tr>
-                                    <td class="hideColumn" scope="row"><?= $row['id'] ?></td>
+                                    <td class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></td>
                                     <td scope="row"><?= $num++ ?></td>
                                     <td scope="row" class="btn-container">
                                         <div class="d-flex align-items-center">
-                                            <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                            <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                            <?php renderDeleteButton($pinAccess, $row['id'], $row['order_id'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                            <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                            <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
+                                            <?php renderDeleteButton($pinAccess, $row['id'], $row['order_id'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                             <?php
                                             $statusCode = shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '');
                                             $canAssignThisOrder = $canAssignEstimatedReceivedDate && shopeeOmsPassesAssignmentScope($connect, $row, USER_ID, USER_GROUP);
@@ -525,29 +477,7 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
         </div>
     </div>
 
-    <div class="estimated-date-modal" id="estimatedReceivedDateModal" aria-hidden="true">
-        <div class="estimated-date-modal__dialog">
-            <div class="d-flex justify-content-between align-items-start mb-3">
-                <h4 class="mb-0" id="estimatedReceivedDateTitle">Assign Estimate Received Date</h4>
-                <button type="button" class="btn btn-light estimated-date-modal__close-btn" onclick="closeEstimatedReceivedDateModal()" aria-label="Close">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            </div>
-            <form method="post">
-                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
-                <input type="hidden" name="estimated_received_order_id" id="estimated_received_order_id" value="">
-                <div class="mb-3">
-                    <label class="form-label" for="estimated_received_date">Estimate Received Date</label>
-                    <input type="date" class="form-control" name="estimated_received_date" id="estimated_received_date" min="<?= $estimatedDateMin ?>" max="<?= $estimatedDateMax ?>" required>
-                    <small class="text-muted">Choose a date from <?= $estimatedDateMin ?> until <?= $estimatedDateMax ?>.</small>
-                </div>
-                <div class="d-flex justify-content-end gap-2">
-                    <button type="button" class="btn btn-light estimated-date-modal__action-btn" onclick="closeEstimatedReceivedDateModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary estimated-date-modal__action-btn" name="assignEstimatedReceivedDateBtn" value="1">Save</button>
-                </div>
-            </form>
-        </div>
-    </div>
+    <?php include_once ROOT . '/include/estimated_date_modal.php'; ?>
     <?php shopeeOmsRenderReceivedDateModal(array('wrapper_attributes' => 'aria-hidden="true"')); ?>
 
 </body>

@@ -1,22 +1,8 @@
-﻿function exportData() {
-    var checkboxes = document.querySelectorAll('.export:checked');
-    if (checkboxes.length === 0) {
-        alert('Please select data to export.');
-        return false;
-    }
-    return true;
-}
-
-function showExportNotification() {
-    alert('Export successful!');
-}
-
-
 $(document).ready(function ($) {
     $(document).on("change", ".exportAll", function (event) { //checkbox handling
         event.preventDefault();
 
-        var isChecked = $(this).prop("checked");
+        const isChecked = $(this).prop("checked");
         $(this).closest("table").find("tbody tr:visible .export").prop("checked", isChecked);
         $(".exportAll").prop("checked", isChecked);
 
@@ -24,11 +10,11 @@ $(document).ready(function ($) {
     });
 
     $('a[name="exportBtn"]').on("click", function () {
-        var checkboxValues = [];
+        const checkboxValues = [];
 
         // Loop through all pages to collect checked checkboxes
         $('#bank_trans_backup_table').DataTable().rows({ search: "applied", page: "current" }).nodes().to$().each(function () {
-            var checkbox = $(this).find('.export:checked');
+            const checkbox = $(this).find('.export:checked');
             if (checkbox.length > 0) {
                 checkbox.each(function () {
                     checkboxValues.push($(this).val());
@@ -42,12 +28,12 @@ $(document).ready(function ($) {
             setCookie('rowID', checkboxValues.join(','), 1);
 
             //uncheck checkboxes
-            var checkboxes = document.querySelectorAll('.export');
+            const checkboxes = document.querySelectorAll('.export');
             checkboxes.forEach(function (checkbox) {
                 checkbox.checked = false;
             });
 
-            var selectAllCheckbox = document.querySelector('.exportAll');
+            const selectAllCheckbox = document.querySelector('.exportAll');
             if (selectAllCheckbox) {
                 selectAllCheckbox.checked = false;
             }
@@ -57,13 +43,4 @@ $(document).ready(function ($) {
             console.log('No checkboxes are checked.');
         }
     });
-
-    function updateCheckboxesOnOtherPages(isChecked) {
-        // Get all cells in the DataTable
-        var cells = $('#bank_trans_backup_table').DataTable().rows({ page: "current" }).nodes();
-
-        // Check/uncheck all checkboxes in the DataTable
-        $(cells).find('.export').prop('checked', isChecked);
-    }
 });
-

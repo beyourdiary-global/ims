@@ -101,6 +101,9 @@ var state = {
   assignees: Array.isArray(cfg.assignees) ? cfg.assignees.slice() : [],
   labels: Array.isArray(cfg.labels) ? cfg.labels.slice() : [],
   statusLabels: Array.isArray(cfg.statusLabels) ? cfg.statusLabels.slice() : [],
+  linkRelationTypes: Array.isArray(cfg.linkRelationTypes)
+    ? cfg.linkRelationTypes.slice()
+    : [],
   columns: Array.isArray(cfg.columns) ? cfg.columns.slice() : [],
   allowedWorkTypeIds: Array.isArray(cfg.allowedWorkTypeIds)
     ? cfg.allowedWorkTypeIds.slice()
@@ -350,6 +353,8 @@ var itemDetailModalState = {
   selectedLabelIds: [],
   comments: [],
   commentsLoading: false,
+  worklogs: [],
+  worklogsLoading: false,
   parentItemId: 0,
   parentOptions: [],
   webLinks: [],
@@ -364,8 +369,11 @@ var itemDetailModalState = {
   timeTracking: {
     ownText: "No time logged",
     ownSeconds: 0,
+    ownRemainingSeconds: 0,
+    ownEstimateSeconds: 0,
     childText: "No time logged",
     childSeconds: 0,
+    childRemainingSeconds: 0,
     canIncludeChild: false,
     includeChild: false,
   },
@@ -375,14 +383,31 @@ var itemDetailModalState = {
     done: 0,
     progress_percent: 0,
   },
+  isParentType: false,
+  childCreatePanelOpen: false,
+  childCreateMode: "create",
+  childCreateSelectedItemId: 0,
+  childCreateSearchResults: [],
+  childCreateSearchTimer: 0,
+  itemLinks: {
+    groups: [],
+    total: 0,
+  },
+  linkEditorOpen: false,
+  linkRelationType: "",
+  linkSelectedItemId: 0,
+  linkSearchResults: [],
+  linkSearchTimer: 0,
   childTitleEditingItemId: 0,
   childPickerItemId: 0,
   childPickerField: "",
   childWorkItemsCollapsed: false,
   history: [],
+  historyRequestSeq: 0,
   activityCollapsed: false,
   activityTab: "all",
   activitySortDirection: "desc",
+  worklogRequestSeq: 0,
 };
 
 var statusModalState = {
@@ -401,6 +426,18 @@ var worklogTimerState = {
 
 var worklogTickerId = null;
 var worklogStoragePrefix = "task_board_worklog_timer_v1_";
+
+function nextItemDetailHistoryRequestSeq() {
+  itemDetailModalState.historyRequestSeq =
+    Number(itemDetailModalState.historyRequestSeq || 0) + 1;
+  return itemDetailModalState.historyRequestSeq;
+}
+
+function nextItemDetailWorklogRequestSeq() {
+  itemDetailModalState.worklogRequestSeq =
+    Number(itemDetailModalState.worklogRequestSeq || 0) + 1;
+  return itemDetailModalState.worklogRequestSeq;
+}
 
 var currentUserId = Number(cfg.currentUserId || 0);
 var boardProjectId = Number(cfg.currentProjectId || 0);
@@ -620,7 +657,7 @@ function setComposerWorkType($toggle, workType) {
 normalizeAllWorkTypes();
 
 function notify(message) {
-  window.alert(message || "Operation completed.");
+  showNotification(message || "Operation completed.", "info");
 }
 
 function cleanupTaskDialogArtifacts() {
@@ -731,6 +768,29 @@ function formatRelativeTime(dateValue, timeValue) {
   return diffDay + (diffDay === 1 ? " day ago" : " days ago");
 }
 
+function formatActivityDateTime(dateValue, timeValue) {
+  var createdAtMs = parseDateTimeToMs(dateValue, timeValue);
+  if (!createdAtMs) {
+    return "";
+  }
+
+  try {
+    var dt = new Date(createdAtMs);
+    var dateText = new Intl.DateTimeFormat("en-US", {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }).format(dt);
+    var timeText = new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+    }).format(dt);
+    return dateText + " at " + timeText;
+  } catch (e) {
+    return String(dateValue || "").trim();
+  }
+}
+
 function parseDurationTextToSeconds(text) {
   var source = String(text || "").trim();
   if (!source) {
@@ -801,6 +861,33 @@ function formatDurationBrief(totalSeconds) {
   return parts.slice(0, 2).join(" ");
 }
 
+function formatDurationInputText(totalSeconds) {
+  var remain = Math.max(0, Math.floor(Number(totalSeconds || 0)));
+  var days = Math.floor(remain / 86400);
+  remain -= days * 86400;
+  var hours = Math.floor(remain / 3600);
+  remain -= hours * 3600;
+  var minutes = Math.floor(remain / 60);
+  remain -= minutes * 60;
+  var seconds = remain;
+  var parts = [];
+
+  if (days > 0) {
+    parts.push(days + "d");
+  }
+  if (hours > 0) {
+    parts.push(hours + "h");
+  }
+  if (minutes > 0) {
+    parts.push(minutes + "m");
+  }
+  if (seconds > 0) {
+    parts.push(seconds + "s");
+  }
+
+  return parts.length ? parts.join(" ") : "0m";
+}
+
 function estimateUnitToSeconds(value, unit) {
   var amount = Math.max(0, Number(value || 0));
   if (!amount) {
@@ -848,6 +935,16 @@ function renderDetailTimeTracking(
           ) ||
           0,
         ),
+        ownRemainingSeconds: Number(
+          timeTrackingText.ownRemainingSeconds ||
+          timeTrackingText.own_remaining_seconds ||
+          0,
+        ),
+        ownEstimateSeconds: Number(
+          timeTrackingText.ownEstimateSeconds ||
+          timeTrackingText.own_estimate_seconds ||
+          0,
+        ),
         childText:
           String(
             timeTrackingText.childText ||
@@ -871,6 +968,11 @@ function renderDetailTimeTracking(
           timeTrackingText.child_original_estimate_seconds ||
           0,
         ),
+        childRemainingSeconds: Number(
+          timeTrackingText.childRemainingSeconds ||
+          timeTrackingText.child_remaining_seconds ||
+          0,
+        ),
         canIncludeChild:
           Number(
             timeTrackingText.canIncludeChild ||
@@ -889,9 +991,12 @@ function renderDetailTimeTracking(
         ownSeconds: parseDurationTextToSeconds(
           String(timeTrackingText || ""),
         ),
+        ownRemainingSeconds: 0,
+        ownEstimateSeconds: 0,
         childText: "No time logged",
         childSeconds: 0,
         childEstimateSeconds: 0,
+        childRemainingSeconds: 0,
         canIncludeChild: false,
         includeChild: false,
       };
@@ -907,11 +1012,28 @@ function renderDetailTimeTracking(
   var loggedSeconds = info.ownSeconds + (includeChild ? info.childSeconds : 0);
   var trackingText =
     loggedSeconds > 0 ? formatDurationBrief(loggedSeconds) : "No time logged";
-  var ownEstimateSeconds = estimateUnitToSeconds(estimateValue, estimateUnit);
+  var ownEstimateSeconds = Math.max(
+    Number(info.ownEstimateSeconds || 0),
+    estimateUnitToSeconds(estimateValue, estimateUnit),
+  );
+  var ownRemainingSeconds = Math.max(
+    0,
+    Number(info.ownRemainingSeconds || Math.max(ownEstimateSeconds - info.ownSeconds, 0)),
+  );
+  var childEstimateSeconds = Number(info.childEstimateSeconds || 0);
+  var childRemainingSeconds = Math.max(
+    0,
+    Number(
+      info.childRemainingSeconds ||
+      Math.max(childEstimateSeconds - Number(info.childSeconds || 0), 0),
+    ),
+  );
   var estimateSeconds = includeChild
-    ? ownEstimateSeconds + Number(info.childEstimateSeconds || 0)
-    : ownEstimateSeconds;
-  var remainingSeconds = Math.max(estimateSeconds - loggedSeconds, 0);
+    ? loggedSeconds + ownRemainingSeconds + childRemainingSeconds
+    : loggedSeconds + ownRemainingSeconds;
+  var remainingSeconds = includeChild
+    ? ownRemainingSeconds + childRemainingSeconds
+    : ownRemainingSeconds;
   var toggleHtml = info.canIncludeChild
     ? '<label class="task-item-detail-time-tracking-toggle"><input id="taskItemDetailIncludeChildTimeTrackingInput" type="checkbox"' +
     (includeChild ? " checked" : "") +
@@ -1259,10 +1381,92 @@ function renderCommentFeed($target, commentRows) {
   focusCommentFromHash();
 }
 
+function renderWorklogEntryHtml(row, options) {
+  var settings = options && typeof options === "object" ? options : {};
+  var worklogId = Number((row || {}).id || 0);
+  var actor = String((row || {}).actor_name || "User").trim() || "User";
+  var durationText = String((row || {}).duration_text || "").trim() || "0s";
+  var startedText = formatActivityDateTime(
+    row && row.started_date ? row.started_date : "",
+    row && row.started_time ? row.started_time : "",
+  );
+  var descriptionHtml = String((row || {}).work_description_html || "").trim();
+  var isEdited = Number((row || {}).is_edited || 0) === 1;
+  var actionHtml =
+    settings.showActions && canEdit && worklogId > 0
+      ? '<div class="task-item-worklog-actions-row">' +
+        '<button type="button" class="btn task-item-worklog-action-btn task-item-worklog-edit-btn" data-worklog-id="' +
+        worklogId +
+        '">Edit</button>' +
+        '<span class="task-item-worklog-action-sep">&middot;</span>' +
+        '<button type="button" class="btn task-item-worklog-action-btn task-item-worklog-delete-btn" data-worklog-id="' +
+        worklogId +
+        '">Delete</button>' +
+        "</div>"
+      : "";
+
+  return (
+    '<div class="task-item-activity-entry task-item-worklog-entry" data-worklog-id="' +
+    worklogId +
+    '">' +
+    '<div class="task-item-activity-avatar">' +
+    escHtml(initials(actor)) +
+    "</div>" +
+    '<div class="task-item-activity-content">' +
+    '<div class="task-item-activity-text"><span class="task-item-activity-actor">' +
+    escHtml(actor) +
+    "</span> logged " +
+    escHtml(durationText) +
+    (isEdited
+      ? ' <span class="task-item-worklog-edited">(edited)</span>'
+      : "") +
+    "</div>" +
+    '<div class="task-item-activity-meta">' +
+    (startedText
+      ? '<div class="task-item-activity-ago">' + escHtml(startedText) + "</div>"
+      : "") +
+    activityTypeBadgeHtml("worklog") +
+    "</div>" +
+    (descriptionHtml
+      ? '<div class="task-item-activity-comment-body">' +
+        descriptionHtml +
+        "</div>"
+      : "") +
+    actionHtml +
+    "</div></div>"
+  );
+}
+
+function renderWorklogFeed($target, worklogRows) {
+  if (!$target || !$target.length) {
+    return;
+  }
+
+  var rows = sortedActivityRows(Array.isArray(worklogRows) ? worklogRows : []);
+  if (!rows.length) {
+    $target.html(
+      '<div class="task-item-activity-empty">No work log yet.</div>',
+    );
+    return;
+  }
+
+  var html = "";
+  for (var i = 0; i < rows.length; i++) {
+    html += renderWorklogEntryHtml(rows[i] || {}, {
+      showActions: true,
+    });
+  }
+
+  $target.html(html);
+}
+
 function activityTypeBadgeHtml(type) {
   var value = String(type || "history").toLowerCase();
   if (value === "comment") {
     return '<span class="task-item-activity-type-badge task-item-activity-type-comment">COMMENT</span>';
+  }
+  if (value === "worklog") {
+    return '<span class="task-item-activity-type-badge task-item-activity-type-worklog">WORKLOG</span>';
   }
   return '<span class="task-item-activity-type-badge task-item-activity-type-history">HISTORY</span>';
 }
@@ -1277,12 +1481,12 @@ function sortedActivityRows(rows) {
   var sorted = Array.isArray(rows) ? rows.slice() : [];
   sorted.sort(function (a, b) {
     var tsA = toActivitySortTimestamp(
-      a && a.create_date ? a.create_date : "",
-      a && a.create_time ? a.create_time : "",
+      a && (a.create_date || a.started_date) ? a.create_date || a.started_date : "",
+      a && (a.create_time || a.started_time) ? a.create_time || a.started_time : "",
     );
     var tsB = toActivitySortTimestamp(
-      b && b.create_date ? b.create_date : "",
-      b && b.create_time ? b.create_time : "",
+      b && (b.create_date || b.started_date) ? b.create_date || b.started_date : "",
+      b && (b.create_time || b.started_time) ? b.create_time || b.started_time : "",
     );
 
     if (tsA !== tsB) {
@@ -1415,7 +1619,7 @@ function toActivitySortTimestamp(createDate, createTime) {
   return Number.isFinite(ms) ? ms : 0;
 }
 
-function renderAllActivityFeed($target, historyRows, commentRows) {
+function renderAllActivityFeed($target, historyRows, commentRows, worklogRows) {
   if (!$target || !$target.length) {
     return;
   }
@@ -1423,6 +1627,7 @@ function renderAllActivityFeed($target, historyRows, commentRows) {
   var allRows = [];
   var history = Array.isArray(historyRows) ? historyRows : [];
   var comments = Array.isArray(commentRows) ? commentRows : [];
+  var worklogs = Array.isArray(worklogRows) ? worklogRows : [];
   var i;
 
   for (i = 0; i < history.length; i++) {
@@ -1450,6 +1655,20 @@ function renderAllActivityFeed($target, historyRows, commentRows) {
         commentRow.create_time,
       ),
       payload: commentRow,
+    });
+  }
+
+  for (i = 0; i < worklogs.length; i++) {
+    var worklogRow = worklogs[i] || {};
+    allRows.push({
+      type: "worklog",
+      create_date: worklogRow.started_date || worklogRow.create_date,
+      create_time: worklogRow.started_time || worklogRow.create_time,
+      sort_ts: toActivitySortTimestamp(
+        worklogRow.started_date || worklogRow.create_date,
+        worklogRow.started_time || worklogRow.create_time,
+      ),
+      payload: worklogRow,
     });
   }
 
@@ -1484,6 +1703,13 @@ function renderAllActivityFeed($target, historyRows, commentRows) {
 
     if (row.type === "comment") {
       html += buildCommentEntryHtml(payload, "all");
+      continue;
+    }
+
+    if (row.type === "worklog") {
+      html += renderWorklogEntryHtml(payload, {
+        showActions: false,
+      });
       continue;
     }
 
@@ -1530,6 +1756,7 @@ function renderItemHistoryPanels() {
     $("#taskItemActivityAllList"),
     itemDetailModalState.history,
     itemDetailModalState.comments,
+    itemDetailModalState.worklogs,
   );
   renderCommentFeed(
     $("#taskItemActivityCommentList"),
@@ -1539,13 +1766,17 @@ function renderItemHistoryPanels() {
     $("#taskItemActivityHistoryList"),
     itemDetailModalState.history,
   );
+  renderWorklogFeed(
+    $("#taskItemActivityWorklogList"),
+    itemDetailModalState.worklogs,
+  );
   updateActivitySortButtons();
   $(document).trigger("task:historyPanelsRendered");
 }
 
 function setItemActivityTab(tabName) {
   var tab = String(tabName || "all").toLowerCase();
-  if (["all", "comment", "history"].indexOf(tab) === -1) {
+  if (["all", "comment", "history", "worklog"].indexOf(tab) === -1) {
     tab = "all";
   }
 
@@ -1557,13 +1788,20 @@ function setItemActivityTab(tabName) {
 
   $("#taskItemActivityPanelAll")
     .toggleClass("d-none", tab !== "all")
-    .prop("hidden", tab !== "all");
+    .prop("hidden", tab !== "all")
+    .toggleClass("is-active", tab === "all");
   $("#taskItemActivityPanelComment")
     .toggleClass("d-none", tab !== "comment")
-    .prop("hidden", tab !== "comment");
+    .prop("hidden", tab !== "comment")
+    .toggleClass("is-active", tab === "comment");
   $("#taskItemActivityPanelHistory")
     .toggleClass("d-none", tab !== "history")
-    .prop("hidden", tab !== "history");
+    .prop("hidden", tab !== "history")
+    .toggleClass("is-active", tab === "history");
+  $("#taskItemActivityPanelWorklog")
+    .toggleClass("d-none", tab !== "worklog")
+    .prop("hidden", tab !== "worklog")
+    .toggleClass("is-active", tab === "worklog");
 
   updateActivitySortButtons();
 }
@@ -1571,20 +1809,71 @@ function setItemActivityTab(tabName) {
 function loadItemHistory(itemId) {
   var id = Number(itemId || 0);
   if (!id) {
+    nextItemDetailHistoryRequestSeq();
     itemDetailModalState.history = [];
     renderItemHistoryPanels();
     return;
   }
 
+  var requestSeq = nextItemDetailHistoryRequestSeq();
   postAction(
     {
       task_action: "get_item_history",
       item_id: id,
     },
     function (res) {
+      if (
+        Number(itemDetailModalState.itemId || 0) !== id ||
+        requestSeq !== Number(itemDetailModalState.historyRequestSeq || 0)
+      ) {
+        return;
+      }
       itemDetailModalState.history = Array.isArray(res.history)
         ? res.history.slice()
         : [];
+      renderItemHistoryPanels();
+    },
+  );
+}
+
+function loadItemWorklogs(itemId) {
+  var id = Number(itemId || 0);
+  if (!id) {
+    nextItemDetailWorklogRequestSeq();
+    itemDetailModalState.worklogs = [];
+    itemDetailModalState.worklogsLoading = false;
+    renderItemHistoryPanels();
+    return;
+  }
+
+  var requestSeq = nextItemDetailWorklogRequestSeq();
+  itemDetailModalState.worklogsLoading = true;
+  postAction(
+    {
+      task_action: "get_item_worklogs",
+      item_id: id,
+    },
+    function (res) {
+      if (
+        Number(itemDetailModalState.itemId || 0) !== id ||
+        requestSeq !== Number(itemDetailModalState.worklogRequestSeq || 0)
+      ) {
+        return;
+      }
+      itemDetailModalState.worklogs = Array.isArray(res.worklogs)
+        ? res.worklogs.slice()
+        : [];
+      itemDetailModalState.worklogsLoading = false;
+      renderItemHistoryPanels();
+    },
+    function () {
+      if (
+        Number(itemDetailModalState.itemId || 0) !== id ||
+        requestSeq !== Number(itemDetailModalState.worklogRequestSeq || 0)
+      ) {
+        return;
+      }
+      itemDetailModalState.worklogsLoading = false;
       renderItemHistoryPanels();
     },
   );
@@ -1869,23 +2158,31 @@ function saveWorklogForCurrentItem() {
       duration_seconds: totalSeconds,
     },
     function (res) {
-      var detail =
-        res && res.detail && typeof res.detail === "object" ? res.detail : {};
-      renderDetailTimeTracking(
-        detail,
-        Number($("#taskItemDetailEstimateValueInput").val() || 0),
-        String($("#taskItemDetailEstimateUnitInput").val() || "minutes"),
-      );
+      if (typeof applyCurrentItemDetailResponse === "function") {
+        applyCurrentItemDetailResponse(res || {});
+      } else {
+        var detail =
+          res && res.detail && typeof res.detail === "object" ? res.detail : {};
+        renderDetailTimeTracking(
+          detail,
+          Number($("#taskItemDetailEstimateValueInput").val() || 0),
+          String($("#taskItemDetailEstimateUnitInput").val() || "minutes"),
+        );
+
+        if (Array.isArray(res && res.worklogs)) {
+          itemDetailModalState.worklogs = res.worklogs.slice();
+        }
+        if (Array.isArray(res && res.history)) {
+          itemDetailModalState.history = res.history.slice();
+        }
+        renderItemHistoryPanels();
+      }
 
       worklogTimerState.elapsedSeconds = 0;
       worklogTimerState.running = false;
       worklogTimerState.startedAtMs = 0;
       persistWorklogTimerState();
       applyWorklogTimerUi();
-
-      if (itemDetailModalState.itemId === itemId) {
-        loadItemHistory(itemId);
-      }
 
       showBoardToast(
         "Work log saved",

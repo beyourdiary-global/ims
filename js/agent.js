@@ -3,7 +3,7 @@ $(document).ready(function() {
     
     if (!($("#agt_brand").attr('disabled'))) {
         $("#agt_brand").keyup(function() {
-            var param = {
+            const param = {
                 search: $(this).val(),
                 searchType: 'name', // column of the table
                 elementID: $(this).attr('id'), // id of the input
@@ -19,7 +19,7 @@ $(document).ready(function() {
 
         if (!($("#agt_pic").attr('disabled'))) {
             $("#agt_pic").keyup(function() {
-                var param = {
+                const param = {
                     search: $(this).val(),
                     searchType: 'name', // column of the table
                     elementID: $(this).attr('id'), // id of the input
@@ -34,7 +34,7 @@ $(document).ready(function() {
     
     if (!($("#agt_country").attr('disabled'))) { 
         $("#agt_country").keyup(function() { 
-            var param = { 
+            const param = { 
                 search: $(this).val(), 
                 searchType: 'name', // column of the table
                 elementID: $(this).attr('id'), // id of the input
@@ -77,11 +77,11 @@ $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
     
-    var name_chk = 0;
-    var email_chk = 0;
-    var brand_chk = 0;
-    var pic_chk = 0;
-    var country_chk = 0;
+    let name_chk = 0;
+    let email_chk = 0;
+    let brand_chk = 0;
+    let pic_chk = 0;
+    let country_chk = 0;
 
     if (($('#name').val() === '' || $('#name').val() === null || $('#name')
             .val() === undefined)) {

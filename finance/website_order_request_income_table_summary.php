@@ -2,7 +2,6 @@
 $currentPagePin = 92;
 ob_start();
 $pageTitle = "Website Order Request";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
@@ -176,42 +175,6 @@ if (!empty($checkboxValues)) {
     }
 }
 
-function addDirToZip($dir, $zip, $basePath)
-{
-    $files = scandir($dir);
-    foreach ($files as $file) {
-        if ($file == '.' || $file == '..') {
-            continue;
-        }
-        $filePath = $dir . $file;
-        if (is_file($filePath)) {
-            // Add the file to the zip archive with a relative path
-            $relativePath = str_replace($basePath, '', $filePath);
-            $zip->addFile($filePath, $relativePath);
-        } elseif (is_dir($filePath)) {
-            // Add the directory to the zip archive
-            $zip->addEmptyDir(str_replace($basePath, '', $filePath));
-            // Recursively add files and directories inside the current directory
-            addDirToZip($filePath . '/', $zip, $basePath);
-        }
-    }
-}
-
-function deleteDir($dirPath) {
-    if (!is_dir($dirPath)) {
-        return;
-    }
-    $files = glob($dirPath . '*', GLOB_MARK);
-    foreach ($files as $file) {
-        if (is_dir($file)) {
-            deleteDir($file);
-        } else {
-            unlink($file);
-        }
-    }
-    rmdir($dirPath);
-}
-
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 $_SESSION['act'] = '';
 $_SESSION['viewChk'] = '';
@@ -220,7 +183,7 @@ unset($_SESSION['resetChk']);
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 $tblName = WEB_ORDER_REQ;
-$redirect_page = $SITEURL . '/finance/website_order_request.php';
+$redirectPage = $SITEURL . '/finance/website_order_request.php';
 $deleteRedirectPage = $SITEURL . '/finance/website_order_request_table.php';
 $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
 ?>
@@ -237,9 +200,6 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
         createSortingTable('website_order_request_table');
     });
 </script>
-
-
-
 <body>
 
     <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
@@ -263,7 +223,7 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         Request </a>
                                 <?php endif; ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>
@@ -761,14 +721,6 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
             console.log('No checkboxes are checked.');
         }
     });
-
-    function updateCheckboxesOnOtherPages(isChecked) {
-        // Get all cells in the DataTable
-        var cells = $('#website_order_request_table').DataTable().cells().nodes();
-
-        // Check/uncheck all checkboxes in the DataTable
-        $(cells).find('.export').prop('checked', isChecked);
-    }
 });
 
 <?php include "../js/order_req.js" ?>

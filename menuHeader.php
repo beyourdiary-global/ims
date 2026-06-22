@@ -3,20 +3,60 @@
 
 <head>
     <?php
-    include_once "include/connection.php";
-    include_once "include/common.php";
-    include_once "include/common_variable.php";
-    include_once ROOT . "/include/system_alert_common.php";
+    include_once __DIR__ . "/include/connection.php";
+    include_once __DIR__ . "/include/common.php";
+    include_once __DIR__ . "/include/common_variable.php";
+    include_once __DIR__ . "/include/system_alert_common.php";
+
+    $menuHeaderRootPath = defined('ROOT') ? realpath(ROOT) : realpath(__DIR__);
+    if ($menuHeaderRootPath === false) {
+        $menuHeaderRootPath = defined('ROOT') ? ROOT : __DIR__;
+    }
+
+    $menuHeaderIncludePaths = explode(PATH_SEPARATOR, get_include_path());
+    $menuHeaderNormalizedIncludePaths = array();
+
+    foreach ($menuHeaderIncludePaths as $menuHeaderIncludePath) {
+        $menuHeaderRealIncludePath = realpath($menuHeaderIncludePath);
+        $menuHeaderNormalizedIncludePaths[] = $menuHeaderRealIncludePath !== false ? $menuHeaderRealIncludePath : $menuHeaderIncludePath;
+    }
+
+    if (!in_array($menuHeaderRootPath, $menuHeaderNormalizedIncludePaths, true)) {
+        set_include_path($menuHeaderRootPath . PATH_SEPARATOR . get_include_path());
+    }
+
+    if (!function_exists('listPageNetworkFailRedirect')) {
+        function listPageNetworkFailRedirect($redirectUrl = '')
+        {
+            global $SITEURL;
+
+            $redirectUrl = trim((string) $redirectUrl);
+
+            if ($redirectUrl === '') {
+                if (isset($SITEURL) && trim((string) $SITEURL) !== '') {
+                    $redirectUrl = rtrim((string) $SITEURL, '/') . '/dashboard.php';
+                } else if (defined('SITEURL')) {
+                    $redirectUrl = rtrim((string) SITEURL, '/') . '/dashboard.php';
+                } else {
+                    $redirectUrl = 'dashboard.php';
+                }
+            }
+
+            renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error', $redirectUrl);
+            exit;
+        }
+    }
+
+
 
     $img_path = $SITEURL . '/' . img_server . 'themes/';
-    $rst = getData('*', "id = '1'", '', 'projects', $connect);
+    $result = getData('*', "id = '1'", '', 'projects', $connect);
 
-    if (!$rst) {
-        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
-        echo '<script>location.href = "' . $SITEURL . '/index.php";</script>';
+    if (!$result) {
+        renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error', $SITEURL . '/index.php');
     } else {
         $dataExisted = 1;
-        $row = $rst->fetch_assoc();
+        $row = $result->fetch_assoc();
     }
 
     // --- ADD THIS NEW PART ---
@@ -102,7 +142,7 @@
     }
     // --- END OF NEW PART ---
 
-    include_once "header.php";
+    include_once __DIR__ . "/header.php";
 
     ?>
     <link rel="icon" type="image" href="<?php if (isset($row['meta_logo']))
@@ -516,7 +556,7 @@
                             <ul class="dropdown-menu dropdown-menu-right mt-3"
                                 aria-labelledby="navbarDropdownMenuAvatar">
                                 <li>
-                                    <a class="dropdown-item" href="<?= $SITEURL ?>/user_profile.php">My profile</a>
+                                    <a class="dropdown-item" href="<?= $SITEURL ?>/users/user_profile.php">My profile</a>
                                 </li>
                                 <li>
                                     <a class="dropdown-item" href="<?= $SITEURL ?>/changePassword.php">Settings</a>
@@ -589,7 +629,7 @@
                     </button>
                     <ul class="dropdown-menu dropdown-menu-right mt-0" aria-labelledby="navbarTogglerMenuAvatar">
                         <li>
-                            <a class="dropdown-item" href="<?= $SITEURL ?>/user_profile.php">My profile</a>
+                            <a class="dropdown-item" href="<?= $SITEURL ?>/users/user_profile.php">My profile</a>
                             <div class="dropdown-divider my-0"></div>
                         </li>
                         <li>
@@ -610,6 +650,13 @@
     <!-- Navbar -->
     <?php include ROOT . "/menu_bar.php"; ?>
 </div>
+
+<?php include_once ROOT . '/include/list_page_preloader.php'; ?>
+<script>
+    if (typeof preloader === 'function') {
+        preloader(300);
+    }
+</script>
 
 <div class="modal fade" id="allNotificationModal" tabindex="-1" aria-labelledby="allNotificationModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">

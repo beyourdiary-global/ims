@@ -7,7 +7,7 @@ $(document).ready(function() {
 
     if (!($("#swt_pic").attr('disabled'))) {
         $("#swt_pic").keyup(function() {
-            var param = {
+            const param = {
                 search: $(this).val(),
                 searchType: 'name', // column of the table
                 elementID: $(this).attr('id'), // id of the input
@@ -22,7 +22,7 @@ $(document).ready(function() {
 
     if (!($("#curr").attr('disabled'))) {
         $("#curr").keyup(function() {
-            var param = {
+            const param = {
                 search: $(this).val(),
                 searchType: 'unit', // column of the table
                 elementID: $(this).attr('id'), // id of the input
@@ -64,12 +64,12 @@ $("#swt_attach").on("input", function() {
 $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
-    var date_chk = 0;
-    var id_chk = 0;
-    var pic_chk = 0;
-    var curr_chk = 0;
-    var amt_chk = 0;
-    var attach_chk = 0;
+    let date_chk = 0;
+    let id_chk = 0;
+    let pic_chk = 0;
+    let curr_chk = 0;
+    let amt_chk = 0;
+    let attach_chk = 0;
 
 
     if (($('#swt_date').val() === '' || $('#swt_date').val() === null || $('#swt_date')

@@ -9,13 +9,21 @@ function toggleNewCustomerSection() {
 }
 
 //total
-document.getElementById("wor_price").addEventListener("input", calculateTotal);
-document
-  .getElementById("wor_shipping")
-  .addEventListener("input", calculateTotal);
-document
-  .getElementById("wor_discount")
-  .addEventListener("input", calculateTotal);
+var worPriceInput = document.getElementById("wor_price");
+var worShippingInput = document.getElementById("wor_shipping");
+var worDiscountInput = document.getElementById("wor_discount");
+
+if (worPriceInput) {
+  worPriceInput.addEventListener("input", calculateTotal);
+}
+
+if (worShippingInput) {
+  worShippingInput.addEventListener("input", calculateTotal);
+}
+
+if (worDiscountInput) {
+  worDiscountInput.addEventListener("input", calculateTotal);
+}
 
 function calculateTotal() {
   var price = parseFloat(document.getElementById("wor_price").value) || 0;
@@ -28,17 +36,23 @@ function calculateTotal() {
 }
 
 //show text field when "create new customer id" is selected from dropdown list
-document.getElementById("wor_cust_id").addEventListener("change", function () {
+function toggleWebsiteCreateCustomerIdSection() {
   var create_cust_id_sect = document.getElementById("WOR_CreateCustID");
-  create_cust_id_sect.hidden = this.value !== "Create New Customer ID";
-});
+  var wor_cust_id = document.getElementById("wor_cust_id");
 
-// Trigger the check on page load
-window.onload = function () {
-  var create_cust_id_sect = document.getElementById("WOR_CreateCustID");
-  var wor_cust_id_value = document.getElementById("wor_cust_id").value;
-  create_cust_id_sect.hidden = wor_cust_id_value !== "Create New Customer ID";
-};
+  if (!create_cust_id_sect || !wor_cust_id) {
+    return;
+  }
+
+  create_cust_id_sect.hidden = wor_cust_id.value !== "Create New Customer ID";
+}
+
+var worCustIdInput = document.getElementById("wor_cust_id");
+if (worCustIdInput) {
+  worCustIdInput.addEventListener("change", toggleWebsiteCreateCustomerIdSection);
+}
+
+window.addEventListener("load", toggleWebsiteCreateCustomerIdSection);
 
 //autocomplete
 $(document).ready(function () {
@@ -56,10 +70,6 @@ $(document).ready(function () {
 
   $("#wor_cust_id").change(autofill);
 
-  function getParameterByName(name) {
-    var urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get(name);
-  }
   var act = getParameterByName("act");
   var trackOrderBtn = document.getElementById("trackOrderBtn");
   if (act !== "I" && trackOrderBtn) {
@@ -298,7 +308,8 @@ function isValidEmail(email) {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
   return emailRegex.test(email);
 }
-$(".submitBtn").on("click", () => {
+$(".submitBtn").on("click", function (event) {
+  event.preventDefault();
   $(".error-message").remove();
   var order_id_chk = 0;
   var brand_chk = 0;
@@ -727,7 +738,32 @@ $(".submitBtn").on("click", () => {
     shipping_name_chk == 1 &&
     shipping_address_chk == 1 &&
     shipping_contact_chk == 1
-  )
-    $(this).closest("form").submit();
-  else return false;
+  ) {
+    var form = document.getElementById("FORForm");
+
+    if (!form) {
+      if (typeof showNotification === "function") {
+        showNotification("Form is not found. Please refresh the page and try again.", "error");
+      } else {
+        alert("Form is not found. Please refresh the page and try again.");
+      }
+      return false;
+    }
+
+    if (this.name) {
+      $(form).find('input.js-submit-action-value[name="' + this.name + '"]').remove();
+
+      $("<input>")
+        .attr("type", "hidden")
+        .attr("name", this.name)
+        .attr("class", "js-submit-action-value")
+        .val(this.value)
+        .appendTo(form);
+    }
+
+    HTMLFormElement.prototype.submit.call(form);
+    return true;
+  }
+
+  return false;
 });

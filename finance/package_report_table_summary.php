@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 0;
 $pageTitle = "Package Report";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
@@ -32,18 +31,6 @@ $result4 = getData('*', '', '', SHOPEE_SG_ORDER_REQ ,$finance_connect);
         createSortingTable('lazada_order_req');
     });
 </script>
-
-<style>
-    .btn {
-        padding: 0.2rem 0.5rem;
-        font-size: 0.75rem;
-        margin: 3px;
-    }
-    .btn-container {
-        white-space: nowrap;
-    }
-</style>
-
 <body>
 
 <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
@@ -495,7 +482,7 @@ $result4 = getData('*', '', '', SHOPEE_SG_ORDER_REQ ,$finance_connect);
 </body>
 <script>
    $(document).ready(function() {
-    var groupOption = '<?php echo $groupOption; ?>'; // Get the group option value from PHP
+    const groupOption = '<?php echo $groupOption; ?>'; // Get the group option value from PHP
 
     // Loop through each option in the select dropdown
     $('#group2 option').each(function() {

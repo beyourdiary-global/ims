@@ -5,7 +5,6 @@ $taskParentPin = 139;
 $currentPagePin = 141;
 $pageTitle = 'Project User Access';
 $taskParentTitle = 'Project Task';
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
@@ -482,7 +481,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $currentProjectId > 0) {
 }
 
 if ($currentProjectId > 0 && !taskCanAccessProjectUserAccess($connect, $currentProjectId)) {
-    echo "<script>alert('Only the project owner can access project user access page.'); location.replace('../dashboard.php');</script>";
+    renderNotificationScript('Only the project owner can access project user access page.', 'error', '../dashboard.php', 1200, true);
     exit;
 }
 

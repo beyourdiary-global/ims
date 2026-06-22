@@ -1,6 +1,5 @@
 <?php
 $currentPagePin = 0;
-$isProcess = 1;
 include_once '../../menuHeader.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 

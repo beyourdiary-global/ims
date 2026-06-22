@@ -2,7 +2,6 @@
 $currentPagePin = 69;
 ob_start();
 $pageTitle = "Facebook Order Request";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
@@ -145,42 +144,6 @@ if (!empty($checkboxValues)) {
     }
 }
 
-function addDirToZip($dir, $zip, $basePath)
-{
-    $files = scandir($dir);
-    foreach ($files as $file) {
-        if ($file == '.' || $file == '..') {
-            continue;
-        }
-        $filePath = $dir . $file;
-        if (is_file($filePath)) {
-            // Add the file to the zip archive with a relative path
-            $relativePath = str_replace($basePath, '', $filePath);
-            $zip->addFile($filePath, $relativePath);
-        } elseif (is_dir($filePath)) {
-            // Add the directory to the zip archive
-            $zip->addEmptyDir(str_replace($basePath, '', $filePath));
-            // Recursively add files and directories inside the current directory
-            addDirToZip($filePath . '/', $zip, $basePath);
-        }
-    }
-}
-
-function deleteDir($dirPath) {
-    if (!is_dir($dirPath)) {
-        return;
-    }
-    $files = glob($dirPath . '*', GLOB_MARK);
-    foreach ($files as $file) {
-        if (is_dir($file)) {
-            deleteDir($file);
-        } else {
-            unlink($file);
-        }
-    }
-    rmdir($dirPath);
-}
-
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 $canAssignEstimatedReceivedDate = isActionAllowed('Edit', $pinAccess);
 $estimatedDateToday = new DateTimeImmutable('today');
@@ -194,19 +157,20 @@ if (empty($_SESSION['csrf_token'])) {
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceivedDateBtn')) {
     $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
-        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', (string) $_SERVER['REQUEST_URI'], 1200, true);
         exit;
     }
 
     if (!$canAssignEstimatedReceivedDate) {
-        echo "<script>alert('Security Error: You do not have permission to assign Estimate Received Dates.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+        renderNotificationScript('Security Error: You do not have permission to assign Estimate Received Dates.', 'error', (string) $_SERVER['REQUEST_URI'], 1200, true);
         exit;
     }
 
     $assignOrderId = postSpaceFilter('estimated_received_order_id');
     $assignDate = postSpaceFilter('estimated_received_date');
     $assignmentResult = assignEstimatedReceivedDate($finance_connect, FB_ORDER_REQ, $assignOrderId, $assignDate, USER_ID);
-    echo "<script>alert('" . addslashes($assignmentResult['message']) . "'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+    $assignmentMessage = (string) $assignmentResult['message'];
+    renderNotificationScript($assignmentMessage, resolveNotificationType($assignmentMessage, 'info'), (string) $_SERVER['REQUEST_URI'], 1200, true);
     exit;
 }
 $_SESSION['act'] = '';
@@ -216,7 +180,7 @@ unset($_SESSION['resetChk']);
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 $tblName = FB_ORDER_REQ;
-$redirect_page = $SITEURL . '/finance/fb_order_req.php';
+$redirectPage = $SITEURL . '/finance/fb_order_req.php';
 $deleteRedirectPage = $SITEURL . '/finance/fb_order_req_income_table.php';
 $result = getData('*', '', '', FB_ORDER_REQ, $finance_connect);
 ?>
@@ -226,50 +190,11 @@ $result = getData('*', '', '', FB_ORDER_REQ, $finance_connect);
 
 <head>
     <link rel="stylesheet" href="../css/main.css">
-    <style>
-        .estimated-date-modal {
-            position: fixed;
-            inset: 0;
-            z-index: 2000;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            background: rgba(0, 0, 0, 0.45);
-            padding: 16px;
-        }
-        .estimated-date-modal.is-open { display: flex; }
-        .estimated-date-modal__dialog {
-            width: 100%;
-            max-width: 420px;
-            border-radius: 12px;
-            background: #fff;
-            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
-            padding: 20px;
-        }
-        .estimated-date-modal__close-btn,
-        .estimated-date-modal__action-btn { text-transform: none !important; }
-    </style>
+
 </head>
 
 <script>
-    function openEstimatedReceivedDateModal(orderId, orderCode, minDate, maxDate) {
-        const modal = document.getElementById('estimatedReceivedDateModal');
-        const title = document.getElementById('estimatedReceivedDateTitle');
-        const orderIdInput = document.getElementById('estimated_received_order_id');
-        const dateInput = document.getElementById('estimated_received_date');
-        if (!modal || !orderIdInput || !dateInput) return;
-        title.textContent = orderCode ? 'Assign Estimate Received Date for ' + orderCode : 'Assign Estimate Received Date';
-        orderIdInput.value = orderId;
-        dateInput.value = '';
-        dateInput.min = minDate;
-        dateInput.max = maxDate;
-        modal.classList.add('is-open');
-    }
 
-    function closeEstimatedReceivedDateModal() {
-        const modal = document.getElementById('estimatedReceivedDateModal');
-        if (modal) modal.classList.remove('is-open');
-    }
 
     $(document).ready(() => {
         createSortingTable('fb_order_req_table');
@@ -283,9 +208,6 @@ $result = getData('*', '', '', FB_ORDER_REQ, $finance_connect);
         });
     });
 </script>
-
-
-
 <body>
 
     <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
@@ -309,7 +231,7 @@ $result = getData('*', '', '', FB_ORDER_REQ, $finance_connect);
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         Request </a>
                                 <?php endif; ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>
@@ -391,17 +313,17 @@ $result = getData('*', '', '', FB_ORDER_REQ, $finance_connect);
 
                             <tr>
                                 <th class="hideColumn" scope="row">
-                                    <?= $row['id'] ?>
+                                    <?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>
                                 </th>
-                                <th class="text-center"><input type="checkbox" class="export" value="<?= $row['id'] ?>"></th>
+                                <th class="text-center"><input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>"></th>
                                 <th scope="row">
                                     <?= $num++; ?>
                                 </th>
                                 <td scope="row" class="btn-container">
                                     <div class="d-flex align-items-center">
-                                    <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                    <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                    <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['contact'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                    <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                    <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
+                                    <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['contact'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                     <button class="btn btn-secondary dropdown-toggle" type="button" id="dropdownMenuButton" data-bs-toggle="dropdown" aria-expanded="false">
                                             <i class="fas fa-users"></i>
                                         </button>
@@ -428,55 +350,55 @@ $result = getData('*', '', '', FB_ORDER_REQ, $finance_connect);
                                 <td><?= getMarketplaceRequestStatusLabel(isset($row['order_status']) ? $row['order_status'] : '') ?></td>
                                 <td><?= !empty($row['estimated_received_date']) ? htmlspecialchars((string) $row['estimated_received_date'], ENT_QUOTES, 'UTF-8') : '' ?></td>
                                 <td scope="row">
-                                    <?= $row['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['fb_link'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['fb_link'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['contact'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['contact'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $pic['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($pic['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $country['nicename'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($country['nicename'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $brand['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($brand['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $series['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($series['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $package['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($package['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $fb_page['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($fb_page['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $channel['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($channel['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['price'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['price'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $pay_meth['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($pay_meth['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['ship_rec_name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['ship_rec_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['ship_rec_add'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['ship_rec_add'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['ship_rec_contact'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['ship_rec_contact'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['remark'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['remark'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['attachment'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['attachment'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                             </tr>
                         <?php }
@@ -518,29 +440,7 @@ $result = getData('*', '', '', FB_ORDER_REQ, $finance_connect);
 
     </div>
 
-<div class="estimated-date-modal" id="estimatedReceivedDateModal" aria-hidden="true">
-    <div class="estimated-date-modal__dialog">
-        <div class="d-flex justify-content-between align-items-start mb-3">
-            <h4 class="mb-0" id="estimatedReceivedDateTitle">Assign Estimate Received Date</h4>
-            <button type="button" class="btn btn-light estimated-date-modal__close-btn" onclick="closeEstimatedReceivedDateModal()" aria-label="Close">
-                <i class="fa-solid fa-xmark"></i>
-            </button>
-        </div>
-        <form method="post">
-            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
-            <input type="hidden" name="estimated_received_order_id" id="estimated_received_order_id" value="">
-            <div class="mb-3">
-                <label class="form-label" for="estimated_received_date">Estimate Received Date</label>
-                <input type="date" class="form-control" name="estimated_received_date" id="estimated_received_date" min="<?= $estimatedDateMin ?>" max="<?= $estimatedDateMax ?>" required>
-                <small class="text-muted">Choose a date from <?= $estimatedDateMin ?> until <?= $estimatedDateMax ?>.</small>
-            </div>
-            <div class="d-flex justify-content-end gap-2">
-                <button type="button" class="btn btn-light estimated-date-modal__action-btn" onclick="closeEstimatedReceivedDateModal()">Cancel</button>
-                <button type="submit" class="btn btn-primary estimated-date-modal__action-btn" name="assignEstimatedReceivedDateBtn" value="1">Save</button>
-            </div>
-        </form>
-    </div>
-</div>
+<?php include_once ROOT . '/include/estimated_date_modal.php'; ?>
 
 </body>
 <script>

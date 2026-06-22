@@ -4,7 +4,7 @@ $(document).ready(function() {
 
     if (!($("#la_country").attr('disabled'))) { 
         $("#la_country").keyup(function() { 
-            var param = { 
+            const param = { 
                 search: $(this).val(), 
                 searchType: 'name', // column of the table
                 elementID: $(this).attr('id'), // id of the input
@@ -18,7 +18,7 @@ $(document).ready(function() {
     }
     if (!($("#la_currency").attr('disabled'))) {
         $("#la_currency").keyup(function() {
-            var param = {
+            const param = {
                 search: $(this).val(),
                 searchType: 'unit', // column of the table
                 elementID: $(this).attr('id'), // id of the input
@@ -49,9 +49,9 @@ $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
     
-    var name_chk = 0;
-    var country_chk = 0;
-    var currency_chk = 0;
+    let name_chk = 0;
+    let country_chk = 0;
+    let currency_chk = 0;
 
     if (($('#la_name').val() === '' || $('#la_name').val() === null || $('#la_name')
             .val() === undefined)) {

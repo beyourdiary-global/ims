@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 50;
 $pageTitle = "Facebook Ads Top Up Transaction";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
@@ -9,14 +8,14 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = FB_ADS_TOPUP;
 
-$dataID = input('id');
+$dataId = (int) input('id');
 $act = input('act');
 $pageAction = getPageAction($act);
 $allowed_ext = array("png", "jpg", "jpeg", "svg", "pdf");
 
 
-$redirect_page = $SITEURL . '/finance/fb_ads_topup_trans_table.php';
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$redirectPage = $SITEURL . '/finance/fb_ads_topup_trans_table.php';
+$redirectLink = ("<script>location.href = '$redirectPage';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
 $img_path = '../' . img_server . 'finance/fb_ads_topup/';
@@ -31,34 +30,32 @@ if (!is_dir($fbAdsTopupAttachmentAbsDir)) {
 }
 
 // to display data to input
-if ($dataID) { //edit/remove/view
-    $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName , $finance_connect);
+if ($dataId) { //edit/remove/view
+    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName , $finance_connect);
 
-    if ($rst != false && $rst->num_rows > 0) {
+    if ($result != false && $result->num_rows > 0) {
         $dataExisted = 1;
-        $row = $rst->fetch_assoc();
+        $row = $result->fetch_assoc();
     } else {
-        // If $rst is false or no data found ($act==null)
+        // If $result is false or no data found ($act==null)
         $errorExist = 1;
         $_SESSION['tempValConfirmBox'] = true;
         $act = "F";
     }
 }
 
-if (!($dataID) && !($act)) {
-    echo '<script>
-    alert("Invalid action.");
-    window.location.href = "' . $redirect_page . '"; // Redirect to previous page
-    </script>';
+if (!($dataId) && !($act)) {
+    renderNotificationScript('Invalid action.', 'error', $redirectPage);
+
 }
 
 if (post('actionBtn')) {
     $action = post('actionBtn');
 
-    $fat_acc = postSpaceFilter("fat_meta_acc_hidden");
+    $fat_acc = (int) postSpaceFilter("fat_meta_acc_hidden");
     $fat_trans_id = postSpaceFilter("fat_trans_id");
     $fat_date = postSpaceFilter("fat_date");
-    $fat_pic = postSpaceFilter("fat_pic_hidden");
+    $fat_pic = (int) postSpaceFilter("fat_pic_hidden");
     $fat_bank = postSpaceFilter("fat_bank");
     $fat_amt = postSpaceFilter('fat_amt');
     $fat_remark = postSpaceFilter('fat_remark');
@@ -66,8 +63,8 @@ if (post('actionBtn')) {
     $fat_attach = null;
     if (isset($_FILES["fat_attach"]) && $_FILES["fat_attach"]["size"] != 0) {
         $fat_attach = $_FILES["fat_attach"]["name"];
-    } elseif (isset($_POST['existing_attachment'])) {
-        $fat_attach = $_POST['existing_attachment'];
+    } elseif (post('existing_attachment') !== '') {
+        $fat_attach = trim((string) post('existing_attachment'));
     }
 
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
@@ -155,7 +152,13 @@ if (post('actionBtn')) {
                         array_push($datafield, 'remark');
                     }
 
-                    $query = "INSERT INTO " . $tblName  . "(meta_acc,transactionID,payment_date,pic,topup_amt,attachment,remark,create_by,create_date,create_time) VALUES ('$fat_acc','$fat_trans_id','$fat_date','$fat_pic','$fat_amt','$fat_attach','$fat_remark','" . USER_ID . "',curdate(),curtime())";
+                    $sqlFatTransId = mysqli_real_escape_string($finance_connect, trim((string) $fat_trans_id));
+                    $sqlFatDate = mysqli_real_escape_string($finance_connect, trim((string) $fat_date));
+                    $sqlFatAmt = mysqli_real_escape_string($finance_connect, trim((string) $fat_amt));
+                    $sqlFatAttach = mysqli_real_escape_string($finance_connect, trim((string) $fat_attach));
+                    $sqlFatRemark = mysqli_real_escape_string($finance_connect, trim((string) $fat_remark));
+
+                    $query = "INSERT INTO " . $tblName  . "(meta_acc,transactionID,payment_date,pic,topup_amt,attachment,remark,create_by,create_date,create_time) VALUES ('$fat_acc','$sqlFatTransId','$sqlFatDate','$fat_pic','$sqlFatAmt','$sqlFatAttach','$sqlFatRemark','" . USER_ID . "',curdate(),curtime())";
                     // Execute the query
                     $returnData = mysqli_query($finance_connect, $query);
                     $_SESSION['tempValConfirmBox'] = true;
@@ -166,8 +169,8 @@ if (post('actionBtn')) {
             } else {
                 try {
                     // take old value
-                    $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName , $finance_connect);
-                    $row = $rst->fetch_assoc();
+                    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName , $finance_connect);
+                    $row = $result->fetch_assoc();
 
                     // check value
                     if ($row['meta_acc'] != $fat_acc) {
@@ -219,7 +222,13 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {                        
-                        $query = "UPDATE " . $tblName  . " SET meta_acc = '$fat_acc', transactionID = '$fat_trans_id', payment_date = '$fat_date', pic = '$fat_pic', topup_amt = '$fat_amt', remark ='$fat_remark', attachment ='$fat_attach', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
+                        $sqlFatTransId = mysqli_real_escape_string($finance_connect, trim((string) $fat_trans_id));
+                        $sqlFatDate = mysqli_real_escape_string($finance_connect, trim((string) $fat_date));
+                        $sqlFatAmt = mysqli_real_escape_string($finance_connect, trim((string) $fat_amt));
+                        $sqlFatAttach = mysqli_real_escape_string($finance_connect, trim((string) $fat_attach));
+                        $sqlFatRemark = mysqli_real_escape_string($finance_connect, trim((string) $fat_remark));
+
+                        $query = "UPDATE " . $tblName  . " SET meta_acc = '$fat_acc', transactionID = '$sqlFatTransId', payment_date = '$sqlFatDate', pic = '$fat_pic', topup_amt = '$sqlFatAmt', remark ='$sqlFatRemark', attachment ='$sqlFatAttach', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($finance_connect, $query);
 
                     } else {
@@ -248,11 +257,11 @@ if (post('actionBtn')) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval']  = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
             }
@@ -267,18 +276,18 @@ if (post('actionBtn')) {
 
 
 if (post('act') == 'D') {
-    $id = post('id');
+    $id = (int) post('id');
     if ($id) {
         try {
             // take name
-            $rst = getData('*', "id = '$id'", 'LIMIT 1', $tblName , $finance_connect);
-            $row = $rst->fetch_assoc();
+            $result = getData('*', "id = '$id'", 'LIMIT 1', $tblName , $finance_connect);
+            $row = $result->fetch_assoc();
 
-            $dataID = $row['id'];
+            $dataId = $row['id'];
             $fat_trans_id = $row['transactionID'];
 
             //SET the record status to 'D'
-            deleteRecord($tblName , '',$dataID, $fat_trans_id, $finance_connect, $connect, $cdate, $ctime, $pageTitle);
+            deleteRecord($tblName , '',$dataId, $fat_trans_id, $finance_connect, $connect, $cdate, $ctime, $pageTitle);
             $_SESSION['delChk'] = 1;
         } catch (Exception $e) {
             echo 'Message: ' . $e->getMessage();
@@ -287,13 +296,13 @@ if (post('act') == 'D') {
 }
 
 //view
-if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
+if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
     $_SESSION['viewChk'] = 1;
 
     if (isset($errorExist)) {
-        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataID . "</b> ] from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataId . "</b> ] from <b><i>$tblName Table</i></b>.";
     } else {
-        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataID . "</b> ] <b>" . $row['transactionID'] . "</b> from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataId . "</b> ] <b>" . $row['transactionID'] . "</b> from <b><i>$tblName Table</i></b>.";
     }
 
     $log = [
@@ -343,12 +352,10 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 </head>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
     <div class="page-load-cover">
     <div class="d-flex flex-column my-3 ms-3">
-        <p><a href="<?= $redirect_page ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?php
+        <p><a href="<?= $redirectPage ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?php
                                                                                                                     echo displayPageAction($act, $pageTitle);
                                                                                                                     ?>
         </p>
@@ -384,7 +391,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 if (isset($echoVal)) {
                                     $meta_rst = getData('*', "id = '$echoVal'", '', META_ADS_ACC, $finance_connect);
                                     if (!$meta_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                                        renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                                         echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                                     }
                                     $meta_row = $meta_rst->fetch_assoc();
@@ -460,7 +467,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 if (isset($echoVal)) {
                                     $user_rst = getData('name', "id = '$echoVal'", '', USR_USER, $connect);
                                     if (!$user_rst) {
-                                        echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+                                        renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
                                         echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
                                     }
                                     $user_row = $user_rst->fetch_assoc();
@@ -600,7 +607,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
     if (isset($_SESSION['tempValConfirmBox'])) {
         unset($_SESSION['tempValConfirmBox']);
         echo $clearLocalStorage;
-        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
     }
     ?>
     <script>

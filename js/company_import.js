@@ -1,8 +1,8 @@
-preloader(300);
+
 
 $(document).ready(function () {
-  var page = "Company";
-  var action = "Import";
+  const page = "Company";
+  const action = "Import";
 
   checkCurrentPage(page, action);
   dropdownMenuDispFix();

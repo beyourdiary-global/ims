@@ -4,10 +4,6 @@ $('#for_attach').on('change', function() {
 
 //autocomplete
 $(document).ready(function() {
-    function getParameterByName(name) {
-        var urlParams = new URLSearchParams(window.location.search);
-        return urlParams.get(name);
-    }
     var act = getParameterByName('act');
     var trackOrderBtn = document.getElementById('trackOrderBtn');
     if (act !== 'I' && trackOrderBtn) {
@@ -222,7 +218,8 @@ $("#for_attach").on("input", function() {
 });
 
 
-$('.submitBtn').on('click', () => {
+$('.submitBtn').on('click', function (event) {
+    event.preventDefault();
     $(".error-message").remove();
     var name_chk = 0;
     var link_chk = 0;
@@ -395,9 +392,10 @@ $('.submitBtn').on('click', () => {
 
 
     var fileInput = $('#for_attach')[0];
-    console.log($('#for_attachmentValue').val());
+    var hasSelectedAttachment = fileInput && fileInput.files && fileInput.files.length > 0;
+
     // Check if a new file is selected or if there is an existing attachment
-    if ((fileInput.files.length === 0) && ($('#for_attachmentValue').val() == '' || $('#for_attachmentValue').val() == '0' || $('#for_attachmentValue').val() === null || $('#for_attachmentValue')
+    if ((!hasSelectedAttachment) && ($('#for_attachmentValue').val() == '' || $('#for_attachmentValue').val() == '0' || $('#for_attachmentValue').val() === null || $('#for_attachmentValue')
     .val() === undefined)) {
         // No file selected and no existing attachment
         attach_chk = 0;
@@ -407,9 +405,32 @@ $('.submitBtn').on('click', () => {
         attach_chk = 1;
     }
 
-    if (name_chk == 1 && link_chk == 1 && ctc_chk == 1 && pic_chk == 1 && country_chk == 1 && brand_chk == 1 && series_chk == 1 && pkg_chk == 1 && fbpage_chk == 1 && channel_chk == 1 && price_chk == 1 && pay_chk == 1 && rec_name_chk == 1 && rec_add_chk == 1 && rec_ctc_chk == 1 && attach_chk == 1)
-        $(this).closest('form').submit();
-    else
-        return false;
+    if (name_chk == 1 && link_chk == 1 && ctc_chk == 1 && pic_chk == 1 && country_chk == 1 && brand_chk == 1 && series_chk == 1 && pkg_chk == 1 && fbpage_chk == 1 && channel_chk == 1 && price_chk == 1 && pay_chk == 1 && rec_name_chk == 1 && rec_add_chk == 1 && rec_ctc_chk == 1 && attach_chk == 1) {
+        var form = document.getElementById('FORForm');
 
-})
+        if (!form) {
+            if (typeof showNotification === 'function') {
+                showNotification('Form is not found. Please refresh the page and try again.', 'error');
+            } else {
+                alert('Form is not found. Please refresh the page and try again.');
+            }
+            return false;
+        }
+
+        if (this.name) {
+            $(form).find('input.js-submit-action-value[name="' + this.name + '"]').remove();
+
+            $('<input>')
+                .attr('type', 'hidden')
+                .attr('name', this.name)
+                .attr('class', 'js-submit-action-value')
+                .val(this.value)
+                .appendTo(form);
+        }
+
+        HTMLFormElement.prototype.submit.call(form);
+        return true;
+    }
+
+    return false;
+});

@@ -1,18 +1,10 @@
 <?php
 $pageTitle = "Tax";
 $currentPagePin = 57;
-$isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
+include_once '../include/list_page_header.php';
 
-$redirect_page = $SITEURL . '/finance/tax.php';
+$redirectPage = $SITEURL . '/finance/tax.php';
 $deleteRedirectPage = $SITEURL . '/finance/tax_table.php';
 $result = getData('*', '', '', TAX_SETT, $finance_connect);
 // if (!$result) {
@@ -30,19 +22,14 @@ $result = getData('*', '', '', TAX_SETT, $finance_connect);
 </head>
 
 <script>
-    preloader(300);
+    
 
     $(document).ready(() => {
         createSortingTable('tax_table');
     });
 </script>
-
-
-
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
@@ -61,7 +48,7 @@ $result = getData('*', '', '', TAX_SETT, $finance_connect);
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         Tax </a>
                                 <?php endif; ?>
                             </div>
@@ -96,20 +83,20 @@ $result = getData('*', '', '', TAX_SETT, $finance_connect);
                                     ?>
 
                                     <tr>
-                                        <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                        <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                         <th scope="row"><?= $num++; ?></th>
                                         <td scope="row" class="btn-container">
-                                            <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                            <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                            <?php renderDeleteButton($pinAccess, $row['id'], $row['percentage'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                            <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                            <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
+                                            <?php renderDeleteButton($pinAccess, $row['id'], $row['percentage'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                         </td>
                                         <td scope="row"><?php if (isset($row3['name']))
-                                            echo $row3['name'] ?></td>
-                                            <td scope="row"><?= $row['name'] ?></td>
+                                            echo htmlspecialchars((string) $row3['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                            <td scope="row"><?= htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row"><?php if (isset($row['percentage']))
-                                            echo $row['percentage'] ?></td>
+                                            echo htmlspecialchars((string) $row['percentage'], ENT_QUOTES, 'UTF-8') ?></td>
                                             <td scope="row"><?php if (isset($row['remark']))
-                                            echo $row['remark'] ?></td>
+                                            echo htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') ?></td>
                                         </tr>
                                 <?php }
                             }
@@ -133,8 +120,8 @@ $result = getData('*', '', '', TAX_SETT, $finance_connect);
     </div>
 
     <script>
-        var page = "<?= $pageTitle ?>";
-        var action = "<?php echo isset($act) ? $act : ' '; ?>";
+        const page = "<?= $pageTitle ?>";
+        const action = "<?php echo isset($act) ? $act : ' '; ?>";
 
         checkCurrentPage(page, action);
         //to solve the issue of dropdown menu displaying inside the table when table class include table-responsive

@@ -25,6 +25,293 @@
       .replace(/>/g, "&gt;");
   }
 
+  function updateAirbillScanStatus(message, isError) {
+    const statusEl = document.getElementById("sorScanAirbillStatus");
+    if (!statusEl) {
+      return;
+    }
+
+    const statusMessage = String(message || "");
+    if (statusMessage === "") {
+      statusEl.style.display = "none";
+      statusEl.innerHTML = "";
+      return;
+    }
+
+    statusEl.style.display = "block";
+    statusEl.style.color = isError ? "#dc3545" : "#6c757d";
+    statusEl.innerHTML =
+      '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>' +
+      statusMessage;
+  }
+
+  function waitForAirbillLoadingPaint() {
+    return new Promise(function (resolve) {
+      window.requestAnimationFrame(function () {
+        window.requestAnimationFrame(resolve);
+      });
+    });
+  }
+
+  function extractAirbillCandidate(rawText) {
+    const text = String(rawText || "").trim();
+    if (text === "") {
+      return "";
+    }
+
+    const upperText = text.toUpperCase();
+
+    const directMatch = upperText.match(/\bMY\d{10,14}\b/g);
+    if (directMatch && directMatch.length > 0) {
+      return String(directMatch[0] || "").toUpperCase();
+    }
+
+    const compactText = upperText.replace(/[^A-Z0-9]+/g, "");
+    const compactMatch = compactText.match(/MY\d{10,14}/g);
+    if (compactMatch && compactMatch.length > 0) {
+      return String(compactMatch[0] || "").toUpperCase();
+    }
+
+    const fixedText = compactText
+      .replace(/MYO(?=\d{9,13})/g, "MY0")
+      .replace(/MYQ(?=\d{9,13})/g, "MY0")
+      .replace(/MYI(?=\d{9,13})/g, "MY1")
+      .replace(/MYL(?=\d{9,13})/g, "MY1");
+
+    const fixedMatch = fixedText.match(/MY\d{10,14}/g);
+    if (fixedMatch && fixedMatch.length > 0) {
+      return String(fixedMatch[0] || "").toUpperCase();
+    }
+
+    const normalizedText = upperText.replace(/[^A-Z0-9]+/g, " ");
+    const fallbackMatches = normalizedText.match(/\b[A-Z0-9]{10,30}\b/g) || [];
+    for (const candidate of fallbackMatches) {
+      const digitCount = (candidate.match(/\d/g) || []).length;
+      if (digitCount >= 6 && candidate.length >= 12) {
+        return candidate;
+      }
+    }
+
+    return "";
+  }
+
+  function getZXingReader() {
+    if (
+      window.ZXingBrowser &&
+      typeof window.ZXingBrowser.BrowserMultiFormatReader === "function"
+    ) {
+      return new window.ZXingBrowser.BrowserMultiFormatReader();
+    }
+
+    if (
+      window.ZXing &&
+      typeof window.ZXing.BrowserMultiFormatReader === "function"
+    ) {
+      return new window.ZXing.BrowserMultiFormatReader();
+    }
+
+    return null;
+  }
+
+  function loadImageFromFile(file) {
+    return new Promise(function (resolve, reject) {
+      const imageUrl = URL.createObjectURL(file);
+      const imageElement = new Image();
+      imageElement.decoding = "async";
+
+      imageElement.onload = function () {
+        URL.revokeObjectURL(imageUrl);
+        resolve(imageElement);
+      };
+
+      imageElement.onerror = function () {
+        URL.revokeObjectURL(imageUrl);
+        reject(new Error("Unable to load selected image."));
+      };
+
+      imageElement.src = imageUrl;
+    });
+  }
+
+  function createAirbillCanvas(imageElement, region, scale, mode) {
+    const sourceWidth = imageElement.naturalWidth || imageElement.width;
+    const sourceHeight = imageElement.naturalHeight || imageElement.height;
+
+    const cropX = Math.max(0, Math.floor(region.x * sourceWidth));
+    const cropY = Math.max(0, Math.floor(region.y * sourceHeight));
+    const cropWidth = Math.min(sourceWidth - cropX, Math.floor(region.w * sourceWidth));
+    const cropHeight = Math.min(sourceHeight - cropY, Math.floor(region.h * sourceHeight));
+
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.floor(cropWidth * scale));
+    canvas.height = Math.max(1, Math.floor(cropHeight * scale));
+
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(
+      imageElement,
+      cropX,
+      cropY,
+      cropWidth,
+      cropHeight,
+      0,
+      0,
+      canvas.width,
+      canvas.height,
+    );
+
+    if (mode === "normal") {
+      return canvas;
+    }
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+
+    for (let i = 0; i < data.length; i += 4) {
+      const gray = Math.round(
+        data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114,
+      );
+
+      let value = gray;
+      if (mode === "threshold") {
+        value = gray > 145 ? 255 : 0;
+      } else if (mode === "contrast") {
+        value = gray > 125 ? 255 : 0;
+      } else if (mode === "invert") {
+        value = 255 - gray;
+      }
+
+      data[i] = value;
+      data[i + 1] = value;
+      data[i + 2] = value;
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    return canvas;
+  }
+
+  function buildAirbillCanvasCandidates(imageElement) {
+    const regions = [
+      { x: 0.00, y: 0.00, w: 1.00, h: 1.00 },
+      { x: 0.42, y: 0.00, w: 0.58, h: 1.00 },
+      { x: 0.45, y: 0.00, w: 0.52, h: 0.24 },
+      { x: 0.76, y: 0.48, w: 0.22, h: 0.30 },
+      { x: 0.50, y: 0.00, w: 0.48, h: 0.35 },
+      { x: 0.47, y: 0.45, w: 0.51, h: 0.35 },
+    ];
+
+    const modes = ["normal", "threshold", "contrast", "invert"];
+    const candidates = [];
+
+    regions.forEach(function (region, regionIndex) {
+      modes.forEach(function (mode) {
+        const scale = regionIndex === 0 ? 1 : 2;
+        candidates.push(createAirbillCanvas(imageElement, region, scale, mode));
+      });
+    });
+
+    return candidates;
+  }
+
+  function getDecodedText(result) {
+    if (!result) {
+      return "";
+    }
+
+    if (typeof result.getText === "function") {
+      return String(result.getText() || "");
+    }
+
+    if (result.text) {
+      return String(result.text || "");
+    }
+
+    if (result.rawValue) {
+      return String(result.rawValue || "");
+    }
+
+    return "";
+  }
+
+  async function decodeCanvasWithZXing(reader, canvas) {
+    if (typeof reader.decodeFromCanvas === "function") {
+      return reader.decodeFromCanvas(canvas);
+    }
+
+    const dataUrl = canvas.toDataURL("image/png");
+    const imageElement = new Image();
+    imageElement.decoding = "async";
+
+    await new Promise(function (resolve, reject) {
+      imageElement.onload = resolve;
+      imageElement.onerror = reject;
+      imageElement.src = dataUrl;
+    });
+
+    return reader.decodeFromImageElement(imageElement);
+  }
+
+  async function decodeCanvasWithNativeBarcodeDetector(canvas) {
+    if (!("BarcodeDetector" in window)) {
+      return "";
+    }
+
+    try {
+      const detector = new BarcodeDetector({
+        formats: ["code_128", "code_39", "ean_13", "qr_code"],
+      });
+      const results = await detector.detect(canvas);
+
+      for (const result of results || []) {
+        const candidate = extractAirbillCandidate(result.rawValue || "");
+        if (candidate !== "") {
+          return candidate;
+        }
+      }
+    } catch (error) {
+      return "";
+    }
+
+    return "";
+  }
+
+  async function decodeAirbillFromImageFile(file) {
+    if (!file) {
+      return "";
+    }
+
+    const reader = getZXingReader();
+    if (!reader && !("BarcodeDetector" in window)) {
+      throw new Error("Barcode scanner library is not available.");
+    }
+
+    const imageElement = await loadImageFromFile(file);
+    const canvases = buildAirbillCanvasCandidates(imageElement);
+
+    for (const canvas of canvases) {
+      const nativeCandidate = await decodeCanvasWithNativeBarcodeDetector(canvas);
+      if (nativeCandidate !== "") {
+        return nativeCandidate;
+      }
+    }
+
+    if (reader) {
+      for (const canvas of canvases) {
+        try {
+          const result = await decodeCanvasWithZXing(reader, canvas);
+          const candidate = extractAirbillCandidate(getDecodedText(result));
+          if (candidate !== "") {
+            return candidate;
+          }
+        } catch (error) {
+          // Try next crop/preprocess version.
+        }
+      }
+    }
+
+    return "";
+  }
+
   function closeAutocomplete(input) {
     if (!input) return;
     var listId = input.getAttribute("data-list-id");
@@ -879,9 +1166,47 @@
   var warehouseIdInput = document.getElementById("sor_warehouse");
   var courierNameInput = document.getElementById("sor_courier_name");
   var courierIdInput = document.getElementById("sor_courier");
+  const trackingInput = document.getElementById("sor_tracking_no");
+  const stockOrderImageInput = document.getElementById("sor_stock_order_image");
 
   bindTextAutocomplete(warehouseNameInput, warehouseIdInput, warehouseOptions);
   bindTextAutocomplete(courierNameInput, courierIdInput, courierOptions);
+
+  if (stockOrderImageInput) {
+    stockOrderImageInput.addEventListener("change", async function () {
+      const file =
+        stockOrderImageInput.files && stockOrderImageInput.files[0]
+          ? stockOrderImageInput.files[0]
+          : null;
+
+      if (!file) {
+        updateAirbillScanStatus("", false);
+        return;
+      }
+
+      updateAirbillScanStatus("Extracting tracking number...", false);
+      await waitForAirbillLoadingPaint();
+
+      try {
+        const scannedAirbill = await decodeAirbillFromImageFile(file);
+        if (scannedAirbill === "") {
+          updateAirbillScanStatus("", false);
+          return;
+        }
+
+        if (trackingInput) {
+          trackingInput.value = scannedAirbill;
+          trackingInput.dispatchEvent(new Event("input", { bubbles: true }));
+          trackingInput.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+
+        updateAirbillScanStatus("", false);
+      } catch (error) {
+        console.error(error);
+        updateAirbillScanStatus("", false);
+      }
+    });
+  }
 
   if (
     warehouseIdInput &&

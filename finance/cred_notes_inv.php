@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 70;
 $pageTitle = "Credit Notes (Invoice)";
-$isFinance = 1;
 $redirectToCreateInvoicePage = 0; // Default value
 
 include '../menuHeader.php';
@@ -10,15 +9,15 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = CRED_NOTES_INV;
 //Current Page Action And Data ID
-$dataID = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 $isActionPost = (post('actionBtn') !== null && post('actionBtn') !== '');
 
 //Page Redirect Link , Clean LocalStorage , Error Alert Msg 
-$redirect_page = $SITEURL . '/finance/cred_notes_inv_table.php';
+$redirectPage = $SITEURL . '/finance/cred_notes_inv_table.php';
 $create_page = $SITEURL . '/finance/cred_inv_create.php';
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$redirectLink = ("<script>location.href = '$redirectPage';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 $user_id = USER_ID;
 
@@ -28,16 +27,16 @@ $pageActionTitle = $pageAction . " " . $pageTitle;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 
 //Checking The Page ID , Action , Pin Access Exist Or Not
-if ((!($dataID) && !($act) && !$isActionPost) || !isActionAllowed($pageAction, $pinAccess)) {
+if ((!($dataId) && !($act) && !$isActionPost) || !isActionAllowed($pageAction, $pinAccess)) {
     echo $redirectLink;
     exit;
 }
 
 //Get The Data From Database
-$rst = getData('*', "id = '$dataID'", '', $tblName, $finance_connect);
+$result = getData('*', "id = '$dataId'", '', $tblName, $finance_connect);
 
 //Checking Data Error When Retrieved From Database
-if ($act != 'I' && (!$rst || !($row = $rst->fetch_assoc()))) {
+if ($act != 'I' && (!$result || !($row = $result->fetch_assoc()))) {
     $errorExist = 1;
     $_SESSION['tempValConfirmBox'] = true;
     $act = "F";
@@ -45,20 +44,20 @@ if ($act != 'I' && (!$rst || !($row = $rst->fetch_assoc()))) {
 
 //Delete Data
 if ($act == 'D') {
-    $deleteLabel = isset($row['invoice']) ? $row['invoice'] : $dataID;
-    deleteRecord($tblName, '', $dataID, $deleteLabel, $finance_connect, $connect, $cdate, $ctime, $pageTitle);
+    $deleteLabel = isset($row['invoice']) ? $row['invoice'] : $dataId;
+    deleteRecord($tblName, '', $dataId, $deleteLabel, $finance_connect, $connect, $cdate, $ctime, $pageTitle);
     $_SESSION['delChk'] = 1;
 }
 
 //View Data
-if ($dataID && !$act && USER_ID && !$_SESSION['viewChk'] && !$_SESSION['delChk']) {
+if ($dataId && !$act && USER_ID && !$_SESSION['viewChk'] && !$_SESSION['delChk']) {
 
     $_SESSION['viewChk'] = 1;
 
     if (isset($errorExist)) {
-        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataID . "</b> ] from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataId . "</b> ] from <b><i>$tblName Table</i></b>.";
     } else {
-        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataID . "</b> ] <b>" . $row['invoice'] . "</b> from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataId . "</b> ] <b>" . $row['invoice'] . "</b> from <b><i>$tblName Table</i></b>.";
     }
 
     $log = [
@@ -84,7 +83,7 @@ $pay_terms_result = getData('*', '', '', FIN_PAY_TERMS, $finance_connect);
 $proj_result = getData('*', "id = '1'", '', PROJ, $connect);
 
 if (!$proj_result) {
-    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
     echo $redirectLink;
 }
 
@@ -292,7 +291,7 @@ if (post('actionBtn')) {
 
                     $query = "INSERT INTO " . $tblName . "(projectID, invoice, date, due_date, currency, bill_nameID, bill_add, bill_email, bill_contact, products, pay_method, pay_terms, pay_details, sales_pic, remark, subtotal, discount, tax, total, inv_note, create_by, create_date, create_time) VALUES ('1','$inv_id','$date','$due','$cni_curr','$mName','$mAdd','$mEmail','$mCtc','$productIDString','$cni_pay','$pay_terms','$cni_pay_details','$cni_pic','$cni_remark','$cni_sub','$cni_disc','$cni_tax','$cni_total','$cni_notes','" . USER_ID . "',curdate(),curtime())";
                     $returnData = mysqli_query($finance_connect, $query);
-                    $dataID = $finance_connect->insert_id;
+                    $dataId = $finance_connect->insert_id;
 
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
@@ -394,7 +393,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if ($oldvalarr && $chgvalarr) {
-                        $query = "UPDATE " . $tblName . " SET invoice = '$inv_id ',date='$date',due_date='$due',currency='$cni_curr',bill_nameID='$mName',bill_add='$mAdd',bill_email='$mEmail',bill_contact='$mCtc', products='$productIDString',pay_method='$cni_pay',pay_details='$cni_pay_details',pay_terms='$pay_terms',sales_pic='$cni_pic',remark='$cni_remark',subtotal='$cni_sub',discount='$cni_disc',tax='$cni_tax',total='$cni_total',inv_note='$cni_notes', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
+                        $query = "UPDATE " . $tblName . " SET invoice = '$inv_id ',date='$date',due_date='$due',currency='$cni_curr',bill_nameID='$mName',bill_add='$mAdd',bill_email='$mEmail',bill_contact='$mCtc', products='$productIDString',pay_method='$cni_pay',pay_details='$cni_pay_details',pay_terms='$pay_terms',sales_pic='$cni_pic',remark='$cni_remark',subtotal='$cni_sub',discount='$cni_disc',tax='$cni_tax',total='$cni_total',inv_note='$cni_notes', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($finance_connect, $query);
                     } else {
                         $act = 'NC';
@@ -422,11 +421,11 @@ if (post('actionBtn')) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval'] = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
             }
@@ -445,17 +444,17 @@ if (post('actionBtn')) {
 if (isset($_SESSION['tempValConfirmBox'])) {
     unset($_SESSION['tempValConfirmBox']);
     echo $clearLocalStorage;
-    if ($redirectToCreateInvoicePage == 1 && isset($returnData) && $returnData && !empty($dataID)) {
-        $url = $create_page . "?id=" . $dataID;
+    if ($redirectToCreateInvoicePage == 1 && isset($returnData) && $returnData && !empty($dataId)) {
+        $url = $create_page . "?id=" . $dataId;
         echo "<script>alert('Invoice created successfully.');location.href = '$url';</script>";
         exit;
     } else {
-        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
     }
 }
 
-if ($redirectToCreateInvoicePage == 1 && isset($returnData) && $returnData && !empty($dataID)) {
-    $url = $create_page . "?id=" . $dataID;
+if ($redirectToCreateInvoicePage == 1 && isset($returnData) && $returnData && !empty($dataId)) {
+    $url = $create_page . "?id=" . $dataId;
     echo "<script>alert('Invoice created successfully.');location.href = '$url';</script>";
     exit;
 }
@@ -468,21 +467,20 @@ if ($redirectToCreateInvoicePage == 1 && isset($returnData) && $returnData && !e
 <head>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
     <link rel="stylesheet" href="./css/package.css">
+    <style>
+    span.input-group-text{
+        border:none;
+    }
+    </style>
 </head>
-<style>
-span.input-group-text{
-    border:none;
-}
-</style>
+
 <body style="background-color: rgb(240, 241, 247);">
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
 
         <div class="d-flex flex-column my-3 ms-3">
-            <p><a href="<?= $redirect_page ?>">
+            <p><a href="<?= $redirectPage ?>">
                     <?= $pageTitle ?>
                 </a> <i class="fa-solid fa-chevron-right fa-xs"></i>
                 <?php echo $pageActionTitle ?>
@@ -493,7 +491,7 @@ span.input-group-text{
             <div class="col-12 col-md-12 formWidthAdjust">
                 <form id="form" method="post" enctype="multipart/form-data">
                     <input type="hidden" name="act" value="<?= htmlspecialchars((string) $act) ?>">
-                    <input type="hidden" name="id" value="<?= htmlspecialchars((string) $dataID) ?>">
+                    <input type="hidden" name="id" value="<?= htmlspecialchars((string) $dataId) ?>">
                     <div class="form-group mb-5">
                         <h2>
                             <?php echo $pageActionTitle ?>
@@ -1135,8 +1133,8 @@ span.input-group-text{
 
     <script>
         //Initial Page And Action Value
-        var page = "<?= $pageTitle ?>";
-        var action = "<?php echo isset($act) ? $act : ''; ?>";
+        const page = "<?= $pageTitle ?>";
+        const action = "<?php echo isset($act) ? $act : ''; ?>";
 
         checkCurrentPage(page, action);
         setButtonColor();

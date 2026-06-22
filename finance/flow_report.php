@@ -3,7 +3,6 @@ $currentPagePin = 148;
 $pageTitle = 'Daily Flow Report';
 $displayPageTitle = 'Daily Flow Report';
 $disablePinGroupPageTitleSync = true;
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
@@ -11,7 +10,7 @@ include_once '../checkCurrentPagePin.php';
 $reportAccess = checkPinByGroupId($connect, 148);
 $canViewPage = isActionAllowed('View', $reportAccess);
 if (!$canViewPage) {
-    echo '<script>alert("You do not have permission to view Daily Flow Report."); location.replace("../dashboard.php");</script>';
+    renderNotificationScript('You do not have permission to view Daily Flow Report.', 'error', '../dashboard.php', 1200, true);
     exit;
 }
 
@@ -587,18 +586,7 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
             }
         }
 
-        function getValidDataTableRowCount(tableElement) {
-            var headerCount = tableElement.querySelectorAll('thead th').length;
-            var validRows = 0;
-            tableElement.querySelectorAll('tbody tr').forEach(function (rowElement) {
-                var cellCount = rowElement.querySelectorAll('td, th').length;
-                var hasColspan = rowElement.querySelector('[colspan]');
-                if (!hasColspan && cellCount === headerCount) {
-                    validRows += 1;
-                }
-            });
-            return validRows;
-        }
+        
 
         document.querySelectorAll('.flow-report-summary-table-js').forEach(function (tableElement) {
             var rowCount = getValidDataTableRowCount(tableElement);
@@ -659,17 +647,6 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
         });
 
         var hiddenPlatformInput = document.getElementById('flow_report_platform_query');
-        function activatePlatformTab(platformKey) {
-            document.querySelectorAll('[data-platform-tab]').forEach(function (button) {
-                button.classList.toggle('is-active', button.getAttribute('data-platform-tab') === platformKey);
-            });
-            document.querySelectorAll('[data-platform-panel]').forEach(function (panel) {
-                panel.classList.toggle('is-active', panel.getAttribute('data-platform-panel') === platformKey);
-            });
-            if (hiddenPlatformInput) {
-                hiddenPlatformInput.value = platformKey;
-            }
-        }
 
         document.querySelectorAll('[data-platform-tab]').forEach(function (button) {
             button.addEventListener('click', function () {

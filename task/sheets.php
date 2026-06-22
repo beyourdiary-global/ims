@@ -1,16 +1,17 @@
 <?php
 $taskParentPin = 139;
-$currentPagePin = 138;
+$currentPagePin = $taskParentPin;
+$pageTitlePin = 138;
 $pageTitle = 'Sheets';
 $taskParentTitle = 'Project Task';
-$isFinance = 1;
+$taskPermissionPin = $taskParentPin;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     include_once '../include/connection.php';
     include_once ROOT . '/include/common.php';
     include_once ROOT . '/include/common_variable.php';
     include_once './common_task.php';
-    $pageTitle = taskGetPinGroupTitleById($connect, $currentPagePin, $pageTitle);
+    $pageTitle = taskGetPinGroupTitleById($connect, $pageTitlePin, $pageTitle);
     $taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParentTitle);
 
     if (empty($_SESSION['csrf_token'])) {
@@ -23,7 +24,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         exit;
     }
 
-    $pinAccess = taskGetPinAccessByGroupId($connect, $currentPagePin);
+    $pinAccess = taskGetPinAccessByGroupId($connect, $taskPermissionPin);
     if (!taskIsActionAllowed('view', $pinAccess)) {
         header('Content-Type: application/json');
         echo json_encode(array('ok' => 0, 'message' => 'You do not have permission to access Project Task.'));
@@ -32,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
     $currentUserId = (int) USER_ID;
     $currentProjectId = taskResolveCurrentProjectId($connect, 0);
-    if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $currentPagePin)) {
+    if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $taskPermissionPin)) {
         header('Content-Type: application/json');
         echo json_encode(array('ok' => 0, 'message' => 'You do not have access to this project sheets.'));
         exit;
@@ -258,23 +259,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 }
 
 include_once '../menuHeader.php';
-include_once '../checkCurrentPagePin.php';
 include_once './common_task.php';
 include_once './board_item_history.php';
-$pageTitle = taskGetPinGroupTitleById($connect, $currentPagePin, $pageTitle);
+$pageTitle = taskGetPinGroupTitleById($connect, $pageTitlePin, $pageTitle);
 $taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParentTitle);
 
-$pinAccess = taskGetPinAccessByGroupId($connect, $currentPagePin);
+$pinAccess = taskGetPinAccessByGroupId($connect, $taskPermissionPin);
 if (!taskIsActionAllowed('view', $pinAccess)) {
-    echo "<script>alert('You do not have permission to view Project Task.'); location.replace('../dashboard.php');</script>";
+    renderNotificationScript('You do not have permission to view Project Task.', 'error', '../dashboard.php', 1200, true);
     exit;
 }
 
 $currentUserId = USER_ID;
 $currentProjectId = taskResolveCurrentProjectId($connect, 0);
 $currentProject = $currentProjectId > 0 ? taskGetProjectById($connect, $currentProjectId) : array();
-if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $currentPagePin)) {
-    echo "<script>alert('You do not have access to this project sheets.'); location.replace('../dashboard.php');</script>";
+if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $taskPermissionPin)) {
+    renderNotificationScript('You do not have access to this project sheets.', 'error', '../dashboard.php', 1200, true);
     exit;
 }
 $taskParentTitle = !empty($currentProject) && isset($currentProject['name']) && trim((string) $currentProject['name']) !== ''
@@ -304,7 +304,7 @@ if (function_exists('audit_log')) {
 
 $canEdit = taskIsActionAllowed('edit', $pinAccess) && taskUserCanColumnAction($connect, $currentProjectId, 'edit');
 $canAdd = taskIsActionAllowed('add', $pinAccess) && taskUserCanColumnAction($connect, $currentProjectId, 'add');
-$boardPinAccess = taskGetPinAccessByGroupId($connect, 136);
+$boardPinAccess = taskGetPinAccessByGroupId($connect, $taskPermissionPin);
 $workItemCanAdd = taskIsActionAllowed('add', $boardPinAccess) && taskUserCanWorkItemAction($connect, $currentProjectId, 'add');
 $workItemCanEdit = taskIsActionAllowed('edit', $boardPinAccess) && taskUserCanWorkItemAction($connect, $currentProjectId, 'edit');
 $workItemCanDelete = taskIsActionAllowed('delete', $boardPinAccess) && taskUserCanWorkItemAction($connect, $currentProjectId, 'delete');

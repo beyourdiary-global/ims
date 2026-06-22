@@ -2,10 +2,7 @@
 ob_start();
 $pageTitle = "Monthly Bank Transaction Backup Record";
 $currentPagePin = 59;
-$isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+include_once '../include/list_page_header.php';
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d H:i:s') . "_list.xlsx";
 $img_path = '../' . img_server . 'finance/bank_trans_backup/';
@@ -120,50 +117,7 @@ if (!empty($checkboxValues)) {
     }
 }
 
-function addDirToZip($dir, $zip, $basePath)
-{
-    $files = scandir($dir);
-    foreach ($files as $file) {
-        if ($file == '.' || $file == '..') {
-            continue;
-        }
-        $filePath = $dir . $file;
-        if (is_file($filePath)) {
-            // Add the file to the zip archive with a relative path
-            $relativePath = str_replace($basePath, '', $filePath);
-            $zip->addFile($filePath, $relativePath);
-        } elseif (is_dir($filePath)) {
-            // Add the directory to the zip archive
-            $zip->addEmptyDir(str_replace($basePath, '', $filePath));
-            // Recursively add files and directories inside the current directory
-            addDirToZip($filePath . '/', $zip, $basePath);
-        }
-    }
-}
-
-function deleteDir($dirPath) {
-    if (!is_dir($dirPath)) {
-        return;
-    }
-    $files = glob($dirPath . '*', GLOB_MARK);
-    foreach ($files as $file) {
-        if (is_dir($file)) {
-            deleteDir($file);
-        } else {
-            unlink($file);
-        }
-    }
-    rmdir($dirPath);
-}
-
-
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
-
-$redirect_page = $SITEURL . '/finance/bank_trans_backup.php';
+$redirectPage = $SITEURL . '/finance/bank_trans_backup.php';
 
 $result = getData('*', '', '', BANK_TRANS_BACKUP, $finance_connect);
 
@@ -215,7 +169,7 @@ $img_path = SITEURL . img_server . 'finance/bank_trans_backup/';
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         Transaction </a>
                                 <?php endif; ?>
                                 <?php if (isActionAllowed("Export", $pinAccess)): ?>
@@ -259,22 +213,22 @@ $img_path = SITEURL . img_server . 'finance/bank_trans_backup/';
 
                                 <tr>
                                     <th class="hideColumn" scope="row">
-                                        <?= $row['id'] ?>
+                                        <?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>
                                     </th>
                                     <th class="text-center">
-                                        <input type="checkbox" class="export" value="<?= $row['id'] ?>">
+                                        <input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>">
                                     </th>
                                     <th scope="row">
                                         <?= $num++; ?>
                                     </th>
                                     <td scope="row" class="btn-container">
-                                        <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess);?>
-                                        <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2) ?>
-                                        <?php renderDeleteButton($pinAccess, $row['id'], $row['year'], $row['month'], $pageTitle, $redirect_page, $deleteRedirectPage) ?>
+                                        <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess);?>
+                                        <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2) ?>
+                                        <?php renderDeleteButton($pinAccess, $row['id'], $row['year'], $row['month'], $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                     </td>
                                     <td scope="row">
                                         <?php if (isset($row['year']))
-                                            echo $row['year'] ?>
+                                            echo htmlspecialchars((string) $row['year'], ENT_QUOTES, 'UTF-8') ?>
                                         </td>
                                         <td scope="row">
                                         <?= $fullMonthName ?>
@@ -282,7 +236,7 @@ $img_path = SITEURL . img_server . 'finance/bank_trans_backup/';
                                     <td scope="row">
                                         <?php if (isset($row['attachment'])) { ?><a href="<?= $img_path . $row['attachment'] ?>"
                                                 target="_blank">
-                                                <?= $row['attachment'] ?>
+                                                <?= htmlspecialchars((string) $row['attachment'], ENT_QUOTES, 'UTF-8') ?>
                                             </a>
                                         <?php } ?>
                                     </td>
@@ -312,8 +266,8 @@ $img_path = SITEURL . img_server . 'finance/bank_trans_backup/';
 </body>
 <script>
     //Initial Page And Action Value
-    var page = "<?= $pageTitle ?>";
-    var action = "<?php echo isset($act) ? $act : ' '; ?>";
+    const page = "<?= $pageTitle ?>";
+    const action = "<?php echo isset($act) ? $act : ' '; ?>";
     checkCurrentPage(page, action);
     /**
   oufei 20231014

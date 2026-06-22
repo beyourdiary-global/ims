@@ -1,12 +1,8 @@
 <!-- Meta Tags -->
-<meta charset="utf-8">
+<?php include_once __DIR__ . "/include/page_head_meta.php"; ?>
 <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
-<meta name="description" content="<?= $row['meta'] ?>">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=3.0">
+<meta name="description" content="<?= htmlspecialchars((string) ($row['meta'] ?? 'BeYourDiary Content Management System'), ENT_QUOTES, 'UTF-8') ?>">
 <meta name="robots" content="beyourdiary">
-
-<!-- Website -->
-<title><?= $pageTitle ?></title>
 
 <!-- Fonts -->
 <link href="<?= $SITEURL ?>/header/font/OpenSans.css" rel="stylesheet">

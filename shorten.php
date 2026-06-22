@@ -32,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $destination_url
     ]);
 
-    $shortened_url = "https://cms.beyourdiary.com/blog/preview.php?blog=" . $shorten_key;
+    $shortened_url = SITEURL . "/blog/preview.php?blog=" . $shorten_key;
 }
 ?>
 
@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <title>Upload & Shorten</title>
     <script>
         function copyLink() {
-            var copyText = document.getElementById("shortenUrl");
+            const copyText = document.getElementById("shortenUrl");
             copyText.select();
             copyText.setSelectionRange(0, 99999);
             document.execCommand("copy");

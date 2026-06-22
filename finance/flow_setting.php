@@ -1,5 +1,5 @@
 <?php
-$isFinance = 1;
+
 $pageTitle = 'Flow Setting';
 include_once '../include/connection.php';
 include_once '../include/common.php';
@@ -212,18 +212,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['flow_action']) && $_P
 $currentPagePin = 149;
 $pageTitle = 'Flow Setting';
 $disablePinGroupPageTitleSync = true;
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
 
 $pageTitle = 'Flow Setting';
 if (!isActionAllowed('View', checkPinByGroupId($connect, 149))) {
-    echo '<script>alert("You do not have permission to view Flow Setting."); location.replace("../dashboard.php");</script>';
+    renderNotificationScript('You do not have permission to view Flow Setting.', 'error', '../dashboard.php', 1200, true);
     exit;
 }
 if ((int) USER_GROUP !== 1) {
-    echo '<script>alert("Only Super Admin can access Flow Setting."); location.replace("../dashboard.php");</script>';
+    renderNotificationScript('Only Super Admin can access Flow Setting.', 'error', '../dashboard.php', 1200, true);
     exit;
 }
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {

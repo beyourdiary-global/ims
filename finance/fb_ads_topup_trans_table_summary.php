@@ -2,7 +2,6 @@
 $currentPagePin = 50;
 ob_start();
 $pageTitle = "Facebook Ads Top Up Transaction";
-$isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
@@ -128,49 +127,13 @@ if (!empty($checkboxValues)) {
     }
 }
 
-function addDirToZip($dir, $zip, $basePath) 
-{
-    $files = scandir($dir);
-    foreach ($files as $file) {
-        if ($file == '.' || $file == '..') {
-            continue;
-        }
-        $filePath = $dir . $file;
-        if (is_file($filePath)) {
-            // Add the file to the zip archive with a relative path
-            $relativePath = str_replace($basePath, '', $filePath);
-            $zip->addFile($filePath, $relativePath);
-        } elseif (is_dir($filePath)) {
-            // Add the directory to the zip archive
-            $zip->addEmptyDir(str_replace($basePath, '', $filePath));
-            // Recursively add files and directories inside the current directory
-            addDirToZip($filePath . '/', $zip, $basePath);
-        }
-    }
-}
-
-function deleteDir($dirPath) {
-    if (!is_dir($dirPath)) {
-        return;
-    }
-    $files = glob($dirPath . '*', GLOB_MARK);
-    foreach ($files as $file) {
-        if (is_dir($file)) {
-            deleteDir($file);
-        } else {
-            unlink($file);
-        }
-    }
-    rmdir($dirPath);
-}
-
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 $_SESSION['act'] = '';
 $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 $deleteRedirectPage = $SITEURL . '/fb_ads_topup_trans_table.php';
-$redirect_page = $SITEURL . '/finance/fb_ads_topup_trans.php';
+$redirectPage = $SITEURL . '/finance/fb_ads_topup_trans.php';
 $result = getData('*', '', '', FB_ADS_TOPUP, $finance_connect);
 $result2 = getData('*', '', '', FB_ADS_TOPUP, $finance_connect);
 
@@ -203,7 +166,7 @@ $result2 = getData('*', '', '', FB_ADS_TOPUP, $finance_connect);
                         <h2><?php echo $pageTitle . " Summary"; ?></h2>
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
+                                <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
                             <?php endif; ?>
                             <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="if (exportData()) { showExportNotification(); }"><i class="fa-solid fa-file-export"></i> Export</a>
                         </div>
@@ -245,12 +208,12 @@ $result2 = getData('*', '', '', FB_ADS_TOPUP, $finance_connect);
                     ?>
                    
                    <tr onclick="window.location='fb_ads_topup_trans_table_detail.php?ids=<?= urlencode($row['id']) ?>';" style="cursor:pointer;">
-                        <td class="hideColumn" scope="row"><?= $row['id'] ?></td>
-                        <th class="text-center"><input type="checkbox" class="export" value="<?= $row['id'] ?>"></th>
+                        <td class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></td>
+                        <th class="text-center"><input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>"></th>
                         <td scope="row"><?= $num++; ?></td>
-                        <td scope="row"><?php if (isset($meta_acc['accName'])) echo $meta_acc['accName'] ?></td>
-                        <td scope="row"><?php if (isset($row['payment_date'])) echo $row['payment_date'] ?></td>
-                        <td scope="row"><?php if (isset($row['topup_amt'])) echo $row['topup_amt'] ?></td>
+                        <td scope="row"><?php if (isset($meta_acc['accName'])) echo htmlspecialchars((string) $meta_acc['accName'], ENT_QUOTES, 'UTF-8') ?></td>
+                        <td scope="row"><?php if (isset($row['payment_date'])) echo htmlspecialchars((string) $row['payment_date'], ENT_QUOTES, 'UTF-8') ?></td>
+                        <td scope="row"><?php if (isset($row['topup_amt'])) echo htmlspecialchars((string) $row['topup_amt'], ENT_QUOTES, 'UTF-8') ?></td>
                     </tr>
                     <?php }
                             }

@@ -6,7 +6,6 @@ curr AC -->
 $currentPagePin = 66;
 ob_start();
 $pageTitle = "Delivery Fees Claim Record";
-$isFinance = 1;
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
@@ -122,42 +121,6 @@ if (!empty($checkboxValues)) {
     }
 }
 
-function addDirToZip($dir, $zip, $basePath)
-{
-    $files = scandir($dir);
-    foreach ($files as $file) {
-        if ($file == '.' || $file == '..') {
-            continue;
-        }
-        $filePath = $dir . $file;
-        if (is_file($filePath)) {
-            // Add the file to the zip archive with a relative path
-            $relativePath = str_replace($basePath, '', $filePath);
-            $zip->addFile($filePath, $relativePath);
-        } elseif (is_dir($filePath)) {
-            // Add the directory to the zip archive
-            $zip->addEmptyDir(str_replace($basePath, '', $filePath));
-            // Recursively add files and directories inside the current directory
-            addDirToZip($filePath . '/', $zip, $basePath);
-        }
-    }
-}
-
-function deleteDir($dirPath) {
-    if (!is_dir($dirPath)) {
-        return;
-    }
-    $files = glob($dirPath . '*', GLOB_MARK);
-    foreach ($files as $file) {
-        if (is_dir($file)) {
-            deleteDir($file);
-        } else {
-            unlink($file);
-        }
-    }
-    rmdir($dirPath);
-}
-
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 $_SESSION['act'] = '';
 $_SESSION['viewChk'] = '';
@@ -165,7 +128,7 @@ $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 
 $deleteRedirectPage = $SITEURL . '/finance/del_fees_claim_table.php';
-$redirect_page = $SITEURL . '/finance/del_fees_claim.php';
+$redirectPage = $SITEURL . '/finance/del_fees_claim.php';
 $result = getData('*', '', '', DEL_FEES_CLAIM, $finance_connect);
 ?>
 
@@ -199,7 +162,7 @@ $result = getData('*', '', '', DEL_FEES_CLAIM, $finance_connect);
                         
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
+                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
                                 <?php endif; ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="if (exportData()) { showExportNotification(); }"><i class="fa-solid fa-file-export"></i> Export</a>
                             </div>
@@ -248,12 +211,12 @@ $result = getData('*', '', '', DEL_FEES_CLAIM, $finance_connect);
                         ?>
 
                                 <tr onclick="window.location='del_fees_claim_table_detail.php?ids=<?= urlencode($row['id']) ?>';" style="cursor:pointer;">
-                                    <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
-                                    <th class="text-center"><input type="checkbox" class="export" value="<?= $row['id'] ?>"></th>
+                                    <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
+                                    <th class="text-center"><input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>"></th>
                                     <td scope="row"><?= $num++ ?></td>
-                                    <td scope="row"><?php if (isset($row3['name'])) echo $row3['name'] ?></td>
-                                    <td scope="row"><?php if (isset($row2['unit'])) echo $row2['unit'] ?></td>
-                                    <td scope="row"><?php if (isset($row['total'])) echo  $row['total'] ?></td>
+                                    <td scope="row"><?php if (isset($row3['name'])) echo htmlspecialchars((string) $row3['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row2['unit'])) echo htmlspecialchars((string) $row2['unit'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['total'])) echo  htmlspecialchars((string) $row['total'], ENT_QUOTES, 'UTF-8') ?></td>
                                  
                                 </tr>
                         <?php }
@@ -286,8 +249,8 @@ $result = getData('*', '', '', DEL_FEES_CLAIM, $finance_connect);
 <?php include "../js/fb_ads_topup_table.js" ?>
 <?php include "../js/del_fees_claim_table.js" ?>
     //Initial Page And Action Value
-    var page = "<?= $pageTitle ?>";
-    var action = "<?php echo isset($act) ? $act : ' '; ?>";
+    const page = "<?= $pageTitle ?>";
+    const action = "<?php echo isset($act) ? $act : ' '; ?>";
 
     checkCurrentPage(page, action);
     /**

@@ -6,10 +6,8 @@ curr AC -->
 ob_start();
 $pageTitle = "Delivery Fees Claim Record";
 $currentPagePin = 66;
-$isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+
+include_once '../include/list_page_header.php';
 
 
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
@@ -122,52 +120,8 @@ if (!empty($checkboxValues)) {
     }
 }
 
-function addDirToZip($dir, $zip, $basePath)
-{
-    $files = scandir($dir);
-    foreach ($files as $file) {
-        if ($file == '.' || $file == '..') {
-            continue;
-        }
-        $filePath = $dir . $file;
-        if (is_file($filePath)) {
-            // Add the file to the zip archive with a relative path
-            $relativePath = str_replace($basePath, '', $filePath);
-            $zip->addFile($filePath, $relativePath);
-        } elseif (is_dir($filePath)) {
-            // Add the directory to the zip archive
-            $zip->addEmptyDir(str_replace($basePath, '', $filePath));
-            // Recursively add files and directories inside the current directory
-            addDirToZip($filePath . '/', $zip, $basePath);
-        }
-    }
-}
-
-function deleteDir($dirPath) {
-    if (!is_dir($dirPath)) {
-        return;
-    }
-    $files = glob($dirPath . '*', GLOB_MARK);
-    foreach ($files as $file) {
-        if (is_dir($file)) {
-            deleteDir($file);
-        } else {
-            unlink($file);
-        }
-    }
-    rmdir($dirPath);
-}
-
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['searchChk'] = '';
-unset($_SESSION['resetChk']);
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
-
 $deleteRedirectPage = $SITEURL . '/finance/del_fees_claim_table.php';
-$redirect_page = $SITEURL . '/finance/del_fees_claim.php';
+$redirectPage = $SITEURL . '/finance/del_fees_claim.php';
 $result = getData('*', '', '', DEL_FEES_CLAIM, $finance_connect);
 $tblName = DEL_FEES_CLAIM;
 ?>
@@ -202,7 +156,7 @@ $tblName = DEL_FEES_CLAIM;
                         
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
+                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
                                 <?php endif; ?>
                                 <?php if (isActionAllowed("Export", $pinAccess)) : ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>
@@ -312,24 +266,7 @@ $tblName = DEL_FEES_CLAIM;
                         $groupedRows = [];
                         $counters = 1;
         
-                        function generateTableRow($id, &$counters, $courier, $createdate, $topupAmt) {
-                            echo '<tr onclick="window.location=\'del_fees_claim_table_summary.php?ids=' . urlencode($id) . '\';" style="cursor:pointer;">';
-                            echo '<th class="hideColumn" scope="row">' . $id . '</th>';
-                            echo ' <th class="text-center"><input type="checkbox" class="export" value="' . $id . '"></th>';
-                            echo '<th scope="row">' . $counters++ . '</th>';
-                            echo '<td scope="row">' . $courier . '</td>';
-                            echo '<td scope="row">' . number_format($topupAmt, 2, '.', '') . '</td>';
-                            echo '</tr>';
-                        }
-                        function generateTableRow2($id, &$counters, $courier, $curr, $createdate,$topupAmt) {
-                            echo '<tr onclick="window.location=\'del_fees_claim_table_summary.php?ids=' . urlencode($id) . '\';" style="cursor:pointer;">';
-                            echo '<th class="hideColumn" scope="row">' . $id . '</th>';
-                            echo ' <th class="text-center"><input type="checkbox" class="export" value="' . $id . '"></th>';
-                            echo '<th scope="row">' . $counters++ . '</th>';
-                            echo '<td scope="row">' . $curr . '</td>';
-                            echo '<td scope="row">' . number_format($topupAmt, 2, '.', '') . '</td>';
-                            echo '</tr>';
-                        }
+
                         $groupedRows = [];
                         while ($row = $result->fetch_assoc()) {
                             $viewActMsg = '';
@@ -355,9 +292,9 @@ $tblName = DEL_FEES_CLAIM;
                                     <td scope="row" class="btn-container">
                                     <div class="d-flex align-items-center">'    
                                     ?>
-                                        <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess);?>
-                                        <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2) ?>
-                                        <?php renderDeleteButton($pinAccess, $row['id'],'', '', $pageTitle, $redirect_page, $deleteRedirectPage) ?>
+                                        <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess);?>
+                                        <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2) ?>
+                                        <?php renderDeleteButton($pinAccess, $row['id'],'', '', $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                     <?php echo'</div>
                                     </td>
                                     <td scope="row">' . (isset($row['claim_date']) ? $row['claim_date'] : '') . '</td>
@@ -512,9 +449,19 @@ $tblName = DEL_FEES_CLAIM;
                                     }                         
                                     
                                 }else if ($groupOption === 'currency') {
-                                    generateTableRow2($row['id'],$counters, $courier, $curr,$createdate, $row['total']);
+                                    financeGenerateTableRow(array(
+                                        'id' => $row['id'],
+                                        'summary_page' => 'del_fees_claim_table_summary.php',
+                                        'cells' => array($curr),
+                                        'amount' => $row['total'],
+                                    ), $counters);
                                 }else if ($groupOption === 'courier') {
-                                    generateTableRow($row['id'], $counters, $courier, $createdate, $row['total']);
+                                    financeGenerateTableRow(array(
+                                        'id' => $row['id'],
+                                        'summary_page' => 'del_fees_claim_table_summary.php',
+                                        'cells' => array($courier),
+                                        'amount' => $row['total'],
+                                    ), $counters);
                                 }
                             }
                             
@@ -611,8 +558,8 @@ $tblName = DEL_FEES_CLAIM;
 <?php include "../js/fb_ads_topup_table.js" ?>
 <?php include "../js/del_fees_claim_table.js" ?>
     //Initial Page And Action Value
-    var page = "<?= $pageTitle ?>";
-    var action = "<?php echo isset($act) ? $act : ' '; ?>";
+    const page = "<?= $pageTitle ?>";
+    const action = "<?php echo isset($act) ? $act : ' '; ?>";
 
     checkCurrentPage(page, action);
     /**

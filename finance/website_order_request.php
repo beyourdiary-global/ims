@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 92;
 $pageTitle = "Website Order Request";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
@@ -9,22 +8,32 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = WEB_ORDER_REQ;
 
-$dataID = input('id');
-$act = input('act');
+$orderDeleteApprovalModuleKey = 'website_order_request';
+$orderDeleteApprovalState = orderDeleteApprovalInitPageState();
+$orderDeleteApprovalMode = !empty($orderDeleteApprovalState['approval_mode']);
+$orderDeleteApprovalRequestId = isset($orderDeleteApprovalState['request_id']) ? (int) $orderDeleteApprovalState['request_id'] : 0;
+$dataId = isset($orderDeleteApprovalState['data_id']) ? $orderDeleteApprovalState['data_id'] : '';
+$act = isset($orderDeleteApprovalState['act']) ? $orderDeleteApprovalState['act'] : '';
+$orderDeleteApprovalPanelHtml = isset($orderDeleteApprovalState['panel_html']) ? (string) $orderDeleteApprovalState['panel_html'] : '';
 $pageAction = getPageAction($act);
 
 
-$redirect_page = $SITEURL . '/finance/website_order_request_table.php';
-$back_redirect_page = commonResolveBackUrl($redirect_page);
-$redirectLink = '<script>location.href=' . json_encode($redirect_page) . ';</script>';
+$redirectPage = $SITEURL . '/finance/website_order_request_table.php';
+$back_redirect_page = commonResolveBackUrl($redirectPage);
+$websiteCurrentRequestPath = isset($_SERVER['REQUEST_URI']) ? (string) parse_url((string) $_SERVER['REQUEST_URI'], PHP_URL_PATH) : '';
+$websiteBackRedirectPath = (string) parse_url((string) $back_redirect_page, PHP_URL_PATH);
+if ($websiteBackRedirectPath === '' || ($websiteCurrentRequestPath !== '' && $websiteBackRedirectPath === $websiteCurrentRequestPath)) {
+    $back_redirect_page = $redirectPage;
+}
+$redirectLink = '<script>location.href=' . json_encode($redirectPage) . ';</script>';
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 $pendingStatusUpdate = shopeeOmsNormalizeStatusCode(post('updateStatusBtn'));
 $worShouldSaveBeforeStatusUpdate = $pendingStatusUpdate !== '' && $act === 'E';
 $worTriggerStatusTransitionAfterSave = false;
-$worHandleStatusTransition = function ($newStatus) use ($connect, $finance_connect, $dataID, $pageTitle, $cdate, $ctime, $tblName, $redirect_page) {
+$worHandleStatusTransition = function ($newStatus) use ($connect, $finance_connect, $dataId, $pageTitle, $cdate, $ctime, $tblName, $redirectPage) {
     $newStatus = shopeeOmsNormalizeStatusCode($newStatus);
     $transitionRemark = 'Order Status Update to ' . shopeeOmsGetStatusLabel($newStatus);
-    $transitionResult = shopeeOmsExecuteTransition($connect, $finance_connect, (int) $dataID, $newStatus, array(
+    $transitionResult = shopeeOmsExecuteTransition($connect, $finance_connect, (int) $dataId, $newStatus, array(
         'actor_user_id' => USER_ID,
         'actor_user_group_id' => USER_GROUP,
         'source_page' => $pageTitle,
@@ -47,14 +56,15 @@ $worHandleStatusTransition = function ($newStatus) use ($connect, $finance_conne
             'connect' => $connect,
             'oldval' => 'order_status: ' . $oldStatus,
             'changes' => 'order_status: ' . $newStatusCode,
-            'act_msg' => USER_NAME . " updated Website order #" . (int) $dataID . " from " . htmlspecialchars($oldStatus, ENT_QUOTES, 'UTF-8') . " to " . htmlspecialchars($newStatusCode, ENT_QUOTES, 'UTF-8') . ".",
+            'act_msg' => USER_NAME . " updated Website order #" . (int) $dataId . " from " . htmlspecialchars($oldStatus, ENT_QUOTES, 'UTF-8') . " to " . htmlspecialchars($newStatusCode, ENT_QUOTES, 'UTF-8') . ".",
         ));
-        echo '<script>alert(' . json_encode((string) $transitionRemark) . '); window.location.replace(' . json_encode((string) $redirect_page) . ');</script>';
+        echo '<script>alert(' . json_encode((string) $transitionRemark) . '); window.location.replace(' . json_encode((string) $redirectPage) . ');</script>';
         exit;
     }
-
-    echo '<script>alert(' . json_encode((string) (isset($transitionResult['message']) ? $transitionResult['message'] : 'Unable to update order status.')) . ');</script>';
-    exit;
+    return array(
+        'success' => false,
+        'message' => (string) (isset($transitionResult['message']) ? $transitionResult['message'] : 'Unable to update order status.'),
+    );
 };
 generateDBData(WEB_CUST_RCD, $connect);
 $worStatusOptions = shopeeOmsGetEditableStatusOptions();
@@ -68,16 +78,17 @@ foreach ($worWarehouseRows as $worWarehouseRow) {
         $worWarehouseOptionMap[$worWarehouseId] = isset($worWarehouseRow['name']) ? (string) $worWarehouseRow['name'] : ('Warehouse #' . $worWarehouseId);
     }
 }
+$worPopupErrorMessage = '';
 
 // to display data to input
-if ($dataID) { //edit/remove/view
-    $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $finance_connect);
+if ($dataId) { //edit/remove/view
+    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $finance_connect);
 
-    if ($rst != false && $rst->num_rows > 0) {
+    if ($result != false && $result->num_rows > 0) {
         $dataExisted = 1;
-        $row = $rst->fetch_assoc();
+        $row = $result->fetch_assoc();
     } else {
-        // If $rst is false or no data found ($act==null)
+        // If $result is false or no data found ($act==null)
         $errorExist = 1;
         $_SESSION['tempValConfirmBox'] = true;
         $act = "F";
@@ -85,15 +96,46 @@ if ($dataID) { //edit/remove/view
 }
 
 if ($pendingStatusUpdate !== '' && !$worShouldSaveBeforeStatusUpdate) {
-    $worHandleStatusTransition($pendingStatusUpdate);
+    $worTransitionResult = $worHandleStatusTransition($pendingStatusUpdate);
+    if (is_array($worTransitionResult) && empty($worTransitionResult['success'])) {
+        $transitionErrorState = shopeeOmsResolveStatusTransitionErrorState(
+            $pendingStatusUpdate,
+            isset($worTransitionResult['message']) ? $worTransitionResult['message'] : '',
+            'Unable to update order status.'
+        );
+        if ($transitionErrorState['stock_out_warehouse_err'] !== '') {
+            $stock_out_warehouse_err = $transitionErrorState['stock_out_warehouse_err'];
+        }
+        $worPopupErrorMessage = $transitionErrorState['popup_error_message'];
+    }
 }
 
-if (!($dataID) && !($act)) {
-    echo '<script>
-    alert("Invalid action.");
-    window.location.href = "' . $redirect_page . '"; // Redirect to previous page
-    </script>';
+if (!($dataId) && !($act)) {
+    renderNotificationScript('Invalid action.', 'error', $redirectPage);
+    exit;
 }
+
+$worExecuteDeleteOrder = orderDeleteApprovalBuildStandardDeleteCallback(array(
+    'data_connect' => $finance_connect,
+    'audit_connect' => $connect,
+    'table_name' => $tblName,
+    'page_title' => $pageTitle,
+    'fallback_data_id' => (int) $dataId,
+    'label_field' => 'order_id',
+));
+
+$orderDeleteApprovalPanelHtml = orderDeleteApprovalHandlePageFlow(array(
+    'connect' => $connect,
+    'request_id' => $orderDeleteApprovalRequestId,
+    'module_key' => $orderDeleteApprovalModuleKey,
+    'data_id' => (int) $dataId,
+    'current_user_id' => (int) USER_ID,
+    'page_title' => $pageTitle,
+    'redirect_page' => $redirectPage,
+    'clear_local_storage' => $clearLocalStorage,
+    'approval_mode' => $orderDeleteApprovalMode,
+    'delete_callback' => $worExecuteDeleteOrder,
+));
 
 if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
     $customer_id = postSpaceFilter('customer_id');
@@ -361,6 +403,20 @@ if (post('actionBtn') || $worShouldSaveBeforeStatusUpdate) {
                 break;
             }
 
+            if ($action === 'addRecord' && $wor_order_status === 'TP') {
+                $worWarehouseStockValidation = shopeeOmsValidateWarehouseStockForOrder($connect, $finance_connect, array(
+                    'pkg' => $wor_pkg,
+                    'stock_out_warehouse_id' => $wor_stock_out_warehouse_id,
+                ), array(
+                    'platform' => 'website',
+                ));
+                if (empty($worWarehouseStockValidation['success'])) {
+                    $stock_out_warehouse_err = isset($worWarehouseStockValidation['message']) ? (string) $worWarehouseStockValidation['message'] : 'Selected warehouse does not have enough stock.';
+                    $error = 1;
+                    break;
+                }
+            }
+
             if ($action == 'addRecord') {
                 try {
                     //check values
@@ -484,14 +540,14 @@ if (post('actionBtn') || $worShouldSaveBeforeStatusUpdate) {
                     $query = "INSERT INTO " . $tblName . " (order_id,brand,series,pkg,country,currency,price,shipping,discount,total,pay_method,pic,cust_id,cust_name,cust_email,cust_birthday,shipping_name,shipping_address,shipping_contact,remark,order_status,stock_out_warehouse_id,airbill_no,airbill_attachment,create_by,create_date,create_time) VALUES ('$wor_order_id','$wor_brand','$wor_series','$wor_pkg','$wor_country','$wor_currency','$wor_price','$wor_shipping','$wor_discount','$wor_total','$wor_pay','$wor_pic','$wor_cust_id','$wor_cust_name','$wor_cust_email','$wor_cust_birthday','$wor_shipping_name','$wor_shipping_address','$wor_shipping_contact','$wor_remark','$wor_order_status'," . ($wor_stock_out_warehouse_id > 0 ? $wor_stock_out_warehouse_id : 'NULL') . ",'$wor_airbill_no','" . mysqli_real_escape_string($finance_connect, $wor_airbill_attachment) . "','" . USER_ID . "',curdate(),curtime())";
                     $returnData = mysqli_query($finance_connect, $query);
                     if (!$returnData) { throw new Exception(mysqli_error($finance_connect)); }
-                    $dataID = $finance_connect->insert_id;
-                    if ($wor_order_status === 'TP' && $dataID > 0) {
-                        $freshOrderRow = shopeeOmsLoadOrder($finance_connect, $dataID, 'website');
+                    $dataId = $finance_connect->insert_id;
+                    if ($wor_order_status === 'TP' && $dataId > 0) {
+                        $freshOrderRow = shopeeOmsLoadOrder($finance_connect, $dataId, 'website');
                         $tokenResult = shopeeOmsCreateWarehouseToken($connect, $finance_connect, $freshOrderRow, USER_ID, 'website');
                         if (!empty($tokenResult['success']) && !empty($tokenResult['token_row']) && !empty($tokenResult['notification'])) {
                             $notifyResult = shopeeOmsSendWarehouseNotification($connect, $finance_connect, $tokenResult['token_row'], $tokenResult['notification'], $pageTitle);
                             if (!empty($notifyResult['sent']) && shopeeOmsTableHasColumn($finance_connect, dbFinance, $tblName, 'step_a_sent_at')) {
-                                mysqli_query($finance_connect, "UPDATE `" . $tblName . "` SET `step_a_sent_at` = NOW() WHERE id = " . $dataID . " LIMIT 1");
+                                mysqli_query($finance_connect, "UPDATE `" . $tblName . "` SET `step_a_sent_at` = NOW() WHERE id = " . $dataId . " LIMIT 1");
                             }
                         }
                     }
@@ -512,8 +568,8 @@ if (post('actionBtn') || $worShouldSaveBeforeStatusUpdate) {
                 try {
 
                     // take old value
-                    $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $finance_connect);
-                    $row = $rst->fetch_assoc();
+                    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $finance_connect);
+                    $row = $result->fetch_assoc();
 
                     // check value
                     if ($row['order_id'] != $wor_order_id) {
@@ -662,7 +718,7 @@ if (post('actionBtn') || $worShouldSaveBeforeStatusUpdate) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
-                        $query = "UPDATE " . $tblName . " SET order_id = '$wor_order_id', brand = '$wor_brand', series = '$wor_series', pkg = '$wor_pkg', country = '$wor_country', currency = '$wor_currency', price = '$wor_price', shipping = '$wor_shipping', discount = '$wor_discount', total = '$wor_total', pay_method = '$wor_pay', pic = '$wor_pic', cust_id = '$wor_cust_id', cust_name = '$wor_cust_name', cust_email = '$wor_cust_email', cust_birthday = '$wor_cust_birthday', shipping_name = '$wor_shipping_name', shipping_address = '$wor_shipping_address', shipping_contact = '$wor_shipping_contact', remark ='$wor_remark', order_status = '$wor_order_status', stock_out_warehouse_id = " . ($wor_stock_out_warehouse_id > 0 ? $wor_stock_out_warehouse_id : 'NULL') . ", airbill_no = '$wor_airbill_no', airbill_attachment = '" . mysqli_real_escape_string($finance_connect, $wor_airbill_attachment) . "', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
+                        $query = "UPDATE " . $tblName . " SET order_id = '$wor_order_id', brand = '$wor_brand', series = '$wor_series', pkg = '$wor_pkg', country = '$wor_country', currency = '$wor_currency', price = '$wor_price', shipping = '$wor_shipping', discount = '$wor_discount', total = '$wor_total', pay_method = '$wor_pay', pic = '$wor_pic', cust_id = '$wor_cust_id', cust_name = '$wor_cust_name', cust_email = '$wor_cust_email', cust_birthday = '$wor_cust_birthday', shipping_name = '$wor_shipping_name', shipping_address = '$wor_shipping_address', shipping_contact = '$wor_shipping_contact', remark ='$wor_remark', order_status = '$wor_order_status', stock_out_warehouse_id = " . ($wor_stock_out_warehouse_id > 0 ? $wor_stock_out_warehouse_id : 'NULL') . ", airbill_no = '$wor_airbill_no', airbill_attachment = '" . mysqli_real_escape_string($finance_connect, $wor_airbill_attachment) . "', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($finance_connect, $query);
 
                     } else {
@@ -695,18 +751,34 @@ if (post('actionBtn') || $worShouldSaveBeforeStatusUpdate) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval'] = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
             }
 
             if ($action === 'updRecord' && $worShouldSaveBeforeStatusUpdate) {
                 if ($worTriggerStatusTransitionAfterSave) {
-                    $worHandleStatusTransition($pendingStatusUpdate);
+                    unset($_SESSION['tempValConfirmBox']);
+                    $worTransitionResult = $worHandleStatusTransition($pendingStatusUpdate);
+                    if (is_array($worTransitionResult) && empty($worTransitionResult['success'])) {
+                        $transitionErrorState = shopeeOmsResolveStatusTransitionErrorState(
+                            $pendingStatusUpdate,
+                            isset($worTransitionResult['message']) ? $worTransitionResult['message'] : '',
+                            'Unable to update order status.'
+                        );
+                        if ($act === 'NC') {
+                            $act = 'E';
+                        }
+                        if ($transitionErrorState['stock_out_warehouse_err'] !== '') {
+                            $stock_out_warehouse_err = $transitionErrorState['stock_out_warehouse_err'];
+                        }
+                        $worPopupErrorMessage = $transitionErrorState['popup_error_message'];
+                        break;
+                    }
                 }
 
                 $worSaveErrorMessage = trim((string) $errorMsg) !== '' ? trim((string) $errorMsg) : 'Unable to save edited order details.';
@@ -723,29 +795,58 @@ if (post('act') == 'D') {
     $id = post('id');
     if ($id) {
         try {
-            // take name
-            $rst = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $finance_connect);
-            $row = $rst->fetch_assoc();
+            $result = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $finance_connect);
+            if (!$result || $result->num_rows === 0) {
+                renderNotificationScript('Order record was not found.', 'error', $redirectPage, 1200, true);
+                exit;
+            }
 
-            $dataID = $row['id'];
+            $row = $result->fetch_assoc();
+            $dataId = (int) $row['id'];
+            $deleteLabel = isset($row['order_id']) ? trim((string) $row['order_id']) : '';
+            if ($deleteLabel === '') {
+                $deleteLabel = 'Order #' . $dataId;
+            }
 
-            //SET the record status to 'D'
-            deleteRecord($tblName, '', $dataID, $row['order_id'], $finance_connect, $connect, $cdate, $ctime, $pageTitle);
-            $_SESSION['delChk'] = 1;
+            $deleteApprovalResult = orderDeleteApprovalRequestDelete($connect, $orderDeleteApprovalModuleKey, $dataId, $deleteLabel, $pageTitle);
+            if (!empty($deleteApprovalResult['direct_delete'])) {
+                $deleteResult = $worExecuteDeleteOrder(array(
+                    'source_order_id' => $dataId,
+                    'source_order_label' => $deleteLabel,
+                ));
+                renderNotificationScript(
+                    $deleteResult['message'],
+                    !empty($deleteResult['success']) ? 'success' : 'error',
+                    $redirectPage,
+                    1200,
+                    true
+                );
+                exit;
+            }
+
+            renderNotificationScript(
+                $deleteApprovalResult['message'],
+                isset($deleteApprovalResult['notification_type']) ? $deleteApprovalResult['notification_type'] : (!empty($deleteApprovalResult['success']) ? 'success' : 'error'),
+                $redirectPage,
+                1200,
+                true
+            );
+            exit;
         } catch (Exception $e) {
-            echo 'Message: ' . $e->getMessage();
+            renderNotificationScript($e->getMessage(), 'error', $redirectPage, 1200, true);
+            exit;
         }
     }
 }
 
 //view
-if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
+if (($dataId) && !($act) && (USER_ID != '') && empty($_SESSION['viewChk']) && empty($_SESSION['delChk'])) {
     $_SESSION['viewChk'] = 1;
 
     if (isset($errorExist)) {
-        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataID . "</b> ] from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataId . "</b> ] from <b><i>$tblName Table</i></b>.";
     } else {
-        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataID . "</b> ] <b>" . $row['order_id'] . "</b> from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataId . "</b> ] <b>" . $row['order_id'] . "</b> from <b><i>$tblName Table</i></b>.";
     }
 
     $log = [
@@ -774,7 +875,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
     $connect,
     '',
     $urbanismBadgeSeedName,
-    $redirect_page,
+    $redirectPage,
     $pageTitle
 );
 ?>
@@ -785,6 +886,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
 <head>
     <link rel="stylesheet" href="../css/main.css">
     <script src="header/js/pdf.min.js"></script>
+    <script src="../js/pdf_airbill_parser.js"></script>
     <style>
         .shopee-airbill-toggle-col {
             display: flex;
@@ -924,7 +1026,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
 <body>
 <form id="myForm" method="POST" action="">
         <input type="hidden" name="act" value="<?php echo $act; ?>">
-        <input type="hidden" name="id" value="<?php echo $dataID; ?>">
+        <input type="hidden" name="id" value="<?php echo $dataId; ?>">
     </form>
     <div class="d-flex flex-column my-3 ms-3">
         <p><a href="<?= htmlspecialchars((string) $back_redirect_page, ENT_QUOTES, 'UTF-8') ?>">
@@ -940,6 +1042,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
     <div id="formContainer" class="container d-flex justify-content-center">
         <div class="col-6 col-md-6 formWidthAdjust">
             <form id="FORForm" method="post" action="" enctype="multipart/form-data">
+                <input type="hidden" name="return_url" value="<?= htmlspecialchars((string) $back_redirect_page, ENT_QUOTES, 'UTF-8') ?>">
                 <div class="form-group mb-5">
                     <div class="order-title-row">
                         <h2 class="mb-0"><?php echo displayPageAction($act, $pageTitle); ?></h2>
@@ -959,6 +1062,8 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                             echo $err1; ?>
                     </span>
                 </div>
+
+                <?php echo $orderDeleteApprovalPanelHtml; ?>
 
                 <div class="form-group">
     <div class="row">
@@ -1666,8 +1771,8 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                         }
                     }
                     ?>
-                    <button type="button" class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn" id="actionBtn"
-                        onclick="if (window.history.length > 1) { window.history.back(); } else { location.href = <?= htmlspecialchars(json_encode($redirect_page), ENT_QUOTES, 'UTF-8') ?>; }">Back</button>
+                    <button type="button" class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="backBtn" id="backBtn"
+                        onclick="location.href = <?= htmlspecialchars(json_encode($back_redirect_page), ENT_QUOTES, 'UTF-8') ?>;">Back</button>
                 </div>
             </form>
         </div>
@@ -1682,11 +1787,13 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
     if (isset($_SESSION['tempValConfirmBox'])) {
         unset($_SESSION['tempValConfirmBox']);
         echo $clearLocalStorage;
-        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
+    }
+    if ($worPopupErrorMessage !== '') {
+        echo '<script>document.addEventListener("DOMContentLoaded", function () { confirmationDialog("", ' . json_encode($worPopupErrorMessage) . ', ' . json_encode((string) $pageTitle) . ', "", "", "ErrMO"); });</script>';
     }
     ?>
     <script>
-        <?php echo shopeeOmsRenderAirbillPdfAutofillScript(); ?>
         <?php echo shopeeOmsRenderAirbillAttachmentPreviewScript(); ?>
 
         var page = "<?= $pageTitle ?>";
@@ -1754,28 +1861,6 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                 { textId: 'brand', hiddenId: 'brand_hidden', label: 'Brand' },
                 { textId: 'series', hiddenId: 'series_hidden', label: 'Series' }
             ];
-
-            function clearNewCustomerInlineError(field) {
-                if (!field) {
-                    return;
-                }
-                field.classList.remove('shopee-inline-invalid');
-                if (field.nextElementSibling && field.nextElementSibling.classList.contains('shopee-inline-error')) {
-                    field.nextElementSibling.remove();
-                }
-            }
-
-            function showNewCustomerInlineError(field, message) {
-                if (!field) {
-                    return;
-                }
-                clearNewCustomerInlineError(field);
-                field.classList.add('shopee-inline-invalid');
-                var errorNode = document.createElement('span');
-                errorNode.className = 'shopee-inline-error';
-                errorNode.textContent = message;
-                field.insertAdjacentElement('afterend', errorNode);
-            }
 
             function validateWebsiteNewCustomerForm() {
                 var hasError = false;

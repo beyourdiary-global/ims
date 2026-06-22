@@ -2,12 +2,8 @@
 ob_start();
 $pageTitle = "Facebook Ads Top Up Transaction";
 $currentPagePin = 50;
-$isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
+include_once '../include/list_page_header.php';
 
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d_H-i-s') . "_list.xlsx";
@@ -179,50 +175,8 @@ if (!empty($checkboxValues)) {
     }
 }
 
-function addDirToZip($dir, $zip, $basePath) 
-{
-    $files = scandir($dir);
-    foreach ($files as $file) {
-        if ($file == '.' || $file == '..') {
-            continue;
-        }
-        $filePath = $dir . $file;
-        if (is_file($filePath)) {
-            // Add the file to the zip archive with a relative path
-            $relativePath = str_replace($basePath, '', $filePath);
-            $zip->addFile($filePath, $relativePath);
-        } elseif (is_dir($filePath)) {
-            // Add the directory to the zip archive
-            $zip->addEmptyDir(str_replace($basePath, '', $filePath));
-            // Recursively add files and directories inside the current directory
-            addDirToZip($filePath . '/', $zip, $basePath);
-        }
-    }
-}
-
-function deleteDir($dirPath) {
-    if (!is_dir($dirPath)) {
-        return;
-    }
-    $files = glob($dirPath . '*', GLOB_MARK);
-    foreach ($files as $file) {
-        if (is_dir($file)) {
-            deleteDir($file);
-        } else {
-            unlink($file);
-        }
-    }
-    rmdir($dirPath);
-}
-
-$_SESSION['searchChk'] = '';
-unset($_SESSION['resetChk']);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 $deleteRedirectPage = $SITEURL . '/fb_ads_topup_trans_table.php';
-$redirect_page = $SITEURL . '/finance/fb_ads_topup_trans.php';
+$redirectPage = $SITEURL . '/finance/fb_ads_topup_trans.php';
 $result = getData('*', '', '', FB_ADS_TOPUP, $finance_connect);
 $result2 = getData('*', '', '', FB_ADS_TOPUP, $finance_connect);
 $tblName = FB_ADS_TOPUP;
@@ -255,10 +209,10 @@ $tblName = FB_ADS_TOPUP;
                         <h2><?php echo $pageTitle ?></h2>
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                <a class="btn btn-sm btn-rounded btn-primary px-3" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
+                                <a class="btn btn-sm btn-rounded btn-primary px-3" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
                             <?php endif; ?>
                             <?php if (isActionAllowed("Import", $pinAccess)) : ?>
-                                <a class="btn btn-sm btn-rounded btn-primary px-3" name="importBtn" id="addBtn" href="<?= $SITEURL ?>/facebook_ads_topup_import.php"><i class="fa-solid fa-file-import"></i> Import </a>
+                                <a class="btn btn-sm btn-rounded btn-primary px-3" name="importBtn" id="addBtn" href="<?= $SITEURL ?>/import/facebook_ads_topup_import.php"><i class="fa-solid fa-file-import"></i> Import </a>
                             <?php endif; ?>
                             <?php if (isActionAllowed("Export", $pinAccess)) : ?>
                                 <a class="btn btn-sm btn-rounded btn-primary px-3" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>
@@ -363,24 +317,7 @@ $tblName = FB_ADS_TOPUP;
                 $groupOption3 = isset($_GET['timeRange']) ? $_GET['timeRange'] : ''; 
                 $groupOption4 = isset($_GET['timeInterval']) ? $_GET['timeInterval'] : ''; 
 
-                function generateTableRow($id, &$counters, $accName, $paymentDate, $topupAmt) {
-                    echo '<tr onclick="window.location=\'fb_ads_topup_trans_table_summary.php?ids=' . urlencode($id) . '\';" style="cursor:pointer;">';
-                    echo '<th class="hideColumn" scope="row">' . $id . '</th>';
-                    echo ' <th class="text-center"><input type="checkbox" class="export" value="' . $id . '"></th>';
-                    echo '<th scope="row">' . $counters++ . '</th>';
-                    echo '<td scope="row">' . $accName . '</td>';
-                    echo '<td scope="row">' . number_format($topupAmt, 2, '.', '') . '</td>';
-                    echo '</tr>';
-                }
-                function generateTableRow2($id, &$counters, $accName, $paymentDate, $topupAmt) {
-                    echo '<tr onclick="window.location=\'fb_ads_topup_trans_table_summary.php?ids=' . urlencode($id) . '\';" style="cursor:pointer;">';
-                    echo '<th class="hideColumn" scope="row">' . $id . '</th>';
-                    echo ' <th class="text-center"><input type="checkbox" class="export" value="' . $id . '"></th>';
-                    echo '<th scope="row">' . $counters++ . '</th>';
-                    echo '<td scope="row">' . $paymentDate . '</td>';
-                    echo '<td scope="row">' . number_format($topupAmt, 2, '.', '') . '</td>';
-                    echo '</tr>';
-                }
+
                 
                 $groupedRows = [];
                 $counters = 1;
@@ -404,9 +341,9 @@ $tblName = FB_ADS_TOPUP;
                             <div class="d-flex align-items-center">' 
                         
                         ?>
-                            <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess);?>
-                            <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2) ?>
-                            <?php renderDeleteButton($pinAccess, $row['id'], $row['meta_acc'], $row['transactionID'], $pageTitle, $redirect_page, $deleteRedirectPage) ?>
+                            <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess);?>
+                            <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2) ?>
+                            <?php renderDeleteButton($pinAccess, $row['id'], $row['meta_acc'], $row['transactionID'], $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                         <?php echo'</div>
                         </td>
                         <td scope="row">' . (isset($meta_acc['accName']) ? $meta_acc['accName'] : '') . '</td>
@@ -563,10 +500,20 @@ $tblName = FB_ADS_TOPUP;
                         
                     }  else if ($groupOption === 'invoice') {
                         $totalTopupAmount += (float) (isset($row['topup_amt']) ? $row['topup_amt'] : 0);
-                        generateTableRow2($row['id'], $counters, $accName, $paymentDate, $row['topup_amt']);
+                        financeGenerateTableRow(array(
+                            'id' => $row['id'],
+                            'summary_page' => 'fb_ads_topup_trans_table_summary.php',
+                            'cells' => array($paymentDate),
+                            'amount' => $row['topup_amt'],
+                        ), $counters);
                     } else if ($groupOption === 'metaaccount') {
                         $totalTopupAmount += (float) (isset($row['topup_amt']) ? $row['topup_amt'] : 0);
-                        generateTableRow($row['id'], $counters, $accName, $paymentDate, $row['topup_amt']);
+                        financeGenerateTableRow(array(
+                            'id' => $row['id'],
+                            'summary_page' => 'fb_ads_topup_trans_table_summary.php',
+                            'cells' => array($accName),
+                            'amount' => $row['topup_amt'],
+                        ), $counters);
                     }
                     
                 }

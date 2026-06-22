@@ -378,20 +378,20 @@ if (!function_exists('orderReportBuildDateWhereSql')) {
 }
 
 if (!function_exists('orderReportLoadLookupMap')) {
-    function orderReportLoadLookupMap($conn, $tableName, $labelField = 'name')
+    function orderReportLoadLookupMap($conn, $tblName, $labelField = 'name')
     {
         $map = array();
-        if (!($conn instanceof mysqli) || !defined($tableName) && $tableName === '') {
+        if (!($conn instanceof mysqli) || !defined($tblName) && $tblName === '') {
             return $map;
         }
 
-        if (!tableExists($tableName, $conn)) {
+        if (!tableExists($tblName, $conn)) {
             return $map;
         }
 
         $rows = orderReportFetchRows(
             $conn,
-            "SELECT `id`, `" . str_replace('`', '``', $labelField) . "` AS `label` FROM `" . $tableName . "` WHERE `status` = 'A' ORDER BY `" . str_replace('`', '``', $labelField) . "` ASC"
+            "SELECT `id`, `" . str_replace('`', '``', $labelField) . "` AS `label` FROM `" . $tblName . "` WHERE `status` = 'A' ORDER BY `" . str_replace('`', '``', $labelField) . "` ASC"
         );
 
         foreach ($rows as $row) {
@@ -565,7 +565,7 @@ if (!function_exists('orderReportBuildFieldFilterSql')) {
 }
 
 if (!function_exists('orderReportBuildBaseQuery')) {
-    function orderReportBuildBaseQuery($conn, $tableName, $dateWhereSql, $extraConditions = array())
+    function orderReportBuildBaseQuery($conn, $tblName, $dateWhereSql, $extraConditions = array())
     {
         $conditions = array("`status` = 'A'");
         if (trim((string) $dateWhereSql) !== '') {
@@ -579,7 +579,7 @@ if (!function_exists('orderReportBuildBaseQuery')) {
             }
         }
 
-        return "SELECT * FROM `" . str_replace('`', '``', $tableName) . "` WHERE " . implode(' AND ', $conditions) . " ORDER BY `id` DESC";
+        return "SELECT * FROM `" . str_replace('`', '``', $tblName) . "` WHERE " . implode(' AND ', $conditions) . " ORDER BY `id` DESC";
     }
 }
 
@@ -1551,7 +1551,7 @@ if (!function_exists('orderReportRenderPage')) {
         );
 
         $chartPayloadJson = json_encode($chartPayload, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
-        $chartScriptPath = rtrim((string) SITEURL, '/') . '/header/js/chart.umd.min.js';
+        $chartScriptPath = CHART_JS_LOCAL_PATH;
         $reportScriptPath = rtrim((string) SITEURL, '/') . '/js/order_report.js';
         $reportScriptVersion = @filemtime(ROOT . '/js/order_report.js');
         $reportScriptUrl = $reportScriptPath . ($reportScriptVersion ? ('?v=' . $reportScriptVersion) : '');

@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 43;
 $pageTitle = "Current Bank Account Transaction";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
@@ -9,14 +8,14 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = CURR_BANK_TRANS;
 
-$dataID = input('id');
+$dataId = input('id');
 $act = input('act');
 $pageAction = getPageAction($act);
 $allowed_ext = array("png", "jpg", "jpeg", "svg", "pdf");
 
 
-$redirect_page = $SITEURL . '/finance/curr_bank_trans_table.php';
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$redirectPage = $SITEURL . '/finance/curr_bank_trans_table.php';
+$redirectLink = ("<script>location.href = '$redirectPage';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
 $img_path = '../' . img_server . 'finance/current_bank_account/';
@@ -25,15 +24,15 @@ if (!file_exists($img_path)) {
 }
 
 // to display data to input
-if ($dataID) { //edit/remove/view
-    $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $finance_connect);
+if ($dataId) { //edit/remove/view
+    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $finance_connect);
 
-    if ($rst != false && $rst->num_rows > 0) {
+    if ($result != false && $result->num_rows > 0) {
         $dataExisted = 1;
-        $row = $rst->fetch_assoc();
+        $row = $result->fetch_assoc();
         $trans_id = $row['transactionID'];
     } else {
-        // If $rst is false or no data found ($act==null)
+        // If $result is false or no data found ($act==null)
         $errorExist = 1;
         $_SESSION['tempValConfirmBox'] = true;
         $act = "F";
@@ -57,11 +56,9 @@ if ($dataID) { //edit/remove/view
     $trans_id = "CBA{$currentDate}{$nextRowId}";
 }
 
-if (!($dataID) && !($act)) {
-    echo '<script>
-    alert("Invalid action.");
-    window.location.href = "' . $redirect_page . '"; // Redirect to previous page
-    </script>';
+if (!($dataId) && !($act)) {
+    renderNotificationScript('Invalid action.', 'error', $redirectPage);
+
 }
 
 //dropdown list for currency
@@ -235,8 +232,8 @@ if (post('actionBtn')) {
             } else {
                 try {
                     // take old value
-                    $rst = getData('*', "id = '$dataID'", 'LIMIT 1', $tblName, $finance_connect);
-                    $row = $rst->fetch_assoc();
+                    $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $finance_connect);
+                    $row = $result->fetch_assoc();
 
                     // check value
                     if ($row['type'] != $cba_type) {
@@ -311,7 +308,7 @@ if (post('actionBtn')) {
                         WHERE
                             bank = '$cba_bank'
                             AND currency = '$cba_curr'
-                            AND id < '$dataID'
+                            AND id < '$dataId'
                             AND `status` != 'D'
                         ORDER BY
                             id DESC
@@ -337,7 +334,7 @@ if (post('actionBtn')) {
                             $cba_final_amt = number_format($cba_prev_amt - $cba_amt, 2, '.', '');
                         }
 
-                        $query = "UPDATE " . $tblName  . " SET type = '$cba_type',date = '$cba_date',bank = '$cba_bank', currency = '$cba_curr',amount = '$cba_amt', prev_amt ='$cba_prev_amt', final_amt ='$cba_final_amt', attachment ='$cba_attach', remark ='$cba_remark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
+                        $query = "UPDATE " . $tblName  . " SET type = '$cba_type',date = '$cba_date',bank = '$cba_bank', currency = '$cba_curr',amount = '$cba_amt', prev_amt ='$cba_prev_amt', final_amt ='$cba_final_amt', attachment ='$cba_attach', remark ='$cba_remark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($finance_connect, $query);
 
                         updateTransAmt($finance_connect, $tblName, ['bank', 'currency'], ['bank', 'currency']);
@@ -367,11 +364,11 @@ if (post('actionBtn')) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval']  = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
             }
@@ -390,14 +387,14 @@ if (post('act') == 'D') {
     if ($id) {
         try {
             // take name
-            $rst = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $finance_connect);
-            $row = $rst->fetch_assoc();
+            $result = getData('*', "id = '$id'", 'LIMIT 1', $tblName, $finance_connect);
+            $row = $result->fetch_assoc();
 
-            $dataID = $row['id'];
+            $dataId = $row['id'];
             $trans_id = $row['transactionID'];
 
             //SET the record status to 'D'
-            deleteRecord($tblName, '', $dataID, $trans_id, $finance_connect, $connect, $cdate, $ctime, $pageTitle);
+            deleteRecord($tblName, '', $dataId, $trans_id, $finance_connect, $connect, $cdate, $ctime, $pageTitle);
             $_SESSION['delChk'] = 1;
         } catch (Exception $e) {
             echo 'Message: ' . $e->getMessage();
@@ -407,14 +404,14 @@ if (post('act') == 'D') {
 }
 
 //view
-if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
+if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
     $trans_id = isset($dataExisted) ? $row['transactionID'] : '';
     $_SESSION['viewChk'] = 1;
 
     if (isset($errorExist)) {
-        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataID . "</b> ] from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataId . "</b> ] from <b><i>$tblName Table</i></b>.";
     } else {
-        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataID . "</b> ] <b>" . $row['transactionID'] . "</b> from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataId . "</b> ] <b>" . $row['transactionID'] . "</b> from <b><i>$tblName Table</i></b>.";
     }
 
     $log = [
@@ -440,15 +437,13 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
 </head>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
 
 
         <div class="d-flex flex-column my-3 ms-3">
-            <p><a href="<?= $redirect_page ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i>
+            <p><a href="<?= $redirectPage ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i>
                 <?php
                 echo displayPageAction($act, $pageTitle);
                 ?>
@@ -674,7 +669,7 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
     if (isset($_SESSION['tempValConfirmBox'])) {
         unset($_SESSION['tempValConfirmBox']);
         echo $clearLocalStorage;
-        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+        echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
     }
     ?>
 
@@ -682,8 +677,8 @@ if (($dataID) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         <?php include "../js/curr_bank_trans.js" ?>
 
         //Initial Page And Action Value
-        var page = "<?= $pageTitle ?>";
-        var action = "<?php echo isset($act) ? $act : ''; ?>";
+        const page = "<?= $pageTitle ?>";
+        const action = "<?php echo isset($act) ? $act : ''; ?>";
 
         checkCurrentPage(page, action);
         centerAlignment("formContainer");

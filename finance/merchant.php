@@ -1,7 +1,6 @@
 <?php
 $currentPagePin = 36;
 $pageTitle = "Merchant";
-$isFinance = 1;
 
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
@@ -10,13 +9,13 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 $tblName = MERCHANT;
 
 //Current Page Action And Data ID
-$dataID = !empty(input('id')) ? input('id') : post('id');
+$dataId = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
 //Page Redirect Link , Clean LocalStorage , Error Alert Msg 
-$redirect_page = $SITEURL . '/finance/merchant_table.php';
-$redirectLink = ("<script>location.href = '$redirect_page';</script>");
+$redirectPage = $SITEURL . '/finance/merchant_table.php';
+$redirectLink = ("<script>location.href = '$redirectPage';</script>");
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 $errorMsgAlert = "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
 
@@ -26,14 +25,14 @@ $pageActionTitle = $pageAction . " " . $pageTitle;
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 
 //Checking The Page ID , Action , Pin Access Exist Or Not
-if (!($dataID) && !($act) || !isActionAllowed($pageAction, $pinAccess))
+if (!($dataId) && !($act) || !isActionAllowed($pageAction, $pinAccess))
     echo $redirectLink;
 
 //Get The Data From Database
-$rst = getData('*', "id = '$dataID'", '', $tblName,  $finance_connect);
+$result = getData('*', "id = '$dataId'", '', $tblName,  $finance_connect);
 
 //Checking Data Error When Retrieved From Database
-if ($act != 'I' && (!$rst || !($row = $rst->fetch_assoc()))) {
+if ($act != 'I' && (!$result || !($row = $result->fetch_assoc()))) {
     $errorExist = 1;
     $_SESSION['tempValConfirmBox'] = true;
     $act = "F";
@@ -41,19 +40,19 @@ if ($act != 'I' && (!$rst || !($row = $rst->fetch_assoc()))) {
 
 //Delete Data
 if ($act == 'D') {
-    deleteRecord($tblName, '',$dataID, $row['name'],  $finance_connect, $connect, $cdate, $ctime, $pageTitle);
+    deleteRecord($tblName, '',$dataId, $row['name'],  $finance_connect, $connect, $cdate, $ctime, $pageTitle);
     $_SESSION['delChk'] = 1;
 }
 
 //View Data
-if ($dataID && !$act && USER_ID && !$_SESSION['viewChk'] && !$_SESSION['delChk']) {
+if ($dataId && !$act && USER_ID && !$_SESSION['viewChk'] && !$_SESSION['delChk']) {
 
     $_SESSION['viewChk'] = 1;
 
     if (isset($errorExist)) {
-        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataID . "</b> ] from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " fail to viewed the data [<b> ID = " . $dataId . "</b> ] from <b><i>$tblName Table</i></b>.";
     } else {
-        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataID . "</b> ] <b>" . $row['name'] . "</b> from <b><i>$tblName Table</i></b>.";
+        $viewActMsg = USER_NAME . " viewed the data [<b> ID = " . $dataId . "</b> ] <b>" . $row['name'] . "</b> from <b><i>$tblName Table</i></b>.";
     }
 
     $log = [
@@ -107,8 +106,8 @@ if (post('actionBtn')) {
 
             try {
                 $query = "SELECT COUNT(*) as count FROM `$tblName` WHERE `name` = '$currentDataName'";
-                if ($dataID) {
-                    $query .= " AND id != '$dataID'";
+                if ($dataId) {
+                    $query .= " AND id != '$dataId'";
                 }
                 $result = mysqli_query($finance_connect, $query);
                 if ($result) {
@@ -172,7 +171,7 @@ if (post('actionBtn')) {
 
                     $query = "INSERT INTO " . $tblName . "(name,business_no,contact,email,address,person_in_charges,person_in_charges_contact,remark,create_by,create_date,create_time) VALUES ('$currentDataName','$mrcht_business_no','$mrcht_contact','$mrcht_email','$mrcht_address','$mrcht_pic','$mrcht_pic_contact','$dataRemark','" . USER_ID . "',curdate(),curtime())";
                     $returnData = mysqli_query($finance_connect, $query);
-                    $dataID = $finance_connect->insert_id;
+                    $dataId = $finance_connect->insert_id;
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
                     $act = "F";
@@ -230,7 +229,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if ($oldvalarr && $chgvalarr) {
-                        $query = "UPDATE " . $tblName . " SET name ='$currentDataName',business_no = '$mrcht_business_no',email = '$mrcht_email', contact = '$mrcht_contact', address ='$mrcht_address', person_in_charges ='$mrcht_pic', person_in_charges_contact ='$mrcht_pic_contact', remark ='$dataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataID'";
+                        $query = "UPDATE " . $tblName . " SET name ='$currentDataName',business_no = '$mrcht_business_no',email = '$mrcht_email', contact = '$mrcht_contact', address ='$mrcht_address', person_in_charges ='$mrcht_pic', person_in_charges_contact ='$mrcht_pic_contact', remark ='$dataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($finance_connect, $query);
                     } else {
                         $act = 'NC';
@@ -258,11 +257,11 @@ if (post('actionBtn')) {
 
                 if ($pageAction == 'Add') {
                     $log['newval'] = implodeWithComma($newvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, $newvalarr, '', '', $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 } else if ($pageAction == 'Edit') {
                     $log['oldval']  = implodeWithComma($oldvalarr);
                     $log['changes'] = implodeWithComma($chgvalarr);
-                    $log['act_msg'] = actMsgLog($dataID, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
+                    $log['act_msg'] = actMsgLog($dataId, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
             }
@@ -281,7 +280,7 @@ if (post('actionBtn')) {
 if (isset($_SESSION['tempValConfirmBox'])) {
     unset($_SESSION['tempValConfirmBox']);
     echo $clearLocalStorage;
-    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirect_page . '","' . $act . '");</script>';
+    echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
 }
 
 ?>
@@ -291,24 +290,23 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 
 <head>
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
+    <style>
+        .required-dot {
+    color: red;
+    }
+    </style>
 </head>
 
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div class="d-flex flex-column my-3 ms-3">
-            <p><a href="<?= $redirect_page ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i>
+            <p><a href="<?= $redirectPage ?>"><?= $pageTitle ?></a> <i class="fa-solid fa-chevron-right fa-xs"></i>
                 <?php echo $pageActionTitle ?>
             </p>
         </div>
-<style>
-    .required-dot {
-  color: red;
-}
-</style>
+
         <div id="formContainer" class="container d-flex justify-content-center">
             <div class="col-8 col-md-6 formWidthAdjust">
                 <form id="form" method="post" novalidate>
@@ -445,8 +443,8 @@ if (isset($_SESSION['tempValConfirmBox'])) {
         include "../js/merchant.js"
             ?>
         //Initial Page And Action Value
-        var page = "<?= $pageTitle ?>";
-        var action = "<?php echo isset($act) ? $act : ''; ?>";
+        const page = "<?= $pageTitle ?>";
+        const action = "<?php echo isset($act) ? $act : ''; ?>";
 
         checkCurrentPage(page, action);
         setButtonColor();

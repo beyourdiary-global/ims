@@ -35,7 +35,7 @@ $(document).ready(function() {
 
     if (!($("#brandSeries").attr('disabled'))) {
         $("#brandSeries").keyup(function() {
-            var param = {
+            const param = {
                 search: $(this).val(),
                 searchType: 'name', // column of the table
                 elementID: $(this).attr('id'), // id of the input

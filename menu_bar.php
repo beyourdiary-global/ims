@@ -207,15 +207,10 @@ if (in_array('130', GlobalPin)) {
 
 include_once ROOT . '/task/common_task.php';
 
-$hasTaskSummaryAccess = taskIsActionAllowed('view', taskGetPinAccessByGroupId($connect, 137));
-$hasTaskBoardAccess = taskIsActionAllowed('view', taskGetPinAccessByGroupId($connect, 136));
-$hasTaskSheetsAccess = taskIsActionAllowed('view', taskGetPinAccessByGroupId($connect, 138));
 $hasTaskManagementAccess = taskIsActionAllowed('view', taskGetPinAccessByGroupId($connect, 139));
-$taskManagementLandingUrl = $hasTaskSummaryAccess
+$taskManagementLandingUrl = $hasTaskManagementAccess
     ? $SITEURL . '/task/summary.php'
-    : ($hasTaskBoardAccess
-        ? $SITEURL . '/task/board.php'
-        : ($hasTaskSheetsAccess ? $SITEURL . '/task/sheets.php' : 'javascript:void(0)'));
+    : 'javascript:void(0)';
 
 $menuList = array(
     // dashboard
@@ -242,25 +237,25 @@ $menuList = array(
         'y',
         'expand' => array(
             array('Shopee Customer', 'mdi mdi-deal-outline', $SITEURL . '/shopee/shopee_cust_info_table.php', '85'),
-            array('Lazada Customer', 'mdi mdi-deal-outline', $SITEURL . '/lazada_cust_rcd_table.php', '91'),
-            array('Facebook Customer', 'mdi mdi-deal-outline', $SITEURL . '/fb_cust_deals_table.php', '75'),
-            array('Website Customer', 'mdi mdi-deal-outline', $SITEURL . '/website_customer_record_table.php', '84'),
-            array('Whatsapp Customer', 'mdi mdi-deal-outline', $SITEURL . '/customerInfoTable.php', '38'),
-            array('Customer Follow-Up', 'mdi mdi-account-clock-outline', $SITEURL . '/customer_follow_up_list.php', '151'),
-            array('Customer Daily Report', 'mdi mdi-file-chart-outline', $SITEURL . '/customer_daily_report.php', '150'),
-            array('Campaign', 'mdi mdi-bullhorn-outline', $SITEURL . '/campaign_table.php', '153'),
+            array('Lazada Customer', 'mdi mdi-deal-outline', $SITEURL . '/finance/lazada_cust_rcd_table.php', '91'),
+            array('Facebook Customer', 'mdi mdi-deal-outline', $SITEURL . '/customer/fb_cust_deals_table.php', '75'),
+            array('Website Customer', 'mdi mdi-deal-outline', $SITEURL . '/customer/website_customer_record_table.php', '84'),
+            array('Whatsapp Customer', 'mdi mdi-deal-outline', $SITEURL . '/customer/customerInfoTable.php', '38'),
+            array('Customer Follow-Up', 'mdi mdi-account-clock-outline', $SITEURL . '/customer/customer_follow_up_list.php', '151'),
+            array('Customer Daily Report', 'mdi mdi-file-chart-outline', $SITEURL . '/customer/customer_daily_report.php', '150'),
+            array('Campaign', 'mdi mdi-bullhorn-outline', $SITEURL . '/campaign/campaign_table.php', '153'),
             array(
                 'Setting',
                 'mdi mdi-cog',
                 'javascript:void(0)',
                 'y',
                 'expand' => array(
-                    array('Customer Segmentation', 'mdi mdi-account-group-outline', $SITEURL . '/cus_segmentation_table.php', '29'),
-                    array('Customer Level', 'mdi mdi-account-group-outline', $SITEURL . '/cus_level_table.php', '142'),
-                    array('Customer Repeat', 'mdi mdi-account-group-outline', $SITEURL . '/cus_repeat_table.php', '143'),
-                    array('Message Shortcuts', 'mdi mdi-message-text-outline', $SITEURL . '/message_shortcuts_table.php', '144'),
-                    array('Tag', 'mdi mdi-account-group-outline', $SITEURL . '/tagTable.php', '35'),
-                    array('Campaign Rule Setting', 'mdi mdi-cog-outline', $SITEURL . '/campaign_rule_setting_table.php', '154'),
+                    array('Customer Segmentation', 'mdi mdi-account-group-outline', $SITEURL . '/customer/cus_segmentation_table.php', '29'),
+                    array('Customer Level', 'mdi mdi-account-group-outline', $SITEURL . '/customer/cus_level_table.php', '142'),
+                    array('Customer Repeat', 'mdi mdi-account-group-outline', $SITEURL . '/customer/cus_repeat_table.php', '143'),
+                    array('Message Shortcuts', 'mdi mdi-message-text-outline', $SITEURL . '/settings/message_shortcuts_table.php', '144'),
+                    array('Tag', 'mdi mdi-account-group-outline', $SITEURL . '/customer/tagTable.php', '35'),
+                    array('Campaign Rule Setting', 'mdi mdi-cog-outline', $SITEURL . '/campaign/campaign_rule_setting_table.php', '154'),
                 ),
                 'pin' => array('29', '142', '143', '144', '35', '154'),
             ),
@@ -274,7 +269,7 @@ $menuList = array(
         'y',
         'expand' => array(
             array('Shopee Order', 'mdi mdi-cart', $userShopeeLink, $userShopeePin),
-            array('Lazada Order', 'mdi mdi-note-text-outline', $SITEURL . '/lazada_order_req_table.php', '93'),
+            array('Lazada Order', 'mdi mdi-note-text-outline', $SITEURL . '/finance/lazada_order_req_table.php', '93'),
             array('Facebook Order', 'mdi mdi-note-text-outline', $SITEURL . '/finance/fb_order_req_table.php', '69'),
             array('Website Order', 'mdi mdi-note-text-outline', $SITEURL . '/finance/website_order_request_table.php', '92'),
             array('Waiting To Pack', 'mdi mdi-package-variant-closed', $SITEURL . '/finance/waiting_to_pack.php', '146'),
@@ -304,20 +299,20 @@ $menuList = array(
         'javascript:void(0)',
         'y',
         'expand' => array(
-            array('Warehouse', 'mdi mdi-warehouse', $SITEURL . '/warehouse_table.php', '16'),
-            array('Stock Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/finance/stock_order_request_table.php', '126'),
-            array('Stock In', 'mdi mdi-tray-arrow-down', $SITEURL . '/warehouse_stock_in_table.php', '125'),
-            array('Stock List', 'mdi mdi-package-variant', $SITEURL . '/stock_list_table.php', '120'),
-            array('Order Warehouse Transfer', 'mdi mdi-swap-horizontal', $SITEURL . '/order_warehouse_transfer.php', '152'),
-            array('Barcode Generate', 'mdi mdi-barcode', $SITEURL . '/barcode_generator.php', '22'),
-            array('Rate Checking', 'mdi mdi-package-variant', $SITEURL . '/rate_checking.php', '17'),
+            array('Warehouse', 'mdi mdi-warehouse', $SITEURL . '/stock/warehouse_table.php', '16'),
+            array('Stock Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/stock/stock_order_request_table.php', '126'),
+            array('Stock In', 'mdi mdi-tray-arrow-down', $SITEURL . '/stock/warehouse_stock_in_table.php', '125'),
+            array('Stock List', 'mdi mdi-package-variant', $SITEURL . '/stock/stock_list_table.php', '120'),
+            array('Order Warehouse Transfer', 'mdi mdi-swap-horizontal', $SITEURL . '/stock/order_warehouse_transfer.php', '152'),
+            array('Barcode Generate', 'mdi mdi-barcode', $SITEURL . '/product/barcode_generator.php', '22'),
+            array('Rate Checking', 'mdi mdi-package-variant', $SITEURL . '/stock/rate_checking.php', '17'),
             array(
                 'Setting',
                 'mdi mdi-cog',
                 'javascript:void(0)',
                 'y',
                 'expand' => array(
-                    array('Courier', 'mdi mdi-label-outline', $SITEURL . '/courier_table.php', '53'),
+                    array('Courier', 'mdi mdi-label-outline', $SITEURL . '/stock/courier_table.php', '53'),
                 ),
                 'pin' => array('53'),
             ),
@@ -330,13 +325,13 @@ $menuList = array(
         'javascript:void(0)',
         'y',
         'expand' => array(
-            array('Product', 'mdi mdi-package-variant', $SITEURL . '/product_table.php', '20'),
-            array('Package', 'mdi mdi-package', $SITEURL . '/package_table.php', '21'),
-            array('Product Status', 'mdi mdi-package-variant-closed', $SITEURL . '/prod_status_table.php', '15'),
-            array('Brand', 'mdi mdi-label-outline', $SITEURL . '/brand_table.php', '9'),
-            array('Category', 'mdi mdi-label-outline', $SITEURL . '/product_category_table.php', '56'),
-            array('Label', 'mdi mdi-label-outline', $SITEURL . '/label_table.php', '145'),
-            array('Brand Series', 'mdi mdi-label-outline', $SITEURL . '/brand_series_table.php', '74'),
+            array('Product', 'mdi mdi-package-variant', $SITEURL . '/product/product_table.php', '20'),
+            array('Package', 'mdi mdi-package', $SITEURL . '/product/package_table.php', '21'),
+            array('Product Status', 'mdi mdi-package-variant-closed', $SITEURL . '/product/prod_status_table.php', '15'),
+            array('Brand', 'mdi mdi-label-outline', $SITEURL . '/product/brand_table.php', '9'),
+            array('Category', 'mdi mdi-label-outline', $SITEURL . '/product/product_category_table.php', '56'),
+            array('Label', 'mdi mdi-label-outline', $SITEURL . '/customer/label_table.php', '145'),
+            array('Brand Series', 'mdi mdi-label-outline', $SITEURL . '/product/brand_series_table.php', '74'),
         ),
         'pin' => array('20', '21', '15', '9', '56', '145', '74')
     ),
@@ -385,7 +380,7 @@ $menuList = array(
         'javascript:void(0)',
         'y',
         'expand' => array(
-            array('Purchase Order', 'mdi mdi-file-document-outline', $SITEURL . '/purchase_order_table.php', '135'),
+            array('Purchase Order', 'mdi mdi-file-document-outline', $SITEURL . '/stock/purchase_order_table.php', '135'),
             array('Credit Notes (Invoice)', 'mdi storefront-outline', $SITEURL . '/finance/cred_notes_inv_table.php', '70'),
             array('Debit Notes (Invoice)', 'mdi storefront-outline', $SITEURL . '/finance/debit_notes_inv_table.php', '94'),
             array('Current Bank Account Transaction', 'mdi storefront-outline', $SITEURL . '/finance/curr_bank_trans_table.php', '43'),
@@ -427,7 +422,7 @@ $menuList = array(
                     array('Shopee Order Report', 'mdi storefront-outline', $SITEURL . '/shopee/shopeeOrder_request_income.php', '123'),
                     array('Facebook Order Request', 'mdi storefront-outline', $SITEURL . '/finance/fb_order_req_income_table.php', '69'),
                     array('Website Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/finance/website_order_request_income_table.php', '92'),
-                    array('Lazada Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/lazada_order_req_income_table.php', '93'),
+                    array('Lazada Order Request', 'mdi mdi-note-text-outline', $SITEURL . '/finance/lazada_order_req_income_table.php', '93'),
                     array('Sales Person Report', 'mdi mdi-note-text-outline', $SITEURL . '/finance/sales_person_report_table.php', '100'),
                 ),
                 'pin' => array('123', '69', '92', '93', '100'),
@@ -441,7 +436,7 @@ $menuList = array(
                     array('Shopee Order Report', 'mdi storefront-outline', $SITEURL . '/shopee/shopee_order_report.php', '155'),
                     array('Facebook Order Report', 'mdi storefront-outline', $SITEURL . '/finance/facebook_order_report.php', '156'),
                     array('Website Order Report', 'mdi mdi-note-text-outline', $SITEURL . '/finance/website_order_report.php', '157'),
-                    array('Lazada Order Report', 'mdi mdi-note-text-outline', $SITEURL . '/lazada_order_report.php', '158'),
+                    array('Lazada Order Report', 'mdi mdi-note-text-outline', $SITEURL . '/finance/lazada_order_report.php', '158'),
                 ),
                 'pin' => array('155', '156', '157', '158'),
             ),
@@ -456,7 +451,7 @@ $menuList = array(
         'expand' => array(
             array('Merchant', 'mdi storefront-outline', $SITEURL . '/finance/merchant_table.php', '36'),
             array('Agent', 'mdi mdi-information-outline', $SITEURL . '/finance/agent_table.php', '62'),
-            array('Goal Target', 'mdi mdi-bullseye-arrow', $SITEURL . '/goalTarget_table.php', '121'),
+            array('Goal Target', 'mdi mdi-bullseye-arrow', $SITEURL . '/settings/goalTarget_table.php', '121'),
 
         ),
         'pin' => array('36', '62', '121')
@@ -467,20 +462,20 @@ $menuList = array(
         'javascript:void(0)',
         'y',
         'expand' => array(
-            array('Sql Account', 'mdi mdi-database', $SITEURL . '/sql_account_table.php', '132'),
-            array('Token Setting', 'mdi mdi-key-chain', $SITEURL . '/token_setting_table.php', '133'),
-            array('Theme Setting', 'mdi mdi-brush-variant', $SITEURL . '/theme_setting.php', '23'),
-            array('System Setting', 'mdi mdi-brush-variant', $SITEURL . '/system_setting.php', '39'),
+            array('Sql Account', 'mdi mdi-database', $SITEURL . '/settings/sql_account_table.php', '132'),
+            array('Token Setting', 'mdi mdi-key-chain', $SITEURL . '/settings/token_setting_table.php', '133'),
+            array('Theme Setting', 'mdi mdi-brush-variant', $SITEURL . '/settings/theme_setting.php', '23'),
+            array('System Setting', 'mdi mdi-brush-variant', $SITEURL . '/settings/system_setting.php', '39'),
             array(
                 'User Management',
                 'mdi mdi-folder-account',
                 'javascript:void(0)',
                 'y',
                 'expand' => array(
-                    array('User', 'mdi mdi-account-wrench-outline', $SITEURL . '/user_table.php', '90'),
-                    array('User Group', 'mdi mdi-account-wrench-outline', $SITEURL . '/user_group_table.php', '3'),
-                    array('Pin', 'mdi mdi-pin', $SITEURL . '/pin_table.php', '1'),
-                    array('Pin Group', 'mdi mdi-ungroup', $SITEURL . '/pin_group_table.php', '2'),
+                    array('User', 'mdi mdi-account-wrench-outline', $SITEURL . '/users/user_table.php', '90'),
+                    array('User Group', 'mdi mdi-account-wrench-outline', $SITEURL . '/users/user_group_table.php', '3'),
+                    array('Pin', 'mdi mdi-pin', $SITEURL . '/users/pin_table.php', '1'),
+                    array('Pin Group', 'mdi mdi-ungroup', $SITEURL . '/users/pin_group_table.php', '2'),
 
                 ),
                 'pin' => array('1', '2', '90', '3'),
@@ -492,13 +487,13 @@ $menuList = array(
                 'javascript:void(0)',
                 'y',
                 'expand' => array(
-                    array('Bank', 'mdi mdi-bank', 'bank_table.php', '8'),
-                    array('Currencies', 'mdi mdi-swap-horizontal', $SITEURL . '/currencies_table.php', '11'),
-                    array('Currency Unit', 'mdi mdi-currency-usd', $SITEURL . '/currency_unit_table.php', '10'),
-                    array('Platform', 'mdi mdi-home-outline', $SITEURL . '/platform_table.php', '14'),
-                    array('Weight Unit', 'mdi mdi-weight', $SITEURL . '/weight_unit_table.php', '19'),
+                    array('Bank', 'mdi mdi-bank', $SITEURL . '/settings/bank_table.php', '8'),
+                    array('Currencies', 'mdi mdi-swap-horizontal', $SITEURL . '/settings/currencies_table.php', '11'),
+                    array('Currency Unit', 'mdi mdi-currency-usd', $SITEURL . '/settings/currency_unit_table.php', '10'),
+                    array('Platform', 'mdi mdi-home-outline', $SITEURL . '/settings/platform_table.php', '14'),
+                    array('Weight Unit', 'mdi mdi-weight', $SITEURL . '/settings/weight_unit_table.php', '19'),
                     array('Chanel (Social Media)', 'mdi storefront-outline', $SITEURL . '/finance/chanel_social_media_table.php', '79'),
-                    array('Company', 'mdi mdi-office-building-outline', $SITEURL . '/company_table.php', '127'),
+                    array('Company', 'mdi mdi-office-building-outline', $SITEURL . '/settings/company_table.php', '127'),
                 ),
                 'pin' => array('8', '11', '10', '14', '19', '79', '127'),
             ),
@@ -508,7 +503,7 @@ $menuList = array(
     array(
         'Import Shortcut',
         'mdi mdi-file-import-outline',
-        $SITEURL . '/common_import.php',
+        $SITEURL . '/import/common_import.php',
         'n',
         'expand' => array(),
         'pin' => $importShortcutVisiblePins
@@ -524,7 +519,7 @@ $menuList = array(
     array(
         'Audit Log',
         'mdi mdi-text-box-search-outline',
-        $SITEURL . '/audit_log.php',
+        $SITEURL . '/users/audit_log.php',
         'n',
         'expand' => array(),
         'pin' => array('18')
@@ -681,9 +676,9 @@ if ($hasTaskManagementAccess) {
                         $expandMenus = $innerList['expand'];
                         if ($isTaskManagementMenu) {
                             $expandMenus = array(
-                                array('Summary', 'mdi mdi-view-dashboard-outline', $SITEURL . '/task/summary.php', '137'),
-                                array('Board', 'mdi mdi-view-column-outline', $SITEURL . '/task/board.php', '136'),
-                                array('Sheets', 'mdi mdi-table-large', $SITEURL . '/task/sheets.php', '138'),
+                                array('Summary', 'mdi mdi-view-dashboard-outline', $SITEURL . '/task/summary.php', '139'),
+                                array('Board', 'mdi mdi-view-column-outline', $SITEURL . '/task/board.php', '139'),
+                                array('Sheets', 'mdi mdi-table-large', $SITEURL . '/task/sheets.php', '139'),
                             );
                         }
 
@@ -797,9 +792,9 @@ if ($hasTaskManagementAccess) {
                     <?php
                     $pid = (int) $taskProject['id'];
                     $isActiveProject = $pid === (int) $taskCurrentProjectId;
-                    $projectHasSummaryAccess = taskUserCanAccessProjectPageByPin($connect, $pid, 137);
-                    $projectHasBoardAccess = taskUserCanAccessProjectPageByPin($connect, $pid, 136);
-                    $projectHasSheetsAccess = taskUserCanAccessProjectPageByPin($connect, $pid, 138);
+                    $projectHasSummaryAccess = taskUserCanAccessProjectPageByPin($connect, $pid, 139);
+                    $projectHasBoardAccess = taskUserCanAccessProjectPageByPin($connect, $pid, 139);
+                    $projectHasSheetsAccess = taskUserCanAccessProjectPageByPin($connect, $pid, 139);
                     $canAccessProjectSettings = taskCanAccessProjectSettings($connect, $pid, false);
                     $canAccessProjectUserAccess = taskCanAccessProjectUserAccess($connect, $pid);
                     $canManageProjectActions = taskCanManageProjectActions($connect, $pid);
@@ -1246,12 +1241,12 @@ if ($hasTaskManagementAccess) {
                 }
                 confirmBtn.disabled = false;
                 if (data && data.message) {
-                    alert(data.message);
+                    showNotification(data.message, 'error');
                 }
                 })
                 .catch(function () {
                 confirmBtn.disabled = false;
-                alert('Failed to create project task.');
+                showNotification('Failed to create project task.', 'error');
                 });
             });
         }

@@ -1,7 +1,6 @@
 <?php
 ob_start();
 $pageTitle = "Shopee Order Report";
-$isFinance = 1;
 $currentPagePin = 123;
 
 include_once '../menuHeader.php';
@@ -216,43 +215,6 @@ if (!empty($checkboxValues)) {
     }
 }
 
-function addDirToZip($dir, $zip, $basePath)
-{
-    $files = scandir($dir);
-    foreach ($files as $file) {
-        if ($file == '.' || $file == '..') {
-            continue;
-        }
-        $filePath = $dir . $file;
-        if (is_file($filePath)) {
-            // Add the file to the zip archive with a relative path
-            $relativePath = str_replace($basePath, '', $filePath);
-            $zip->addFile($filePath, $relativePath);
-        } elseif (is_dir($filePath)) {
-            // Add the directory to the zip archive
-            $zip->addEmptyDir(str_replace($basePath, '', $filePath));
-            // Recursively add files and directories inside the current directory
-            addDirToZip($filePath . '/', $zip, $basePath);
-        }
-    }
-}
-
-function deleteDir($dirPath)
-{
-    if (!is_dir($dirPath)) {
-        return;
-    }
-    $files = glob($dirPath . '*', GLOB_MARK);
-    foreach ($files as $file) {
-        if (is_dir($file)) {
-            deleteDir($file);
-        } else {
-            unlink($file);
-        }
-    }
-    rmdir($dirPath);
-}
-
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 $_SESSION['act'] = '';
 $_SESSION['viewChk'] = '';
@@ -262,7 +224,7 @@ $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 $tblName = SHOPEE_SG_ORDER_REQ;
 // echo "<br><br><br><br><br><br>";
-$redirect_page = $SITEURL . '/shopee/shopee_order_req.php';
+$redirectPage = $SITEURL . '/shopee/shopee_order_req.php';
 $deleteRedirectPage = $SITEURL . '/shopee/shopee_order_req_table.php';
 
 $selectFields = "$groupbyValue, SUM(price) as price, id, GROUP_CONCAT(id) AS combined_ids";
@@ -311,7 +273,7 @@ $result = getData(
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                    href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                    href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                     Request </a>
                             <?php endif; ?>
                             <?php if (isActionAllowed("Export", $pinAccess)): ?>
@@ -444,7 +406,7 @@ $result = getData(
         $(document).on("change", ".exportAll", function (event) { //checkbox handling
             event.preventDefault();
 
-            var isChecked = $(this).prop("checked");
+            const isChecked = $(this).prop("checked");
             $(".export").prop("checked", isChecked);
             $(".exportAll").prop("checked", isChecked);
 
@@ -452,13 +414,13 @@ $result = getData(
         });
 
         $('a[name="exportBtn"]').on("click", function () {
-            var checkboxValues = [];
+            const checkboxValues = [];
 
             // Loop through all pages to collect checked checkboxes
             $('#shopee_order_req_table').DataTable().$('tr', {
                 "filter": "applied"
             }).each(function () {
-                var checkbox = $(this).find('.export:checked');
+                const checkbox = $(this).find('.export:checked');
                 if (checkbox.length > 0) {
                     checkbox.each(function () {
                         checkboxValues.push($(this).val());
@@ -472,12 +434,12 @@ $result = getData(
                 setCookie('rowID', checkboxValues.join(','), 1);
 
                 //uncheck checkboxes
-                var checkboxes = document.querySelectorAll('.export');
+                const checkboxes = document.querySelectorAll('.export');
                 checkboxes.forEach(function (checkbox) {
                     checkbox.checked = false;
                 });
 
-                var selectAllCheckbox = document.querySelector('.exportAll');
+                const selectAllCheckbox = document.querySelector('.exportAll');
                 if (selectAllCheckbox) {
                     selectAllCheckbox.checked = false;
                 }
@@ -487,14 +449,6 @@ $result = getData(
                 console.log('No checkboxes are checked.');
             }
         });
-
-        function updateCheckboxesOnOtherPages(isChecked) {
-            // Get all cells in the DataTable
-            var cells = $('#shopee_order_req_table').DataTable().cells().nodes();
-
-            // Check/uncheck all checkboxes in the DataTable
-            $(cells).find('.export').prop('checked', isChecked);
-        }
     });
 
     <?php include "../js/order_req.js" ?>

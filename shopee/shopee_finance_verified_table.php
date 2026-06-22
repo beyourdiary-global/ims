@@ -1,17 +1,9 @@
 <?php
 $currentPagePin = 0;
 $pageTitle = "Shopee Order Request";
-$isFinance = 1;
 
-include_once '../menuHeader.php';
-include_once '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
+include_once '../include/list_page_header.php';
 
 
 $verifyMessage = ''; // declare message holder
@@ -45,7 +37,7 @@ if (isset($_GET['verify_id'])) {
 
 
 
-$redirect_page = $SITEURL . '/shopee/shopee_order_req.php';
+$redirectPage = $SITEURL . '/shopee/shopee_order_req.php';
 $deleteRedirectPage = $SITEURL . '/shopee/shopee_finance_verified_table.php';
 $result = getData('*', 'order_status="OC"', '', SHOPEE_SG_ORDER_REQ, $finance_connect);
 $shopeeBuyerMetaMap = array();
@@ -65,6 +57,32 @@ if ($result instanceof mysqli_result) {
 
     <head>
         <link rel="stylesheet" href="../css/main.css">
+        <style>
+            .btn-verified {
+                display: inline-block;
+                padding: 0.25rem 0.5rem;
+                font-size: 0.875rem;
+                font-weight: 500;
+                color: #fff;
+                background-color: #0d6efd;
+                border: 1px solid #0d6efd;
+                border-radius: 0.25rem;
+                text-decoration: none;
+                transition: background-color 0.2s, box-shadow 0.2s;
+            }
+        
+            .btn-verified:hover {
+                background-color: #0b5ed7;
+                text-decoration: none;
+                box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+            }
+        
+            .btn-verified:active {
+                background-color: #0a58ca;
+                box-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
+            }
+        </style>
+
     </head>
 
     <script>
@@ -72,33 +90,6 @@ if ($result instanceof mysqli_result) {
             createSortingTable('shopee_finance_verified_table');
         });
     </script>
-
-    <style>
-        .btn-verified {
-            display: inline-block;
-            padding: 0.25rem 0.5rem;
-            font-size: 0.875rem;
-            font-weight: 500;
-            color: #fff;
-            background-color: #0d6efd;
-            border: 1px solid #0d6efd;
-            border-radius: 0.25rem;
-            text-decoration: none;
-            transition: background-color 0.2s, box-shadow 0.2s;
-        }
-    
-        .btn-verified:hover {
-            background-color: #0b5ed7;
-            text-decoration: none;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
-        }
-    
-        .btn-verified:active {
-            background-color: #0a58ca;
-            box-shadow: inset 0 3px 5px rgba(0, 0, 0, 0.125);
-        }
-    </style>
-
 
     <body>
 <?php if (!empty($verifyMessage)): ?>
@@ -126,7 +117,7 @@ if ($result instanceof mysqli_result) {
                             
                                 <div class="mt-auto mb-auto">
                                     <?php if (isActionAllowed("Add", $pinAccess)): ?>
-                                        <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . " ?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . " ?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         Request </a>
                                         <?php endif; ?>
                                 </div>
@@ -189,14 +180,14 @@ if ($result instanceof mysqli_result) {
 
                                 <tr>
                                     <th class="hideColumn" scope="row">
-                                        <?= $row['id'] ?>
+                                        <?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>
                                     </th>
                                     <th scope="row">
                                         <?= $num++; ?>
                                     </th>
 
                                     <td scope="row" class="btn-container">
-                                        <a href="?verify_id=<?= $row['id'] ?>" class="btn btn-sm btn-success btn-verified" onclick="return confirm('Mark this order as verified?')">
+                                        <a href="?verify_id=<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>" class="btn btn-sm btn-success btn-verified" onclick="return confirm('Mark this order as verified?')">
                                             Verified
                                         </a>
 
@@ -206,56 +197,56 @@ if ($result instanceof mysqli_result) {
                                     </td>
 
                                     <td scope="row">
-                                        <?= $acc['name'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($acc['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $curr['unit'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($curr['unit'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['orderID'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($row['orderID'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['date'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($row['date'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['time'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($row['time'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $pkg['name'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($pkg['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $brand['name'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($brand['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row"><?= customerLabelRenderShopeeBuyerCell($connect, $finance_connect, isset($row['buyer']) ? $row['buyer'] : '', '', $shopeeBuyerMetaMap) ?></td>
                                     <td scope="row">
-                                        <?= $pay['name'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($pay['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['price'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($row['price'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['voucher'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($row['voucher'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['act_shipping_fee'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($row['act_shipping_fee'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['service_fee'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($row['service_fee'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['trans_fee'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($row['trans_fee'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['ams_fee'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($row['ams_fee'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['fees'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($row['fees'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['final_amt'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($row['final_amt'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
-                                        <?= $row['remark'] ?? '' ?>
+                                        <?= htmlspecialchars((string) ($row['remark'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                 </tr>
                                 <?php } ?>

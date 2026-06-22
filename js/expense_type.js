@@ -10,8 +10,8 @@ $("#et_code").on("input", function() {
 $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
-    var name_chk = 0;
-    var code_chk = 0;
+    let name_chk = 0;
+    let code_chk = 0;
 
     if (($('#et_name').val() === '' || $('#et_name').val() === null || $('#et_name')
             .val() === undefined)) {

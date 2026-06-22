@@ -1,18 +1,10 @@
 <?php
 $pageTitle = "Current Bank Account Transaction";
 $currentPagePin = 43;
-$isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
+include_once '../include/list_page_header.php';
 
-$redirect_page = $SITEURL . '/finance/curr_bank_trans.php';
+$redirectPage = $SITEURL . '/finance/curr_bank_trans.php';
 $result = getData('*', '', '', CURR_BANK_TRANS, $finance_connect);
 $hasRows = $result instanceof mysqli_result && $result->num_rows > 0;
 ?>
@@ -25,7 +17,7 @@ $hasRows = $result instanceof mysqli_result && $result->num_rows > 0;
 </head>
 
 <script>
-    preloader(300);
+    
 
     $(document).ready(() => {
         if ($('#curr_bank_trans_table').length) {
@@ -33,20 +25,9 @@ $hasRows = $result instanceof mysqli_result && $result->num_rows > 0;
         }
     });
 </script>
-<style>
-    .btn {
-        padding: 0.2rem 0.5rem;
-        font-size: 0.75rem;
-        margin: 3px;
-    }
-    .btn-container {
-        white-space: nowrap;
-    }
-</style>
+
 <body>
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
@@ -63,7 +44,7 @@ $hasRows = $result instanceof mysqli_result && $result->num_rows > 0;
                             <h2><?php echo $pageTitle ?></h2>
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
+                                    <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
                                 <?php endif; ?>
                             </div>
                         </div>
@@ -101,25 +82,25 @@ $hasRows = $result instanceof mysqli_result && $result->num_rows > 0;
                         ?>
 
                                 <tr>
-                                    <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                    <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                     <th scope="row"><?= $num++; ?></th>
                                     <td scope="row" class="btn-container">
                                     <div class="d-flex align-items-center">
-                                    <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess);?>
-                                    <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2) ?>
-                                    <?php renderDeleteButton($pinAccess, $row['id'], $row['transactionID'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage) ?>
+                                    <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess);?>
+                                    <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2) ?>
+                                    <?php renderDeleteButton($pinAccess, $row['id'], $row['transactionID'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                                     </div>
                                     </td>
-                                    <td scope="row"><?= $row['transactionID'] ?></td>
-                                    <td scope="row"><?php if (isset($row['type'])) echo $row['type'] ?></td>
-                                    <td scope="row"><?php if (isset($row['date'])) echo $row['date'] ?></td>
-                                    <td scope="row"><?php if (isset($row3['name'])) echo $row3['name'] ?></td>
-                                    <td scope="row"><?php if (isset($row2['unit'])) echo $row2['unit'] ?></td>
-                                    <td scope="row"><?php if (isset($row['amount'])) echo $row['amount'] ?></td>
-                                    <td scope="row"><?php if (isset($row['prev_amt'])) echo $row['prev_amt'] ?></td>
-                                    <td scope="row"><?php if (isset($row['final_amt'])) echo $row['final_amt'] ?></td>
-                                    <td scope="row"><?php if (isset($row['remark'])) echo $row['remark'] ?></td>
-                                    <td scope="row"><?php if (isset($row['attachment'])) echo $row['attachment'] ?></td>
+                                    <td scope="row"><?= htmlspecialchars((string) $row['transactionID'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['type'])) echo htmlspecialchars((string) $row['type'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['date'])) echo htmlspecialchars((string) $row['date'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row3['name'])) echo htmlspecialchars((string) $row3['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row2['unit'])) echo htmlspecialchars((string) $row2['unit'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['amount'])) echo htmlspecialchars((string) $row['amount'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['prev_amt'])) echo htmlspecialchars((string) $row['prev_amt'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['final_amt'])) echo htmlspecialchars((string) $row['final_amt'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['remark'])) echo htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?php if (isset($row['attachment'])) echo htmlspecialchars((string) $row['attachment'], ENT_QUOTES, 'UTF-8') ?></td>
                                 </tr>
                         <?php }
                         } ?>
@@ -152,8 +133,8 @@ $hasRows = $result instanceof mysqli_result && $result->num_rows > 0;
 </body>
 <script>
     //Initial Page And Action Value
-    var page = "<?= $pageTitle ?>";
-    var action = "<?php echo isset($act) ? $act : ' '; ?>";
+    const page = "<?= $pageTitle ?>";
+    const action = "<?php echo isset($act) ? $act : ' '; ?>";
 
     checkCurrentPage(page, action);
     /* function(void) : to solve the issue of dropdown menu displaying inside the table when table class include table-responsive */

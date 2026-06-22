@@ -364,9 +364,6 @@ if ($getYearlyGoalTargetByYear != false && $getYearlyGoalTargetByYear->num_rows 
     <script>
         <?php include "./js/dashboard.js" ?>
 
-    </script>
-
-
-</body>
+    </script></body>
 
 </html>

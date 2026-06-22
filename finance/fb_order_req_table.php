@@ -1,13 +1,12 @@
 <?php
 $pageTitle = "Facebook Order Request";
 $currentPagePin = 69;
-$isFinance = 1;
+$listPageSkipSessionReset = true;
+$listPageSkipNumbering = true;
 
-include_once '../menuHeader.php';
-include_once '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
+include_once '../include/list_page_header.php';
+
 $canAssignEstimatedReceivedDate = isActionAllowed('Edit', $pinAccess);
 $estimatedDateToday = new DateTimeImmutable('today');
 $estimatedDateMin = $estimatedDateToday->modify('+1 day')->format('Y-m-d');
@@ -28,12 +27,12 @@ if (!empty($currentTableQuery)) {
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceivedDateBtn')) {
     $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
-        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', (string) $_SERVER['REQUEST_URI'], 1200, true);
         exit;
     }
 
     if (!$canAssignEstimatedReceivedDate) {
-        echo "<script>alert('Security Error: You do not have permission to assign Estimate Received Dates.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+        renderNotificationScript('Security Error: You do not have permission to assign Estimate Received Dates.', 'error', (string) $_SERVER['REQUEST_URI'], 1200, true);
         exit;
     }
 
@@ -68,14 +67,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceiv
         audit_log($auditData);
     }
 
-    echo "<script>alert('" . addslashes($assignmentResult['message']) . "'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+    $assignmentMessage = (string) $assignmentResult['message'];
+    renderNotificationScript($assignmentMessage, resolveNotificationType($assignmentMessage, 'info'), (string) $_SERVER['REQUEST_URI'], 1200, true);
     exit;
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('moveToPackBtn')) {
     $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
-        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', (string) $_SERVER['REQUEST_URI'], 1200, true);
         exit;
     }
 
@@ -89,7 +89,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('moveToPackBtn')) {
         'platform' => 'facebook',
     ));
 
-    echo '<script>alert(' . json_encode((string) (isset($moveToPackResult['message']) ? $moveToPackResult['message'] : 'Unable to move order to To Pack.'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . '); location.replace(' . json_encode((string) $currentTableRedirect, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ');</script>';
+    $moveToPackMessage = (string) (isset($moveToPackResult['message']) ? $moveToPackResult['message'] : 'Unable to move order to To Pack.');
+    renderNotificationScript($moveToPackMessage, resolveNotificationType($moveToPackMessage, 'info'), $currentTableRedirect, 1200, true);
     exit;
 }
 
@@ -102,7 +103,8 @@ if (isset($_GET['verify_id'])) {
         'remark' => 'Verified from Facebook order request table.',
         'platform' => 'facebook',
     ));
-    echo "<script>alert('" . addslashes(isset($verifyResult['message']) ? $verifyResult['message'] : 'Unable to verify order.') . "'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
+    $verifyMessage = (string) (isset($verifyResult['message']) ? $verifyResult['message'] : 'Unable to verify order.');
+    renderNotificationScript($verifyMessage, resolveNotificationType($verifyMessage, 'info'), $currentTableRedirect, 1200, true);
     exit;
 }
 
@@ -115,14 +117,15 @@ if (isset($_GET['complete_id'])) {
         'remark' => 'Completed from Facebook order request table.',
         'platform' => 'facebook',
     ));
-    echo "<script>alert('" . addslashes(isset($completeResult['message']) ? $completeResult['message'] : 'Unable to complete order.') . "'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
+    $completeMessage = (string) (isset($completeResult['message']) ? $completeResult['message'] : 'Unable to complete order.');
+    renderNotificationScript($completeMessage, resolveNotificationType($completeMessage, 'info'), $currentTableRedirect, 1200, true);
     exit;
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['force_wafc_id']) && !isset($_POST['move_to_wafc_with_received_date_btn'])) {
     $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
-        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
+        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', $currentTableRedirect, 1200, true);
         exit;
     }
 
@@ -137,7 +140,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['force_wafc_id
         'allow_auto_follow_up' => false,
         'platform' => 'facebook',
     ));
-    echo "<script>alert('" . addslashes(isset($wafcResult['message']) ? $wafcResult['message'] : 'Unable to move order to WAFC.') . "'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
+    $wafcMessage = (string) (isset($wafcResult['message']) ? $wafcResult['message'] : 'Unable to move order to WAFC.');
+    renderNotificationScript($wafcMessage, resolveNotificationType($wafcMessage, 'info'), $currentTableRedirect, 1200, true);
     exit;
 }
 
@@ -154,7 +158,7 @@ shopeeOmsHandleMoveToWafcWithReceivedDatePost($connect, $finance_connect, array(
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['return_id'])) {
     $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
-        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
+        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', $currentTableRedirect, 1200, true);
         exit;
     }
 
@@ -167,7 +171,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['return_id']))
         'action' => 'mark_return',
         'platform' => 'facebook',
     ));
-    echo "<script>alert('" . addslashes(isset($returnResult['message']) ? $returnResult['message'] : 'Unable to mark order as Return.') . "'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
+    $returnMessage = (string) (isset($returnResult['message']) ? $returnResult['message'] : 'Unable to mark order as Return.');
+    renderNotificationScript($returnMessage, resolveNotificationType($returnMessage, 'info'), $currentTableRedirect, 1200, true);
     exit;
 }
 
@@ -176,14 +181,14 @@ $_SESSION['viewChk'] = '';
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 
-$redirect_page = $SITEURL . '/finance/fb_order_req.php';
+$redirectPage = $SITEURL . '/finance/fb_order_req.php';
 $deleteRedirectPage = $SITEURL . '/finance/fb_order_req_table.php';
 $result = getData('*', '', '', FB_ORDER_REQ, $finance_connect);
 
-function fbReqFetchAssoc($rst)
+function fbReqFetchAssoc($result)
 {
-    if ($rst instanceof mysqli_result && $rst->num_rows > 0) {
-        return $rst->fetch_assoc();
+    if ($result instanceof mysqli_result && $result->num_rows > 0) {
+        return $result->fetch_assoc();
     }
     return array();
 }
@@ -194,63 +199,10 @@ function fbReqFetchAssoc($rst)
 
 <head>
     <link rel="stylesheet" href="../css/main.css">
-    <style>
-        .estimated-date-modal {
-            position: fixed;
-            inset: 0;
-            z-index: 2000;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            background: rgba(0, 0, 0, 0.45);
-            padding: 16px;
-        }
 
-        .estimated-date-modal.is-open {
-            display: flex;
-        }
-
-        .estimated-date-modal__dialog {
-            width: 100%;
-            max-width: 420px;
-            border-radius: 12px;
-            background: #fff;
-            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
-            padding: 20px;
-        }
-
-        .estimated-date-modal__close-btn,
-        .estimated-date-modal__action-btn {
-            text-transform: none !important;
-        }
-    </style>
 </head>
 
 <script>
-    function openEstimatedReceivedDateModal(orderId, orderCode, minDate, maxDate) {
-        const modal = document.getElementById('estimatedReceivedDateModal');
-        const title = document.getElementById('estimatedReceivedDateTitle');
-        const orderIdInput = document.getElementById('estimated_received_order_id');
-        const dateInput = document.getElementById('estimated_received_date');
-
-        if (!modal || !orderIdInput || !dateInput) {
-            return;
-        }
-
-        title.textContent = orderCode ? 'Assign Estimate Received Date for ' + orderCode : 'Assign Estimate Received Date';
-        orderIdInput.value = orderId;
-        dateInput.value = '';
-        dateInput.min = minDate;
-        dateInput.max = maxDate;
-        modal.classList.add('is-open');
-    }
-
-    function closeEstimatedReceivedDateModal() {
-        const modal = document.getElementById('estimatedReceivedDateModal');
-        if (modal) {
-            modal.classList.remove('is-open');
-        }
-    }
 
     $(document).ready(() => {
         createSortingTable('fb_order_req_table');
@@ -266,9 +218,6 @@ function fbReqFetchAssoc($rst)
 
     });
 </script>
-
-
-
 <body>
 
     <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
@@ -292,7 +241,7 @@ function fbReqFetchAssoc($rst)
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         Request </a>
                                 <?php endif; ?>
                             </div>
@@ -364,16 +313,16 @@ function fbReqFetchAssoc($rst)
 
                             <tr>
                                 <th class="hideColumn" scope="row">
-                                    <?= $row['id'] ?>
+                                    <?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>
                                 </th>
                                 <th scope="row">
                                     <?= $num++; ?>
                                 </th>
                                 <td scope="row" class="btn-container">
                                     <div class="d-flex align-items-center">
-                                    <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                    <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                    <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['contact'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                    <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                    <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
+                                    <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['contact'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                     <?php
                                     $statusCode = shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '');
                                     $canAssignThisOrder = $canAssignEstimatedReceivedDate && shopeeOmsPassesAssignmentScope($connect, $row, USER_ID, USER_GROUP);
@@ -447,61 +396,61 @@ function fbReqFetchAssoc($rst)
                                         class="btn <?= $urbanismAction['is_member'] ? 'btn-success' : 'btn-secondary' ?> me-1 <?= $urbanismAction['disabled'] ? 'disabled' : '' ?>"
                                         href="<?= htmlspecialchars($urbanismAction['url'], ENT_QUOTES, 'UTF-8') ?>"
                                         title="<?= htmlspecialchars($urbanismAction['title'], ENT_QUOTES, 'UTF-8') ?>"
-                                        <?= $urbanismAction['disabled'] ? 'onclick="return false;" aria-disabled="true"' : '' ?>><i class="<?= $urbanismAction['icon_class'] ?>"></i></a>
+                                        <?= $urbanismAction['disabled'] ? 'onclick="return false;" aria-disabled="true"' : '' ?>><i class="<?= htmlspecialchars((string) $urbanismAction['icon_class'], ENT_QUOTES, 'UTF-8') ?>"></i></a>
                                     </div>
                                     </td>
                                 <td><?= getMarketplaceRequestStatusLabel(isset($row['order_status']) ? $row['order_status'] : '') ?></td>
                                 <td><?= isset($row['estimated_received_date']) && !empty($row['estimated_received_date']) ? htmlspecialchars((string) $row['estimated_received_date'], ENT_QUOTES, 'UTF-8') : '' ?></td>
                                 <td scope="row">
-                                    <?= $row['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['fb_link'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['fb_link'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['contact'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['contact'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $pic['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($pic['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $country['nicename'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($country['nicename'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $brand['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($brand['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $series['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($series['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $package['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($package['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $fb_page['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($fb_page['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $channel['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($channel['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['price'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['price'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $pay_meth['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($pay_meth['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['ship_rec_name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['ship_rec_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['ship_rec_add'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['ship_rec_add'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['ship_rec_contact'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['ship_rec_contact'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['remark'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['remark'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['attachment'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['attachment'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                             </tr>
                         <?php } ?>
@@ -538,29 +487,7 @@ function fbReqFetchAssoc($rst)
 
     </div>
 
-    <div class="estimated-date-modal" id="estimatedReceivedDateModal" aria-hidden="true">
-        <div class="estimated-date-modal__dialog">
-            <div class="d-flex justify-content-between align-items-start mb-3">
-                <h4 class="mb-0" id="estimatedReceivedDateTitle">Assign Estimate Received Date</h4>
-                <button type="button" class="btn btn-light estimated-date-modal__close-btn" onclick="closeEstimatedReceivedDateModal()" aria-label="Close">
-                    <i class="fa-solid fa-xmark"></i>
-                </button>
-            </div>
-            <form method="post">
-                <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
-                <input type="hidden" name="estimated_received_order_id" id="estimated_received_order_id" value="">
-                <div class="mb-3">
-                    <label class="form-label" for="estimated_received_date">Estimate Received Date</label>
-                    <input type="date" class="form-control" name="estimated_received_date" id="estimated_received_date" min="<?= $estimatedDateMin ?>" max="<?= $estimatedDateMax ?>" required>
-                    <small class="text-muted">Choose a date from <?= $estimatedDateMin ?> until <?= $estimatedDateMax ?>.</small>
-                </div>
-                <div class="d-flex justify-content-end gap-2">
-                    <button type="button" class="btn btn-light estimated-date-modal__action-btn" onclick="closeEstimatedReceivedDateModal()">Cancel</button>
-                    <button type="submit" class="btn btn-primary estimated-date-modal__action-btn" name="assignEstimatedReceivedDateBtn" value="1">Save</button>
-                </div>
-            </form>
-        </div>
-    </div>
+    <?php include_once ROOT . '/include/estimated_date_modal.php'; ?>
     <?php shopeeOmsRenderReceivedDateModal(array('wrapper_attributes' => 'aria-hidden="true"')); ?>
 
 </body>

@@ -54,7 +54,7 @@ if (preg_match('#/[^/]+\?id=0$#', $redirectPage)) {
 
 switch ($platform) {
     case 'lazada':
-        $redirectPage = rtrim((string) $SITEURL, '/') . '/lazada_order_req_table.php';
+        $redirectPage = rtrim((string) $SITEURL, '/') . '/finance/lazada_order_req_table.php';
         break;
     case 'facebook':
         $redirectPage = rtrim((string) $SITEURL, '/') . '/finance/fb_order_req_table.php';
@@ -103,7 +103,7 @@ if ($tokenRst && mysqli_num_rows($tokenRst) > 0) {
 
 $tokenValue = trim((string) (isset($tokenRow['token']) ? $tokenRow['token'] : ''));
 $orderLink = $tokenValue !== ''
-    ? rtrim((string) $SITEURL, '/') . '/warehouse_stock_in_scan.php?t=' . urlencode($tokenValue)
+    ? rtrim((string) $SITEURL, '/') . '/stock/warehouse_stock_in_scan.php?t=' . urlencode($tokenValue)
     : '';
 
 $qrImageUrl = '';
@@ -241,7 +241,7 @@ $customerFieldLabel = $platform === 'shopee' ? 'Shopee Buyer Username' : $platfo
     </style>
 </head>
 <body>
-<div class="pre-load-center"><div class="preloader"></div></div>
+    
 <div class="page-load-cover">
     <div class="container-fluid d-flex justify-content-center mt-3">
         <div class="col-12 col-md-11">
@@ -359,7 +359,7 @@ $customerFieldLabel = $platform === 'shopee' ? 'Shopee Buyer Username' : $platfo
     checkCurrentPage(<?= json_encode($menuPageTitle, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>, '');
     dropdownMenuDispFix();
     setButtonColor();
-    preloader(300);
+    
 
     var copyBtn = document.getElementById('copyOrderLinkBtn');
     var orderLinkInput = document.getElementById('orderRequestLink');

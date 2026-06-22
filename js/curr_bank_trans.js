@@ -27,11 +27,11 @@ $("#cba_amt").on("input", function() {
 $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
-    var type_chk = 0;
-    var date_chk = 0;
-    var bank_chk = 0;
-    var currency_chk = 0;
-    var amt_chk = 0;
+    let type_chk = 0;
+    let date_chk = 0;
+    let bank_chk = 0;
+    let currency_chk = 0;
+    let amt_chk = 0;
 
     if ($('#cba_type').val() === '' || $('#cba_type').val() === null || $('#cba_type')
         .val() === undefined) {

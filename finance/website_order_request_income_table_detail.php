@@ -2,7 +2,6 @@
 $currentPagePin = 92;
 ob_start();
 $pageTitle = "Website Order Request";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
@@ -176,42 +175,6 @@ if (!empty($checkboxValues)) {
     }
 }
 
-function addDirToZip($dir, $zip, $basePath)
-{
-    $files = scandir($dir);
-    foreach ($files as $file) {
-        if ($file == '.' || $file == '..') {
-            continue;
-        }
-        $filePath = $dir . $file;
-        if (is_file($filePath)) {
-            // Add the file to the zip archive with a relative path
-            $relativePath = str_replace($basePath, '', $filePath);
-            $zip->addFile($filePath, $relativePath);
-        } elseif (is_dir($filePath)) {
-            // Add the directory to the zip archive
-            $zip->addEmptyDir(str_replace($basePath, '', $filePath));
-            // Recursively add files and directories inside the current directory
-            addDirToZip($filePath . '/', $zip, $basePath);
-        }
-    }
-}
-
-function deleteDir($dirPath) {
-    if (!is_dir($dirPath)) {
-        return;
-    }
-    $files = glob($dirPath . '*', GLOB_MARK);
-    foreach ($files as $file) {
-        if (is_dir($file)) {
-            deleteDir($file);
-        } else {
-            unlink($file);
-        }
-    }
-    rmdir($dirPath);
-}
-
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 $canAssignEstimatedReceivedDate = isActionAllowed('Edit', $pinAccess);
 $estimatedDateToday = new DateTimeImmutable('today');
@@ -225,19 +188,20 @@ if (empty($_SESSION['csrf_token'])) {
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceivedDateBtn')) {
     $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
-        echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', (string) $_SERVER['REQUEST_URI'], 1200, true);
         exit;
     }
 
     if (!$canAssignEstimatedReceivedDate) {
-        echo "<script>alert('Security Error: You do not have permission to assign Estimate Received Dates.'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+        renderNotificationScript('Security Error: You do not have permission to assign Estimate Received Dates.', 'error', (string) $_SERVER['REQUEST_URI'], 1200, true);
         exit;
     }
 
     $assignOrderId = postSpaceFilter('estimated_received_order_id');
     $assignDate = postSpaceFilter('estimated_received_date');
     $assignmentResult = assignEstimatedReceivedDate($finance_connect, WEB_ORDER_REQ, $assignOrderId, $assignDate, USER_ID);
-    echo "<script>alert('" . addslashes($assignmentResult['message']) . "'); location.replace('" . addslashes($_SERVER['REQUEST_URI']) . "');</script>";
+    $assignmentMessage = (string) $assignmentResult['message'];
+    renderNotificationScript($assignmentMessage, resolveNotificationType($assignmentMessage, 'info'), (string) $_SERVER['REQUEST_URI'], 1200, true);
     exit;
 }
 $_SESSION['act'] = '';
@@ -247,7 +211,7 @@ unset($_SESSION['resetChk']);
 $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 $tblName = WEB_ORDER_REQ;
-$redirect_page = $SITEURL . '/finance/website_order_request.php';
+$redirectPage = $SITEURL . '/finance/website_order_request.php';
 $deleteRedirectPage = $SITEURL . '/finance/website_order_request_table.php';
 $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
 ?>
@@ -257,50 +221,11 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
 
 <head>
     <link rel="stylesheet" href="../css/main.css">
-    <style>
-        .estimated-date-modal {
-            position: fixed;
-            inset: 0;
-            z-index: 2000;
-            display: none;
-            align-items: center;
-            justify-content: center;
-            background: rgba(0, 0, 0, 0.45);
-            padding: 16px;
-        }
-        .estimated-date-modal.is-open { display: flex; }
-        .estimated-date-modal__dialog {
-            width: 100%;
-            max-width: 420px;
-            border-radius: 12px;
-            background: #fff;
-            box-shadow: 0 18px 40px rgba(0, 0, 0, 0.22);
-            padding: 20px;
-        }
-        .estimated-date-modal__close-btn,
-        .estimated-date-modal__action-btn { text-transform: none !important; }
-    </style>
+
 </head>
 
 <script>
-    function openEstimatedReceivedDateModal(orderId, orderCode, minDate, maxDate) {
-        const modal = document.getElementById('estimatedReceivedDateModal');
-        const title = document.getElementById('estimatedReceivedDateTitle');
-        const orderIdInput = document.getElementById('estimated_received_order_id');
-        const dateInput = document.getElementById('estimated_received_date');
-        if (!modal || !orderIdInput || !dateInput) return;
-        title.textContent = orderCode ? 'Assign Estimate Received Date for ' + orderCode : 'Assign Estimate Received Date';
-        orderIdInput.value = orderId;
-        dateInput.value = '';
-        dateInput.min = minDate;
-        dateInput.max = maxDate;
-        modal.classList.add('is-open');
-    }
 
-    function closeEstimatedReceivedDateModal() {
-        const modal = document.getElementById('estimatedReceivedDateModal');
-        if (modal) modal.classList.remove('is-open');
-    }
 
     $(document).ready(() => {
         createSortingTable('website_order_request_table');
@@ -314,9 +239,6 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
         });
     });
 </script>
-
-
-
 <body>
 
     <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
@@ -340,7 +262,7 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         Request </a>
                                 <?php endif; ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>
@@ -420,17 +342,17 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
 
                             <tr>
                                 <th class="hideColumn" scope="row">
-                                    <?= $row['id'] ?>
+                                    <?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>
                                 </th>
-                                <th class="text-center"><input type="checkbox" class="export" value="<?= $row['id'] ?>"></th>
+                                <th class="text-center"><input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>"></th>
                                 <th scope="row">
                                     <?= $num++; ?>
                                 </th>
                                 
                                 <td scope="row" class="btn-container">
-                                <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                <?php renderDeleteButton($pinAccess, $row['id'], $row['order_id'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
+                                <?php renderDeleteButton($pinAccess, $row['id'], $row['order_id'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                 <?php if (shouldShowEstimatedReceivedDateButton($row) && $canAssignEstimatedReceivedDate) { ?>
                                     <button type="button" class="btn btn-sm btn-warning btn-assign-estimated-date"
                                         data-order-id="<?= (int) $row['id'] ?>"
@@ -443,73 +365,73 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
                                 <td scope="row"><?= getMarketplaceRequestStatusLabel(isset($row['order_status']) ? $row['order_status'] : '') ?></td>
                                 <td scope="row"><?= !empty($row['estimated_received_date']) ? htmlspecialchars((string) $row['estimated_received_date'], ENT_QUOTES, 'UTF-8') : '' ?></td>
                                 <td scope="row">
-                                    <?= $row['order_id'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['order_id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['brand'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['brand'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['series'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['series'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                
                                 <td scope="row">
-                                    <?= $package['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($package['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $country['nicename'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($country['nicename'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
 
                                 <td scope="row">
-                                    <?= $currency['unit'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($currency['unit'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                               
                                 <td scope="row">
-                                    <?= $row['price'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['price'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
 
                                 <td scope="row">
-                                    <?= $row['shipping'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['shipping'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
 
                                 <td scope="row">
-                                    <?= $row['discount'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['discount'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
 
                                 <td scope="row">
-                                    <?= $row['total'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['total'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
 
                                 <td scope="row">
-                                    <?= $pay['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($pay['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['pic'] ?? '' ?>
-                                </td>
-
-                                <td scope="row">
-                                    <?= $cust_id['cust_id'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['pic'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
 
                                 <td scope="row">
-                                    <?= $row['cust_name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($cust_id['cust_id'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                                </td>
+
+                                <td scope="row">
+                                    <?= htmlspecialchars((string) ($row['cust_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['cust_email'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['cust_email'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['cust_birthday'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['cust_birthday'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['shipping_name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['shipping_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['shipping_address'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['shipping_address'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['shipping_contact'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['shipping_contact'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['remark'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['remark'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                             </tr>
                         <?php }}}} ?>
@@ -552,29 +474,7 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
 
     </div>
 
-<div class="estimated-date-modal" id="estimatedReceivedDateModal" aria-hidden="true">
-    <div class="estimated-date-modal__dialog">
-        <div class="d-flex justify-content-between align-items-start mb-3">
-            <h4 class="mb-0" id="estimatedReceivedDateTitle">Assign Estimate Received Date</h4>
-            <button type="button" class="btn btn-light estimated-date-modal__close-btn" onclick="closeEstimatedReceivedDateModal()" aria-label="Close">
-                <i class="fa-solid fa-xmark"></i>
-            </button>
-        </div>
-        <form method="post">
-            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
-            <input type="hidden" name="estimated_received_order_id" id="estimated_received_order_id" value="">
-            <div class="mb-3">
-                <label class="form-label" for="estimated_received_date">Estimate Received Date</label>
-                <input type="date" class="form-control" name="estimated_received_date" id="estimated_received_date" min="<?= $estimatedDateMin ?>" max="<?= $estimatedDateMax ?>" required>
-                <small class="text-muted">Choose a date from <?= $estimatedDateMin ?> until <?= $estimatedDateMax ?>.</small>
-            </div>
-            <div class="d-flex justify-content-end gap-2">
-                <button type="button" class="btn btn-light estimated-date-modal__action-btn" onclick="closeEstimatedReceivedDateModal()">Cancel</button>
-                <button type="submit" class="btn btn-primary estimated-date-modal__action-btn" name="assignEstimatedReceivedDateBtn" value="1">Save</button>
-            </div>
-        </form>
-    </div>
-</div>
+<?php include_once ROOT . '/include/estimated_date_modal.php'; ?>
 
 </body>
 <script>
@@ -624,14 +524,6 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
             console.log('No checkboxes are checked.');
         }
     });
-
-    function updateCheckboxesOnOtherPages(isChecked) {
-        // Get all cells in the DataTable
-        var cells = $('#website_order_request_table').DataTable().cells().nodes();
-
-        // Check/uncheck all checkboxes in the DataTable
-        $(cells).find('.export').prop('checked', isChecked);
-    }
 });
 
 <?php include "../js/order_req.js" ?>

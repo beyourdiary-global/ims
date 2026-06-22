@@ -2,7 +2,6 @@
 $currentPagePin = 0;
 ob_start();
 $pageTitle = "Shopee SG Order Request";
-$isFinance = 1;
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
@@ -173,42 +172,6 @@ if (!empty($checkboxValues)) {
     }
 }
 
-function addDirToZip($dir, $zip, $basePath)
-{
-    $files = scandir($dir);
-    foreach ($files as $file) {
-        if ($file == '.' || $file == '..') {
-            continue;
-        }
-        $filePath = $dir . $file;
-        if (is_file($filePath)) {
-            // Add the file to the zip archive with a relative path
-            $relativePath = str_replace($basePath, '', $filePath);
-            $zip->addFile($filePath, $relativePath);
-        } elseif (is_dir($filePath)) {
-            // Add the directory to the zip archive
-            $zip->addEmptyDir(str_replace($basePath, '', $filePath));
-            // Recursively add files and directories inside the current directory
-            addDirToZip($filePath . '/', $zip, $basePath);
-        }
-    }
-}
-
-function deleteDir($dirPath) {
-    if (!is_dir($dirPath)) {
-        return;
-    }
-    $files = glob($dirPath . '*', GLOB_MARK);
-    foreach ($files as $file) {
-        if (is_dir($file)) {
-            deleteDir($file);
-        } else {
-            unlink($file);
-        }
-    }
-    rmdir($dirPath);
-}
-
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 $_SESSION['act'] = '';
 $_SESSION['viewChk'] = '';
@@ -218,7 +181,7 @@ $_SESSION['delChk'] = '';
 $num = 1;   // numbering
 $tblName = SHOPEE_SG_ORDER_REQ;
 
-$redirect_page = $SITEURL . '/shopee/shopee_order_req.php';
+$redirectPage = $SITEURL . '/shopee/shopee_order_req.php';
 $deleteRedirectPage = $SITEURL . '/shopee/shopee_order_req_table.php';
 $result = getData('*', '', '', SHOPEE_SG_ORDER_REQ, $finance_connect);
 $shopeeBuyerMetaMap = array();
@@ -244,9 +207,6 @@ if ($result instanceof mysqli_result) {
         createSortingTable('shopee_order_req_table');
     });
 </script>
-
-
-
 <body>
 
     <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
@@ -270,7 +230,7 @@ if ($result instanceof mysqli_result) {
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         Request </a>
                                 <?php endif; ?>
                                 <a class="btn btn-sm btn-rounded btn-primary" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>
@@ -348,18 +308,18 @@ if ($result instanceof mysqli_result) {
 
                             <tr>
                                 <th class="hideColumn" scope="row">
-                                    <?= $row['id'] ?>
+                                    <?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>
                                 </th>
-                                <th class="text-center"><input type="checkbox" class="export" value="<?= $row['id'] ?>"></th>
+                                <th class="text-center"><input type="checkbox" class="export" value="<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>"></th>
 
                                 <th scope="row">
                                     <?= $num++; ?>
                                 </th>
 
                                 <td scope="row" class="btn-container">
-                                <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                <?php renderDeleteButton($pinAccess, $row['id'], $row['orderID'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
+                                <?php renderDeleteButton($pinAccess, $row['id'], $row['orderID'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                 </td>
                                 <td scope="row">
                                 <?php
@@ -376,59 +336,59 @@ if ($result instanceof mysqli_result) {
                                 </td>
 
                                 <td scope="row">
-                                    <?= $acc['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($acc['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $curr['unit'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($curr['unit'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['orderID'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['orderID'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['date'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['date'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['time'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['time'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $pkg['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($pkg['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $brand['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($brand['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row"><?= customerLabelRenderShopeeBuyerCell($connect, $finance_connect, isset($row['buyer']) ? $row['buyer'] : '', '', $shopeeBuyerMetaMap) ?></td>
                                 <td scope="row">
-                                    <?= $pay['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($pay['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $pic['name'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($pic['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['price'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['price'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['voucher'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['voucher'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['act_shipping_fee'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['act_shipping_fee'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['service_fee'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['service_fee'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['trans_fee'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['trans_fee'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['ams_fee'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['ams_fee'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['fees'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['fees'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['final_amt'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['final_amt'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
-                                    <?= $row['remark'] ?? '' ?>
+                                    <?= htmlspecialchars((string) ($row['remark'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                             </tr>
                         <?php }}}} ?>
@@ -476,7 +436,7 @@ $(document).ready(function ($) {
     $(document).on("change", ".exportAll", function (event) { //checkbox handling
         event.preventDefault();
 
-        var isChecked = $(this).prop("checked");
+        const isChecked = $(this).prop("checked");
         $(".export").prop("checked", isChecked);
         $(".exportAll").prop("checked", isChecked);
 
@@ -484,11 +444,11 @@ $(document).ready(function ($) {
     });
 
     $('a[name="exportBtn"]').on("click", function () {
-        var checkboxValues = [];
+        const checkboxValues = [];
 
         // Loop through all pages to collect checked checkboxes
         $('#shopee_order_req_table').DataTable().$('tr', { "filter": "applied" }).each(function () {
-            var checkbox = $(this).find('.export:checked');
+            const checkbox = $(this).find('.export:checked');
             if (checkbox.length > 0) {
                 checkbox.each(function () {
                     checkboxValues.push($(this).val());
@@ -502,12 +462,12 @@ $(document).ready(function ($) {
             setCookie('rowID', checkboxValues.join(','), 1);
 
             //uncheck checkboxes
-            var checkboxes = document.querySelectorAll('.export');
+            const checkboxes = document.querySelectorAll('.export');
             checkboxes.forEach(function (checkbox) {
                 checkbox.checked = false;
             });
 
-            var selectAllCheckbox = document.querySelector('.exportAll');
+            const selectAllCheckbox = document.querySelector('.exportAll');
             if (selectAllCheckbox) {
                 selectAllCheckbox.checked = false;
             }
@@ -517,14 +477,6 @@ $(document).ready(function ($) {
             console.log('No checkboxes are checked.');
         }
     });
-
-    function updateCheckboxesOnOtherPages(isChecked) {
-        // Get all cells in the DataTable
-        var cells = $('#shopee_order_req_table').DataTable().cells().nodes();
-
-        // Check/uncheck all checkboxes in the DataTable
-        $(cells).find('.export').prop('checked', isChecked);
-    }
 });
     /**
   oufei 20231014

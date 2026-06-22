@@ -1,22 +1,14 @@
 <?php
 $pageTitle = "Chanel (Social Media)";
 $currentPagePin = 79;
-$isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
+include_once '../include/list_page_header.php';
 
-$redirect_page = $SITEURL . '/finance/chanel_social_media.php';
+$redirectPage = $SITEURL . '/finance/chanel_social_media.php';
 $deleteRedirectPage = $SITEURL . '/finance/chanel_social_media_table.php';
 $result = getData('*', '', '', CHANEL_SC_MD, $finance_connect);
 if (!$result) {
-    echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
+    renderNotificationScript('Sorry, currently network temporary fail, please try again later.', 'error');
     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
 }
 ?>
@@ -29,19 +21,14 @@ if (!$result) {
 </head>
 
 <script>
-    preloader(300);
+    
     $(document).ready(() => {
         createSortingTable('chanel_social_media_table');
     });
 </script>
-
-
-
 <body>
 
-<div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
@@ -58,7 +45,7 @@ if (!$result) {
                         <h2><?php echo $pageTitle ?></h2>
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Account </a>
+                                <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Account </a>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -83,12 +70,12 @@ if (!$result) {
                     ?>
 
                             <tr>
-                                <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                 <th scope="row"><?= $num++; ?></th>
                                 <td scope="row" class="btn-container">
-                                <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
+                                <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                 </td>
                                 <td scope="row"><?= isset($row['name']) ? $row['name']  : '' ?></td>
                                 <td scope="row"><?= isset($row['description']) ? $row['description'] : '' ?></td>

@@ -1,52 +1,4 @@
 ﻿//export notification
-function exportData() {
-  var checkboxes = document.querySelectorAll(".export:checked");
-  if (checkboxes.length === 0) {
-    alert("Please select data to export.");
-    return false;
-  }
-  return true;
-}
-
-function showExportNotification() {
-  alert("Export successful!");
-}
-
-function auditExport(ids, tblName) {
-  var xhr = new XMLHttpRequest();
-  xhr.open("POST", "../export.php", true);
-  xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
-  xhr.send("ids=" + ids.join(",") + "&tblName=" + encodeURIComponent(tblName));
-}
-
-function captureAndExport(tblName) {
-  var checkboxValues = [];
-  $("#shopee_ads_topup_trans_table")
-    .DataTable()
-    .rows({ search: "applied", page: "current" })
-    .nodes()
-    .to$()
-    .each(function () {
-      var checkbox = $(this).find(".export:checked");
-      if (checkbox.length > 0) {
-        checkbox.each(function () {
-          checkboxValues.push($(this).val());
-        });
-      }
-    });
-
-  if (checkboxValues.length > 0) {
-    setCookie("rowID", checkboxValues.join(","), 1);
-    auditExport(checkboxValues, tblName || "shopee_ads_topup");
-    alert("Export successful!");
-    window.location.href =
-      "shopee_ads_topup_trans_table.php?export_ids=" +
-      encodeURIComponent(checkboxValues.join(","));
-  } else {
-    alert("Please select data to export.");
-  }
-}
-
 $(document).ready(function ($) {
   var filterState = window.shopeeAdsTableFilters || {};
   var tableConfig = window.shopeeAdsTableConfig || {};
@@ -300,19 +252,13 @@ $(document).ready(function ($) {
           "shopee_ads_topup_trans_table.php?export_ids=" +
           encodeURIComponent(checkboxValues.join(","));
         console.log("[shopee_ads_topup_export] redirect_url:", exportUrl);
-        alert("Export successful!");
-        window.location.assign(exportUrl);
+        showNotification("Export successful!", "success");
+        window.setTimeout(function () {
+          window.location.assign(exportUrl);
+        }, 600);
       } else {
-        alert("Please select data to export.");
+        showNotification("Please select data to export.", "warning");
       }
     },
   );
-
-  function updateCheckboxesOnOtherPages(isChecked) {
-    // Get all cells in the DataTable
-    var cells = table.rows({ page: "current" }).nodes();
-
-    // Check/uncheck all checkboxes in the DataTable
-    $(cells).find(".export").prop("checked", isChecked);
-  }
 });

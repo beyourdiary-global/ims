@@ -151,6 +151,7 @@ if (!function_exists('shopeeOrderDetailPdfRenderVerifyModalScript')) {
         $siteUrl = isset($config['site_url']) && trim((string) $config['site_url']) !== '' ? rtrim((string) $config['site_url'], '/') : '';
         ?>
         <script src="../finance/header/js/pdf.min.js"></script>
+    <script src="../js/pdf_airbill_parser.js"></script>
         <script>
             (function () {
                 var config = {
@@ -198,6 +199,7 @@ if (!function_exists('shopeeOrderDetailPdfRenderVerifyModalScript')) {
                         if (!statusNode) {
                             return;
                         }
+
                         statusNode.textContent = message || '';
                         statusNode.classList.toggle('text-danger', !!isError);
                         statusNode.classList.toggle('text-muted', !isError);
@@ -432,8 +434,10 @@ if (!function_exists('shopeeOrderDetailPdfRenderVerifyModalScript')) {
 
                     function handleVerifySuccess(result) {
                         modalInstance.hide();
-                        window.alert(result && result.message ? result.message : 'Order verified successfully.');
-                        window.location.replace(config.redirectUrl || window.location.href);
+                        showNotification(result && result.message ? result.message : 'Order verified successfully.', 'success');
+                        window.setTimeout(function () {
+                            window.location.replace(config.redirectUrl || window.location.href);
+                        }, 1200);
                     }
 
                     document.querySelectorAll(config.triggerSelector).forEach(function (triggerButton) {
@@ -443,7 +447,7 @@ if (!function_exists('shopeeOrderDetailPdfRenderVerifyModalScript')) {
                             var existingPdfPath = triggerButton.getAttribute('data-existing-pdf-path') || '';
 
                             if (!orderId) {
-                                window.alert('Invalid order.');
+                                showNotification('Invalid order.', 'error');
                                 return;
                             }
 

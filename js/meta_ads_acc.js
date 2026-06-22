@@ -10,8 +10,8 @@ $("#maa_name").on("input", function() {
 $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
-    var id_chk = 0;
-    var name_chk = 0;
+    let id_chk = 0;
+    let name_chk = 0;
 
     if (($('#maa_id').val() === '' || $('#maa_id').val() === null || $('#maa_id')
             .val() === undefined)) {

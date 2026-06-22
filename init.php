@@ -63,6 +63,18 @@ if (!$siteOrlocalMode) {
     $siteUrl = 'https://uatcms.beyourdiary.com';
 }
 
+/**
+ * TODO SECURITY:
+ * Database credentials are still defined in this file for current system compatibility.
+ * This should be improved later by moving the database password and host config into
+ * environment variables or a .env file that is excluded from Git.
+ *
+ * When this is changed in the future:
+ * 1. Update the server/local environment configuration.
+ * 2. Remove plaintext credentials from the repository.
+ * 3. Rotate the exposed database password.
+ * 4. Test both CMS and finance database connections.
+ */
 define('dbuser', $dbUser);
 define('dbpwd', $siteOrlocalMode ? 'Byd1234@Global' : '');
 define('dbhost', $siteOrlocalMode ? '127.0.0.1:3306' : 'localhost');
@@ -72,6 +84,25 @@ define('SITEURL', $siteUrl);
 $SITEURL = SITEURL;
 define('ROOT', dirname(__FILE__));
 define('email_cc', "report@beyourdiary.com	");
+
+// shared external URLs / CDN paths
+define('TELEGRAM_API', 'https://api.telegram.org/bot');
+define('QR_CODE_API_URL', 'https://api.qrserver.com/v1/create-qr-code/');
+define('IPAPI_URL', 'https://ipapi.co/');
+define('DUCKDUCKGO_FAVICON_URL', 'https://icons.duckduckgo.com/ip3/');
+define('GOOGLE_FAVICON_URL', 'https://www.google.com/s2/favicons');
+define('JQUERY_3_6_4_JS', 'https://code.jquery.com/jquery-3.6.4.min.js');
+define('CHART_JS_CDN_URL', 'https://cdn.jsdelivr.net/npm/chart.js');
+define('CHART_JS_LOCAL_PATH', SITEURL . '/header/js/chart.umd.min.js');
+define('PDF_JS_LOCAL_PATH', SITEURL . '/header/js/pdf.min.js');
+define('PDF_WORKER_LOCAL_PATH', SITEURL . '/header/js/pdf.worker.min.js');
+
+if (!function_exists('siteUrlPath')) {
+    function siteUrlPath($path = '')
+    {
+        return rtrim(SITEURL, '/') . '/' . ltrim((string) $path, '/');
+    }
+}
 
 
 // //define date time
@@ -115,18 +146,23 @@ define('USER_GROUP', isset($_SESSION['user_group']) ? $_SESSION['user_group'] : 
 // $error_msg = array('3'=>'Required api key', '4'=>'Invalid api key', '5'=>'Unauthorized user', '0'=>'Success', '1'=>'Required authentication key', '1'=>'Invalid authentication key', '6'=>'Invalid data format');
 
 // easyparcel auth & api (live on live server, demo on localhost)
+define('EASYPARCEL_LIVE_DOMAIN_MY', 'https://connect.easyparcel.my/?ac=');
+define('EASYPARCEL_DEMO_DOMAIN_MY', 'https://demo.connect.easyparcel.my/?ac=');
+define('EASYPARCEL_LIVE_DOMAIN_SG', 'https://connect.easyparcel.sg/?ac=');
+define('EASYPARCEL_DEMO_DOMAIN_SG', 'https://demo.connect.easyparcel.sg/?ac=');
+
 if ($siteOrlocalMode) {
-    define('EASYPARCEL_DOMAIN_MY', 'https://connect.easyparcel.my/?ac=');
+    define('EASYPARCEL_DOMAIN_MY', EASYPARCEL_LIVE_DOMAIN_MY);
     define('EASYPARCEL_AUTH_MY', 'MwxHG9i3Wu');
     define('EASYPARCEL_API_MY', 'EP-Jj0HYyEkp');
-    define('EASYPARCEL_DOMAIN_SG', 'https://connect.easyparcel.sg/?ac=');
+    define('EASYPARCEL_DOMAIN_SG', EASYPARCEL_LIVE_DOMAIN_SG);
     define('EASYPARCEL_AUTH_SG', 'nYgGJWc9Hq');
     define('EASYPARCEL_API_SG', 'EP-Mqx0IKqqS');
 } else {
-    define('EASYPARCEL_DOMAIN_MY', 'https://demo.connect.easyparcel.my/?ac=');
+    define('EASYPARCEL_DOMAIN_MY', EASYPARCEL_DEMO_DOMAIN_MY);
     define('EASYPARCEL_AUTH_MY', 'MwxHG9i3Wu');
     define('EASYPARCEL_API_MY', 'EP-Jj0HYyEkp');
-    define('EASYPARCEL_DOMAIN_SG', 'https://demo.connect.easyparcel.sg/?ac=');
+    define('EASYPARCEL_DOMAIN_SG', EASYPARCEL_DEMO_DOMAIN_SG);
     define('EASYPARCEL_AUTH_SG', 'zKpyWplgj9');
     define('EASYPARCEL_API_SG', 'EP-Mqx0IKqqS');
 }
@@ -210,6 +246,7 @@ define('CAMPAIGN_PURCHASE_RECORD', 'campaign_purchase_record');
 define('CAMPAIGN_RULE_SETTING', 'campaign_rule_setting');
 define('CAMPAIGN_RULE_GENERATED_LOG', 'campaign_rule_generated_log');
 define('SYSTEM_ALERT_MESSAGE', 'system_alert_message');
+define('ORDER_DELETE_APPROVAL_REQUEST', 'order_delete_approval_request');
 define('TASK_COLUMN', 'task_board_status');
 define('TASK_WORK_TYPE', 'task_work_type');
 define('TASK_ITEM', 'task_board_item');
@@ -220,9 +257,11 @@ define('TASK_PROJECT_KEY', 'task_project_key');
 define('TASK_ITEM_ATTACHMENT', 'task_board_item_attachment');
 define('TASK_ITEM_URL', 'task_board_item_url');
 define('TASK_ITEM_RELATION', 'task_board_item_relation');
+define('TASK_ITEM_LINK', 'task_board_item_link');
 define('TASK_ITEM_HISTORY', 'task_board_item_history');
 define('TASK_ITEM_COMMENT', 'task_board_item_comment');
 define('TASK_ITEM_COMMENT_REPLY', 'task_board_comment_reply');
+define('TASK_ITEM_WORKLOG', 'task_board_item_worklog');
 define('TASK_SHEETS', 'task_sheets_column');
 define('TASK_PROJECT', 'task_project');
 define('TASK_PROJECT_ITEM_ACCESS', 'task_project_item_access');

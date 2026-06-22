@@ -2248,3 +2248,14 @@ td.btn-container.mobile-action-open-left .mobile-action-menu {
   padding-top: 4px;
   line-height: 20px;
 }
+
+#dispTable #addBtn.btn,
+#dispTable #actionBtn.btn,
+#dispTable #importBtn.btn,
+#dispTable .btn[name="actionBtn"] {
+  font-size: 18px !important;
+}
+
+#dispTable .btn-container {
+  white-space: nowrap;
+}

@@ -1,18 +1,11 @@
 <?php
 $pageTitle = "Agent";
 $currentPagePin = 62;
-$isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
+include_once '../include/list_page_header.php';
 
-$redirect_page = $SITEURL . '/finance/agent.php';
+
+$redirectPage = $SITEURL . '/finance/agent.php';
 $deleteRedirectPage = $SITEURL . '/finance/agent_table.php';
 $result = getData('*', '', '', AGENT, $finance_connect);
 // if (!$result) {
@@ -29,29 +22,14 @@ $result = getData('*', '', '', AGENT, $finance_connect);
 </head>
 
 <script>
-    preloader(300);
+    
     $(document).ready(() => {
         createSortingTable('agent_table');
     });
 </script>
-
-<style>
-    .btn {
-        padding: 0.2rem 0.5rem;
-        font-size: 0.75rem;
-        margin: 3px;
-    }
-
-    .btn-container {
-        white-space: nowrap;
-    }
-</style>
-
 <body>
 
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
@@ -70,7 +48,7 @@ $result = getData('*', '', '', AGENT, $finance_connect);
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         Account </a>
                                 <?php endif; ?>
                             </div>
@@ -111,21 +89,21 @@ $result = getData('*', '', '', AGENT, $finance_connect);
                                 ?>
 
                                 <tr>
-                                    <th class="hideColumn" scope="row"><?= $row['id'] ?></th>
+                                    <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                     <th scope="row"><?= $num++; ?></th>
 
                                     <td scope="row" class="btn-container">
-                                        <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                        <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                        <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                        <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                        <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
+                                        <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                     </td>
-                                    <td scope="row"><?= $row['name'] ?></td>
+                                    <td scope="row"><?= htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') ?></td>
                                     <td scope="row"><?= isset($row2['name']) ? $row2['name'] : '' ?></td>
                                     <td scope="row"><?= isset($usr['name']) ? $usr['name'] : '' ?></td>
-                                    <td scope="row"><?= $row['contact'] ?></td>
-                                    <td scope="row"><?= $row['email'] ?></td>
-                                    <td scope="row"><?= $row3['name'] ?></td>
-                                    <td scope="row"><?= $row['remark'] ?></td>
+                                    <td scope="row"><?= htmlspecialchars((string) $row['contact'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?= htmlspecialchars((string) $row['email'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?= htmlspecialchars((string) $row3['name'], ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row"><?= htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') ?></td>
                                 </tr>
                             <?php } ?>
                         </tbody>

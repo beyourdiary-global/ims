@@ -1,20 +1,11 @@
 <?php
 $pageTitle = "Shopee Customer Record";
 $currentPagePin = 85;
-$isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
+
+include_once '../include/list_page_header.php';
 include_once ROOT . '/include/customer_tag.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-$pinAccess = checkCurrentPin($connect, $pageTitle);
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
-
-$redirect_page = $SITEURL . '/shopee/shopee_cust_info.php';
+$redirectPage = $SITEURL . '/shopee/shopee_cust_info.php';
 $deleteRedirectPage = $SITEURL . '/shopee/shopee_cust_info_table.php';
 $result = getData('*', '', '', SHOPEE_CUST_INFO, $finance_connect);
 $tableRows = array();
@@ -41,7 +32,7 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
 </head>
 
 <script>
-    preloader(300);
+    
     $(document).ready(() => {
         createSortingTable('shopee_cust_info_table', { searching: true });
         initCustomerRecordTableFilters({
@@ -62,14 +53,9 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
         });
     });
 </script>
-
-
-
 <body>
 
-    <div class="pre-load-center">
-        <div class="preloader"></div>
-    </div>
+    
 
     <div class="page-load-cover">
         <div id="dispTable" class="container-fluid d-flex justify-content-center mt-3">
@@ -88,7 +74,7 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
                             <div class="mt-auto mb-auto">
                                 <?php if (isActionAllowed("Add", $pinAccess)): ?>
                                     <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
-                                        href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
+                                        href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                         Record </a>
                                 <?php endif; ?>
                             </div>
@@ -219,9 +205,9 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
                                         <th class="hideColumn" scope="row"><?= htmlspecialchars($row['id'], ENT_QUOTES, 'UTF-8') ?></th>
                                         <th scope="row"><?= htmlspecialchars($num++, ENT_QUOTES, 'UTF-8') ?></th>
                                         <td scope="row" class="btn-container">
-                                            <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess); ?>
-                                            <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2); ?>
-                                            <?php renderDeleteButton($pinAccess, $row['id'], $row['buyer_username'], $row['remark'], $pageTitle, $redirect_page, $deleteRedirectPage); ?>
+                                            <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
+                                            <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
+                                            <?php renderDeleteButton($pinAccess, $row['id'], $row['buyer_username'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                             <?php
                                             $urbanismAction = getUrbanismMemberActionData(
                                                 $connect,

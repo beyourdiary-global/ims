@@ -4,8 +4,8 @@ function showNotification(message) {
 
 // Form submission 
 $('#submitBtn').on('click', function () {
-    var barcodeInputs = $('[name="barcode_input[]"]').toArray();
-    var isValid = true;
+    const barcodeInputs = $('[name="barcode_input[]"]').toArray();
+    const isValid = true;
 
     if (isValid) {
         $('#stockForm').submit();
@@ -23,8 +23,8 @@ $("#expire_date").on("input", function() {
 $('.submitBtn').on('click', () => {
     $(".error-message").remove();
     //event.preventDefault();
-    var expire_chk = 0;
-    var date_chk = 0;
+    let expire_chk = 0;
+    let date_chk = 0;
 
     
    

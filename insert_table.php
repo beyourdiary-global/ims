@@ -35,57 +35,57 @@ if (!$conn->select_db($db_fin)) {
 // HELPER FUNCTIONS (FIXED)
 // ==========================================
 
-function columnExists($conn, $dbName, $tableName, $columnName)
+function columnExists($conn, $dbName, $tblName, $columnName)
 {
     $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
+    $safeTable = $conn->real_escape_string($tblName);
     $safeColumn = $conn->real_escape_string($columnName);
     $sql = "SELECT 1 FROM information_schema.columns WHERE table_schema='$safeDb' AND table_name='$safeTable' AND column_name='$safeColumn' LIMIT 1";
-    $rst = $conn->query($sql);
-    return ($rst && $rst->num_rows > 0);
+    $result = $conn->query($sql);
+    return ($result && $result->num_rows > 0);
 }
 
-function addColumnIfMissing($conn, $dbName, $tableName, $columnName, $alterSql)
+function addColumnIfMissing($conn, $dbName, $tblName, $columnName, $alterSql)
 {
-    if (!columnExists($conn, $dbName, $tableName, $columnName)) {
+    if (!columnExists($conn, $dbName, $tblName, $columnName)) {
         if ($conn->query($alterSql)) {
-            echo "<p style='color:blue;'>Added column `$columnName` to `$tableName`.</p>";
+            echo "<p style='color:blue;'>Added column `$columnName` to `$tblName`.</p>";
         } else {
-            echo "<p style='color:red;'>Failed adding `$columnName` to `$tableName`: " . $conn->error . "</p>";
+            echo "<p style='color:red;'>Failed adding `$columnName` to `$tblName`: " . $conn->error . "</p>";
         }
     } else {
-        echo "<p style='color:green;'>Verified column `$columnName` already exists in `$tableName`.</p>";
+        echo "<p style='color:green;'>Verified column `$columnName` already exists in `$tblName`.</p>";
     }
 }
 
-function dropColumnIfExists($conn, $dbName, $tableName, $columnName, $alterSql)
+function dropColumnIfExists($conn, $dbName, $tblName, $columnName, $alterSql)
 {
-    if (columnExists($conn, $dbName, $tableName, $columnName)) {
+    if (columnExists($conn, $dbName, $tblName, $columnName)) {
         if ($conn->query($alterSql)) {
-            echo "<p style='color:blue;'>Dropped column `$columnName` from `$tableName`.</p>";
+            echo "<p style='color:blue;'>Dropped column `$columnName` from `$tblName`.</p>";
         } else {
-            echo "<p style='color:red;'>Failed dropping `$columnName` from `$tableName`: " . $conn->error . "</p>";
+            echo "<p style='color:red;'>Failed dropping `$columnName` from `$tblName`: " . $conn->error . "</p>";
         }
     } else {
-        echo "<p style='color:green;'>Verified column `$columnName` is already removed from `$tableName`.</p>";
+        echo "<p style='color:green;'>Verified column `$columnName` is already removed from `$tblName`.</p>";
     }
 }
 
-function alterColumnToVarcharIfInt($conn, $dbName, $tableName, $columnName, $varcharLen = 255)
+function alterColumnToVarcharIfInt($conn, $dbName, $tblName, $columnName, $varcharLen = 255)
 {
     $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
+    $safeTable = $conn->real_escape_string($tblName);
     $safeColumn = $conn->real_escape_string($columnName);
 
     $sql = "SELECT DATA_TYPE FROM information_schema.columns WHERE table_schema='$safeDb' AND table_name='$safeTable' AND column_name='$safeColumn' LIMIT 1";
-    $rst = $conn->query($sql);
+    $result = $conn->query($sql);
 
-    if (!$rst || $rst->num_rows === 0) {
-        echo "<p style='color:orange;'>Column `$columnName` not found in `$tableName` to alter.</p>";
+    if (!$result || $result->num_rows === 0) {
+        echo "<p style='color:orange;'>Column `$columnName` not found in `$tblName` to alter.</p>";
         return;
     }
 
-    $row = $rst->fetch_assoc();
+    $row = $result->fetch_assoc();
     if ($row) {
         $row = array_change_key_case($row, CASE_LOWER);
     }
@@ -93,32 +93,32 @@ function alterColumnToVarcharIfInt($conn, $dbName, $tableName, $columnName, $var
     if (isset($row['data_type'])) {
         $dataType = strtolower((string) $row['data_type']);
         if (strpos($dataType, 'int') !== false) {
-            $alterSql = "ALTER TABLE `$tableName` MODIFY COLUMN `$columnName` VARCHAR(" . (int) $varcharLen . ") NULL";
+            $alterSql = "ALTER TABLE `$tblName` MODIFY COLUMN `$columnName` VARCHAR(" . (int) $varcharLen . ") NULL";
             if ($conn->query($alterSql)) {
-                echo "<p style='color:blue;'>Updated `$tableName`.`$columnName` to VARCHAR(" . (int) $varcharLen . ").</p>";
+                echo "<p style='color:blue;'>Updated `$tblName`.`$columnName` to VARCHAR(" . (int) $varcharLen . ").</p>";
             } else {
-                echo "<p style='color:red;'>Failed updating `$tableName`.`$columnName`: " . $conn->error . "</p>";
+                echo "<p style='color:red;'>Failed updating `$tblName`.`$columnName`: " . $conn->error . "</p>";
             }
         } else {
-            echo "<p style='color:green;'>Verified `$tableName`.`$columnName` is already non-integer ($dataType).</p>";
+            echo "<p style='color:green;'>Verified `$tblName`.`$columnName` is already non-integer ($dataType).</p>";
         }
     }
 }
 
-function alterColumnToTextIfVarchar($conn, $dbName, $tableName, $columnName)
+function alterColumnToTextIfVarchar($conn, $dbName, $tblName, $columnName)
 {
     $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
+    $safeTable = $conn->real_escape_string($tblName);
     $safeColumn = $conn->real_escape_string($columnName);
     $sql = "SELECT DATA_TYPE FROM information_schema.columns WHERE table_schema='$safeDb' AND table_name='$safeTable' AND column_name='$safeColumn' LIMIT 1";
-    $rst = $conn->query($sql);
+    $result = $conn->query($sql);
 
-    if (!$rst || $rst->num_rows === 0) {
-        echo "<p style='color:orange;'>Column `$columnName` not found in `$tableName` to alter.</p>";
+    if (!$result || $result->num_rows === 0) {
+        echo "<p style='color:orange;'>Column `$columnName` not found in `$tblName` to alter.</p>";
         return;
     }
 
-    $row = $rst->fetch_assoc();
+    $row = $result->fetch_assoc();
     if ($row) {
         $row = array_change_key_case($row, CASE_LOWER);
     }
@@ -126,35 +126,35 @@ function alterColumnToTextIfVarchar($conn, $dbName, $tableName, $columnName)
     if (isset($row['data_type'])) {
         $dataType = strtolower((string) $row['data_type']);
         if ($dataType === 'varchar') {
-            $alterSql = "ALTER TABLE `$tableName` MODIFY COLUMN `$columnName` TEXT NULL";
+            $alterSql = "ALTER TABLE `$tblName` MODIFY COLUMN `$columnName` TEXT NULL";
             if ($conn->query($alterSql)) {
-                echo "<p style='color:blue;'>Updated `$tableName`.`$columnName` to TEXT.</p>";
+                echo "<p style='color:blue;'>Updated `$tblName`.`$columnName` to TEXT.</p>";
             } else {
-                echo "<p style='color:red;'>Failed updating `$tableName`.`$columnName` to TEXT: " . $conn->error . "</p>";
+                echo "<p style='color:red;'>Failed updating `$tblName`.`$columnName` to TEXT: " . $conn->error . "</p>";
             }
         } else {
-            echo "<p style='color:green;'>Verified `$tableName`.`$columnName` is already non-varchar ($dataType).</p>";
+            echo "<p style='color:green;'>Verified `$tblName`.`$columnName` is already non-varchar ($dataType).</p>";
         }
     }
 }
 
-function ensureVarcharColumnLengthAtLeast($conn, $dbName, $tableName, $columnName, $minLength = 255, $defaultValue = '')
+function ensureVarcharColumnLengthAtLeast($conn, $dbName, $tblName, $columnName, $minLength = 255, $defaultValue = '')
 {
     $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
+    $safeTable = $conn->real_escape_string($tblName);
     $safeColumn = $conn->real_escape_string($columnName);
-    $qualifiedTable = "`" . str_replace('`', '``', $dbName) . "`.`" . str_replace('`', '``', $tableName) . "`";
-    $rst = $conn->query("SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE, COLUMN_DEFAULT
+    $qualifiedTable = "`" . str_replace('`', '``', $dbName) . "`.`" . str_replace('`', '``', $tblName) . "`";
+    $result = $conn->query("SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, IS_NULLABLE, COLUMN_DEFAULT
         FROM information_schema.columns
         WHERE table_schema='$safeDb' AND table_name='$safeTable' AND column_name='$safeColumn'
         LIMIT 1");
 
-    if (!$rst || $rst->num_rows === 0) {
-        echo "<p style='color:orange;'>Column `$columnName` not found in `$tableName` to verify length.</p>";
+    if (!$result || $result->num_rows === 0) {
+        echo "<p style='color:orange;'>Column `$columnName` not found in `$tblName` to verify length.</p>";
         return;
     }
 
-    $row = $rst->fetch_assoc();
+    $row = $result->fetch_assoc();
     if ($row) {
         $row = array_change_key_case($row, CASE_LOWER);
     }
@@ -167,12 +167,12 @@ function ensureVarcharColumnLengthAtLeast($conn, $dbName, $tableName, $columnNam
     if ($dataType !== 'varchar' || $currentLength < (int) $minLength || $isNullable) {
         $alterSql = "ALTER TABLE " . $qualifiedTable . " MODIFY COLUMN `" . str_replace('`', '``', $columnName) . "` VARCHAR(" . (int) $minLength . ") " . $defaultSql;
         if ($conn->query($alterSql)) {
-            echo "<p style='color:blue;'>Verified `$tableName`.`$columnName` supports VARCHAR(" . (int) $minLength . ").</p>";
+            echo "<p style='color:blue;'>Verified `$tblName`.`$columnName` supports VARCHAR(" . (int) $minLength . ").</p>";
         } else {
-            echo "<p style='color:red;'>Failed updating `$tableName`.`$columnName` length: " . $conn->error . "</p>";
+            echo "<p style='color:red;'>Failed updating `$tblName`.`$columnName` length: " . $conn->error . "</p>";
         }
     } else {
-        echo "<p style='color:green;'>Verified `$tableName`.`$columnName` already supports VARCHAR(" . (int) $currentLength . ").</p>";
+        echo "<p style='color:green;'>Verified `$tblName`.`$columnName` already supports VARCHAR(" . (int) $currentLength . ").</p>";
     }
 }
 
@@ -229,26 +229,26 @@ if ($cmsConn->connect_error) {
     insertTableEnsureOrderReportPins($cmsConn);
 }
 
-function indexExists($conn, $dbName, $tableName, $indexName)
+function indexExists($conn, $dbName, $tblName, $indexName)
 {
     $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
+    $safeTable = $conn->real_escape_string($tblName);
     $safeIndex = $conn->real_escape_string($indexName);
     $sql = "SELECT 1 FROM information_schema.statistics WHERE table_schema='$safeDb' AND table_name='$safeTable' AND index_name='$safeIndex' LIMIT 1";
-    $rst = $conn->query($sql);
-    return ($rst && $rst->num_rows > 0);
+    $result = $conn->query($sql);
+    return ($result && $result->num_rows > 0);
 }
 
-function dropIndexIfExists($conn, $dbName, $tableName, $indexName, $alterSql)
+function dropIndexIfExists($conn, $dbName, $tblName, $indexName, $alterSql)
 {
-    if (indexExists($conn, $dbName, $tableName, $indexName)) {
+    if (indexExists($conn, $dbName, $tblName, $indexName)) {
         if ($conn->query($alterSql)) {
-            echo "<p style='color:blue;'>Dropped index `$indexName` from `$tableName`.</p>";
+            echo "<p style='color:blue;'>Dropped index `$indexName` from `$tblName`.</p>";
         } else {
-            echo "<p style='color:red;'>Failed dropping index `$indexName` from `$tableName`: " . $conn->error . "</p>";
+            echo "<p style='color:red;'>Failed dropping index `$indexName` from `$tblName`: " . $conn->error . "</p>";
         }
     } else {
-        echo "<p style='color:green;'>Verified index `$indexName` is already removed from `$tableName`.</p>";
+        echo "<p style='color:green;'>Verified index `$indexName` is already removed from `$tblName`.</p>";
     }
 }
 
@@ -567,6 +567,12 @@ if ($conn->select_db($db_fin)) {
 // addColumnIfMissing($conn, $db_fin, 'shopee_ads_topup_transaction', 'attachment', "ALTER TABLE `shopee_ads_topup_transaction` ADD COLUMN `attachment` VARCHAR(255) DEFAULT NULL AFTER `pay_meth`");
 
 addColumnIfMissing($conn, $db_fin, 'stock_in_order', 'stock_type', "ALTER TABLE `stock_in_order` ADD COLUMN `stock_type` VARCHAR(20) NOT NULL DEFAULT 'Stock In' AFTER `attachment`");
+
+if ($conn->select_db($db_fin)) {
+    addColumnIfMissing($conn, $db_fin, 'stock_order_request', 'stock_order_image', "ALTER TABLE `stock_order_request` ADD COLUMN `stock_order_image` VARCHAR(255) DEFAULT NULL AFTER `attachment`");
+} else {
+    echo "<p style='color:red;'>Unable to select Finance database `" . $db_fin . "` for `stock_order_request.stock_order_image`.</p>";
+}
 
 $createStockOutBatchUsageTableSql = "CREATE TABLE IF NOT EXISTS `stock_out_batch_usage` (
     `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -1114,79 +1120,79 @@ migrationEnsureIndex($conn, $db_fin, 'stock_out_batch_usage', 'idx_sobu_product_
 
 // echo "<h3>Stock Order Request financial schema setup complete.</h3>";
 
-// function migrationTableExists($conn, $dbName, $tableName)
+// function migrationTableExists($conn, $dbName, $tblName)
 // {
 //     $safeDb = $conn->real_escape_string($dbName);
-//     $safeTable = $conn->real_escape_string($tableName);
+//     $safeTable = $conn->real_escape_string($tblName);
 //     $sql = "SELECT 1 FROM information_schema.tables WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' LIMIT 1";
-//     $rst = $conn->query($sql);
-//     return ($rst && $rst->num_rows > 0);
+//     $result = $conn->query($sql);
+//     return ($result && $result->num_rows > 0);
 // }
 
-// function migrationColumnExists($conn, $dbName, $tableName, $columnName)
+// function migrationColumnExists($conn, $dbName, $tblName, $columnName)
 // {
 //     $safeDb = $conn->real_escape_string($dbName);
-//     $safeTable = $conn->real_escape_string($tableName);
+//     $safeTable = $conn->real_escape_string($tblName);
 //     $safeColumn = $conn->real_escape_string($columnName);
 //     $sql = "SELECT 1 FROM information_schema.columns WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' AND column_name='" . $safeColumn . "' LIMIT 1";
-//     $rst = $conn->query($sql);
-//     return ($rst && $rst->num_rows > 0);
+//     $result = $conn->query($sql);
+//     return ($result && $result->num_rows > 0);
 // }
 
-// function migrationIndexExists($conn, $dbName, $tableName, $indexName)
+// function migrationIndexExists($conn, $dbName, $tblName, $indexName)
 // {
 //     $safeDb = $conn->real_escape_string($dbName);
-//     $safeTable = $conn->real_escape_string($tableName);
+//     $safeTable = $conn->real_escape_string($tblName);
 //     $safeIndex = $conn->real_escape_string($indexName);
 //     $sql = "SELECT 1 FROM information_schema.statistics WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' AND index_name='" . $safeIndex . "' LIMIT 1";
-//     $rst = $conn->query($sql);
-//     return ($rst && $rst->num_rows > 0);
+//     $result = $conn->query($sql);
+//     return ($result && $result->num_rows > 0);
 // }
 
-function migrationTableExists($conn, $dbName, $tableName)
+function migrationTableExists($conn, $dbName, $tblName)
 {
     $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
+    $safeTable = $conn->real_escape_string($tblName);
     $sql = "SELECT 1 FROM information_schema.tables WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' LIMIT 1";
-    $rst = $conn->query($sql);
-    return ($rst && $rst->num_rows > 0);
+    $result = $conn->query($sql);
+    return ($result && $result->num_rows > 0);
 }
 
-function migrationColumnExists($conn, $dbName, $tableName, $columnName)
+function migrationColumnExists($conn, $dbName, $tblName, $columnName)
 {
     $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
+    $safeTable = $conn->real_escape_string($tblName);
     $safeColumn = $conn->real_escape_string($columnName);
     $sql = "SELECT 1 FROM information_schema.columns WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' AND column_name='" . $safeColumn . "' LIMIT 1";
-    $rst = $conn->query($sql);
-    return ($rst && $rst->num_rows > 0);
+    $result = $conn->query($sql);
+    return ($result && $result->num_rows > 0);
 }
 
-function migrationIndexExists($conn, $dbName, $tableName, $indexName)
+function migrationIndexExists($conn, $dbName, $tblName, $indexName)
 {
     $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
+    $safeTable = $conn->real_escape_string($tblName);
     $safeIndex = $conn->real_escape_string($indexName);
     $sql = "SELECT 1 FROM information_schema.statistics WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' AND index_name='" . $safeIndex . "' LIMIT 1";
-    $rst = $conn->query($sql);
-    return ($rst && $rst->num_rows > 0);
+    $result = $conn->query($sql);
+    return ($result && $result->num_rows > 0);
 }
 
-function migrationEnsureColumn($conn, $dbName, $tableName, $columnName, $alterSql, $successMessage)
+function migrationEnsureColumn($conn, $dbName, $tblName, $columnName, $alterSql, $successMessage)
 {
-    if (!migrationColumnExists($conn, $dbName, $tableName, $columnName)) {
+    if (!migrationColumnExists($conn, $dbName, $tblName, $columnName)) {
         if ($conn->query($alterSql)) {
             echo "<p style='color:green;'>" . $successMessage . "</p>";
         } else {
-            echo "<p style='color:red;'>Failed altering `" . $tableName . "` for column `" . $columnName . "`: " . $conn->error . "</p>";
+            echo "<p style='color:red;'>Failed altering `" . $tblName . "` for column `" . $columnName . "`: " . $conn->error . "</p>";
         }
     }
 }
 
-function migrationEnsureColumnAfter($conn, $dbName, $tableName, $columnName, $afterColumnName, $modifySql, $successMessage)
+function migrationEnsureColumnAfter($conn, $dbName, $tblName, $columnName, $afterColumnName, $modifySql, $successMessage)
 {
     $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
+    $safeTable = $conn->real_escape_string($tblName);
     $safeColumn = $conn->real_escape_string($columnName);
     $safeAfterColumn = $conn->real_escape_string($afterColumnName);
     $sql = "SELECT c.ORDINAL_POSITION AS column_position, a.ORDINAL_POSITION AS after_position
@@ -1199,13 +1205,13 @@ function migrationEnsureColumnAfter($conn, $dbName, $tableName, $columnName, $af
             AND c.table_name = '$safeTable'
             AND c.column_name = '$safeColumn'
         LIMIT 1";
-    $rst = $conn->query($sql);
+    $result = $conn->query($sql);
 
-    if (!$rst || $rst->num_rows === 0) {
+    if (!$result || $result->num_rows === 0) {
         return;
     }
 
-    $row = $rst->fetch_assoc();
+    $row = $result->fetch_assoc();
     $columnPosition = isset($row['column_position']) ? (int) $row['column_position'] : 0;
     $afterPosition = isset($row['after_position']) ? (int) $row['after_position'] : 0;
 
@@ -1213,26 +1219,26 @@ function migrationEnsureColumnAfter($conn, $dbName, $tableName, $columnName, $af
         if ($conn->query($modifySql)) {
             echo "<p style='color:blue;'>" . $successMessage . "</p>";
         } else {
-            echo "<p style='color:red;'>Failed repositioning `" . $tableName . "`.`" . $columnName . "`: " . $conn->error . "</p>";
+            echo "<p style='color:red;'>Failed repositioning `" . $tblName . "`.`" . $columnName . "`: " . $conn->error . "</p>";
         }
     }
 }
 
-function migrationEnsureIndex($conn, $dbName, $tableName, $indexName, $alterSql, $successMessage)
+function migrationEnsureIndex($conn, $dbName, $tblName, $indexName, $alterSql, $successMessage)
 {
-    if (!migrationIndexExists($conn, $dbName, $tableName, $indexName)) {
+    if (!migrationIndexExists($conn, $dbName, $tblName, $indexName)) {
         if ($conn->query($alterSql)) {
             echo "<p style='color:green;'>" . $successMessage . "</p>";
         } else {
-            echo "<p style='color:red;'>Failed altering `" . $tableName . "` for index `" . $indexName . "`: " . $conn->error . "</p>";
+            echo "<p style='color:red;'>Failed altering `" . $tblName . "` for index `" . $indexName . "`: " . $conn->error . "</p>";
         }
     }
 }
 
-function migrationGetSettingValue($conn, $dbName, $tableName, $settingKey)
+function migrationGetSettingValue($conn, $dbName, $tblName, $settingKey)
 {
     $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
+    $safeTable = $conn->real_escape_string($tblName);
     $safeKey = $conn->real_escape_string($settingKey);
     $sql = "SELECT `setting_value` FROM `" . $safeDb . "`.`" . $safeTable . "` WHERE `setting_key` = '" . $safeKey . "' LIMIT 1";
     $result = $conn->query($sql);
@@ -1245,10 +1251,10 @@ function migrationGetSettingValue($conn, $dbName, $tableName, $settingKey)
     return isset($row['setting_value']) ? (string) $row['setting_value'] : null;
 }
 
-function migrationUpsertSetting($conn, $dbName, $tableName, $settingKey, $settingValue, $remark, $actorUserId)
+function migrationUpsertSetting($conn, $dbName, $tblName, $settingKey, $settingValue, $remark, $actorUserId)
 {
     $safeDb = $conn->real_escape_string($dbName);
-    $safeTable = $conn->real_escape_string($tableName);
+    $safeTable = $conn->real_escape_string($tblName);
     $safeKey = $conn->real_escape_string($settingKey);
     $safeValue = $conn->real_escape_string($settingValue);
     $safeRemark = $conn->real_escape_string($remark);
@@ -1597,6 +1603,52 @@ migrationEnsureIndex($conn, $db_cms, $systemAlertMessageTable, 'idx_sam_module_s
 migrationEnsureIndex($conn, $db_cms, $systemAlertMessageTable, 'idx_sam_display_date', "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD INDEX `idx_sam_display_date` (`display_date`)", "Verified `{$systemAlertMessageTable}` display date index.");
 migrationEnsureIndex($conn, $db_cms, $systemAlertMessageTable, 'idx_sam_related_record', "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD INDEX `idx_sam_related_record` (`related_table`, `related_id`)", "Verified `{$systemAlertMessageTable}` related record index.");
 migrationEnsureIndex($conn, $db_cms, $systemAlertMessageTable, 'idx_sam_notification_type', "ALTER TABLE `{$db_cms}`.`{$systemAlertMessageTable}` ADD INDEX `idx_sam_notification_type` (`notification_type`)", "Verified `{$systemAlertMessageTable}` notification type index.");
+
+$orderDeleteApprovalRequestTable = defined('ORDER_DELETE_APPROVAL_REQUEST') ? ORDER_DELETE_APPROVAL_REQUEST : 'order_delete_approval_request';
+$createOrderDeleteApprovalRequestSql = "CREATE TABLE IF NOT EXISTS `{$db_cms}`.`{$orderDeleteApprovalRequestTable}` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `module_key` VARCHAR(80) NOT NULL DEFAULT '',
+    `platform` VARCHAR(30) DEFAULT NULL,
+    `source_db` VARCHAR(20) NOT NULL DEFAULT '',
+    `source_table` VARCHAR(120) NOT NULL DEFAULT '',
+    `source_order_id` INT NOT NULL DEFAULT 0,
+    `source_order_label` VARCHAR(255) DEFAULT NULL,
+    `request_user_id` INT NOT NULL DEFAULT 0,
+    `request_user_group_id` INT DEFAULT NULL,
+    `supervisor_user_ids` VARCHAR(255) DEFAULT NULL,
+    `request_status` VARCHAR(20) NOT NULL DEFAULT 'pending',
+    `approval_remark` TEXT DEFAULT NULL,
+    `reject_reason` TEXT DEFAULT NULL,
+    `decision_user_id` INT DEFAULT NULL,
+    `decision_date` DATE DEFAULT NULL,
+    `decision_time` TIME DEFAULT NULL,
+    `executed_user_id` INT DEFAULT NULL,
+    `executed_date` DATE DEFAULT NULL,
+    `executed_time` TIME DEFAULT NULL,
+    `create_by` VARCHAR(30) DEFAULT NULL,
+    `create_date` DATE DEFAULT NULL,
+    `create_time` TIME DEFAULT NULL,
+    `update_by` VARCHAR(30) DEFAULT NULL,
+    `update_date` DATE DEFAULT NULL,
+    `update_time` TIME DEFAULT NULL,
+    `status` CHAR(1) NOT NULL DEFAULT 'A',
+    PRIMARY KEY (`id`),
+    KEY `idx_odar_source_pending` (`module_key`, `source_order_id`, `request_status`, `status`),
+    KEY `idx_odar_request_user_pending` (`request_user_id`, `request_status`, `status`),
+    KEY `idx_odar_request_status` (`request_status`, `status`),
+    KEY `idx_odar_decision_user` (`decision_user_id`, `request_status`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+if ($conn->query($createOrderDeleteApprovalRequestSql)) {
+    echo "<p style='color:green;'>Verified `{$orderDeleteApprovalRequestTable}` is ready in `{$db_cms}`.</p>";
+} else {
+    echo "<p style='color:red;'>Failed creating `{$orderDeleteApprovalRequestTable}`: " . $conn->error . "</p>";
+}
+
+migrationEnsureIndex($conn, $db_cms, $orderDeleteApprovalRequestTable, 'idx_odar_source_pending', "ALTER TABLE `{$db_cms}`.`{$orderDeleteApprovalRequestTable}` ADD INDEX `idx_odar_source_pending` (`module_key`, `source_order_id`, `request_status`, `status`)", "Verified `{$orderDeleteApprovalRequestTable}` source pending index.");
+migrationEnsureIndex($conn, $db_cms, $orderDeleteApprovalRequestTable, 'idx_odar_request_user_pending', "ALTER TABLE `{$db_cms}`.`{$orderDeleteApprovalRequestTable}` ADD INDEX `idx_odar_request_user_pending` (`request_user_id`, `request_status`, `status`)", "Verified `{$orderDeleteApprovalRequestTable}` requester pending index.");
+migrationEnsureIndex($conn, $db_cms, $orderDeleteApprovalRequestTable, 'idx_odar_request_status', "ALTER TABLE `{$db_cms}`.`{$orderDeleteApprovalRequestTable}` ADD INDEX `idx_odar_request_status` (`request_status`, `status`)", "Verified `{$orderDeleteApprovalRequestTable}` request status index.");
+migrationEnsureIndex($conn, $db_cms, $orderDeleteApprovalRequestTable, 'idx_odar_decision_user', "ALTER TABLE `{$db_cms}`.`{$orderDeleteApprovalRequestTable}` ADD INDEX `idx_odar_decision_user` (`decision_user_id`, `request_status`, `status`)", "Verified `{$orderDeleteApprovalRequestTable}` decision user index.");
 
 function removePinAccessIds($pinList, $removeIds = array(7, 8))
 {
@@ -2380,6 +2432,152 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Failed creating `" . TASK_ITEM_RELATION . "`: " . $conn->error . "</p>";
     }
 
+    $createTaskItemLinkSql = "CREATE TABLE IF NOT EXISTS `" . TASK_ITEM_LINK . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `project_id` INT NOT NULL,
+        `source_item_id` INT NOT NULL,
+        `target_item_id` INT NOT NULL,
+        `relation_type` VARCHAR(80) NOT NULL,
+        `remark` VARCHAR(255) DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_project_source_status` (`project_id`, `source_item_id`, `status`),
+        KEY `idx_project_target_status` (`project_id`, `target_item_id`, `status`),
+        KEY `idx_relation_type` (`relation_type`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+
+    if ($conn->query($createTaskItemLinkSql)) {
+        echo "<p style='color:green;'>Verified table `" . TASK_ITEM_LINK . "` for task item linked-work-item relations.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . TASK_ITEM_LINK . "`: " . $conn->error . "</p>";
+    }
+
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'project_id',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD COLUMN `project_id` INT NOT NULL AFTER `id`",
+        "Verified `" . TASK_ITEM_LINK . "` includes `project_id`."
+    );
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'source_item_id',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD COLUMN `source_item_id` INT NOT NULL AFTER `project_id`",
+        "Verified `" . TASK_ITEM_LINK . "` includes `source_item_id`."
+    );
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'target_item_id',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD COLUMN `target_item_id` INT NOT NULL AFTER `source_item_id`",
+        "Verified `" . TASK_ITEM_LINK . "` includes `target_item_id`."
+    );
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'relation_type',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD COLUMN `relation_type` VARCHAR(80) NOT NULL AFTER `target_item_id`",
+        "Verified `" . TASK_ITEM_LINK . "` includes `relation_type`."
+    );
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'remark',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD COLUMN `remark` VARCHAR(255) DEFAULT NULL AFTER `relation_type`",
+        "Verified `" . TASK_ITEM_LINK . "` includes `remark`."
+    );
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'create_by',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD COLUMN `create_by` VARCHAR(30) DEFAULT NULL AFTER `remark`",
+        "Verified `" . TASK_ITEM_LINK . "` includes `create_by`."
+    );
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'create_date',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD COLUMN `create_date` DATE DEFAULT NULL AFTER `create_by`",
+        "Verified `" . TASK_ITEM_LINK . "` includes `create_date`."
+    );
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'create_time',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD COLUMN `create_time` TIME DEFAULT NULL AFTER `create_date`",
+        "Verified `" . TASK_ITEM_LINK . "` includes `create_time`."
+    );
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'update_by',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD COLUMN `update_by` VARCHAR(30) DEFAULT NULL AFTER `create_time`",
+        "Verified `" . TASK_ITEM_LINK . "` includes `update_by`."
+    );
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'update_date',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD COLUMN `update_date` DATE DEFAULT NULL AFTER `update_by`",
+        "Verified `" . TASK_ITEM_LINK . "` includes `update_date`."
+    );
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'update_time',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD COLUMN `update_time` TIME DEFAULT NULL AFTER `update_date`",
+        "Verified `" . TASK_ITEM_LINK . "` includes `update_time`."
+    );
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'status',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A' AFTER `update_time`",
+        "Verified `" . TASK_ITEM_LINK . "` includes `status`."
+    );
+    migrationEnsureIndex(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'idx_project_source_status',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD INDEX `idx_project_source_status` (`project_id`, `source_item_id`, `status`)",
+        "Verified `" . TASK_ITEM_LINK . "` includes `idx_project_source_status`."
+    );
+    migrationEnsureIndex(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'idx_project_target_status',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD INDEX `idx_project_target_status` (`project_id`, `target_item_id`, `status`)",
+        "Verified `" . TASK_ITEM_LINK . "` includes `idx_project_target_status`."
+    );
+    migrationEnsureIndex(
+        $conn,
+        $db_cms,
+        TASK_ITEM_LINK,
+        'idx_relation_type',
+        "ALTER TABLE `" . $db_cms . "`.`" . TASK_ITEM_LINK . "` ADD INDEX `idx_relation_type` (`relation_type`)",
+        "Verified `" . TASK_ITEM_LINK . "` includes `idx_relation_type`."
+    );
+
     $createTaskItemHistorySql = "CREATE TABLE IF NOT EXISTS `" . TASK_ITEM_HISTORY . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `item_id` INT NOT NULL,
@@ -2452,6 +2650,32 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Failed creating `" . TASK_ITEM_COMMENT_REPLY . "`: " . $conn->error . "</p>";
     }
 
+    $createTaskItemWorklogSql = "CREATE TABLE IF NOT EXISTS `" . TASK_ITEM_WORKLOG . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `item_id` INT NOT NULL,
+        `duration_seconds` INT NOT NULL DEFAULT 0,
+        `started_date` DATE DEFAULT NULL,
+        `started_time` TIME DEFAULT NULL,
+        `work_description_html` MEDIUMTEXT DEFAULT NULL,
+        `work_description_text` TEXT DEFAULT NULL,
+        `remaining_seconds_snapshot` INT DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_task_item_worklog_main` (`item_id`, `status`, `started_date`, `started_time`),
+        KEY `idx_task_item_worklog_created` (`create_date`, `create_time`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createTaskItemWorklogSql)) {
+        echo "<p style='color:green;'>Verified table `" . TASK_ITEM_WORKLOG . "` for task item worklogs.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . TASK_ITEM_WORKLOG . "`: " . $conn->error . "</p>";
+    }
+
     // MIGRATION: Update indexes for existing Task Item Comment tables
 
     // 1. Migration for TASK_ITEM_COMMENT
@@ -2515,6 +2739,7 @@ if ($conn->select_db($db_cms)) {
     migrationEnsureIndex($conn, $db_cms, TASK_PROJECT_KEY, 'idx_task_project_key_project', "ALTER TABLE `" . TASK_PROJECT_KEY . "` ADD INDEX `idx_task_project_key_project` (`project_id`, `status`)", "Verified `" . TASK_PROJECT_KEY . "` project index.");
 
     migrationEnsureColumn($conn, $db_cms, TASK_ITEM, 'project_id', "ALTER TABLE `" . TASK_ITEM . "` ADD COLUMN `project_id` INT DEFAULT NULL AFTER `id`", "Verified `" . TASK_ITEM . "` includes `project_id`.");
+    migrationEnsureColumn($conn, $db_cms, TASK_ITEM, 'remaining_estimate_seconds', "ALTER TABLE `" . TASK_ITEM . "` ADD COLUMN `remaining_estimate_seconds` INT DEFAULT NULL AFTER `original_estimate`", "Verified `" . TASK_ITEM . "` includes `remaining_estimate_seconds`.");
     migrationEnsureIndex($conn, $db_cms, TASK_ITEM, 'idx_task_item_project', "ALTER TABLE `" . TASK_ITEM . "` ADD INDEX `idx_task_item_project` (`project_id`, `column_id`, `sort_order`)", "Verified `" . TASK_ITEM . "` project index.");
 
     migrationEnsureColumn($conn, $db_cms, TASK_SHEETS, 'project_id', "ALTER TABLE `" . TASK_SHEETS . "` ADD COLUMN `project_id` INT DEFAULT NULL AFTER `id`", "Verified `" . TASK_SHEETS . "` includes `project_id`.");

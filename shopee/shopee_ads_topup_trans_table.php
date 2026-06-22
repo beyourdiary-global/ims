@@ -2,10 +2,9 @@
 ob_start();
 $pageTitle = "Shopee Ads Top Up Transaction";
 $currentPagePin = 77;
-$isFinance = 1;
-include '../menuHeader.php';
-include '../checkCurrentPagePin.php';
-$pageTitle = getPinGroupNameById($connect, $currentPagePin);
+$listPageSkipPinAccess = true;
+
+include_once '../include/list_page_header.php';
 
 checkCurrentPin($connect, $pageTitle);
 $pinAccess = checkPin($connect, $pageTitle);
@@ -191,50 +190,8 @@ if (!empty($checkboxValues)) {
     }
 }
 
-function addDirToZip($dir, $zip, $basePath)
-{
-    $files = scandir($dir);
-    foreach ($files as $file) {
-        if ($file == '.' || $file == '..') {
-            continue;
-        }
-        $filePath = $dir . $file;
-        if (is_file($filePath)) {
-            // Add the file to the zip archive with a relative path
-            $relativePath = str_replace($basePath, '', $filePath);
-            $zip->addFile($filePath, $relativePath);
-        } elseif (is_dir($filePath)) {
-            // Add the directory to the zip archive
-            $zip->addEmptyDir(str_replace($basePath, '', $filePath));
-            // Recursively add files and directories inside the current directory
-            addDirToZip($filePath . '/', $zip, $basePath);
-        }
-    }
-}
-
-function deleteDir($dirPath) {
-    if (!is_dir($dirPath)) {
-        return;
-    }
-    $files = glob($dirPath . '*', GLOB_MARK);
-    foreach ($files as $file) {
-        if (is_dir($file)) {
-            deleteDir($file);
-        } else {
-            unlink($file);
-        }
-    }
-    rmdir($dirPath);
-}
-
-$_SESSION['act'] = '';
-$_SESSION['viewChk'] = '';
-$_SESSION['searchChk'] = '';
-unset($_SESSION['resetChk']);
-$_SESSION['delChk'] = '';
-$num = 1;   // numbering
 $deleteRedirectPage = $SITEURL . '/shopee/shopee_ads_topup_trans_table.php';
-$redirect_page = $SITEURL . '/shopee/shopee_ads_topup_trans.php';
+$redirectPage = $SITEURL . '/shopee/shopee_ads_topup_trans.php';
 $result = getData('*', '', '', SHOPEE_ADS_TOPUP, $finance_connect);
 $tblName = SHOPEE_ADS_TOPUP;
 
@@ -465,10 +422,10 @@ if ($isTimeReportMode || $groupOption !== '') {
                         <h2><?php echo $pageTitle ?></h2>
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                <a class="btn btn-sm btn-rounded btn-primary px-3" name="addBtn" id="addBtn" href="<?= $redirect_page . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
+                                <a class="btn btn-sm btn-rounded btn-primary px-3" name="addBtn" id="addBtn" href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add Transaction </a>
                             <?php endif; ?>
                             <?php if (isActionAllowed("Import", $pinAccess)) : ?>
-                                <a class="btn btn-sm btn-rounded btn-primary px-3" name="importBtn" id="addBtn" href="<?= $SITEURL ?>/shopee_ads_topup_import.php"><i class="fa-solid fa-file-import"></i> Import </a>
+                                <a class="btn btn-sm btn-rounded btn-primary px-3" name="importBtn" id="addBtn" href="<?= $SITEURL ?>/import/shopee_ads_topup_import.php"><i class="fa-solid fa-file-import"></i> Import </a>
                             <?php endif; ?>
                             <?php if (isActionAllowed("Export", $pinAccess)) : ?>
                                 <a class="btn btn-sm btn-rounded btn-primary px-3" name="exportBtnShopee" id="addBtn" href="#"><i class="fa-solid fa-file-export"></i> Export</a>
@@ -663,9 +620,9 @@ if ($isTimeReportMode || $groupOption !== '') {
                             <td scope="row" class="btn-container">
                             <div class="d-flex align-items-center">' 
                             ?>
-                            <?php renderViewEditButton("View", $redirect_page, $row, $pinAccess);?>
-                            <?php renderViewEditButton("Edit", $redirect_page, $row, $pinAccess, $act_2) ?>
-                            <?php renderDeleteButton($pinAccess, $row['id'], $row['shopee_acc'], $row['orderID'], $pageTitle, $redirect_page, $deleteRedirectPage) ?>
+                            <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess);?>
+                            <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2) ?>
+                            <?php renderDeleteButton($pinAccess, $row['id'], $row['shopee_acc'], $row['orderID'], $pageTitle, $redirectPage, $deleteRedirectPage) ?>
                             <?php echo'</div>
                             </td>
                             <td scope="row">' . (isset($shopee_acc['name']) ? $shopee_acc['name'] : '') . '</td>

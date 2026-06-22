@@ -75,6 +75,46 @@ function xssFilter($url)
 	return $url;
 }
 
+if (!function_exists('addDirToZip')) {
+	function addDirToZip($dir, $zip, $basePath)
+	{
+		$files = scandir($dir);
+		foreach ($files as $file) {
+			if ($file == '.' || $file == '..') {
+				continue;
+			}
+			$filePath = $dir . $file;
+			if (is_file($filePath)) {
+				// Add the file to the zip archive with a relative path.
+				$relativePath = str_replace($basePath, '', $filePath);
+				$zip->addFile($filePath, $relativePath);
+			} elseif (is_dir($filePath)) {
+				// Add the directory to the zip archive and recurse into it.
+				$zip->addEmptyDir(str_replace($basePath, '', $filePath));
+				addDirToZip($filePath . '/', $zip, $basePath);
+			}
+		}
+	}
+}
+
+if (!function_exists('deleteDir')) {
+	function deleteDir($dirPath)
+	{
+		if (!is_dir($dirPath)) {
+			return;
+		}
+		$files = glob($dirPath . '*', GLOB_MARK);
+		foreach ($files as $file) {
+			if (is_dir($file)) {
+				deleteDir($file);
+			} else {
+				unlink($file);
+			}
+		}
+		rmdir($dirPath);
+	}
+}
+
 if (!function_exists('decodePdfStream')) {
     function decodePdfStream($stream)
     {
@@ -116,6 +156,57 @@ if (!function_exists('commonFormatAmountRm')) {
     {
         $num = is_numeric($val) ? (float) $val : 0;
         return number_format($num, 2, '.', '');
+    }
+}
+
+if (!function_exists('financeGenerateTableRow')) {
+    function financeGenerateTableRow($config, &$counters)
+    {
+        $id = isset($config['id']) ? $config['id'] : '';
+        $summaryPage = isset($config['summary_page']) ? trim((string) $config['summary_page']) : '';
+        $urlParamName = isset($config['url_param_name']) && trim((string) $config['url_param_name']) !== ''
+            ? trim((string) $config['url_param_name'])
+            : 'ids';
+        $cells = isset($config['cells']) ? $config['cells'] : array();
+        $amount = isset($config['amount']) ? $config['amount'] : 0;
+        $amountDecimals = isset($config['amount_decimals']) ? (int) $config['amount_decimals'] : 2;
+        $checkboxClass = isset($config['checkbox_class']) && trim((string) $config['checkbox_class']) !== ''
+            ? trim((string) $config['checkbox_class'])
+            : 'export';
+        $checkboxValue = array_key_exists('checkbox_value', $config) ? $config['checkbox_value'] : $id;
+        $idBeforeCheckbox = array_key_exists('id_before_checkbox', $config) ? (bool) $config['id_before_checkbox'] : true;
+        $includeHiddenId = array_key_exists('include_hidden_id', $config) ? (bool) $config['include_hidden_id'] : true;
+
+        if (!is_array($cells)) {
+            $cells = array($cells);
+        }
+
+        $url = $summaryPage !== ''
+            ? $summaryPage . '?' . rawurlencode($urlParamName) . '=' . rawurlencode((string) $id)
+            : '#';
+
+        $checkboxValueAttr = $checkboxValue === null ? '' : ' value="' . $checkboxValue . '"';
+
+        echo '<tr onclick="window.location=\'' . $url . '\';" style="cursor:pointer;">';
+
+        if ($idBeforeCheckbox && $includeHiddenId) {
+            echo '<th class="hideColumn" scope="row">' . $id . '</th>';
+        }
+
+        echo ' <th class="text-center"><input type="checkbox" class="' . $checkboxClass . '"' . $checkboxValueAttr . '></th>';
+
+        if (!$idBeforeCheckbox && $includeHiddenId) {
+            echo '<th class="hideColumn" scope="row">' . $id . '</th>';
+        }
+
+        echo '<th scope="row">' . $counters++ . '</th>';
+
+        foreach ($cells as $cell) {
+            echo '<td scope="row">' . $cell . '</td>';
+        }
+
+        echo '<td scope="row">' . number_format((float) $amount, $amountDecimals, '.', '') . '</td>';
+        echo '</tr>';
     }
 }
 
@@ -176,9 +267,9 @@ if (!function_exists('commonResolvePaymentMethodName')) {
             return $payMethodId;
         }
 
-        $rst = getData('name', "id='" . mysqli_real_escape_string($financeConnect, $payMethodId) . "'", 'LIMIT 1', FIN_PAY_METH, $financeConnect);
-        if ($rst && $rst->num_rows > 0) {
-            $row = $rst->fetch_assoc();
+        $result = getData('name', "id='" . mysqli_real_escape_string($financeConnect, $payMethodId) . "'", 'LIMIT 1', FIN_PAY_METH, $financeConnect);
+        if ($result && $result->num_rows > 0) {
+            $row = $result->fetch_assoc();
             return isset($row['name']) ? (string) $row['name'] : $payMethodId;
         }
 
@@ -222,6 +313,142 @@ if (!function_exists('commonResolveBackUrl')) {
         $referer = isset($_SERVER['HTTP_REFERER']) ? $_SERVER['HTTP_REFERER'] : '';
 
         return commonSafeBackUrl($referer, $fallbackUrl);
+    }
+}
+
+if (!function_exists('renderNotificationScript')) {
+    function renderNotificationScript($message, $type = 'info', $redirectUrl = '', $delayMs = 1200, $useReplace = false, $reload = false)
+    {
+        $allowedTypes = array('success', 'error', 'warning', 'info');
+        $type = strtolower(trim((string) $type));
+        if (!in_array($type, $allowedTypes, true)) {
+            $type = 'info';
+        }
+
+        $messageJson = json_encode((string) $message, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+        $typeJson = json_encode($type, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+        $redirectJson = json_encode((string) $redirectUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+        $delayMs = max(0, (int) $delayMs);
+        $useReplace = $useReplace ? 'true' : 'false';
+        $reload = $reload ? 'true' : 'false';
+
+        echo '<script>(function(){'
+            . 'var message=' . $messageJson . ';'
+            . 'var type=' . $typeJson . ';'
+            . 'var redirectUrl=' . $redirectJson . ';'
+            . 'var delayMs=' . $delayMs . ';'
+            . 'var useReplace=' . $useReplace . ';'
+            . 'var shouldReload=' . $reload . ';'
+            . 'function fallbackShowNotification(text, kind){'
+                . 'var resolvedText=String(text==null?"":text).trim();'
+                . 'if(!resolvedText){return;}'
+                . 'var resolvedType=String(kind||"info").toLowerCase();'
+                . 'var palette={success:{background:"#d1e7dd",border:"#badbcc",color:"#0f5132"},error:{background:"#f8d7da",border:"#f5c2c7",color:"#842029"},warning:{background:"#fff3cd",border:"#ffecb5",color:"#664d03"},info:{background:"#cff4fc",border:"#b6effb",color:"#055160"}};'
+                . 'if(!palette[resolvedType]){resolvedType="info";}'
+                . 'var host=document.getElementById("global-notification-host");'
+                . 'if(!host){host=document.createElement("div");host.id="global-notification-host";host.setAttribute("aria-live","polite");host.style.position="fixed";host.style.top="16px";host.style.right="16px";host.style.zIndex="1080";host.style.display="flex";host.style.flexDirection="column";host.style.gap="10px";host.style.maxWidth="min(360px, calc(100vw - 32px))";(document.body||document.documentElement).appendChild(host);}'
+                . 'var toast=document.createElement("div");'
+                . 'toast.setAttribute("role","status");'
+                . 'toast.style.background=palette[resolvedType].background;'
+                . 'toast.style.border="1px solid "+palette[resolvedType].border;'
+                . 'toast.style.borderRadius="10px";'
+                . 'toast.style.boxShadow="0 10px 24px rgba(15, 23, 42, 0.14)";'
+                . 'toast.style.color=palette[resolvedType].color;'
+                . 'toast.style.fontSize="14px";'
+                . 'toast.style.fontWeight="600";'
+                . 'toast.style.lineHeight="1.4";'
+                . 'toast.style.padding="12px 14px";'
+                . 'toast.style.opacity="0";'
+                . 'toast.style.transform="translateY(-8px)";'
+                . 'toast.style.transition="opacity 0.2s ease, transform 0.2s ease";'
+                . 'toast.textContent=resolvedText;'
+                . 'host.appendChild(toast);'
+                . 'window.requestAnimationFrame(function(){toast.style.opacity="1";toast.style.transform="translateY(0)";});'
+                . 'window.setTimeout(function(){toast.style.opacity="0";toast.style.transform="translateY(-8px)";window.setTimeout(function(){if(toast.parentNode){toast.parentNode.removeChild(toast);}},220);},3200);'
+            . '}'
+            . 'var notify=typeof window.showNotification==="function"?window.showNotification:fallbackShowNotification;'
+            . 'notify(message,type);'
+            . 'if(shouldReload){window.setTimeout(function(){window.location.reload();},delayMs);return;}'
+            . 'if(redirectUrl){window.setTimeout(function(){if(useReplace&&typeof window.location.replace==="function"){window.location.replace(redirectUrl);}else{window.location.href=redirectUrl;}},delayMs);}'
+        . '})();</script>';
+    }
+}
+
+if (!function_exists('resolveNotificationType')) {
+    function resolveNotificationType($message, $defaultType = 'info')
+    {
+        $defaultType = strtolower(trim((string) $defaultType));
+        if (!in_array($defaultType, array('success', 'error', 'warning', 'info'), true)) {
+            $defaultType = 'info';
+        }
+
+        $normalized = strtolower(trim((string) $message));
+        if ($normalized === '') {
+            return $defaultType;
+        }
+
+        $successKeywords = array(
+            'success',
+            'successful',
+            'completed',
+            'complete',
+            'created',
+            'updated',
+            'saved',
+            'imported',
+            'sent',
+            'added'
+        );
+        foreach ($successKeywords as $keyword) {
+            if (strpos($normalized, $keyword) !== false) {
+                return 'success';
+            }
+        }
+
+        $errorKeywords = array(
+            'required',
+            'missing',
+            'invalid',
+            'error',
+            'failed',
+            'unable',
+            'sorry',
+            'no permission',
+            'security',
+            'denied',
+            'captcha'
+        );
+        foreach ($errorKeywords as $keyword) {
+            if (strpos($normalized, $keyword) !== false) {
+                return 'error';
+            }
+        }
+
+        $warningKeywords = array(
+            'please select',
+            'please fill',
+            'please wait',
+            'please check',
+            'refresh the page'
+        );
+        foreach ($warningKeywords as $keyword) {
+            if (strpos($normalized, $keyword) !== false) {
+                return 'warning';
+            }
+        }
+
+        $infoKeywords = array(
+            'no record',
+            'not found',
+            'no selected'
+        );
+        foreach ($infoKeywords as $keyword) {
+            if (strpos($normalized, $keyword) !== false) {
+                return 'info';
+            }
+        }
+
+        return $defaultType;
     }
 }
 
@@ -392,7 +619,7 @@ function isDuplicateRecord($fieldName, $fieldValue, $tbl, $connect, $primaryKeyV
 	return false;
 }
 
-//example: isDuplicateRecordWithConditions(['month', 'year'], [$btb_month, $btb_year], $tblName, $finance_connect, $dataID)
+//example: isDuplicateRecordWithConditions(['month', 'year'], [$btb_month, $btb_year], $tblName, $finance_connect, $dataId)
 function isDuplicateRecordWithConditions($fields, $values, $tbl, $connect, $primaryKeyValue)
 {
 	if (count($fields) !== count($values) || empty($fields)) {
@@ -444,12 +671,12 @@ function isRecordExist($tblName, $idType, $id, $connect)
 }
 
 
-function tableExists($tableName, $conn)
+function tableExists($tblName, $conn)
 {
 	if (!$conn) {
 		die("Database connection is not initialized.");
 	}
-	$result = $conn->query("SHOW TABLES LIKE '$tableName'");
+	$result = $conn->query("SHOW TABLES LIKE '$tblName'");
 	if (!$result)
 		return;
 	return $result && $result->num_rows > 0;
@@ -502,9 +729,9 @@ if (!function_exists('getPinGroupNameById')) {
             return '';
         }
 
-        $rst = getData('name', "id = '$pinGroupId'", 'LIMIT 1', 'pin_group', $connect);
-        if ($rst && $rst->num_rows > 0) {
-            $row = $rst->fetch_assoc();
+        $result = getData('name', "id = '$pinGroupId'", 'LIMIT 1', 'pin_group', $connect);
+        if ($result && $result->num_rows > 0) {
+            $row = $result->fetch_assoc();
             if (isset($row['name']) && trim((string) $row['name']) !== '') {
                 return (string) $row['name'];
             }
@@ -517,10 +744,10 @@ if (!function_exists('getPinGroupNameById')) {
 
 function generateDBData($tblname, $conn)
 {
-	$rst = getData('*', '', '', $tblname, $conn);
+	$result = getData('*', '', '', $tblname, $conn);
 
-	// Check if $rst is a valid result set
-	if ($rst === false) {
+	// Check if $result is a valid result set
+	if ($result === false) {
 		// Log the error or output debug information
 		error_log("Error in getData() for table $tblname: " . $conn->error);
 		return;
@@ -529,7 +756,7 @@ function generateDBData($tblname, $conn)
 	}
 
 	$data = array();
-	while ($row = $rst->fetch_assoc()) {
+	while ($row = $result->fetch_assoc()) {
 		$data[] = $row;
 	}
 
@@ -1258,34 +1485,36 @@ if (!function_exists('commonRenderCreateUpdateInfo')) {
     }
 }
 
-function renderViewEditButton($action, $redirect_page, $row, $pinAccess, $act_2 = null)
+function renderViewEditButton($action, $redirectPage, $row, $pinAccess, $act_2 = null)
 {
 	switch ($action) {
 		case "View":
 			if (isActionAllowed("View", $pinAccess)) {
-				echo '<a class="btn btn-primary me-1" href="' . $redirect_page . '?id=' . $row['id'] . '"><i class="fas fa-eye"></i></a>';
+				echo '<a class="btn btn-primary me-1" href="' . $redirectPage . '?id=' . $row['id'] . '"><i class="fas fa-eye"></i></a>';
 			}
 			break;
 		case "Edit":
 			if (isActionAllowed("Edit", $pinAccess)) {
-				echo '<a class="btn btn-warning me-1" href="' . $redirect_page . '?id=' . $row['id'] . '&act=' . $act_2 . '"><i class="fas fa-edit"></i></a>';
+				echo '<a class="btn btn-warning me-1" href="' . $redirectPage . '?id=' . $row['id'] . '&act=' . $act_2 . '"><i class="fas fa-edit"></i></a>';
 			}
 			break;
 	}
 
 }
 
-function renderViewEditButtonByPin($action, $redirect_page, $row, $pinAccess, $act_2 = null)
+function renderViewEditButtonByPin($action, $redirectPage, $row, $pinAccess, $act_2 = null)
 {
+	$redirectPage = (string) $redirectPage;
+	$querySeparator = strpos($redirectPage, '?') === false ? '?' : '&';
 	switch ($action) {
 		case "1":
 			if (in_array(1, $pinAccess)) {
-				echo '<a class="btn btn-primary me-1" href="' . $redirect_page . '?id=' . $row['id'] . '"><i class="fas fa-eye"></i></a>';
+				echo '<a class="btn btn-primary me-1" href="' . $redirectPage . $querySeparator . 'id=' . $row['id'] . '"><i class="fas fa-eye"></i></a>';
 			}
 			break;
 		case "2":
 			if (in_array(2, $pinAccess)) {
-				echo '<a class="btn btn-warning me-1" href="' . $redirect_page . '?id=' . $row['id'] . '&act=' . $act_2 . '"><i class="fas fa-edit"></i></a>';
+				echo '<a class="btn btn-warning me-1" href="' . $redirectPage . $querySeparator . 'id=' . $row['id'] . '&act=' . $act_2 . '"><i class="fas fa-edit"></i></a>';
 			}
 			break;
 	}
@@ -1482,7 +1711,7 @@ if (!function_exists('getUrbanismMemberActionData')) {
         $url = '#';
         $disabled = true;
         if ($targetId !== '' && defined('SITEURL')) {
-            $url = SITEURL . '/urb_cust_reg.php?' . http_build_query($params);
+            $url = SITEURL . '/customer/urb_cust_reg.php?' . http_build_query($params);
             $disabled = false;
         }
 
@@ -1591,7 +1820,7 @@ if (!function_exists('customerLabelGetPlatformConfigs')) {
             ),
             'facebook' => array(
                 'label' => 'Facebook Customer Record (Deals)',
-                'record_url' => '/fb_cust_deals_table.php',
+                'record_url' => '/customer/fb_cust_deals_table.php',
                 'customer_table' => FB_CUST_DEALS,
                 'customer_db' => 'cms',
                 'order_table' => FB_ORDER_REQ,
@@ -1605,7 +1834,7 @@ if (!function_exists('customerLabelGetPlatformConfigs')) {
             ),
             'website' => array(
                 'label' => 'Website Customer Record (Deals)',
-                'record_url' => '/website_customer_record_table.php',
+                'record_url' => '/customer/website_customer_record_table.php',
                 'customer_table' => WEB_CUST_RCD,
                 'customer_db' => 'cms',
                 'order_table' => WEB_ORDER_REQ,
@@ -1640,7 +1869,7 @@ if (!function_exists('customerDailyReportGetPlatformConfigs')) {
                 'page_title' => 'Lazada Customer Record (Deals)',
                 'table' => LAZADA_CUST_RCD,
                 'db' => 'cms',
-                'record_url' => '/lazada_cust_rcd.php',
+                'record_url' => '/finance/lazada_cust_rcd.php',
                 'display_fields' => array('name'),
             ),
             'facebook' => array(
@@ -1649,7 +1878,7 @@ if (!function_exists('customerDailyReportGetPlatformConfigs')) {
                 'page_title' => 'Facebook Customer Record (Deals)',
                 'table' => FB_CUST_DEALS,
                 'db' => 'cms',
-                'record_url' => '/fb_cust_deals.php',
+                'record_url' => '/customer/fb_cust_deals.php',
                 'display_fields' => array('name'),
             ),
             'website' => array(
@@ -1658,7 +1887,7 @@ if (!function_exists('customerDailyReportGetPlatformConfigs')) {
                 'page_title' => 'Website Customer Record (Deals)',
                 'table' => WEB_CUST_RCD,
                 'db' => 'cms',
-                'record_url' => '/website_customer_record.php',
+                'record_url' => '/customer/website_customer_record.php',
                 'display_fields' => array('name'),
             ),
             'customer_info' => array(
@@ -1667,7 +1896,7 @@ if (!function_exists('customerDailyReportGetPlatformConfigs')) {
                 'page_title' => 'Customer Info',
                 'table' => CUS_INFO,
                 'db' => 'cms',
-                'record_url' => '/customerInfo.php',
+                'record_url' => '/customer/customerInfo.php',
                 'display_fields' => array('name', 'last_name'),
             ),
         );
@@ -1695,11 +1924,11 @@ if (!function_exists('customerDailyReportResolveDbConnect')) {
 }
 
 if (!function_exists('customerDailyReportGetPlatformConfigByTable')) {
-    function customerDailyReportGetPlatformConfigByTable($tableName)
+    function customerDailyReportGetPlatformConfigByTable($tblName)
     {
-        $tableName = trim((string) $tableName);
+        $tblName = trim((string) $tblName);
         foreach (customerDailyReportGetPlatformConfigs() as $platformConfig) {
-            if (isset($platformConfig['table']) && (string) $platformConfig['table'] === $tableName) {
+            if (isset($platformConfig['table']) && (string) $platformConfig['table'] === $tblName) {
                 return $platformConfig;
             }
         }
@@ -1913,10 +2142,10 @@ if (!function_exists('customerDailyReportGetPrimaryCustomerFieldLabel')) {
 }
 
 if (!function_exists('customerDailyReportResolveLookupValueById')) {
-    function customerDailyReportResolveLookupValueById($dbConnect, $tableName, $rawValue, $displayField = 'name', $altDisplayField = '')
+    function customerDailyReportResolveLookupValueById($dbConnect, $tblName, $rawValue, $displayField = 'name', $altDisplayField = '')
     {
         $rawValue = trim((string) $rawValue);
-        if ($rawValue === '' || !($dbConnect instanceof mysqli) || $tableName === '') {
+        if ($rawValue === '' || !($dbConnect instanceof mysqli) || $tblName === '') {
             return $rawValue;
         }
 
@@ -1930,7 +2159,7 @@ if (!function_exists('customerDailyReportResolveLookupValueById')) {
 
             $resolvedValue = $valuePart;
             if (preg_match('/^\d+$/', $valuePart)) {
-                $result = getData('*', "id = '" . mysqli_real_escape_string($dbConnect, $valuePart) . "'", 'LIMIT 1', $tableName, $dbConnect);
+                $result = getData('*', "id = '" . mysqli_real_escape_string($dbConnect, $valuePart) . "'", 'LIMIT 1', $tblName, $dbConnect);
                 if ($result && $result->num_rows > 0) {
                     $row = $result->fetch_assoc();
                     if (isset($row[$displayField]) && trim((string) $row[$displayField]) !== '') {
@@ -2374,13 +2603,13 @@ if (!function_exists('customerDailyReportGetCustomerMeta')) {
             return $meta;
         }
 
-        $tableName = isset($platformConfig['table']) ? (string) $platformConfig['table'] : '';
-        if ($tableName === '') {
+        $tblName = isset($platformConfig['table']) ? (string) $platformConfig['table'] : '';
+        if ($tblName === '') {
             $customerMetaCache[$cacheKey] = $meta;
             return $meta;
         }
 
-        $result = getData('*', "id = '" . $recordId . "'", 'LIMIT 1', $tableName, $dbConnect);
+        $result = getData('*', "id = '" . $recordId . "'", 'LIMIT 1', $tblName, $dbConnect);
         if ($result && $result->num_rows > 0) {
             $row = $result->fetch_assoc();
             $displayName = customerDailyReportGetDisplayNameFromRow($row, $platformConfig['display_fields'] ?? array());
@@ -2437,8 +2666,8 @@ if (!function_exists('shopeeOmsGetOrderSourceConfigs')) {
                 'delay_remark_field' => 'delay_remark',
                 'date_field' => 'create_date',
                 'fallback_code_prefix' => 'LAZ',
-                'view_url' => '/lazada_order_req.php',
-                'info_url' => '/lazada_order_request_info.php',
+                'view_url' => '/finance/lazada_order_req.php',
+                'info_url' => '/finance/lazada_order_request_info.php',
                 'attachment_page_name' => 'lazada_order_request',
             ),
             'facebook' => array(
@@ -2510,15 +2739,15 @@ if (!function_exists('shopeeOmsGetOrderSourceConfig')) {
 }
 
 if (!function_exists('shopeeOmsResolvePlatformFromTableName')) {
-    function shopeeOmsResolvePlatformFromTableName($tableName)
+    function shopeeOmsResolvePlatformFromTableName($tblName)
     {
-        $tableName = trim((string) $tableName);
-        if ($tableName === '') {
+        $tblName = trim((string) $tblName);
+        if ($tblName === '') {
             return '';
         }
 
         foreach (shopeeOmsGetOrderSourceConfigs() as $platform => $config) {
-            if (isset($config['table']) && (string) $config['table'] === $tableName) {
+            if (isset($config['table']) && (string) $config['table'] === $tblName) {
                 return $platform;
             }
         }
@@ -2565,12 +2794,12 @@ if (!function_exists('shopeeOmsBuildQualifiedTableName')) {
     {
         $sourceConfig = is_array($sourceConfig) ? $sourceConfig : array();
         $dbName = isset($sourceConfig['db_name']) ? trim((string) $sourceConfig['db_name']) : '';
-        $tableName = isset($sourceConfig['table']) ? trim((string) $sourceConfig['table']) : '';
-        if ($dbName === '' || $tableName === '') {
+        $tblName = isset($sourceConfig['table']) ? trim((string) $sourceConfig['table']) : '';
+        if ($dbName === '' || $tblName === '') {
             return '';
         }
 
-        return '`' . str_replace('`', '``', $dbName) . '`.`' . str_replace('`', '``', $tableName) . '`';
+        return '`' . str_replace('`', '``', $dbName) . '`.`' . str_replace('`', '``', $tblName) . '`';
     }
 }
 
@@ -2608,24 +2837,24 @@ if (!function_exists('shopeeOmsGetOrderSourcePlatform')) {
 }
 
 if (!function_exists('shopeeOmsTableHasColumn')) {
-    function shopeeOmsTableHasColumn($connect, $dbName, $tableName, $columnName)
+    function shopeeOmsTableHasColumn($connect, $dbName, $tblName, $columnName)
     {
         static $cache = array();
 
         $dbName = trim((string) $dbName);
-        $tableName = trim((string) $tableName);
+        $tblName = trim((string) $tblName);
         $columnName = trim((string) $columnName);
-        if (!($connect instanceof mysqli) || $dbName === '' || $tableName === '' || $columnName === '') {
+        if (!($connect instanceof mysqli) || $dbName === '' || $tblName === '' || $columnName === '') {
             return false;
         }
 
-        $cacheKey = $dbName . '|' . $tableName . '|' . $columnName;
+        $cacheKey = $dbName . '|' . $tblName . '|' . $columnName;
         if (array_key_exists($cacheKey, $cache)) {
             return $cache[$cacheKey];
         }
 
         $safeDbName = mysqli_real_escape_string($connect, $dbName);
-        $safeTableName = mysqli_real_escape_string($connect, $tableName);
+        $safeTableName = mysqli_real_escape_string($connect, $tblName);
         $safeColumnName = mysqli_real_escape_string($connect, $columnName);
         $sql = "SELECT 1
             FROM information_schema.columns
@@ -2643,10 +2872,10 @@ if (!function_exists('shopeeOmsSourceHasColumn')) {
     function shopeeOmsSourceHasColumn($cmsConnect, $financeConnect, $sourceConfig, $columnName)
     {
         $sourceConfig = is_array($sourceConfig) ? $sourceConfig : array();
-        $tableName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : '';
+        $tblName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : '';
         $dbName = isset($sourceConfig['db_name']) ? (string) $sourceConfig['db_name'] : '';
         $conn = shopeeOmsGetOrderSourceDbConnection($cmsConnect, $financeConnect, $sourceConfig);
-        return shopeeOmsTableHasColumn($conn, $dbName, $tableName, $columnName);
+        return shopeeOmsTableHasColumn($conn, $dbName, $tblName, $columnName);
     }
 }
 
@@ -2801,9 +3030,9 @@ if (!function_exists('customerLabelFetchRows')) {
 }
 
 if (!function_exists('customerLabelFetchActiveRows')) {
-    function customerLabelFetchActiveRows($conn, $tableName, $columns = '*', $extraWhere = '', $orderBy = 'ORDER BY id ASC')
+    function customerLabelFetchActiveRows($conn, $tblName, $columns = '*', $extraWhere = '', $orderBy = 'ORDER BY id ASC')
     {
-        if (!($conn instanceof mysqli) || $tableName === '' || !tableExists($tableName, $conn)) {
+        if (!($conn instanceof mysqli) || $tblName === '' || !tableExists($tblName, $conn)) {
             return array();
         }
 
@@ -2812,7 +3041,7 @@ if (!function_exists('customerLabelFetchActiveRows')) {
             $where .= " AND " . $extraWhere;
         }
 
-        $sql = "SELECT " . $columns . " FROM `" . $tableName . "` " . $where . " " . $orderBy;
+        $sql = "SELECT " . $columns . " FROM `" . $tblName . "` " . $where . " " . $orderBy;
         return customerLabelFetchRows($conn, $sql);
     }
 }
@@ -4165,7 +4394,7 @@ if (!function_exists('customerLabelBuildBreakdownUrl')) {
             return '';
         }
 
-        return $baseUrl . '/customer_label_breakdown.php?label_type=' . urlencode($labelType) . '&label_id=' . $labelId;
+        return $baseUrl . '/customer/customer_label_breakdown.php?label_type=' . urlencode($labelType) . '&label_id=' . $labelId;
     }
 }
 
@@ -4327,10 +4556,10 @@ if (!function_exists('shouldShowEstimatedReceivedDateButton')) {
 }
 
 if (!function_exists('assignEstimatedReceivedDate')) {
-    function assignEstimatedReceivedDate($connect, $tableName, $orderId, $date, $currentUserId)
+    function assignEstimatedReceivedDate($connect, $tblName, $orderId, $date, $currentUserId)
     {
         return function_exists('shopeeOmsAssignEstimatedReceivedDate')
-            ? shopeeOmsAssignEstimatedReceivedDate($connect, $tableName, $orderId, $date, $currentUserId)
+            ? shopeeOmsAssignEstimatedReceivedDate($connect, $tblName, $orderId, $date, $currentUserId)
             : array(
                 'success' => false,
                 'message' => 'OMS date assignment helper is unavailable.',
@@ -4873,8 +5102,8 @@ if (!function_exists('shopeeOmsLoadOrder')) {
         }
 
         $sourceConfig = shopeeOmsResolveOrderSourceConfig($source);
-        $tableName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
-        $sql = "SELECT * FROM `" . $tableName . "` WHERE id = " . $orderId . " LIMIT 1";
+        $tblName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
+        $sql = "SELECT * FROM `" . $tblName . "` WHERE id = " . $orderId . " LIMIT 1";
         $result = mysqli_query($connect, $sql);
         if ($result && mysqli_num_rows($result) > 0) {
             return shopeeOmsAttachOrderSourceMeta((array) mysqli_fetch_assoc($result), isset($sourceConfig['platform']) ? $sourceConfig['platform'] : 'shopee', $sourceConfig);
@@ -4893,11 +5122,11 @@ if (!function_exists('shopeeOmsLoadOrderByCode')) {
         }
 
         $sourceConfig = shopeeOmsResolveOrderSourceConfig($source);
-        $tableName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
+        $tblName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
         $fieldName = isset($sourceConfig['order_code_field']) ? trim((string) $sourceConfig['order_code_field']) : '';
         $safeOrderCode = mysqli_real_escape_string($connect, $orderCode);
         if ($fieldName !== '') {
-            $sql = "SELECT * FROM `" . $tableName . "` WHERE `" . $fieldName . "` = '" . $safeOrderCode . "' LIMIT 1";
+            $sql = "SELECT * FROM `" . $tblName . "` WHERE `" . $fieldName . "` = '" . $safeOrderCode . "' LIMIT 1";
         } else {
             $platform = isset($sourceConfig['platform']) ? (string) $sourceConfig['platform'] : 'shopee';
             $prefix = strtoupper(trim((string) (isset($sourceConfig['fallback_code_prefix']) ? $sourceConfig['fallback_code_prefix'] : '')));
@@ -4914,7 +5143,7 @@ if (!function_exists('shopeeOmsLoadOrderByCode')) {
                 return array();
             }
 
-            $sql = "SELECT * FROM `" . $tableName . "` WHERE id = " . $numericId . " LIMIT 1";
+            $sql = "SELECT * FROM `" . $tblName . "` WHERE id = " . $numericId . " LIMIT 1";
         }
         $result = mysqli_query($connect, $sql);
         if ($result && mysqli_num_rows($result) > 0) {
@@ -5107,22 +5336,22 @@ if (!function_exists('shopeeOmsBuildPackageQtySnapshotFromInputs')) {
 }
 
 if (!function_exists('shopeeOmsLoadTableSnapshotRows')) {
-    function shopeeOmsLoadTableSnapshotRows($tableName)
+    function shopeeOmsLoadTableSnapshotRows($tblName)
     {
-        $tableName = trim((string) $tableName);
-        if ($tableName === '' || !preg_match('/^[A-Za-z0-9_]+$/', $tableName) || !defined('ROOT')) {
+        $tblName = trim((string) $tblName);
+        if ($tblName === '' || !preg_match('/^[A-Za-z0-9_]+$/', $tblName) || !defined('ROOT')) {
             return array();
         }
 
         static $snapshotCache = array();
-        if (array_key_exists($tableName, $snapshotCache)) {
-            return $snapshotCache[$tableName];
+        if (array_key_exists($tblName, $snapshotCache)) {
+            return $snapshotCache[$tblName];
         }
 
         $rootPath = rtrim((string) ROOT, '/\\');
         $candidatePaths = array(
-            $rootPath . '/data/' . $tableName . '.json',
-            $rootPath . '/' . $tableName . '.json',
+            $rootPath . '/data/' . $tblName . '.json',
+            $rootPath . '/' . $tblName . '.json',
         );
 
         foreach ($candidatePaths as $path) {
@@ -5137,13 +5366,13 @@ if (!function_exists('shopeeOmsLoadTableSnapshotRows')) {
 
             $rows = json_decode($json, true);
             if (is_array($rows)) {
-                $snapshotCache[$tableName] = $rows;
-                return $snapshotCache[$tableName];
+                $snapshotCache[$tblName] = $rows;
+                return $snapshotCache[$tblName];
             }
         }
 
-        $snapshotCache[$tableName] = array();
-        return $snapshotCache[$tableName];
+        $snapshotCache[$tblName] = array();
+        return $snapshotCache[$tblName];
     }
 }
 
@@ -5975,7 +6204,7 @@ if (!function_exists('shopeeOmsSendTelegramAttachment')) {
                 continue;
             }
 
-            $apiUrl = 'https://api.telegram.org/bot' . $botToken . '/' . $strategy['endpoint'];
+            $apiUrl = TELEGRAM_API . $botToken . '/' . $strategy['endpoint'];
             $payload = array(
                 'chat_id' => $chatId,
                 'caption' => $captionText,
@@ -6053,7 +6282,7 @@ if (!function_exists('shopeeOmsSendTelegramAttachmentByUrl')) {
 
         $attemptErrors = array();
         foreach ($sendStrategies as $strategy) {
-            $apiUrl = 'https://api.telegram.org/bot' . $botToken . '/' . $strategy['endpoint'];
+            $apiUrl = TELEGRAM_API . $botToken . '/' . $strategy['endpoint'];
             $payload = array(
                 'chat_id' => $chatId,
                 'caption' => $captionText,
@@ -6251,12 +6480,12 @@ if (!function_exists('shopeeOmsFindTokenSettingPageConflicts')) {
             $sql .= " AND id <> '" . $excludeId . "'";
         }
         $sql .= " ORDER BY id DESC";
-        $rst = mysqli_query($connect, $sql);
-        if (!$rst) {
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
             return $conflicts;
         }
 
-        while ($row = mysqli_fetch_assoc($rst)) {
+        while ($row = mysqli_fetch_assoc($result)) {
             $rowPages = shopeeOmsNormalizeTokenSettingPageValues(isset($row['page_used']) ? $row['page_used'] : '');
             $overlap = array_values(array_intersect($selectedPages, $rowPages));
             if (!empty($overlap)) {
@@ -6381,7 +6610,7 @@ if (!function_exists('shopeeOmsBuildWarehouseMessage')) {
             $buyerConnect = $connect;
         }
         $customerName = shopeeOmsGetOrderCustomerNameText($connect, $buyerConnect, $orderRow, $sourceConfig);
-        $link = rtrim((string) SITEURL, '/') . '/warehouse_stock_in_scan.php?t=' . rawurlencode((string) $tokenValue);
+        $link = rtrim((string) SITEURL, '/') . '/stock/warehouse_stock_in_scan.php?t=' . rawurlencode((string) $tokenValue);
         $orderCode = shopeeOmsGetOrderCodeValue($orderRow, $sourceConfig);
         $addressField = isset($sourceConfig['address_field']) ? (string) $sourceConfig['address_field'] : 'customer_address';
         $airbillField = isset($sourceConfig['airbill_no_field']) ? (string) $sourceConfig['airbill_no_field'] : 'airbill_no';
@@ -6923,399 +7152,7 @@ if (!function_exists('shopeeOmsExtractAirbillDeliveryInfoFromAttachment')) {
 if (!function_exists('shopeeOmsRenderAirbillPdfAutofillScript')) {
     function shopeeOmsRenderAirbillPdfAutofillScript()
     {
-        return <<<'JS'
-if (!window.shopeeOmsAirbillPdfAutofill) {
-    window.shopeeOmsAirbillPdfAutofill = (function () {
-        function getPdfTextItemX(item) {
-            return item && item.transform ? Number(item.transform[4]) || 0 : 0;
-        }
-
-        function getPdfTextItemY(item) {
-            return item && item.transform ? Number(item.transform[5]) || 0 : 0;
-        }
-
-        function normalizePdfTextItem(item) {
-            return String(item && item.str ? item.str : '').trim();
-        }
-
-        function sortPdfItemsForReading(items) {
-            return items.slice().sort(function (a, b) {
-                var yDiff = getPdfTextItemY(b) - getPdfTextItemY(a);
-                if (Math.abs(yDiff) > 2) {
-                    return yDiff;
-                }
-                return getPdfTextItemX(a) - getPdfTextItemX(b);
-            });
-        }
-
-        function groupPdfItemsIntoLines(items) {
-            var sortedItems = sortPdfItemsForReading(items);
-            var lines = [];
-
-            sortedItems.forEach(function (item) {
-                var text = normalizePdfTextItem(item);
-                if (text === '') {
-                    return;
-                }
-
-                var itemY = getPdfTextItemY(item);
-                var currentLine = lines.length > 0 ? lines[lines.length - 1] : null;
-                if (!currentLine || Math.abs(currentLine.y - itemY) > 2) {
-                    currentLine = {
-                        y: itemY,
-                        items: []
-                    };
-                    lines.push(currentLine);
-                }
-
-                currentLine.items.push(item);
-            });
-
-            return lines.map(function (line) {
-                return line.items
-                    .slice()
-                    .sort(function (a, b) {
-                        return getPdfTextItemX(a) - getPdfTextItemX(b);
-                    })
-                    .map(function (item) {
-                        return normalizePdfTextItem(item);
-                    })
-                    .filter(function (text) {
-                        return text !== '';
-                    })
-                    .join(' ')
-                    .replace(/\s+,/g, ',')
-                    .trim();
-            }).filter(function (line) {
-                return line !== '';
-            });
-        }
-
-        function isLikelyAirbillCode(text) {
-            var normalized = String(text || '').replace(/\s+/g, '').toUpperCase();
-            if (normalized.length < 10) {
-                return false;
-            }
-            if (!/[A-Z]/.test(normalized) || !/\d/.test(normalized)) {
-                return false;
-            }
-
-            return /^(?:GDSP|MY)[A-Z0-9]{8,}$/.test(normalized) || /^[A-Z0-9]{10,}$/.test(normalized);
-        }
-
-        function extractAirbillCodeFromPdfItems(items, pageHeight) {
-            var candidates = items
-                .map(function (item) {
-                    return {
-                        text: normalizePdfTextItem(item).replace(/\s+/g, '').toUpperCase(),
-                        x: getPdfTextItemX(item),
-                        y: getPdfTextItemY(item)
-                    };
-                })
-                .filter(function (item) {
-                    return item.y >= (pageHeight * 0.65) && isLikelyAirbillCode(item.text);
-                })
-                .sort(function (a, b) {
-                    if (Math.abs(b.y - a.y) > 2) {
-                        return b.y - a.y;
-                    }
-                    return a.x - b.x;
-                });
-
-            return candidates.length > 0 ? candidates[0].text : '';
-        }
-
-        function findRecipientSectionHeader(items, pageWidth) {
-            var headers = items
-                .filter(function (item) {
-                    var text = normalizePdfTextItem(item).toUpperCase();
-                    return text.indexOf('RECIPIENT DETAILS') === 0 && getPdfTextItemX(item) <= (pageWidth * 0.3);
-                })
-                .sort(function (a, b) {
-                    return getPdfTextItemY(b) - getPdfTextItemY(a);
-                });
-
-            return headers.length > 0 ? headers[0] : null;
-        }
-
-        function extractRecipientNameFromPdfItems(items, pageWidth) {
-            var recipientHeader = findRecipientSectionHeader(items, pageWidth);
-            var nameLabels = items
-                .filter(function (item) {
-                    return normalizePdfTextItem(item) === 'Name:' && getPdfTextItemX(item) <= (pageWidth * 0.2);
-                })
-                .filter(function (item) {
-                    return !recipientHeader || getPdfTextItemY(item) < getPdfTextItemY(recipientHeader) - 2;
-                })
-                .sort(function (a, b) {
-                    return getPdfTextItemY(b) - getPdfTextItemY(a);
-                });
-
-            if (nameLabels.length === 0) {
-                return '';
-            }
-
-            var recipientNameLabel = nameLabels[0];
-            var minX = getPdfTextItemX(recipientNameLabel) + Number(recipientNameLabel.width || 0) - 1;
-            var lineY = getPdfTextItemY(recipientNameLabel);
-            var maxX = pageWidth * 0.62;
-            var nameItems = items.filter(function (item) {
-                var text = normalizePdfTextItem(item);
-                if (text === '' || text === 'Name:' || text === 'Address:' || text === 'Phone:' || text === 'Postcode:') {
-                    return false;
-                }
-
-                return getPdfTextItemX(item) >= minX &&
-                    getPdfTextItemX(item) <= maxX &&
-                    Math.abs(getPdfTextItemY(item) - lineY) <= 3;
-            });
-
-            var nameLines = groupPdfItemsIntoLines(nameItems);
-            return nameLines.length > 0 ? nameLines[0].trim() : '';
-        }
-
-        function extractRecipientAddressFromPdfItems(items, pageWidth) {
-            var recipientHeader = findRecipientSectionHeader(items, pageWidth);
-            var addressLabels = items
-                .filter(function (item) {
-                    return normalizePdfTextItem(item) === 'Address:' && getPdfTextItemX(item) <= (pageWidth * 0.2);
-                })
-                .filter(function (item) {
-                    return !recipientHeader || getPdfTextItemY(item) < getPdfTextItemY(recipientHeader) - 2;
-                })
-                .sort(function (a, b) {
-                    return getPdfTextItemY(b) - getPdfTextItemY(a);
-                });
-
-            if (addressLabels.length === 0) {
-                return '';
-            }
-
-            var recipientAddressLabel = addressLabels[addressLabels.length - 1];
-            var recipientPostcodeLabel = items
-                .filter(function (item) {
-                    return normalizePdfTextItem(item) === 'Postcode:' &&
-                        getPdfTextItemX(item) <= (pageWidth * 0.2) &&
-                        getPdfTextItemY(item) < getPdfTextItemY(recipientAddressLabel) - 10;
-                })
-                .sort(function (a, b) {
-                    return getPdfTextItemY(b) - getPdfTextItemY(a);
-                })[0] || null;
-
-            var minX = getPdfTextItemX(recipientAddressLabel) + Number(recipientAddressLabel.width || 0) - 1;
-            var minY = recipientPostcodeLabel ? getPdfTextItemY(recipientPostcodeLabel) + 8 : getPdfTextItemY(recipientAddressLabel) - 60;
-            var maxY = getPdfTextItemY(recipientAddressLabel) + 1;
-            var maxX = pageWidth * 0.62;
-            var addressItems = items.filter(function (item) {
-                var text = normalizePdfTextItem(item);
-                if (text === '' || text === 'Address:' || text === 'Phone:' || text === 'Name:' || text === 'Postcode:') {
-                    return false;
-                }
-
-                var itemX = getPdfTextItemX(item);
-                var itemY = getPdfTextItemY(item);
-                return itemX >= minX && itemX <= maxX && itemY <= maxY && itemY >= minY;
-            });
-
-            return groupPdfItemsIntoLines(addressItems).join('\n').trim();
-        }
-
-        function extractShopeeAirbillDataFromPdfItems(items, pageWidth, pageHeight) {
-            return {
-                airbillNo: extractAirbillCodeFromPdfItems(items, pageHeight),
-                customerName: extractRecipientNameFromPdfItems(items, pageWidth),
-                customerAddress: extractRecipientAddressFromPdfItems(items, pageWidth)
-            };
-        }
-
-        function dispatchInputEvent(element) {
-            if (!element) {
-                return;
-            }
-
-            try {
-                element.dispatchEvent(new Event('input', { bubbles: true }));
-                element.dispatchEvent(new Event('change', { bubbles: true }));
-            } catch (error) {
-            }
-        }
-
-        function bind(config) {
-            config = config || {};
-            var fileInput = document.querySelector(config.fileInputSelector || '');
-            var airbillNo = document.querySelector(config.airbillNoSelector || '');
-            var customerName = document.querySelector(config.customerNameSelector || '');
-            var customerAddress = document.querySelector(config.customerAddressSelector || '');
-            var statusNode = document.querySelector(config.statusSelector || '');
-            var localStorageKey = String(config.localStorageKey || '').trim();
-            if (!fileInput || !airbillNo || !customerAddress || !statusNode) {
-                return false;
-            }
-
-            function readStoredDeliveryInfo() {
-                if (localStorageKey === '' || typeof window.localStorage === 'undefined') {
-                    return null;
-                }
-
-                try {
-                    var raw = window.localStorage.getItem(localStorageKey);
-                    return raw ? JSON.parse(raw) : null;
-                } catch (error) {
-                    return null;
-                }
-            }
-
-            function writeStoredDeliveryInfo() {
-                if (localStorageKey === '' || typeof window.localStorage === 'undefined') {
-                    return;
-                }
-
-                try {
-                    window.localStorage.setItem(localStorageKey, JSON.stringify({
-                        airbillNo: airbillNo ? String(airbillNo.value || '') : '',
-                        customerName: customerName ? String(customerName.value || '') : '',
-                        customerAddress: customerAddress ? String(customerAddress.value || '') : ''
-                    }));
-                } catch (error) {
-                }
-            }
-
-            function setStatus(message, isError) {
-                statusNode.textContent = message;
-                if (config.errorClass) {
-                    statusNode.classList.toggle(config.errorClass, !!isError);
-                }
-                if (config.normalClass) {
-                    statusNode.classList.toggle(config.normalClass, !isError);
-                }
-            }
-
-            if (typeof pdfjsLib === 'undefined') {
-                setStatus('PDF extraction library failed to load on this page.', true);
-                return false;
-            }
-
-            if (config.workerSrc) {
-                pdfjsLib.GlobalWorkerOptions.workerSrc = config.workerSrc;
-            }
-
-            if (fileInput.dataset.airbillPdfAutofillBound === '1') {
-                return true;
-            }
-
-            var storedDeliveryInfo = readStoredDeliveryInfo();
-            if (storedDeliveryInfo) {
-                if (airbillNo && !String(airbillNo.value || '').trim() && String(storedDeliveryInfo.airbillNo || '').trim()) {
-                    airbillNo.value = String(storedDeliveryInfo.airbillNo || '').trim();
-                    dispatchInputEvent(airbillNo);
-                }
-                if (customerName && !String(customerName.value || '').trim() && String(storedDeliveryInfo.customerName || '').trim()) {
-                    customerName.value = String(storedDeliveryInfo.customerName || '').trim();
-                    dispatchInputEvent(customerName);
-                }
-                if (customerAddress && !String(customerAddress.value || '').trim() && String(storedDeliveryInfo.customerAddress || '').trim()) {
-                    customerAddress.value = String(storedDeliveryInfo.customerAddress || '').trim();
-                    dispatchInputEvent(customerAddress);
-                }
-            }
-
-            function readFileAsArrayBuffer(file) {
-                return new Promise(function (resolve, reject) {
-                    var reader = new FileReader();
-                    reader.onload = function (event) {
-                        resolve(event.target.result);
-                    };
-                    reader.onerror = reject;
-                    reader.readAsArrayBuffer(file);
-                });
-            }
-
-            function loadPdfPageTextItems(file) {
-                return readFileAsArrayBuffer(file).then(function (buffer) {
-                    return pdfjsLib.getDocument({
-                        data: new Uint8Array(buffer)
-                    }).promise;
-                }).then(function (pdfDoc) {
-                    return pdfDoc.getPage(1).then(function (page) {
-                        var viewport = page.getViewport({ scale: 1 });
-                        return page.getTextContent().then(function (textContent) {
-                            return {
-                                items: (textContent.items || []).filter(function (item) {
-                                    return normalizePdfTextItem(item) !== '';
-                                }),
-                                pageWidth: Number(viewport.width) || 0,
-                                pageHeight: Number(viewport.height) || 0
-                            };
-                        });
-                    });
-                });
-            }
-
-            fileInput.addEventListener('change', function () {
-                setStatus('', false);
-                if (!this.files || !this.files[0]) {
-                    return;
-                }
-
-                var selectedFile = this.files[0];
-                if (!/\.pdf$/i.test(String(selectedFile.name || ''))) {
-                    return;
-                }
-
-                setStatus(customerName ? 'Extracting airbill number, customer name and address from PDF...' : 'Extracting airbill number and address from PDF...', false);
-
-                loadPdfPageTextItems(selectedFile).then(function (pdfData) {
-                    var extractedData = extractShopeeAirbillDataFromPdfItems(
-                        pdfData.items,
-                        pdfData.pageWidth,
-                        pdfData.pageHeight
-                    );
-
-                    if (extractedData.airbillNo !== '') {
-                        airbillNo.value = extractedData.airbillNo;
-                        dispatchInputEvent(airbillNo);
-                    }
-                    if (customerName && extractedData.customerName !== '') {
-                        customerName.value = extractedData.customerName;
-                        dispatchInputEvent(customerName);
-                    }
-                    if (extractedData.customerAddress !== '') {
-                        customerAddress.value = extractedData.customerAddress;
-                        dispatchInputEvent(customerAddress);
-                    }
-                    writeStoredDeliveryInfo();
-
-                    if (extractedData.airbillNo !== '' || extractedData.customerName !== '' || extractedData.customerAddress !== '') {
-                        setStatus('Airbill PDF extracted successfully.', false);
-                    } else {
-                        setStatus(
-                            customerName
-                                ? 'Unable to detect the airbill number, customer name or address from this PDF. Please fill them manually.'
-                                : 'Unable to detect the airbill number or address from this PDF. Please fill them manually.',
-                            true
-                        );
-                    }
-                }).catch(function () {
-                    setStatus(
-                        customerName
-                            ? 'Unable to read this PDF. Please fill the airbill number, customer name and address manually.'
-                            : 'Unable to read this PDF. Please fill the airbill number and address manually.',
-                        true
-                    );
-                });
-            });
-
-            fileInput.dataset.airbillPdfAutofillBound = '1';
-            return true;
-        }
-
-        return {
-            bind: bind,
-            extractShopeeAirbillDataFromPdfItems: extractShopeeAirbillDataFromPdfItems
-        };
-    })();
-}
-JS;
+        return '';
     }
 }
 
@@ -7470,7 +7307,7 @@ if (!function_exists('shopeeOmsLookupCountryCode')) {
         }
 
         if ($code === '') {
-            $url = 'https://ipapi.co/' . rawurlencode($ip) . '/country/';
+            $url = IPAPI_URL . rawurlencode($ip) . '/country/';
             $context = stream_context_create(array(
                 'http' => array(
                     'method' => 'GET',
@@ -7734,7 +7571,7 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
             }
 
             if ($documentSent && $messageText !== '') {
-                $messageUrl = 'https://api.telegram.org/bot' . $botToken . '/sendMessage';
+                $messageUrl = TELEGRAM_API . $botToken . '/sendMessage';
                 $messagePayload = array(
                     'chat_id' => $chatId,
                     'text' => $messageText,
@@ -7762,7 +7599,7 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
             }
 
             if (!$documentSent && $messageText !== '') {
-                $fallbackUrl = 'https://api.telegram.org/bot' . $botToken . '/sendMessage';
+                $fallbackUrl = TELEGRAM_API . $botToken . '/sendMessage';
                 $fallbackPayload = array(
                     'chat_id' => $chatId,
                     'text' => $fallbackMessageText,
@@ -7798,7 +7635,7 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
             }
 
             if ($documentSent && $messageText !== '') {
-                $messageUrl = 'https://api.telegram.org/bot' . $botToken . '/sendMessage';
+                $messageUrl = TELEGRAM_API . $botToken . '/sendMessage';
                 $messagePayload = array(
                     'chat_id' => $chatId,
                     'text' => $messageText,
@@ -7818,7 +7655,7 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
                     $finalResponse = $messageResponse;
                 }
             } else {
-                $apiUrl = 'https://api.telegram.org/bot' . $botToken . '/sendMessage';
+                $apiUrl = TELEGRAM_API . $botToken . '/sendMessage';
                 $payload = array(
                     'chat_id' => $chatId,
                     'text' => $fallbackMessageText,
@@ -8030,6 +7867,36 @@ if (!function_exists('shopeeOmsBuildLogPlatformCondition')) {
     }
 }
 
+if (!function_exists('shopeeOmsResolveStatusTransitionErrorDisplay')) {
+    function shopeeOmsResolveStatusTransitionErrorDisplay($targetStatus, $message, $fallbackMessage = 'Unable to update order status.')
+    {
+        $resolvedMessage = trim((string) $message);
+        if ($resolvedMessage === '') {
+            $resolvedMessage = trim((string) $fallbackMessage);
+        }
+        if ($resolvedMessage === '') {
+            $resolvedMessage = 'Unable to update order status.';
+        }
+
+        return array(
+            'show_inline_stock_error' => shopeeOmsNormalizeStatusCode($targetStatus) === 'TP',
+            'message' => $resolvedMessage,
+        );
+    }
+}
+
+if (!function_exists('shopeeOmsResolveStatusTransitionErrorState')) {
+    function shopeeOmsResolveStatusTransitionErrorState($targetStatus, $message, $fallbackMessage = 'Unable to update order status.')
+    {
+        $display = shopeeOmsResolveStatusTransitionErrorDisplay($targetStatus, $message, $fallbackMessage);
+
+        return array(
+            'stock_out_warehouse_err' => !empty($display['show_inline_stock_error']) ? (string) $display['message'] : '',
+            'popup_error_message' => !empty($display['show_inline_stock_error']) ? '' : (string) $display['message'],
+        );
+    }
+}
+
 if (!function_exists('shopeeOmsExecuteTransition')) {
     function shopeeOmsExecuteTransition($cmsConnect, $financeConnect, $orderId, $targetStatus, $options = array())
     {
@@ -8042,7 +7909,7 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
         }
         $sourceConfig = shopeeOmsResolveOrderSourceConfig($resolvedSource, 'shopee');
         $platform = isset($sourceConfig['platform']) ? (string) $sourceConfig['platform'] : 'shopee';
-        $tableName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
+        $tblName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
         $tableDbName = isset($sourceConfig['db_name']) ? (string) $sourceConfig['db_name'] : dbFinance;
         $orderConnect = shopeeOmsGetOrderSourceDbConnection($cmsConnect, $financeConnect, $sourceConfig);
         $actorUserId = trim((string) (isset($options['actor_user_id']) ? $options['actor_user_id'] : (defined('USER_ID') ? USER_ID : 'SYSTEM')));
@@ -8100,6 +7967,15 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
             return array('success' => false, 'message' => $airbillValidation['message']);
         }
 
+        if ($targetStatus === 'TP') {
+            $warehouseStockValidation = shopeeOmsValidateWarehouseStockForOrder($cmsConnect, $financeConnect, $orderRow, array(
+                'platform' => $platform,
+            ));
+            if (empty($warehouseStockValidation['success'])) {
+                return $warehouseStockValidation;
+            }
+        }
+
         $safeActorUserId = mysqli_real_escape_string($orderConnect, $actorUserId);
         $assignments = array(
             "order_status = '" . mysqli_real_escape_string($orderConnect, $targetStatus) . "'",
@@ -8107,14 +7983,14 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
             "update_date = CURDATE()",
             "update_time = CURTIME()"
         );
-        if (shopeeOmsTableHasColumn($orderConnect, $tableDbName, $tableName, 'latest_transition_at')) {
+        if (shopeeOmsTableHasColumn($orderConnect, $tableDbName, $tblName, 'latest_transition_at')) {
             $assignments[] = "latest_transition_at = NOW()";
         }
         foreach ($fieldUpdates as $fieldName => $fieldValue) {
             if (!preg_match('/^[A-Za-z0-9_]+$/', (string) $fieldName)) {
                 continue;
             }
-            if (!shopeeOmsTableHasColumn($orderConnect, $tableDbName, $tableName, $fieldName)) {
+            if (!shopeeOmsTableHasColumn($orderConnect, $tableDbName, $tblName, $fieldName)) {
                 continue;
             }
 
@@ -8127,7 +8003,7 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
             }
         }
 
-        $updateSql = "UPDATE `" . $tableName . "` SET " . implode(', ', $assignments) . " WHERE id = " . $orderId . " LIMIT 1";
+        $updateSql = "UPDATE `" . $tblName . "` SET " . implode(', ', $assignments) . " WHERE id = " . $orderId . " LIMIT 1";
         if (!mysqli_query($orderConnect, $updateSql)) {
             if ($targetStatus === 'TP' && trim((string) (isset($orderRow[$airbillField]) ? $orderRow[$airbillField] : '')) === '') {
                 return array('success' => false, 'message' => 'Airbill is required when Order Status is To Pack.');
@@ -8157,8 +8033,8 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
             if (!empty($tokenResult['success']) && !empty($tokenResult['token_row']) && !empty($tokenResult['notification'])) {
                 $notifyResult = shopeeOmsSendWarehouseNotification($cmsConnect, $financeConnect, $tokenResult['token_row'], $tokenResult['notification'], $sourcePage);
                 if (!empty($notifyResult['sent'])) {
-                    if (shopeeOmsTableHasColumn($orderConnect, $tableDbName, $tableName, 'step_a_sent_at')) {
-                        mysqli_query($orderConnect, "UPDATE `" . $tableName . "` SET `step_a_sent_at` = NOW() WHERE id = " . $orderId . " LIMIT 1");
+                    if (shopeeOmsTableHasColumn($orderConnect, $tableDbName, $tblName, 'step_a_sent_at')) {
+                        mysqli_query($orderConnect, "UPDATE `" . $tblName . "` SET `step_a_sent_at` = NOW() WHERE id = " . $orderId . " LIMIT 1");
                     }
                 }
                 $stepAResult = array(
@@ -8195,10 +8071,10 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
 }
 
 if (!function_exists('shopeeOmsAssignEstimatedReceivedDate')) {
-    function shopeeOmsAssignEstimatedReceivedDate($connect, $tableName, $orderId, $date, $currentUserId)
+    function shopeeOmsAssignEstimatedReceivedDate($connect, $tblName, $orderId, $date, $currentUserId)
     {
-        $tableName = trim((string) $tableName);
-        $sourceConfig = shopeeOmsResolveOrderSourceConfig($tableName, 'shopee');
+        $tblName = trim((string) $tblName);
+        $sourceConfig = shopeeOmsResolveOrderSourceConfig($tblName, 'shopee');
         $platform = isset($sourceConfig['platform']) ? (string) $sourceConfig['platform'] : 'shopee';
 
         global $finance_connect;
@@ -8269,10 +8145,10 @@ if (!function_exists('shopeeOmsAssignEstimatedReceivedDate')) {
             "`update_date` = CURDATE()",
             "`update_time` = CURTIME()",
         );
-        if (shopeeOmsTableHasColumn($orderDb, isset($sourceConfig['db_name']) ? $sourceConfig['db_name'] : dbFinance, isset($sourceConfig['table']) ? $sourceConfig['table'] : $tableName, 'latest_transition_at')) {
+        if (shopeeOmsTableHasColumn($orderDb, isset($sourceConfig['db_name']) ? $sourceConfig['db_name'] : dbFinance, isset($sourceConfig['table']) ? $sourceConfig['table'] : $tblName, 'latest_transition_at')) {
             $assignments[] = "`latest_transition_at` = NOW()";
         }
-        $updateSql = "UPDATE `" . (isset($sourceConfig['table']) ? $sourceConfig['table'] : $tableName) . "`
+        $updateSql = "UPDATE `" . (isset($sourceConfig['table']) ? $sourceConfig['table'] : $tblName) . "`
             SET " . implode(",\n                ", $assignments) . "
             WHERE id = " . (int) $orderId . "
             LIMIT 1";
@@ -8321,10 +8197,10 @@ if (!function_exists('shopeeOmsMoveToWafcWithReceivedDate')) {
         $resolvedSource = isset($options['platform']) ? $options['platform'] : (isset($options['table_name']) ? $options['table_name'] : 'shopee');
         $sourceConfig = shopeeOmsResolveOrderSourceConfig($resolvedSource, 'shopee');
         $orderConnect = shopeeOmsGetOrderSourceDbConnection($cmsConnect, $financeConnect, $sourceConfig);
-        $tableName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
+        $tblName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
         $dbName = isset($sourceConfig['db_name']) ? (string) $sourceConfig['db_name'] : dbFinance;
 
-        if (!shopeeOmsTableHasColumn($orderConnect, $dbName, $tableName, 'received_date')) {
+        if (!shopeeOmsTableHasColumn($orderConnect, $dbName, $tblName, 'received_date')) {
             return array(
                 'success' => false,
                 'message' => 'Received Date column is not available yet. Please run insert_table.php first.',
@@ -8382,7 +8258,7 @@ if (!function_exists('shopeeOmsHandleMoveToWafcWithReceivedDatePost')) {
         $sessionToken = isset($_SESSION[$csrfSessionKey]) ? (string) $_SESSION[$csrfSessionKey] : '';
 
         if (!hash_equals($sessionToken, $submittedToken)) {
-            echo '<script>alert(' . json_encode('Invalid session token. Please refresh the page and try again.', JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . '); location.replace(' . json_encode($redirectUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ');</script>';
+            renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', $redirectUrl, 1200, true);
             exit;
         }
 
@@ -8434,7 +8310,8 @@ if (!function_exists('shopeeOmsHandleMoveToWafcWithReceivedDatePost')) {
             ));
         }
 
-        echo '<script>alert(' . json_encode((string) (isset($wafcResult['message']) ? $wafcResult['message'] : 'Unable to move order to WAFC.'), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . '); location.replace(' . json_encode($redirectUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ');</script>';
+        $wafcMessage = (string) (isset($wafcResult['message']) ? $wafcResult['message'] : 'Unable to move order to WAFC.');
+        renderNotificationScript($wafcMessage, resolveNotificationType($wafcMessage, 'info'), $redirectUrl, 1200, true);
         exit;
     }
 }
@@ -8569,7 +8446,7 @@ if (!function_exists('shopeeOmsRenderReceivedDateModalScript')) {
 }
 
 if (!function_exists('shopeeOmsResolveIdCsvToNames')) {
-    function shopeeOmsResolveIdCsvToNames($connect, $tableName, $csvValue)
+    function shopeeOmsResolveIdCsvToNames($connect, $tblName, $csvValue)
     {
         $csvValue = trim((string) $csvValue);
         if ($csvValue === '' || !($connect instanceof mysqli)) {
@@ -8587,7 +8464,7 @@ if (!function_exists('shopeeOmsResolveIdCsvToNames')) {
             return $csvValue;
         }
 
-        $result = mysqli_query($connect, "SELECT id, name FROM `" . $tableName . "` WHERE id IN (" . implode(',', $idMap) . ")");
+        $result = mysqli_query($connect, "SELECT id, name FROM `" . $tblName . "` WHERE id IN (" . implode(',', $idMap) . ")");
         $nameMap = array();
         if ($result) {
             while ($row = mysqli_fetch_assoc($result)) {
@@ -9012,22 +8889,22 @@ if (!function_exists('shopeeOmsRunOverduePostponedAutoMove')) {
                 continue;
             }
 
-            $tableName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : '';
+            $tblName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : '';
             $delayRemarkField = isset($sourceConfig['delay_remark_field']) && trim((string) $sourceConfig['delay_remark_field']) !== ''
                 ? trim((string) $sourceConfig['delay_remark_field'])
                 : 'delay_remark';
             $statusCondition = shopeeOmsBuildOrderStatusInCondition($orderConnect, 'order_status', array('WR'));
-            if ($tableName === '' || $statusCondition === '') {
+            if ($tblName === '' || $statusCondition === '') {
                 continue;
             }
 
             $selectFields = array('id', 'estimated_received_date');
-            if (shopeeOmsTableHasColumn($orderConnect, isset($sourceConfig['db_name']) ? $sourceConfig['db_name'] : dbFinance, $tableName, $delayRemarkField)) {
+            if (shopeeOmsTableHasColumn($orderConnect, isset($sourceConfig['db_name']) ? $sourceConfig['db_name'] : dbFinance, $tblName, $delayRemarkField)) {
                 $selectFields[] = $delayRemarkField;
             }
 
             $sql = "SELECT " . implode(', ', $selectFields) . "
-                FROM `" . $tableName . "`
+                FROM `" . $tblName . "`
                 WHERE status = 'A'
                   AND " . $statusCondition;
             $result = mysqli_query($orderConnect, $sql);
@@ -9159,6 +9036,146 @@ if (!function_exists('shopeeOmsRunFourteenDayAutoMove')) {
         }
 
         return $movedCount;
+    }
+}
+
+if (!function_exists('shopeeOmsBuildWarehouseStockShortageMessage')) {
+    function shopeeOmsBuildWarehouseStockShortageMessage($warehouseName, $shortages)
+    {
+        $shortages = is_array($shortages) ? $shortages : array();
+        if (empty($shortages)) {
+            return '';
+        }
+
+        $warehouseName = trim((string) $warehouseName);
+        $warehouseSubject = $warehouseName !== ''
+            ? 'Selected warehouse "' . $warehouseName . '"'
+            : 'Selected warehouse';
+
+        $parts = array();
+        foreach ($shortages as $shortage) {
+            if (!is_array($shortage)) {
+                continue;
+            }
+
+            $productLabel = trim((string) (isset($shortage['product_label']) ? $shortage['product_label'] : ''));
+            $productId = isset($shortage['product_id']) ? (int) $shortage['product_id'] : 0;
+            if ($productLabel === '') {
+                $productLabel = $productId > 0 ? ('Product #' . $productId) : 'this product';
+            }
+
+            $requiredQty = isset($shortage['required_qty']) ? (int) $shortage['required_qty'] : 0;
+            $availableQty = isset($shortage['available_qty']) ? (int) $shortage['available_qty'] : 0;
+            if ($availableQty < 0) {
+                $availableQty = 0;
+            }
+
+            $parts[] = $productLabel . ' (required: ' . $requiredQty . ', available: ' . $availableQty . ')';
+        }
+
+        if (empty($parts)) {
+            return $warehouseSubject . ' does not have enough stock.';
+        }
+
+        return $warehouseSubject . ' does not have enough stock for ' . implode(', ', $parts) . '.';
+    }
+}
+
+if (!function_exists('shopeeOmsValidateWarehouseStockForOrder')) {
+    function shopeeOmsValidateWarehouseStockForOrder($cmsConnect, $financeConnect, $orderRow, $options = array())
+    {
+        if (!($cmsConnect instanceof mysqli) || !($financeConnect instanceof mysqli) || !is_array($orderRow)) {
+            return array('success' => false, 'message' => 'Unable to connect to warehouse inventory.');
+        }
+
+        $options = is_array($options) ? $options : array();
+        $resolvedSource = isset($options['platform']) ? $options['platform'] : shopeeOmsGetOrderSourcePlatform($orderRow, 'shopee');
+        if (!empty($orderRow['__oms_platform'])) {
+            $resolvedSource = $orderRow['__oms_platform'];
+        }
+
+        $sourceConfig = shopeeOmsResolveOrderSourceConfig($resolvedSource, 'shopee');
+        $productSummary = shopeeOmsBuildOrderProductSummaryBySource($cmsConnect, $orderRow, $sourceConfig);
+        $productQtyMap = isset($productSummary['product_qty_map']) && is_array($productSummary['product_qty_map'])
+            ? $productSummary['product_qty_map']
+            : array();
+        if (empty($productQtyMap)) {
+            return array('success' => false, 'message' => 'No product item found for this order package.');
+        }
+
+        $defaultWarehouseId = shopeeOmsGetDefaultWarehouseId($cmsConnect);
+        $warehouseId = isset($options['warehouse_id'])
+            ? shopeeOmsNormalizeWarehouseId($options['warehouse_id'])
+            : shopeeOmsResolveStockOutWarehouseId($cmsConnect, $orderRow, $defaultWarehouseId);
+        if ($warehouseId <= 0) {
+            return array('success' => false, 'message' => 'Stock Out Warehouse cannot be empty.');
+        }
+
+        $warehouseName = shopeeOmsResolveWarehouseNameById($cmsConnect, $warehouseId, $defaultWarehouseId);
+        $productNameMap = array();
+        $productIds = array();
+        foreach (array_keys($productQtyMap) as $productId) {
+            $productId = (int) $productId;
+            if ($productId > 0) {
+                $productIds[$productId] = $productId;
+            }
+        }
+
+        if (!empty($productIds)) {
+            $productResult = mysqli_query($cmsConnect, "SELECT id, name FROM `" . PROD . "` WHERE id IN (" . implode(',', $productIds) . ")");
+            if ($productResult) {
+                while ($productRow = mysqli_fetch_assoc($productResult)) {
+                    $resolvedProductId = isset($productRow['id']) ? (int) $productRow['id'] : 0;
+                    if ($resolvedProductId > 0) {
+                        $productNameMap[$resolvedProductId] = isset($productRow['name']) ? trim((string) $productRow['name']) : '';
+                    }
+                }
+            }
+        }
+
+        $shortages = array();
+        foreach ($productQtyMap as $productId => $requiredQty) {
+            $productId = (int) $productId;
+            $requiredQty = (int) $requiredQty;
+            if ($productId <= 0 || $requiredQty <= 0) {
+                continue;
+            }
+
+            $availableQty = 0;
+            $batches = siGetAvailableFifoStockInBatches($financeConnect, $warehouseId, $productId, 0, 0);
+            foreach ($batches as $batch) {
+                $availableQty += isset($batch['available_quantity']) ? (int) $batch['available_quantity'] : 0;
+            }
+
+            if ($availableQty < $requiredQty) {
+                $shortages[] = array(
+                    'product_id' => $productId,
+                    'product_label' => isset($productNameMap[$productId]) && $productNameMap[$productId] !== ''
+                        ? $productNameMap[$productId]
+                        : ('Product #' . $productId),
+                    'required_qty' => $requiredQty,
+                    'available_qty' => $availableQty,
+                );
+            }
+        }
+
+        if (!empty($shortages)) {
+            return array(
+                'success' => false,
+                'message' => shopeeOmsBuildWarehouseStockShortageMessage($warehouseName, $shortages),
+                'shortages' => $shortages,
+                'warehouse_id' => $warehouseId,
+                'warehouse_name' => $warehouseName,
+            );
+        }
+
+        return array(
+            'success' => true,
+            'message' => '',
+            'shortages' => array(),
+            'warehouse_id' => $warehouseId,
+            'warehouse_name' => $warehouseName,
+        );
     }
 }
 
@@ -9339,7 +9356,7 @@ if (!function_exists('shopeeOmsBulkMoveCurrentShippedOrdersToWaerd')) {
         $sourceConfig = shopeeOmsResolveOrderSourceConfig(isset($options['platform']) ? $options['platform'] : 'shopee');
         $platform = isset($sourceConfig['platform']) ? (string) $sourceConfig['platform'] : 'shopee';
         $orderConnect = shopeeOmsGetOrderSourceDbConnection($cmsConnect, $financeConnect, $sourceConfig);
-        $tableName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
+        $tblName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : SHOPEE_SG_ORDER_REQ;
 
         if (!($cmsConnect instanceof mysqli) || !($orderConnect instanceof mysqli)) {
             return array(
@@ -9367,7 +9384,7 @@ if (!function_exists('shopeeOmsBulkMoveCurrentShippedOrdersToWaerd')) {
         $orderCodeField = isset($sourceConfig['order_code_field']) && trim((string) $sourceConfig['order_code_field']) !== ''
             ? '`' . $sourceConfig['order_code_field'] . '` AS order_code'
             : "CONCAT('" . mysqli_real_escape_string($orderConnect, strtoupper((string) (isset($sourceConfig['fallback_code_prefix']) ? $sourceConfig['fallback_code_prefix'] : 'OMS'))) . "-', id) AS order_code";
-        $sql = "SELECT id, " . $orderCodeField . ", order_status FROM `" . $tableName . "` WHERE status = 'A' AND " . $statusCondition . " ORDER BY id ASC";
+        $sql = "SELECT id, " . $orderCodeField . ", order_status FROM `" . $tblName . "` WHERE status = 'A' AND " . $statusCondition . " ORDER BY id ASC";
         $result = mysqli_query($orderConnect, $sql);
         if (!$result) {
             return array(
@@ -9737,16 +9754,54 @@ if (!function_exists('sorDecodeToken')) {
 
 if (!function_exists('sorResolveTrackingMySlug')) {
     /**
-     * Map courier name (from DB) to tracking.my URL slug.
-     * Also tries to auto-detect from tracking number prefix.
+     * Map courier name/tracking number to tracking.my URL slug.
+     * Tracking number pattern is checked first because imported/scanned labels
+     * may have the wrong courier selected in CMS.
      */
     function sorResolveTrackingMySlug($courierName, $trackingNo)
     {
         $courierName = strtolower(trim((string) $courierName));
         $trackingNo = strtoupper(trim((string) $trackingNo));
 
-        // Map courier names to tracking.my slugs
+        // SPX Malaysia airbill format, example: MY064857959876.
+        // Check this before courier name because CMS courier may be selected as J&T.
+        if (preg_match('/^MY\d{10,14}$/', $trackingNo)) {
+            return 'shopee';
+        }
+
+        if (preg_match('/^SPXMY|^SPX/i', $trackingNo)) {
+            return 'shopee';
+        }
+
+        if (preg_match('/^MYJZ/i', $trackingNo)) {
+            return 'dhl-ecommerce';
+        }
+
+        if (preg_match('/^JT/i', $trackingNo)) {
+            return 'jt';
+        }
+
+        if (preg_match('/^NV/i', $trackingNo)) {
+            return 'ninjavan';
+        }
+
+        if (preg_match('/^MY[A-Z]{2}\d/i', $trackingNo)) {
+            return 'dhl-ecommerce';
+        }
+
+        if (preg_match('/^[A-Z]{2}\d{9}[A-Z]{2}$/', $trackingNo)) {
+            return 'pos';
+        }
+
+        if (preg_match('/^\d{10,}$/', $trackingNo)) {
+            return 'pos';
+        }
+
         $nameMap = array(
+            'spx' => 'shopee',
+            'spx express' => 'shopee',
+            'shopee express' => 'shopee',
+            'shopee' => 'shopee',
             'dhl' => 'dhl-ecommerce',
             'dhl ecommerce' => 'dhl-ecommerce',
             'dhl e-commerce' => 'dhl-ecommerce',
@@ -9757,8 +9812,6 @@ if (!function_exists('sorResolveTrackingMySlug')) {
             'j&t express' => 'jt',
             'jnt' => 'jt',
             'jnt express' => 'jt',
-            'shopee express' => 'shopee',
-            'shopee' => 'shopee',
             'best express' => 'best',
             'citylink' => 'citylink',
             'citylink express' => 'citylink',
@@ -9774,30 +9827,6 @@ if (!function_exists('sorResolveTrackingMySlug')) {
             if (strpos($courierName, $key) !== false) {
                 return $slug;
             }
-        }
-
-        // Auto-detect from tracking number prefix
-        if (preg_match('/^MYJZ/i', $trackingNo)) {
-            return 'dhl-ecommerce';
-        }
-        if (preg_match('/^SPXMY|^SPX/i', $trackingNo)) {
-            return 'shopee';
-        }
-        if (preg_match('/^MY[A-Z]{2}\d/i', $trackingNo)) {
-            // Generic MY prefix â†’ DHL eCommerce (most common)
-            return 'dhl-ecommerce';
-        }
-        if (preg_match('/^JT/i', $trackingNo)) {
-            return 'jt';
-        }
-        if (preg_match('/^NV/i', $trackingNo)) {
-            return 'ninjavan';
-        }
-        if (preg_match('/^[A-Z]{2}\d{9}[A-Z]{2}$/', $trackingNo)) {
-            return 'pos'; // Pos Malaysia international format
-        }
-        if (preg_match('/^\d{10,}$/', $trackingNo)) {
-            return 'pos'; // Pos Malaysia uses long numeric tracking numbers
         }
 
         return '';
@@ -9979,120 +10008,194 @@ if (!function_exists('sorWsDecode')) {
 
 if (!function_exists('sorFetchTrackingMyWebSocket')) {
     /**
-     * Fetch actual tracking status from tracking.my via its WebSocket API.
-     * 1. GET the tracking.my page to extract the pre-built WebSocket message
-     *    (contains a server-computed verify hash).
-     * 2. Open a WebSocket connection and send the message.
-     * 3. Parse the JSON response for the latest tracking event.
+     * Fetch tracking status from tracking.my WebSocket.
+     * More compatible with live hosting by trying tls:// and ssl://,
+     * adding SNI headers, and reading multiple WebSocket frames.
      */
     function sorFetchTrackingMyWebSocket($courierName, $trackingNo, &$rawJson = null)
     {
+        $rawJson = null;
         $trackingNo = trim((string) $trackingNo);
-        if ($trackingNo === '') return '';
+        if ($trackingNo === '') {
+            return '';
+        }
 
         $slug = sorResolveTrackingMySlug($courierName, $trackingNo);
-        if ($slug === '') return '';
+        if ($slug === '') {
+            return '';
+        }
 
         $pageUrl = 'https://www.tracking.my/' . $slug . '/' . rawurlencode($trackingNo);
         $opts = array(
             'http' => array(
                 'method' => 'GET',
                 'header' => "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36\r\n" .
-                            "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n",
-                'timeout' => 15,
+                            "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8\r\n" .
+                            "Accept-Language: en-US,en;q=0.9\r\n" .
+                            "Connection: close\r\n",
+                'timeout' => 20,
+                'ignore_errors' => true,
             ),
-            'ssl' => array('verify_peer' => false, 'verify_peer_name' => false),
+            'ssl' => array(
+                'verify_peer' => false,
+                'verify_peer_name' => false,
+                'SNI_enabled' => true,
+                'SNI_server_name' => 'www.tracking.my',
+                'peer_name' => 'www.tracking.my',
+            ),
         );
+
         $body = @file_get_contents($pageUrl, false, stream_context_create($opts));
-        if ($body === false || $body === '') return '';
-
-        // The page embeds: socket.send("{&quot;action&quot;:...&quot;verify&quot;:&quot;HASH&quot;}")
-        if (!preg_match('/socket\.send\(\s*"([^"]+)"\s*\)/', $body, $m)) return '';
-
-        $wsMessage = html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
-        $wsCheck = json_decode($wsMessage, true);
-        if (!is_array($wsCheck) || !isset($wsCheck['action'])) return '';
-
-        // Open WebSocket connection
-        $wsKey = base64_encode(openssl_random_pseudo_bytes(16));
-        $ctx = stream_context_create(array(
-            'ssl' => array('verify_peer' => false, 'verify_peer_name' => false),
-        ));
-        $sock = @stream_socket_client('ssl://www.tracking.my:443', $errno, $errstr, 10, STREAM_CLIENT_CONNECT, $ctx);
-        if (!$sock) return '';
-
-        stream_set_timeout($sock, 10);
-
-        // WebSocket upgrade handshake
-        $handshake = "GET /websocket HTTP/1.1\r\n" .
-            "Host: www.tracking.my\r\n" .
-            "Upgrade: websocket\r\n" .
-            "Connection: Upgrade\r\n" .
-            "Sec-WebSocket-Key: $wsKey\r\n" .
-            "Sec-WebSocket-Version: 13\r\n" .
-            "Origin: https://www.tracking.my\r\n" .
-            "\r\n";
-        @fwrite($sock, $handshake);
-
-        // Read upgrade response
-        $resp = '';
-        while (!feof($sock)) {
-            $line = @fgets($sock, 1024);
-            if ($line === false) break;
-            $resp .= $line;
-            if ($line === "\r\n") break;
-        }
-        if (strpos($resp, '101') === false) {
-            @fclose($sock);
+        if ($body === false || trim((string) $body) === '') {
             return '';
         }
 
-        // Send the tracking request
-        @fwrite($sock, sorWsEncode($wsMessage));
-
-        // Read the tracking response
-        $data = sorWsDecode($sock);
-        @fclose($sock);
-
-        if ($data === '') return '';
-
-        $result = json_decode($data, true);
-        $rawJson = $data; // expose raw response for diagnostics
-        if (!is_array($result) || !isset($result['result']) || !is_array($result['result'])) return '';
-
-        // tracking.my response: { result: [ {status, content, date, location, ...}, ... ] }
-        // 'status' is a CATEGORY (e.g. "delivered", "exception", "in_transit")
-        // 'content' is the human-readable description (e.g. "Parcel has been delivered", "Shipment cancelled")
-        // result[0] is the LATEST event.
-
-        // First, find the latest non-sponsored event
-        $latestStatus = '';
-        $latestContent = '';
-        foreach ($result['result'] as $event) {
-            if (!is_array($event)) continue;
-            $evStatus = isset($event['status']) ? trim((string) $event['status']) : '';
-            if ($evStatus === '' || $evStatus === 'sponsored') continue;
-            $latestStatus = $evStatus;
-            $latestContent = isset($event['content']) ? trim((string) $event['content']) : '';
-            break; // first non-sponsored = latest
+        $wsMessage = '';
+        if (preg_match('/socket\.send\(\s*"([^"]+)"\s*\)/', $body, $m)) {
+            $wsMessage = html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
+        } else if (preg_match("/socket\.send\(\s*'([^']+)'\s*\)/", $body, $m)) {
+            $wsMessage = html_entity_decode($m[1], ENT_QUOTES, 'UTF-8');
         }
 
-        if ($latestStatus === '') return '';
+        $wsCheck = json_decode($wsMessage, true);
+        if (!is_array($wsCheck) || !isset($wsCheck['action'])) {
+            return '';
+        }
 
-        // Try to derive a more specific status from the content text
+        $socketTargets = array(
+            'tls://www.tracking.my:443',
+            'ssl://www.tracking.my:443',
+        );
+
+        $data = '';
+        foreach ($socketTargets as $socketTarget) {
+            $wsKey = base64_encode(openssl_random_pseudo_bytes(16));
+            $ctx = stream_context_create(array(
+                'ssl' => array(
+                    'verify_peer' => false,
+                    'verify_peer_name' => false,
+                    'SNI_enabled' => true,
+                    'SNI_server_name' => 'www.tracking.my',
+                    'peer_name' => 'www.tracking.my',
+                ),
+            ));
+
+            $errno = 0;
+            $errstr = '';
+            $sock = @stream_socket_client($socketTarget, $errno, $errstr, 15, STREAM_CLIENT_CONNECT, $ctx);
+            if (!$sock) {
+                continue;
+            }
+
+            stream_set_timeout($sock, 15);
+
+            $handshake = "GET /websocket HTTP/1.1\r\n" .
+                "Host: www.tracking.my\r\n" .
+                "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36\r\n" .
+                "Upgrade: websocket\r\n" .
+                "Connection: Upgrade\r\n" .
+                "Sec-WebSocket-Key: " . $wsKey . "\r\n" .
+                "Sec-WebSocket-Version: 13\r\n" .
+                "Origin: https://www.tracking.my\r\n" .
+                "Pragma: no-cache\r\n" .
+                "Cache-Control: no-cache\r\n" .
+                "\r\n";
+
+            @fwrite($sock, $handshake);
+
+            $resp = '';
+            while (!feof($sock)) {
+                $line = @fgets($sock, 2048);
+                if ($line === false) {
+                    break;
+                }
+
+                $resp .= $line;
+                if ($line === "\r\n") {
+                    break;
+                }
+            }
+
+            if (strpos($resp, '101') === false) {
+                @fclose($sock);
+                continue;
+            }
+
+            @fwrite($sock, sorWsEncode($wsMessage));
+
+            $startedAt = time();
+            for ($i = 0; $i < 8; $i++) {
+                if ((time() - $startedAt) > 15) {
+                    break;
+                }
+
+                $frameData = sorWsDecode($sock);
+                if ($frameData === '') {
+                    continue;
+                }
+
+                $decoded = json_decode($frameData, true);
+                if (is_array($decoded) && isset($decoded['result']) && is_array($decoded['result'])) {
+                    $data = $frameData;
+                    break;
+                }
+            }
+
+            @fclose($sock);
+
+            if ($data !== '') {
+                break;
+            }
+        }
+
+        if ($data === '') {
+            return '';
+        }
+
+        $result = json_decode($data, true);
+        $rawJson = $data;
+
+        if (!is_array($result) || !isset($result['result']) || !is_array($result['result'])) {
+            return '';
+        }
+
+        $latestStatus = '';
+        $latestContent = '';
+
+        foreach ($result['result'] as $event) {
+            if (!is_array($event)) {
+                continue;
+            }
+
+            $evStatus = isset($event['status']) ? strtolower(trim((string) $event['status'])) : '';
+            if ($evStatus === '' || $evStatus === 'sponsored') {
+                continue;
+            }
+
+            $latestStatus = $evStatus;
+            $latestContent = isset($event['content']) ? trim((string) $event['content']) : '';
+            break;
+        }
+
+        if ($latestStatus === '') {
+            return '';
+        }
+
         $contentLower = strtolower($latestContent);
         $contentKeywords = array(
-            'cancel' => 'Cancelled',
-            'returned to sender' => 'Returned to Sender',
+            'parcel has been delivered' => 'Delivered',
             'delivered' => 'Delivered',
             'out for delivery' => 'Out for Delivery',
             'in transit' => 'In Transit',
             'picked up' => 'Picked Up',
+            'returned to sender' => 'Returned to Sender',
+            'return' => 'Returned',
+            'cancel' => 'Cancelled',
             'preparing' => 'Shipment Information Received',
             'information received' => 'Shipment Information Received',
         );
 
-        $displayStatus = ucfirst($latestStatus); // default: use category name
+        $displayStatus = ucwords(str_replace('_', ' ', $latestStatus));
         foreach ($contentKeywords as $needle => $label) {
             if (strpos($contentLower, $needle) !== false) {
                 $displayStatus = $label;
@@ -10251,8 +10354,18 @@ if (!function_exists('sorRefreshTrackingStatus')) {
             return false;
         }
 
-        $statusText = sorFetchTrackingStatusEasyParcel($trackingNo, $courierCountryCode);
         $trackingUrl = sorBuildTrackingUrl($trackingLink, $trackingNo);
+        $statusText = '';
+
+        // SPX Malaysia tracking numbers can be scanned/imported while the CMS courier is still wrong.
+        // Try tracking.my first for this pattern.
+        if (preg_match('/^MY\d{10,14}$/i', $trackingNo)) {
+            $statusText = sorFetchTrackingMyWebSocket($courierNameForSlug, $trackingNo);
+        }
+
+        if ($statusText === '') {
+            $statusText = sorFetchTrackingStatusEasyParcel($trackingNo, $courierCountryCode);
+        }
 
         // Fallback to courier tracking page scrape when EasyParcel cannot provide a usable status.
         $epFailed = ($statusText === '' || stripos($statusText, 'failed:') !== false || stripos($statusText, 'unavailable') !== false || stripos($statusText, 'no status') !== false);
@@ -10267,13 +10380,12 @@ if (!function_exists('sorRefreshTrackingStatus')) {
         $statusIsError = (stripos($statusText, 'Unable to retrieve') !== false)
             || (stripos($statusText, 'unavailable') !== false)
             || (stripos($statusText, 'failed') !== false);
+
         if ((!$statusIsUsable || $statusIsError) && $trackingNo !== '') {
-            // Resolve courier name for tracking.my slug (already fetched from DB above)
             $wsStatus = sorFetchTrackingMyWebSocket($courierNameForSlug, $trackingNo);
             if ($wsStatus !== '') {
                 $statusText = $wsStatus;
             } else {
-                // Final fallback: keyword scrape on tracking.my page
                 $slug = sorResolveTrackingMySlug($courierNameForSlug, $trackingNo);
                 if ($slug !== '') {
                     $altUrl = 'https://www.tracking.my/' . $slug . '/' . rawurlencode($trackingNo);
@@ -10282,8 +10394,8 @@ if (!function_exists('sorRefreshTrackingStatus')) {
                         $statusText = $altStatus . ' | Source: tracking.my';
                     }
                 }
-                // If all fallbacks failed and the current status is an error, clear it
-                if ($statusIsError && stripos($statusText, 'Unable to retrieve') !== false) {
+
+                if ($statusText === '' || stripos($statusText, 'Unable to retrieve') !== false) {
                     $statusText = 'Tracking unavailable | Synced: ' . date('Y-m-d H:i:s');
                 }
             }
@@ -10322,9 +10434,9 @@ if (!function_exists('siLoadWarehouses')) {
     function siLoadWarehouses($connect)
     {
         $rows = array();
-        $rst = mysqli_query($connect, "SELECT id, name FROM " . WHSE . " WHERE status='A' ORDER BY name ASC");
-        if ($rst) {
-            while ($r = mysqli_fetch_assoc($rst)) {
+        $result = mysqli_query($connect, "SELECT id, name FROM " . WHSE . " WHERE status='A' ORDER BY name ASC");
+        if ($result) {
+            while ($r = mysqli_fetch_assoc($result)) {
                 $rows[] = array('id' => (int) $r['id'], 'name' => (string) $r['name']);
             }
         }
@@ -10336,9 +10448,9 @@ if (!function_exists('siLoadProducts')) {
     function siLoadProducts($connect)
     {
         $rows = array();
-        $rst = mysqli_query($connect, "SELECT id, name FROM " . PROD . " WHERE status='A' ORDER BY name ASC");
-        if ($rst) {
-            while ($r = mysqli_fetch_assoc($rst)) {
+        $result = mysqli_query($connect, "SELECT id, name FROM " . PROD . " WHERE status='A' ORDER BY name ASC");
+        if ($result) {
+            while ($r = mysqli_fetch_assoc($result)) {
                 $rows[] = array('id' => (int) $r['id'], 'name' => (string) $r['name']);
             }
         }
@@ -10350,9 +10462,9 @@ if (!function_exists('siLoadPackages')) {
     function siLoadPackages($connect)
     {
         $rows = array();
-        $rst = mysqli_query($connect, "SELECT id, name, product FROM " . PKG . " WHERE status='A' ORDER BY name ASC");
-        if ($rst) {
-            while ($r = mysqli_fetch_assoc($rst)) {
+        $result = mysqli_query($connect, "SELECT id, name, product FROM " . PKG . " WHERE status='A' ORDER BY name ASC");
+        if ($result) {
+            while ($r = mysqli_fetch_assoc($result)) {
                 $productIds = array();
                 $csv = isset($r['product']) ? (string) $r['product'] : '';
                 if ($csv !== '') {
@@ -10524,44 +10636,44 @@ if (!function_exists('siBuildProductQtyMap')) {
 }
 
 if (!function_exists('siTableExistsByName')) {
-    function siTableExistsByName($connect, $tableName)
+    function siTableExistsByName($connect, $tblName)
     {
-        $tableName = trim((string) $tableName);
-        if (!($connect instanceof mysqli) || $tableName === '') {
+        $tblName = trim((string) $tblName);
+        if (!($connect instanceof mysqli) || $tblName === '') {
             return false;
         }
 
-        $sql = "SHOW TABLES LIKE '" . mysqli_real_escape_string($connect, $tableName) . "'";
+        $sql = "SHOW TABLES LIKE '" . mysqli_real_escape_string($connect, $tblName) . "'";
         $result = mysqli_query($connect, $sql);
         return ($result instanceof mysqli_result && mysqli_num_rows($result) > 0);
     }
 }
 
 if (!function_exists('siColumnExistsByName')) {
-    function siColumnExistsByName($connect, $tableName, $columnName)
+    function siColumnExistsByName($connect, $tblName, $columnName)
     {
-        $tableName = trim((string) $tableName);
+        $tblName = trim((string) $tblName);
         $columnName = trim((string) $columnName);
-        if (!($connect instanceof mysqli) || $tableName === '' || $columnName === '') {
+        if (!($connect instanceof mysqli) || $tblName === '' || $columnName === '') {
             return false;
         }
 
-        $sql = "SHOW COLUMNS FROM `" . str_replace('`', '``', $tableName) . "` LIKE '" . mysqli_real_escape_string($connect, $columnName) . "'";
+        $sql = "SHOW COLUMNS FROM `" . str_replace('`', '``', $tblName) . "` LIKE '" . mysqli_real_escape_string($connect, $columnName) . "'";
         $result = mysqli_query($connect, $sql);
         return ($result instanceof mysqli_result && mysqli_num_rows($result) > 0);
     }
 }
 
 if (!function_exists('siIndexExistsByName')) {
-    function siIndexExistsByName($connect, $tableName, $indexName)
+    function siIndexExistsByName($connect, $tblName, $indexName)
     {
-        $tableName = trim((string) $tableName);
+        $tblName = trim((string) $tblName);
         $indexName = trim((string) $indexName);
-        if (!($connect instanceof mysqli) || $tableName === '' || $indexName === '') {
+        if (!($connect instanceof mysqli) || $tblName === '' || $indexName === '') {
             return false;
         }
 
-        $sql = "SHOW INDEX FROM `" . str_replace('`', '``', $tableName) . "` WHERE Key_name = '" . mysqli_real_escape_string($connect, $indexName) . "'";
+        $sql = "SHOW INDEX FROM `" . str_replace('`', '``', $tblName) . "` WHERE Key_name = '" . mysqli_real_escape_string($connect, $indexName) . "'";
         $result = mysqli_query($connect, $sql);
         return ($result instanceof mysqli_result && mysqli_num_rows($result) > 0);
     }
@@ -10586,8 +10698,8 @@ if (!function_exists('siEnsureStockOutBatchUsageTable')) {
             return true;
         }
 
-        $tableName = STOCK_OUT_BATCH_USAGE;
-        $createSql = "CREATE TABLE IF NOT EXISTS `" . $tableName . "` (
+        $tblName = STOCK_OUT_BATCH_USAGE;
+        $createSql = "CREATE TABLE IF NOT EXISTS `" . $tblName . "` (
             `id` INT AUTO_INCREMENT PRIMARY KEY,
             `stock_out_order_id` INT NOT NULL,
             `stock_out_item_id` INT NOT NULL,
@@ -10610,21 +10722,21 @@ if (!function_exists('siEnsureStockOutBatchUsageTable')) {
         }
 
         $columnSqlMap = array(
-            'stock_out_order_id' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `stock_out_order_id` INT NOT NULL AFTER `id`",
-            'stock_out_item_id' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `stock_out_item_id` INT NOT NULL AFTER `stock_out_order_id`",
-            'stock_in_order_id' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `stock_in_order_id` INT NOT NULL AFTER `stock_out_item_id`",
-            'stock_in_item_id' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `stock_in_item_id` INT NOT NULL AFTER `stock_in_order_id`",
-            'product_id' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `product_id` INT NOT NULL DEFAULT 0 AFTER `stock_in_item_id`",
-            'package_id' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `package_id` INT NOT NULL DEFAULT 0 AFTER `product_id`",
-            'used_quantity' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `used_quantity` INT NOT NULL DEFAULT 0 AFTER `package_id`",
-            'create_by' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `create_by` VARCHAR(30) DEFAULT NULL AFTER `used_quantity`",
-            'create_date' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `create_date` DATE DEFAULT NULL AFTER `create_by`",
-            'create_time' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `create_time` TIME DEFAULT NULL AFTER `create_date`",
-            'status' => "ALTER TABLE `" . $tableName . "` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A' AFTER `create_time`",
+            'stock_out_order_id' => "ALTER TABLE `" . $tblName . "` ADD COLUMN `stock_out_order_id` INT NOT NULL AFTER `id`",
+            'stock_out_item_id' => "ALTER TABLE `" . $tblName . "` ADD COLUMN `stock_out_item_id` INT NOT NULL AFTER `stock_out_order_id`",
+            'stock_in_order_id' => "ALTER TABLE `" . $tblName . "` ADD COLUMN `stock_in_order_id` INT NOT NULL AFTER `stock_out_item_id`",
+            'stock_in_item_id' => "ALTER TABLE `" . $tblName . "` ADD COLUMN `stock_in_item_id` INT NOT NULL AFTER `stock_in_order_id`",
+            'product_id' => "ALTER TABLE `" . $tblName . "` ADD COLUMN `product_id` INT NOT NULL DEFAULT 0 AFTER `stock_in_item_id`",
+            'package_id' => "ALTER TABLE `" . $tblName . "` ADD COLUMN `package_id` INT NOT NULL DEFAULT 0 AFTER `product_id`",
+            'used_quantity' => "ALTER TABLE `" . $tblName . "` ADD COLUMN `used_quantity` INT NOT NULL DEFAULT 0 AFTER `package_id`",
+            'create_by' => "ALTER TABLE `" . $tblName . "` ADD COLUMN `create_by` VARCHAR(30) DEFAULT NULL AFTER `used_quantity`",
+            'create_date' => "ALTER TABLE `" . $tblName . "` ADD COLUMN `create_date` DATE DEFAULT NULL AFTER `create_by`",
+            'create_time' => "ALTER TABLE `" . $tblName . "` ADD COLUMN `create_time` TIME DEFAULT NULL AFTER `create_date`",
+            'status' => "ALTER TABLE `" . $tblName . "` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A' AFTER `create_time`",
         );
 
         foreach ($columnSqlMap as $columnName => $alterSql) {
-            if (!siColumnExistsByName($financeConnect, $tableName, $columnName)) {
+            if (!siColumnExistsByName($financeConnect, $tblName, $columnName)) {
                 if (!mysqli_query($financeConnect, $alterSql)) {
                     return false;
                 }
@@ -10632,13 +10744,13 @@ if (!function_exists('siEnsureStockOutBatchUsageTable')) {
         }
 
         $indexSqlMap = array(
-            'idx_sobu_stock_out_order_item' => "ALTER TABLE `" . $tableName . "` ADD INDEX `idx_sobu_stock_out_order_item` (`stock_out_order_id`, `stock_out_item_id`, `status`)",
-            'idx_sobu_stock_in_order_item' => "ALTER TABLE `" . $tableName . "` ADD INDEX `idx_sobu_stock_in_order_item` (`stock_in_order_id`, `stock_in_item_id`, `status`)",
-            'idx_sobu_product_package_status' => "ALTER TABLE `" . $tableName . "` ADD INDEX `idx_sobu_product_package_status` (`product_id`, `package_id`, `status`)",
+            'idx_sobu_stock_out_order_item' => "ALTER TABLE `" . $tblName . "` ADD INDEX `idx_sobu_stock_out_order_item` (`stock_out_order_id`, `stock_out_item_id`, `status`)",
+            'idx_sobu_stock_in_order_item' => "ALTER TABLE `" . $tblName . "` ADD INDEX `idx_sobu_stock_in_order_item` (`stock_in_order_id`, `stock_in_item_id`, `status`)",
+            'idx_sobu_product_package_status' => "ALTER TABLE `" . $tblName . "` ADD INDEX `idx_sobu_product_package_status` (`product_id`, `package_id`, `status`)",
         );
 
         foreach ($indexSqlMap as $indexName => $alterSql) {
-            if (!siIndexExistsByName($financeConnect, $tableName, $indexName)) {
+            if (!siIndexExistsByName($financeConnect, $tblName, $indexName)) {
                 if (!mysqli_query($financeConnect, $alterSql)) {
                     return false;
                 }
@@ -10742,9 +10854,9 @@ if (!function_exists('siFetchFlatRows')) {
                 INNER JOIN `" . $itemTable . "` i ON i.stock_in_order_id=o.id AND i.status='A'
                 " . $whereSql . "
                 ORDER BY o.id DESC, i.id ASC";
-        $rst = mysqli_query($financeConnect, $sql);
-        if ($rst) {
-            while ($r = mysqli_fetch_assoc($rst)) {
+        $result = mysqli_query($financeConnect, $sql);
+        if ($result) {
+            while ($r = mysqli_fetch_assoc($result)) {
                 $productRaw = isset($r['product_id']) ? trim((string) $r['product_id']) : '';
                 $qtyRaw = isset($r['product_quantity']) ? trim((string) $r['product_quantity']) : '';
                 $productParts = array_map('trim', explode(',', $productRaw));
@@ -11352,9 +11464,9 @@ if (!function_exists('siFetchFlatRows')) {
                 INNER JOIN `" . $itemTable . "` i ON i.stock_in_order_id=o.id AND i.status='A'
                 WHERE o.status='A'
                 ORDER BY o.id DESC, i.id ASC";
-        $rst = mysqli_query($financeConnect, $sql);
-        if ($rst) {
-            while ($r = mysqli_fetch_assoc($rst)) {
+        $result = mysqli_query($financeConnect, $sql);
+        if ($result) {
+            while ($r = mysqli_fetch_assoc($result)) {
                 $productRaw = isset($r['product_id']) ? trim((string) $r['product_id']) : '';
                 $qtyRaw = isset($r['product_quantity']) ? trim((string) $r['product_quantity']) : '';
                 $productParts = array_map('trim', explode(',', $productRaw));
@@ -11666,10 +11778,1124 @@ if (!function_exists('siFindOrderIdByFields')) {
         $safeDate = mysqli_real_escape_string($financeConnect, (string) $stockInDate);
         $safeOrderNo = mysqli_real_escape_string($financeConnect, (string) $orderNumber);
         $sql = "SELECT id FROM `" . $orderTable . "` WHERE status='A' AND warehouse_id='" . $warehouseId . "' AND stock_in_date='" . $safeDate . "' AND order_number='" . $safeOrderNo . "' AND COALESCE(NULLIF(TRIM(stock_type), ''), 'Stock In')='Stock In' LIMIT 1";
-        $rst = mysqli_query($financeConnect, $sql);
-        if ($rst && ($row = mysqli_fetch_assoc($rst))) {
+        $result = mysqli_query($financeConnect, $sql);
+        if ($result && ($row = mysqli_fetch_assoc($result))) {
             return (int) $row['id'];
         }
         return 0;
+    }
+}
+
+if (!function_exists('orderDeleteApprovalGetTableName')) {
+    function orderDeleteApprovalGetTableName()
+    {
+        return defined('ORDER_DELETE_APPROVAL_REQUEST') ? ORDER_DELETE_APPROVAL_REQUEST : 'order_delete_approval_request';
+    }
+}
+
+if (!function_exists('orderDeleteApprovalGetModuleConfigs')) {
+    function orderDeleteApprovalGetModuleConfigs()
+    {
+        return array(
+            'website_order_request' => array(
+                'title' => 'Website Order Request',
+                'platform' => 'website',
+                'source_db' => 'finance',
+                'source_table' => defined('WEB_ORDER_REQ') ? WEB_ORDER_REQ : 'website_order_request',
+                'page_path' => '/finance/website_order_request.php',
+                'table_path' => '/finance/website_order_request_table.php',
+            ),
+            'facebook_order_request' => array(
+                'title' => 'Facebook Order Request',
+                'platform' => 'facebook',
+                'source_db' => 'finance',
+                'source_table' => defined('FB_ORDER_REQ') ? FB_ORDER_REQ : 'facebook_order_request',
+                'page_path' => '/finance/fb_order_req.php',
+                'table_path' => '/finance/fb_order_req_table.php',
+            ),
+            'lazada_order_request' => array(
+                'title' => 'Lazada Order Request',
+                'platform' => 'lazada',
+                'source_db' => 'cms',
+                'source_table' => defined('LAZADA_ORDER_REQ') ? LAZADA_ORDER_REQ : 'lazada_order_request',
+                'page_path' => '/finance/lazada_order_req.php',
+                'table_path' => '/finance/lazada_order_req_table.php',
+            ),
+            'shopee_order_request' => array(
+                'title' => 'Shopee Order Request',
+                'platform' => 'shopee',
+                'source_db' => 'finance',
+                'source_table' => defined('SHOPEE_SG_ORDER_REQ') ? SHOPEE_SG_ORDER_REQ : 'shopee_sg_order_request',
+                'page_path' => '/shopee/shopee_order_req.php',
+                'table_path' => '/shopee/shopee_order_req_table.php',
+            ),
+            'stock_order_request' => array(
+                'title' => 'Stock Order Request',
+                'platform' => 'stock',
+                'source_db' => 'finance',
+                'source_table' => defined('STOCK_ORDER_REQ') ? STOCK_ORDER_REQ : 'stock_order_request',
+                'page_path' => '/stock/stock_order_request.php',
+                'table_path' => '/stock/stock_order_request_table.php',
+            ),
+        );
+    }
+}
+
+if (!function_exists('orderDeleteApprovalGetModuleConfig')) {
+    function orderDeleteApprovalGetModuleConfig($moduleKey)
+    {
+        $moduleKey = trim((string) $moduleKey);
+        $configs = orderDeleteApprovalGetModuleConfigs();
+        return isset($configs[$moduleKey]) ? $configs[$moduleKey] : array();
+    }
+}
+
+if (!function_exists('orderDeleteApprovalInitPageState')) {
+    function orderDeleteApprovalInitPageState()
+    {
+        $approvalMode = input('approval_mode') == '1' || post('approval_mode') == '1';
+        $dataId = input('id');
+        if ($dataId === '' || $dataId === null) {
+            $dataId = post('id');
+        }
+
+        $act = input('act');
+        if ($act === '' || $act === null) {
+            $act = post('act');
+        }
+
+        if ($approvalMode) {
+            $act = '';
+        }
+
+        return array(
+            'approval_mode' => $approvalMode,
+            'request_id' => (int) (!empty(input('approval_request_id')) ? input('approval_request_id') : post('approval_request_id')),
+            'data_id' => $dataId,
+            'act' => $act,
+            'panel_html' => '',
+        );
+    }
+}
+
+if (!function_exists('orderDeleteApprovalGetBaseUrl')) {
+    function orderDeleteApprovalGetBaseUrl()
+    {
+        return defined('SITEURL') ? rtrim((string) SITEURL, '/') : '';
+    }
+}
+
+if (!function_exists('orderDeleteApprovalNormalizeUserIds')) {
+    function orderDeleteApprovalNormalizeUserIds($userIds)
+    {
+        $normalized = array();
+        foreach ((array) $userIds as $userId) {
+            $userId = (int) $userId;
+            if ($userId > 0) {
+                $normalized[$userId] = $userId;
+            }
+        }
+
+        return array_values($normalized);
+    }
+}
+
+if (!function_exists('orderDeleteApprovalParseSupervisorIds')) {
+    function orderDeleteApprovalParseSupervisorIds($value)
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return array();
+        }
+
+        return orderDeleteApprovalNormalizeUserIds(array_map('trim', explode(',', $value)));
+    }
+}
+
+if (!function_exists('orderDeleteApprovalSerializeSupervisorIds')) {
+    function orderDeleteApprovalSerializeSupervisorIds($userIds)
+    {
+        return implode(',', orderDeleteApprovalNormalizeUserIds($userIds));
+    }
+}
+
+if (!function_exists('orderDeleteApprovalBuildPageUrl')) {
+    function orderDeleteApprovalBuildPageUrl($moduleKey, $sourceOrderId, $requestId = 0, $approvalMode = false)
+    {
+        $config = orderDeleteApprovalGetModuleConfig($moduleKey);
+        if (empty($config)) {
+            $baseUrl = orderDeleteApprovalGetBaseUrl();
+            return $baseUrl !== '' ? ($baseUrl . '/dashboard.php') : 'dashboard.php';
+        }
+
+        $url = orderDeleteApprovalGetBaseUrl() . (string) $config['page_path'];
+        $params = array(
+            'id' => (int) $sourceOrderId,
+        );
+
+        if ($approvalMode) {
+            $params['approval_mode'] = 1;
+        }
+        if ((int) $requestId > 0) {
+            $params['approval_request_id'] = (int) $requestId;
+        }
+
+        $queryString = http_build_query($params);
+        return $queryString !== '' ? ($url . '?' . $queryString) : $url;
+    }
+}
+
+if (!function_exists('orderDeleteApprovalBuildTableUrl')) {
+    function orderDeleteApprovalBuildTableUrl($moduleKey)
+    {
+        $config = orderDeleteApprovalGetModuleConfig($moduleKey);
+        if (empty($config)) {
+            $baseUrl = orderDeleteApprovalGetBaseUrl();
+            return $baseUrl !== '' ? ($baseUrl . '/dashboard.php') : 'dashboard.php';
+        }
+
+        return orderDeleteApprovalGetBaseUrl() . (string) $config['table_path'];
+    }
+}
+
+if (!function_exists('orderDeleteApprovalResolveDisplayName')) {
+    function orderDeleteApprovalResolveDisplayName($connect, $userId, $fallbackPrefix = 'User', $emptyValue = '-')
+    {
+        $userId = (int) $userId;
+        if ($userId <= 0) {
+            return $emptyValue;
+        }
+
+        $displayName = trim((string) commonResolveUserDisplayName($connect, $userId));
+        return $displayName !== '' ? $displayName : ($fallbackPrefix . ' #' . $userId);
+    }
+}
+
+if (!function_exists('orderDeleteApprovalGetSourceOrderLabel')) {
+    function orderDeleteApprovalGetSourceOrderLabel($requestRow, $sourceOrderId = 0, $fallbackPrefix = '')
+    {
+        $sourceOrderLabel = is_array($requestRow) ? trim((string) (isset($requestRow['source_order_label']) ? $requestRow['source_order_label'] : '')) : '';
+        if ($sourceOrderLabel === '' && (int) $sourceOrderId > 0) {
+            $sourceOrderLabel = ($fallbackPrefix !== '' ? $fallbackPrefix : '') . (int) $sourceOrderId;
+        }
+
+        return $sourceOrderLabel;
+    }
+}
+
+if (!function_exists('orderDeleteApprovalSqlValueOrNull')) {
+    function orderDeleteApprovalSqlValueOrNull($connect, $value)
+    {
+        $value = trim((string) $value);
+        return $value !== '' ? ("'" . mysqli_real_escape_string($connect, $value) . "'") : 'NULL';
+    }
+}
+
+if (!function_exists('orderDeleteApprovalReadUserRow')) {
+    function orderDeleteApprovalReadUserRow($connect, $userId)
+    {
+        $userId = (int) $userId;
+        if (!($connect instanceof mysqli) || $userId <= 0) {
+            return array();
+        }
+
+        if (function_exists('systemAlertReadUserRow')) {
+            return (array) systemAlertReadUserRow($connect, $userId);
+        }
+
+        $result = getData('*', "id = '" . $userId . "'", 'LIMIT 1', USR_USER, $connect);
+        if ($result && $result->num_rows > 0) {
+            return (array) $result->fetch_assoc();
+        }
+
+        return array();
+    }
+}
+
+if (!function_exists('orderDeleteApprovalResolveSupervisorIdsForUser')) {
+    function orderDeleteApprovalResolveSupervisorIdsForUser($connect, $userId)
+    {
+        $userRow = orderDeleteApprovalReadUserRow($connect, $userId);
+        if (empty($userRow)) {
+            return array();
+        }
+
+        if (function_exists('systemAlertResolveUserSupervisorIds')) {
+            return orderDeleteApprovalNormalizeUserIds(systemAlertResolveUserSupervisorIds($connect, $userRow));
+        }
+
+        $candidateFields = array(
+            'main_report_supervisor',
+            'report_supervisor',
+            'supervisor_id',
+            'leader_id',
+            'report_to',
+            'second_report_supervisor',
+        );
+
+        $supervisorIds = array();
+        foreach ($candidateFields as $fieldName) {
+            if (!empty($userRow[$fieldName])) {
+                $supervisorIds[] = (int) $userRow[$fieldName];
+            }
+        }
+
+        return orderDeleteApprovalNormalizeUserIds($supervisorIds);
+    }
+}
+
+if (!function_exists('orderDeleteApprovalReadRequest')) {
+    function orderDeleteApprovalReadRequest($connect, $requestId)
+    {
+        $requestId = (int) $requestId;
+        if (!($connect instanceof mysqli) || $requestId <= 0) {
+            return array();
+        }
+
+        $tableName = orderDeleteApprovalGetTableName();
+        $sql = "SELECT * FROM `" . $tableName . "` WHERE `id` = " . $requestId . " AND `status` = 'A' LIMIT 1";
+        $result = mysqli_query($connect, $sql);
+        if ($result && $result->num_rows > 0) {
+            return (array) mysqli_fetch_assoc($result);
+        }
+
+        return array();
+    }
+}
+
+if (!function_exists('orderDeleteApprovalReadPendingRequestBySource')) {
+    function orderDeleteApprovalReadPendingRequestBySource($connect, $moduleKey, $sourceOrderId)
+    {
+        $moduleKey = trim((string) $moduleKey);
+        $sourceOrderId = (int) $sourceOrderId;
+        if (!($connect instanceof mysqli) || $moduleKey === '' || $sourceOrderId <= 0) {
+            return array();
+        }
+
+        $tableName = orderDeleteApprovalGetTableName();
+        $safeModuleKey = mysqli_real_escape_string($connect, $moduleKey);
+        $sql = "SELECT *
+                FROM `" . $tableName . "`
+                WHERE `module_key` = '" . $safeModuleKey . "'
+                  AND `source_order_id` = " . $sourceOrderId . "
+                  AND `request_status` = 'pending'
+                  AND `status` = 'A'
+                ORDER BY `id` DESC
+                LIMIT 1";
+        $result = mysqli_query($connect, $sql);
+        if ($result && $result->num_rows > 0) {
+            return (array) mysqli_fetch_assoc($result);
+        }
+
+        return array();
+    }
+}
+
+if (!function_exists('orderDeleteApprovalCanUserReviewRequest')) {
+    function orderDeleteApprovalCanUserReviewRequest($requestRow, $moduleKey, $sourceOrderId, $userId)
+    {
+        $moduleKey = trim((string) $moduleKey);
+        $sourceOrderId = (int) $sourceOrderId;
+        $userId = (int) $userId;
+        if (!is_array($requestRow) || empty($requestRow) || $moduleKey === '' || $sourceOrderId <= 0 || $userId <= 0) {
+            return false;
+        }
+
+        if (trim((string) (isset($requestRow['module_key']) ? $requestRow['module_key'] : '')) !== $moduleKey) {
+            return false;
+        }
+
+        if ((int) (isset($requestRow['source_order_id']) ? $requestRow['source_order_id'] : 0) !== $sourceOrderId) {
+            return false;
+        }
+
+        $supervisorIds = orderDeleteApprovalParseSupervisorIds(isset($requestRow['supervisor_user_ids']) ? $requestRow['supervisor_user_ids'] : '');
+        return in_array($userId, $supervisorIds, true);
+    }
+}
+
+if (!function_exists('orderDeleteApprovalCanUserAccessRequestView')) {
+    function orderDeleteApprovalCanUserAccessRequestView($requestRow, $moduleKey, $sourceOrderId, $userId)
+    {
+        $userId = (int) $userId;
+        if ($userId <= 0 || !is_array($requestRow) || empty($requestRow)) {
+            return false;
+        }
+
+        if (orderDeleteApprovalCanUserReviewRequest($requestRow, $moduleKey, $sourceOrderId, $userId)) {
+            return true;
+        }
+
+        return (int) (isset($requestRow['request_user_id']) ? $requestRow['request_user_id'] : 0) === $userId;
+    }
+}
+
+if (!function_exists('orderDeleteApprovalBuildDeletedMessage')) {
+    function orderDeleteApprovalBuildDeletedMessage($requestRow, $moduleKey, $sourceOrderId)
+    {
+        $moduleKey = trim((string) $moduleKey);
+        $sourceOrderId = (int) $sourceOrderId;
+        $config = orderDeleteApprovalGetModuleConfig($moduleKey);
+        $sourceOrderLabel = orderDeleteApprovalGetSourceOrderLabel($requestRow, $sourceOrderId);
+
+        if ($moduleKey === 'stock_order_request') {
+            return 'The Stock order request ' . $sourceOrderLabel . ' already deleted';
+        }
+
+        $platformLabel = '';
+        if (!empty($config) && isset($config['platform'])) {
+            $platformLabel = ucwords(str_replace('_', ' ', trim((string) $config['platform'])));
+        }
+        if ($platformLabel === '' && !empty($config) && isset($config['title'])) {
+            $platformLabel = trim((string) $config['title']);
+        }
+        if ($platformLabel === '') {
+            $platformLabel = 'Selected';
+        }
+
+        return 'The ' . $platformLabel . ' order ' . $sourceOrderLabel . ' already deleted';
+    }
+}
+
+if (!function_exists('orderDeleteApprovalShowDeletedPopup')) {
+    function orderDeleteApprovalShowDeletedPopup($requestRow, $moduleKey, $sourceOrderId, $pageTitle, $redirectPage, $clearLocalStorage = '')
+    {
+        if (session_status() === PHP_SESSION_NONE) {
+            @session_start();
+        }
+
+        unset($_SESSION['tempValConfirmBox']);
+
+        $message = orderDeleteApprovalBuildDeletedMessage($requestRow, $moduleKey, $sourceOrderId);
+        if ($clearLocalStorage !== '') {
+            echo $clearLocalStorage;
+        }
+
+        echo '<script>confirmationDialog("", ' . json_encode($message, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ', ' . json_encode((string) $pageTitle, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ', "", ' . json_encode((string) $redirectPage, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ', "ErrMO");</script>';
+        exit;
+    }
+}
+
+if (!function_exists('orderDeleteApprovalWriteAuditLog')) {
+    function orderDeleteApprovalWriteAuditLog($connect, $pageTitle, $logAct, $message, $queryRecord = '', $queryTable = '')
+    {
+        if (!($connect instanceof mysqli) || !defined('USER_ID') || USER_ID === '') {
+            return;
+        }
+
+        audit_log(array(
+            'log_act' => $logAct,
+            'cdate' => date('Y-m-d'),
+            'ctime' => date('H:i:s'),
+            'uid' => USER_ID,
+            'cby' => USER_ID,
+            'act_msg' => $message,
+            'query_rec' => $queryRecord,
+            'query_table' => $queryTable,
+            'page' => $pageTitle,
+            'connect' => $connect,
+        ));
+    }
+}
+
+if (!function_exists('orderDeleteApprovalResolveActor')) {
+    function orderDeleteApprovalResolveActor($connect, $requestRow = array())
+    {
+        $actorUserId = defined('USER_ID') ? (int) USER_ID : 0;
+        $actorUserName = defined('USER_NAME') ? trim((string) USER_NAME) : '';
+
+        if (is_array($requestRow) && !empty($requestRow)) {
+            $requestUserId = isset($requestRow['request_user_id']) ? (int) $requestRow['request_user_id'] : 0;
+            if ($requestUserId > 0) {
+                $actorUserId = $requestUserId;
+                $resolvedName = orderDeleteApprovalResolveDisplayName($connect, $requestUserId, 'User', '');
+                if ($resolvedName !== '') {
+                    $actorUserName = $resolvedName;
+                }
+            }
+        }
+
+        if ($actorUserName === '') {
+            $actorUserName = $actorUserId > 0 ? ('User #' . $actorUserId) : 'System';
+        }
+
+        return array(
+            'user_id' => $actorUserId,
+            'user_name' => $actorUserName,
+        );
+    }
+}
+
+if (!function_exists('orderDeleteApprovalSoftDeleteSingleRecord')) {
+    function orderDeleteApprovalSoftDeleteSingleRecord($dataConnect, $auditConnect, $tableName, $sourceOrderId, $sourceOrderLabel, $pageTitle, $requestRow = array(), $idColumn = 'id')
+    {
+        $sourceOrderId = (int) $sourceOrderId;
+        $sourceOrderLabel = trim((string) $sourceOrderLabel);
+        $tableName = trim((string) $tableName);
+        $idColumn = trim((string) $idColumn);
+
+        if (!($dataConnect instanceof mysqli) || !($auditConnect instanceof mysqli) || $tableName === '' || $sourceOrderId <= 0) {
+            return array('success' => false, 'message' => 'Invalid order delete request.');
+        }
+
+        if ($idColumn === '') {
+            $idColumn = 'id';
+        }
+
+        $safeIdColumn = mysqli_real_escape_string($dataConnect, $idColumn);
+        $query = "UPDATE " . $tableName . " SET status = 'D' WHERE " . $safeIdColumn . " = '" . $sourceOrderId . "'";
+        $deleteSuccess = mysqli_query($dataConnect, $query);
+        $deleteError = $deleteSuccess ? '' : mysqli_error($dataConnect);
+
+        $actor = orderDeleteApprovalResolveActor($auditConnect, $requestRow);
+        $logMessage = $actor['user_name'] . ' ' . ($deleteSuccess ? 'deleted' : 'failed to delete') . ' the data [<b> ID = ' . $sourceOrderId . '</b> ] <b>' . htmlspecialchars($sourceOrderLabel, ENT_QUOTES, 'UTF-8') . '</b> from <b><i>' . htmlspecialchars($tableName, ENT_QUOTES, 'UTF-8') . ' Table</i></b>.';
+        if (!$deleteSuccess && $deleteError !== '') {
+            $logMessage .= ' ( ' . htmlspecialchars($deleteError, ENT_QUOTES, 'UTF-8') . ' )';
+        }
+
+        audit_log(array(
+            'log_act' => 'delete',
+            'cdate' => date('Y-m-d'),
+            'ctime' => date('H:i:s'),
+            'uid' => $actor['user_id'],
+            'cby' => $actor['user_id'],
+            'act_msg' => $logMessage,
+            'query_rec' => $query,
+            'query_table' => $tableName,
+            'page' => $pageTitle,
+            'connect' => $auditConnect,
+        ));
+
+        if (!$deleteSuccess) {
+            return array('success' => false, 'message' => $deleteError !== '' ? $deleteError : 'Unable to delete this order.');
+        }
+
+        return array('success' => true, 'message' => 'Order deleted successfully.');
+    }
+}
+
+if (!function_exists('orderDeleteApprovalResolveSourceOrderId')) {
+    function orderDeleteApprovalResolveSourceOrderId($requestRow = array(), $fallbackDataId = 0)
+    {
+        $deleteDataId = 0;
+        if (is_array($requestRow) && isset($requestRow['source_order_id'])) {
+            $deleteDataId = (int) $requestRow['source_order_id'];
+        }
+        if ($deleteDataId <= 0) {
+            $deleteDataId = (int) $fallbackDataId;
+        }
+
+        return $deleteDataId;
+    }
+}
+
+if (!function_exists('orderDeleteApprovalExecuteStandardSoftDelete')) {
+    function orderDeleteApprovalExecuteStandardSoftDelete($config = array(), $requestRow = array())
+    {
+        $config = is_array($config) ? $config : array();
+        $dataConnect = isset($config['data_connect']) ? $config['data_connect'] : null;
+        $auditConnect = isset($config['audit_connect']) ? $config['audit_connect'] : null;
+        $tableName = isset($config['table_name']) ? (string) $config['table_name'] : '';
+        $pageTitle = isset($config['page_title']) ? (string) $config['page_title'] : '';
+        $fallbackDataId = isset($config['fallback_data_id']) ? (int) $config['fallback_data_id'] : 0;
+        $labelField = isset($config['label_field']) ? trim((string) $config['label_field']) : '';
+        $notFoundMessage = isset($config['not_found_message']) && trim((string) $config['not_found_message']) !== ''
+            ? trim((string) $config['not_found_message'])
+            : 'Order record was not found.';
+
+        $deleteDataId = orderDeleteApprovalResolveSourceOrderId($requestRow, $fallbackDataId);
+        if (!($dataConnect instanceof mysqli) || !($auditConnect instanceof mysqli) || $tableName === '' || $deleteDataId <= 0) {
+            return array('success' => false, 'message' => 'Invalid order delete request.');
+        }
+
+        $deleteResult = getData('*', "id = '" . $deleteDataId . "'", 'LIMIT 1', $tableName, $dataConnect);
+        if (!$deleteResult || $deleteResult->num_rows === 0) {
+            return array('success' => false, 'message' => $notFoundMessage);
+        }
+
+        $deleteRow = $deleteResult->fetch_assoc();
+        $deleteLabel = $labelField !== '' && isset($deleteRow[$labelField]) ? trim((string) $deleteRow[$labelField]) : '';
+        if ($deleteLabel === '') {
+            $deleteLabel = 'Order #' . $deleteDataId;
+        }
+
+        $deleteResponse = orderDeleteApprovalSoftDeleteSingleRecord(
+            $dataConnect,
+            $auditConnect,
+            $tableName,
+            $deleteDataId,
+            $deleteLabel,
+            $pageTitle,
+            $requestRow
+        );
+        if (!empty($deleteResponse['success'])) {
+            $_SESSION['delChk'] = 1;
+        }
+
+        return $deleteResponse;
+    }
+}
+
+if (!function_exists('orderDeleteApprovalBuildStandardDeleteCallback')) {
+    function orderDeleteApprovalBuildStandardDeleteCallback($config = array())
+    {
+        $config = is_array($config) ? $config : array();
+
+        return function ($requestRow = array()) use ($config) {
+            return orderDeleteApprovalExecuteStandardSoftDelete($config, $requestRow);
+        };
+    }
+}
+
+if (!function_exists('orderDeleteApprovalCreateSupervisorAlerts')) {
+    function orderDeleteApprovalCreateSupervisorAlerts($connect, $requestRow)
+    {
+        if (!($connect instanceof mysqli) || !is_array($requestRow) || empty($requestRow) || !function_exists('systemAlertCreateOnce')) {
+            return;
+        }
+
+        $requestId = isset($requestRow['id']) ? (int) $requestRow['id'] : 0;
+        $moduleKey = isset($requestRow['module_key']) ? (string) $requestRow['module_key'] : '';
+        $config = orderDeleteApprovalGetModuleConfig($moduleKey);
+        if ($requestId <= 0 || empty($config)) {
+            return;
+        }
+
+        $sourceOrderId = isset($requestRow['source_order_id']) ? (int) $requestRow['source_order_id'] : 0;
+        $sourceOrderLabel = orderDeleteApprovalGetSourceOrderLabel($requestRow, $sourceOrderId);
+        $requestUserId = isset($requestRow['request_user_id']) ? (int) $requestRow['request_user_id'] : 0;
+        $requestUserName = orderDeleteApprovalResolveDisplayName($connect, $requestUserId);
+
+        $message = $requestUserName . ' requested delete for ' . (string) $config['title'];
+        if ($sourceOrderLabel !== '') {
+            $message .= ' ' . $sourceOrderLabel;
+        }
+        $message .= '.';
+
+        foreach (orderDeleteApprovalParseSupervisorIds(isset($requestRow['supervisor_user_ids']) ? $requestRow['supervisor_user_ids'] : '') as $supervisorUserId) {
+            systemAlertCreateOnce($connect, array(
+                'module_key' => 'order_delete_approval',
+                'notification_type' => 'order_delete_pending_approval',
+                'target_user_id' => $supervisorUserId,
+                'target_user_group_id' => function_exists('systemAlertGetUserGroupId') ? systemAlertGetUserGroupId($connect, $supervisorUserId) : 0,
+                'title' => 'Order Delete Request',
+                'message' => $message,
+                'action_url' => orderDeleteApprovalBuildPageUrl($moduleKey, $sourceOrderId, $requestId, true),
+                'action_label' => 'Review Request',
+                'related_table' => orderDeleteApprovalGetTableName(),
+                'related_id' => $requestId,
+                'related_platform' => isset($config['platform']) ? (string) $config['platform'] : '',
+                'display_date' => date('Y-m-d'),
+                'create_by' => defined('USER_ID') ? USER_ID : 'SYSTEM',
+                'create_date' => date('Y-m-d'),
+                'create_time' => date('H:i:s'),
+            ));
+        }
+    }
+}
+
+if (!function_exists('orderDeleteApprovalNotifyRequester')) {
+    function orderDeleteApprovalNotifyRequester($connect, $requestRow, $notificationType)
+    {
+        if (!($connect instanceof mysqli) || !is_array($requestRow) || empty($requestRow) || !function_exists('systemAlertCreateOnce')) {
+            return;
+        }
+
+        $requestId = isset($requestRow['id']) ? (int) $requestRow['id'] : 0;
+        $requestUserId = isset($requestRow['request_user_id']) ? (int) $requestRow['request_user_id'] : 0;
+        $moduleKey = isset($requestRow['module_key']) ? (string) $requestRow['module_key'] : '';
+        $config = orderDeleteApprovalGetModuleConfig($moduleKey);
+        if ($requestId <= 0 || $requestUserId <= 0 || empty($config)) {
+            return;
+        }
+
+        $sourceOrderLabel = orderDeleteApprovalGetSourceOrderLabel($requestRow, isset($requestRow['source_order_id']) ? (int) $requestRow['source_order_id'] : 0);
+        $actorUserId = isset($requestRow['decision_user_id']) ? (int) $requestRow['decision_user_id'] : 0;
+        $actorName = orderDeleteApprovalResolveDisplayName($connect, $actorUserId, 'User', 'Supervisor');
+
+        $title = 'Order Delete Request';
+        $message = '';
+        $actionUrl = orderDeleteApprovalBuildTableUrl($moduleKey);
+        $actionLabel = 'Open Table';
+        if ($notificationType === 'order_delete_approved') {
+            $message = $actorName . ' approved your delete request ' . (string) $config['title'];
+            if ($sourceOrderLabel !== '') {
+                $message .= ' ' . $sourceOrderLabel;
+            }
+            $message .= '.';
+        } else if ($notificationType === 'order_delete_rejected') {
+            $message = $actorName . ' rejected your delete request for ' . (string) $config['title'];
+            if ($sourceOrderLabel !== '') {
+                $message .= ' ' . $sourceOrderLabel;
+            }
+            $remark = trim((string) (isset($requestRow['reject_reason']) ? $requestRow['reject_reason'] : ''));
+            if ($remark === '') {
+                $remark = trim((string) (isset($requestRow['approval_remark']) ? $requestRow['approval_remark'] : ''));
+            }
+            if ($remark !== '') {
+                $message .= ' Remark: ' . $remark;
+            }
+            $message .= '.';
+            $actionUrl = orderDeleteApprovalBuildPageUrl($moduleKey, (int) (isset($requestRow['source_order_id']) ? $requestRow['source_order_id'] : 0));
+            $actionLabel = 'Open Order';
+        } else {
+            return;
+        }
+
+        systemAlertCreateOnce($connect, array(
+            'module_key' => 'order_delete_approval',
+            'notification_type' => $notificationType,
+            'target_user_id' => $requestUserId,
+            'target_user_group_id' => function_exists('systemAlertGetUserGroupId') ? systemAlertGetUserGroupId($connect, $requestUserId) : 0,
+            'title' => $title,
+            'message' => $message,
+            'action_url' => $actionUrl,
+            'action_label' => $actionLabel,
+            'related_table' => orderDeleteApprovalGetTableName(),
+            'related_id' => $requestId,
+            'related_platform' => isset($config['platform']) ? (string) $config['platform'] : '',
+            'display_date' => date('Y-m-d'),
+            'create_by' => defined('USER_ID') ? USER_ID : 'SYSTEM',
+            'create_date' => date('Y-m-d'),
+            'create_time' => date('H:i:s'),
+        ));
+    }
+}
+
+if (!function_exists('orderDeleteApprovalRequestDelete')) {
+    function orderDeleteApprovalRequestDelete($connect, $moduleKey, $sourceOrderId, $sourceOrderLabel, $pageTitle)
+    {
+        $sourceOrderId = (int) $sourceOrderId;
+        $sourceOrderLabel = trim((string) $sourceOrderLabel);
+        $moduleKey = trim((string) $moduleKey);
+        if (!($connect instanceof mysqli) || $moduleKey === '' || $sourceOrderId <= 0 || !defined('USER_ID') || (int) USER_ID <= 0) {
+            return array(
+                'success' => false,
+                'direct_delete' => false,
+                'notification_type' => 'error',
+                'message' => 'Unable to prepare delete request.',
+            );
+        }
+
+        $config = orderDeleteApprovalGetModuleConfig($moduleKey);
+        if (empty($config)) {
+            return array(
+                'success' => false,
+                'direct_delete' => false,
+                'notification_type' => 'error',
+                'message' => 'Delete request configuration is unavailable.',
+            );
+        }
+
+        $pendingRequest = orderDeleteApprovalReadPendingRequestBySource($connect, $moduleKey, $sourceOrderId);
+        if (!empty($pendingRequest)) {
+            return array(
+                'success' => false,
+                'direct_delete' => false,
+                'notification_type' => 'warning',
+                'message' => 'Delete request is already pending for this order.',
+                'request_row' => $pendingRequest,
+            );
+        }
+
+        $supervisorIds = orderDeleteApprovalResolveSupervisorIdsForUser($connect, (int) USER_ID);
+        if (empty($supervisorIds)) {
+            return array(
+                'success' => true,
+                'direct_delete' => true,
+                'notification_type' => 'success',
+                'message' => '',
+            );
+        }
+
+        $tableName = orderDeleteApprovalGetTableName();
+        $safeModuleKey = mysqli_real_escape_string($connect, $moduleKey);
+        $safePlatform = mysqli_real_escape_string($connect, isset($config['platform']) ? (string) $config['platform'] : '');
+        $safeSourceDb = mysqli_real_escape_string($connect, isset($config['source_db']) ? (string) $config['source_db'] : '');
+        $safeSourceTable = mysqli_real_escape_string($connect, isset($config['source_table']) ? (string) $config['source_table'] : '');
+        $safeSupervisorIds = mysqli_real_escape_string($connect, orderDeleteApprovalSerializeSupervisorIds($supervisorIds));
+        $requestUserId = (int) USER_ID;
+        $requestUserGroupId = defined('USER_GROUP') ? (int) USER_GROUP : 0;
+        $safeCreateBy = mysqli_real_escape_string($connect, (string) USER_ID);
+
+        $sql = "INSERT INTO `" . $tableName . "` (
+                    `module_key`,
+                    `platform`,
+                    `source_db`,
+                    `source_table`,
+                    `source_order_id`,
+                    `source_order_label`,
+                    `request_user_id`,
+                    `request_user_group_id`,
+                    `supervisor_user_ids`,
+                    `request_status`,
+                    `create_by`,
+                    `create_date`,
+                    `create_time`,
+                    `update_by`,
+                    `update_date`,
+                    `update_time`,
+                    `status`
+                ) VALUES (
+                    '" . $safeModuleKey . "',
+                    '" . $safePlatform . "',
+                    '" . $safeSourceDb . "',
+                    '" . $safeSourceTable . "',
+                    " . $sourceOrderId . ",
+                    " . orderDeleteApprovalSqlValueOrNull($connect, $sourceOrderLabel) . ",
+                    " . $requestUserId . ",
+                    " . ($requestUserGroupId > 0 ? $requestUserGroupId : 'NULL') . ",
+                    '" . $safeSupervisorIds . "',
+                    'pending',
+                    '" . $safeCreateBy . "',
+                    CURDATE(),
+                    CURTIME(),
+                    '" . $safeCreateBy . "',
+                    CURDATE(),
+                    CURTIME(),
+                    'A'
+                )";
+
+        if (!mysqli_query($connect, $sql)) {
+            return array(
+                'success' => false,
+                'direct_delete' => false,
+                'notification_type' => 'error',
+                'message' => 'Failed to create delete request.',
+            );
+        }
+
+        $requestId = (int) mysqli_insert_id($connect);
+        $requestRow = orderDeleteApprovalReadRequest($connect, $requestId);
+        if (!empty($requestRow)) {
+            orderDeleteApprovalCreateSupervisorAlerts($connect, $requestRow);
+        }
+
+        $requestUserName = defined('USER_NAME') && trim((string) USER_NAME) !== ''
+            ? trim((string) USER_NAME)
+            : orderDeleteApprovalResolveDisplayName($connect, $requestUserId);
+
+        $auditMessage = $requestUserName . ' submitted delete request for ' . (string) $config['title'];
+        if ($sourceOrderLabel !== '') {
+            $auditMessage .= ' <b>' . htmlspecialchars($sourceOrderLabel, ENT_QUOTES, 'UTF-8') . '</b>';
+        }
+        $auditMessage .= '.';
+        orderDeleteApprovalWriteAuditLog($connect, $pageTitle, 'request', $auditMessage, $sql, $tableName);
+
+        return array(
+            'success' => true,
+            'direct_delete' => false,
+            'notification_type' => 'success',
+            'message' => 'Delete request has been sent to supervisor.',
+            'request_row' => $requestRow,
+        );
+    }
+}
+
+if (!function_exists('orderDeleteApprovalGetDecisionConfig')) {
+    function orderDeleteApprovalGetDecisionConfig($decisionType)
+    {
+        $configs = array(
+            'approve' => array(
+                'request_status' => 'executed',
+                'remark_field' => 'approval_remark',
+                'log_act' => 'approval',
+                'notification_type' => 'order_delete_approved',
+                'success_message' => 'Delete request approved and order deleted successfully.',
+                'action_label' => 'approved',
+                'permission_message' => 'You do not have permission to approve this delete request.',
+                'requires_delete' => true,
+            ),
+            'reject' => array(
+                'request_status' => 'rejected',
+                'remark_field' => 'reject_reason',
+                'log_act' => 'declined',
+                'notification_type' => 'order_delete_rejected',
+                'success_message' => 'Delete request rejected successfully.',
+                'action_label' => 'rejected',
+                'permission_message' => 'You do not have permission to reject this delete request.',
+                'requires_delete' => false,
+            ),
+        );
+
+        $decisionType = trim((string) $decisionType);
+        return isset($configs[$decisionType]) ? $configs[$decisionType] : array();
+    }
+}
+
+if (!function_exists('orderDeleteApprovalProcessDecision')) {
+    function orderDeleteApprovalProcessDecision($connect, $requestId, $moduleKey, $sourceOrderId, $decisionRemark, $pageTitle, $decisionType, $executeDeleteCallback = null)
+    {
+        $decisionConfig = orderDeleteApprovalGetDecisionConfig($decisionType);
+        if (empty($decisionConfig)) {
+            return array('success' => false, 'message' => 'Invalid delete request action.');
+        }
+
+        $requestRow = orderDeleteApprovalReadRequest($connect, $requestId);
+        if (empty($requestRow)) {
+            return array('success' => false, 'message' => 'Delete request was not found.');
+        }
+        if (!orderDeleteApprovalCanUserReviewRequest($requestRow, $moduleKey, $sourceOrderId, (int) USER_ID)) {
+            return array('success' => false, 'message' => $decisionConfig['permission_message']);
+        }
+        if (trim((string) (isset($requestRow['request_status']) ? $requestRow['request_status'] : '')) !== 'pending') {
+            return array('success' => false, 'message' => 'This delete request is no longer pending.');
+        }
+
+        if (!empty($decisionConfig['requires_delete'])) {
+            if (!is_callable($executeDeleteCallback)) {
+                return array('success' => false, 'message' => 'Delete executor is unavailable.');
+            }
+
+            $deleteResult = call_user_func($executeDeleteCallback, $requestRow);
+            if (!is_array($deleteResult) || empty($deleteResult['success'])) {
+                return array(
+                    'success' => false,
+                    'message' => is_array($deleteResult) && isset($deleteResult['message']) ? (string) $deleteResult['message'] : 'Unable to delete this order.',
+                );
+            }
+        }
+
+        $decisionRemark = trim((string) $decisionRemark);
+        $tableName = orderDeleteApprovalGetTableName();
+        $safeUpdateBy = mysqli_real_escape_string($connect, (string) USER_ID);
+        $sqlParts = array(
+            "`request_status` = '" . $decisionConfig['request_status'] . "'",
+            "`" . $decisionConfig['remark_field'] . "` = " . orderDeleteApprovalSqlValueOrNull($connect, $decisionRemark),
+            "`decision_user_id` = " . (int) USER_ID,
+            "`decision_date` = CURDATE()",
+            "`decision_time` = CURTIME()",
+            "`update_by` = '" . $safeUpdateBy . "'",
+            "`update_date` = CURDATE()",
+            "`update_time` = CURTIME()",
+        );
+        if ($decisionConfig['request_status'] === 'executed') {
+            $sqlParts[] = "`executed_user_id` = " . (int) USER_ID;
+            $sqlParts[] = "`executed_date` = CURDATE()";
+            $sqlParts[] = "`executed_time` = CURTIME()";
+        }
+
+        $sql = "UPDATE `" . $tableName . "`
+                SET " . implode(",\n                    ", $sqlParts) . "
+                WHERE `id` = " . (int) $requestId . "
+                  AND `request_status` = 'pending'
+                  AND `status` = 'A'
+                LIMIT 1";
+
+        if (!mysqli_query($connect, $sql)) {
+            return array(
+                'success' => false,
+                'message' => $decisionConfig['request_status'] === 'executed'
+                    ? 'Order was deleted, but the delete request could not be finalized.'
+                    : 'Failed to reject delete request.',
+            );
+        }
+
+        $updatedRequestRow = orderDeleteApprovalReadRequest($connect, $requestId);
+        if (!empty($updatedRequestRow)) {
+            orderDeleteApprovalNotifyRequester($connect, $updatedRequestRow, $decisionConfig['notification_type']);
+        }
+
+        $config = orderDeleteApprovalGetModuleConfig($moduleKey);
+        $sourceOrderLabel = orderDeleteApprovalGetSourceOrderLabel($requestRow, $sourceOrderId);
+        $actorName = defined('USER_NAME') && trim((string) USER_NAME) !== ''
+            ? trim((string) USER_NAME)
+            : orderDeleteApprovalResolveDisplayName($connect, (int) USER_ID, 'User', 'Supervisor');
+        $auditMessage = $actorName . ' ' . $decisionConfig['action_label'] . ' delete request for ' . (isset($config['title']) ? (string) $config['title'] : 'Order');
+        if ($sourceOrderLabel !== '') {
+            $auditMessage .= ' <b>' . htmlspecialchars($sourceOrderLabel, ENT_QUOTES, 'UTF-8') . '</b>';
+        }
+        if ($decisionRemark !== '') {
+            $auditMessage .= '. Remark: ' . htmlspecialchars($decisionRemark, ENT_QUOTES, 'UTF-8');
+        }
+        $auditMessage .= '.';
+        orderDeleteApprovalWriteAuditLog($connect, $pageTitle, $decisionConfig['log_act'], $auditMessage, $sql, $tableName);
+
+        return array('success' => true, 'message' => $decisionConfig['success_message']);
+    }
+}
+
+if (!function_exists('orderDeleteApprovalApproveRequest')) {
+    function orderDeleteApprovalApproveRequest($connect, $requestId, $moduleKey, $sourceOrderId, $decisionRemark, $pageTitle, $executeDeleteCallback)
+    {
+        return orderDeleteApprovalProcessDecision($connect, $requestId, $moduleKey, $sourceOrderId, $decisionRemark, $pageTitle, 'approve', $executeDeleteCallback);
+    }
+}
+
+if (!function_exists('orderDeleteApprovalRejectRequest')) {
+    function orderDeleteApprovalRejectRequest($connect, $requestId, $moduleKey, $sourceOrderId, $decisionRemark, $pageTitle)
+    {
+        return orderDeleteApprovalProcessDecision($connect, $requestId, $moduleKey, $sourceOrderId, $decisionRemark, $pageTitle, 'reject');
+    }
+}
+
+if (!function_exists('orderDeleteApprovalRenderDecisionPanel')) {
+    function orderDeleteApprovalRenderDecisionPanel($connect, $requestRow, $moduleKey, $sourceOrderId, $currentUserId)
+    {
+        if (!is_array($requestRow) || empty($requestRow)) {
+            return '';
+        }
+
+        $moduleKey = trim((string) $moduleKey);
+        $sourceOrderId = (int) $sourceOrderId;
+        $currentUserId = (int) $currentUserId;
+        if ($moduleKey === '' || $sourceOrderId <= 0) {
+            return '';
+        }
+
+        $requestStatus = trim((string) (isset($requestRow['request_status']) ? $requestRow['request_status'] : ''));
+        $sourceOrderLabel = orderDeleteApprovalGetSourceOrderLabel($requestRow, $sourceOrderId, '#');
+        $requestUserId = isset($requestRow['request_user_id']) ? (int) $requestRow['request_user_id'] : 0;
+        $requestUserName = orderDeleteApprovalResolveDisplayName($connect, $requestUserId);
+
+        $canReview = orderDeleteApprovalCanUserReviewRequest($requestRow, $moduleKey, $sourceOrderId, $currentUserId);
+        $decisionUserId = isset($requestRow['decision_user_id']) ? (int) $requestRow['decision_user_id'] : 0;
+        $decisionUserName = orderDeleteApprovalResolveDisplayName($connect, $decisionUserId);
+
+        $statusClass = 'alert-info';
+        $statusLabel = ucwords(str_replace('_', ' ', $requestStatus));
+        $detailHtml = '';
+
+        if ($requestStatus === 'pending') {
+            $statusClass = 'alert-warning';
+            if ($canReview) {
+                $detailHtml = '
+                    <div class="row g-3 mt-1">
+                        <div class="col-12">
+                            <label class="form-label" for="order_delete_decision_remark">Remark</label>
+                            <textarea class="form-control" id="order_delete_decision_remark" name="decision_remark" rows="3" placeholder="Optional remark"></textarea>
+                        </div>
+                        <div class="col-12 d-flex flex-wrap justify-content-center gap-3">
+                            <button type="submit" name="approveDeleteApproval" value="1" class="btn btn-success mt-1" style="border-radius:999px; padding:12px 26px; font-size:16px; font-weight:600; line-height:1.2; min-width:190px; box-shadow:0 8px 18px rgba(0, 0, 0, 0.12); text-transform:none;">Approve Delete</button>
+                            <button type="submit" name="rejectDeleteApproval" value="1" class="btn btn-danger mt-1" style="border-radius:999px; padding:12px 26px; font-size:16px; font-weight:600; line-height:1.2; min-width:190px; box-shadow:0 8px 18px rgba(0, 0, 0, 0.12); text-transform:none;">Reject Delete</button>
+                        </div>
+                    </div>';
+            } else {
+                $detailHtml = '<p class="mb-0 mt-2">This delete request is pending supervisor review.</p>';
+            }
+        } else if ($requestStatus === 'rejected') {
+            $statusClass = 'alert-danger';
+            $rejectRemark = trim((string) (isset($requestRow['reject_reason']) ? $requestRow['reject_reason'] : ''));
+            if ($rejectRemark === '') {
+                $rejectRemark = trim((string) (isset($requestRow['approval_remark']) ? $requestRow['approval_remark'] : ''));
+            }
+            $detailHtml = '<p class="mb-0 mt-2"><strong>Rejected By:</strong> ' . htmlspecialchars($decisionUserName, ENT_QUOTES, 'UTF-8');
+            if ($rejectRemark !== '') {
+                $detailHtml .= '<br><strong>Remark:</strong> ' . htmlspecialchars($rejectRemark, ENT_QUOTES, 'UTF-8');
+            }
+            $detailHtml .= '</p>';
+        } else if ($requestStatus === 'executed') {
+            $statusClass = 'alert-success';
+            $approvalRemark = trim((string) (isset($requestRow['approval_remark']) ? $requestRow['approval_remark'] : ''));
+            $detailHtml = '<p class="mb-0 mt-2"><strong>Approved By:</strong> ' . htmlspecialchars($decisionUserName, ENT_QUOTES, 'UTF-8');
+            if ($approvalRemark !== '') {
+                $detailHtml .= '<br><strong>Remark:</strong> ' . htmlspecialchars($approvalRemark, ENT_QUOTES, 'UTF-8');
+            }
+            $detailHtml .= '</p>';
+        }
+
+        $html = '
+            <div class="alert ' . $statusClass . ' mb-4" role="alert">
+                <div class="d-flex flex-column gap-1">
+                    <strong>Delete Request - ' . htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') . '</strong>
+                    <span><strong>Requested By:</strong> ' . htmlspecialchars($requestUserName, ENT_QUOTES, 'UTF-8') . '</span>
+                    <span><strong>Order:</strong> ' . htmlspecialchars($sourceOrderLabel, ENT_QUOTES, 'UTF-8') . '</span>
+                </div>
+                <input type="hidden" name="approval_request_id" value="' . (int) (isset($requestRow['id']) ? $requestRow['id'] : 0) . '">
+                <input type="hidden" name="approval_mode" value="1">
+                ' . $detailHtml . '
+            </div>';
+
+        return $html;
+    }
+}
+
+if (!function_exists('orderDeleteApprovalHandlePageFlow')) {
+    function orderDeleteApprovalHandlePageFlow($config = array())
+    {
+        $config = is_array($config) ? $config : array();
+        $connect = isset($config['connect']) ? $config['connect'] : null;
+        $requestId = isset($config['request_id']) ? (int) $config['request_id'] : 0;
+        $moduleKey = isset($config['module_key']) ? trim((string) $config['module_key']) : '';
+        $dataId = isset($config['data_id']) ? (int) $config['data_id'] : 0;
+        $currentUserId = isset($config['current_user_id']) ? (int) $config['current_user_id'] : 0;
+        $pageTitle = isset($config['page_title']) ? (string) $config['page_title'] : '';
+        $redirectPage = isset($config['redirect_page']) ? (string) $config['redirect_page'] : '';
+        $clearLocalStorage = isset($config['clear_local_storage']) ? (string) $config['clear_local_storage'] : '';
+        $orderDeleteApprovalMode = !empty($config['approval_mode']);
+        $deleteCallback = isset($config['delete_callback']) ? $config['delete_callback'] : null;
+        $decisionRemark = isset($config['decision_remark']) ? trim((string) $config['decision_remark']) : trim((string) postSpaceFilter('decision_remark'));
+        $panelHtml = '';
+
+        if ($orderDeleteApprovalMode && $dataId > 0) {
+            $requestRow = orderDeleteApprovalReadRequest($connect, $requestId);
+            if (
+                empty($requestRow) ||
+                !orderDeleteApprovalCanUserAccessRequestView($requestRow, $moduleKey, $dataId, $currentUserId)
+            ) {
+                renderNotificationScript('You do not have permission to review this delete request.', 'error', $redirectPage, 1200, true);
+                exit;
+            }
+
+            if (trim((string) (isset($requestRow['request_status']) ? $requestRow['request_status'] : '')) === 'executed') {
+                orderDeleteApprovalShowDeletedPopup(
+                    $requestRow,
+                    $moduleKey,
+                    $dataId,
+                    $pageTitle,
+                    $redirectPage,
+                    $clearLocalStorage
+                );
+            }
+
+            $panelHtml = orderDeleteApprovalRenderDecisionPanel(
+                $connect,
+                $requestRow,
+                $moduleKey,
+                $dataId,
+                $currentUserId
+            );
+        }
+
+        if (post('approveDeleteApproval')) {
+            $approvalResult = orderDeleteApprovalApproveRequest(
+                $connect,
+                $requestId,
+                $moduleKey,
+                $dataId,
+                $decisionRemark,
+                $pageTitle,
+                $deleteCallback
+            );
+            renderNotificationScript(
+                $approvalResult['message'],
+                !empty($approvalResult['success']) ? 'success' : 'error',
+                $redirectPage,
+                1200,
+                true
+            );
+            exit;
+        }
+
+        if (post('rejectDeleteApproval')) {
+            $rejectResult = orderDeleteApprovalRejectRequest(
+                $connect,
+                $requestId,
+                $moduleKey,
+                $dataId,
+                $decisionRemark,
+                $pageTitle
+            );
+            renderNotificationScript(
+                $rejectResult['message'],
+                !empty($rejectResult['success']) ? 'success' : 'error',
+                $redirectPage,
+                1200,
+                true
+            );
+            exit;
+        }
+
+        return $panelHtml;
     }
 }

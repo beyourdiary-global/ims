@@ -1,7 +1,7 @@
 $(document).ready(function () {
   if (!$("#mrcht_pic").attr("disabled")) {
     $("#mrcht_pic").keyup(function () {
-      var param = {
+      const param = {
         search: $(this).val(),
         searchType: "name", // column of the table
         elementID: $(this).attr("id"), // id of the input
@@ -30,10 +30,10 @@ $("#mrcht_pic_contact").on("input", function () {
 $(".submitBtn").on("click", function (event) {
   $(".error-message").remove();
   //event.preventDefault();
-  var name_chk = 0;
-  var email_chk = 0;
-  var pic_chk = 0;
-  var contact_chk = 0;
+  let name_chk = 0;
+  let email_chk = 0;
+  let pic_chk = 0;
+  let contact_chk = 0;
 
   if (
     $("#currentDataName").val() === "" ||
