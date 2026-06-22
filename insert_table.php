@@ -1273,6 +1273,181 @@ function migrationUpsertSetting($conn, $dbName, $tblName, $settingKey, $settingV
     return $conn->query($sql);
 }
 
+function migrationBuildCustomerFollowUpAlertActionUrl($followUpId, $roundId = 0, $notificationType = '')
+{
+    $followUpId = (int) $followUpId;
+    if ($followUpId <= 0) {
+        return '';
+    }
+
+    $params = array(
+        'follow_up_id' => $followUpId,
+    );
+
+    $roundId = (int) $roundId;
+    if ($roundId > 0) {
+        $params['round_id'] = $roundId;
+    }
+
+    $notificationType = trim((string) $notificationType);
+    if ($notificationType !== '') {
+        $params['notification_type'] = $notificationType;
+    }
+
+    return siteUrlWithQuery(ROUTE_CUSTOMER_FOLLOW_UP_LIST, $params);
+}
+
+function migrationBuildCustomerFollowUpAlertActionUrlFromExisting($actionUrl)
+{
+    $actionUrl = trim((string) $actionUrl);
+    if ($actionUrl === '') {
+        return '';
+    }
+
+    $queryString = (string) parse_url($actionUrl, PHP_URL_QUERY);
+    if ($queryString === '' && strpos($actionUrl, '?') !== false) {
+        $queryString = substr($actionUrl, strpos($actionUrl, '?') + 1);
+    }
+
+    if ($queryString === '') {
+        return '';
+    }
+
+    $params = array();
+    parse_str($queryString, $params);
+
+    $followUpId = isset($params['follow_up_id']) ? (int) $params['follow_up_id'] : 0;
+    $roundId = isset($params['round_id']) ? (int) $params['round_id'] : 0;
+    $notificationType = isset($params['notification_type']) ? (string) $params['notification_type'] : '';
+
+    return migrationBuildCustomerFollowUpAlertActionUrl($followUpId, $roundId, $notificationType);
+}
+
+function migrationRepairCustomerFollowUpAlertActionUrls($conn, $dbName, $systemAlertTable, $notificationTable, $settingsTable, $actorUserId)
+{
+    $settingKey = 'customer_follow_up_alert_action_url_fix_v1';
+
+    if (!migrationTableExists($conn, $dbName, $settingsTable)) {
+        echo "<p style='color:orange;'>Skipped Customer Follow-Up alert action URL repair because the run-once settings table is unavailable.</p>";
+        return;
+    }
+
+    $existingMarker = migrationGetSettingValue($conn, $dbName, $settingsTable, $settingKey);
+    if ($existingMarker !== null && trim((string) $existingMarker) !== '') {
+        echo "<p style='color:green;'>Verified Customer Follow-Up alert action URL repair already ran (`" . htmlspecialchars($settingKey, ENT_QUOTES, 'UTF-8') . "`).</p>";
+        return;
+    }
+
+    if (
+        !migrationTableExists($conn, $dbName, $systemAlertTable)
+        || !migrationTableExists($conn, $dbName, $notificationTable)
+    ) {
+        echo "<p style='color:orange;'>Skipped Customer Follow-Up alert action URL repair because required tables are missing.</p>";
+        return;
+    }
+
+    $safeDb = str_replace('`', '``', $dbName);
+    $safeSystemAlertTable = str_replace('`', '``', $systemAlertTable);
+    $safeNotificationTable = str_replace('`', '``', $notificationTable);
+    $safeRelatedTable = $conn->real_escape_string($notificationTable);
+
+    $sql = "SELECT sam.`id`, sam.`action_url`, sam.`related_id`,
+                   cfun.`follow_up_id`, cfun.`round_id`, cfun.`notification_type`
+            FROM `{$safeDb}`.`{$safeSystemAlertTable}` sam
+            LEFT JOIN `{$safeDb}`.`{$safeNotificationTable}` cfun
+                ON sam.`related_table` = '" . $safeRelatedTable . "'
+               AND sam.`related_id` = cfun.`id`
+               AND cfun.`status` = 'A'
+            WHERE sam.`module_key` = 'customer_follow_up'
+              AND sam.`status` = 'A'";
+    $result = $conn->query($sql);
+
+    if (!$result) {
+        echo "<p style='color:red;'>Failed reading Customer Follow-Up system alerts for action URL repair: " . htmlspecialchars($conn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+        return;
+    }
+
+    $rows = array();
+    while ($row = $result->fetch_assoc()) {
+        $rows[] = $row;
+    }
+
+    $scannedCount = count($rows);
+    $updatedCount = 0;
+    $unchangedCount = 0;
+    $skippedCount = 0;
+
+    $updateSql = "UPDATE `{$safeDb}`.`{$safeSystemAlertTable}` SET `action_url` = ? WHERE `id` = ? LIMIT 1";
+    $updateStmt = $conn->prepare($updateSql);
+    if (!$updateStmt) {
+        echo "<p style='color:red;'>Failed preparing Customer Follow-Up action URL repair statement: " . htmlspecialchars($conn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+        return;
+    }
+
+    $startedTransaction = false;
+
+    try {
+        $conn->begin_transaction();
+        $startedTransaction = true;
+
+        foreach ($rows as $row) {
+            $alertId = isset($row['id']) ? (int) $row['id'] : 0;
+            if ($alertId <= 0) {
+                $skippedCount++;
+                continue;
+            }
+
+            $expectedUrl = '';
+            $followUpId = isset($row['follow_up_id']) ? (int) $row['follow_up_id'] : 0;
+            if ($followUpId > 0) {
+                $expectedUrl = migrationBuildCustomerFollowUpAlertActionUrl(
+                    $followUpId,
+                    isset($row['round_id']) ? (int) $row['round_id'] : 0,
+                    isset($row['notification_type']) ? (string) $row['notification_type'] : ''
+                );
+            } else {
+                $expectedUrl = migrationBuildCustomerFollowUpAlertActionUrlFromExisting(
+                    isset($row['action_url']) ? (string) $row['action_url'] : ''
+                );
+            }
+
+            if ($expectedUrl === '') {
+                $skippedCount++;
+                continue;
+            }
+
+            $currentUrl = trim((string) (isset($row['action_url']) ? $row['action_url'] : ''));
+            if ($currentUrl === $expectedUrl) {
+                $unchangedCount++;
+                continue;
+            }
+
+            $updateStmt->bind_param('si', $expectedUrl, $alertId);
+            if (!$updateStmt->execute()) {
+                throw new Exception('Failed updating system alert id ' . $alertId . ': ' . $updateStmt->error);
+            }
+
+            $updatedCount++;
+        }
+
+        $markerValue = 'updated=' . $updatedCount . ';unchanged=' . $unchangedCount . ';skipped=' . $skippedCount . ';scanned=' . $scannedCount;
+        $markerRemark = 'One-time repair for wrong Customer Follow-Up system alert action_url path.';
+        if (!migrationUpsertSetting($conn, $dbName, $settingsTable, $settingKey, $markerValue, $markerRemark, $actorUserId)) {
+            throw new Exception('Failed writing repair marker `' . $settingKey . '`: ' . $conn->error);
+        }
+
+        $conn->commit();
+        echo "<p style='color:green;'>Customer Follow-Up alert action URL repair completed. Scanned: " . (int) $scannedCount . ", updated: " . (int) $updatedCount . ", unchanged: " . (int) $unchangedCount . ", skipped: " . (int) $skippedCount . ".</p>";
+    } catch (Exception $exception) {
+        if ($startedTransaction) {
+            $conn->rollback();
+        }
+        echo "<p style='color:red;'>Customer Follow-Up alert action URL repair failed: " . htmlspecialchars($exception->getMessage(), ENT_QUOTES, 'UTF-8') . "</p>";
+    }
+
+    $updateStmt->close();
+}
+
 $customerFollowUpTable = defined('CUSTOMER_FOLLOW_UP') ? CUSTOMER_FOLLOW_UP : 'customer_follow_up';
 $customerFollowUpRoundTable = defined('CUSTOMER_FOLLOW_UP_ROUND') ? CUSTOMER_FOLLOW_UP_ROUND : 'customer_follow_up_round';
 $customerFollowUpActionLogTable = defined('CUSTOMER_FOLLOW_UP_ACTION_LOG') ? CUSTOMER_FOLLOW_UP_ACTION_LOG : 'customer_follow_up_action_log';
@@ -3504,6 +3679,15 @@ if ($conn->select_db($db_cms)) {
     } else {
         echo "<p style='color:red;'>Failed creating `" . ORDER_FLOW_SETTING . "`: " . $conn->error . "</p>";
     }
+
+    migrationRepairCustomerFollowUpAlertActionUrls(
+        $conn,
+        $db_cms,
+        $systemAlertMessageTable,
+        $customerFollowUpNotificationTable,
+        ORDER_FLOW_SETTING,
+        isset($_SESSION['userid']) ? (string) $_SESSION['userid'] : 'SYSTEM'
+    );
 
     $createOmsPermissionSql = "CREATE TABLE IF NOT EXISTS `" . ORDER_FLOW_TRANSITION_PERMISSION . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
