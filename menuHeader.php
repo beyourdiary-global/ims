@@ -34,11 +34,11 @@
 
             if ($redirectUrl === '') {
                 if (isset($SITEURL) && trim((string) $SITEURL) !== '') {
-                    $redirectUrl = rtrim((string) $SITEURL, '/') . '/dashboard.php';
+                    $redirectUrl = siteUrlPath(ROUTE_DASHBOARD);
                 } else if (defined('SITEURL')) {
-                    $redirectUrl = rtrim((string) SITEURL, '/') . '/dashboard.php';
+                    $redirectUrl = siteUrlPath(ROUTE_DASHBOARD);
                 } else {
-                    $redirectUrl = 'dashboard.php';
+                    $redirectUrl = ltrim((string) ROUTE_DASHBOARD, '/');
                 }
             }
 
@@ -108,10 +108,10 @@
     $menuAlertUserId = defined('USER_ID') ? (int) USER_ID : (isset($_SESSION['userid']) ? (int) $_SESSION['userid'] : 0);
     $menuAlertRequestUri = isset($_SERVER['REQUEST_URI']) && trim((string) $_SERVER['REQUEST_URI']) !== ''
         ? (string) $_SERVER['REQUEST_URI']
-        : '/dashboard.php';
+        : ROUTE_DASHBOARD;
     $menuAlertCurrentPageUrl = rtrim((string) $SITEURL, '/') . $menuAlertRequestUri;
     $menuAlertModalReturnUrl = systemAlertMenuAppendQueryParam($menuAlertCurrentPageUrl, 'system_alert_modal', '1');
-    $menuAlertLiveEndpointUrl = rtrim((string) $SITEURL, '/') . '/system_alert_live.php';
+    $menuAlertLiveEndpointUrl = systemAlertBuildLiveEndpointUrl();
 
     if ($menuAlertUserId > 0 && function_exists('systemAlertGenerateForUser')) {
         systemAlertGenerateForUser($connect, isset($finance_connect) ? $finance_connect : $connect, $menuAlertUserId);
@@ -507,7 +507,7 @@
                                 <div class="system-alert-dropdown-header">
                                     <div class="system-alert-dropdown-header-title">Notifications</div>
                                     <?php if ($menuAlertUnreadCount > 0) { ?>
-                                        <a class="system-alert-mark-all" href="<?= htmlspecialchars($SITEURL . '/system_alert_action.php?action=mark_all&redirect=' . urlencode($menuAlertCurrentPageUrl), ENT_QUOTES, 'UTF-8') ?>">Mark all as read</a>
+                                        <a class="system-alert-mark-all" href="<?= htmlspecialchars(systemAlertBuildMarkAllUrl($menuAlertCurrentPageUrl), ENT_QUOTES, 'UTF-8') ?>">Mark all as read</a>
                                     <?php } ?>
                                 </div>
                                 <div class="system-alert-list">
@@ -519,7 +519,7 @@
                                             $menuAlertIsUnread = strtoupper(trim((string) (isset($menuAlertRow['is_read']) ? $menuAlertRow['is_read'] : 'N'))) !== 'Y';
                                             $menuAlertTitle = trim((string) (isset($menuAlertRow['title']) ? $menuAlertRow['title'] : 'Notification'));
                                             $menuAlertMessage = trim((string) (isset($menuAlertRow['message']) ? $menuAlertRow['message'] : ''));
-                                            $menuAlertLink = $SITEURL . '/system_alert_action.php?id=' . $menuAlertId . '&redirect=' . urlencode($menuAlertCurrentPageUrl);
+                                            $menuAlertLink = systemAlertBuildOpenUrl($menuAlertId, $menuAlertCurrentPageUrl);
                                             ?>
                                             <a class="system-alert-item <?= $menuAlertIsUnread ? 'system-alert-item-unread' : '' ?>" href="<?= htmlspecialchars($menuAlertLink, ENT_QUOTES, 'UTF-8') ?>">
                                                 <div class="system-alert-item-meta">
@@ -583,7 +583,7 @@
                         <div class="system-alert-dropdown-header">
                             <div class="system-alert-dropdown-header-title">Notifications</div>
                             <?php if ($menuAlertUnreadCount > 0) { ?>
-                                <a class="system-alert-mark-all" href="<?= htmlspecialchars($SITEURL . '/system_alert_action.php?action=mark_all&redirect=' . urlencode($menuAlertCurrentPageUrl), ENT_QUOTES, 'UTF-8') ?>">Mark all as read</a>
+                                <a class="system-alert-mark-all" href="<?= htmlspecialchars(systemAlertBuildMarkAllUrl($menuAlertCurrentPageUrl), ENT_QUOTES, 'UTF-8') ?>">Mark all as read</a>
                             <?php } ?>
                         </div>
                         <div class="system-alert-list">
@@ -595,7 +595,7 @@
                                     $menuAlertIsUnread = strtoupper(trim((string) (isset($menuAlertRow['is_read']) ? $menuAlertRow['is_read'] : 'N'))) !== 'Y';
                                     $menuAlertTitle = trim((string) (isset($menuAlertRow['title']) ? $menuAlertRow['title'] : 'Notification'));
                                     $menuAlertMessage = trim((string) (isset($menuAlertRow['message']) ? $menuAlertRow['message'] : ''));
-                                    $menuAlertLink = $SITEURL . '/system_alert_action.php?id=' . $menuAlertId . '&redirect=' . urlencode($menuAlertCurrentPageUrl);
+                                    $menuAlertLink = systemAlertBuildOpenUrl($menuAlertId, $menuAlertCurrentPageUrl);
                                     ?>
                                     <a class="system-alert-item <?= $menuAlertIsUnread ? 'system-alert-item-unread' : '' ?>" href="<?= htmlspecialchars($menuAlertLink, ENT_QUOTES, 'UTF-8') ?>">
                                         <div class="system-alert-item-meta">
@@ -711,8 +711,8 @@
                                     $menuAlertModuleLabel = function_exists('systemAlertFormatModuleLabel')
                                         ? systemAlertFormatModuleLabel(isset($menuAlertRow['module_key']) ? $menuAlertRow['module_key'] : '')
                                         : trim((string) (isset($menuAlertRow['module_key']) ? $menuAlertRow['module_key'] : 'General'));
-                                    $menuAlertOpenLink = $SITEURL . '/system_alert_action.php?id=' . $menuAlertId . '&redirect=' . urlencode($menuAlertCurrentPageUrl);
-                                    $menuAlertMarkReadLink = $SITEURL . '/system_alert_action.php?action=mark_read&id=' . $menuAlertId . '&redirect=' . urlencode($menuAlertModalReturnUrl);
+                                    $menuAlertOpenLink = systemAlertBuildOpenUrl($menuAlertId, $menuAlertCurrentPageUrl);
+                                    $menuAlertMarkReadLink = systemAlertBuildMarkReadUrl($menuAlertId, $menuAlertModalReturnUrl);
                                     ?>
                                     <tr>
                                         <td>
@@ -745,7 +745,7 @@
                 </div>
             </div>
             <div class="modal-footer">
-                <a href="<?= htmlspecialchars($SITEURL . '/system_alert_action.php?action=mark_all&redirect=' . urlencode($menuAlertModalReturnUrl), ENT_QUOTES, 'UTF-8') ?>"
+                <a href="<?= htmlspecialchars(systemAlertBuildMarkAllUrl($menuAlertModalReturnUrl), ENT_QUOTES, 'UTF-8') ?>"
                     class="btn btn-outline-primary">Mark All As Read</a>
             </div>
         </div>

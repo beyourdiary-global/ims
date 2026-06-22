@@ -601,13 +601,13 @@ if (!function_exists('taskBuildWorkItemActionUrl')) {
             return '';
         }
 
-        $baseUrl = defined('SITEURL') ? rtrim((string) SITEURL, '/') : '';
-        $url = ($baseUrl !== '' ? $baseUrl : '') . '/task/board.php';
+        $path = ROUTE_TASK_BOARD;
+        $params = array();
         if ($projectId > 0) {
-            $url .= '?project_id=' . $projectId;
+            $params['project_id'] = $projectId;
         }
 
-        return $url . '#task-item-' . $itemId;
+        return siteUrlWithQuery($path, $params, 'task-item-' . $itemId);
     }
 }
 
