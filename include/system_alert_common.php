@@ -63,7 +63,7 @@ if (!function_exists('systemAlertGetModuleConfigs')) {
                 'action_label' => 'Open Follow-Up',
             ),
             'project_task' => array(
-                'pin_group_id' => 136,
+                'pin_group_id' => 139,
                 'title' => 'Project Task',
                 'path' => '/task/board.php',
                 'action_label' => 'Open Work Item',
