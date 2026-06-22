@@ -4186,6 +4186,71 @@ body.task-board-page .task-board-scroll {
   transition: background 0.2s ease;
 }
 
+.task-editor-upload-host {
+  position: relative;
+}
+
+.task-editor-upload-overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  border-radius: inherit;
+  background: rgba(255, 255, 255, 0.74);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.18s ease;
+  z-index: 6;
+}
+
+.task-editor-upload-host.task-editor-uploading .task-editor-upload-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.task-editor-upload-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  max-width: 320px;
+  padding: 0.7rem 1rem;
+  border: 1px solid rgba(30, 79, 143, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.96);
+  box-shadow: 0 10px 28px rgba(23, 43, 77, 0.14);
+  color: #1e4f8f;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.task-editor-upload-spinner {
+  width: 18px;
+  height: 18px;
+  border: 2px solid rgba(30, 79, 143, 0.18);
+  border-top-color: #1e4f8f;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  animation: task-editor-upload-spin 0.7s linear infinite;
+}
+
+.task-editor-upload-text {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@keyframes task-editor-upload-spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .task-item-activity-compose .tox.tox-tinymce {
   border: 1px solid #dfe1e6;
   border-radius: 8px;
