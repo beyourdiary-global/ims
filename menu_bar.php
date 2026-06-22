@@ -207,15 +207,10 @@ if (in_array('130', GlobalPin)) {
 
 include_once ROOT . '/task/common_task.php';
 
-$hasTaskSummaryAccess = taskIsActionAllowed('view', taskGetPinAccessByGroupId($connect, 137));
-$hasTaskBoardAccess = taskIsActionAllowed('view', taskGetPinAccessByGroupId($connect, 136));
-$hasTaskSheetsAccess = taskIsActionAllowed('view', taskGetPinAccessByGroupId($connect, 138));
 $hasTaskManagementAccess = taskIsActionAllowed('view', taskGetPinAccessByGroupId($connect, 139));
-$taskManagementLandingUrl = $hasTaskSummaryAccess
+$taskManagementLandingUrl = $hasTaskManagementAccess
     ? $SITEURL . '/task/summary.php'
-    : ($hasTaskBoardAccess
-        ? $SITEURL . '/task/board.php'
-        : ($hasTaskSheetsAccess ? $SITEURL . '/task/sheets.php' : 'javascript:void(0)'));
+    : 'javascript:void(0)';
 
 $menuList = array(
     // dashboard
@@ -681,9 +676,9 @@ if ($hasTaskManagementAccess) {
                         $expandMenus = $innerList['expand'];
                         if ($isTaskManagementMenu) {
                             $expandMenus = array(
-                                array('Summary', 'mdi mdi-view-dashboard-outline', $SITEURL . '/task/summary.php', '137'),
-                                array('Board', 'mdi mdi-view-column-outline', $SITEURL . '/task/board.php', '136'),
-                                array('Sheets', 'mdi mdi-table-large', $SITEURL . '/task/sheets.php', '138'),
+                                array('Summary', 'mdi mdi-view-dashboard-outline', $SITEURL . '/task/summary.php', '139'),
+                                array('Board', 'mdi mdi-view-column-outline', $SITEURL . '/task/board.php', '139'),
+                                array('Sheets', 'mdi mdi-table-large', $SITEURL . '/task/sheets.php', '139'),
                             );
                         }
 
@@ -797,9 +792,9 @@ if ($hasTaskManagementAccess) {
                     <?php
                     $pid = (int) $taskProject['id'];
                     $isActiveProject = $pid === (int) $taskCurrentProjectId;
-                    $projectHasSummaryAccess = taskUserCanAccessProjectPageByPin($connect, $pid, 137);
-                    $projectHasBoardAccess = taskUserCanAccessProjectPageByPin($connect, $pid, 136);
-                    $projectHasSheetsAccess = taskUserCanAccessProjectPageByPin($connect, $pid, 138);
+                    $projectHasSummaryAccess = taskUserCanAccessProjectPageByPin($connect, $pid, 139);
+                    $projectHasBoardAccess = taskUserCanAccessProjectPageByPin($connect, $pid, 139);
+                    $projectHasSheetsAccess = taskUserCanAccessProjectPageByPin($connect, $pid, 139);
                     $canAccessProjectSettings = taskCanAccessProjectSettings($connect, $pid, false);
                     $canAccessProjectUserAccess = taskCanAccessProjectUserAccess($connect, $pid);
                     $canManageProjectActions = taskCanManageProjectActions($connect, $pid);

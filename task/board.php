@@ -1,8 +1,10 @@
 <?php
 $taskParentPin = 139;
-$currentPagePin = 136;
+$currentPagePin = $taskParentPin;
+$pageTitlePin = 136;
 $pageTitle = 'Board';
 $taskParentTitle = 'Project Task';
+$taskPermissionPin = $taskParentPin;
 
 if (!function_exists('taskBoardAuditLog')) {
     function taskBoardAuditLog($connect, $pageTitle, $pageAction, $viewActMsg, $cdate, $ctime)
@@ -31,10 +33,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     include_once ROOT . '/include/common.php';
     include_once ROOT . '/include/common_variable.php';
     include_once './common_task.php';
-    $pageTitle = taskGetPinGroupTitleById($connect, $currentPagePin, $pageTitle);
+    $pageTitle = taskGetPinGroupTitleById($connect, $pageTitlePin, $pageTitle);
     $taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParentTitle);
 
-    $pinAccess = taskGetPinAccessByGroupId($connect, $currentPagePin);
+    $pinAccess = taskGetPinAccessByGroupId($connect, $taskPermissionPin);
     if (!taskIsActionAllowed('view', $pinAccess)) {
         taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to access task board.'));
     }
@@ -52,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
     $currentUserId = USER_ID;
     $currentProjectId = taskResolveCurrentProjectId($connect, 0);
-    if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $currentPagePin)) {
+    if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $taskPermissionPin)) {
         taskJsonResponse(array('ok' => 0, 'message' => 'You do not have access to this project board.'));
     }
     if ($currentProjectId > 0) {
@@ -930,8 +932,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         $detail = $loadItemDetailForPermission($itemId);
         $durationSeconds = isset($_POST['duration_seconds']) ? (int) $_POST['duration_seconds'] : 0;
         $oldSeconds = isset($detail['own_time_tracking_seconds']) ? (int) $detail['own_time_tracking_seconds'] : 0;
-        $requireColumnTransition('time_tracking', $oldSeconds, max(0, $oldSeconds));
-
+        $oldWorklogSeconds = 0;
+        if (defined('TASK_ITEM_WORKLOG')) {
+            $worklogRst = mysqli_query(
+                $connect,
+                "SELECT duration_seconds FROM " . TASK_ITEM_WORKLOG . " WHERE id='" . $worklogId . "' AND item_id='" . $itemId . "' AND status='A' LIMIT 1"
+            );
+            if ($worklogRst && $worklogRst->num_rows > 0) {
+                $worklogRow = $worklogRst->fetch_assoc();
+                $oldWorklogSeconds = isset($worklogRow['duration_seconds']) ? max(0, (int) $worklogRow['duration_seconds']) : 0;
+            }
+        }
+        $requireColumnTransition('time_tracking', $oldSeconds, max(0, $oldSeconds - $oldWorklogSeconds + $durationSeconds));
         $result = taskUpdateItemWorklog(
             $connect,
             $itemId,
@@ -960,8 +972,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         $worklogId = isset($_POST['worklog_id']) ? (int) $_POST['worklog_id'] : 0;
         $detail = $loadItemDetailForPermission($itemId);
         $oldSeconds = isset($detail['own_time_tracking_seconds']) ? (int) $detail['own_time_tracking_seconds'] : 0;
-        $requireColumnTransition('time_tracking', $oldSeconds, max(0, $oldSeconds));
-
+        $deletedWorklogSeconds = 0;
+        if (defined('TASK_ITEM_WORKLOG')) {
+            $worklogRst = mysqli_query(
+                $connect,
+                "SELECT duration_seconds FROM " . TASK_ITEM_WORKLOG . " WHERE id='" . $worklogId . "' AND item_id='" . $itemId . "' AND status='A' LIMIT 1"
+            );
+            if ($worklogRst && $worklogRst->num_rows > 0) {
+                $worklogRow = $worklogRst->fetch_assoc();
+                $deletedWorklogSeconds = isset($worklogRow['duration_seconds']) ? max(0, (int) $worklogRow['duration_seconds']) : 0;
+            }
+        }
+        $requireColumnTransition('time_tracking', $oldSeconds, max(0, $oldSeconds - $deletedWorklogSeconds));
         $result = taskDeleteItemWorklog(
             $connect,
             $itemId,
@@ -1339,13 +1361,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 }
 
 include_once '../menuHeader.php';
-include_once '../checkCurrentPagePin.php';
 include_once './common_task.php';
 include_once './board_item_history.php';
-$pageTitle = taskGetPinGroupTitleById($connect, $currentPagePin, $pageTitle);
+$pageTitle = taskGetPinGroupTitleById($connect, $pageTitlePin, $pageTitle);
 $taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParentTitle);
 
-$pinAccess = taskGetPinAccessByGroupId($connect, $currentPagePin);
+$pinAccess = taskGetPinAccessByGroupId($connect, $taskPermissionPin);
 if (!taskIsActionAllowed('view', $pinAccess)) {
     renderNotificationScript('You do not have permission to view task board.', 'error', '../dashboard.php', 1200, true);
     exit;
@@ -1355,7 +1376,7 @@ $safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
 $currentUserId = USER_ID;
 $currentProjectId = taskResolveCurrentProjectId($connect, 0);
 $currentProject = $currentProjectId > 0 ? taskGetProjectById($connect, $currentProjectId) : array();
-if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $currentPagePin)) {
+if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $taskPermissionPin)) {
     renderNotificationScript('You do not have access to this project board.', 'error', '../dashboard.php', 1200, true);
     exit;
 }
