@@ -459,8 +459,19 @@ var boardGroupCookieName =
   String(currentUserId > 0 ? currentUserId : 0) +
   "_project_" +
   String(boardProjectId > 0 ? boardProjectId : 0);
+var boardZoomStorageKeyPrefix = "task_board_zoom_v1_user_";
+var boardZoomStorageKey =
+  boardZoomStorageKeyPrefix +
+  String(currentUserId > 0 ? currentUserId : 0) +
+  "_project_" +
+  String(boardProjectId > 0 ? boardProjectId : 0);
+var boardZoomDefault = 90;
+var boardZoomMin = 50;
+var boardZoomMax = 120;
+var boardZoomStep = 1;
 var boardGroupBy = "status";
 var boardStatusColumns = [];
+var boardZoomPercent = boardZoomDefault;
 
 var boardViewFieldDefaults = {
   work_item_key: true,
@@ -2437,6 +2448,42 @@ function loadBoardViewFieldsFromCookie() {
   }
 }
 
+function normalizeBoardZoomPercent(value) {
+  var percent = Number(value || 0);
+  if (!isFinite(percent) || percent <= 0) {
+    percent = boardZoomDefault;
+  }
+
+  percent = Math.round(percent);
+  if (percent < boardZoomMin) {
+    percent = boardZoomMin;
+  }
+  if (percent > boardZoomMax) {
+    percent = boardZoomMax;
+  }
+
+  return percent;
+}
+
+function saveBoardZoomToStorage() {
+  try {
+    window.localStorage.setItem(
+      boardZoomStorageKey,
+      String(normalizeBoardZoomPercent(boardZoomPercent)),
+    );
+  } catch (e) {}
+}
+
+function loadBoardZoomFromStorage() {
+  try {
+    boardZoomPercent = normalizeBoardZoomPercent(
+      window.localStorage.getItem(boardZoomStorageKey),
+    );
+  } catch (e) {
+    boardZoomPercent = boardZoomDefault;
+  }
+}
+
 function normalizeBoardGroupBy(value) {
   var mode = String(value || "status")
     .trim()
@@ -2764,6 +2811,56 @@ function syncBoardViewSettingsCheckboxes() {
 
     $(this).prop("checked", isBoardViewFieldEnabled(key));
   });
+}
+
+function syncBoardZoomControls() {
+  var percent = normalizeBoardZoomPercent(boardZoomPercent);
+  boardZoomPercent = percent;
+
+  $("#taskBoardZoomRange").val(String(percent));
+  $("#taskBoardZoomValue").text(String(percent) + "%");
+  $("#taskBoardZoomOutBtn").prop("disabled", percent <= boardZoomMin);
+  $("#taskBoardZoomInBtn").prop("disabled", percent >= boardZoomMax);
+}
+
+function applyBoardZoom() {
+  var percent = normalizeBoardZoomPercent(boardZoomPercent);
+  var scale = percent / 100;
+  var zoomAreas = document.querySelectorAll(".task-board-zoom-area");
+
+  boardZoomPercent = percent;
+  if (zoomAreas.length && scale > 0) {
+    for (var i = 0; i < zoomAreas.length; i++) {
+      var zoomArea = zoomAreas[i];
+      if (!zoomArea) {
+        continue;
+      }
+      zoomArea.style.zoom = String(percent) + "%";
+      zoomArea.style.width = String(100 / scale) + "%";
+    }
+  }
+
+  syncBoardZoomControls();
+
+  if (typeof syncTaskBoardSettingsPanelZoom === "function") {
+    syncTaskBoardSettingsPanelZoom();
+  }
+  if (
+    typeof isTaskBoardSettingsPanelOpen === "function" &&
+    typeof updateTaskBoardSettingsPanelPosition === "function" &&
+    isTaskBoardSettingsPanelOpen()
+  ) {
+    updateTaskBoardSettingsPanelPosition();
+  }
+}
+
+function setBoardZoomPercent(value, persist) {
+  boardZoomPercent = normalizeBoardZoomPercent(value);
+  applyBoardZoom();
+
+  if (persist !== false) {
+    saveBoardZoomToStorage();
+  }
 }
 
 function parseCardDate(value) {
