@@ -8992,8 +8992,8 @@ if (!function_exists('shopeeOmsRunFourteenDayAutoMove')) {
             if (shopeeOmsSourceHasColumn($cmsConnect, $financeConnect, $sourceConfig, 'latest_transition_at')) {
                 $latestTransitionExprParts[] = "o.latest_transition_at";
             }
-            $latestTransitionExprParts[] = "CONCAT(o.update_date, ' ', o.update_time')";
-            $latestTransitionExprParts[] = "CONCAT(o.create_date, ' ', o.create_time')";
+            $latestTransitionExprParts[] = "CONCAT(o.update_date, ' ', o.update_time)";
+            $latestTransitionExprParts[] = "CONCAT(o.create_date, ' ', o.create_time)";
             $latestTransitionExpr = "COALESCE(" . implode(', ', $latestTransitionExprParts) . ")";
             $statusCondition = shopeeOmsBuildOrderStatusInCondition($financeConnect, 'order_status', array('PR'));
             if ($statusCondition !== '') {
