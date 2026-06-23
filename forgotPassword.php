@@ -90,7 +90,7 @@ if ($resetpass_btn == 1) {
                     <table class="header" style="border-spacing: 0;width: 100%;">
                         <tr>
                             <td class="logo" align="center" style="padding: 0;">
-                            <img src="' . ($dataExisted ? $img_path . $row['meta_logo'] : '.img/byd_logo.') . '" style="border: 0;">;
+                            <img src="' . ($dataExisted ? $img_path . $row['meta_logo'] : '.img/byd_logo.') . '" style="border: 0;">
                             </td>
                         </tr>
                     </table> <!-- End Header -->
