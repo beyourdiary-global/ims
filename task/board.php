@@ -1424,14 +1424,16 @@ $projectBoardBackground = isset($currentProject['board_background_color']) ? (st
 <body class="task-board-page" style="--task-project-board-bg: <?= htmlspecialchars($projectBoardBackground, ENT_QUOTES, 'UTF-8') ?>;">
 <div class="container-fluid task-page-wrap px-0">
     <div class="col-12 px-0">
-        <div class="col-12 col-md-11 mx-auto task-board-page-header">
-            <div class="d-flex flex-column mb-2">
-                <div class="row">
-                    <p><a href="<?= $SITEURL ?>/dashboard.php">Dashboard</a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?= htmlspecialchars($taskParentTitle, ENT_QUOTES, 'UTF-8') ?> <i class="fa-solid fa-chevron-right fa-xs"></i> <?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></p>
-                </div>
-                <div class="row">
-                    <div class="col-12 d-flex justify-content-between flex-wrap align-items-center">
-                        <h2><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></h2>
+        <div id="taskBoardHeaderZoomArea" class="task-board-zoom-area task-board-header-zoom-shell">
+            <div class="col-12 col-md-11 mx-auto task-board-page-header">
+                <div class="d-flex flex-column mb-2">
+                    <div class="row">
+                        <p><a href="<?= $SITEURL ?>/dashboard.php">Dashboard</a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?= htmlspecialchars($taskParentTitle, ENT_QUOTES, 'UTF-8') ?> <i class="fa-solid fa-chevron-right fa-xs"></i> <?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></p>
+                    </div>
+                    <div class="row">
+                        <div class="col-12 d-flex justify-content-between flex-wrap align-items-center">
+                            <h2><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></h2>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1445,105 +1447,134 @@ $projectBoardBackground = isset($currentProject['board_background_color']) ? (st
 
             <div id="taskSidebarBackdrop" class="task-sidebar-backdrop"></div>
 
-            <div class="task-main-content" style="background: <?= htmlspecialchars($projectBoardBackground, ENT_QUOTES, 'UTF-8') ?>;">
-                <div class="task-board-toolbar mb-2">
-                    <div class="task-board-search-group">
-                        <i class="fa-solid fa-magnifying-glass"></i>
-                        <input id="taskBoardSearchInput" class="form-control" type="text" maxlength="150" placeholder="Search board">
-                    </div>
-                    <div id="taskBoardFilterSelectedAssignees" class="task-board-filter-selected-assignees d-none"></div>
-                    <div id="taskBoardFilterDropdown" class="dropdown task-board-filter-wrap">
-                        <button id="taskBoardFilterBtn" class="btn task-board-filter-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
-                            <span class="task-board-filter-btn-label">Filter</span>
-                            <span id="taskBoardFilterCountBadge" class="task-board-filter-count-badge d-none">0</span>
-                        </button>
-                        <div id="taskBoardFilterMenu" class="dropdown-menu task-board-filter-menu p-0"></div>
-                    </div>
-                    <div class="task-board-toolbar-actions ms-auto">
-                        <div id="taskBoardGroupDropdown" class="dropdown task-board-group-wrap">
-                            <button id="taskBoardGroupBtn" class="btn task-board-group-btn" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
-                                <span id="taskBoardGroupLabel">Group: Status</span>
+            <div id="taskBoardContentZoomArea" class="task-board-zoom-area task-board-content-zoom-shell">
+                <div class="task-main-content" style="background: <?= htmlspecialchars($projectBoardBackground, ENT_QUOTES, 'UTF-8') ?>;">
+                    <div class="task-board-toolbar mb-2">
+                        <div class="task-board-search-group">
+                            <i class="fa-solid fa-magnifying-glass"></i>
+                            <input id="taskBoardSearchInput" class="form-control" type="text" maxlength="150" placeholder="Search board">
+                        </div>
+                        <div id="taskBoardFilterSelectedAssignees" class="task-board-filter-selected-assignees d-none"></div>
+                        <div id="taskBoardFilterDropdown" class="dropdown task-board-filter-wrap">
+                            <button id="taskBoardFilterBtn" class="btn task-board-filter-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                                <span class="task-board-filter-btn-label">Filter</span>
+                                <span id="taskBoardFilterCountBadge" class="task-board-filter-count-badge d-none">0</span>
                             </button>
-                            <div class="dropdown-menu dropdown-menu-end task-board-group-menu p-2">
-                                <button type="button" class="dropdown-item task-board-group-option" data-group-by="assignee">
-                                    <span>Assignee</span>
-                                    <i class="fa-solid fa-check task-board-group-check d-none"></i>
-                                </button>
-                                <button type="button" class="dropdown-item task-board-group-option" data-group-by="priority">
-                                    <span>Priority</span>
-                                    <i class="fa-solid fa-check task-board-group-check d-none"></i>
-                                </button>
-                                <button type="button" class="dropdown-item task-board-group-option" data-group-by="status">
-                                    <span>Status</span>
-                                    <i class="fa-solid fa-check task-board-group-check d-none"></i>
-                                </button>
-                            </div>
+                            <div id="taskBoardFilterMenu" class="dropdown-menu task-board-filter-menu p-0"></div>
                         </div>
+                        <div class="task-board-toolbar-actions ms-auto">
+                            <div id="taskBoardGroupDropdown" class="dropdown task-board-group-wrap">
+                                <button id="taskBoardGroupBtn" class="btn task-board-group-btn" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                                    <span id="taskBoardGroupLabel">Group: Status</span>
+                                </button>
+                                <div class="dropdown-menu dropdown-menu-end task-board-group-menu p-2">
+                                    <button type="button" class="dropdown-item task-board-group-option" data-group-by="assignee">
+                                        <span>Assignee</span>
+                                        <i class="fa-solid fa-check task-board-group-check d-none"></i>
+                                    </button>
+                                    <button type="button" class="dropdown-item task-board-group-option" data-group-by="priority">
+                                        <span>Priority</span>
+                                        <i class="fa-solid fa-check task-board-group-check d-none"></i>
+                                    </button>
+                                    <button type="button" class="dropdown-item task-board-group-option" data-group-by="status">
+                                        <span>Status</span>
+                                        <i class="fa-solid fa-check task-board-group-check d-none"></i>
+                                    </button>
+                                </div>
+                            </div>
 
-                        <div class="dropdown task-board-settings-wrap">
-                        <button id="taskBoardSettingsBtn" class="btn task-board-settings-btn" type="button" data-bs-auto-close="outside" aria-expanded="false" title="Board settings">
-                            <i class="fa-solid fa-sliders"></i>
-                        </button>
-                        <div id="taskBoardSettingsPanel" class="dropdown-menu dropdown-menu-end task-board-settings-panel p-3">
-                            <h6 class="task-board-settings-section-title mb-2">Fields</h6>
-                            <div class="task-board-settings-fields">
-                                <?php
-                                    $settingsFields = array(
-                                        'work_item_key' => 'Work item key',
-                                        'work_type' => 'Work type',
-                                        'labels' => 'Labels',
-                                        'assignee' => 'Assignee',
-                                        'priority' => 'Priority',
-                                        'reporter' => 'Reporter',
-                                        'due_date' => 'Due date',
-                                        'created' => 'Created',
-                                        'updated' => 'Updated',
-                                        'amendement_date' => 'Amendement date',
-                                        'amendement_time' => 'Amendement time',
-                                        'second_amendement_date' => 'Second amen-date',
-                                        'second_amendement_time' => 'Second amen-time',
-                                        'start_date' => 'Start date',
-                                        'original_estimate' => 'Original estimate',
-                                        'parent' => 'Parent',
-                                    );
-                                ?>
-                                <?php foreach ($settingsFields as $fieldKey => $fieldLabel): ?>
-                                    <div class="task-board-settings-field-row">
-                                        <span><?= htmlspecialchars($fieldLabel, ENT_QUOTES, 'UTF-8') ?></span>
-                                        <label class="task-field-toggle mb-0" title="Toggle <?= htmlspecialchars($fieldLabel, ENT_QUOTES, 'UTF-8') ?>">
-                                            <input class="task-board-view-field-checkbox" type="checkbox" data-field-key="<?= htmlspecialchars($fieldKey, ENT_QUOTES, 'UTF-8') ?>" checked>
-                                            <span class="task-field-toggle-slider"></span>
-                                        </label>
+                            <div class="dropdown task-board-settings-wrap">
+                            <button id="taskBoardSettingsBtn" class="btn task-board-settings-btn" type="button" data-bs-auto-close="outside" aria-expanded="false" title="Board settings">
+                                <i class="fa-solid fa-sliders"></i>
+                            </button>
+                            <div id="taskBoardSettingsPanel" class="dropdown-menu dropdown-menu-end task-board-settings-panel p-3">
+                                <h6 class="task-board-settings-section-title mb-2">View</h6>
+                                <div class="task-board-zoom-control">
+                                    <button id="taskBoardZoomOutBtn" type="button" class="btn task-board-zoom-step-btn" title="Zoom out" aria-label="Zoom out board">
+                                        <i class="fa-solid fa-minus"></i>
+                                    </button>
+                                    <div class="task-board-zoom-main">
+                                        <div class="task-board-zoom-head">
+                                            <span class="task-board-zoom-label">Board size</span>
+                                            <button id="taskBoardZoomResetBtn" type="button" class="btn task-board-zoom-reset-btn" title="Reset to default 90%">Default 90%</button>
+                                        </div>
+                                        <input
+                                            id="taskBoardZoomRange"
+                                            class="form-range task-board-zoom-range"
+                                            type="range"
+                                            min="50"
+                                            max="120"
+                                            step="1"
+                                            value="90"
+                                            aria-label="Board zoom percentage"
+                                        >
                                     </div>
-                                <?php endforeach; ?>
+                                    <span id="taskBoardZoomValue" class="task-board-zoom-value">90%</span>
+                                    <button id="taskBoardZoomInBtn" type="button" class="btn task-board-zoom-step-btn" title="Zoom in" aria-label="Zoom in board">
+                                        <i class="fa-solid fa-plus"></i>
+                                    </button>
+                                </div>
+                                <div class="task-board-settings-divider"></div>
+                                <h6 class="task-board-settings-section-title mb-2">Fields</h6>
+                                <div class="task-board-settings-fields">
+                                    <?php
+                                        $settingsFields = array(
+                                            'work_item_key' => 'Work item key',
+                                            'work_type' => 'Work type',
+                                            'labels' => 'Labels',
+                                            'assignee' => 'Assignee',
+                                            'priority' => 'Priority',
+                                            'reporter' => 'Reporter',
+                                            'due_date' => 'Due date',
+                                            'created' => 'Created',
+                                            'updated' => 'Updated',
+                                            'amendement_date' => 'Amendement date',
+                                            'amendement_time' => 'Amendement time',
+                                            'second_amendement_date' => 'Second amen-date',
+                                            'second_amendement_time' => 'Second amen-time',
+                                            'start_date' => 'Start date',
+                                            'original_estimate' => 'Original estimate',
+                                            'parent' => 'Parent',
+                                        );
+                                    ?>
+                                    <?php foreach ($settingsFields as $fieldKey => $fieldLabel): ?>
+                                        <div class="task-board-settings-field-row">
+                                            <span><?= htmlspecialchars($fieldLabel, ENT_QUOTES, 'UTF-8') ?></span>
+                                            <label class="task-field-toggle mb-0" title="Toggle <?= htmlspecialchars($fieldLabel, ENT_QUOTES, 'UTF-8') ?>">
+                                                <input class="task-board-view-field-checkbox" type="checkbox" data-field-key="<?= htmlspecialchars($fieldKey, ENT_QUOTES, 'UTF-8') ?>" checked>
+                                                <span class="task-field-toggle-slider"></span>
+                                            </label>
+                                        </div>
+                                    <?php endforeach; ?>
+                                </div>
                             </div>
+                        </div>
+
                         </div>
                     </div>
 
-                    </div>
-                </div>
+                    <div id="taskBoardApp" class="task-board-scroll">
+                        <div id="taskBoardGrid" class="task-board-grid">
+                            <?php foreach ($columns as $column): ?>
+                                <?php
+                                    $columnId = (int) $column['id'];
+                                    $columnItems = isset($itemsByColumn[$columnId]) ? $itemsByColumn[$columnId] : array();
+                                    $canCreateInColumn = $canAdd && ($hasFullProjectAccess || in_array($columnId, $allowedStatusIds, true));
+                                    taskRenderBoardColumn($column, $columnItems, $workTypes, $assignees, $canCreateInColumn, $canEdit, $canDelete, $isProjectOwner);
+                                ?>
+                            <?php endforeach; ?>
+                        </div>
 
-                <div id="taskBoardApp" class="task-board-scroll">
-                    <div id="taskBoardGrid" class="task-board-grid">
-                        <?php foreach ($columns as $column): ?>
-                            <?php
-                                $columnId = (int) $column['id'];
-                                $columnItems = isset($itemsByColumn[$columnId]) ? $itemsByColumn[$columnId] : array();
-                                $canCreateInColumn = $canAdd && ($hasFullProjectAccess || in_array($columnId, $allowedStatusIds, true));
-                                taskRenderBoardColumn($column, $columnItems, $workTypes, $assignees, $canCreateInColumn, $canEdit, $canDelete, $isProjectOwner);
-                            ?>
-                        <?php endforeach; ?>
-                    </div>
+                        <div id="taskBoardEmpty" class="task-empty-board-note mt-3 <?= !empty($columns) ? 'd-none' : '' ?>">
+                            Board is empty. Click the + button to create your first status.
+                        </div>
 
-                    <div id="taskBoardEmpty" class="task-empty-board-note mt-3 <?= !empty($columns) ? 'd-none' : '' ?>">
-                        Board is empty. Click the + button to create your first status.
-                    </div>
-
-                    <div id="taskBoardNoResult" class="task-board-no-result d-none">
-                        <div class="task-board-no-result-icon"><i class="fa-solid fa-magnifying-glass"></i></div>
-                        <h4>No search results</h4>
-                        <p>Try a different word, phrase or filter.</p>
-                        <button id="taskBoardNoResultClearBtn" type="button" class="btn task-board-no-result-clear-btn">Clear</button>
+                        <div id="taskBoardNoResult" class="task-board-no-result d-none">
+                            <div class="task-board-no-result-icon"><i class="fa-solid fa-magnifying-glass"></i></div>
+                            <h4>No search results</h4>
+                            <p>Try a different word, phrase or filter.</p>
+                            <button id="taskBoardNoResultClearBtn" type="button" class="btn task-board-no-result-clear-btn">Clear</button>
+                        </div>
                     </div>
                 </div>
             </div>

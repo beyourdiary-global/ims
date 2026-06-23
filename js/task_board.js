@@ -6577,6 +6577,23 @@ function updateTaskBoardSettingsPanelPosition() {
   panel.style.setProperty("--task-board-settings-right", String(right) + "px");
 }
 
+function syncTaskBoardSettingsPanelZoom() {
+  var panel = document.getElementById("taskBoardSettingsPanel");
+  var percent = Number(boardZoomPercent || 0);
+  if (!panel) {
+    return;
+  }
+
+  if (!isFinite(percent) || percent <= 0) {
+    percent = 100;
+  }
+
+  panel.style.setProperty(
+    "--task-board-settings-panel-zoom",
+    String(10000 / percent) + "%",
+  );
+}
+
 function isTaskBoardSettingsPanelOpen() {
   return $("#taskBoardSettingsPanel").hasClass("show");
 }
@@ -6597,6 +6614,8 @@ function openTaskBoardSettingsPanel() {
   }
 
   syncBoardViewSettingsCheckboxes();
+  syncBoardZoomControls();
+  syncTaskBoardSettingsPanelZoom();
   setTaskBoardSettingsPanelState(true);
   updateTaskBoardSettingsPanelPosition();
 }
@@ -6685,6 +6704,22 @@ $(document).on("change", ".task-board-view-field-checkbox", function () {
   updateAllColumnCounts();
 });
 
+$(document).on("input change", "#taskBoardZoomRange", function () {
+  setBoardZoomPercent($(this).val());
+});
+
+$(document).on("click", "#taskBoardZoomOutBtn", function () {
+  setBoardZoomPercent(boardZoomPercent - boardZoomStep);
+});
+
+$(document).on("click", "#taskBoardZoomInBtn", function () {
+  setBoardZoomPercent(boardZoomPercent + boardZoomStep);
+});
+
+$(document).on("click", "#taskBoardZoomResetBtn", function () {
+  setBoardZoomPercent(boardZoomDefault);
+});
+
 $(window).on("resize.taskBoard", function () {
   updateAllColumnCounts();
   if (isTaskBoardSettingsPanelOpen()) {
@@ -6715,6 +6750,12 @@ function safeRefreshBoardUi() {
 
   try {
     refreshCardItemKeys();
+  } catch (e) {}
+
+  try {
+    loadBoardZoomFromStorage();
+    applyBoardZoom();
+    syncTaskBoardSettingsPanelZoom();
   } catch (e) {}
 
   try {
