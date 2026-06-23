@@ -19,6 +19,103 @@ $(function () {
     return columnState[userId][columnKey];
   }
 
+  function getColumnKeys() {
+    var keys = [];
+
+    $(".project-access-column-section").each(function () {
+      var columnKey = String($(this).data("column-key") || "").trim();
+      if (columnKey && keys.indexOf(columnKey) === -1) {
+        keys.push(columnKey);
+      }
+    });
+
+    return keys;
+  }
+
+  function getColumnAccessUserIds() {
+    var userIds = [];
+
+    $(".project-access-column-row-toggle").each(function () {
+      var userId = String($(this).data("user-id") || "").trim();
+      if (userId && userIds.indexOf(userId) === -1) {
+        userIds.push(userId);
+      }
+    });
+
+    return userIds;
+  }
+
+  function isAllColumnsActionChecked(action) {
+    var bulkAction = String(action || "").trim();
+    var columnKeys = getColumnKeys();
+    var userIds = getColumnAccessUserIds();
+
+    if (!columnKeys.length || !userIds.length) {
+      return false;
+    }
+
+    for (var userIndex = 0; userIndex < userIds.length; userIndex++) {
+      for (var columnIndex = 0; columnIndex < columnKeys.length; columnIndex++) {
+        var row = getUserColumn(userIds[userIndex], columnKeys[columnIndex]);
+
+        if (bulkAction === "access") {
+          if (
+            Number(row.add || 0) !== 1 ||
+            Number(row.edit || 0) !== 1 ||
+            Number(row.delete || 0) !== 1
+          ) {
+            return false;
+          }
+          continue;
+        }
+
+        if (Number(row[bulkAction] || 0) !== 1) {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  }
+
+  function syncColumnBulkToggles() {
+    $(".project-access-column-bulk-toggle").each(function () {
+      var action = String($(this).data("column-bulk-action") || "").trim();
+      $(this).prop("checked", isAllColumnsActionChecked(action));
+    });
+  }
+
+  function setAllColumnsAction(action, checked) {
+    var bulkAction = String(action || "").trim();
+    var value = checked ? 1 : 0;
+    var columnKeys = getColumnKeys();
+    var userIds = getColumnAccessUserIds();
+
+    if (!columnKeys.length || !userIds.length) {
+      return;
+    }
+
+    for (var userIndex = 0; userIndex < userIds.length; userIndex++) {
+      for (var columnIndex = 0; columnIndex < columnKeys.length; columnIndex++) {
+        var row = getUserColumn(userIds[userIndex], columnKeys[columnIndex]);
+
+        if (bulkAction === "access") {
+          row.add = value;
+          row.edit = value;
+          row.delete = value;
+          continue;
+        }
+
+        if (bulkAction === "add" || bulkAction === "edit" || bulkAction === "delete") {
+          row[bulkAction] = value;
+        }
+      }
+    }
+
+    renderColumnCheckboxes();
+    queueSave();
+  }
+
   function renderColumnCheckboxes() {
     $(".project-access-column-action").each(function () {
       var $cb = $(this);
@@ -38,6 +135,8 @@ $(function () {
           Number(row.delete || 0) === 1
       );
     });
+
+    syncColumnBulkToggles();
   }
 
   function buildHiddenInputs() {
@@ -191,6 +290,11 @@ $(function () {
     row.delete = checked;
     renderColumnCheckboxes();
     queueSave();
+  });
+
+  $(".project-access-column-bulk-toggle").on("change", function () {
+    var action = String($(this).data("column-bulk-action") || "").trim();
+    setAllColumnsAction(action, $(this).is(":checked"));
   });
 
   $(".project-access-row-toggle").on("change", function () {
