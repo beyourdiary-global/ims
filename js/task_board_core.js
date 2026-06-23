@@ -131,6 +131,12 @@ function normalizeProjectPermissionFieldKey(fieldKey) {
   if (key === "reporter") {
     return "reporter_name";
   }
+  if (key === "amendement_time") {
+    return "amendement_time_minutes";
+  }
+  if (key === "second_amendement_time") {
+    return "second_amendement_time_minutes";
+  }
 
   return key;
 }
