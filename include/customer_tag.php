@@ -885,6 +885,15 @@ if (!function_exists('customerTagHandlePost')) {
                 break;
         }
 
+        if (
+            !empty($state['success'])
+            && !$isDraftTagState
+            && $platform === 'shopee'
+            && function_exists('shopeeCustomerRecordClearListCache')
+        ) {
+            shopeeCustomerRecordClearListCache();
+        }
+
         if (customerTagIsAjaxRequest()) {
             while (ob_get_level() > 0) {
                 ob_end_clean();

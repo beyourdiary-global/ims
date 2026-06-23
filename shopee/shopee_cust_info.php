@@ -19,6 +19,14 @@ if (!function_exists('scrEsc')) {
     }
 }
 
+if (!function_exists('shopeeCustomerRecordRedirectToTable')) {
+    function shopeeCustomerRecordRedirectToTable($redirectPage)
+    {
+        header('Location: ' . $redirectPage);
+        exit;
+    }
+}
+
 //Current Page Action And Data ID
 $dataId = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
@@ -144,6 +152,13 @@ $shopeeCustomerDraftTagIds = customerTagExtractTagIds($shopeeCustomerActiveTags)
 //Delete Data
 if ($act == 'D') {
     deleteRecord($tblName, '', $dataId, (isset($row['buyer_username']) ? $row['buyer_username'] : ''), $finance_connect, $connect, $cdate, $ctime, $pageTitle);
+    if (mysqli_affected_rows($finance_connect) > 0) {
+        shopeeCustomerRecordClearListCache();
+        if (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest') {
+            renderNotificationScript('Customer record deleted successfully.', 'success');
+            exit;
+        }
+    }
     $_SESSION['delChk'] = 1;
 }
 
@@ -165,7 +180,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     switch ($action) {
         case 'addRecord':
         case 'updRecord':
-
             $scr_username = postSpaceFilter("scr_username");
             $scr_pic = postSpaceFilter("scr_pic_hidden");
             $scr_country = postSpaceFilter("scr_country_hidden");
@@ -264,6 +278,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     if ($returnData) {
                         $dataId = $finance_connect->insert_id;
                         customerTagApplyDraftTagsToCustomer($connect, $shopeeCustomerTagPlatform, $dataId, $pageTitle, $scr_username, customerTagGetPostedDraftTagIds(), $shopeeCustomerTagDraftToken);
+                        shopeeCustomerRecordClearListCache();
                         $_SESSION['tempValConfirmBox'] = true;
                     } else {
                         $errorMsg = mysqli_error($finance_connect);
@@ -328,7 +343,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     // convert into string
                     $oldval = implode(",", $oldvalarr);
                     $chgval = implode(",", $chgvalarr);
-                    $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
                         $query = "UPDATE " . $tblName . " SET buyer_username = '" . scrEsc($finance_connect, $scr_username) . "', pic = '" . scrEsc($finance_connect, $scr_pic) . "', country = '" . scrEsc($finance_connect, $scr_country) . "', brand = '" . scrEsc($finance_connect, $scr_brand) . "', series = '" . scrEsc($finance_connect, $scr_series) . "', contact_no = '" . scrEsc($finance_connect, $scr_contact) . "', remark = '" . scrEsc($finance_connect, $scr_remark) . "', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '" . (int) $dataId . "'";
@@ -337,6 +351,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                             $errorMsg = mysqli_error($finance_connect);
                             $err1 = "Failed to edit record: " . $errorMsg;
                             $act = "F";
+                        } else {
+                            shopeeCustomerRecordClearListCache();
+                            $_SESSION['tempValConfirmBox'] = true;
                         }
 
                     } else {
@@ -378,11 +395,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             break;
         case 'back':
-            if ($action == 'addRecord' || $action == 'updRecord') {
-                echo $clearLocalStorage . ' ' . $redirectLink;
-            } else {
-                echo $redirectLink;
-            }
+            shopeeCustomerRecordRedirectToTable($redirectPage);
             break;
     }
     }
@@ -792,8 +805,9 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                             break;
                     }
                     ?>
-                    <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" type="submit" form="SCRForm" name="actionBtn"
-                        id="actionBtn" value="back">Back</button>
+                    <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel backBtn" type="button" form="SCRForm" name="actionBtn"
+                        id="backBtn" value="back"
+                        onclick="clearLocalStoragePreservingCustomerRecordFilters(); window.location.href = <?= htmlspecialchars(json_encode($redirectPage), ENT_QUOTES, 'UTF-8') ?>;">Back</button>
                 </div>
             </div>
         </div>

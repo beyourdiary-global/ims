@@ -593,6 +593,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
                 $insertCustomerId = (int) mysqli_insert_id($finance_connect);
                 echo "<script>alert('New record created successfully');</script>";
                 generateDBData(SHOPEE_CUST_INFO, $finance_connect);
+                shopeeCustomerRecordClearListCache();
             } else {
                 echo "<script>alert('Error: " . $insert_query . "<br>" . mysqli_error($connect) . "');</script>";
             }
