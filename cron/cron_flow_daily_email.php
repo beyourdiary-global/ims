@@ -70,18 +70,88 @@ if (!function_exists('shopeeOmsBuildEmailSummaryLines')) {
     }
 }
 
-if (date('H') !== '08') {
+if (!function_exists('shopeeOmsCronFlagEnabled')) {
+    function shopeeOmsCronFlagEnabled($value)
+    {
+        $value = strtolower(trim((string) $value));
+        return in_array($value, array('1', 'true', 'yes', 'y', 'manual'), true);
+    }
+}
+
+if (!function_exists('shopeeOmsFlowDailyEmailManualTriggerRequested')) {
+    function shopeeOmsFlowDailyEmailManualTriggerRequested()
+    {
+        if (isset($_GET['manual_trigger']) && shopeeOmsCronFlagEnabled($_GET['manual_trigger'])) {
+            return true;
+        }
+
+        if (isset($_POST['manual_trigger']) && shopeeOmsCronFlagEnabled($_POST['manual_trigger'])) {
+            return true;
+        }
+
+        if (PHP_SAPI === 'cli') {
+            global $argv;
+
+            foreach ((array) $argv as $arg) {
+                $arg = trim((string) $arg);
+                if ($arg === '--manual' || $arg === 'manual_trigger=1' || $arg === '--manual=1') {
+                    return true;
+                }
+
+                if (strpos($arg, 'manual_trigger=') === 0) {
+                    $value = substr($arg, strlen('manual_trigger='));
+                    if (shopeeOmsCronFlagEnabled($value)) {
+                        return true;
+                    }
+                }
+
+                if (strpos($arg, '--manual=') === 0) {
+                    $value = substr($arg, strlen('--manual='));
+                    if (shopeeOmsCronFlagEnabled($value)) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
+    }
+}
+
+$dateFrom = date('Y-m-d', strtotime('-1 day'));
+$dateTo = $dateFrom;
+$isScheduledHour = date('H') === '08';
+$isManualTrigger = !$isScheduledHour && shopeeOmsFlowDailyEmailManualTriggerRequested();
+$manualTriggerLimit = 3;
+$manualTriggerCount = 0;
+$manualTriggerSettingKey = 'shopee_oms_daily_report_manual_trigger_count_' . str_replace('-', '', $dateFrom);
+
+if (!$isScheduledHour && !$isManualTrigger) {
     header('Content-Type: text/plain; charset=utf-8');
     echo "OMS daily email report skipped.\n";
     echo "Current server time: " . date('Y-m-d H:i:s') . "\n";
     echo "This script only sends during the 08:00 AM hour.\n";
+    echo "Manual fallback: add ?manual_trigger=1 or run with --manual (max 3 times per report date).\n";
     exit;
+}
+
+$runMode = 'scheduled';
+if ($isManualTrigger) {
+    $runMode = 'manual';
+    $manualTriggerCount = (int) shopeeOmsGetSetting($connect, $manualTriggerSettingKey, '0');
+
+    if ($manualTriggerCount >= $manualTriggerLimit) {
+        header('Content-Type: text/plain; charset=utf-8');
+        echo "OMS daily email manual trigger skipped.\n";
+        echo "Current server time: " . date('Y-m-d H:i:s') . "\n";
+        echo "Report date: " . $dateFrom . "\n";
+        echo "Manual trigger limit reached: " . $manualTriggerLimit . "\n";
+        exit;
+    }
 }
 
 shopeeOmsRunFourteenDayAutoMove($connect, $finance_connect);
 
-$dateFrom = date('Y-m-d', strtotime('-1 day'));
-$dateTo = $dateFrom;
 $reportData = shopeeOmsGetDailyFlowReport($connect, $finance_connect, $dateFrom, $dateTo);
 $summaryRows = isset($reportData['summary']) ? $reportData['summary'] : array();
 
@@ -183,9 +253,23 @@ if (!empty($recipientEmails)) {
     }
 }
 
+if ($runMode === 'manual') {
+    $manualTriggerCount++;
+    shopeeOmsSetSetting(
+        $connect,
+        $manualTriggerSettingKey,
+        (string) $manualTriggerCount,
+        'OMS daily email manual trigger count for report date ' . $dateFrom
+    );
+}
+
 header('Content-Type: text/plain; charset=utf-8');
 echo "OMS daily email report completed.\n";
+echo "Run mode: " . $runMode . "\n";
 echo "Report date: " . $dateFrom . "\n";
+if ($runMode === 'manual') {
+    echo "Manual trigger used: " . $manualTriggerCount . "/" . $manualTriggerLimit . "\n";
+}
 echo "Recipients configured: " . count($recipientEmails) . "\n";
 echo "Emails sent: " . (int) $sentCount . "\n";
 echo "Report URL: " . $reportUrl . "\n";
