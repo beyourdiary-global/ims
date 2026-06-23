@@ -33,39 +33,13 @@ function applyBoardViewSettingsToCard($card) {
     );
   }
 
-  var dueDateText = formatCardDateLabel($card.attr("data-due-date"));
-  var dueDateValue = String($card.attr("data-due-date") || "").trim();
-  var dueDateMs = parseCardDate(dueDateValue);
-  var today = new Date();
-  var todayMs = new Date(
-    today.getFullYear(),
-    today.getMonth(),
-    today.getDate(),
-  ).getTime();
-  var isOverdue = !!dueDateMs && dueDateMs < todayMs;
   var $meta = $card.find(".task-item-meta").first();
   if (!$meta.length) {
     $meta = $('<div class="task-item-meta"></div>');
     $card.append($meta);
   }
 
-  var $due = $card.find(".task-item-due-date").first();
-  if (isBoardViewFieldEnabled("due_date") && dueDateText) {
-    if (!$due.length) {
-      $due = $('<small class="task-item-due-date"></small>');
-    }
-    $due
-      .toggleClass("task-item-due-date-overdue", isOverdue)
-      .html(
-        '<i class="fa-solid ' +
-          (isOverdue ? "fa-triangle-exclamation" : "fa-clock") +
-          '"></i> ' +
-          escHtml(dueDateText),
-      );
-    $meta.before($due);
-  } else {
-    $due.remove();
-  }
+  $card.find(".task-item-due-date").remove();
 
   var $metaLeft = $meta.find(".task-item-meta-left").first();
   if (!$metaLeft.length) {
@@ -173,7 +147,18 @@ function applyBoardViewSettingsToCard($card) {
   var $fieldList = $card.find(".task-item-field-list").first();
   if (!$fieldList.length) {
     $fieldList = $('<div class="task-item-field-list"></div>');
-    $meta.after($fieldList);
+  }
+
+  var $labelRowForFieldList = $card.find(".task-item-label-row").first();
+  if ($labelRowForFieldList.length) {
+    $fieldList.insertAfter($labelRowForFieldList);
+  } else {
+    var $head = $card.find(".task-item-head").first();
+    if ($head.length) {
+      $fieldList.insertAfter($head);
+    } else {
+      $card.prepend($fieldList);
+    }
   }
 
   if (rowsHtml) {
@@ -210,6 +195,15 @@ function applyBoardViewSettingsToCard($card) {
   } else {
     $fieldList.addClass("d-none").empty();
   }
+
+  $meta.insertAfter($fieldList);
+  $meta.toggleClass(
+    "d-none",
+    !isBoardViewFieldEnabled("work_type") &&
+      !isBoardViewFieldEnabled("work_item_key") &&
+      !isBoardViewFieldEnabled("priority") &&
+      !isBoardViewFieldEnabled("assignee"),
+  );
 }
 
 function applyBoardViewSettingsToAllCards() {
@@ -3258,15 +3252,6 @@ function buildTaskCardHtml(item) {
   var startDate = String(item.start_date || "").trim();
   var dueDate = item.due_date || "";
   var dueDateValue = String(dueDate || "").trim();
-  var dueDateText = formatCardDateLabel(dueDateValue);
-  var dueDateMs = parseCardDate(dueDateValue);
-  var now = new Date();
-  var todayMs = new Date(
-    now.getFullYear(),
-    now.getMonth(),
-    now.getDate(),
-  ).getTime();
-  var isOverdue = !!dueDateMs && dueDateMs < todayMs;
   var estimateValue = Number(item.original_estimate_value || 0);
   var estimateUnit = String(item.original_estimate_unit || "minutes").trim();
   var amendementDate = String(item.amendement_date || "").trim();
@@ -3408,6 +3393,7 @@ function buildTaskCardHtml(item) {
     (labelsHtml
       ? '<div class="task-item-label-row">' + labelsHtml + "</div>"
       : "") +
+    '<div class="task-item-field-list"></div>' +
     '<div class="task-item-meta">' +
     '<div class="task-item-meta-left">' +
     '<div class="dropdown task-item-type-wrap">' +
@@ -3465,15 +3451,6 @@ function buildTaskCardHtml(item) {
     "</div>" +
     "</div>" +
     "</div>" +
-    (dueDateText
-      ? '<small class="task-item-due-date' +
-        (isOverdue ? " task-item-due-date-overdue" : "") +
-        '"><i class="fa-solid ' +
-        (isOverdue ? "fa-triangle-exclamation" : "fa-clock") +
-        '"></i> ' +
-        escHtml(dueDateText) +
-        "</small>"
-      : "") +
     "</article>"
   );
 }
