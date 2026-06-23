@@ -4257,21 +4257,30 @@ function renameStatus(columnId, newName, $column) {
       column_id: id,
       column_name: nextName,
     },
-    function () {
-      var currentColor = String($column.attr("data-column-color") || "#DFE1E6");
-      upsertBoardStatusColumn(id, nextName, currentColor);
+    function (res) {
+      var resolvedName = String(
+        (res && res.column_name) || nextName || "",
+      ).trim();
+      var statusMeta = getBoardStatusColumnMeta(id);
       var $targetColumn =
         $column && $column.length
           ? $column
           : $app.find('.task-column[data-column-id="' + id + '"]');
+      var currentColor = String(
+        ($targetColumn.length
+          ? $targetColumn.attr("data-column-color")
+          : statusMeta && statusMeta.color) || "#DFE1E6",
+      );
+
+      upsertBoardStatusColumn(id, resolvedName, currentColor);
 
       if ($targetColumn.length) {
-        $targetColumn.find(".task-column-title").text(nextName);
+        $targetColumn.find(".task-column-title").text(resolvedName);
         $targetColumn.find(".task-item-card").each(function () {
           setCardStatusColumnMeta(
             $(this),
             id,
-            nextName,
+            resolvedName,
             String($targetColumn.attr("data-column-color") || "#DFE1E6"),
           );
         });
