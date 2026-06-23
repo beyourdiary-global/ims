@@ -3824,6 +3824,9 @@ if (!function_exists('customerLabelRefreshAssignments')) {
         $dataset = customerLabelBuildAssignmentDataset($connect, $financeConnect);
         if (!empty($dataset['success'])) {
             customerLabelWriteRealtimeSyncCache($dataset);
+            if (function_exists('shopeeCustomerRecordClearListCache')) {
+                shopeeCustomerRecordClearListCache();
+            }
         }
         return $dataset;
     }
@@ -4377,6 +4380,248 @@ if (!function_exists('customerLabelPrepareCustomerRows')) {
             'active_filter_type' => $labelType,
             'active_filter_id' => $labelId,
         );
+    }
+}
+
+if (!function_exists('shopeeCustomerRecordListCacheDir')) {
+    function shopeeCustomerRecordListCacheDir()
+    {
+        return dirname(__DIR__) . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR . 'shopee_customer_record_list';
+    }
+}
+
+if (!function_exists('shopeeCustomerRecordNormalizeCacheParams')) {
+    function shopeeCustomerRecordNormalizeCacheParams($params = array())
+    {
+        if (!is_array($params)) {
+            $params = array();
+        }
+
+        foreach ($params as $key => $value) {
+            if (is_array($value)) {
+                $params[$key] = shopeeCustomerRecordNormalizeCacheParams($value);
+                continue;
+            }
+
+            if (is_bool($value)) {
+                $params[$key] = $value ? '1' : '0';
+                continue;
+            }
+
+            if ($value === null) {
+                $params[$key] = '';
+                continue;
+            }
+
+            $params[$key] = trim((string) $value);
+        }
+
+        ksort($params);
+        return $params;
+    }
+}
+
+if (!function_exists('shopeeCustomerRecordListCacheKey')) {
+    function shopeeCustomerRecordListCacheKey($params = array())
+    {
+        $requestMeta = array(
+            'script_name' => isset($_SERVER['SCRIPT_NAME']) ? (string) $_SERVER['SCRIPT_NAME'] : '',
+            'params' => shopeeCustomerRecordNormalizeCacheParams($params),
+        );
+
+        $encodedMeta = json_encode($requestMeta, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        if ($encodedMeta === false) {
+            $encodedMeta = serialize($requestMeta);
+        }
+
+        return hash('sha256', (string) $encodedMeta);
+    }
+}
+
+if (!function_exists('shopeeCustomerRecordListCachePath')) {
+    function shopeeCustomerRecordListCachePath($params = array())
+    {
+        return shopeeCustomerRecordListCacheDir() . DIRECTORY_SEPARATOR . shopeeCustomerRecordListCacheKey($params) . '.json';
+    }
+}
+
+if (!function_exists('shopeeCustomerRecordReadListCache')) {
+    function shopeeCustomerRecordReadListCache($params = array())
+    {
+        $cachePath = shopeeCustomerRecordListCachePath($params);
+        if ($cachePath === '' || !is_file($cachePath) || !is_readable($cachePath)) {
+            return null;
+        }
+
+        $cacheJson = @file_get_contents($cachePath);
+        if ($cacheJson === false || trim($cacheJson) === '') {
+            return null;
+        }
+
+        $cachePayload = json_decode($cacheJson, true);
+        if (!is_array($cachePayload)) {
+            return null;
+        }
+
+        $dataset = isset($cachePayload['dataset']) && is_array($cachePayload['dataset']) ? $cachePayload['dataset'] : null;
+        if (!is_array($dataset)) {
+            return null;
+        }
+
+        $dataset['cache_source'] = 'file';
+        $dataset['cache_expires_at'] = 0;
+        return $dataset;
+    }
+}
+
+if (!function_exists('shopeeCustomerRecordWriteListCache')) {
+    function shopeeCustomerRecordWriteListCache($dataset, $params = array())
+    {
+        if (!is_array($dataset)) {
+            return false;
+        }
+
+        $cacheDir = shopeeCustomerRecordListCacheDir();
+        if ($cacheDir === '' || (!is_dir($cacheDir) && !@mkdir($cacheDir, 0777, true) && !is_dir($cacheDir))) {
+            return false;
+        }
+
+        $cachePath = shopeeCustomerRecordListCachePath($params);
+        $payload = array(
+            'generated_at' => time(),
+            'dataset' => $dataset,
+        );
+
+        $cacheJson = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        if ($cacheJson === false) {
+            return false;
+        }
+
+        return @file_put_contents($cachePath, $cacheJson, LOCK_EX) !== false;
+    }
+}
+
+if (!function_exists('shopeeCustomerRecordClearListCache')) {
+    function shopeeCustomerRecordClearListCache()
+    {
+        $cacheDir = shopeeCustomerRecordListCacheDir();
+        if ($cacheDir === '' || !is_dir($cacheDir)) {
+            return false;
+        }
+
+        $cleared = false;
+        $cacheFiles = glob($cacheDir . DIRECTORY_SEPARATOR . '*.json');
+        if ($cacheFiles === false) {
+            return false;
+        }
+
+        foreach ($cacheFiles as $cacheFile) {
+            if (!is_file($cacheFile)) {
+                continue;
+            }
+
+            if (@unlink($cacheFile)) {
+                $cleared = true;
+            }
+        }
+
+        return $cleared;
+    }
+}
+
+if (!function_exists('shopeeCustomerRecordResolveLookupMap')) {
+    function shopeeCustomerRecordResolveLookupMap($connect, $rows, $fieldName, $tableName, $displayField, $altDisplayFields = array())
+    {
+        $rows = is_array($rows) ? $rows : array();
+        $altDisplayFields = array_values(array_unique(array_filter(array_merge(array((string) $displayField), (array) $altDisplayFields))));
+        $lookupMap = array();
+        $lookupValues = array();
+
+        foreach ($rows as $row) {
+            $fieldValue = isset($row[$fieldName]) ? trim((string) $row[$fieldName]) : '';
+            if ($fieldValue === '' || $fieldValue === '0' || isset($lookupValues[$fieldValue])) {
+                continue;
+            }
+
+            $lookupValues[$fieldValue] = true;
+        }
+
+        foreach (array_keys($lookupValues) as $fieldValue) {
+            $resolvedValue = $fieldValue;
+            $safeValue = mysqli_real_escape_string($connect, (string) $fieldValue);
+            $result = getData($displayField, "id='" . $safeValue . "'", 'LIMIT 1', $tableName, $connect);
+
+            if (!($result instanceof mysqli_result) || $result->num_rows === 0) {
+                foreach ($altDisplayFields as $altField) {
+                    $altField = trim((string) $altField);
+                    if ($altField === '') {
+                        continue;
+                    }
+
+                    $result = getData($displayField, $altField . "='" . $safeValue . "'", 'LIMIT 1', $tableName, $connect);
+                    if ($result instanceof mysqli_result && $result->num_rows > 0) {
+                        break;
+                    }
+                }
+            }
+
+            if ($result instanceof mysqli_result && $result->num_rows > 0) {
+                $lookupRow = $result->fetch_assoc();
+                $resolvedValue = isset($lookupRow[$displayField]) ? $lookupRow[$displayField] : $fieldValue;
+            }
+
+            $lookupMap[$fieldValue] = $resolvedValue;
+        }
+
+        return $lookupMap;
+    }
+}
+
+if (!function_exists('shopeeCustomerRecordBuildListDataset')) {
+    function shopeeCustomerRecordBuildListDataset($connect, $financeConnect)
+    {
+        $tableRows = array();
+        $result = getData('*', '', '', SHOPEE_CUST_INFO, $financeConnect);
+        if ($result instanceof mysqli_result) {
+            while ($row = $result->fetch_assoc()) {
+                $tableRows[] = $row;
+            }
+        }
+
+        $customerLabelData = customerLabelPrepareCustomerRows($connect, 'shopee', $tableRows);
+        $tableRows = isset($customerLabelData['rows']) ? $customerLabelData['rows'] : array();
+
+        return array(
+            'rows' => $tableRows,
+            'label_map' => isset($customerLabelData['label_map']) ? $customerLabelData['label_map'] : array(),
+            'tag_map' => isset($customerLabelData['tag_map']) ? $customerLabelData['tag_map'] : array(),
+            'lookup_maps' => array(
+                'pic' => shopeeCustomerRecordResolveLookupMap($connect, $tableRows, 'pic', USR_USER, 'name', array('name')),
+                'country' => shopeeCustomerRecordResolveLookupMap($connect, $tableRows, 'country', COUNTRIES, 'nicename', array('nicename', 'name')),
+                'brand' => shopeeCustomerRecordResolveLookupMap($connect, $tableRows, 'brand', BRAND, 'name', array('name')),
+                'series' => shopeeCustomerRecordResolveLookupMap($connect, $tableRows, 'series', BRD_SERIES, 'name', array('name')),
+            ),
+        );
+    }
+}
+
+if (!function_exists('shopeeCustomerRecordGetListDataset')) {
+    function shopeeCustomerRecordGetListDataset($connect, $financeConnect, $params = array())
+    {
+        if (empty($params)) {
+            $params = array_merge((array) $_GET, (array) $_POST);
+        }
+
+        $cachedDataset = shopeeCustomerRecordReadListCache($params);
+        if (is_array($cachedDataset)) {
+            return $cachedDataset;
+        }
+
+        $dataset = shopeeCustomerRecordBuildListDataset($connect, $financeConnect);
+        shopeeCustomerRecordWriteListCache($dataset, $params);
+        $dataset['cache_source'] = 'rebuilt';
+        $dataset['cache_expires_at'] = 0;
+        return $dataset;
     }
 }
 

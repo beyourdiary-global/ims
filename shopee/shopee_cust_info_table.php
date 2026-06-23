@@ -7,17 +7,15 @@ include_once ROOT . '/include/customer_tag.php';
 
 $redirectPage = $SITEURL . '/shopee/shopee_cust_info.php';
 $deleteRedirectPage = $SITEURL . '/shopee/shopee_cust_info_table.php';
-$result = getData('*', '', '', SHOPEE_CUST_INFO, $finance_connect);
-$tableRows = array();
-if ($result instanceof mysqli_result) {
-    while ($row = $result->fetch_assoc()) {
-        $tableRows[] = $row;
-    }
-}
-$customerLabelData = customerLabelPrepareCustomerRows($connect, 'shopee', $tableRows);
-$tableRows = isset($customerLabelData['rows']) ? $customerLabelData['rows'] : array();
-$customerLabelMap = isset($customerLabelData['label_map']) ? $customerLabelData['label_map'] : array();
-$customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag_map'] : array();
+$tableDataset = shopeeCustomerRecordGetListDataset($connect, $finance_connect, array_merge((array) $_GET, (array) $_POST));
+$tableRows = isset($tableDataset['rows']) ? $tableDataset['rows'] : array();
+$customerLabelMap = isset($tableDataset['label_map']) ? $tableDataset['label_map'] : array();
+$customerTagMap = isset($tableDataset['tag_map']) ? $tableDataset['tag_map'] : array();
+$lookupMaps = isset($tableDataset['lookup_maps']) && is_array($tableDataset['lookup_maps']) ? $tableDataset['lookup_maps'] : array();
+$picLookupMap = isset($lookupMaps['pic']) && is_array($lookupMaps['pic']) ? $lookupMaps['pic'] : array();
+$countryLookupMap = isset($lookupMaps['country']) && is_array($lookupMaps['country']) ? $lookupMaps['country'] : array();
+$brandLookupMap = isset($lookupMaps['brand']) && is_array($lookupMaps['brand']) ? $lookupMaps['brand'] : array();
+$seriesLookupMap = isset($lookupMaps['series']) && is_array($lookupMaps['series']) ? $lookupMaps['series'] : array();
 // if (!$result) {
 //     echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
 //     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
@@ -104,10 +102,6 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
                         </thead>
                         <tbody>
                             <?php
-                            // Caches to avoid repeated DB lookups for the same PIC and Country values
-                            $picCache = [];
-                            $countryCache = [];
-                            
                             foreach ($tableRows as $row) {
                                 if (isset($row['buyer_username'], $row['id']) && !empty($row['buyer_username'])) {
                                     $customerLabelMeta = isset($customerLabelMap[(int) $row['id']]) ? $customerLabelMap[(int) $row['id']] : array();
@@ -117,77 +111,22 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
 
                                     $picValue = isset($row['pic']) ? trim((string) $row['pic']) : '';
                                     if ($picValue !== '' && $picValue !== '0') {
-                                        if (isset($picCache[$picValue])) {
-                                            // Use cached PIC display name
-                                            $picName = $picCache[$picValue];
-                                        } else {
-                                            // Perform lookup once for this PIC value and cache the result
-                                            $resolvedPicName = $picValue;
-                                            $pic = getData('name', "id='" . $picValue . "'", 'LIMIT 1', USR_USER, $connect);
-                                            if (!$pic || $pic->num_rows === 0) {
-                                                $pic = getData('name', "name='" . $picValue . "'", 'LIMIT 1', USR_USER, $connect);
-                                            }
-
-                                            if ($pic && $pic->num_rows > 0) {
-                                                $picRow = $pic->fetch_assoc();
-                                                $resolvedPicName = $picRow['name'];
-                                            }
-                                            $picCache[$picValue] = $resolvedPicName;
-                                            $picName = $resolvedPicName;
-                                        }
+                                        $picName = isset($picLookupMap[$picValue]) ? $picLookupMap[$picValue] : $picValue;
                                     }
 
                                     $countryValue = isset($row['country']) ? trim((string) $row['country']) : '';
                                     if ($countryValue !== '' && $countryValue !== '0') {
-                                        if (isset($countryCache[$countryValue])) {
-                                            // Use cached Country display name
-                                            $countryName = $countryCache[$countryValue];
-                                        } else {
-                                            // Perform lookup once for this Country value and cache the result
-                                            $resolvedCountryName = $countryValue;
-                                            $country = getData('nicename', "id='" . $countryValue . "'", 'LIMIT 1', COUNTRIES, $connect);
-                                            if (!$country || $country->num_rows === 0) {
-                                                $country = getData('nicename', "nicename='" . $countryValue . "'", 'LIMIT 1', COUNTRIES, $connect);
-                                            }
-                                            if (!$country || $country->num_rows === 0) {
-                                                $country = getData('nicename', "name='" . $countryValue . "'", 'LIMIT 1', COUNTRIES, $connect);
-                                            }
-
-                                            if ($country && $country->num_rows > 0) {
-                                                $countryRow = $country->fetch_assoc();
-                                                $resolvedCountryName = $countryRow['nicename'];
-                                            }
-                                            $countryCache[$countryValue] = $resolvedCountryName;
-                                            $countryName = $resolvedCountryName;
-                                        }
+                                        $countryName = isset($countryLookupMap[$countryValue]) ? $countryLookupMap[$countryValue] : $countryValue;
                                     }
 
                                     $brandValue = isset($row['brand']) ? trim((string) $row['brand']) : '';
                                     if ($brandValue !== '' && $brandValue !== '0') {
-                                        $brand = getData('name', "id='" . $brandValue . "'", 'LIMIT 1', BRAND, $connect);
-                                        if (!$brand || $brand->num_rows === 0) {
-                                            $brand = getData('name', "name='" . $brandValue . "'", 'LIMIT 1', BRAND, $connect);
-                                        }
-                                        if ($brand && $brand->num_rows > 0) {
-                                            $brandRow = $brand->fetch_assoc();
-                                            $brandName = $brandRow['name'];
-                                        } else {
-                                            $brandName = $brandValue;
-                                        }
+                                        $brandName = isset($brandLookupMap[$brandValue]) ? $brandLookupMap[$brandValue] : $brandValue;
                                     }
 
                                     $seriesValue = isset($row['series']) ? trim((string) $row['series']) : '';
                                     if ($seriesValue !== '' && $seriesValue !== '0') {
-                                        $series = getData('name', "id='" . $seriesValue . "'", 'LIMIT 1', BRD_SERIES, $connect);
-                                        if (!$series || $series->num_rows === 0) {
-                                            $series = getData('name', "name='" . $seriesValue . "'", 'LIMIT 1', BRD_SERIES, $connect);
-                                        }
-                                        if ($series && $series->num_rows > 0) {
-                                            $seriesRow = $series->fetch_assoc();
-                                            $seriesName = $seriesRow['name'];
-                                        } else {
-                                            $seriesName = $seriesValue;
-                                        }
+                                        $seriesName = isset($seriesLookupMap[$seriesValue]) ? $seriesLookupMap[$seriesValue] : $seriesValue;
                                     }
 
                                     $filterAttributes = customerRecordBuildFilterDataAttributes(array(
