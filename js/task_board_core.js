@@ -4021,6 +4021,53 @@ function formatCardDateLabel(value) {
   );
 }
 
+function getCardDueDateState(value) {
+  var text = formatCardDateLabel(value);
+  var ms = parseCardDate(value);
+  if (!text || !ms) {
+    return {
+      text: text,
+      isToday: false,
+      isOverdue: false,
+      isAlert: false,
+    };
+  }
+
+  var now = new Date();
+  var todayMs = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  ).getTime();
+  var isToday = ms === todayMs;
+  var isOverdue = ms < todayMs;
+
+  return {
+    text: text,
+    isToday: isToday,
+    isOverdue: isOverdue,
+    isAlert: isToday || isOverdue,
+  };
+}
+
+function buildCardDueDateFieldValueHtml(value) {
+  var due = getCardDueDateState(value);
+  if (!due.text) {
+    return "";
+  }
+
+  return (
+    '<span class="task-item-due-date-value' +
+    (due.isAlert ? " task-item-due-date-value-alert" : "") +
+    '">' +
+    escHtml(due.text) +
+    (due.isAlert
+      ? ' <i class="fa-solid fa-triangle-exclamation task-item-due-date-value-icon" aria-hidden="true"></i>'
+      : "") +
+    "</span>"
+  );
+}
+
 function formatRelativeFromCardDate(value) {
   var ms = parseCardDate(value);
   if (!ms) {
@@ -4158,6 +4205,12 @@ function buildCardFieldRowsHtml($card) {
   }
 
   appendFieldRow(
+    "due_date",
+    "Due date",
+    buildCardDueDateFieldValueHtml($card.attr("data-due-date")),
+    true,
+  );
+  appendFieldRow(
     "created",
     "Created",
     formatRelativeFromCardDate($card.attr("data-create-date")) ||
@@ -4213,6 +4266,30 @@ function buildCardFieldRowsHtml($card) {
   }
 
   appendFieldRow(
+    "amendement_date",
+    "Amendement date",
+    formatCardDateLabel($card.attr("data-amendement-date")),
+    false,
+  );
+  appendFieldRow(
+    "amendement_time",
+    "Amendement time",
+    formatMinutesCompact($card.attr("data-amendement-time-minutes")),
+    false,
+  );
+  appendFieldRow(
+    "second_amendement_date",
+    "Second amen-date",
+    formatCardDateLabel($card.attr("data-second-amendement-date")),
+    false,
+  );
+  appendFieldRow(
+    "second_amendement_time",
+    "Second amen-time",
+    formatMinutesCompact($card.attr("data-second-amendement-time-minutes")),
+    false,
+  );
+  appendFieldRow(
     "parent",
     "Parent",
     '<select class="form-select form-select-sm task-item-parent-select" data-item-id="' +
@@ -4256,30 +4333,6 @@ function buildCardFieldRowsHtml($card) {
       "</span>"
       : "",
     true,
-  );
-  appendFieldRow(
-    "amendement_date",
-    "Amendement date",
-    formatCardDateLabel($card.attr("data-amendement-date")),
-    false,
-  );
-  appendFieldRow(
-    "amendement_time",
-    "Amendement time",
-    formatMinutesCompact($card.attr("data-amendement-time-minutes")),
-    false,
-  );
-  appendFieldRow(
-    "second_amendement_date",
-    "Second amen-date",
-    formatCardDateLabel($card.attr("data-second-amendement-date")),
-    false,
-  );
-  appendFieldRow(
-    "second_amendement_time",
-    "Second amen-time",
-    formatMinutesCompact($card.attr("data-second-amendement-time-minutes")),
-    false,
   );
   appendFieldRow(
     "updated",

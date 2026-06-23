@@ -2195,15 +2195,16 @@ body.task-board-page .task-board-scroll {
   gap: 0.3rem;
 }
 
-.task-label-pill {
+.task-item-card .task-label-pill {
   display: inline-flex;
   align-items: center;
-  border-radius: 999px;
-  background: var(--task-label-bg, #dce8ff);
-  color: var(--task-label-text, #1f4f91);
+  border: 1px solid var(--task-label-bg, #dce8ff);
+  border-radius: 4px;
+  background: #ffffff;
+  color: #1f2d3d;
   font-size: 0.72rem;
-  font-weight: 600;
-  padding: 0.12rem 0.48rem;
+  font-weight: 500;
+  padding: 0.12rem 0.38rem;
 }
 
 .task-item-due-date {
@@ -2238,6 +2239,7 @@ body.task-board-page .task-board-scroll {
   justify-content: space-between;
   align-items: center;
   gap: 0.35rem;
+  margin-top: 0.42rem;
 }
 
 .task-item-meta-left {
@@ -2394,7 +2396,7 @@ body.task-board-page .task-board-scroll {
 }
 
 .task-item-field-list {
-  margin-top: 0.62rem;
+  margin-top: 0.28rem;
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
@@ -2418,6 +2420,18 @@ body.task-board-page .task-board-scroll {
   font-size: 0.92rem;
   line-height: 1.33;
   word-break: break-word;
+}
+
+.task-item-due-date-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  color: #354a64;
+}
+
+.task-item-due-date-value-icon {
+  color: #e34b4b;
+  font-size: 0.84rem;
 }
 
 .task-item-field-parent-value {
