@@ -83,7 +83,7 @@ define('dbFinance', $dbFinanceName);
 define('SITEURL', $siteUrl);
 $SITEURL = SITEURL;
 define('ROOT', dirname(__FILE__));
-define('email_cc', "report@beyourdiary.com	");
+define('email_cc', 'report@beyourdiary.com');
 
 // shared external URLs / CDN paths
 define('TELEGRAM_API', 'https://api.telegram.org/bot');
