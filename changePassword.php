@@ -171,9 +171,30 @@ if ($pageMode == 'userChgPassword') {
     if ($sendEmail == 'rstSendEmail') {
         ob_start();
         $to = $email;
-        $subject = 'Password has been reset';
-        $message = 'Password has been successfully reset.';
-        @mail($to, $subject, $message);
+        $subject = 'Your BeYourDiary password was changed';
+        $message = '
+            <html>
+                <head>
+                    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+                    <title>' . htmlspecialchars($subject, ENT_QUOTES, 'UTF-8') . '</title>
+                </head>
+                <body style="margin:0;background-color:#FFF0E3;font-family:sans-serif;">
+                    <div style="max-width:560px;margin:24px auto;background-color:#FFFFFF;border-radius:18px;padding:28px;">
+                        <p style="font-size:22px;font-weight:bold;margin:0 0 16px;">Password updated successfully</p>
+                        <p style="font-size:14px;line-height:1.6;margin:0 0 12px;">Your BeYourDiary account password has been changed successfully.</p>
+                        <p style="font-size:14px;line-height:1.6;margin:0;">If you did not make this change, please contact support immediately.</p>
+                    </div>
+                </body>
+            </html>
+        ';
+
+        $systemMailProfile = commonMailGetProjectMailProfile($connect);
+        $systemMailFrom = isset($systemMailProfile['company_email']) ? (string) $systemMailProfile['company_email'] : '';
+        commonSendSystemEmail($connect, $to, $subject, $message, array(
+            'from_email' => $systemMailFrom,
+            'text_content' => "Your BeYourDiary account password has been changed successfully.\n\nIf you did not make this change, please contact support immediately.",
+            'auto_submitted' => true,
+        ));
         ob_get_clean();
     }
 } else {

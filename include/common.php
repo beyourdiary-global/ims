@@ -56,6 +56,363 @@ function isEmail($str)
 	return preg_match("/^[_a-zA-Z0-9-]+(\.[_a-zA-Z0-9-]+)*@[a-zA-Z0-9-]+(\.[a-zA-Z0-9-]+)*(\.[a-zA-Z]{2,})$/", $str);
 }
 
+if (!function_exists('commonMailGetEnvValue')) {
+	function commonMailGetEnvValue($key)
+	{
+		$key = trim((string) $key);
+		if ($key === '') {
+			return '';
+		}
+
+		$value = getenv($key);
+		if ($value !== false && !is_array($value)) {
+			return trim((string) $value);
+		}
+
+		if (isset($_SERVER[$key]) && !is_array($_SERVER[$key])) {
+			return trim((string) $_SERVER[$key]);
+		}
+
+		if (isset($_ENV[$key]) && !is_array($_ENV[$key])) {
+			return trim((string) $_ENV[$key]);
+		}
+
+		return '';
+	}
+}
+
+if (!function_exists('commonMailExtractDomain')) {
+	function commonMailExtractDomain($emailOrHost)
+	{
+		$emailOrHost = strtolower(trim((string) $emailOrHost));
+		if ($emailOrHost === '') {
+			return '';
+		}
+
+		if (strpos($emailOrHost, '@') !== false) {
+			$parts = explode('@', $emailOrHost);
+			$emailOrHost = (string) end($parts);
+		}
+
+		$emailOrHost = preg_replace('/:\d+$/', '', $emailOrHost);
+		$emailOrHost = trim((string) $emailOrHost, '.');
+		return $emailOrHost;
+	}
+}
+
+if (!function_exists('commonMailGetRegistrableDomain')) {
+	function commonMailGetRegistrableDomain($domain)
+	{
+		$domain = commonMailExtractDomain($domain);
+		if ($domain === '' || filter_var($domain, FILTER_VALIDATE_IP)) {
+			return $domain;
+		}
+
+		$parts = array_values(array_filter(explode('.', $domain), 'strlen'));
+		$totalParts = count($parts);
+		if ($totalParts < 2) {
+			return $domain;
+		}
+
+		return $parts[$totalParts - 2] . '.' . $parts[$totalParts - 1];
+	}
+}
+
+if (!function_exists('commonMailDomainsAlign')) {
+	function commonMailDomainsAlign($leftDomain, $rightDomain)
+	{
+		$leftDomain = commonMailGetRegistrableDomain($leftDomain);
+		$rightDomain = commonMailGetRegistrableDomain($rightDomain);
+
+		return $leftDomain !== '' && $rightDomain !== '' && $leftDomain === $rightDomain;
+	}
+}
+
+if (!function_exists('commonMailIsPublicMailboxDomain')) {
+	function commonMailIsPublicMailboxDomain($domain)
+	{
+		$domain = commonMailExtractDomain($domain);
+		return in_array($domain, array(
+			'gmail.com',
+			'googlemail.com',
+			'yahoo.com',
+			'yahoo.com.my',
+			'hotmail.com',
+			'outlook.com',
+			'live.com',
+			'msn.com',
+			'icloud.com',
+			'me.com',
+			'aol.com',
+		), true);
+	}
+}
+
+if (!function_exists('commonMailEncodeHeader')) {
+	function commonMailEncodeHeader($value)
+	{
+		$value = trim((string) $value);
+		if ($value === '') {
+			return '';
+		}
+
+		if (function_exists('mb_encode_mimeheader')) {
+			return mb_encode_mimeheader($value, 'UTF-8', 'B', "\r\n");
+		}
+
+		return $value;
+	}
+}
+
+if (!function_exists('commonMailFormatAddress')) {
+	function commonMailFormatAddress($name, $email)
+	{
+		$email = trim((string) $email);
+		if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+			return '';
+		}
+
+		$name = trim((string) $name);
+		if ($name === '') {
+			return $email;
+		}
+
+		$name = str_replace(array("\r", "\n", '"'), array('', '', "'"), $name);
+		return '"' . commonMailEncodeHeader($name) . '" <' . $email . '>';
+	}
+}
+
+if (!function_exists('commonMailBuildTextContent')) {
+	function commonMailBuildTextContent($htmlContent)
+	{
+		$htmlContent = (string) $htmlContent;
+		if ($htmlContent === '') {
+			return '';
+		}
+
+		$lineBreakTags = array('</p>', '</div>', '</tr>', '</table>', '</li>', '<br>', '<br/>', '<br />');
+		$htmlContent = str_ireplace($lineBreakTags, "\n", $htmlContent);
+		$textContent = strip_tags($htmlContent);
+		$textContent = html_entity_decode($textContent, ENT_QUOTES, 'UTF-8');
+		$textContent = preg_replace("/\r\n|\r/u", "\n", $textContent);
+		$textContent = preg_replace("/[ \t]+\n/u", "\n", $textContent);
+		$textContent = preg_replace("/\n{3,}/u", "\n\n", $textContent);
+		return trim((string) $textContent);
+	}
+}
+
+if (!function_exists('commonMailGetProjectMailProfile')) {
+	function commonMailGetProjectMailProfile($connect)
+	{
+		static $profiles = array();
+
+		$cacheKey = 'default';
+		if ($connect instanceof mysqli) {
+			$cacheKey = (string) spl_object_hash($connect);
+		}
+
+		if (isset($profiles[$cacheKey])) {
+			return $profiles[$cacheKey];
+		}
+
+		$profile = array(
+			'company_name' => 'BeYourDiary',
+			'company_email' => '',
+		);
+
+		if ($connect instanceof mysqli && defined('PROJ')) {
+			$result = getData('*', "id = '1'", '', PROJ, $connect);
+			if ($result != false) {
+				$row = $result->fetch_assoc();
+				if (isset($row['company_name']) && trim((string) $row['company_name']) !== '') {
+					$profile['company_name'] = trim((string) $row['company_name']);
+				}
+				if (isset($row['company_email']) && filter_var((string) $row['company_email'], FILTER_VALIDATE_EMAIL)) {
+					$profile['company_email'] = trim((string) $row['company_email']);
+				}
+			}
+		}
+
+		$profiles[$cacheKey] = $profile;
+		return $profile;
+	}
+}
+
+if (!function_exists('commonMailGetSystemSenderDomain')) {
+	function commonMailGetSystemSenderDomain($connect)
+	{
+		$envFromAddress = commonMailGetEnvValue('IMS_MAIL_FROM_ADDRESS');
+		if (filter_var($envFromAddress, FILTER_VALIDATE_EMAIL)) {
+			$envDomain = commonMailGetRegistrableDomain($envFromAddress);
+			if ($envDomain !== '') {
+				return $envDomain;
+			}
+		}
+
+		$siteHost = (string) parse_url(SITEURL, PHP_URL_HOST);
+		$siteDomain = commonMailGetRegistrableDomain($siteHost);
+		if ($siteDomain !== '' && $siteDomain !== 'localhost') {
+			return $siteDomain;
+		}
+
+		$emailCc = defined('email_cc') ? trim((string) email_cc) : '';
+		if (filter_var($emailCc, FILTER_VALIDATE_EMAIL)) {
+			$ccDomain = commonMailGetRegistrableDomain($emailCc);
+			if ($ccDomain !== '') {
+				return $ccDomain;
+			}
+		}
+
+		$profile = commonMailGetProjectMailProfile($connect);
+		if (!empty($profile['company_email'])) {
+			$companyDomain = commonMailGetRegistrableDomain($profile['company_email']);
+			if ($companyDomain !== '') {
+				return $companyDomain;
+			}
+		}
+
+		return 'beyourdiary.com';
+	}
+}
+
+if (!function_exists('commonMailResolveSenderProfile')) {
+	function commonMailResolveSenderProfile($connect, $preferredFromEmail = '', $preferredReplyToEmail = '', $preferredFromName = '')
+	{
+		$profile = commonMailGetProjectMailProfile($connect);
+		$systemDomain = commonMailGetSystemSenderDomain($connect);
+
+		$envFromAddress = commonMailGetEnvValue('IMS_MAIL_FROM_ADDRESS');
+		$envFromName = commonMailGetEnvValue('IMS_MAIL_FROM_NAME');
+		$envReplyTo = commonMailGetEnvValue('IMS_MAIL_REPLY_TO_ADDRESS');
+
+		$fromName = trim((string) $preferredFromName);
+		if ($fromName === '') {
+			$fromName = $envFromName !== '' ? $envFromName : (string) $profile['company_name'];
+		}
+		if ($fromName === '') {
+			$fromName = 'BeYourDiary';
+		}
+
+		$defaultFromEmail = 'no-reply@' . $systemDomain;
+		if (filter_var($envFromAddress, FILTER_VALIDATE_EMAIL)) {
+			$defaultFromEmail = trim((string) $envFromAddress);
+		}
+
+		$replyToEmail = trim((string) $preferredReplyToEmail);
+		if (!filter_var($replyToEmail, FILTER_VALIDATE_EMAIL)) {
+			$replyToEmail = trim((string) $preferredFromEmail);
+		}
+		if (!filter_var($replyToEmail, FILTER_VALIDATE_EMAIL)) {
+			$replyToEmail = $envReplyTo;
+		}
+		if (!filter_var($replyToEmail, FILTER_VALIDATE_EMAIL) && !empty($profile['company_email'])) {
+			$replyToEmail = (string) $profile['company_email'];
+		}
+
+		$candidateFromEmail = trim((string) $preferredFromEmail);
+		if (!filter_var($candidateFromEmail, FILTER_VALIDATE_EMAIL) && !empty($profile['company_email'])) {
+			$candidateFromEmail = (string) $profile['company_email'];
+		}
+		if (!filter_var($candidateFromEmail, FILTER_VALIDATE_EMAIL) && filter_var($envFromAddress, FILTER_VALIDATE_EMAIL)) {
+			$candidateFromEmail = trim((string) $envFromAddress);
+		}
+
+		$fromEmail = $defaultFromEmail;
+		if (filter_var($candidateFromEmail, FILTER_VALIDATE_EMAIL)) {
+			$candidateDomain = commonMailExtractDomain($candidateFromEmail);
+			if (
+				!commonMailIsPublicMailboxDomain($candidateDomain)
+				&& commonMailDomainsAlign($candidateDomain, $systemDomain)
+			) {
+				$fromEmail = $candidateFromEmail;
+			}
+		}
+
+		if (!filter_var($replyToEmail, FILTER_VALIDATE_EMAIL)) {
+			$replyToEmail = $fromEmail;
+		}
+
+		return array(
+			'from_name' => $fromName,
+			'from_email' => $fromEmail,
+			'reply_to_email' => $replyToEmail,
+			'message_id_domain' => commonMailGetRegistrableDomain($fromEmail) !== '' ? commonMailGetRegistrableDomain($fromEmail) : $systemDomain,
+		);
+	}
+}
+
+if (!function_exists('commonSendSystemEmail')) {
+	function commonSendSystemEmail($connect, $toEmail, $subject, $htmlContent, $options = array())
+	{
+		$toEmail = trim((string) $toEmail);
+		$subject = trim((string) $subject);
+		$htmlContent = (string) $htmlContent;
+		$options = is_array($options) ? $options : array();
+
+		if (!filter_var($toEmail, FILTER_VALIDATE_EMAIL) || $subject === '' || $htmlContent === '') {
+			return false;
+		}
+
+		$senderProfile = commonMailResolveSenderProfile(
+			$connect,
+			isset($options['from_email']) ? (string) $options['from_email'] : '',
+			isset($options['reply_to_email']) ? (string) $options['reply_to_email'] : '',
+			isset($options['from_name']) ? (string) $options['from_name'] : ''
+		);
+
+		$textContent = isset($options['text_content']) ? trim((string) $options['text_content']) : '';
+		if ($textContent === '') {
+			$textContent = commonMailBuildTextContent($htmlContent);
+		}
+		if ($textContent === '') {
+			$textContent = trim(strip_tags($subject));
+		}
+
+		$boundary = '=_IMS_' . md5(uniqid((string) mt_rand(), true));
+		$messageIdDomain = trim((string) $senderProfile['message_id_domain']);
+		if ($messageIdDomain === '') {
+			$messageIdDomain = 'beyourdiary.com';
+		}
+
+		$headers = array();
+		$headers[] = 'MIME-Version: 1.0';
+		$headers[] = 'Date: ' . date(DATE_RFC2822);
+		$headers[] = 'Message-ID: <' . md5(uniqid((string) mt_rand(), true)) . '@' . $messageIdDomain . '>';
+		$headers[] = 'From: ' . commonMailFormatAddress($senderProfile['from_name'], $senderProfile['from_email']);
+		$headers[] = 'Reply-To: ' . $senderProfile['reply_to_email'];
+		$headers[] = 'Sender: ' . $senderProfile['from_email'];
+		if (!empty($options['auto_submitted'])) {
+			$headers[] = 'Auto-Submitted: auto-generated';
+		}
+		$headers[] = 'Content-Type: multipart/alternative; boundary="' . $boundary . '"';
+
+		$body = '';
+		$body .= '--' . $boundary . "\r\n";
+		$body .= "Content-Type: text/plain; charset=UTF-8\r\n";
+		$body .= "Content-Transfer-Encoding: base64\r\n\r\n";
+		$body .= chunk_split(base64_encode($textContent));
+		$body .= '--' . $boundary . "\r\n";
+		$body .= "Content-Type: text/html; charset=UTF-8\r\n";
+		$body .= "Content-Transfer-Encoding: base64\r\n\r\n";
+		$body .= chunk_split(base64_encode($htmlContent));
+		$body .= '--' . $boundary . "--\r\n";
+
+		$encodedSubject = commonMailEncodeHeader($subject);
+		$headerStr = implode("\r\n", $headers);
+		$envelopeFrom = trim((string) $senderProfile['from_email']);
+		$extraParams = '';
+		if ($envelopeFrom !== '' && stripos(PHP_OS, 'WIN') !== 0) {
+			$extraParams = '-f' . $envelopeFrom;
+		}
+
+		if ($extraParams !== '') {
+			return @mail($toEmail, $encodedSubject, $body, $headerStr, $extraParams);
+		}
+
+		return @mail($toEmail, $encodedSubject, $body, $headerStr);
+	}
+}
+
 function getSelfUrl()
 {
 	$s = isset($_SERVER['HTTP_X_FORWARDED_PROTO']) && strtolower($_SERVER['HTTP_X_FORWARDED_PROTO']) == 'https' ? 's' : (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] == 'on' ? 's' : '');
