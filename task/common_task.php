@@ -7251,6 +7251,16 @@ if (!function_exists('taskRenderCard')) {
             $statusLabelIds = taskParseCsvIdList(isset($taskItem['task_status']) ? $taskItem['task_status'] : '');
         }
         $statusLabelActionText = !empty($statusLabelIds) ? 'Edit task status labels' : 'Add task status labels';
+        $priorityIconHtml = '<span class="task-priority-medium-icon" aria-hidden="true"></span>';
+        if ($priority === 'Highest') {
+            $priorityIconHtml = '<i class="fa-solid fa-angles-up task-priority-highest" aria-hidden="true"></i>';
+        } elseif ($priority === 'High') {
+            $priorityIconHtml = '<i class="fa-solid fa-angle-up task-priority-high" aria-hidden="true"></i>';
+        } elseif ($priority === 'Low') {
+            $priorityIconHtml = '<i class="fa-solid fa-angle-down task-priority-low" aria-hidden="true"></i>';
+        } elseif ($priority === 'Lowest') {
+            $priorityIconHtml = '<i class="fa-solid fa-angles-down task-priority-lowest" aria-hidden="true"></i>';
+        }
 
         echo '<article class="task-item-card" data-item-id="' . (int) $taskItem['id'] . '" data-label-ids="' . htmlspecialchars(implode(',', $labelIds), ENT_QUOTES, 'UTF-8') . '" data-assignee-user-id="' . $assigneeUserId . '" data-assignee-name="' . htmlspecialchars($assigneeName, ENT_QUOTES, 'UTF-8') . '" data-reporter-user-id="' . $reporterUserId . '" data-reporter-name="' . htmlspecialchars($reporterName, ENT_QUOTES, 'UTF-8') . '" data-priority="' . htmlspecialchars($priority, ENT_QUOTES, 'UTF-8') . '" data-start-date="' . htmlspecialchars($startDate, ENT_QUOTES, 'UTF-8') . '" data-due-date="' . htmlspecialchars($dueDate, ENT_QUOTES, 'UTF-8') . '" data-create-date="' . htmlspecialchars($createDate, ENT_QUOTES, 'UTF-8') . '" data-update-date="' . htmlspecialchars($updateDate, ENT_QUOTES, 'UTF-8') . '" data-original-estimate-value="' . $estimateValue . '" data-original-estimate-unit="' . htmlspecialchars($estimateUnit, ENT_QUOTES, 'UTF-8') . '" data-amendement-date="' . htmlspecialchars($amendementDate, ENT_QUOTES, 'UTF-8') . '" data-amendement-time-minutes="' . $amendementTimeMinutes . '" data-second-amendement-date="' . htmlspecialchars($secondAmendementDate, ENT_QUOTES, 'UTF-8') . '" data-second-amendement-time-minutes="' . $secondAmendementTimeMinutes . '" data-work-type-id="' . (int) (isset($taskItem['work_type_id']) ? $taskItem['work_type_id'] : 0) . '" data-work-type-icon="' . htmlspecialchars($workTypeIcon, ENT_QUOTES, 'UTF-8') . '" data-item-description="' . htmlspecialchars($description, ENT_QUOTES, 'UTF-8') . '" data-work-type-name="' . htmlspecialchars($workTypeName, ENT_QUOTES, 'UTF-8') . '" data-work-item-key="' . htmlspecialchars($workItemKey, ENT_QUOTES, 'UTF-8') . '" data-parent-item-id="' . $parentItemId . '" data-parent-display="' . htmlspecialchars($parentDisplay, ENT_QUOTES, 'UTF-8') . '" data-task-status-label-ids="' . htmlspecialchars(implode(',', $statusLabelIds), ENT_QUOTES, 'UTF-8') . '" draggable="true">';
         echo '<div class="task-item-head">';
@@ -7278,11 +7288,14 @@ if (!function_exists('taskRenderCard')) {
             echo '</div>';
         }
 
+        echo '<div class="task-item-field-list"></div>';
         echo '<div class="task-item-meta">';
         echo '<div class="task-item-meta-left">';
         echo '<span class="task-type-icon" title="' . htmlspecialchars($workTypeName, ENT_QUOTES, 'UTF-8') . '"><img class="task-type-pill-icon" src="' . htmlspecialchars($workTypeIcon, ENT_QUOTES, 'UTF-8') . '" alt=""></span>';
         echo '<span class="task-item-key' . ($workItemKey === '' ? ' d-none' : '') . '">' . htmlspecialchars($workItemKey, ENT_QUOTES, 'UTF-8') . '</span>';
         echo '</div>';
+        echo '<div class="task-item-meta-right">';
+        echo '<span class="task-item-priority-wrap">' . $priorityIconHtml . '</span>';
         if ($canEdit) {
             echo '<div class="dropdown task-item-assignee-wrap">';
             echo '  <button class="btn task-assignee-pill task-item-assignee-btn dropdown-toggle' . ($assigneeUserId <= 0 ? ' task-assignee-pill-unassigned' : '') . '" type="button" data-bs-toggle="dropdown" aria-expanded="false" data-user-id="' . $assigneeUserId . '" title="' . htmlspecialchars($assigneeDisplay, ENT_QUOTES, 'UTF-8') . '">';
@@ -7306,9 +7319,7 @@ if (!function_exists('taskRenderCard')) {
             echo '</span>';
         }
         echo '</div>';
-        if ($dueDate !== '') {
-            echo '<small class="task-item-due-date">Due: ' . htmlspecialchars($dueDate, ENT_QUOTES, 'UTF-8') . '</small>';
-        }
+        echo '</div>';
         echo '</article>';
     }
 }
