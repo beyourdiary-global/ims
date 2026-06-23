@@ -43,6 +43,7 @@ $act = !empty(input('act')) ? input('act') : post('act');
 $actionBtnValue = ($act === 'I') ? 'addData' : 'updData';
 
 $redirectPage = $SITEURL . '/settings/token_setting_table.php';
+$tokenSettingGuideBaseUrl = $SITEURL . '/images_server/token_setting_guide';
 $redirectLink = "<script>location.href = '$redirectPage';</script>";
 $clearLocalStorage = '<script>localStorage.clear();</script>';
 
@@ -399,12 +400,12 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                             <ol class="token-help-steps">
                                 <li>
                                     Open <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer">@BotFather</a>, then send <strong>/start</strong>.<br>
-                                    <img class="token-help-media mt-2" src="<?= $SITEURL ?>/images_server/settings/token_setting_guide/bot_token_step1.png" alt="BotFather start and command list">
+                                    <img class="token-help-media mt-2" src="<?= $tokenSettingGuideBaseUrl ?>/bot_token_step1.png" alt="BotFather start and command list">
                                 </li>
                                 <li>Send <strong>/newbot</strong> and enter your bot display name when BotFather asks.</li>
                                 <li>
                                     Enter a username that ends with <strong>bot</strong> (for example: <code>testing_0406_bot</code>).<br>
-                                    <img class="token-help-media mt-2" src="<?= $SITEURL ?>/images_server/settings/token_setting_guide/bot_token_step2.png" alt="BotFather new bot token message">
+                                    <img class="token-help-media mt-2" src="<?= $tokenSettingGuideBaseUrl ?>/bot_token_step2.png" alt="BotFather new bot token message">
                                 </li>
                                 <li>From the success message, copy the HTTP API token and paste it into the Bot Token field.</li>
                             </ol>
@@ -415,17 +416,17 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                             <ol class="token-help-steps">
                                 <li>
                                     Open your created bot chat and send <strong>/start</strong> once.<br>
-                                    <img class="token-help-media mt-2" src="<?= $SITEURL ?>/images_server/settings/token_setting_guide/chat_id_step1.png" alt="Telegram bot chat with start command">
+                                    <img class="token-help-media mt-2" src="<?= $tokenSettingGuideBaseUrl ?>/chat_id_step1.png" alt="Telegram bot chat with start command">
                                 </li>
                                 <li>Open this URL in browser (replace with your bot token):<br><code><?= TELEGRAM_API ?>&lt;YOUR_BOT_TOKEN&gt;/getUpdates</code></li>
                                 <li>
                                     In the JSON response, find <code>message</code> -&gt; <code>chat</code> -&gt; <code>id</code>.<br>
-                                    <img class="token-help-media mt-2" src="<?= $SITEURL ?>/images_server/settings/token_setting_guide/chat_id_step2.png" alt="Telegram getUpdates response with chat id">
+                                    <img class="token-help-media mt-2" src="<?= $tokenSettingGuideBaseUrl ?>/chat_id_step2.png" alt="Telegram getUpdates response with chat id">
                                 </li>
                                 <li>
                                     For a group chat, add your bot into the Telegram group first, then check the same <code>message</code> -&gt; <code>chat</code> -&gt; <code>id</code> value.
                                     Group chat IDs are usually negative numbers.<br>
-                                    <img class="token-help-media mt-2" src="<?= $SITEURL ?>/images_server/settings/token_setting_guide/chat_id_step3.png" alt="Telegram group chat id example from getUpdates response">
+                                    <img class="token-help-media mt-2" src="<?= $tokenSettingGuideBaseUrl ?>/chat_id_step3.png" alt="Telegram group chat id example from getUpdates response">
                                 </li>
                                 <li>Copy that numeric value (example: <code>1064420282</code> or group chat <code>-5185979975</code>) and paste it into Chat ID.</li>
                             </ol>
