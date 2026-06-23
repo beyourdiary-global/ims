@@ -8,36 +8,12 @@ include_once ROOT . '/include/common.php';
 if (!function_exists('shopeeOmsSendMail')) {
     function shopeeOmsSendMail($toEmail, $subject, $message, $fromEmail = '')
     {
-        $toEmail = trim((string) $toEmail);
-        $subject = (string) $subject;
-        $message = (string) $message;
+        global $connect;
 
-        $host = (string) parse_url(SITEURL, PHP_URL_HOST);
-        $baseHost = preg_replace('/^www\./i', '', $host);
-        $fallbackSender = 'noreply@' . ($baseHost !== '' ? $baseHost : 'beyourdiary.com');
-
-        $fromEmail = trim((string) $fromEmail);
-        if (!filter_var($fromEmail, FILTER_VALIDATE_EMAIL)) {
-            $fromEmail = $fallbackSender;
-        }
-
-        $headers = array();
-        $headers[] = 'MIME-Version: 1.0';
-        $headers[] = 'Content-type: text/html; charset=utf-8';
-        $headers[] = 'From: BeYourDiary <' . $fromEmail . '>';
-        $headers[] = 'Reply-To: ' . $fromEmail;
-        $headers[] = 'Return-Path: ' . $fromEmail;
-        $headers[] = 'Date: ' . date(DATE_RFC2822);
-        $headers[] = 'Message-ID: <' . md5(uniqid((string) mt_rand(), true)) . '@' . ($baseHost !== '' ? $baseHost : 'beyourdiary.com') . '>';
-        $headers[] = 'X-Mailer: PHP/' . phpversion();
-
-        $headerStr = implode("\r\n", $headers);
-        $sent = @mail($toEmail, $subject, $message, $headerStr);
-        if (!$sent) {
-            $sent = @mail($toEmail, $subject, $message, $headerStr, '-f' . $fromEmail);
-        }
-
-        return $sent;
+        return commonSendSystemEmail($connect, $toEmail, $subject, $message, array(
+            'from_email' => $fromEmail,
+            'auto_submitted' => true,
+        ));
     }
 }
 
