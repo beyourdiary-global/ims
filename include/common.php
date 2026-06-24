@@ -5270,6 +5270,79 @@ if (!function_exists('shopeeOmsGetStatusLabel')) {
     }
 }
 
+if (!function_exists('shopeeOmsGetTransitionStatusLabel')) {
+    function shopeeOmsGetTransitionStatusLabel($status, $direction = 'from')
+    {
+        $status = trim((string) $status);
+        $direction = strtolower(trim((string) $direction));
+
+        if ($status === '' && $direction === 'from') {
+            return 'New Order';
+        }
+
+        return shopeeOmsGetStatusLabel($status);
+    }
+}
+
+if (!function_exists('shopeeOmsGetStatusFlowSortOrder')) {
+    function shopeeOmsGetStatusFlowSortOrder($status, $direction = 'from')
+    {
+        static $flowOrder = array(
+            '' => 0,
+            'P' => 1,
+            'TP' => 2,
+            'SP' => 3,
+            'WAERD' => 4,
+            'WR' => 5,
+            'PD' => 6,
+            'PR' => 7,
+            'WAFC' => 8,
+            'V' => 9,
+            'C' => 10,
+            'R' => 11,
+            'CR' => 12,
+        );
+
+        $statusCode = shopeeOmsNormalizeStatusCode($status);
+        if ($statusCode === '' && strtolower(trim((string) $direction)) !== 'from') {
+            return 999;
+        }
+
+        if (isset($flowOrder[$statusCode])) {
+            return (int) $flowOrder[$statusCode];
+        }
+
+        return 1000;
+    }
+}
+
+if (!function_exists('shopeeOmsCompareDailyFlowSummaryRows')) {
+    function shopeeOmsCompareDailyFlowSummaryRows($a, $b)
+    {
+        $platformCompare = strcmp((string) ($a['platform_label'] ?? ''), (string) ($b['platform_label'] ?? ''));
+        if ($platformCompare !== 0) {
+            return $platformCompare;
+        }
+
+        $fromCompare = shopeeOmsGetStatusFlowSortOrder($a['from_status'] ?? '', 'from') <=> shopeeOmsGetStatusFlowSortOrder($b['from_status'] ?? '', 'from');
+        if ($fromCompare !== 0) {
+            return $fromCompare;
+        }
+
+        $toCompare = shopeeOmsGetStatusFlowSortOrder($a['to_status'] ?? '', 'to') <=> shopeeOmsGetStatusFlowSortOrder($b['to_status'] ?? '', 'to');
+        if ($toCompare !== 0) {
+            return $toCompare;
+        }
+
+        $lastTransitionCompare = strcmp((string) ($b['last_transition_time'] ?? ''), (string) ($a['last_transition_time'] ?? ''));
+        if ($lastTransitionCompare !== 0) {
+            return $lastTransitionCompare;
+        }
+
+        return strcmp((string) ($a['transition_key'] ?? ''), (string) ($b['transition_key'] ?? ''));
+    }
+}
+
 if (!function_exists('shopeeOmsGetMarketplaceStatusLabel')) {
     function shopeeOmsGetMarketplaceStatusLabel($status)
     {
@@ -9423,8 +9496,8 @@ if (!function_exists('shopeeOmsGetDailyFlowReport')) {
                         'platform_label' => isset($sourceConfig['label']) ? (string) $sourceConfig['label'] : ucfirst($sourcePlatform),
                         'from_status' => isset($row['from_status']) ? (string) $row['from_status'] : '',
                         'to_status' => isset($row['to_status']) ? (string) $row['to_status'] : '',
-                        'from_label' => shopeeOmsGetStatusLabel(isset($row['from_status']) ? $row['from_status'] : ''),
-                        'to_label' => shopeeOmsGetStatusLabel(isset($row['to_status']) ? $row['to_status'] : ''),
+                        'from_label' => shopeeOmsGetTransitionStatusLabel(isset($row['from_status']) ? $row['from_status'] : '', 'from'),
+                        'to_label' => shopeeOmsGetTransitionStatusLabel(isset($row['to_status']) ? $row['to_status'] : '', 'to'),
                         'total_count' => isset($row['total_count']) ? (int) $row['total_count'] : 0,
                         'last_transition_time' => isset($row['last_transition_time']) ? (string) $row['last_transition_time'] : '',
                     );
@@ -9450,19 +9523,7 @@ if (!function_exists('shopeeOmsGetDailyFlowReport')) {
             }
         }
 
-        usort($summary, function ($a, $b) {
-            $countDiff = (int) ($b['total_count'] ?? 0) <=> (int) ($a['total_count'] ?? 0);
-            if ($countDiff !== 0) {
-                return $countDiff;
-            }
-
-            $platformCompare = strcmp((string) ($a['platform_label'] ?? ''), (string) ($b['platform_label'] ?? ''));
-            if ($platformCompare !== 0) {
-                return $platformCompare;
-            }
-
-            return strcmp((string) ($a['transition_key'] ?? ''), (string) ($b['transition_key'] ?? ''));
-        });
+        usort($summary, 'shopeeOmsCompareDailyFlowSummaryRows');
 
         return array(
             'summary' => $summary,
