@@ -704,6 +704,21 @@ body.task-global-sidebar-open #dispTable {
   margin: auto;
 }
 
+@media (max-width: 767px) {
+  /* Cancel the preview wrapper's extra mobile padding while keeping form gutters aligned. */
+  #sor_airbill_attachment_preview_wrap {
+    width: calc(100% + 3rem) !important;
+    max-width: none !important;
+    margin-left: -1.5rem;
+    margin-right: -1.5rem;
+  }
+
+  #sor_airbill_attachment_preview_wrap img,
+  #sor_airbill_attachment_preview_wrap iframe {
+    display: block;
+  }
+}
+
 .hideColumn {
   display: none;
 }
