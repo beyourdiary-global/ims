@@ -37,43 +37,6 @@ if (!function_exists('fpBuildResetToken')) {
     }
 }
 
-if (!function_exists('fpSendMailFallback')) {
-    function fpSendMailFallback($toEmail, $subject, $htmlContent, $fromEmail = '')
-    {
-        $toEmail = trim((string) $toEmail);
-        $subject = (string) $subject;
-        $htmlContent = (string) $htmlContent;
-
-        $host = (string) parse_url(SITEURL, PHP_URL_HOST);
-        $baseHost = preg_replace('/^www\./i', '', $host);
-        $fallbackSender = 'noreply@' . ($baseHost !== '' ? $baseHost : 'beyourdiary.com');
-
-        $fromEmail = trim((string) $fromEmail);
-        if (!filter_var($fromEmail, FILTER_VALIDATE_EMAIL)) {
-            $fromEmail = $fallbackSender;
-        }
-
-        $headers = array();
-        $headers[] = 'MIME-Version: 1.0';
-        $headers[] = 'Content-type: text/html; charset=utf-8';
-        $headers[] = 'From: BeYourDiary <' . $fromEmail . '>';
-        $headers[] = 'Reply-To: ' . $fromEmail;
-        $headers[] = 'Return-Path: ' . $fromEmail;
-        $headers[] = 'Date: ' . date(DATE_RFC2822);
-        $headers[] = 'Message-ID: <' . md5(uniqid((string) mt_rand(), true)) . '@' . ($baseHost !== '' ? $baseHost : 'beyourdiary.com') . '>';
-        $headers[] = 'X-Mailer: PHP/' . phpversion();
-
-        $headerStr = implode("\r\n", $headers);
-
-        $sent = @mail($toEmail, $subject, $htmlContent, $headerStr);
-        if (!$sent) {
-            $sent = @mail($toEmail, $subject, $htmlContent, $headerStr, '-f' . $fromEmail);
-        }
-
-        return $sent;
-    }
-}
-
 if ($resetpass_btn == 1) {
     header('Content-Type: application/json; charset=utf-8');
 
@@ -110,7 +73,7 @@ if ($resetpass_btn == 1) {
         $token = fpBuildResetToken($to, $pwdHash, $expiresTs);
         $resetUrl = $SITEURL . '/changePassword.php?token=' . urlencode($token) . '&email=' . urlencode($to);
 
-        $subject = 'Request Reset Password';
+        $subject = 'Reset your BeYourDiary password';
         $message = '
             <html>
                 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
@@ -127,7 +90,7 @@ if ($resetpass_btn == 1) {
                     <table class="header" style="border-spacing: 0;width: 100%;">
                         <tr>
                             <td class="logo" align="center" style="padding: 0;">
-                            <img src="' . ($dataExisted ? $img_path . $row['meta_logo'] : '.img/byd_logo.') . '" style="border: 0;">;
+                            <img src="' . ($dataExisted ? $img_path . $row['meta_logo'] : '.img/byd_logo.') . '" style="border: 0;">
                             </td>
                         </tr>
                     </table> <!-- End Header -->
@@ -166,11 +129,23 @@ if ($resetpass_btn == 1) {
             $systemMailFrom = (string) $row['company_email'];
         }
 
-        $emailToUser = fpSendMailFallback($to, $subject, $message, $systemMailFrom);
+        $textMessage = "Hi " . $name . ",\n\n"
+            . "We received a request to reset the password for your account (" . $to . ").\n"
+            . "Use the link below within 24 hours:\n" . $resetUrl . "\n\n"
+            . "If you did not request this, you can ignore this email.";
+
+        $emailToUser = commonSendSystemEmail($connect, $to, $subject, $message, array(
+            'from_email' => $systemMailFrom,
+            'text_content' => $textMessage,
+        ));
 
         // Admin copy is best-effort and should not block user flow.
-        $adminMsg = 'Username: ' . $name . "\r\n" . 'Email: ' . $to;
-        @mail(trim((string) email_cc), 'User Request Reset Password Action', $adminMsg);
+        $adminMsg = 'Username: ' . $name . "\nEmail: " . $to;
+        commonSendSystemEmail($connect, trim((string) email_cc), 'User requested a password reset', nl2br(htmlspecialchars($adminMsg, ENT_QUOTES, 'UTF-8')), array(
+            'from_email' => $systemMailFrom,
+            'text_content' => $adminMsg,
+            'auto_submitted' => true,
+        ));
 
         if ($emailToUser) {
             $response['status'] = 'success';

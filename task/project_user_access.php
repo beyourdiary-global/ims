@@ -958,6 +958,25 @@ asort($userGroupOptions, SORT_NATURAL | SORT_FLAG_CASE);
                                         </button>
                                     <?php endforeach; ?>
                                 </div>
+                                <div class="project-access-column-bulk-wrap">
+                                    <span class="project-access-column-bulk-title">Select all column access:</span>
+                                    <label class="project-access-column-bulk-option">
+                                        <input class="form-check-input project-access-checkbox project-access-column-bulk-toggle" type="checkbox" data-column-bulk-action="add">
+                                        <span>Select all add</span>
+                                    </label>
+                                    <label class="project-access-column-bulk-option">
+                                        <input class="form-check-input project-access-checkbox project-access-column-bulk-toggle" type="checkbox" data-column-bulk-action="edit">
+                                        <span>Select all edit</span>
+                                    </label>
+                                    <label class="project-access-column-bulk-option">
+                                        <input class="form-check-input project-access-checkbox project-access-column-bulk-toggle" type="checkbox" data-column-bulk-action="delete">
+                                        <span>Select all delete</span>
+                                    </label>
+                                    <label class="project-access-column-bulk-option">
+                                        <input class="form-check-input project-access-checkbox project-access-column-bulk-toggle" type="checkbox" data-column-bulk-action="access">
+                                        <span>Select all access</span>
+                                    </label>
+                                </div>
                                 <div class="project-access-table-wrap">
                                     <table class="project-access-table">
                                         <thead>

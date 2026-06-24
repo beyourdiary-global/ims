@@ -465,8 +465,19 @@ var boardGroupCookieName =
   String(currentUserId > 0 ? currentUserId : 0) +
   "_project_" +
   String(boardProjectId > 0 ? boardProjectId : 0);
+var boardZoomStorageKeyPrefix = "task_board_zoom_v1_user_";
+var boardZoomStorageKey =
+  boardZoomStorageKeyPrefix +
+  String(currentUserId > 0 ? currentUserId : 0) +
+  "_project_" +
+  String(boardProjectId > 0 ? boardProjectId : 0);
+var boardZoomDefault = 90;
+var boardZoomMin = 50;
+var boardZoomMax = 120;
+var boardZoomStep = 1;
 var boardGroupBy = "status";
 var boardStatusColumns = [];
+var boardZoomPercent = boardZoomDefault;
 
 var boardViewFieldDefaults = {
   work_item_key: true,
@@ -2443,6 +2454,42 @@ function loadBoardViewFieldsFromCookie() {
   }
 }
 
+function normalizeBoardZoomPercent(value) {
+  var percent = Number(value || 0);
+  if (!isFinite(percent) || percent <= 0) {
+    percent = boardZoomDefault;
+  }
+
+  percent = Math.round(percent);
+  if (percent < boardZoomMin) {
+    percent = boardZoomMin;
+  }
+  if (percent > boardZoomMax) {
+    percent = boardZoomMax;
+  }
+
+  return percent;
+}
+
+function saveBoardZoomToStorage() {
+  try {
+    window.localStorage.setItem(
+      boardZoomStorageKey,
+      String(normalizeBoardZoomPercent(boardZoomPercent)),
+    );
+  } catch (e) {}
+}
+
+function loadBoardZoomFromStorage() {
+  try {
+    boardZoomPercent = normalizeBoardZoomPercent(
+      window.localStorage.getItem(boardZoomStorageKey),
+    );
+  } catch (e) {
+    boardZoomPercent = boardZoomDefault;
+  }
+}
+
 function normalizeBoardGroupBy(value) {
   var mode = String(value || "status")
     .trim()
@@ -2770,6 +2817,56 @@ function syncBoardViewSettingsCheckboxes() {
 
     $(this).prop("checked", isBoardViewFieldEnabled(key));
   });
+}
+
+function syncBoardZoomControls() {
+  var percent = normalizeBoardZoomPercent(boardZoomPercent);
+  boardZoomPercent = percent;
+
+  $("#taskBoardZoomRange").val(String(percent));
+  $("#taskBoardZoomValue").text(String(percent) + "%");
+  $("#taskBoardZoomOutBtn").prop("disabled", percent <= boardZoomMin);
+  $("#taskBoardZoomInBtn").prop("disabled", percent >= boardZoomMax);
+}
+
+function applyBoardZoom() {
+  var percent = normalizeBoardZoomPercent(boardZoomPercent);
+  var scale = percent / 100;
+  var zoomAreas = document.querySelectorAll(".task-board-zoom-area");
+
+  boardZoomPercent = percent;
+  if (zoomAreas.length && scale > 0) {
+    for (var i = 0; i < zoomAreas.length; i++) {
+      var zoomArea = zoomAreas[i];
+      if (!zoomArea) {
+        continue;
+      }
+      zoomArea.style.zoom = String(percent) + "%";
+      zoomArea.style.width = String(100 / scale) + "%";
+    }
+  }
+
+  syncBoardZoomControls();
+
+  if (typeof syncTaskBoardSettingsPanelZoom === "function") {
+    syncTaskBoardSettingsPanelZoom();
+  }
+  if (
+    typeof isTaskBoardSettingsPanelOpen === "function" &&
+    typeof updateTaskBoardSettingsPanelPosition === "function" &&
+    isTaskBoardSettingsPanelOpen()
+  ) {
+    updateTaskBoardSettingsPanelPosition();
+  }
+}
+
+function setBoardZoomPercent(value, persist) {
+  boardZoomPercent = normalizeBoardZoomPercent(value);
+  applyBoardZoom();
+
+  if (persist !== false) {
+    saveBoardZoomToStorage();
+  }
 }
 
 function parseCardDate(value) {
@@ -3924,6 +4021,53 @@ function formatCardDateLabel(value) {
   );
 }
 
+function getCardDueDateState(value) {
+  var text = formatCardDateLabel(value);
+  var ms = parseCardDate(value);
+  if (!text || !ms) {
+    return {
+      text: text,
+      isToday: false,
+      isOverdue: false,
+      isAlert: false,
+    };
+  }
+
+  var now = new Date();
+  var todayMs = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  ).getTime();
+  var isToday = ms === todayMs;
+  var isOverdue = ms < todayMs;
+
+  return {
+    text: text,
+    isToday: isToday,
+    isOverdue: isOverdue,
+    isAlert: isToday || isOverdue,
+  };
+}
+
+function buildCardDueDateFieldValueHtml(value) {
+  var due = getCardDueDateState(value);
+  if (!due.text) {
+    return "";
+  }
+
+  return (
+    '<span class="task-item-due-date-value' +
+    (due.isAlert ? " task-item-due-date-value-alert" : "") +
+    '">' +
+    escHtml(due.text) +
+    (due.isAlert
+      ? ' <i class="fa-solid fa-triangle-exclamation task-item-due-date-value-icon" aria-hidden="true"></i>'
+      : "") +
+    "</span>"
+  );
+}
+
 function formatRelativeFromCardDate(value) {
   var ms = parseCardDate(value);
   if (!ms) {
@@ -4061,6 +4205,12 @@ function buildCardFieldRowsHtml($card) {
   }
 
   appendFieldRow(
+    "due_date",
+    "Due date",
+    buildCardDueDateFieldValueHtml($card.attr("data-due-date")),
+    true,
+  );
+  appendFieldRow(
     "created",
     "Created",
     formatRelativeFromCardDate($card.attr("data-create-date")) ||
@@ -4116,6 +4266,30 @@ function buildCardFieldRowsHtml($card) {
   }
 
   appendFieldRow(
+    "amendement_date",
+    "Amendement date",
+    formatCardDateLabel($card.attr("data-amendement-date")),
+    false,
+  );
+  appendFieldRow(
+    "amendement_time",
+    "Amendement time",
+    formatMinutesCompact($card.attr("data-amendement-time-minutes")),
+    false,
+  );
+  appendFieldRow(
+    "second_amendement_date",
+    "Second amen-date",
+    formatCardDateLabel($card.attr("data-second-amendement-date")),
+    false,
+  );
+  appendFieldRow(
+    "second_amendement_time",
+    "Second amen-time",
+    formatMinutesCompact($card.attr("data-second-amendement-time-minutes")),
+    false,
+  );
+  appendFieldRow(
     "parent",
     "Parent",
     '<select class="form-select form-select-sm task-item-parent-select" data-item-id="' +
@@ -4159,30 +4333,6 @@ function buildCardFieldRowsHtml($card) {
       "</span>"
       : "",
     true,
-  );
-  appendFieldRow(
-    "amendement_date",
-    "Amendement date",
-    formatCardDateLabel($card.attr("data-amendement-date")),
-    false,
-  );
-  appendFieldRow(
-    "amendement_time",
-    "Amendement time",
-    formatMinutesCompact($card.attr("data-amendement-time-minutes")),
-    false,
-  );
-  appendFieldRow(
-    "second_amendement_date",
-    "Second amen-date",
-    formatCardDateLabel($card.attr("data-second-amendement-date")),
-    false,
-  );
-  appendFieldRow(
-    "second_amendement_time",
-    "Second amen-time",
-    formatMinutesCompact($card.attr("data-second-amendement-time-minutes")),
-    false,
   );
   appendFieldRow(
     "updated",
