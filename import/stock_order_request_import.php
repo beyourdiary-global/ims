@@ -7,6 +7,43 @@ include_once '../checkCurrentPagePin.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 include_once ROOT . '/header/phpqrcode/qrlib.php';
 
+if (!function_exists('sorImpBuildPackageProductRows')) {
+    function sorImpBuildPackageProductRows($productIdsRaw, $productNameMap)
+    {
+        $counts = array();
+        $order = array();
+
+        if (!is_array($productIdsRaw)) {
+            $productIdsRaw = array();
+        }
+
+        foreach ($productIdsRaw as $rawProductId) {
+            $productId = (int) $rawProductId;
+            if ($productId <= 0) {
+                continue;
+            }
+
+            if (!isset($counts[$productId])) {
+                $counts[$productId] = 0;
+                $order[] = $productId;
+            }
+
+            $counts[$productId]++;
+        }
+
+        $rows = array();
+        foreach ($order as $productId) {
+            $rows[] = array(
+                'product_id' => $productId,
+                'product_name' => isset($productNameMap[$productId]) ? (string) $productNameMap[$productId] : '',
+                'base_qty' => (int) $counts[$productId],
+            );
+        }
+
+        return $rows;
+    }
+}
+
 $parentPagePinGroupId = 126;
 $parentPageTitle = getPinGroupNameById($connect, $parentPagePinGroupId);
 if ($parentPageTitle === '') {
@@ -147,13 +184,18 @@ if ($pkgRst) {
                 }
             }
         }
+        $productIdsRaw = array_values($productIds);
+        $productRows = sorImpBuildPackageProductRows($productIdsRaw, $productNameMap);
 
         $packages[] = array(
             'id' => (int) $p['id'],
             'name' => (string) $p['name'],
             'item_description' => (string) $p['item_description'],
-            'product_ids' => array_values(array_unique($productIds)),
-            'product_ids_raw' => array_values($productIds),
+            'product_ids' => array_values(array_map(function ($row) {
+                return isset($row['product_id']) ? (int) $row['product_id'] : 0;
+            }, $productRows)),
+            'product_ids_raw' => $productIdsRaw,
+            'product_rows' => $productRows,
             'brand_id' => isset($p['brand']) ? (int) $p['brand'] : 0,
             'price' => isset($p['price']) ? (float) $p['price'] : 0,
         );
@@ -1758,6 +1800,10 @@ if (!function_exists('sorImpParsePdfToRows')) {
             $pkgBrandId = ($pkgHit && isset($pkgHit['brand_id'])) ? (int) $pkgHit['brand_id'] : 0;
             $pkgItemDesc = ($pkgHit && isset($pkgHit['item_description'])) ? (string) $pkgHit['item_description'] : '';
             $pkgCompanyId = ($pkgBrandId > 0 && isset($brandCompanyMap[$pkgBrandId])) ? (int) $brandCompanyMap[$pkgBrandId] : 0;
+            $pkgResolvedName = ($pkgHit && isset($pkgHit['name'])) ? (string) $pkgHit['name'] : (string) $packageText;
+            $pkgProductRows = ($pkgId > 0 && isset($packageMap[$pkgId]['product_rows']) && is_array($packageMap[$pkgId]['product_rows']))
+                ? $packageMap[$pkgId]['product_rows']
+                : array();
 
             $lineTotalPrice = isset($item['line_total_price']) ? (float) $item['line_total_price'] : 0.00;
             $rowQty = isset($item['row_qty']) ? (int) $item['row_qty'] : 1;
@@ -1777,7 +1823,44 @@ if (!function_exists('sorImpParsePdfToRows')) {
 
             $isStandalone = (count($item['products']) === 0 && !$hasSectionMarker);
 
-            if ($isStandalone) {
+            if ($pkgId > 0 && count($pkgProductRows) > 0) {
+                foreach ($pkgProductRows as $pkgProductRow) {
+                    $productId = isset($pkgProductRow['product_id']) ? (int) $pkgProductRow['product_id'] : 0;
+                    $baseQty = isset($pkgProductRow['base_qty']) ? (int) $pkgProductRow['base_qty'] : 1;
+                    if ($baseQty <= 0) {
+                        $baseQty = 1;
+                    }
+
+                    $resolvedProductName = ($productId > 0 && isset($productNameMap[$productId]))
+                        ? (string) $productNameMap[$productId]
+                        : (isset($pkgProductRow['product_name']) ? (string) $pkgProductRow['product_name'] : '');
+
+                    $rows[] = array(
+                        'source_file' => (string) $pdfFile['name'],
+                        'source_attachment' => isset($pdfFile['attachment_path']) ? (string) $pdfFile['attachment_path'] : '',
+                        'invoice_no' => $invoiceNo,
+                        'invoice_date' => $invoiceDate,
+                        'total_price' => $totalPrice,
+                        'warehouse_id' => '',
+                        'product_id' => $productId,
+                        'product_name' => $resolvedProductName,
+                        'pdf_product_name' => $resolvedProductName,
+                        'package_id' => $pkgId,
+                        'package_name' => $pkgResolvedName,
+                        'pdf_package_name' => $pkgResolvedName,
+                        'package_group_key' => $itemGroupKey,
+                        'line_type' => 'package',
+                        'line_total_price' => $lineTotalPrice,
+                        'package_qty' => max(1, $rowQty),
+                        'product_qty' => max(1, $baseQty) * max(1, $rowQty),
+                        'qty' => max(1, $baseQty),
+                        'item_description' => $pkgItemDesc,
+                        'brand_id' => $pkgBrandId,
+                        'company_id' => $pkgCompanyId,
+                        'warning' => '',
+                    );
+                }
+            } else if ($isStandalone) {
                 $standaloneName = sorImpSanitizeExtractedName($packageText);
                 $standaloneProductId = sorImpResolveProductFromText($standaloneName, $productKeyToId);
                 $standaloneBrandId = ($standaloneProductId > 0 && isset($productBrandMap[$standaloneProductId])) ? (int) $productBrandMap[$standaloneProductId] : 0;
