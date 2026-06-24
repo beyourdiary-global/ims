@@ -7,6 +7,43 @@ include_once '../checkCurrentPagePin.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 include_once ROOT . '/header/phpqrcode/qrlib.php';
 
+if (!function_exists('sorBuildPackageProductRows')) {
+    function sorBuildPackageProductRows($productIdsRaw, $productNameMap)
+    {
+        $counts = array();
+        $order = array();
+
+        if (!is_array($productIdsRaw)) {
+            $productIdsRaw = array();
+        }
+
+        foreach ($productIdsRaw as $rawProductId) {
+            $productId = (int) $rawProductId;
+            if ($productId <= 0) {
+                continue;
+            }
+
+            if (!isset($counts[$productId])) {
+                $counts[$productId] = 0;
+                $order[] = $productId;
+            }
+
+            $counts[$productId]++;
+        }
+
+        $rows = array();
+        foreach ($order as $productId) {
+            $rows[] = array(
+                'product_id' => $productId,
+                'product_name' => isset($productNameMap[$productId]) ? (string) $productNameMap[$productId] : '',
+                'base_qty' => (int) $counts[$productId],
+            );
+        }
+
+        return $rows;
+    }
+}
+
 $permissionPage = 'Stock Order Request';
 $pinAccess = checkPin($connect, $permissionPage);
 if (!is_array($pinAccess) || count($pinAccess) === 0) {
@@ -115,13 +152,19 @@ if ($packageRst) {
                 }
             }
         }
-        $pkgProductIds = array_values(array_unique($pkgProductIds));
+        $pkgProductIdsRaw = array_values($pkgProductIds);
+        $pkgProductRows = sorBuildPackageProductRows($pkgProductIdsRaw, $productNameMap);
+        $pkgProductIds = array_values(array_map(function ($row) {
+            return isset($row['product_id']) ? (int) $row['product_id'] : 0;
+        }, $pkgProductRows));
         $packages[] = array(
             'id' => $pkgId,
             'name' => $pkgName,
             'item_description' => $pkgDesc,
             'price' => $pkgPrice,
             'product_ids' => $pkgProductIds,
+            'product_ids_raw' => $pkgProductIdsRaw,
+            'product_rows' => $pkgProductRows,
             'brand_id' => isset($packageRow['brand']) ? (int) $packageRow['brand'] : 0,
         );
         $packageMap[$pkgId] = $pkgPrice;

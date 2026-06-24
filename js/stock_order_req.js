@@ -408,21 +408,48 @@
     return { id: parseInt(p.id, 10), name: String(p.name || "") };
   });
   var packageOptions = (config.packages || []).map(function (p) {
-    var prodIds = Array.isArray(p.product_ids)
-      ? p.product_ids
-          .map(function (x) {
-            return parseInt(x, 10);
+    var productRows = Array.isArray(p.product_rows)
+      ? p.product_rows
+          .map(function (row) {
+            var productId = parseInt(
+              row && row.product_id !== undefined ? row.product_id : 0,
+              10,
+            );
+            var baseQty = parseInt(
+              row && row.base_qty !== undefined ? row.base_qty : 1,
+              10,
+            );
+            if (isNaN(productId) || productId <= 0) return null;
+            if (isNaN(baseQty) || baseQty <= 0) baseQty = 1;
+            return {
+              id: productId,
+              name: String(row && row.product_name ? row.product_name : ""),
+              base_qty: baseQty,
+            };
           })
-          .filter(function (x) {
-            return !isNaN(x) && x > 0;
+          .filter(function (row) {
+            return !!row;
           })
       : [];
+    var prodIds = productRows.map(function (row) {
+      return row.id;
+    });
+    if (prodIds.length === 0 && Array.isArray(p.product_ids)) {
+      prodIds = p.product_ids
+        .map(function (x) {
+          return parseInt(x, 10);
+        })
+        .filter(function (x) {
+          return !isNaN(x) && x > 0;
+        });
+    }
     return {
       id: parseInt(p.id, 10),
       name: String(p.name || ""),
       item_description: String(p.item_description || ""),
       price: String(p.price || "0"),
       product_ids: prodIds,
+      product_rows: productRows,
     };
   });
 
@@ -463,6 +490,51 @@
     return productOptions.filter(function (p) {
       return pkg.product_ids.indexOf(p.id) !== -1;
     });
+  }
+
+  function getPackageProductRows(pkg) {
+    if (pkg && Array.isArray(pkg.product_rows) && pkg.product_rows.length > 0) {
+      return pkg.product_rows
+        .map(function (row) {
+          var productId = parseInt(row && row.id !== undefined ? row.id : 0, 10);
+          var baseQty = parseInt(
+            row && row.base_qty !== undefined ? row.base_qty : 1,
+            10,
+          );
+          if (isNaN(productId) || productId <= 0) return null;
+          if (isNaN(baseQty) || baseQty <= 0) baseQty = 1;
+          var product = productLookupById[productId] || null;
+          return {
+            id: productId,
+            name:
+              String(row && row.name ? row.name : "") ||
+              (product ? String(product.name || "") : ""),
+            base_qty: baseQty,
+          };
+        })
+        .filter(function (row) {
+          return !!row;
+        });
+    }
+
+    if (!pkg || !Array.isArray(pkg.product_ids)) {
+      return [];
+    }
+
+    return pkg.product_ids
+      .map(function (productId) {
+        var parsedProductId = parseInt(productId, 10);
+        if (isNaN(parsedProductId) || parsedProductId <= 0) return null;
+        var product = productLookupById[parsedProductId] || null;
+        return {
+          id: parsedProductId,
+          name: product ? String(product.name || "") : "",
+          base_qty: 1,
+        };
+      })
+      .filter(function (row) {
+        return !!row;
+      });
   }
 
   function getSelectedProductInRow(row) {
@@ -591,6 +663,7 @@
       "",
       descInput ? descInput.value : "",
       packageQtyHidden ? packageQtyHidden.value : qtyInput ? qtyInput.value : 1,
+      1,
       "package",
     );
 
@@ -891,10 +964,12 @@
       !isPackageRow(row) &&
       pkg &&
       !product &&
-      Array.isArray(pkg.product_ids) &&
-      pkg.product_ids.length > 0
+      getPackageProductRows(pkg).length > 0
     ) {
-      var defaultProdId = parseInt(pkg.product_ids[0], 10);
+      var defaultProductRow = getPackageProductRows(pkg)[0];
+      var defaultProdId = defaultProductRow
+        ? parseInt(defaultProductRow.id || 0, 10)
+        : 0;
       if (defaultProdId > 0 && productLookupById[defaultProdId]) {
         if (prodIdInput) prodIdInput.value = String(defaultProdId);
         if (prodNameInput)
@@ -982,9 +1057,14 @@
     prodId,
     desc,
     qty,
+    baseQty,
     rowRole,
   ) {
     var isPackageHeader = rowRole === "package";
+    var normalizedBaseQty = parseInt(baseQty || "1", 10);
+    if (isNaN(normalizedBaseQty) || normalizedBaseQty <= 0) {
+      normalizedBaseQty = 1;
+    }
     return (
       '<td class="row-no"></td>' +
       '<td class="cell-package"><div class="pkg-main-fields"><div class="autocomplete"><input class="form-control sor-item-pkg-name" type="text" id="sor_item_pkg_name_' +
@@ -1022,7 +1102,7 @@
       '"><input class="sor-item-package-qty" type="hidden" name="sor_item_package_qty[]" value="' +
       escapeAttr(qty || 1) +
       '"><input class="sor-item-base-qty" type="hidden" name="sor_item_base_qty[]" value="' +
-      (isPackageHeader ? "1" : "1") +
+      escapeAttr(isPackageHeader ? 1 : normalizedBaseQty) +
       '"><input class="sor-item-group-key" type="hidden" name="sor_item_group_key[]" value="' +
       escapeAttr(rowKey) +
       '"><input class="sor-item-package-price" type="hidden" name="sor_item_package_price[]" value="0.00' +
@@ -1053,6 +1133,7 @@
       "",
       "",
       1,
+      1,
       "package",
     );
     tbody.appendChild(tr);
@@ -1066,7 +1147,7 @@
 
   function addPackageRowWithData(
     pkg,
-    prodId,
+    productMeta,
     groupId,
     rowRole,
     insertAfterRow,
@@ -1074,8 +1155,48 @@
     var tbody = document.getElementById("sorItemBody");
     if (!tbody || !pkg) return;
 
-    var product = productLookupById[parseInt(prodId || 0, 10)] || null;
     var role = rowRole === "package" ? "package" : "product";
+    var normalizedProductMeta = null;
+    if (role !== "package") {
+      if (productMeta && typeof productMeta === "object") {
+        var metaProductId = parseInt(
+          productMeta.id !== undefined ? productMeta.id : 0,
+          10,
+        );
+        if (!isNaN(metaProductId) && metaProductId > 0) {
+          var metaProduct = productLookupById[metaProductId] || null;
+          normalizedProductMeta = {
+            id: metaProductId,
+            name:
+              String(productMeta.name || "") ||
+              (metaProduct ? String(metaProduct.name || "") : ""),
+            base_qty: Math.max(
+              1,
+              parseInt(
+                productMeta.base_qty !== undefined ? productMeta.base_qty : 1,
+                10,
+              ) || 1,
+            ),
+          };
+        }
+      } else {
+        var legacyProductId = parseInt(productMeta || 0, 10);
+        if (!isNaN(legacyProductId) && legacyProductId > 0) {
+          var legacyProduct = productLookupById[legacyProductId] || null;
+          normalizedProductMeta = {
+            id: legacyProductId,
+            name: legacyProduct ? String(legacyProduct.name || "") : "",
+            base_qty: 1,
+          };
+        }
+      }
+    }
+    var initialQty =
+      role === "package"
+        ? 1
+        : normalizedProductMeta
+          ? normalizedProductMeta.base_qty
+          : 1;
     var rowKey = Date.now().toString() + "_" + Math.floor(Math.random() * 1000);
     var tr = document.createElement("tr");
     tr.setAttribute("data-row-key", rowKey);
@@ -1085,10 +1206,23 @@
       rowKey,
       pkg.name || "",
       pkg.id || "",
-      role === "package" ? "" : product ? product.name : "",
-      role === "package" ? "" : product ? product.id : "",
+      role === "package"
+        ? ""
+        : normalizedProductMeta
+          ? normalizedProductMeta.name
+          : "",
+      role === "package"
+        ? ""
+        : normalizedProductMeta
+          ? normalizedProductMeta.id
+          : "",
       pkg.item_description || "",
-      1,
+      initialQty,
+      role === "package"
+        ? 1
+        : normalizedProductMeta
+          ? normalizedProductMeta.base_qty
+          : 1,
       role,
     );
     if (insertAfterRow && insertAfterRow.parentNode === tbody) {
@@ -1110,10 +1244,19 @@
 
     var pkg = getSelectedPackageInRow(row);
     var groupId = getRowGroupId(row);
+    var packageProductRows = getPackageProductRows(pkg);
 
     var sig =
-      pkg && Array.isArray(pkg.product_ids)
-        ? String(pkg.id) + ":" + pkg.product_ids.join(",")
+      pkg && packageProductRows.length > 0
+        ? String(pkg.id) +
+          ":" +
+          packageProductRows
+            .map(function (productRow) {
+              return (
+                String(productRow.id || "") + "x" + String(productRow.base_qty || 1)
+              );
+            })
+            .join(",")
         : "";
     if (row.getAttribute("data-auto-expanded-sig") === sig) {
       return;
@@ -1133,29 +1276,22 @@
 
     updateRowDescAndPrice(row);
 
-    if (
-      !pkg ||
-      !Array.isArray(pkg.product_ids) ||
-      pkg.product_ids.length === 0
-    ) {
+    if (!pkg || packageProductRows.length === 0) {
       reindexRows();
       renderPackageGroups();
       return;
     }
 
     var insertAfter = row;
-    pkg.product_ids.forEach(function (pid) {
-      var extraProdId = parseInt(pid, 10);
-      if (extraProdId > 0) {
-        var added = addPackageRowWithData(
-          pkg,
-          extraProdId,
-          groupId,
-          "product",
-          insertAfter,
-        );
-        if (added) insertAfter = added;
-      }
+    packageProductRows.forEach(function (productRow) {
+      var added = addPackageRowWithData(
+        pkg,
+        productRow,
+        groupId,
+        "product",
+        insertAfter,
+      );
+      if (added) insertAfter = added;
     });
 
     reindexRows();
