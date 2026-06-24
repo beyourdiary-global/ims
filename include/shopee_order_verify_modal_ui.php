@@ -440,38 +440,47 @@ if (!function_exists('shopeeOrderDetailPdfRenderVerifyModalScript')) {
                         }, 1200);
                     }
 
-                    document.querySelectorAll(config.triggerSelector).forEach(function (triggerButton) {
-                        triggerButton.addEventListener('click', function () {
-                            var orderId = triggerButton.getAttribute('data-order-id') || '';
-                            var orderCode = triggerButton.getAttribute('data-order-code') || '';
-                            var existingPdfPath = triggerButton.getAttribute('data-existing-pdf-path') || '';
+                    function openVerifyModalFromTrigger(triggerButton) {
+                        if (!triggerButton) {
+                            return;
+                        }
 
-                            if (!orderId) {
-                                showNotification('Invalid order.', 'error');
-                                return;
-                            }
+                        var orderId = triggerButton.getAttribute('data-order-id') || '';
+                        var orderCode = triggerButton.getAttribute('data-order-code') || '';
+                        var existingPdfPath = triggerButton.getAttribute('data-existing-pdf-path') || '';
 
-                            resetComparisonState();
-                            setStatus('Only PDF file is allowed.', false);
-                            if (fileInput) {
-                                fileInput.value = '';
-                            }
-                            if (titleNode) {
-                                titleNode.textContent = 'Verify Order - ' + (orderCode || ('#' + orderId));
-                            }
-                            if (orderIdField) {
-                                orderIdField.value = orderId;
-                            }
-                            if (pdfPathField) {
-                                pdfPathField.value = existingPdfPath;
-                            }
-                            if (pdfPathDisplay) {
-                                pdfPathDisplay.value = existingPdfPath;
-                            }
-                            updatePdfPreview('');
-                            showChoiceView();
-                            modalInstance.show();
-                        });
+                        if (!orderId) {
+                            showNotification('Invalid order.', 'error');
+                            return;
+                        }
+
+                        resetComparisonState();
+                        setStatus('Only PDF file is allowed.', false);
+                        if (fileInput) {
+                            fileInput.value = '';
+                        }
+                        if (titleNode) {
+                            titleNode.textContent = 'Verify Order - ' + (orderCode || ('#' + orderId));
+                        }
+                        if (orderIdField) {
+                            orderIdField.value = orderId;
+                        }
+                        if (pdfPathField) {
+                            pdfPathField.value = existingPdfPath;
+                        }
+                        if (pdfPathDisplay) {
+                            pdfPathDisplay.value = existingPdfPath;
+                        }
+                        updatePdfPreview('');
+                        showChoiceView();
+                        modalInstance.show();
+                    }
+
+                    document.addEventListener('click', function (event) {
+                        var triggerButton = event.target.closest(config.triggerSelector);
+                        if (triggerButton) {
+                            openVerifyModalFromTrigger(triggerButton);
+                        }
                     });
 
                     if (uploadChoiceBtn) {
