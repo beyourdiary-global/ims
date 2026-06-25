@@ -4752,9 +4752,12 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
     setButtonColor();
     <?php if ($module === 'shopee_order_req') { ?>
         var action = 'I'; // Fake action to satisfy the JS script's logic
-        <?php include "js/shopee_order_req.js"; ?>
     <?php } ?>
-
+</script>
+<?php if ($module === 'shopee_order_req') { ?>
+    <script src="<?= $SITEURL ?>/js/shopee_order_req.js"></script>
+<?php } ?>
+<script>
     (function syncShopeeImportPreviewForm() {
         var previewForm = document.querySelector('form[data-shopee-import-preview="1"]');
         if (!previewForm) return;

@@ -595,8 +595,9 @@ $(document).ready(function($) {
     });
 });
 
-<?php include "js/order_req.js" ?>
-
+</script>
+<script src="<?= $SITEURL ?>/js/order_req.js"></script>
+<script>
 /**
 oufei 20231014
 common.fun.js

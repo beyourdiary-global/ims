@@ -355,7 +355,5 @@ if (post('usrBtn')) {
                 <?php endfor; ?>
             }
         });
-        <?php include "js/stock_in.js" ?>
-        // Notification
-      
     </script>
+    <script src="<?= $SITEURL ?>/js/stock_in.js"></script>

@@ -1088,8 +1088,6 @@ if ($isViewMode && $dataId > 0 && isset($orderById[$dataId])) {
     window.addEventListener('load', applyStockInBackButtonTitle);
     preloader(300, action);
 </script>
+<script src="<?= $SITEURL ?>/js/warehouse_stock_in.js"></script>
 </body>
-<script>
-<?php include './js/warehouse_stock_in.js'; ?>
-</script>
 </html>

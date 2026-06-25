@@ -850,9 +850,7 @@ function validateFacebookPreviewRecords($records, &$errors, $metaAccounts, $user
     document.title = <?= json_encode($pageTitle, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
     preloader(0, '');
     setButtonColor();
-    <?php include "js/facebook_ads_topup_import.js"; ?>
 </script>
+<script src="<?= $SITEURL ?>/js/facebook_ads_topup_import.js"></script>
 
 </html>
-
-

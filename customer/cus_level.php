@@ -357,8 +357,8 @@ if (isset($_SESSION['tempValConfirmBox'])) {
         setButtonColor();
         preloader(300, action);
         
-        <?php include "js/cus_level.js" ?>
     </script>
+    <script src="<?= $SITEURL ?>/js/cus_level.js"></script>
 
 </body>
 

@@ -888,6 +888,6 @@ else if ($action === 'update') {
              }
          }
      };
-    <?php include "js/package_import.js"; ?>
 </script>
+<script src="<?= $SITEURL ?>/js/package_import.js"></script>
 </html>

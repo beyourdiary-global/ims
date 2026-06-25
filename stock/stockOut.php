@@ -407,5 +407,5 @@ if (post('usrBtn')) {
         }
     });
 
-    <?php include "js/stock_out.js" ?>
 </script>
+<script src="<?= $SITEURL ?>/js/stock_out.js"></script>

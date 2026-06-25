@@ -442,7 +442,9 @@ if (!$result) {
     });
 });
 
-    <?php include "js/fb_ads_topup_table.js" ?>
+    </script>
+    <script src="<?= $SITEURL ?>/js/fb_ads_topup_table.js"></script>
+    <script>
         //Initial Page And Action Value
         const page = "<?= $pageTitle ?>";
         const action = "<?php echo isset($act) ? $act : ' '; ?>";

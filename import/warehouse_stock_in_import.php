@@ -854,7 +854,7 @@ $previewData = isset($_SESSION['si_import_preview']) ? $_SESSION['si_import_prev
 
     setButtonColor();
     preloader(300, '');
-    <?php include "js/warehouse_stock_in_import.js"; ?>
 </script>
+<script src="<?= $SITEURL ?>/js/warehouse_stock_in_import.js"></script>
 </body>
 </html>

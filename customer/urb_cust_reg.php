@@ -949,10 +949,8 @@ if ($urbanismOrderFbLink === '' && $urbanismFormName !== '') {
             preloader(300, action);
         }
 
-        <?php
-        include "./js/urb_cust_reg.js"
-            ?>
     </script>
+    <script src="<?= $SITEURL ?>/js/urb_cust_reg.js"></script>
 
 </body>
 

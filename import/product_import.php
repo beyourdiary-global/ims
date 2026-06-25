@@ -800,6 +800,6 @@ if ($action === 'preview') {
     };
 
     preloader(300, '');
-    <?php include "js/product_import.js"; ?>
 </script>
+<script src="<?= $SITEURL ?>/js/product_import.js"></script>
 </html>
