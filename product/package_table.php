@@ -6,7 +6,7 @@ $currentPagePin = 21;
 
 include_once '../include/list_page_header.php';
 
-$libPath = __DIR__ . '/header/PhpXlsxGenerator/PhpXlsxGenerator.php';
+$libPath = ROOT . '/header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 if (is_readable($libPath)) {
     require_once $libPath;
 }
