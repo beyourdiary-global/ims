@@ -1030,10 +1030,8 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         setButtonColor();
         preloader(300, action);
 
-        <?php
-        include "./js/fb_cust_deals.js"
-        ?>
     </script>
+    <script src="<?= $SITEURL ?>/js/fb_cust_deals.js"></script>
 
 </body>
 

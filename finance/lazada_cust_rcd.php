@@ -922,10 +922,8 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         setButtonColor();
         preloader(300, action);
 
-        <?php
-        include __DIR__ . "/../js/lazada_cust_rcd.js"
-        ?>
     </script>
+    <script src="<?= $SITEURL ?>/js/lazada_cust_rcd.js"></script>
 
 </body>
 

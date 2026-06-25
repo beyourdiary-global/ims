@@ -458,9 +458,8 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
     }
     ?>
+    <script src="<?= $SITEURL ?>/js/courier.js"></script>
     <script>
-    <?php include "js/courier.js" ?>
-
     //Initial Page And Action Value
     const page = "<?= $pageTitle ?>";
     const action = "<?php echo isset($act) ? $act : ''; ?>";

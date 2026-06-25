@@ -980,10 +980,8 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         setButtonColor();
         preloader(300, action);
 
-        <?php
-        include "./js/website_customer_record.js"
-        ?>
     </script>
+    <script src="<?= $SITEURL ?>/js/website_customer_record.js"></script>
 
 </body>
 

@@ -371,8 +371,8 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         setAutofocus(action);
         preloader(300, action);
 
-        <?php include "js/update_shipment.js" ?>
     </script>
+    <script src="<?= $SITEURL ?>/js/update_shipment.js"></script>
 
 </body>
 
