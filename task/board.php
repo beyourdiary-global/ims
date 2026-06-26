@@ -1422,10 +1422,10 @@ $projectBoardBackground = isset($currentProject['board_background_color']) ? (st
     <link rel="stylesheet" href="../css/task.css">
 </head>
 <body class="task-board-page" style="--task-project-board-bg: <?= htmlspecialchars($projectBoardBackground, ENT_QUOTES, 'UTF-8') ?>;">
-<div class="container-fluid task-page-wrap px-0">
-    <div class="col-12 px-0">
-        <div id="taskBoardHeaderZoomArea" class="task-board-zoom-area task-board-header-zoom-shell">
-            <div class="col-12 col-md-11 mx-auto task-board-page-header">
+<div class="container-fluid d-flex justify-content-center mt-3 task-page-wrap">
+    <div class="col-12 col-md-11">
+        <div id="taskBoardHeaderZoomArea" class="task-board-header-zoom-shell">
+            <div class="task-board-page-header">
                 <div class="d-flex flex-column mb-2">
                     <div class="row">
                         <p><a href="<?= $SITEURL ?>/dashboard.php">Dashboard</a> <i class="fa-solid fa-chevron-right fa-xs"></i> <?= htmlspecialchars($taskParentTitle, ENT_QUOTES, 'UTF-8') ?> <i class="fa-solid fa-chevron-right fa-xs"></i> <?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></p>
@@ -1450,19 +1450,21 @@ $projectBoardBackground = isset($currentProject['board_background_color']) ? (st
             <div id="taskBoardContentZoomArea" class="task-board-zoom-area task-board-content-zoom-shell">
                 <div class="task-main-content" style="background: <?= htmlspecialchars($projectBoardBackground, ENT_QUOTES, 'UTF-8') ?>;">
                     <div class="task-board-toolbar mb-2">
-                        <div class="task-board-search-group">
-                            <i class="fa-solid fa-magnifying-glass"></i>
-                            <input id="taskBoardSearchInput" class="form-control" type="text" maxlength="150" placeholder="Search board">
+                        <div class="task-board-toolbar-left">
+                            <div class="task-board-search-group">
+                                <i class="fa-solid fa-magnifying-glass"></i>
+                                <input id="taskBoardSearchInput" class="form-control" type="text" maxlength="150" placeholder="Search board">
+                            </div>
+                            <div id="taskBoardFilterSelectedAssignees" class="task-board-filter-selected-assignees d-none"></div>
+                            <div id="taskBoardFilterDropdown" class="dropdown task-board-filter-wrap">
+                                <button id="taskBoardFilterBtn" class="btn task-board-filter-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
+                                    <span class="task-board-filter-btn-label">Filter</span>
+                                    <span id="taskBoardFilterCountBadge" class="task-board-filter-count-badge d-none">0</span>
+                                </button>
+                                <div id="taskBoardFilterMenu" class="dropdown-menu task-board-filter-menu p-0"></div>
+                            </div>
                         </div>
-                        <div id="taskBoardFilterSelectedAssignees" class="task-board-filter-selected-assignees d-none"></div>
-                        <div id="taskBoardFilterDropdown" class="dropdown task-board-filter-wrap">
-                            <button id="taskBoardFilterBtn" class="btn task-board-filter-btn dropdown-toggle" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
-                                <span class="task-board-filter-btn-label">Filter</span>
-                                <span id="taskBoardFilterCountBadge" class="task-board-filter-count-badge d-none">0</span>
-                            </button>
-                            <div id="taskBoardFilterMenu" class="dropdown-menu task-board-filter-menu p-0"></div>
-                        </div>
-                        <div class="task-board-toolbar-actions ms-auto">
+                        <div class="task-board-toolbar-actions">
                             <div id="taskBoardGroupDropdown" class="dropdown task-board-group-wrap">
                                 <button id="taskBoardGroupBtn" class="btn task-board-group-btn" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false">
                                     <span id="taskBoardGroupLabel">Group: Status</span>

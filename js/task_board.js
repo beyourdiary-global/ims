@@ -6029,6 +6029,14 @@ $app.on("dragstart", ".task-item-card", function (e) {
     return;
   }
 
+  if (
+    typeof isTouchBoardViewport === "function" &&
+    isTouchBoardViewport()
+  ) {
+    e.preventDefault();
+    return;
+  }
+
   if (!isBoardGroupedByStatus()) {
     e.preventDefault();
     return;
@@ -6167,6 +6175,63 @@ $("#taskBoardSearchInput").on("input", function () {
   applyBoardFilters();
 });
 
+var taskBoardMobileToolbarMode = null;
+var taskBoardMobileToolbarSyncTimer = 0;
+
+function isTaskBoardMobileToolbar() {
+  if (typeof window.matchMedia !== "function") {
+    return (window.innerWidth || document.documentElement.clientWidth || 0) <= 991.98;
+  }
+
+  return window.matchMedia("(max-width: 991.98px)").matches;
+}
+
+function syncTaskBoardMobileFilterPosition(force) {
+  var filterDropdown = document.getElementById("taskBoardFilterDropdown");
+  var toolbarLeft = document.querySelector(".task-board-toolbar-left");
+  var toolbarActions = document.querySelector(".task-board-toolbar-actions");
+  var groupDropdown = document.getElementById("taskBoardGroupDropdown");
+  var selectedAssignees = document.getElementById("taskBoardFilterSelectedAssignees");
+  var isMobileMode = isTaskBoardMobileToolbar();
+
+  if (!filterDropdown || !toolbarLeft || !toolbarActions) {
+    return;
+  }
+
+  if (!force && taskBoardMobileToolbarMode === isMobileMode) {
+    return;
+  }
+
+  if (isMobileMode) {
+    if (filterDropdown.parentNode !== toolbarActions) {
+      toolbarActions.insertBefore(filterDropdown, groupDropdown || toolbarActions.firstElementChild);
+    }
+  } else if (filterDropdown.parentNode !== toolbarLeft) {
+    if (selectedAssignees && selectedAssignees.parentNode === toolbarLeft) {
+      selectedAssignees.insertAdjacentElement("afterend", filterDropdown);
+    } else {
+      toolbarLeft.appendChild(filterDropdown);
+    }
+  }
+
+  taskBoardMobileToolbarMode = isMobileMode;
+
+  if (filterDropdown.classList.contains("show")) {
+    window.setTimeout(positionTaskBoardFilterMenu, 0);
+  }
+}
+
+syncTaskBoardMobileFilterPosition(true);
+
+$(window)
+  .off("resize.taskBoardMobileFilter orientationchange.taskBoardMobileFilter")
+  .on("resize.taskBoardMobileFilter orientationchange.taskBoardMobileFilter", function () {
+    window.clearTimeout(taskBoardMobileToolbarSyncTimer);
+    taskBoardMobileToolbarSyncTimer = window.setTimeout(function () {
+      syncTaskBoardMobileFilterPosition(false);
+    }, 120);
+  });
+
 function positionTaskBoardFilterMenu() {
   var dropdown = document.getElementById("taskBoardFilterDropdown");
   var button = document.getElementById("taskBoardFilterBtn");
@@ -6176,22 +6241,31 @@ function positionTaskBoardFilterMenu() {
   }
 
   var buttonRect = button.getBoundingClientRect();
-  var mainContent = document.querySelector(".task-main-content");
-  var boardCards = document.querySelectorAll("#taskBoardGrid .task-item-card");
   var viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
-  var menuWidth = Math.min(380, Math.max(280, viewportWidth - 18));
-  var left = Math.max(9, Math.min(buttonRect.left, viewportWidth - menuWidth - 9));
+  var viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  var edgePadding = 9;
+  var menuWidth = Math.min(380, Math.max(280, viewportWidth - edgePadding * 2));
+  var maxHeight = Math.max(260, viewportHeight - 88);
+  var left = Math.max(
+    edgePadding,
+    Math.min(buttonRect.left, viewportWidth - menuWidth - edgePadding),
+  );
   var top = buttonRect.bottom + 8;
 
-  if (mainContent && boardCards.length === 0) {
-    var mainContentRect = mainContent.getBoundingClientRect();
-    top = mainContentRect.bottom + 8;
+  if (top + maxHeight > viewportHeight - edgePadding) {
+    top = Math.max(edgePadding, viewportHeight - maxHeight - edgePadding);
   }
 
   menu.classList.add("task-board-filter-menu-fixed");
   menu.style.width = menuWidth + "px";
   menu.style.left = left + "px";
   menu.style.top = top + "px";
+  menu.style.maxHeight = maxHeight + "px";
+
+  var panel = menu.querySelector(".task-board-filter-panel");
+  if (panel) {
+    panel.style.maxHeight = maxHeight + "px";
+  }
 }
 
 function attachTaskBoardFilterMenuToBody() {
@@ -6232,6 +6306,12 @@ function resetTaskBoardFilterMenuPosition() {
   menu.style.width = "";
   menu.style.left = "";
   menu.style.top = "";
+  menu.style.maxHeight = "";
+
+  var panel = menu.querySelector(".task-board-filter-panel");
+  if (panel) {
+    panel.style.maxHeight = "";
+  }
 }
 
 $(document).on("shown.bs.dropdown", "#taskBoardFilterDropdown", function () {
@@ -6556,6 +6636,42 @@ $(document).on("click", "[data-remove-parent-id]", function (e) {
   commitBoardFilters();
 });
 
+function isTaskBoardSettingsMobilePanel() {
+  if (typeof window.matchMedia !== "function") {
+    return (window.innerWidth || document.documentElement.clientWidth || 0) <= 767.98;
+  }
+
+  return window.matchMedia("(max-width: 767.98px)").matches;
+}
+
+function attachTaskBoardSettingsPanelToBody() {
+  var panel = document.getElementById("taskBoardSettingsPanel");
+  if (!panel || panel.parentNode === document.body) {
+    return;
+  }
+
+  panel.__taskBoardSettingsOriginalParent = panel.parentNode;
+  panel.__taskBoardSettingsOriginalNextSibling = panel.nextSibling;
+  document.body.appendChild(panel);
+}
+
+function restoreTaskBoardSettingsPanelParent() {
+  var panel = document.getElementById("taskBoardSettingsPanel");
+  if (
+    !panel ||
+    !panel.__taskBoardSettingsOriginalParent ||
+    panel.parentNode !== document.body
+  ) {
+    return;
+  }
+
+  var parent = panel.__taskBoardSettingsOriginalParent;
+  var nextSibling = panel.__taskBoardSettingsOriginalNextSibling || null;
+  parent.insertBefore(panel, nextSibling);
+  panel.__taskBoardSettingsOriginalParent = null;
+  panel.__taskBoardSettingsOriginalNextSibling = null;
+}
+
 function updateTaskBoardSettingsPanelPosition() {
   var panel = document.getElementById("taskBoardSettingsPanel");
   var button = document.getElementById("taskBoardSettingsBtn");
@@ -6563,13 +6679,18 @@ function updateTaskBoardSettingsPanelPosition() {
     return;
   }
 
-  var buttonRect = button.getBoundingClientRect();
-  var viewportWidth =
-    window.innerWidth || document.documentElement.clientWidth || 0;
-  if (!panel) {
+  if (isTaskBoardSettingsMobilePanel()) {
+    panel.classList.add("task-board-settings-panel-mobile");
+    panel.style.setProperty("--task-board-settings-top", "68px");
+    panel.style.setProperty("--task-board-settings-right", "10px");
     return;
   }
 
+  panel.classList.remove("task-board-settings-panel-mobile");
+
+  var buttonRect = button.getBoundingClientRect();
+  var viewportWidth =
+    window.innerWidth || document.documentElement.clientWidth || 0;
   var top = Math.max(Math.round(buttonRect.top - 18), 70);
   var right = Math.max(Math.round(viewportWidth - buttonRect.right), 8);
 
@@ -6579,19 +6700,11 @@ function updateTaskBoardSettingsPanelPosition() {
 
 function syncTaskBoardSettingsPanelZoom() {
   var panel = document.getElementById("taskBoardSettingsPanel");
-  var percent = Number(boardZoomPercent || 0);
   if (!panel) {
     return;
   }
 
-  if (!isFinite(percent) || percent <= 0) {
-    percent = 100;
-  }
-
-  panel.style.setProperty(
-    "--task-board-settings-panel-zoom",
-    String(10000 / percent) + "%",
-  );
+  panel.style.setProperty("--task-board-settings-panel-zoom", "100%");
 }
 
 function isTaskBoardSettingsPanelOpen() {
@@ -6615,6 +6728,7 @@ function openTaskBoardSettingsPanel() {
 
   syncBoardViewSettingsCheckboxes();
   syncBoardZoomControls();
+  attachTaskBoardSettingsPanelToBody();
   syncTaskBoardSettingsPanelZoom();
   setTaskBoardSettingsPanelState(true);
   updateTaskBoardSettingsPanelPosition();
@@ -6627,11 +6741,13 @@ function closeTaskBoardSettingsPanel(reason) {
 
   var panel = document.getElementById("taskBoardSettingsPanel");
   if (panel) {
+    panel.classList.remove("task-board-settings-panel-mobile");
     panel.style.removeProperty("--task-board-settings-top");
     panel.style.removeProperty("--task-board-settings-right");
   }
 
   setTaskBoardSettingsPanelState(false);
+  restoreTaskBoardSettingsPanelParent();
 }
 
 function toggleTaskBoardSettingsPanel() {
@@ -6645,15 +6761,10 @@ function toggleTaskBoardSettingsPanel() {
   openTaskBoardSettingsPanel();
 }
 
-$(document).on("mousedown", "#taskBoardSettingsBtn", function (e) {
-  e.preventDefault();
-  e.stopPropagation();
-  toggleTaskBoardSettingsPanel();
-});
-
 $(document).on("click", "#taskBoardSettingsBtn", function (e) {
   e.preventDefault();
   e.stopPropagation();
+  toggleTaskBoardSettingsPanel();
 });
 
 $(document).on("keydown", "#taskBoardSettingsBtn", function (e) {
@@ -6672,7 +6783,7 @@ $(document).on("mousedown", function (e) {
     return;
   }
 
-  if ($(e.target).closest(".task-board-settings-wrap").length) {
+  if ($(e.target).closest(".task-board-settings-wrap, #taskBoardSettingsPanel").length) {
     return;
   }
 
@@ -6722,6 +6833,7 @@ $(document).on("click", "#taskBoardZoomResetBtn", function () {
 
 $(window).on("resize.taskBoard", function () {
   updateAllColumnCounts();
+  syncBoardCardDraggableState();
   if (isTaskBoardSettingsPanelOpen()) {
     updateTaskBoardSettingsPanelPosition();
   }
@@ -6771,6 +6883,141 @@ function safeRefreshBoardUi() {
     renderBoardFilterUi();
     applyBoardFilters();
   } catch (e) {}
+
+  try {
+    syncBoardCardDraggableState();
+  } catch (e) {}
+}
+
+function syncBoardCardDraggableState() {
+  var allowDrag =
+    canEdit &&
+    isBoardGroupedByStatus() &&
+    !(typeof isTouchBoardViewport === "function" && isTouchBoardViewport());
+
+  $app
+    .find(".task-item-card")
+    .attr("draggable", allowDrag ? "true" : "false");
+}
+
+function bindTaskBoardTouchSwipeScroll() {
+  var scroller = document.getElementById("taskBoardApp");
+  if (!scroller || scroller.__taskBoardTouchSwipeBound) {
+    return;
+  }
+
+  var touchState = {
+    active: false,
+    axis: "",
+    startX: 0,
+    startY: 0,
+    startScrollLeft: 0,
+    moved: false,
+  };
+
+  function isBoardSwipeViewport() {
+    if (typeof isTouchBoardViewport === "function" && isTouchBoardViewport()) {
+      return true;
+    }
+
+    if (typeof window.matchMedia !== "function") {
+      return (window.innerWidth || document.documentElement.clientWidth || 0) <= 991.98;
+    }
+
+    return window.matchMedia("(max-width: 991.98px)").matches;
+  }
+
+  function isInteractiveSwipeTarget(target) {
+    if (!target || typeof target.closest !== "function") {
+      return false;
+    }
+
+    return !!target.closest(
+      "input, textarea, select, option, button, a, label, .dropdown-menu, .modal, .tox, .task-composer, .task-board-toolbar",
+    );
+  }
+
+  function resetTouchState() {
+    touchState.active = false;
+    touchState.axis = "";
+    touchState.moved = false;
+    document.body.classList.remove("task-board-touch-scrolling");
+  }
+
+  scroller.addEventListener(
+    "touchstart",
+    function (event) {
+      if (!isBoardSwipeViewport()) {
+        resetTouchState();
+        return;
+      }
+
+      if (!event.touches || event.touches.length !== 1) {
+        resetTouchState();
+        return;
+      }
+
+      if (isInteractiveSwipeTarget(event.target)) {
+        resetTouchState();
+        return;
+      }
+
+      var touch = event.touches[0];
+      touchState.active = true;
+      touchState.axis = "";
+      touchState.startX = Number(touch.clientX || 0);
+      touchState.startY = Number(touch.clientY || 0);
+      touchState.startScrollLeft = scroller.scrollLeft;
+      touchState.moved = false;
+    },
+    { passive: true, capture: true },
+  );
+
+  scroller.addEventListener(
+    "touchmove",
+    function (event) {
+      if (!touchState.active || !event.touches || event.touches.length !== 1) {
+        return;
+      }
+
+      var touch = event.touches[0];
+      var deltaX = Number(touch.clientX || 0) - touchState.startX;
+      var deltaY = Number(touch.clientY || 0) - touchState.startY;
+      var absX = Math.abs(deltaX);
+      var absY = Math.abs(deltaY);
+
+      if (!touchState.axis) {
+        if (absX < 5 && absY < 5) {
+          return;
+        }
+
+        touchState.axis = absX > absY ? "x" : "y";
+      }
+
+      if (touchState.axis !== "x") {
+        return;
+      }
+
+      document.body.classList.add("task-board-touch-scrolling");
+      scroller.scrollLeft = touchState.startScrollLeft - deltaX;
+      touchState.moved = true;
+      event.preventDefault();
+      event.stopPropagation();
+    },
+    { passive: false, capture: true },
+  );
+
+  scroller.addEventListener("touchend", resetTouchState, {
+    passive: true,
+    capture: true,
+  });
+
+  scroller.addEventListener("touchcancel", resetTouchState, {
+    passive: true,
+    capture: true,
+  });
+
+  scroller.__taskBoardTouchSwipeBound = true;
 }
 
 // Labels are handled in task item submenu panel.
@@ -6794,5 +7041,6 @@ state.projectKey.project_key = normalizeProjectKey(
 $("#taskProjectKeyInput").val(state.projectKey.project_key);
 normalizeStatusLabels(state.statusLabels);
 safeRefreshBoardUi();
+bindTaskBoardTouchSwipeScroll();
 window.setTimeout(safeRefreshBoardUi, 120);
 window.setTimeout(safeRefreshBoardUi, 420);

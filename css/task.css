@@ -3,28 +3,21 @@
 }
 
 body.task-board-page {
-  overflow-x: hidden !important;
+  overflow-x: clip !important;
 }
 
 body.task-board-page .page-load-cover,
 body.task-board-page .task-page-wrap {
-  overflow-x: hidden;
+  overflow-x: visible;
 }
 
 body.task-board-page .task-page-wrap {
-  margin-top: 0;
-  padding-left: 0;
-  padding-right: 0;
-}
-
-body.task-board-page .task-page-wrap > .col-12 {
-  padding-left: 0;
-  padding-right: 0;
+  overflow-x: visible;
 }
 
 body.task-board-page .task-board-page-header {
-  padding-left: 12px;
-  padding-right: 12px;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .task-module-layout {
@@ -34,7 +27,7 @@ body.task-board-page .task-board-page-header {
   border: 0;
   border-radius: 0;
   background: transparent;
-  overflow-x: hidden;
+  overflow-x: visible;
   overflow-y: visible;
 }
 
@@ -298,23 +291,41 @@ body.task-board-page .task-board-scroll {
   top: auto;
   z-index: 40;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
+  justify-content: space-between;
   gap: 0.65rem;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   background: var(--task-project-board-bg, #f4f7fb);
   border-bottom: 0;
   padding: 12px 12px 10px;
   margin-bottom: 22px !important;
 }
 
+.task-board-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .task-board-toolbar-actions {
   display: flex;
   align-items: center;
   gap: 0.65rem;
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.task-board-filter-wrap {
+  display: inline-flex;
+  min-width: 0;
+  flex: 0 0 auto;
 }
 
 .task-board-group-wrap {
   display: inline-flex;
+  min-width: 0;
 }
 
 .task-board-group-btn {
@@ -329,6 +340,11 @@ body.task-board-page .task-board-scroll {
   padding: 0.5rem 0.95rem;
   text-transform: none !important;
   box-shadow: none !important;
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  min-width: 0;
 }
 
 .task-board-group-btn::after {
@@ -375,6 +391,7 @@ body.task-board-page .task-board-scroll {
   margin-left: auto;
   position: relative;
   z-index: 1400;
+  flex: 0 0 auto;
 }
 
 .task-board-settings-wrap.show {
@@ -445,6 +462,31 @@ body.task-board-page .task-board-scroll {
 
 .task-board-settings-panel.show {
   display: flex !important;
+}
+
+#taskBoardSettingsPanel.task-board-settings-panel-mobile {
+  position: fixed !important;
+  top: calc(68px + env(safe-area-inset-top)) !important;
+  left: 10px !important;
+  right: 10px !important;
+  bottom: calc(10px + env(safe-area-inset-bottom)) !important;
+  inset: calc(68px + env(safe-area-inset-top)) 10px calc(10px + env(safe-area-inset-bottom)) 10px !important;
+  width: auto !important;
+  max-width: none !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  z-index: 2000 !important;
+  zoom: 100% !important;
+  box-sizing: border-box;
+}
+
+#taskBoardSettingsPanel.task-board-settings-panel-mobile .task-board-settings-fields {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .task-board-settings-panel::-webkit-scrollbar {
@@ -964,6 +1006,18 @@ body.task-board-page .task-board-scroll {
   border: 1px solid #cfd9e8;
   border-radius: 10px;
   overflow: hidden;
+  z-index: 1700;
+}
+
+.task-board-filter-menu-fixed {
+  position: fixed !important;
+  left: 9px;
+  top: auto;
+  right: auto;
+  bottom: auto;
+  transform: none !important;
+  z-index: 1700 !important;
+  display: block !important;
 }
 
 .task-board-filter-panel {
@@ -1444,6 +1498,9 @@ body.task-board-page .task-board-scroll {
   padding-left: 0.9rem;
   padding-bottom: 0.75rem;
   scrollbar-width: auto;
+  touch-action: pan-x;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .task-board-scroll::-webkit-scrollbar {
@@ -1549,10 +1606,15 @@ body.task-board-page .task-board-scroll {
   display: flex;
   align-items: center;
   gap: 0.45rem;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .task-column-title {
   margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .task-column-count {
@@ -1573,6 +1635,11 @@ body.task-board-page .task-board-scroll {
   display: flex;
   align-items: center;
   gap: 0.35rem;
+  flex: 0 0 auto;
+  min-width: 0;
+  margin-left: auto;
+  position: relative;
+  z-index: 1;
 }
 
 .task-column-collapse-btn,
@@ -7284,11 +7351,138 @@ body.task-board-page .task-board-scroll {
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 991.98px) {
   html,
   body {
     max-width: 100%;
     overflow-x: hidden;
+  }
+
+  body.task-board-page,
+  body.task-board-page .page-load-cover,
+  body.task-board-page .task-page-wrap,
+  body.task-board-page .task-page-wrap > .col-12,
+  body.task-board-page .task-module-layout,
+  body.task-board-page #taskModuleLayout,
+  body.task-board-page .task-main-content {
+    overflow: visible !important;
+  }
+
+  body.task-board-page .task-board-toolbar {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+    gap: 0.55rem;
+    overflow: visible !important;
+    position: relative;
+    z-index: 1600;
+  }
+
+  body.task-board-page .task-board-toolbar-left {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(112px, 132px);
+    align-items: stretch;
+    width: 100%;
+    gap: 0.55rem;
+    min-width: 0;
+    overflow: visible;
+  }
+
+  body.task-board-page .task-board-search-group,
+  body.task-board-page .task-board-filter-wrap {
+    min-width: 0;
+    max-width: none;
+  }
+
+  body.task-board-page .task-board-filter-wrap {
+    display: block;
+    position: relative;
+    z-index: 1602;
+  }
+
+  body.task-board-page .task-board-filter-btn {
+    width: 100%;
+    min-width: 0;
+    justify-content: flex-start;
+    white-space: nowrap;
+  }
+
+  body.task-board-page .task-board-toolbar-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 40px;
+    width: 100%;
+    min-width: 0;
+    margin-left: 0 !important;
+    justify-content: stretch;
+    gap: 0.55rem;
+    position: relative;
+    z-index: 1601;
+  }
+
+  body.task-board-page .task-board-group-wrap {
+    display: block;
+    min-width: 0;
+  }
+
+  body.task-board-page .task-board-group-btn {
+    width: 100%;
+    min-width: 0;
+  }
+
+  body.task-board-page .task-board-settings-wrap {
+    margin-left: 0;
+    width: 40px;
+    min-width: 40px;
+    justify-self: end;
+  }
+
+  body.task-board-page .task-board-settings-btn {
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+  }
+
+  body.task-board-page #taskBoardGroupLabel {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+
+  body.task-board-page .task-board-scroll,
+  body.task-board-page #taskBoardApp,
+  body.task-board-page .task-board-grid {
+    -webkit-overflow-scrolling: touch;
+    touch-action: pan-x;
+    overscroll-behavior-x: contain;
+  }
+
+  body.task-board-page .task-item-card {
+    touch-action: pan-x pan-y;
+  }
+
+  body.task-board-page .task-column-header {
+    align-items: flex-start;
+  }
+
+  body.task-board-page .task-column-collapse-btn,
+  body.task-board-page .task-column-menu-btn {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(255, 255, 255, 0.72);
+  }
+
+  body.task-board-page .task-column-menu-list {
+    right: 0;
+    left: auto;
   }
 
   body.task-global-sidebar-enabled .task-page-wrap,
@@ -7308,8 +7502,17 @@ body.task-board-page .task-board-scroll {
   }
 }
 
-body.task-board-page .task-page-wrap,
-body.task-board-page .task-page-wrap > .col-12,
+@media (max-width: 575.98px) {
+  body.task-board-page .task-board-toolbar-left {
+    grid-template-columns: minmax(0, 1fr) minmax(104px, 112px);
+  }
+
+  body.task-board-page .task-board-filter-btn {
+    padding-left: 0.7rem;
+    padding-right: 0.7rem;
+  }
+}
+
 body.task-board-page .task-module-layout,
 body.task-board-page #taskModuleLayout,
 body.task-board-page .task-main-content {
@@ -7346,3 +7549,344 @@ body.task-board-page .task-board-grid > .task-column:first-child {
 body.task-board-page .task-board-grid > .task-column:last-child {
   margin-right: 28px !important;
 }
+
+/* =========================
+   FINAL MOBILE BOARD TOOLBAR FIX
+   JS moves Filter into toolbar actions on mobile
+========================= */
+
+@media (max-width: 991.98px) {
+  body.task-board-page .task-board-toolbar {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: auto auto !important;
+    align-items: stretch !important;
+    gap: 0.55rem !important;
+    overflow: visible !important;
+    position: relative !important;
+    z-index: 1600 !important;
+  }
+
+  body.task-board-page .task-board-toolbar-left {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  body.task-board-page .task-board-search-group {
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+  }
+
+  body.task-board-page #taskBoardFilterSelectedAssignees {
+    display: none !important;
+  }
+
+  body.task-board-page .task-board-toolbar-actions {
+    display: grid !important;
+    grid-template-columns: minmax(96px, 112px) minmax(0, 1fr) 40px !important;
+    align-items: stretch !important;
+    gap: 0.55rem !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    margin-left: 0 !important;
+    position: relative !important;
+    z-index: 1602 !important;
+  }
+
+  body.task-board-page #taskBoardFilterDropdown {
+    grid-column: 1 !important;
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative !important;
+    z-index: 1603 !important;
+  }
+
+  body.task-board-page #taskBoardFilterBtn {
+    display: inline-flex !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    min-height: 40px !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    white-space: nowrap !important;
+    padding-left: 0.65rem !important;
+    padding-right: 0.65rem !important;
+  }
+
+  body.task-board-page .task-board-filter-btn-label {
+    display: inline-block !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
+    text-overflow: ellipsis !important;
+  }
+
+  body.task-board-page #taskBoardGroupDropdown {
+    grid-column: 2 !important;
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  body.task-board-page #taskBoardGroupBtn {
+    width: 100% !important;
+    min-width: 0 !important;
+    padding-left: 0.65rem !important;
+    padding-right: 0.65rem !important;
+  }
+
+  body.task-board-page .task-board-settings-wrap {
+    grid-column: 3 !important;
+    width: 40px !important;
+    min-width: 40px !important;
+    margin-left: 0 !important;
+    justify-self: end !important;
+  }
+
+  body.task-board-page #taskBoardSettingsBtn {
+    width: 40px !important;
+    min-width: 40px !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+  }
+}
+
+/* =========================
+   FINAL TABLET / MOBILE BOARD TOOLBAR FIX
+   Fix 450px - 992px toolbar overflow
+========================= */
+
+@media (max-width: 991.98px) {
+  body.task-board-page #taskBoardHeaderZoomArea,
+  body.task-board-page #taskBoardContentZoomArea,
+  body.task-board-page .task-board-zoom-area {
+    width: 100% !important;
+    max-width: 100% !important;
+    zoom: 100% !important;
+  }
+
+  body.task-board-page #taskBoardContentZoomArea {
+    display: block !important;
+    min-width: 0 !important;
+    overflow: visible !important;
+  }
+
+  body.task-board-page .task-main-content {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: visible !important;
+  }
+
+  body.task-board-page .task-board-toolbar {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: auto auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    align-items: stretch !important;
+    gap: 0.55rem !important;
+    overflow: visible !important;
+    position: relative !important;
+    z-index: 1600 !important;
+    box-sizing: border-box !important;
+  }
+
+  body.task-board-page .task-board-toolbar-left {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    overflow: visible !important;
+  }
+
+  body.task-board-page .task-board-search-group {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  body.task-board-page #taskBoardFilterSelectedAssignees {
+    display: none !important;
+  }
+
+  body.task-board-page .task-board-toolbar-actions {
+    display: grid !important;
+    grid-template-columns: minmax(96px, 112px) minmax(0, 1fr) 40px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    align-items: stretch !important;
+    gap: 0.55rem !important;
+    margin-left: 0 !important;
+    overflow: visible !important;
+    position: relative !important;
+    z-index: 1602 !important;
+    box-sizing: border-box !important;
+  }
+
+  body.task-board-page #taskBoardFilterDropdown {
+    grid-column: 1 !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative !important;
+    z-index: 1603 !important;
+  }
+
+  body.task-board-page #taskBoardFilterBtn {
+    display: inline-flex !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    min-height: 40px !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    white-space: nowrap !important;
+    padding-left: 0.65rem !important;
+    padding-right: 0.65rem !important;
+  }
+
+  body.task-board-page #taskBoardGroupDropdown {
+    grid-column: 2 !important;
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative !important;
+    z-index: 1603 !important;
+  }
+
+  body.task-board-page #taskBoardGroupBtn {
+    display: inline-flex !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    min-height: 40px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    pointer-events: auto !important;
+    white-space: nowrap !important;
+    padding-left: 0.65rem !important;
+    padding-right: 0.65rem !important;
+  }
+
+  body.task-board-page #taskBoardGroupLabel {
+    display: block !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    white-space: nowrap !important;
+    text-overflow: ellipsis !important;
+  }
+
+  body.task-board-page .task-board-settings-wrap {
+    grid-column: 3 !important;
+    display: block !important;
+    width: 40px !important;
+    max-width: 40px !important;
+    min-width: 40px !important;
+    margin-left: 0 !important;
+    justify-self: end !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    position: relative !important;
+    z-index: 1604 !important;
+  }
+
+  body.task-board-page #taskBoardSettingsBtn {
+    display: inline-flex !important;
+    width: 40px !important;
+    max-width: 40px !important;
+    min-width: 40px !important;
+    height: 40px !important;
+    align-items: center !important;
+    justify-content: center !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+  }
+}
+
+/* =========================
+   FINAL IOS / ANDROID BOARD SWIPE FIX
+   iOS Safari does not handle overflow swipe reliably inside CSS zoom
+========================= */
+
+@media (max-width: 991.98px) {
+  body.task-board-page #taskBoardHeaderZoomArea,
+  body.task-board-page #taskBoardContentZoomArea,
+  body.task-board-page .task-board-zoom-area {
+    width: 100% !important;
+    max-width: 100% !important;
+    zoom: 100% !important;
+    transform: none !important;
+  }
+
+  body.task-board-page #taskBoardApp.task-board-scroll {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    min-width: 0 !important;
+    overflow-x: scroll !important;
+    overflow-y: visible !important;
+    -webkit-overflow-scrolling: touch !important;
+    overscroll-behavior-x: contain !important;
+    touch-action: auto !important;
+    scroll-behavior: auto !important;
+  }
+
+  body.task-board-page #taskBoardGrid.task-board-grid {
+    width: max-content !important;
+    min-width: max-content !important;
+    max-width: none !important;
+    display: flex !important;
+    flex-wrap: nowrap !important;
+    touch-action: auto !important;
+  }
+
+  body.task-board-page .task-column {
+    flex: 0 0 320px !important;
+    width: 320px !important;
+    min-width: 320px !important;
+    max-width: 320px !important;
+    touch-action: auto !important;
+  }
+
+  body.task-board-page .task-item-card,
+  body.task-board-page .task-column-header,
+  body.task-board-page .task-item-list {
+    touch-action: auto !important;
+  }
+
+  body.task-board-touch-scrolling,
+  body.task-board-touch-scrolling * {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+  }
+}
+
+

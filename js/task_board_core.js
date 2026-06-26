@@ -117,6 +117,26 @@ var state = {
       : {},
 };
 
+function isTouchBoardViewport() {
+  var viewportWidth =
+    window.innerWidth || document.documentElement.clientWidth || 0;
+  var hasTouch = false;
+
+  if (typeof window.matchMedia === "function") {
+    try {
+      hasTouch =
+        window.matchMedia("(pointer: coarse)").matches ||
+        window.matchMedia("(hover: none)").matches;
+    } catch (e) {}
+  }
+
+  if (!hasTouch && typeof navigator !== "undefined") {
+    hasTouch = Number(navigator.maxTouchPoints || 0) > 0;
+  }
+
+  return hasTouch && viewportWidth > 0 && viewportWidth <= 991.98;
+}
+
 function normalizeProjectPermissionFieldKey(fieldKey) {
   var key = String(fieldKey || "")
     .trim()
@@ -2829,10 +2849,19 @@ function syncBoardZoomControls() {
   $("#taskBoardZoomInBtn").prop("disabled", percent >= boardZoomMax);
 }
 
+function isTaskBoardCompactViewport() {
+  if (typeof window.matchMedia !== "function") {
+    return (window.innerWidth || document.documentElement.clientWidth || 0) <= 991.98;
+  }
+
+  return window.matchMedia("(max-width: 991.98px)").matches;
+}
+
 function applyBoardZoom() {
   var percent = normalizeBoardZoomPercent(boardZoomPercent);
   var scale = percent / 100;
   var zoomAreas = document.querySelectorAll(".task-board-zoom-area");
+  var disableZoomForCompactViewport = isTaskBoardCompactViewport();
 
   boardZoomPercent = percent;
   if (zoomAreas.length && scale > 0) {
@@ -2841,6 +2870,13 @@ function applyBoardZoom() {
       if (!zoomArea) {
         continue;
       }
+
+      if (disableZoomForCompactViewport) {
+        zoomArea.style.zoom = "100%";
+        zoomArea.style.width = "100%";
+        continue;
+      }
+
       zoomArea.style.zoom = String(percent) + "%";
       zoomArea.style.width = String(100 / scale) + "%";
     }
