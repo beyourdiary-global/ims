@@ -2183,6 +2183,9 @@ function initCustomerRecordTableFilters(config) {
         })
         .get(),
     );
+    selectedValues = selectedValues.filter(function (value) {
+      return value !== "";
+    });
 
     if (!selectedValues.length) {
       fieldNode.button.text(field.placeholder || "All");
@@ -2207,10 +2210,37 @@ function initCustomerRecordTableFilters(config) {
             return $(this).val();
           })
           .get(),
-      );
+      ).filter(function (value) {
+        return value !== "";
+      });
     }
 
     return String(fieldNode.input.val() == null ? "" : fieldNode.input.val());
+  };
+
+  let syncMultiSelectPlaceholderState = function (field) {
+    if (!field || !field.multiple || !fieldNodes[field.key]) {
+      return;
+    }
+
+    let fieldNode = fieldNodes[field.key];
+    let selectedValues = normalizeCustomerRecordFilterValuesList(
+      fieldNode.inputs
+        .filter(":checked")
+        .map(function () {
+          return $(this).val();
+        })
+        .get(),
+    ).filter(function (value) {
+      return value !== "";
+    });
+
+    fieldNode.inputs.each(function () {
+      let input = $(this);
+      if (String(input.val()) === "") {
+        input.prop("checked", selectedValues.length === 0);
+      }
+    });
   };
 
   let setFieldNodeValue = function (field, value) {
@@ -2231,6 +2261,7 @@ function initCustomerRecordTableFilters(config) {
         input.prop("checked", !!selectedMap[String(input.val()).trim()]);
       });
 
+      syncMultiSelectPlaceholderState(field);
       updateDropdownButtonLabel(field);
       return;
     }
@@ -2343,10 +2374,9 @@ function initCustomerRecordTableFilters(config) {
       });
     });
 
-    let sortedOptionValues = Object.keys(optionValues).sort(function (
-      leftValue,
-      rightValue,
-    ) {
+    let sortedOptionValues = normalizeCustomerRecordFilterValuesList(
+      Object.keys(optionValues),
+    ).sort(function (leftValue, rightValue) {
       return leftValue.localeCompare(rightValue);
     });
 
@@ -2373,6 +2403,30 @@ function initCustomerRecordTableFilters(config) {
       );
 
       let checkboxNodes = $();
+      let placeholderCheckboxId = fieldId + "_all";
+      let placeholderCheckboxWrap = $('<div class="form-check"></div>');
+      let placeholderCheckboxNode = $(
+        '<input class="form-check-input customer-record-filter-checkbox" type="checkbox" value="" id="' +
+          placeholderCheckboxId +
+          '" data-filter-key="' +
+          field.key +
+          '" data-placeholder="' +
+          $("<div></div>").text(field.placeholder || "All").html() +
+          '">',
+      );
+      let placeholderCheckboxLabel = $(
+        '<label class="form-check-label" for="' +
+          placeholderCheckboxId +
+          '">' +
+          $("<div></div>").text(field.placeholder || "All").html() +
+          "</label>",
+      );
+
+      placeholderCheckboxWrap.append(placeholderCheckboxNode);
+      placeholderCheckboxWrap.append(placeholderCheckboxLabel);
+      dropdownMenu.append(placeholderCheckboxWrap);
+      checkboxNodes = checkboxNodes.add(placeholderCheckboxNode);
+
       sortedOptionValues.forEach(function (value, index) {
         let checkboxId = fieldId + "_" + index;
         let checkboxWrap = $('<div class="form-check"></div>');
@@ -2416,6 +2470,26 @@ function initCustomerRecordTableFilters(config) {
       checkboxNodes
         .off("change.customerRecordFilter")
         .on("change.customerRecordFilter", function () {
+          let currentCheckbox = $(this);
+          let currentValue = String(currentCheckbox.val()).trim();
+
+          if (currentValue === "" && currentCheckbox.is(":checked")) {
+            checkboxNodes.each(function () {
+              let checkbox = $(this);
+              if (checkbox.get(0) !== currentCheckbox.get(0)) {
+                checkbox.prop("checked", false);
+              }
+            });
+          } else if (currentValue !== "" && currentCheckbox.is(":checked")) {
+            checkboxNodes.each(function () {
+              let checkbox = $(this);
+              if (String(checkbox.val()).trim() === "") {
+                checkbox.prop("checked", false);
+              }
+            });
+          }
+
+          syncMultiSelectPlaceholderState(field);
           handleFieldValueChange(field);
         });
 
