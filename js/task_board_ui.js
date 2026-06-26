@@ -3376,7 +3376,11 @@ function buildTaskCardHtml(item) {
     escHtml(String(item.column_name || item.status_name || "")) +
     '" data-task-status-label-ids="' +
     escHtml(statusLabelIds.join(",")) +
-    '" draggable="true">' +
+    '" draggable="' +
+    (typeof isTouchBoardViewport === "function" && isTouchBoardViewport()
+      ? "false"
+      : "true") +
+    '">' +
     '<div class="task-item-head">' +
     '<h6 class="task-item-title">' +
     escHtml(item.title || "") +
@@ -3480,7 +3484,7 @@ function buildColumnHtml(column) {
     (state.isProjectOwner
       ? '<div class="dropdown">' +
         '<button class="btn task-column-menu-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false"><i class="fa-solid fa-ellipsis"></i></button>' +
-        '<ul class="dropdown-menu task-column-menu-list">' +
+        '<ul class="dropdown-menu dropdown-menu-end task-column-menu-list">' +
         '<li><a class="dropdown-item task-column-action" href="#" data-action="rename">Rename status</a></li>' +
         '<li><a class="dropdown-item task-column-action" href="#" data-action="move_left">Move status left</a></li>' +
         '<li><a class="dropdown-item task-column-action" href="#" data-action="move_right">Move status right</a></li>' +
@@ -3798,7 +3802,13 @@ function renderBoardGroupingLayout() {
     var groupCards = Array.isArray(group.cards) ? group.cards : [];
     for (var c = 0; c < groupCards.length; c++) {
       var $card = groupCards[c];
-      $card.attr("draggable", mode === "status" ? "true" : "false");
+      $card.attr(
+        "draggable",
+        mode === "status" &&
+          !(typeof isTouchBoardViewport === "function" && isTouchBoardViewport())
+          ? "true"
+          : "false",
+      );
       $list.append($card);
     }
   }

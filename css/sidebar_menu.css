@@ -643,6 +643,40 @@ body.task-global-sidebar-open .task-top-menu-trigger .task-top-menu-icon {
     box-sizing: border-box;
   }
 
+  #sidebar .task-mobile-project-section .task-global-project-row {
+    align-items: flex-start;
+    gap: 8px;
+    padding-right: 8px;
+  }
+
+  #sidebar .task-mobile-project-section .task-global-project-toggle {
+    flex: 1 1 auto;
+    width: auto;
+    padding-right: 0;
+  }
+
+  #sidebar .task-mobile-project-section .task-global-project-toggle-text {
+    padding-right: 4px;
+  }
+
+  #sidebar .task-mobile-project-section .task-global-project-actions {
+    flex: 0 0 32px;
+    width: 32px;
+    min-width: 32px;
+    margin-left: 4px;
+  }
+
+  #sidebar .task-mobile-project-section .task-global-project-settings-link,
+  #sidebar .task-mobile-project-section .task-global-project-actions-btn {
+    width: 32px;
+    height: 32px;
+    min-width: 32px;
+    border-radius: 8px;
+    opacity: 1;
+    pointer-events: auto;
+    background: rgba(255, 255, 255, 0.08);
+  }
+
   .task-global-sidebar-resize-handle {
     display: none !important;
   }
@@ -736,5 +770,107 @@ body.task-global-sidebar-open .task-top-menu-trigger .task-top-menu-icon {
   .task-global-project-toggle {
     padding-top: 10px;
     padding-bottom: 10px;
+  }
+}
+
+/* =========================
+   FINAL MOBILE SIDEBAR PROJECT NAME WRAP FIX
+   Long project name wraps into 2 rows and keeps ... button visible
+========================= */
+
+@media (max-width: 768px) {
+  #sidebar .task-mobile-project-section .task-global-project-row {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 34px !important;
+    align-items: start !important;
+    gap: 6px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 0 4px !important;
+    box-sizing: border-box !important;
+    overflow: visible !important;
+  }
+
+  #sidebar .task-mobile-project-section .task-global-project-toggle {
+    grid-column: 1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    height: auto !important;
+    min-height: 40px !important;
+    padding: 8px 4px 8px 6px !important;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) 16px !important;
+    align-items: start !important;
+    gap: 6px !important;
+    white-space: normal !important;
+    overflow: hidden !important;
+  }
+
+  #sidebar .task-mobile-project-section .task-global-project-toggle-text {
+    display: -webkit-box !important;
+    -webkit-line-clamp: 2 !important;
+    -webkit-box-orient: vertical !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
+    white-space: normal !important;
+    text-overflow: ellipsis !important;
+    overflow-wrap: anywhere !important;
+    word-break: break-word !important;
+    line-height: 1.25 !important;
+    max-height: 2.5em !important;
+  }
+
+  #sidebar .task-mobile-project-section .task-global-project-toggle-icon {
+    grid-column: 2 !important;
+    align-self: start !important;
+    margin-top: 4px !important;
+    flex: 0 0 auto !important;
+  }
+
+  #sidebar .task-mobile-project-section .task-global-project-actions {
+    grid-column: 2 !important;
+    display: flex !important;
+    align-items: flex-start !important;
+    justify-content: center !important;
+    width: 34px !important;
+    min-width: 34px !important;
+    max-width: 34px !important;
+    margin-left: 0 !important;
+    padding-top: 3px !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    overflow: visible !important;
+  }
+
+  #sidebar .task-mobile-project-section .task-global-project-actions-btn {
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    width: 34px !important;
+    min-width: 34px !important;
+    max-width: 34px !important;
+    height: 34px !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    color: #ffffff !important;
+    background: rgba(255, 255, 255, 0.08) !important;
+    border-radius: 8px !important;
+    flex: 0 0 34px !important;
+  }
+
+  #sidebar .task-mobile-project-section .task-global-project-actions-btn i {
+    display: inline-block !important;
+    font-size: 15px !important;
+    line-height: 1 !important;
+  }
+
+  #sidebar .task-mobile-project-section .task-global-project-submenu {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow: hidden !important;
   }
 }

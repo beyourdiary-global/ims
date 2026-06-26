@@ -2081,7 +2081,15 @@ if (!function_exists('taskCanAccessProjectSettings')) {
             return false;
         }
 
-        return taskIsProjectOwner($connect, $projectId);
+        if (taskIsProjectOwner($connect, $projectId)) {
+            return true;
+        }
+
+        if (taskIsTaskAdminUser($connect)) {
+            return true;
+        }
+
+        return taskIsActionAllowed('view', taskGetPinAccessByGroupId($connect, 140));
     }
 }
 
@@ -2106,7 +2114,15 @@ if (!function_exists('taskCanAccessProjectUserAccess')) {
             return false;
         }
 
-        return taskIsProjectOwner($connect, $projectId);
+        if (taskIsProjectOwner($connect, $projectId)) {
+            return true;
+        }
+
+        if (taskIsTaskAdminUser($connect)) {
+            return true;
+        }
+
+        return taskIsActionAllowed('view', taskGetPinAccessByGroupId($connect, 141));
     }
 }
 
@@ -7034,12 +7050,9 @@ if (!function_exists('taskRenderProjectBrowserMenu')) {
             $projectHasBoardAccess = taskUserCanAccessProjectPageByPin($connect, $projectId, 139);
             $projectHasSheetsAccess = taskUserCanAccessProjectPageByPin($connect, $projectId, 139);
             
-            $isProjectOwner = isset($project['owner_user_id'])
-                && (int) $project['owner_user_id'] === $currentUserId;
-
-            $canAccessProjectSettings = $isProjectOwner;
-            $canAccessProjectUserAccess = $isProjectOwner;
-            $canManageProjectActions = $isProjectOwner;
+            $canAccessProjectSettings = taskCanAccessProjectSettings($connect, $projectId);
+            $canAccessProjectUserAccess = taskCanAccessProjectUserAccess($connect, $projectId);
+            $canManageProjectActions = $canAccessProjectSettings || $canAccessProjectUserAccess;
 
             if (!$projectHasSummaryAccess && !$projectHasBoardAccess && !$projectHasSheetsAccess && !$canManageProjectActions) {
                 continue;
