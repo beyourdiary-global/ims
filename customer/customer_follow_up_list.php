@@ -165,6 +165,53 @@ if (!function_exists('customerFollowUpPagePlatformLabel')) {
     }
 }
 
+if (!function_exists('customerFollowUpPageReadRequestValues')) {
+    function customerFollowUpPageReadRequestValues($key)
+    {
+        if (!isset($_GET[$key])) {
+            return array();
+        }
+
+        $rawValues = $_GET[$key];
+        if (!is_array($rawValues)) {
+            $rawValues = array($rawValues);
+        }
+
+        $values = array();
+        foreach ($rawValues as $rawValue) {
+            $value = trim((string) $rawValue);
+            if ($value === '') {
+                continue;
+            }
+
+            $values[$value] = $value;
+        }
+
+        return array_values($values);
+    }
+}
+
+if (!function_exists('customerFollowUpPageBuildMultiSelectButtonLabel')) {
+    function customerFollowUpPageBuildMultiSelectButtonLabel($selectedLabels, $placeholder)
+    {
+        $selectedLabels = array_values(array_filter(array_map(function ($label) {
+            return trim((string) $label);
+        }, (array) $selectedLabels), function ($label) {
+            return $label !== '';
+        }));
+
+        if (empty($selectedLabels)) {
+            return (string) $placeholder;
+        }
+
+        if (count($selectedLabels) === 1) {
+            return $selectedLabels[0];
+        }
+
+        return count($selectedLabels) . ' selected';
+    }
+}
+
 if (!function_exists('customerFollowUpPageBuildOrderViewUrl')) {
     function customerFollowUpPageBuildOrderViewUrl($platform, $orderId)
     {
@@ -237,13 +284,45 @@ $currentYear = date('Y');
 $selectedMonth = ($selectedMonth === '' || preg_match('/^(0[1-9]|1[0-2])$/', $selectedMonth)) ? $selectedMonth : date('m');
 $selectedYear = ($selectedYear === '' || preg_match('/^\d{4}$/', $selectedYear)) ? $selectedYear : $currentYear;
 $selectedDate = preg_match('/^\d{4}-\d{2}-\d{2}$/', $selectedDate) ? $selectedDate : '';
-$statusFilter = trim((string) input('status'));
-$platformFilter = customerFollowUpNormalizePlatform(input('platform'));
-$customerTypeFilter = trim((string) input('customer_type'));
-$assignedUserFilter = (int) input('assigned_user_id');
+$platformFilters = array();
+foreach (customerFollowUpPageReadRequestValues('platform') as $platformValue) {
+    $normalizedPlatform = customerFollowUpNormalizePlatform($platformValue);
+    if ($normalizedPlatform !== '') {
+        $platformFilters[$normalizedPlatform] = $normalizedPlatform;
+    }
+}
+$platformFilters = array_values($platformFilters);
+
+$statusFilters = array();
+foreach (customerFollowUpPageReadRequestValues('status') as $statusValue) {
+    $normalizedStatus = customerFollowUpNormalizeStatus($statusValue);
+    if ($normalizedStatus !== '') {
+        $statusFilters[strtolower($normalizedStatus)] = $normalizedStatus;
+    }
+}
+$statusFilters = array_values($statusFilters);
+
+$customerTypeFilters = array();
+foreach (customerFollowUpPageReadRequestValues('customer_type') as $customerTypeValue) {
+    $normalizedCustomerType = strtolower(trim((string) $customerTypeValue));
+    if (in_array($normalizedCustomerType, array('new', 'return'), true)) {
+        $customerTypeFilters[$normalizedCustomerType] = $normalizedCustomerType;
+    }
+}
+$customerTypeFilters = array_values($customerTypeFilters);
+
+$assignedUserFilters = array();
+foreach (customerFollowUpPageReadRequestValues('assigned_user_id') as $assignedUserValue) {
+    $assignedUserValue = trim((string) $assignedUserValue);
+    if ($assignedUserValue !== '' && ctype_digit($assignedUserValue) && (int) $assignedUserValue > 0) {
+        $assignedUserFilters[(int) $assignedUserValue] = (int) $assignedUserValue;
+    }
+}
+$assignedUserFilters = array_values($assignedUserFilters);
+
 $canViewAllFollowUpRecords = customerFollowUpIsAdminUser(defined('USER_GROUP') ? USER_GROUP : null);
 if (!$canViewAllFollowUpRecords) {
-    $assignedUserFilter = defined('USER_ID') ? (int) USER_ID : 0;
+    $assignedUserFilters = defined('USER_ID') && (int) USER_ID > 0 ? array((int) USER_ID) : array();
 }
 $followUpIdFilter = (int) input('follow_up_id');
 $roundIdFilter = (int) input('round_id');
@@ -340,6 +419,7 @@ foreach ($messageShortcutOptions as $shortcutRow) {
 }
 
 $assignedUsers = array();
+$assignedUserLabelsById = array();
 $userResult = getData('id,name,username', '', '', USR_USER, $connect);
 if ($userResult) {
     while ($userRow = $userResult->fetch_assoc()) {
@@ -347,23 +427,52 @@ if ($userResult) {
         if (!$canViewAllFollowUpRecords && defined('USER_ID') && $userId !== (int) USER_ID) {
             continue;
         }
+        $userLabel = trim((string) (isset($userRow['name']) && $userRow['name'] !== '' ? $userRow['name'] : $userRow['username']));
+        if ($userId <= 0 || $userLabel === '') {
+            continue;
+        }
+        $assignedUserLabelsById[$userId] = $userLabel;
         $assignedUsers[] = $userRow;
+    }
+}
+
+if ($canViewAllFollowUpRecords) {
+    $assignedUserFilters = array_values(array_filter($assignedUserFilters, function ($userId) use ($assignedUserLabelsById) {
+        return isset($assignedUserLabelsById[(int) $userId]);
+    }));
+}
+
+$selectedPlatformLabels = array_map('customerFollowUpPagePlatformLabel', $platformFilters);
+$selectedStatusLabels = $statusFilters;
+$selectedCustomerTypeLabels = array_map(function ($customerType) {
+    return ucfirst((string) $customerType);
+}, $customerTypeFilters);
+$selectedAssignedUserLabels = array();
+foreach ($assignedUserFilters as $assignedUserId) {
+    if (isset($assignedUserLabelsById[$assignedUserId])) {
+        $selectedAssignedUserLabels[] = $assignedUserLabelsById[$assignedUserId];
     }
 }
 
 $whereConditions = array("f.`status` = 'A'");
 $effectiveStatusSql = "LOWER(CASE WHEN LOWER(IFNULL(r.`postpone_status`, 'none')) = 'pending' THEN 'pending approval' ELSE COALESCE(NULLIF(TRIM(r.`round_status`), ''), NULLIF(TRIM(f.`current_status`), '')) END)";
-if ($platformFilter !== '') {
-    $whereConditions[] = "f.`platform` = '" . customerFollowUpEscape($connect, $platformFilter) . "'";
+if (!empty($platformFilters)) {
+    $whereConditions[] = "f.`platform` IN ('" . implode("','", array_map(function ($platformValue) use ($connect) {
+        return customerFollowUpEscape($connect, $platformValue);
+    }, $platformFilters)) . "')";
 }
-if ($statusFilter !== '') {
-    $whereConditions[] = $effectiveStatusSql . " = '" . customerFollowUpEscape($connect, strtolower($statusFilter)) . "'";
+if (!empty($statusFilters)) {
+    $whereConditions[] = $effectiveStatusSql . " IN ('" . implode("','", array_map(function ($statusValue) use ($connect) {
+        return customerFollowUpEscape($connect, strtolower($statusValue));
+    }, $statusFilters)) . "')";
 }
-if ($assignedUserFilter > 0) {
-    $whereConditions[] = "f.`assigned_user_id` = " . $assignedUserFilter;
+if (!empty($assignedUserFilters)) {
+    $whereConditions[] = "f.`assigned_user_id` IN (" . implode(',', array_map('intval', $assignedUserFilters)) . ")";
 }
-if ($customerTypeFilter !== '') {
-    $whereConditions[] = "LOWER(f.`customer_type`) = '" . customerFollowUpEscape($connect, strtolower($customerTypeFilter)) . "'";
+if (!empty($customerTypeFilters)) {
+    $whereConditions[] = "LOWER(f.`customer_type`) IN ('" . implode("','", array_map(function ($customerTypeValue) use ($connect) {
+        return customerFollowUpEscape($connect, strtolower($customerTypeValue));
+    }, $customerTypeFilters)) . "')";
 }
 if ($selectedDate !== '') {
     $whereConditions[] = "DATE(r.`next_follow_up_date`) = '" . customerFollowUpEscape($connect, $selectedDate) . "'";
@@ -557,6 +666,14 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
             align-items: flex-end;
         }
 
+        .customer-follow-up-page .follow-up-filter-actions {
+            display: flex;
+            align-items: flex-end;
+            justify-content: flex-end;
+            gap: 10px;
+            width: 100%;
+        }
+
         .customer-follow-up-page .follow-up-reset-btn {
             border: 1px solid #d0d5dd;
             background: #ffffff;
@@ -567,10 +684,66 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
             justify-content: center;
         }
 
+        .customer-follow-up-page .follow-up-search-btn {
+            border-radius: 999px;
+            min-width: 120px;
+            height: 38px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
         .customer-follow-up-page .follow-up-filter-grid {
             display: grid;
             grid-template-columns: repeat(6, minmax(0, 1fr));
             gap: 16px;
+        }
+
+        .customer-follow-up-page .follow-up-filter-multiselect .customer-record-filter-dropdown-toggle {
+            min-height: 38px;
+            padding: 0.375rem 0.75rem;
+            padding-right: 2.25rem;
+            text-align: left;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            position: relative;
+            width: 100%;
+        }
+
+        .customer-follow-up-page .follow-up-filter-multiselect {
+            position: relative;
+            width: 100%;
+        }
+
+        .customer-follow-up-page .follow-up-filter-multiselect .customer-record-filter-dropdown-toggle::after {
+            content: "";
+            position: absolute;
+            top: 50%;
+            right: 0.95rem;
+            width: 0;
+            height: 0;
+            border-left: 5px solid transparent;
+            border-right: 5px solid transparent;
+            border-top: 6px solid #6c757d;
+            transform: translateY(-35%);
+            pointer-events: none;
+        }
+
+        .customer-follow-up-page .follow-up-filter-multiselect .dropdown-menu {
+            display: none;
+            width: 100%;
+            min-width: 100%;
+            max-width: 100%;
+            max-height: 240px;
+            overflow-y: auto;
+            inset: calc(100% + 0.25rem) auto auto 0 !important;
+            transform: none !important;
+            z-index: 1080;
+        }
+
+        .customer-follow-up-page .follow-up-filter-multiselect.is-open .dropdown-menu {
+            display: block;
         }
 
         .customer-follow-up-page .follow-up-note {
@@ -817,6 +990,12 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
 
                 <div class="filter-card p-3 mb-4">
                     <form method="get" id="customer_follow_up_filter_form">
+                        <?php if ($followUpIdFilter > 0) { ?>
+                            <input type="hidden" name="follow_up_id" value="<?= $followUpIdFilter ?>">
+                        <?php } ?>
+                        <?php if ($roundIdFilter > 0) { ?>
+                            <input type="hidden" name="round_id" value="<?= $roundIdFilter ?>">
+                        <?php } ?>
                         <div class="follow-up-filter-stack">
                             <div class="follow-up-date-filter-grid">
                                 <div>
@@ -826,7 +1005,7 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                                 <div>
                                     <label class="form-label" for="customer_follow_up_month">Month</label>
                                     <select class="form-select" id="customer_follow_up_month" name="month">
-                                        <option value="">Select Month</option>
+                                        <option value="">All</option>
                                         <?php for ($monthNumber = 1; $monthNumber <= 12; $monthNumber++) { ?>
                                             <?php
                                             $monthValue = str_pad((string) $monthNumber, 2, '0', STR_PAD_LEFT);
@@ -839,63 +1018,119 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                                 <div>
                                     <label class="form-label" for="customer_follow_up_year">Year</label>
                                     <select class="form-select" id="customer_follow_up_year" name="year">
-                                        <option value="">Select Year</option>
+                                        <option value="">All</option>
                                         <?php for ($yearValue = (int) $currentYear; $yearValue >= ((int) $currentYear - 5); $yearValue--) { ?>
                                             <option value="<?= htmlspecialchars((string) $yearValue, ENT_QUOTES, 'UTF-8') ?>" <?= (string) $yearValue === $selectedYear ? 'selected' : '' ?>><?= htmlspecialchars((string) $yearValue, ENT_QUOTES, 'UTF-8') ?></option>
                                         <?php } ?>
                                     </select>
                                 </div>
                                 <div class="follow-up-date-filter-reset">
-                                    <a class="btn btn-outline-secondary w-100 follow-up-reset-btn" href="<?= htmlspecialchars($SITEURL . '/customer/customer_follow_up_list.php', ENT_QUOTES, 'UTF-8') ?>" style="text-transform: none !important;">Reset Filters</a>
+                                    <div class="follow-up-filter-actions">
+                                        <button type="submit" class="btn btn-primary follow-up-search-btn">Search</button>
+                                        <a class="btn btn-outline-secondary w-100 follow-up-reset-btn" href="<?= htmlspecialchars($SITEURL . '/customer/customer_follow_up_list.php', ENT_QUOTES, 'UTF-8') ?>" style="text-transform: none !important;">Reset Filters</a>
+                                    </div>
                                 </div>
                             </div>
                             <div class="follow-up-filter-grid">
                                 <div>
                                     <label class="form-label" for="platform">Platform</label>
-                                    <select class="form-select" id="platform" name="platform">
-                                        <option value="">All Platform</option>
-                                        <?php foreach (array('shopee', 'lazada', 'facebook', 'website', 'customer_info') as $platformOption) { ?>
-                                            <option value="<?= htmlspecialchars($platformOption, ENT_QUOTES, 'UTF-8') ?>" <?= $platformFilter === $platformOption ? 'selected' : '' ?>>
-                                                <?= htmlspecialchars(customerFollowUpPagePlatformLabel($platformOption), ENT_QUOTES, 'UTF-8') ?>
-                                            </option>
-                                        <?php } ?>
-                                    </select>
+                                    <div class="dropdown customer-record-filter-dropdown follow-up-filter-multiselect" data-follow-up-multiselect="platform">
+                                        <button
+                                            class="customer-record-filter-dropdown-toggle"
+                                            type="button"
+                                            id="platform"
+                                            data-placeholder="All Platform"
+                                            aria-expanded="false"><?= htmlspecialchars(customerFollowUpPageBuildMultiSelectButtonLabel($selectedPlatformLabels, 'All Platform'), ENT_QUOTES, 'UTF-8') ?></button>
+                                        <div class="dropdown-menu" aria-labelledby="platform">
+                                            <div class="form-check">
+                                                <input class="form-check-input customer-record-filter-checkbox" type="checkbox" value="" id="platform_all" <?= empty($platformFilters) ? 'checked' : '' ?>>
+                                                <label class="form-check-label" for="platform_all">All Platform</label>
+                                            </div>
+                                            <?php foreach (array('shopee', 'lazada', 'facebook', 'website', 'customer_info') as $platformOption) { ?>
+                                                <div class="form-check">
+                                                    <input class="form-check-input customer-record-filter-checkbox" type="checkbox" name="platform[]" value="<?= htmlspecialchars($platformOption, ENT_QUOTES, 'UTF-8') ?>" id="platform_<?= htmlspecialchars($platformOption, ENT_QUOTES, 'UTF-8') ?>" <?= in_array($platformOption, $platformFilters, true) ? 'checked' : '' ?>>
+                                                    <label class="form-check-label" for="platform_<?= htmlspecialchars($platformOption, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(customerFollowUpPagePlatformLabel($platformOption), ENT_QUOTES, 'UTF-8') ?></label>
+                                                </div>
+                                            <?php } ?>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div>
                                     <label class="form-label" for="status">Status</label>
-                                    <select class="form-select" id="status" name="status">
-                                        <option value="">All Status</option>
-                                        <?php foreach (array('Pending Approval', 'Approved', 'Rejected', 'Missed Follow-Up', 'Done', 'Postponed', 'Lost') as $statusOption) { ?>
-                                            <option value="<?= htmlspecialchars($statusOption, ENT_QUOTES, 'UTF-8') ?>" <?= strtolower($statusFilter) === strtolower($statusOption) ? 'selected' : '' ?>>
-                                                <?= htmlspecialchars($statusOption, ENT_QUOTES, 'UTF-8') ?>
-                                            </option>
-                                        <?php } ?>
-                                    </select>
+                                    <div class="dropdown customer-record-filter-dropdown follow-up-filter-multiselect" data-follow-up-multiselect="status">
+                                        <button
+                                            class="customer-record-filter-dropdown-toggle"
+                                            type="button"
+                                            id="status"
+                                            data-placeholder="All Status"
+                                            aria-expanded="false"><?= htmlspecialchars(customerFollowUpPageBuildMultiSelectButtonLabel($selectedStatusLabels, 'All Status'), ENT_QUOTES, 'UTF-8') ?></button>
+                                        <div class="dropdown-menu" aria-labelledby="status">
+                                            <div class="form-check">
+                                                <input class="form-check-input customer-record-filter-checkbox" type="checkbox" value="" id="status_all" <?= empty($statusFilters) ? 'checked' : '' ?>>
+                                                <label class="form-check-label" for="status_all">All Status</label>
+                                            </div>
+                                            <?php foreach (array('Pending Approval', 'Approved', 'Rejected', 'Missed Follow-Up', 'Done', 'Postponed', 'Lost') as $statusOption) { ?>
+                                                <div class="form-check">
+                                                    <input class="form-check-input customer-record-filter-checkbox" type="checkbox" name="status[]" value="<?= htmlspecialchars($statusOption, ENT_QUOTES, 'UTF-8') ?>" id="status_<?= htmlspecialchars(strtolower(str_replace(array(' ', '-'), '_', $statusOption)), ENT_QUOTES, 'UTF-8') ?>" <?= in_array($statusOption, $statusFilters, true) ? 'checked' : '' ?>>
+                                                    <label class="form-check-label" for="status_<?= htmlspecialchars(strtolower(str_replace(array(' ', '-'), '_', $statusOption)), ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($statusOption, ENT_QUOTES, 'UTF-8') ?></label>
+                                                </div>
+                                            <?php } ?>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div>
                                     <label class="form-label" for="assigned_user_id">Assigned User</label>
-                                    <select class="form-select" id="assigned_user_id" name="assigned_user_id">
-                                        <option value="">All User</option>
-                                        <?php foreach ($assignedUsers as $userRow) {
-                                            $userId = isset($userRow['id']) ? (int) $userRow['id'] : 0;
-                                            $userLabel = trim((string) (isset($userRow['name']) && $userRow['name'] !== '' ? $userRow['name'] : $userRow['username']));
-                                            if ($userId <= 0 || $userLabel === '') {
-                                                continue;
-                                            }
-                                            ?>
-                                            <option value="<?= $userId ?>" <?= $assignedUserFilter === $userId ? 'selected' : '' ?>>
-                                                <?= htmlspecialchars($userLabel, ENT_QUOTES, 'UTF-8') ?>
-                                            </option>
-                                        <?php } ?>
-                                    </select>
+                                    <div class="dropdown customer-record-filter-dropdown follow-up-filter-multiselect" data-follow-up-multiselect="assigned_user_id">
+                                        <button
+                                            class="customer-record-filter-dropdown-toggle"
+                                            type="button"
+                                            id="assigned_user_id"
+                                            data-placeholder="All User"
+                                            aria-expanded="false"><?= htmlspecialchars(customerFollowUpPageBuildMultiSelectButtonLabel($selectedAssignedUserLabels, 'All User'), ENT_QUOTES, 'UTF-8') ?></button>
+                                        <div class="dropdown-menu" aria-labelledby="assigned_user_id">
+                                            <div class="form-check">
+                                                <input class="form-check-input customer-record-filter-checkbox" type="checkbox" value="" id="assigned_user_id_all" <?= empty($assignedUserFilters) ? 'checked' : '' ?>>
+                                                <label class="form-check-label" for="assigned_user_id_all">All User</label>
+                                            </div>
+                                            <?php foreach ($assignedUsers as $userRow) {
+                                                $userId = isset($userRow['id']) ? (int) $userRow['id'] : 0;
+                                                $userLabel = trim((string) (isset($userRow['name']) && $userRow['name'] !== '' ? $userRow['name'] : $userRow['username']));
+                                                if ($userId <= 0 || $userLabel === '') {
+                                                    continue;
+                                                }
+                                                ?>
+                                                <div class="form-check">
+                                                    <input class="form-check-input customer-record-filter-checkbox" type="checkbox" name="assigned_user_id[]" value="<?= $userId ?>" id="assigned_user_id_<?= $userId ?>" <?= in_array($userId, $assignedUserFilters, true) ? 'checked' : '' ?>>
+                                                    <label class="form-check-label" for="assigned_user_id_<?= $userId ?>"><?= htmlspecialchars($userLabel, ENT_QUOTES, 'UTF-8') ?></label>
+                                                </div>
+                                            <?php } ?>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div>
                                     <label class="form-label" for="customer_type">Customer Type</label>
-                                    <select class="form-select" id="customer_type" name="customer_type">
-                                        <option value="">All Type</option>
-                                        <option value="new" <?= strtolower($customerTypeFilter) === 'new' ? 'selected' : '' ?>>New</option>
-                                        <option value="return" <?= strtolower($customerTypeFilter) === 'return' ? 'selected' : '' ?>>Return</option>
-                                    </select>
+                                    <div class="dropdown customer-record-filter-dropdown follow-up-filter-multiselect" data-follow-up-multiselect="customer_type">
+                                        <button
+                                            class="customer-record-filter-dropdown-toggle"
+                                            type="button"
+                                            id="customer_type"
+                                            data-placeholder="All Type"
+                                            aria-expanded="false"><?= htmlspecialchars(customerFollowUpPageBuildMultiSelectButtonLabel($selectedCustomerTypeLabels, 'All Type'), ENT_QUOTES, 'UTF-8') ?></button>
+                                        <div class="dropdown-menu" aria-labelledby="customer_type">
+                                            <div class="form-check">
+                                                <input class="form-check-input customer-record-filter-checkbox" type="checkbox" value="" id="customer_type_all" <?= empty($customerTypeFilters) ? 'checked' : '' ?>>
+                                                <label class="form-check-label" for="customer_type_all">All Type</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input customer-record-filter-checkbox" type="checkbox" name="customer_type[]" value="new" id="customer_type_new" <?= in_array('new', $customerTypeFilters, true) ? 'checked' : '' ?>>
+                                                <label class="form-check-label" for="customer_type_new">New</label>
+                                            </div>
+                                            <div class="form-check">
+                                                <input class="form-check-input customer-record-filter-checkbox" type="checkbox" name="customer_type[]" value="return" id="customer_type_return" <?= in_array('return', $customerTypeFilters, true) ? 'checked' : '' ?>>
+                                                <label class="form-check-label" for="customer_type_return">Return</label>
+                                            </div>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div>
                                     <label class="form-label d-block" for="missed_only">Extra Filter</label>
@@ -1657,6 +1892,142 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
             setButtonColor();
         }
 
+        function customerFollowUpUpdateMultiSelectButton(dropdown) {
+            if (!dropdown) {
+                return;
+            }
+
+            var button = dropdown.querySelector('.customer-record-filter-dropdown-toggle');
+            if (!button) {
+                return;
+            }
+
+            var placeholder = button.getAttribute('data-placeholder') || 'All';
+            var selectedLabels = Array.prototype.slice.call(dropdown.querySelectorAll('input[type="checkbox"][name]:checked')).map(function (checkbox) {
+                var checkboxId = checkbox.getAttribute('id');
+                var label = checkboxId ? dropdown.querySelector('label[for="' + checkboxId + '"]') : null;
+                return label ? label.textContent.trim() : '';
+            }).filter(function (label) {
+                return label !== '';
+            });
+
+            if (!selectedLabels.length) {
+                button.textContent = placeholder;
+            } else if (selectedLabels.length === 1) {
+                button.textContent = selectedLabels[0];
+            } else {
+                button.textContent = selectedLabels.length + ' selected';
+            }
+        }
+
+        function customerFollowUpSetMultiSelectOpen(dropdown, shouldOpen) {
+            if (!dropdown) {
+                return;
+            }
+
+            var button = dropdown.querySelector('.customer-record-filter-dropdown-toggle');
+            dropdown.classList.toggle('is-open', shouldOpen);
+            if (button) {
+                button.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+            }
+        }
+
+        function customerFollowUpCloseAllMultiSelects(exceptDropdown) {
+            document.querySelectorAll('[data-follow-up-multiselect]').forEach(function (dropdown) {
+                if (exceptDropdown && dropdown === exceptDropdown) {
+                    return;
+                }
+
+                customerFollowUpSetMultiSelectOpen(dropdown, false);
+            });
+        }
+
+        function customerFollowUpSyncMultiSelectState(dropdown, changedCheckbox) {
+            if (!dropdown) {
+                return;
+            }
+
+            var allCheckbox = dropdown.querySelector('input[type="checkbox"]:not([name])');
+            var optionCheckboxes = Array.prototype.slice.call(dropdown.querySelectorAll('input[type="checkbox"][name]'));
+            var checkedOptionCount = optionCheckboxes.filter(function (checkbox) {
+                return checkbox.checked;
+            }).length;
+
+            if (changedCheckbox && !changedCheckbox.hasAttribute('name') && changedCheckbox.checked) {
+                optionCheckboxes.forEach(function (checkbox) {
+                    checkbox.checked = false;
+                });
+            } else if (changedCheckbox && changedCheckbox.hasAttribute('name') && changedCheckbox.checked && allCheckbox) {
+                allCheckbox.checked = false;
+            }
+
+            if (allCheckbox) {
+                allCheckbox.checked = optionCheckboxes.every(function (checkbox) {
+                    return !checkbox.checked;
+                });
+            }
+
+            if (checkedOptionCount === 0 && allCheckbox) {
+                allCheckbox.checked = true;
+            }
+
+            customerFollowUpUpdateMultiSelectButton(dropdown);
+        }
+
+        function customerFollowUpInitializeMultiSelectFilters() {
+            document.querySelectorAll('[data-follow-up-multiselect]').forEach(function (dropdown) {
+                var button = dropdown.querySelector('.customer-record-filter-dropdown-toggle');
+                var menu = dropdown.querySelector('.dropdown-menu');
+
+                if (button && !button.dataset.followUpToggleBound) {
+                    button.addEventListener('click', function (event) {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        var shouldOpen = !dropdown.classList.contains('is-open');
+                        customerFollowUpCloseAllMultiSelects(dropdown);
+                        customerFollowUpSetMultiSelectOpen(dropdown, shouldOpen);
+                    });
+                    button.dataset.followUpToggleBound = '1';
+                }
+
+                if (menu && !menu.dataset.followUpMenuBound) {
+                    menu.addEventListener('click', function (event) {
+                        event.stopPropagation();
+                    });
+                    menu.dataset.followUpMenuBound = '1';
+                }
+
+                dropdown.querySelectorAll('input[type="checkbox"]').forEach(function (checkbox) {
+                    if (!checkbox.dataset.followUpCheckboxBound) {
+                        checkbox.addEventListener('change', function () {
+                            customerFollowUpSyncMultiSelectState(dropdown, checkbox);
+                        });
+                        checkbox.dataset.followUpCheckboxBound = '1';
+                    }
+                });
+
+                customerFollowUpSyncMultiSelectState(dropdown, null);
+            });
+
+            if (!document.body.dataset.followUpMultiSelectCloseBound) {
+                document.addEventListener('click', function (event) {
+                    if (event.target.closest('[data-follow-up-multiselect]')) {
+                        return;
+                    }
+
+                    customerFollowUpCloseAllMultiSelects();
+                });
+
+                document.addEventListener('keydown', function (event) {
+                    if (event.key === 'Escape') {
+                        customerFollowUpCloseAllMultiSelects();
+                    }
+                });
+
+                document.body.dataset.followUpMultiSelectCloseBound = '1';
+            }
+        }
+
         function customerFollowUpRefreshTableSection() {
             var tableSection = document.getElementById('customer_follow_up_table_section');
             if (!tableSection) {
@@ -2164,14 +2535,7 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
             });
         }
 
-        var customerFollowUpFilterForm = document.getElementById('customer_follow_up_filter_form');
-        if (customerFollowUpFilterForm) {
-            document.querySelectorAll('#customer_follow_up_filter_form select, #customer_follow_up_filter_form input[type="date"], #customer_follow_up_filter_form input[type="checkbox"]').forEach(function (filterElement) {
-                filterElement.addEventListener('change', function () {
-                    customerFollowUpFilterForm.submit();
-                });
-            });
-        }
+        customerFollowUpInitializeMultiSelectFilters();
 
         customerFollowUpInitializeTableSection();
 
