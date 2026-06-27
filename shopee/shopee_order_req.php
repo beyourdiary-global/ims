@@ -3056,7 +3056,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                     </div>
                 </div>
                 <?php } ?>
-                    <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
+                    <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column mobile-sticky-form-actions-target shopee-order-action-row">
                         <?php
                         if (isset($row['order_status'])) {
                             $statusCode = shopeeOmsNormalizeStatusCode($row['order_status']);

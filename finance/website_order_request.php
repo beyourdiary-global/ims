@@ -1753,8 +1753,16 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                     </div>
                 </div>
                 <?php }} ?>
-                <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
+                <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column mobile-sticky-form-actions-target shopee-order-action-row">
                     <?php
+                    if ($act === 'E' && isset($row['order_status'])) {
+                        $statusCode = shopeeOmsNormalizeStatusCode($row['order_status']);
+                        $canMoveToPack = shopeeOmsHasTransitionPermission($connect, $statusCode, 'TP', USER_GROUP, $row, USER_ID);
+                        if ($statusCode === 'P' && $canMoveToPack) {
+                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" value="TP" formnovalidate>MOVE TO TO PACK</button>';
+                        }
+                    }
+
                     switch ($act) {
                         case 'I':
                             echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="addRecord">Add Record</button>';
@@ -1762,13 +1770,6 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                         case 'E':
                             echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="updRecord">Edit Record</button>';
                             break;
-                    }
-                    if ($act === 'E' && isset($row['order_status'])) {
-                        $statusCode = shopeeOmsNormalizeStatusCode($row['order_status']);
-                        $canMoveToPack = shopeeOmsHasTransitionPermission($connect, $statusCode, 'TP', USER_GROUP, $row, USER_ID);
-                        if ($statusCode === 'P' && $canMoveToPack) {
-                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" value="TP" formnovalidate>MOVE TO TO PACK</button>';
-                        }
                     }
                     ?>
                     <button type="button" class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="backBtn" id="backBtn"

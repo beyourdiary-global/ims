@@ -4021,86 +4021,137 @@ function commonBuildMobileFloatingAddButton() {
   document.body.classList.add("has-mobile-floating-add-btn");
 }
 
-function commonBuildMobileStickyFormActions() {
-  let preferredContainer = document.querySelector(".mobile-sticky-form-actions-target");
-  if (preferredContainer) {
-    preferredContainer.classList.add("mobile-sticky-form-actions");
-    document.body.classList.add("has-mobile-sticky-form-actions");
+let commonMobileStickyFormActionsState = null;
 
-    let preferredButtons = Array.prototype.slice
-      .call(
-        preferredContainer.querySelectorAll(
-          "button.submitBtn, button.cancel, button#actionBtn, button#backBtn, button[name='actionBtn'], button[name='updateStatusBtn'], a.submitBtn, a.cancel, a#actionBtn, a#backBtn",
-        ),
-      )
-      .filter(function (button) {
-        return !button.closest("td") && !button.closest(".mobile-floating-action-bar");
-      });
+function commonMobileStickyActionSelector() {
+  return "button.submitBtn, button.cancel, button#actionBtn, button#backBtn, button[name='actionBtn'], button[name='updateStatusBtn'], a.submitBtn, a.cancel, a#actionBtn, a#backBtn";
+}
 
-    preferredButtons.sort(function (a, b) {
-      let aText = commonNormalizeButtonText(a.textContent || a.value || "").toLowerCase();
-      let bText = commonNormalizeButtonText(b.textContent || b.value || "").toLowerCase();
-
-      let aIsBack =
-        a.id === "backBtn" ||
-        a.classList.contains("backBtn") ||
-        a.classList.contains("cancel") ||
-        a.value === "back" ||
-        aText === "back";
-
-      let bIsBack =
-        b.id === "backBtn" ||
-        b.classList.contains("backBtn") ||
-        b.classList.contains("cancel") ||
-        b.value === "back" ||
-        bText === "back";
-
-      if (aIsBack && !bIsBack) {
-        return -1;
-      }
-
-      if (!aIsBack && bIsBack) {
-        return 1;
-      }
-
-      return 0;
-    });
-
-    for (let p = 0; p < preferredButtons.length; p++) {
-      preferredButtons[p].classList.add("mobile-sticky-form-button");
-      preferredContainer.appendChild(preferredButtons[p]);
-    }
-
-    return;
+function commonIsBackActionButton(button) {
+  if (!button) {
+    return false;
   }
 
-  let selector =
-  "button.submitBtn, button.cancel, button#actionBtn, button#backBtn, button[name='actionBtn'], button[name='updateStatusBtn'], a.submitBtn, a.cancel, a#actionBtn, a#backBtn";
-  let buttons = Array.prototype.slice.call(document.querySelectorAll(selector)).filter(function (
-    button,
-  ) {
-    let parentForm = button.closest("form");
-    let isUploadAnalyzeButton =
-      parentForm &&
-      parentForm.querySelector("input[type='file']") &&
-      !button.hasAttribute("formnovalidate");
+  let buttonText = commonNormalizeButtonText(button.textContent || "").toLowerCase();
+  let buttonValue = commonNormalizeButtonText(button.value || "").toLowerCase();
 
-    return (
-      !isUploadAnalyzeButton &&
-      !button.closest("td") &&
-      !button.closest(".mobile-floating-action-bar") &&
-      !button.closest(".mobile-sticky-form-actions")
-    );
-  });
+  return (
+    button.id === "backBtn" ||
+    button.classList.contains("backBtn") ||
+    button.classList.contains("cancel") ||
+    buttonValue === "back" ||
+    buttonText === "back"
+  );
+}
+
+function commonGetMobileStickyActionPriority(button) {
+  if (!button) {
+    return 99;
+  }
+
+  if (commonIsBackActionButton(button)) {
+    return 3;
+  }
+
+  let buttonName = commonNormalizeButtonText(button.getAttribute("name") || "").toLowerCase();
+  if (buttonName === "updatestatusbtn") {
+    return 1;
+  }
+
+  return 2;
+}
+
+function commonCollectMobileStickyActionButtons(container) {
+  if (!container) {
+    return [];
+  }
+
+  return Array.prototype.slice
+    .call(container.querySelectorAll(commonMobileStickyActionSelector()))
+    .filter(function (button) {
+      return (
+        commonMobileActionIsVisible(button) &&
+        !button.disabled &&
+        !button.closest("td") &&
+        !button.closest(".modal") &&
+        !button.closest(".mobile-floating-action-bar") &&
+        !button.closest(".mobile-sticky-form-actions")
+      );
+    });
+}
+
+function commonSortMobileStickyActionButtons(buttons) {
+  return (buttons || [])
+    .map(function (button, index) {
+      return {
+        button: button,
+        index: index,
+      };
+    })
+    .sort(function (a, b) {
+      let aPriority = commonGetMobileStickyActionPriority(a.button);
+      let bPriority = commonGetMobileStickyActionPriority(b.button);
+
+      if (aPriority !== bPriority) {
+        return aPriority - bPriority;
+      }
+
+      return a.index - b.index;
+    })
+    .map(function (entry) {
+      return entry.button;
+    });
+}
+
+function commonFindMobileStickyActionGroup() {
+  let preferredContainer = document.querySelector(".mobile-sticky-form-actions-target");
+  if (preferredContainer) {
+    let preferredButtons = commonCollectMobileStickyActionButtons(preferredContainer);
+    if (preferredButtons.length > 0) {
+      return {
+        container: preferredContainer,
+        buttons: commonSortMobileStickyActionButtons(preferredButtons),
+      };
+    }
+  }
+
+  let buttons = Array.prototype.slice
+    .call(document.querySelectorAll(commonMobileStickyActionSelector()))
+    .filter(function (button) {
+      let parentForm = button.closest("form");
+      let isUploadAnalyzeButton =
+        parentForm &&
+        parentForm.querySelector("input[type='file']") &&
+        !button.hasAttribute("formnovalidate");
+
+      return (
+        commonMobileActionIsVisible(button) &&
+        !button.disabled &&
+        !isUploadAnalyzeButton &&
+        !button.closest("td") &&
+        !button.closest(".modal") &&
+        !button.closest(".mobile-floating-action-bar") &&
+        !button.closest(".mobile-sticky-form-actions")
+      );
+    });
 
   if (buttons.length === 0) {
-    return;
+    return null;
   }
 
   let groupedParents = [];
 
   for (let i = 0; i < buttons.length; i++) {
     let parent = buttons[i].parentElement;
+    let sourcePanel = buttons[i].closest(".mobile-sticky-form-actions-source-panel");
+    if (
+      sourcePanel &&
+      sourcePanel.parentElement &&
+      sourcePanel.parentElement.classList.contains("mobile-sticky-form-actions-source")
+    ) {
+      parent = sourcePanel.parentElement;
+    }
+
     if (!parent) {
       continue;
     }
@@ -4124,7 +4175,7 @@ function commonBuildMobileStickyFormActions() {
   }
 
   if (groupedParents.length === 0) {
-    return;
+    return null;
   }
 
   groupedParents.sort(function (a, b) {
@@ -4132,50 +4183,605 @@ function commonBuildMobileStickyFormActions() {
       return b.buttons.length - a.buttons.length;
     }
 
-    return (
-      b.element.getBoundingClientRect().top - a.element.getBoundingClientRect().top
-    );
+    return b.element.getBoundingClientRect().top - a.element.getBoundingClientRect().top;
   });
 
-  let actionContainer = groupedParents[0].element;
-    actionContainer.classList.add("mobile-sticky-form-actions");
-    document.body.classList.add("has-mobile-sticky-form-actions");
+  return {
+    container: groupedParents[0].element,
+    buttons: commonSortMobileStickyActionButtons(groupedParents[0].buttons),
+  };
+}
 
-    let stickyButtons = groupedParents[0].buttons;
+function commonMeasureMobileStickyActionWidth(button) {
+  if (!button) {
+    return 0;
+  }
 
-    stickyButtons.sort(function (a, b) {
-      let aText = commonNormalizeButtonText(a.textContent || a.value || "").toLowerCase();
-      let bText = commonNormalizeButtonText(b.textContent || b.value || "").toLowerCase();
+  let measurementNode = button.cloneNode(true);
+  measurementNode.removeAttribute("id");
+  measurementNode.removeAttribute("name");
+  measurementNode.removeAttribute("form");
+  measurementNode.setAttribute("aria-hidden", "true");
+  if (measurementNode.tagName === "BUTTON") {
+    measurementNode.setAttribute("type", "button");
+  }
+  if (measurementNode.tagName === "A") {
+    measurementNode.setAttribute("href", "#");
+  }
 
-      let aIsBack =
-        a.id === "backBtn" ||
-        a.classList.contains("backBtn") ||
-        a.classList.contains("cancel") ||
-        a.value === "back" ||
-        aText === "back";
+  measurementNode.style.position = "absolute";
+  measurementNode.style.left = "-9999px";
+  measurementNode.style.top = "-9999px";
+  measurementNode.style.visibility = "hidden";
+  measurementNode.style.width = "auto";
+  measurementNode.style.maxWidth = "none";
+  measurementNode.style.whiteSpace = "nowrap";
+  measurementNode.style.fontSize = "12px";
+  measurementNode.style.lineHeight = "1.2";
+  measurementNode.style.padding = "8px 14px";
+  measurementNode.style.minHeight = "40px";
 
-      let bIsBack =
-        b.id === "backBtn" ||
-        b.classList.contains("backBtn") ||
-        b.classList.contains("cancel") ||
-        b.value === "back" ||
-        bText === "back";
+  document.body.appendChild(measurementNode);
+  let measuredWidth = Math.ceil(measurementNode.getBoundingClientRect().width);
+  measurementNode.remove();
 
-      if (aIsBack && !bIsBack) {
-        return -1;
-      }
+  return Math.max(measuredWidth + 6, 108);
+}
 
-      if (!aIsBack && bIsBack) {
-        return 1;
-      }
+function commonShouldCollapseSplitMobileStickyActionLayout(sourceContainer, buttons) {
+  if (!sourceContainer || !buttons || buttons.length !== 3) {
+    return false;
+  }
 
-      return 0;
-    });
+  if (!window.matchMedia("(max-width: 768px)").matches) {
+    return false;
+  }
 
-    for (let k = 0; k < stickyButtons.length; k++) {
-      stickyButtons[k].classList.add("mobile-sticky-form-button");
-      actionContainer.appendChild(stickyButtons[k]);
+  let viewportWidth = Math.max(
+    document.documentElement.clientWidth || 0,
+    window.innerWidth || 0,
+  );
+  let sourceWidth = Math.ceil(sourceContainer.getBoundingClientRect().width || 0);
+  let availableWidth = Math.max(Math.min(sourceWidth || viewportWidth, viewportWidth) - 4, 240);
+  let secondRowColumnWidth = Math.floor((availableWidth - 8) / 2);
+
+  if (secondRowColumnWidth <= 0) {
+    return true;
+  }
+
+  for (let i = 1; i < buttons.length; i++) {
+    let button = buttons[i];
+    let computedStyle = window.getComputedStyle(button);
+    let measurementNode = document.createElement("span");
+    measurementNode.textContent = commonNormalizeButtonText(button.textContent || "");
+    measurementNode.style.position = "absolute";
+    measurementNode.style.left = "-9999px";
+    measurementNode.style.top = "-9999px";
+    measurementNode.style.visibility = "hidden";
+    measurementNode.style.whiteSpace = "nowrap";
+    measurementNode.style.fontFamily = computedStyle.fontFamily;
+    measurementNode.style.fontSize = computedStyle.fontSize;
+    measurementNode.style.fontWeight = computedStyle.fontWeight;
+    measurementNode.style.fontStyle = computedStyle.fontStyle;
+    measurementNode.style.letterSpacing = computedStyle.letterSpacing;
+    measurementNode.style.textTransform = computedStyle.textTransform;
+
+    document.body.appendChild(measurementNode);
+    let textWidth = Math.ceil(measurementNode.getBoundingClientRect().width);
+    measurementNode.remove();
+
+    let horizontalChrome =
+      (parseFloat(computedStyle.paddingLeft) || 0) +
+      (parseFloat(computedStyle.paddingRight) || 0) +
+      (parseFloat(computedStyle.borderLeftWidth) || 0) +
+      (parseFloat(computedStyle.borderRightWidth) || 0) +
+      20;
+
+    if ((textWidth + horizontalChrome) > secondRowColumnWidth) {
+      return true;
     }
+  }
+
+  return false;
+}
+
+function commonResolveMobileStickyActionLayout(sourceContainerOrButtons, maybeButtons) {
+  let sourceContainer = Array.isArray(sourceContainerOrButtons)
+    ? null
+    : sourceContainerOrButtons;
+  let buttons = Array.isArray(sourceContainerOrButtons)
+    ? sourceContainerOrButtons
+    : (maybeButtons || []);
+  let buttonCount = (buttons || []).length;
+
+  if (buttonCount <= 1) {
+    return { mode: "inline", columns: 1 };
+  }
+
+  if (buttonCount === 2) {
+    return { mode: "inline", columns: 2 };
+  }
+
+  if (buttonCount === 3) {
+    if (commonShouldCollapseSplitMobileStickyActionLayout(sourceContainer, buttons)) {
+      return { mode: "collapsed", columns: 1 };
+    }
+
+    return { mode: "split", columns: 2 };
+  }
+
+  if (buttonCount > 3) {
+    return { mode: "collapsed", columns: 1 };
+  }
+
+  let viewportWidth = Math.max(
+    document.documentElement.clientWidth || 0,
+    window.innerWidth || 0,
+  );
+  let availableWidth = Math.max(viewportWidth - 24, 240);
+  let gapWidth = 8;
+  let requiredWidth = 0;
+
+  for (let i = 0; i < buttons.length; i++) {
+    requiredWidth += commonMeasureMobileStickyActionWidth(buttons[i]);
+  }
+
+  requiredWidth += gapWidth * (buttons.length - 1);
+
+  if (requiredWidth <= availableWidth) {
+    return { mode: "inline", columns: buttons.length };
+  }
+
+  return { mode: "split", columns: 2 };
+}
+
+function commonEnsureMobileStickyActionSourceStructure(sourceContainer) {
+  if (!sourceContainer) {
+    return {
+      toggleButton: null,
+      panel: null,
+    };
+  }
+
+  let panel = sourceContainer.querySelector(".mobile-sticky-form-actions-source-panel");
+  if (!panel) {
+    panel = document.createElement("div");
+    panel.className = "mobile-sticky-form-actions-source-panel";
+    sourceContainer.appendChild(panel);
+  }
+
+  let directChildren = Array.prototype.slice.call(sourceContainer.children);
+  for (let i = 0; i < directChildren.length; i++) {
+    let child = directChildren[i];
+    if (
+      child !== panel &&
+      child.matches &&
+      child.matches(commonMobileStickyActionSelector())
+    ) {
+      panel.appendChild(child);
+    }
+  }
+
+  let toggleButton = sourceContainer.querySelector(".mobile-sticky-form-actions-source-toggle");
+  if (!toggleButton) {
+    toggleButton = document.createElement("button");
+    toggleButton.type = "button";
+    toggleButton.className =
+      "btn btn-lg btn-rounded btn-primary mobile-sticky-form-actions-source-toggle";
+    toggleButton.textContent = "Show More";
+    sourceContainer.insertBefore(toggleButton, panel);
+  }
+
+  if (!toggleButton.dataset.bound) {
+    toggleButton.addEventListener("click", function (event) {
+      event.preventDefault();
+      event.stopPropagation();
+
+      let shouldExpand = !sourceContainer.classList.contains("is-expanded");
+      sourceContainer.classList.toggle("is-expanded", shouldExpand);
+      toggleButton.textContent = shouldExpand ? "Hide Actions" : "Show More";
+      toggleButton.setAttribute("aria-expanded", shouldExpand ? "true" : "false");
+    });
+    toggleButton.dataset.bound = "1";
+  }
+
+  return {
+    toggleButton: toggleButton,
+    panel: panel,
+  };
+}
+
+let commonMobileStickySourceOutsideBound = false;
+
+function commonBindMobileStickySourceOutsideCollapse() {
+  if (commonMobileStickySourceOutsideBound) {
+    return;
+  }
+
+  document.addEventListener("pointerdown", function (event) {
+    let expandedSources = document.querySelectorAll(
+      '.mobile-sticky-form-actions-source[data-mobile-sticky-source-mode="collapsed"].is-expanded',
+    );
+
+    for (let i = 0; i < expandedSources.length; i++) {
+      let sourceContainer = expandedSources[i];
+      if (sourceContainer.contains(event.target)) {
+        continue;
+      }
+
+      sourceContainer.classList.remove("is-expanded");
+      let toggleButton = sourceContainer.querySelector(
+        ".mobile-sticky-form-actions-source-toggle",
+      );
+      if (toggleButton) {
+        toggleButton.textContent = "Show More";
+        toggleButton.setAttribute("aria-expanded", "false");
+      }
+    }
+  });
+
+  commonMobileStickySourceOutsideBound = true;
+}
+
+function commonApplyMobileStickySourceLayout(sourceContainer, sourceButtons, layout) {
+  if (!sourceContainer) {
+    return;
+  }
+
+  let sourceStructure = commonEnsureMobileStickyActionSourceStructure(sourceContainer);
+  let toggleButton = sourceStructure.toggleButton;
+
+  sourceContainer.classList.add("mobile-sticky-form-actions-source");
+  sourceContainer.setAttribute(
+    "data-mobile-sticky-source-mode",
+    layout && layout.mode ? layout.mode : "inline",
+  );
+  if (layout && layout.mode !== "collapsed") {
+    sourceContainer.classList.remove("is-expanded");
+  }
+
+  if (toggleButton) {
+    toggleButton.textContent = "Show More";
+    toggleButton.setAttribute(
+      "aria-expanded",
+      sourceContainer.classList.contains("is-expanded") ? "true" : "false",
+    );
+  }
+
+  let allActionButtons = sourceContainer.querySelectorAll(commonMobileStickyActionSelector());
+  for (let i = 0; i < allActionButtons.length; i++) {
+    allActionButtons[i].classList.remove(
+      "mobile-sticky-form-source-btn",
+      "mobile-sticky-form-source-btn-primary",
+    );
+  }
+
+  for (let j = 0; j < sourceButtons.length; j++) {
+    sourceButtons[j].classList.add("mobile-sticky-form-source-btn");
+    if (layout && layout.mode === "split" && j === 0) {
+      sourceButtons[j].classList.add("mobile-sticky-form-source-btn-primary");
+    }
+  }
+
+  commonBindMobileStickySourceOutsideCollapse();
+}
+
+function commonIsMobileStickyActionViewport() {
+  return window.matchMedia("(max-width: 768px)").matches;
+}
+
+function commonIsMobileStickyActionSourceVisible(sourceContainer) {
+  if (!sourceContainer || !commonMobileActionIsVisible(sourceContainer)) {
+    return false;
+  }
+
+  let sourceRect = sourceContainer.getBoundingClientRect();
+  let viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+
+  return sourceRect.top < viewportHeight - 16 && sourceRect.bottom > 0;
+}
+
+function commonEnsureMobileStickyFormActionsOverlay() {
+  if (
+    commonMobileStickyFormActionsState &&
+    commonMobileStickyFormActionsState.overlay &&
+    commonMobileStickyFormActionsState.overlay.isConnected
+  ) {
+    return commonMobileStickyFormActionsState;
+  }
+
+  let overlay = document.createElement("div");
+  overlay.className = "mobile-sticky-form-actions";
+  overlay.hidden = true;
+  overlay.setAttribute("aria-hidden", "true");
+  overlay.innerHTML =
+    '<div class="mobile-sticky-form-actions-shell">' +
+      '<div class="mobile-sticky-form-actions-panel"></div>' +
+      '<button type="button" class="btn btn-lg btn-rounded btn-primary mobile-sticky-form-actions-toggle" aria-expanded="false">Show More</button>' +
+    "</div>";
+
+  document.body.appendChild(overlay);
+
+  let state = {
+    overlay: overlay,
+    shell: overlay.querySelector(".mobile-sticky-form-actions-shell"),
+    panel: overlay.querySelector(".mobile-sticky-form-actions-panel"),
+    toggleButton: overlay.querySelector(".mobile-sticky-form-actions-toggle"),
+    sourceContainer: null,
+    sourceButtons: [],
+    mutationObserver: null,
+    visibilityObserver: null,
+    rafHandle: 0,
+    mode: "inline",
+  };
+
+  state.toggleButton.addEventListener("click", function (event) {
+    event.preventDefault();
+    if (state.mode !== "collapsed") {
+      return;
+    }
+
+    let shouldExpand = !state.overlay.classList.contains("is-expanded");
+    state.overlay.classList.toggle("is-expanded", shouldExpand);
+    state.toggleButton.textContent = shouldExpand ? "Hide Actions" : "Show More";
+    state.toggleButton.setAttribute("aria-expanded", shouldExpand ? "true" : "false");
+  });
+
+  document.addEventListener("pointerdown", function (event) {
+    if (
+      !commonMobileStickyFormActionsState ||
+      commonMobileStickyFormActionsState.mode !== "collapsed" ||
+      !commonMobileStickyFormActionsState.overlay.classList.contains("is-expanded") ||
+      !commonMobileStickyFormActionsState.overlay.contains(event.target)
+    ) {
+      commonCloseMobileStickyFormActions();
+    }
+  });
+
+  window.addEventListener("resize", function () {
+    if (commonMobileStickyFormActionsState) {
+      commonQueueMobileStickyFormActionRefresh();
+    }
+  });
+
+  window.addEventListener(
+    "scroll",
+    function () {
+      if (commonMobileStickyFormActionsState) {
+        commonQueueMobileStickyFormActionRefresh();
+      }
+    },
+    { passive: true },
+  );
+
+  commonMobileStickyFormActionsState = state;
+  return state;
+}
+
+function commonCloseMobileStickyFormActions() {
+  if (!commonMobileStickyFormActionsState) {
+    return;
+  }
+
+  commonMobileStickyFormActionsState.overlay.classList.remove("is-expanded");
+  commonMobileStickyFormActionsState.toggleButton.textContent = "Show More";
+  commonMobileStickyFormActionsState.toggleButton.setAttribute("aria-expanded", "false");
+}
+
+function commonScheduleMobileStickySourceObserver(state) {
+  if (!state || !state.sourceContainer) {
+    return;
+  }
+
+  if (state.visibilityObserver) {
+    state.visibilityObserver.disconnect();
+    state.visibilityObserver = null;
+  }
+
+  if ("IntersectionObserver" in window) {
+    state.visibilityObserver = new IntersectionObserver(
+      function () {
+        commonQueueMobileStickyFormActionRefresh();
+      },
+      {
+        root: null,
+        threshold: [0, 0.1, 0.5, 1],
+      },
+    );
+    state.visibilityObserver.observe(state.sourceContainer);
+  }
+}
+
+function commonBindMobileStickySourceMutations(state) {
+  if (!state || !state.sourceContainer || !("MutationObserver" in window)) {
+    return;
+  }
+
+  if (state.mutationObserver) {
+    state.mutationObserver.disconnect();
+  }
+
+  state.mutationObserver = new MutationObserver(function () {
+    commonQueueMobileStickyFormActionRefresh(true);
+  });
+
+  state.mutationObserver.observe(state.sourceContainer, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+    attributes: true,
+    attributeFilter: [
+      "class",
+      "style",
+      "disabled",
+      "hidden",
+      "value",
+      "title",
+      "aria-label",
+      "data-bs-original-title",
+    ],
+  });
+}
+
+function commonCreateMobileStickyActionProxy(sourceButton) {
+  let proxyButton = sourceButton.cloneNode(true);
+  proxyButton.removeAttribute("id");
+  proxyButton.removeAttribute("name");
+  proxyButton.removeAttribute("form");
+  proxyButton.removeAttribute("onclick");
+  proxyButton.classList.add("mobile-sticky-form-overlay-btn");
+
+  if (proxyButton.tagName === "BUTTON") {
+    proxyButton.setAttribute("type", "button");
+  }
+
+  if (proxyButton.tagName === "A") {
+    proxyButton.setAttribute("href", "#");
+  }
+
+  proxyButton.addEventListener("click", function (event) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (sourceButton.disabled) {
+      return;
+    }
+
+    sourceButton.click();
+  });
+
+  return proxyButton;
+}
+
+function commonRenderMobileStickyFormActions(state) {
+  if (!state || !state.sourceContainer) {
+    return;
+  }
+
+  let sourceButtons = commonSortMobileStickyActionButtons(
+    commonCollectMobileStickyActionButtons(state.sourceContainer),
+  );
+
+  state.sourceButtons = sourceButtons;
+  state.panel.innerHTML = "";
+
+  if (sourceButtons.length === 0) {
+    state.overlay.hidden = true;
+    state.overlay.setAttribute("aria-hidden", "true");
+    document.body.classList.remove("has-mobile-sticky-form-actions");
+    return;
+  }
+
+  let layout = commonResolveMobileStickyActionLayout(sourceButtons);
+  state.mode = layout.mode;
+  state.overlay.dataset.mode = layout.mode;
+  state.overlay.style.setProperty("--mobile-sticky-cols", String(layout.columns || 1));
+  document.body.classList.add("has-mobile-sticky-form-actions");
+  commonApplyMobileStickySourceLayout(state.sourceContainer, sourceButtons, layout);
+
+  for (let i = 0; i < sourceButtons.length; i++) {
+    let proxyButton = commonCreateMobileStickyActionProxy(sourceButtons[i]);
+    if (layout.mode === "split" && i === 0) {
+      proxyButton.classList.add("mobile-sticky-form-overlay-btn-primary");
+    }
+    state.panel.appendChild(proxyButton);
+  }
+
+  if (layout.mode !== "collapsed") {
+    commonCloseMobileStickyFormActions();
+  }
+}
+
+function commonRefreshMobileStickyFormActions(forceRerender) {
+  let state = commonEnsureMobileStickyFormActionsOverlay();
+  if (!state || !state.sourceContainer) {
+    return;
+  }
+
+  if (forceRerender) {
+    commonRenderMobileStickyFormActions(state);
+  }
+
+  let shouldShowOverlay =
+    commonIsMobileStickyActionViewport() &&
+    state.sourceButtons.length > 0 &&
+    !commonIsMobileStickyActionSourceVisible(state.sourceContainer);
+
+  if (!shouldShowOverlay) {
+    state.overlay.hidden = true;
+    state.overlay.setAttribute("aria-hidden", "true");
+    commonCloseMobileStickyFormActions();
+    return;
+  }
+
+  state.overlay.hidden = false;
+  state.overlay.setAttribute("aria-hidden", "false");
+}
+
+function commonQueueMobileStickyFormActionRefresh(forceRerender) {
+  let state = commonEnsureMobileStickyFormActionsOverlay();
+  if (!state) {
+    return;
+  }
+
+  if (state.rafHandle) {
+    window.cancelAnimationFrame(state.rafHandle);
+  }
+
+  state.rafHandle = window.requestAnimationFrame(function () {
+    state.rafHandle = 0;
+    commonRefreshMobileStickyFormActions(!!forceRerender);
+  });
+}
+
+function commonDestroyMobileStickyFormActionsOverlay() {
+  if (!commonMobileStickyFormActionsState) {
+    document.body.classList.remove("has-mobile-sticky-form-actions");
+    return;
+  }
+
+  if (commonMobileStickyFormActionsState.visibilityObserver) {
+    commonMobileStickyFormActionsState.visibilityObserver.disconnect();
+  }
+
+  if (commonMobileStickyFormActionsState.mutationObserver) {
+    commonMobileStickyFormActionsState.mutationObserver.disconnect();
+  }
+
+  if (commonMobileStickyFormActionsState.rafHandle) {
+    window.cancelAnimationFrame(commonMobileStickyFormActionsState.rafHandle);
+  }
+
+  if (
+    commonMobileStickyFormActionsState.overlay &&
+    commonMobileStickyFormActionsState.overlay.parentNode
+  ) {
+    commonMobileStickyFormActionsState.overlay.parentNode.removeChild(
+      commonMobileStickyFormActionsState.overlay,
+    );
+  }
+
+  commonMobileStickyFormActionsState = null;
+  document.body.classList.remove("has-mobile-sticky-form-actions");
+}
+
+function commonBuildMobileStickyFormActions() {
+  let actionGroup = commonFindMobileStickyActionGroup();
+  if (!actionGroup || !actionGroup.container || actionGroup.buttons.length === 0) {
+    commonDestroyMobileStickyFormActionsOverlay();
+    return;
+  }
+
+  let layout = commonResolveMobileStickyActionLayout(
+    actionGroup.container,
+    actionGroup.buttons,
+  );
+  commonApplyMobileStickySourceLayout(
+    actionGroup.container,
+    actionGroup.buttons,
+    layout,
+  );
+  commonDestroyMobileStickyFormActionsOverlay();
 }
 
 function commonInitMobileActionEnhancements() {
@@ -4192,3 +4798,4 @@ if (document.readyState === "loading") {
 }
 
 window.addEventListener("load", commonInitMobileActionEnhancements);
+window.addEventListener("resize", commonBuildMobileStickyFormActions);
