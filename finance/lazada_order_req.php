@@ -1916,8 +1916,16 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                             </div>
                         <?php }
                         } ?>
-                    <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
+                    <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column mobile-sticky-form-actions-target shopee-order-action-row">
                         <?php
+                        if ($act === 'E' && isset($row['order_status'])) {
+                            $statusCode = shopeeOmsNormalizeStatusCode($row['order_status']);
+                            $canMoveToPack = shopeeOmsHasTransitionPermission($connect, $statusCode, 'TP', USER_GROUP, $row, USER_ID);
+                            if ($statusCode === 'P' && $canMoveToPack) {
+                                echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" value="TP" formnovalidate>MOVE TO TO PACK</button>';
+                            }
+                        }
+
                         switch ($act) {
                             case 'I':
                                 echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="addRequest">Add Request</button>';
@@ -1926,16 +1934,9 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                                 echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="updRequest">Edit Request</button>';
                                 break;
                         }
-                        if ($act === 'E' && isset($row['order_status'])) {
-                            $statusCode = shopeeOmsNormalizeStatusCode($row['order_status']);
-                            $canMoveToPack = shopeeOmsHasTransitionPermission($connect, $statusCode, 'TP', USER_GROUP, $row, USER_ID);
-                            if ($statusCode === 'P' && $canMoveToPack) {
-                                echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" value="TP" formnovalidate>MOVE TO TO PACK</button>';
-                            }
-                        }
                         ?>
-                            <button type="button" class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="actionBtn" id="actionBtn"
-                                onclick="if (window.history.length > 1) { window.history.back(); } else { location.href = <?= htmlspecialchars(json_encode($redirectPage), ENT_QUOTES, 'UTF-8') ?>; }">Back</button>
+                            <button type="button" class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="backBtn" id="backBtn"
+                                onclick="location.href = <?= htmlspecialchars(json_encode($back_redirect_page), ENT_QUOTES, 'UTF-8') ?>;">Back</button>
                     </div>
                 </form>
             </div>
