@@ -4192,13 +4192,6 @@ if ($conn->select_db($db_fin)) {
     } else {
         echo "<p style='color:red;'>Failed creating `" . LUCKY_DRAW_VIRTUAL_WINNER . "`: " . $conn->error . "</p>";
     }
-    if (migrationIndexExists($conn, $db_cms, LUCKY_DRAW_VIRTUAL_WINNER, 'idx_lucky_draw_virtual_board')) {
-        if ($conn->query("ALTER TABLE `" . LUCKY_DRAW_VIRTUAL_WINNER . "` DROP INDEX `idx_lucky_draw_virtual_board`")) {
-            echo "<p style='color:blue;'>Dropped old `idx_lucky_draw_virtual_board` index from `" . LUCKY_DRAW_VIRTUAL_WINNER . "`.</p>";
-        } else {
-            echo "<p style='color:red;'>Failed dropping old `idx_lucky_draw_virtual_board` from `" . LUCKY_DRAW_VIRTUAL_WINNER . "`: " . $conn->error . "</p>";
-        }
-    }
     migrationEnsureColumn($conn, $db_cms, LUCKY_DRAW_VIRTUAL_WINNER, 'is_enabled', "ALTER TABLE `" . LUCKY_DRAW_VIRTUAL_WINNER . "` ADD COLUMN `is_enabled` CHAR(1) NOT NULL DEFAULT 'Y' AFTER `display_prize`", "Verified `" . LUCKY_DRAW_VIRTUAL_WINNER . "` includes `is_enabled`.");
     migrationEnsureIndex($conn, $db_cms, LUCKY_DRAW_VIRTUAL_WINNER, 'idx_lucky_draw_virtual_board', "ALTER TABLE `" . LUCKY_DRAW_VIRTUAL_WINNER . "` ADD INDEX `idx_lucky_draw_virtual_board` (`is_enabled`, `status`)", "Verified `" . LUCKY_DRAW_VIRTUAL_WINNER . "` enabled/status index.");
 
