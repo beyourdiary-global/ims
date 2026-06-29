@@ -96,17 +96,21 @@ if (empty($reservationResult['success'])) {
 }
 
 $prizeRow = isset($reservationResult['prize']) && is_array($reservationResult['prize']) ? $reservationResult['prize'] : array();
+$resultMessage = isset($reservationResult['message']) ? trim((string) $reservationResult['message']) : '';
+if ($resultMessage === '') {
+    $resultMessage = 'Congratulations! Your draw result is ready.';
+}
 luckyDrawRememberParticipationSession(
     isset($reservationResult['claim_token']) ? (string) $reservationResult['claim_token'] : '',
     isset($reservationResult['claim_url']) ? (string) $reservationResult['claim_url'] : '',
     $prizeRow,
-    'Your previous draw is still available. Complete your claim now.'
+    $resultMessage
 );
 luckyDrawRecordRequestLog($connect, 'draw_attempt', (string) $memberRow['member_id_hmac'], $ipHmac, 'won');
 luckyDrawJsonResponse(array(
     'success' => true,
     'can_claim' => !empty($reservationResult['claim_url']),
-    'message' => 'Congratulations! Your draw result is ready.',
+    'message' => $resultMessage,
     'claim_url' => isset($reservationResult['claim_url']) ? (string) $reservationResult['claim_url'] : '',
     'prize' => array(
         'id' => isset($prizeRow['id']) ? (int) $prizeRow['id'] : 0,

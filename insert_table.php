@@ -4141,7 +4141,6 @@ if ($conn->select_db($db_fin)) {
         `prize_id` INT NOT NULL,
         `prize_name_snapshot` VARCHAR(255) DEFAULT NULL,
         `prize_type_snapshot` VARCHAR(30) DEFAULT NULL,
-        `voucher_code_id` INT DEFAULT NULL,
         `facebook_order_request_id` INT DEFAULT NULL,
         `redeem_reference` VARCHAR(60) DEFAULT NULL,
         `draw_state` VARCHAR(30) NOT NULL DEFAULT 'won',

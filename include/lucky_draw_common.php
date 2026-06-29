@@ -532,6 +532,26 @@ if (!function_exists('luckyDrawPrizeAvailableUnits')) {
     }
 }
 
+if (!function_exists('luckyDrawValidateVoucherPrizeStockConfig')) {
+    function luckyDrawValidateVoucherPrizeStockConfig($prizeRow)
+    {
+        $prizeType = strtolower(trim((string) (isset($prizeRow['prize_type']) ? $prizeRow['prize_type'] : '')));
+        if ($prizeType !== 'voucher') {
+            return array('success' => true, 'message' => '');
+        }
+
+        $totalStock = isset($prizeRow['total_stock']) ? (int) $prizeRow['total_stock'] : 0;
+        if ($totalStock <= 0) {
+            return array(
+                'success' => false,
+                'message' => 'Voucher Total Stock must be greater than 0.',
+            );
+        }
+
+        return array('success' => true, 'message' => '');
+    }
+}
+
 if (!function_exists('luckyDrawValidatePrizeDefaults')) {
     function luckyDrawValidatePrizeDefaults($prizeRow)
     {
@@ -676,11 +696,12 @@ if (!function_exists('luckyDrawReadiness')) {
             );
             $defaultsCheck = luckyDrawValidatePrizeDefaults($prizeRow);
             $stockCheck = array('success' => true, 'message' => '');
+            $voucherConfigCheck = luckyDrawValidateVoucherPrizeStockConfig($prizeRow);
             if (strtolower((string) ($prizeRow['prize_type'] ?? '')) === 'physical') {
                 $stockCheck = luckyDrawValidatePhysicalPrizeStock($connect, $financeConnect, $prizeRow);
             }
 
-            $prizeReady = !empty($defaultsCheck['success']) && !empty($stockCheck['success']) && $availability > 0;
+            $prizeReady = !empty($defaultsCheck['success']) && !empty($stockCheck['success']) && !empty($voucherConfigCheck['success']) && $availability > 0;
             if ($prizeReady) {
                 $readyPrizeCount++;
             } else {
@@ -690,6 +711,9 @@ if (!function_exists('luckyDrawReadiness')) {
             $detailParts = array('Availability: ' . $availability);
             if (strtolower((string) ($prizeRow['prize_type'] ?? '')) === 'voucher' && $availability <= 0) {
                 $detailParts[] = 'Voucher availability uses the remaining Total Stock configured on the prize row.';
+            }
+            if (empty($voucherConfigCheck['success'])) {
+                $detailParts[] = $voucherConfigCheck['message'];
             }
             if (empty($defaultsCheck['success'])) {
                 $detailParts[] = $defaultsCheck['message'];
@@ -1230,6 +1254,7 @@ if (!function_exists('luckyDrawCreateReservation')) {
             }
 
             $eligiblePrizeRows = array();
+            $hasVoucherConfigError = false;
             foreach ($prizeRows as $prizeRow) {
                 $prizeId = isset($prizeRow['id']) ? (int) $prizeRow['id'] : 0;
                 $voucherReservedCount = (int) ($voucherStateCounts[$prizeId]['reserved'] ?? 0);
@@ -1240,12 +1265,16 @@ if (!function_exists('luckyDrawCreateReservation')) {
                     $voucherReservedCount,
                     $voucherAssignedCount
                 );
+                $voucherConfigCheck = luckyDrawValidateVoucherPrizeStockConfig($prizeRow);
+                if (empty($voucherConfigCheck['success']) && (float) ($prizeRow['weight'] ?? 0) > 0) {
+                    $hasVoucherConfigError = true;
+                }
                 if ((float) ($prizeRow['weight'] ?? 0) <= 0 || $availableUnits <= 0) {
                     continue;
                 }
 
                 $defaultsCheck = luckyDrawValidatePrizeDefaults($prizeRow);
-                if (empty($defaultsCheck['success'])) {
+                if (empty($defaultsCheck['success']) || empty($voucherConfigCheck['success'])) {
                     continue;
                 }
 
@@ -1253,6 +1282,9 @@ if (!function_exists('luckyDrawCreateReservation')) {
             }
 
             if (empty($eligiblePrizeRows)) {
+                if ($hasVoucherConfigError) {
+                    throw new Exception('Lucky Draw voucher stock configuration is incomplete. Please contact support.');
+                }
                 throw new Exception('No prize is available for the birthday draw.');
             }
 
@@ -1327,7 +1359,7 @@ if (!function_exists('luckyDrawCreateReservation')) {
 
             return array(
                 'success' => true,
-                'message' => '',
+                'message' => 'Congratulations! Your draw result is ready.',
                 'draw_log_id' => $drawLogId,
                 'claim_token' => $claimToken,
                 'claim_url' => luckyDrawBuildClaimUrl($claimToken),
@@ -1350,7 +1382,7 @@ if (!function_exists('luckyDrawFindClaimByToken')) {
 
         $tokenHash = hash('sha256', $rawToken);
         $safeTokenHash = mysqli_real_escape_string($connect, $tokenHash);
-        $sql = "SELECT dl.*, p.prize_name, p.prize_image, p.prize_type, p.package_id, p.country_id, p.brand_id, p.series_id,
+        $sql = "SELECT dl.*, p.prize_name, p.prize_image, p.prize_type, p.voucher_code, p.package_id, p.country_id, p.brand_id, p.series_id,
                        p.fb_page_id, p.channel_id, p.pay_method_id, p.stock_out_warehouse_id, p.sales_pic_user_id, p.price
                 FROM `" . LUCKY_DRAW_DRAW_LOG . "` dl
                 INNER JOIN `" . LUCKY_DRAW_PRIZE . "` p ON p.id = dl.prize_id AND p.status = 'A'
@@ -1425,11 +1457,32 @@ if (!function_exists('luckyDrawSubmitClaim')) {
             return array('success' => false, 'message' => 'The claim link is invalid.', 'field_errors' => array());
         }
 
+        $email = luckyDrawSafePublicText(isset($claimData['email']) ? $claimData['email'] : '', 190);
+        if ($email === '') {
+            return array(
+                'success' => false,
+                'message' => 'Please check the highlighted field and try again.',
+                'field_errors' => array(
+                    'email' => 'Invalid email.',
+                ),
+            );
+        }
+
+        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return array(
+                'success' => false,
+                'message' => 'Please check the highlighted field and try again.',
+                'field_errors' => array(
+                    'email' => 'Invalid email format.',
+                ),
+            );
+        }
+
         mysqli_begin_transaction($connect);
         try {
             $tokenHash = hash('sha256', $rawToken);
             $safeTokenHash = mysqli_real_escape_string($connect, $tokenHash);
-            $sql = "SELECT dl.*, p.prize_name, p.prize_type, p.package_id, p.country_id, p.brand_id, p.series_id,
+            $sql = "SELECT dl.*, p.prize_name, p.prize_type, p.voucher_code, p.package_id, p.country_id, p.brand_id, p.series_id,
                            p.fb_page_id, p.channel_id, p.pay_method_id, p.stock_out_warehouse_id, p.sales_pic_user_id, p.price
                     FROM `" . LUCKY_DRAW_DRAW_LOG . "` dl
                     INNER JOIN `" . LUCKY_DRAW_PRIZE . "` p ON p.id = dl.prize_id AND p.status = 'A'
@@ -1450,27 +1503,6 @@ if (!function_exists('luckyDrawSubmitClaim')) {
             $reservationExpiresAt = isset($drawRow['reservation_expires_at']) ? trim((string) $drawRow['reservation_expires_at']) : '';
             if ($reservationExpiresAt !== '' && strtotime($reservationExpiresAt) < time()) {
                 throw new Exception('This claim link has expired.');
-            }
-
-            $email = luckyDrawSafePublicText(isset($claimData['email']) ? $claimData['email'] : '', 190);
-            if ($email === '') {
-                return array(
-                    'success' => false,
-                    'message' => 'Please check the highlighted field and try again.',
-                    'field_errors' => array(
-                        'email' => 'Invalid email.',
-                    ),
-                );
-            }
-
-            if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                return array(
-                    'success' => false,
-                    'message' => 'Please check the highlighted field and try again.',
-                    'field_errors' => array(
-                        'email' => 'Invalid email format.',
-                    ),
-                );
             }
 
             $prizeType = strtolower(trim((string) (isset($drawRow['prize_type']) ? $drawRow['prize_type'] : '')));
@@ -1568,17 +1600,19 @@ if (!function_exists('luckyDrawQueueEmailSendLock')) {
             $lockToken = bin2hex(random_bytes(16));
             try {
                 $staleBoundary = date('Y-m-d H:i:s', strtotime('-' . max(1, (int) $lockMinutes) . ' minutes'));
-                $sql = "SELECT * FROM `" . LUCKY_DRAW_DRAW_LOG . "`
-                    WHERE status = 'A'
-                      AND prize_type_snapshot = 'voucher'
-                      AND claim_state = 'claimed'
-                      AND email_state IN ('pending', 'failed', 'sending')
+                $sql = "SELECT dl.*, p.prize_name, p.prize_type, p.voucher_code
+                    FROM `" . LUCKY_DRAW_DRAW_LOG . "` dl
+                    INNER JOIN `" . LUCKY_DRAW_PRIZE . "` p ON p.id = dl.prize_id AND p.status = 'A'
+                    WHERE dl.status = 'A'
+                      AND dl.prize_type_snapshot = 'voucher'
+                      AND dl.claim_state = 'claimed'
+                      AND dl.email_state IN ('pending', 'failed', 'sending')
                       AND (
-                          email_state IN ('pending', 'failed')
-                          OR email_locked_at IS NULL
-                          OR email_locked_at < '" . mysqli_real_escape_string($connect, $staleBoundary) . "'
+                          dl.email_state IN ('pending', 'failed')
+                          OR dl.email_locked_at IS NULL
+                          OR dl.email_locked_at < '" . mysqli_real_escape_string($connect, $staleBoundary) . "'
                       )
-                    ORDER BY id ASC
+                    ORDER BY dl.id ASC
                     LIMIT 1
                     FOR UPDATE";
                 $result = mysqli_query($connect, $sql);
@@ -1686,7 +1720,12 @@ if (!function_exists('luckyDrawSendVoucherQueueBatch')) {
                 continue;
             }
 
-            $voucherCode = '';
+            $voucherCode = luckyDrawSafePublicText(isset($queueRow['voucher_code']) ? $queueRow['voucher_code'] : '', 255);
+            if ($voucherCode === '') {
+                luckyDrawMarkEmailSendResult($connect, $drawLogId, $lockToken, false, 'Voucher code is missing for this prize.');
+                $processed['failed']++;
+                continue;
+            }
 
             $emailContent = luckyDrawBuildVoucherEmailContent($queueRow, $voucherCode);
             $sent = commonSendSystemEmail($connect, $claimEmail, $emailContent['subject'], $emailContent['message'], array(
@@ -1716,7 +1755,7 @@ if (!function_exists('luckyDrawResendVoucherEmailNow')) {
 
         try {
             $lockToken = bin2hex(random_bytes(16));
-            $sql = "SELECT dl.*, p.prize_name, p.prize_type
+            $sql = "SELECT dl.*, p.prize_name, p.prize_type, p.voucher_code
                 FROM `" . LUCKY_DRAW_DRAW_LOG . "` dl
                 INNER JOIN `" . LUCKY_DRAW_PRIZE . "` p ON p.id = dl.prize_id AND p.status = 'A'
                 WHERE dl.id = " . $drawLogId . "
@@ -1755,7 +1794,15 @@ if (!function_exists('luckyDrawResendVoucherEmailNow')) {
 
             mysqli_commit($connect);
 
-            $voucherCode = '';
+            $voucherCode = luckyDrawSafePublicText(isset($drawRow['voucher_code']) ? $drawRow['voucher_code'] : '', 255);
+            if ($voucherCode === '') {
+                luckyDrawMarkEmailSendResult($connect, $drawLogId, $lockToken, false, 'Voucher code is missing for this prize.');
+                return array(
+                    'success' => false,
+                    'message' => 'Voucher code is missing for this prize.',
+                );
+            }
+
             $emailContent = luckyDrawBuildVoucherEmailContent($drawRow, $voucherCode);
             $sent = commonSendSystemEmail($connect, $claimEmail, $emailContent['subject'], $emailContent['message'], array(
                 'auto_submitted' => true,

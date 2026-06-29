@@ -288,6 +288,9 @@
         });
     }
 
+    window.addEventListener('pagehide', clearWinRedirectTimers);
+    window.addEventListener('beforeunload', clearWinRedirectTimers);
+
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
             closeAllPrizesModal();
