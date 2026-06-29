@@ -733,11 +733,11 @@ if ($action === 'preview') {
                                     <option value="<?= htmlspecialchars($optName) ?>"></option>
                                 <?php } ?>
                             </datalist>
-                            <div class="d-flex justify-content-center gap-2 flex-wrap mt-4">
-                                <a href="product_import.php" class="btn btn-lg btn-rounded btn-secondary px-4">Cancel</a>
-                                <button class="btn btn-lg btn-rounded btn-success px-4" type="submit" name="actionBtn" value="update">
-                                    <i class="fa-solid fa-cloud-arrow-up"></i> Execute Bulk Import & Update
+                            <div class="import-preview-actions mt-4">
+                                <button class="btn btn-lg btn-rounded btn-success px-4 import-preview-primary" type="submit" name="actionBtn" value="update">
+                                    <i class="fa-solid fa-cloud-arrow-up"></i> Import <?= htmlspecialchars($parentPageTitle, ENT_QUOTES, 'UTF-8') ?>
                                 </button>
+                                <a href="product_import.php" class="btn btn-lg btn-rounded btn-secondary px-4 import-preview-cancel">Cancel</a>
                             </div>
                         </form>
                     </div>

@@ -263,6 +263,7 @@ function fbReqFetchAssoc($result)
                             <th scope="col" id="action_col">Action</th>
                             <th scope="col">Order Status</th>
                             <th scope="col">Estimate Received Date</th>
+                            <th scope="col">Redeem</th>
                             <th scope="col">Name</th>
                             <th scope="col">Facebook Link</th>
                             <th scope="col">Contact</th>
@@ -402,6 +403,13 @@ function fbReqFetchAssoc($result)
                                 <td><?= getMarketplaceRequestStatusLabel(isset($row['order_status']) ? $row['order_status'] : '') ?></td>
                                 <td><?= isset($row['estimated_received_date']) && !empty($row['estimated_received_date']) ? htmlspecialchars((string) $row['estimated_received_date'], ENT_QUOTES, 'UTF-8') : '' ?></td>
                                 <td scope="row">
+                                    <?php if (trim((string) ($row['redeem_source'] ?? '')) !== '') { ?>
+                                        <div><span class="badge bg-info text-dark"><?= htmlspecialchars((string) $row['redeem_source'], ENT_QUOTES, 'UTF-8') ?></span></div>
+                                        <small class="text-muted d-block"><?= htmlspecialchars((string) ($row['redeem_reference'] ?? ''), ENT_QUOTES, 'UTF-8') ?></small>
+                                        <small class="text-muted d-block"><?= htmlspecialchars((string) ($row['claim_email'] ?? ''), ENT_QUOTES, 'UTF-8') ?></small>
+                                    <?php } ?>
+                                </td>
+                                <td scope="row">
                                     <?= htmlspecialchars((string) ($row['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
@@ -462,6 +470,7 @@ function fbReqFetchAssoc($result)
                             <th scope="col" id="action_col">Action</th>
                             <th scope="col">Order Status</th>
                             <th scope="col">Estimate Received Date</th>
+                            <th scope="col">Redeem</th>
                             <th scope="col">Name</th>
                             <th scope="col">Facebook Link</th>
                             <th scope="col">Contact</th>

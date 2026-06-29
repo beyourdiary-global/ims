@@ -403,6 +403,12 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
                                                 <?php } else { ?>
                                                     <?= htmlspecialchars($orderCode) ?>
                                                 <?php } ?>
+                                                <?php if (trim((string) ($row['redeem_source'] ?? '')) !== '') { ?>
+                                                    <div class="mt-1">
+                                                        <span class="badge bg-info text-dark"><?= htmlspecialchars((string) $row['redeem_source'], ENT_QUOTES, 'UTF-8') ?></span>
+                                                        <small class="d-block text-muted"><?= htmlspecialchars((string) ($row['redeem_reference'] ?? ''), ENT_QUOTES, 'UTF-8') ?></small>
+                                                    </div>
+                                                <?php } ?>
                                             </td>
                                             <td><?= htmlspecialchars($stockOutWarehouseName !== '' ? $stockOutWarehouseName : '-') ?></td>
                                             <td><?= $customerDisplayHtml ?></td>

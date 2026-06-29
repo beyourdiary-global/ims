@@ -13562,3 +13562,7 @@ if (!function_exists('orderDeleteApprovalHandlePageFlow')) {
         return $panelHtml;
     }
 }
+
+if (defined('ROOT')) {
+    include_once ROOT . '/include/lucky_draw_common.php';
+}

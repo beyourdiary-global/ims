@@ -1609,6 +1609,25 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                         </div>
                     </div>
                 </fieldset>
+                <fieldset class="border p-2 mb-3" style="border-radius: 3px;">
+                    <legend class="float-none w-auto p-2">Redeem Details</legend>
+                    <div class="form-group">
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label form_lbl" for="redeem_source_display">Redeem Source</label>
+                                <input class="form-control" type="text" id="redeem_source_display" value="<?= htmlspecialchars((string) ($row['redeem_source'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" disabled>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label form_lbl" for="redeem_reference_display">Redeem Reference</label>
+                                <input class="form-control" type="text" id="redeem_reference_display" value="<?= htmlspecialchars((string) ($row['redeem_reference'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" disabled>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label form_lbl" for="claim_email_display">Claim Email</label>
+                                <input class="form-control" type="text" id="claim_email_display" value="<?= htmlspecialchars((string) ($row['claim_email'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" disabled>
+                            </div>
+                        </div>
+                    </div>
+                </fieldset>
 
                 <div class="form-group mb-3">
                     <label class="form-label form_lbl" id="for_remark_lbl" for="for_remark">Remark</label>

@@ -84,6 +84,8 @@ define('SITEURL', $siteUrl);
 $SITEURL = SITEURL;
 define('ROOT', dirname(__FILE__));
 define('email_cc', 'report@beyourdiary.com');
+define('LUCKY_DRAW_RECAPTCHA_SITE_KEY_ENV', '6Lf_ZTItAAAAAE3hVIJHVPHjwSFV3laFSPJt7EAv');
+define('LUCKY_DRAW_RECAPTCHA_SECRET_KEY_ENV', '6Lf_ZTItAAAAANbZp4eHzF_HdWp6OC_Fn572azU-');
 
 // shared external URLs / CDN paths
 define('TELEGRAM_API', 'https://api.telegram.org/bot');
@@ -126,6 +128,16 @@ define('ROUTE_SHOPEE_ORDER_REQ', '/shopee/shopee_order_req.php');
 define('ROUTE_SHOPEE_ORDER_REQ_TABLE', '/shopee/shopee_order_req_table.php');
 define('ROUTE_STOCK_ORDER_REQUEST', '/stock/stock_order_request.php');
 define('ROUTE_STOCK_ORDER_REQUEST_TABLE', '/stock/stock_order_request_table.php');
+define('ROUTE_LUCKY_DRAW_HOME', '/lucky_draw/');
+define('ROUTE_LUCKY_DRAW_CLAIM', '/lucky_draw/claim.php');
+define('ROUTE_LUCKY_DRAW_DRAW_SUBMIT', '/lucky_draw/draw_submit.php');
+define('ROUTE_LUCKY_DRAW_BOARD_FEED', '/lucky_draw/board_feed.php');
+define('ROUTE_LUCKY_DRAW_ADMIN_DASHBOARD', '/lucky_draw/dashboard.php');
+define('ROUTE_LUCKY_DRAW_ADMIN_PRIZES_TABLE', '/lucky_draw/prizes_table.php');
+define('ROUTE_LUCKY_DRAW_ADMIN_PRIZES', '/lucky_draw/prizes.php');
+define('ROUTE_LUCKY_DRAW_ADMIN_LOGS', '/lucky_draw/logs.php');
+define('ROUTE_LUCKY_DRAW_ADMIN_VIRTUAL_BOARD_TABLE', '/lucky_draw/virtual_board_table.php');
+define('ROUTE_LUCKY_DRAW_ADMIN_VIRTUAL_BOARD', '/lucky_draw/virtual_board.php');
 
 if (!function_exists('siteUrlWithQuery')) {
     function siteUrlWithQuery($path = '', $params = array(), $fragment = '')
@@ -314,6 +326,12 @@ define('TASK_PROJECT', 'task_project');
 define('TASK_PROJECT_ITEM_ACCESS', 'task_project_item_access');
 define('TASK_PROJECT_COLUMN_ACCESS', 'task_project_column_access');
 define('TASK_PROJECT_STATUS_ACCESS', 'task_project_status_access');
+define('LUCKY_DRAW_PRIZE', 'lucky_draw_prize');
+define('LUCKY_DRAW_VOUCHER_CODE', 'lucky_draw_voucher_code');
+define('LUCKY_DRAW_DRAW_LOG', 'lucky_draw_draw_log');
+define('LUCKY_DRAW_VIRTUAL_WINNER', 'lucky_draw_virtual_winner');
+define('LUCKY_DRAW_ADMIN_LOG', 'lucky_draw_admin_log');
+define('LUCKY_DRAW_REQUEST_LOG', 'lucky_draw_request_log');
 
 
 

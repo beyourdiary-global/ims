@@ -1027,6 +1027,11 @@ body.task-global-sidebar-open #dispTable {
   white-space: nowrap;
 }
 
+.campaign-action-btns {
+  min-width: 310px;
+  white-space: nowrap;
+}
+
 .order-title-row {
   display: flex;
   align-items: center;
@@ -2547,5 +2552,41 @@ td.btn-container.mobile-action-open-left .mobile-action-menu {
   .mobile-sticky-form-actions .mobile-sticky-form-actions-toggle {
     font-size: 12px !important;
     line-height: 1.2 !important;
+  }
+}
+
+.import-preview-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+  width: fit-content;
+  max-width: 100%;
+  margin: 0 auto;
+}
+
+.import-preview-actions .btn {
+  min-width: 180px;
+  margin: 0 !important;
+}
+
+.import-preview-actions .import-preview-primary {
+  order: 1;
+}
+
+.import-preview-actions .import-preview-cancel {
+  order: 2;
+}
+
+@media (max-width: 768px) {
+  .import-preview-actions {
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+  }
+
+  .import-preview-actions .btn {
+    width: min(100%, 320px);
   }
 }
