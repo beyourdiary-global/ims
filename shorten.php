@@ -1,7 +1,8 @@
 <?php
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $description = $_POST['description'];
-    $destination_url = $_POST['destination_url'];
+    // This standalone page does not bootstrap include/common.php, so read POST values directly via filter_input().
+    $description = (string) filter_input(INPUT_POST, 'description');
+    $destination_url = (string) filter_input(INPUT_POST, 'destination_url');
 
     $uploads = [];
     for ($i = 0; $i < 4; $i++) {

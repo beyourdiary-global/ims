@@ -391,9 +391,9 @@ if (post('actionBtn')) {
 
             $attachmentPath = siAttachmentEncodeList($attachmentList);
 
-            $productIds = isset($_POST['product_id']) ? postSpaceFilter('product_id') : array();
-            $productNames = isset($_POST['product_name']) ? postSpaceFilter('product_name') : array();
-            $quantities = isset($_POST['product_quantity']) ? postSpaceFilter('product_quantity') : array();
+            $productIds = postSpaceFilter('product_id') ?: array();
+            $productNames = postSpaceFilter('product_name') ?: array();
+            $quantities = postSpaceFilter('product_quantity') ?: array();
 
             if (!is_array($productIds)) {
                 $productIds = array();

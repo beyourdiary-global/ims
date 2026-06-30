@@ -20,6 +20,17 @@ if (!file_exists($tempAttachDir)) {
 }
 
 $checkboxValues = isset($_COOKIE['rowID']) ? $_COOKIE['rowID'] : '';
+$groupOption = input('group');
+$allowedGroups = array('brand', 'series', 'package', 'person', 'currency', 'country', 'method');
+if (!in_array($groupOption, $allowedGroups, true)) {
+    $groupOption = '';
+}
+$groupOption3 = input('timeRange');
+$groupOption4 = input('timeInterval');
+$allowedTimeIntervals = array('daily', 'weekly', 'monthly', 'yearly');
+if (!in_array($groupOption4, $allowedTimeIntervals, true)) {
+    $groupOption4 = '';
+}
 
 // Check if any checkboxes are checked
 if (!empty($checkboxValues)) {
@@ -294,22 +305,20 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
                             <th scope="col">S/N</th>
                             <th id="group_header" scope="col">
                             <?php 
-                                    if (isset($_GET['group'])) {
-                                        if ($_GET['group'] == 'brand') {
+                                    if ($groupOption == 'brand') {
                                             echo "Brand";
-                                        }else if ($_GET['group'] == 'series') {
+                                        }else if ($groupOption == 'series') {
                                             echo "Series";
-                                        }else if ($_GET['group'] == 'package') {
+                                        }else if ($groupOption == 'package') {
                                             echo "Package";
-                                        }else if ($_GET['group'] == 'person') {
+                                        }else if ($groupOption == 'person') {
                                             echo "Person In Charge";
-                                        }else if ($_GET['group'] == 'currency') {
+                                        }else if ($groupOption == 'currency') {
                                             echo "Currency";
-                                        }else if ($_GET['group'] == 'country') {
+                                        }else if ($groupOption == 'country') {
                                             echo "Country";
-                                        }else if ($_GET['group'] == 'method') {
+                                        }else if ($groupOption == 'method') {
                                             echo "Payment Method";
-                                        }
                                     }
                                 ?>
                             </th>
@@ -318,9 +327,6 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
                     </thead>
                     <tbody>
                         <?php 
-                        $groupOption = isset($_GET['group']) ? $_GET['group'] : ''; 
-                        $groupOption3 = isset($_GET['timeRange']) ? $_GET['timeRange'] : ''; 
-                        $groupOption4 = isset($_GET['timeInterval']) ? $_GET['timeInterval'] : ''; 
                         $groupedRows = [];
                         $counters = 1;
                         $groupedRows = [];
@@ -500,22 +506,20 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
                             <th scope="col">S/N</th>
                             <th id="group_header" scope="col">
                             <?php 
-                                    if (isset($_GET['group'])) {
-                                        if ($_GET['group'] == 'brand') {
+                                    if ($groupOption == 'brand') {
                                             echo "Brand";
-                                        }else if ($_GET['group'] == 'series') {
+                                        }else if ($groupOption == 'series') {
                                             echo "Series";
-                                        }else if ($_GET['group'] == 'package') {
+                                        }else if ($groupOption == 'package') {
                                             echo "Package";
-                                        }else if ($_GET['group'] == 'person') {
+                                        }else if ($groupOption == 'person') {
                                             echo "Person In Charge";
-                                        }else if ($_GET['group'] == 'currency') {
+                                        }else if ($groupOption == 'currency') {
                                             echo "Currency";
-                                        }else if ($_GET['group'] == 'country') {
+                                        }else if ($groupOption == 'country') {
                                             echo "Country";
-                                        }else if ($_GET['group'] == 'method') {
+                                        }else if ($groupOption == 'method') {
                                             echo "Payment Method";
-                                        }
                                     }
                                 ?>
                             </th>

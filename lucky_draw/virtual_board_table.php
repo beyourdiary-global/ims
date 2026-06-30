@@ -20,13 +20,12 @@ $canDeleteRow = isActionAllowed('Delete', $pinAccess);
 $showActionColumn = $canViewRow || $canEditRow || $canDeleteRow;
 $canBulkEnable = $canEditRow;
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['enable_selected'])) {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('enable_selected') !== '') {
     luckyDrawRequireAdminAction($connect, 'Edit', $pinAccess);
-    $selectedRowIds = isset($_POST['selected_row_ids']) && is_array($_POST['selected_row_ids'])
-        ? array_values(array_unique(array_filter(array_map('intval', $_POST['selected_row_ids']), function ($value) {
+    $selectedRowIds = (array) post('selected_row_ids') ?: array();
+    $selectedRowIds = array_values(array_unique(array_filter(array_map('intval', $selectedRowIds), function ($value) {
             return $value > 0;
-        })))
-        : array();
+        })));
 
     if (empty($selectedRowIds)) {
         luckyDrawAdminRedirect(ROUTE_LUCKY_DRAW_ADMIN_VIRTUAL_BOARD_TABLE, array(
@@ -79,14 +78,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['enable_select
     ));
 }
 
-$deleteRequested = post('act') === 'D' || (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['delete_board_row_id']));
+$deleteRequested = post('act') === 'D' || (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('delete_board_row_id') !== '');
 if ($deleteRequested) {
     luckyDrawRequireAdminAction($connect, 'Delete', $pinAccess);
     $boardRowId = 0;
     if (post('act') === 'D') {
         $boardRowId = (int) post('id');
-    } elseif (isset($_POST['delete_board_row_id'])) {
-        $boardRowId = (int) $_POST['delete_board_row_id'];
+    } elseif (post('delete_board_row_id') !== '') {
+        $boardRowId = (int) post('delete_board_row_id');
     }
     $deleteSucceeded = false;
     if ($boardRowId > 0) {
@@ -117,11 +116,11 @@ if ($deleteRequested) {
 }
 
 $flash = luckyDrawAdminFlashGet();
-$resultDialogAct = strtoupper(trim((string) ($_GET['result_act'] ?? '')));
+$resultDialogAct = strtoupper(trim((string) input('result_act')));
 if (!in_array($resultDialogAct, array('PC', 'NC', 'ERRMO'), true)) {
     $resultDialogAct = '';
 }
-$resultDialogMessage = trim((string) ($_GET['result_message'] ?? ''));
+$resultDialogMessage = trim((string) input('result_message'));
 if ($resultDialogAct === '' && !empty($flash['message']) && strtolower((string) ($flash['type'] ?? '')) === 'warning') {
     $resultDialogAct = 'ErrMO';
     $resultDialogMessage = (string) $flash['message'];

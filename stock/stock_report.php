@@ -23,6 +23,26 @@ if (!$result) {
     echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
     echo "<script>location.href ='$SITEURL/dashboard.php';</script>";
 }
+
+$groupLabels = array(
+    'stock_type' => 'Stock Type',
+    'brand' => 'Brand',
+    'product' => 'Product',
+    'whse' => 'Warehouse',
+    'pdtcategory' => 'Product Category',
+    'platform' => 'Platform',
+    'stockinpic' => 'Stock In Person In Charge',
+    'stockoutpic' => 'Stock Out Person In Charge',
+);
+$groupOption = input('group');
+if (!array_key_exists($groupOption, $groupLabels)) {
+    $groupOption = '';
+}
+$groupOption3 = input('timeRange');
+$groupOption4 = input('timeInterval');
+if ($groupOption4 !== '' && !in_array($groupOption4, array('daily', 'weekly', 'monthly', 'yearly'), true)) {
+    $groupOption4 = '';
+}
 ?>
 
 <!DOCTYPE html>
@@ -123,21 +143,8 @@ if (!$result) {
                         <th id="group_header" scope="col">
 
                         <?php
-                            if (isset($_GET['group'])) {
-                            $groupLabels = [
-                                'stock_type' => 'Stock Type',
-                                'brand' => 'Brand',
-                                'product' => 'Product',
-                                'whse' => 'Warehouse',
-                                'pdtcategory' => 'Product Category',
-                                'platform' => 'Platform',
-                                'stockinpic' => 'Stock In Person In Charge',
-                                'stockoutpic' => 'Stock Out Person In Charge',
-                            ];
-
-                            if (isset($_GET['group']) && array_key_exists($_GET['group'], $groupLabels)) {
-                                echo $groupLabels[$_GET['group']];
-                            }
+                            if ($groupOption !== '' && array_key_exists($groupOption, $groupLabels)) {
+                                echo $groupLabels[$groupOption];
                             }
                         ?>
                         </th>
@@ -149,9 +156,6 @@ if (!$result) {
 
                     <tbody>
                         <?php
-                        $groupOption = isset($_GET['group']) ? $_GET['group'] : ''; 
-                        $groupOption3 = isset($_GET['timeRange']) ? $_GET['timeRange'] : ''; 
-                        $groupOption4 = isset($_GET['timeInterval']) ? $_GET['timeInterval'] : ''; 
                         $groupedRows = [];
                         $counters = 1;
                         $groupedRows = [];
@@ -367,21 +371,8 @@ if (!$result) {
                   <th id="group_header" scope="col">
 
                   <?php
-                      if (isset($_GET['group'])) {
-                      $groupLabels = [
-                          'stock_type' => 'Stock Type',
-                          'brand' => 'Brand',
-                          'product' => 'Product',
-                          'whse' => 'Warehouse',
-                          'pdtcategory' => 'Product Category',
-                          'platform' => 'Platform',
-                          'stockinpic' => 'Stock In Person In Charge',
-                          'stockoutpic' => 'Stock Out Person In Charge',
-                      ];
-
-                      if (isset($_GET['group']) && array_key_exists($_GET['group'], $groupLabels)) {
-                          echo $groupLabels[$_GET['group']];
-                      }
+                      if ($groupOption !== '' && array_key_exists($groupOption, $groupLabels)) {
+                          echo $groupLabels[$groupOption];
                       }
                   ?>
                   </th>

@@ -320,13 +320,12 @@ if (!function_exists('customerTagGetPostedSelectedTagIds')) {
     function customerTagGetPostedSelectedTagIds()
     {
         $tagIds = array();
+        $postedTagIds = (array) post('customerTagSelectedIds') ?: array();
 
-        if (isset($_POST['customerTagSelectedIds']) && is_array($_POST['customerTagSelectedIds'])) {
-            foreach ($_POST['customerTagSelectedIds'] as $tagId) {
-                $tagId = (int) $tagId;
-                if ($tagId > 0 && !in_array($tagId, $tagIds, true)) {
-                    $tagIds[] = $tagId;
-                }
+        foreach ($postedTagIds as $tagId) {
+            $tagId = (int) $tagId;
+            if ($tagId > 0 && !in_array($tagId, $tagIds, true)) {
+                $tagIds[] = $tagId;
             }
         }
 

@@ -104,9 +104,9 @@ if (!empty($checkboxValues)) {
     exit;
 }
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['resend_draw_log_id'])) {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('resend_draw_log_id') !== '') {
     luckyDrawRequireAdminAction($connect, 'Edit', $pinAccess);
-    $drawLogId = isset($_POST['resend_draw_log_id']) ? (int) $_POST['resend_draw_log_id'] : 0;
+    $drawLogId = (int) post('resend_draw_log_id');
     if ($drawLogId > 0) {
         $resendResult = luckyDrawResendVoucherEmailNow($connect, $finance_connect, $drawLogId, (string) USER_ID);
         luckyDrawInsertAdminLog($connect, 'resend_email', LUCKY_DRAW_DRAW_LOG, $drawLogId, (string) ($resendResult['message'] ?? 'Voucher email resend attempted.'), USER_ID, array(

@@ -2,6 +2,7 @@
 
 use PgSql\Lob;
 
+// Intentional raw POST access lives here so the rest of the codebase can reuse these helpers.
 function post($key)
 {
 	return isset($_POST[$key]) ? $_POST[$key] : '';
@@ -18,6 +19,7 @@ function postSpaceFilter($key)
 	}
 }
 
+// Intentional raw GET access lives here so the rest of the codebase can reuse these helpers.
 function input($key)
 {
 	$results = '';
@@ -43,6 +45,115 @@ function numberInput($key)
 {
 	$val = input($key);
 	return isNumber($val) ? $val : '';
+}
+
+if (!function_exists('inputArray')) {
+	function inputArray($key)
+	{
+		if (!isset($_GET[$key])) {
+			return array();
+		}
+
+		if (!is_array($_GET[$key])) {
+			$value = input($key);
+			return $value !== '' ? array($value) : array();
+		}
+
+		$values = array();
+		foreach ((array) $_GET[$key] as $value) {
+			if (is_array($value)) {
+				continue;
+			}
+
+			$value = trim((string) $value);
+			if ($value === '' || strlen($value) > 256) {
+				continue;
+			}
+
+			$value = xssFilter($value);
+			if ($value === '') {
+				continue;
+			}
+
+			$values[] = $value;
+		}
+
+		return $values;
+	}
+}
+
+if (!function_exists('numberInputArray')) {
+	function numberInputArray($key)
+	{
+		$values = array();
+		foreach (inputArray($key) as $value) {
+			$value = trim((string) $value);
+			if ($value !== '' && isNumber($value)) {
+				$values[] = $value;
+			}
+		}
+
+		return $values;
+	}
+}
+
+if (!function_exists('searchInputArray')) {
+	function searchInputArray($key)
+	{
+		$values = array();
+		foreach (inputArray($key) as $value) {
+			if (preg_match("/<script(.*?)>(.*?)<\/script>/is", $value) || preg_match("/<script(.*?)>/is", $value)) {
+				continue;
+			}
+
+			$value = strip_tags((string) $value);
+			$value = trim(preg_replace('/[^(a-zA-Z0-9.()\-,\/)\&\'\"]+/i', ' ', $value));
+			if ($value !== '') {
+				$values[] = $value;
+			}
+		}
+
+		return $values;
+	}
+}
+
+if (!function_exists('commonSafeQueryParams')) {
+	function commonSafeQueryParams($excludeKeys = array())
+	{
+		$excluded = array();
+		foreach ((array) $excludeKeys as $excludeKey) {
+			$excludeKey = trim((string) $excludeKey);
+			if ($excludeKey !== '') {
+				$excluded[$excludeKey] = true;
+			}
+		}
+
+		$params = array();
+		foreach ((array) $_GET as $paramKey => $paramValue) {
+			$paramKey = trim((string) $paramKey);
+			if ($paramKey === '' || isset($excluded[$paramKey]) || !preg_match('/^[A-Za-z0-9_-]+$/', $paramKey)) {
+				continue;
+			}
+
+			if (is_array($paramValue)) {
+				continue;
+			}
+
+			$paramValue = trim((string) $paramValue);
+			if ($paramValue === '' || strlen($paramValue) > 256) {
+				continue;
+			}
+
+			$paramValue = xssFilter($paramValue);
+			if ($paramValue === '' || preg_match('/^\s*(?:javascript|data|vbscript)\s*:/i', $paramValue)) {
+				continue;
+			}
+
+			$params[$paramKey] = $paramValue;
+		}
+
+		return $params;
+	}
 }
 
 
@@ -4966,7 +5077,8 @@ if (!function_exists('shopeeCustomerRecordGetListDataset')) {
     function shopeeCustomerRecordGetListDataset($connect, $financeConnect, $params = array())
     {
         if (empty($params)) {
-            $params = array_merge((array) $_GET, (array) $_POST);
+            // Intentionally keep the full raw GET payload here for cache-key parity, including scalar and array query parameters.
+            $params = (array) $_GET;
         }
 
         $cachedDataset = shopeeCustomerRecordReadListCache($params);
@@ -7588,7 +7700,7 @@ if (!function_exists('shopeeOmsBuildWarehouseMessage')) {
         $deliveryInfo = $platform === 'shopee' ? shopeeOmsExtractAirbillDeliveryInfoFromAttachment($airbillAttachment) : array();
         $rememberedDeliveryInfo = shopeeOmsGetRememberedWarehouseDeliveryInfo($platform, isset($orderRow['id']) ? $orderRow['id'] : 0);
         $deliveryCustomerName = isset($orderRow['customer_name']) ? trim((string) $orderRow['customer_name']) : '';
-        // Intentionally avoid reading from $_POST here to keep message generation deterministic.
+        // Intentionally avoid reading from request-body state here to keep message generation deterministic.
         if ($deliveryCustomerName === '' && isset($rememberedDeliveryInfo['customer_name'])) {
             $deliveryCustomerName = trim((string) $rememberedDeliveryInfo['customer_name']);
         }
@@ -9212,7 +9324,7 @@ if (!function_exists('shopeeOmsHandleMoveToWafcWithReceivedDatePost')) {
     {
         $options = is_array($options) ? $options : array();
         $buttonName = isset($options['button_name']) && trim((string) $options['button_name']) !== '' ? trim((string) $options['button_name']) : 'move_to_wafc_with_received_date_btn';
-        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !isset($_POST[$buttonName])) {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !filter_has_var(INPUT_POST, $buttonName)) {
             return false;
         }
 
@@ -9221,7 +9333,7 @@ if (!function_exists('shopeeOmsHandleMoveToWafcWithReceivedDatePost')) {
             : (string) ($_SERVER['REQUEST_URI'] ?? '');
         $csrfFieldName = isset($options['csrf_field_name']) && trim((string) $options['csrf_field_name']) !== '' ? trim((string) $options['csrf_field_name']) : 'csrf_token';
         $csrfSessionKey = isset($options['csrf_session_key']) && trim((string) $options['csrf_session_key']) !== '' ? trim((string) $options['csrf_session_key']) : 'csrf_token';
-        $submittedToken = isset($_POST[$csrfFieldName]) ? (string) $_POST[$csrfFieldName] : '';
+        $submittedToken = (string) post($csrfFieldName);
         $sessionToken = isset($_SESSION[$csrfSessionKey]) ? (string) $_SESSION[$csrfSessionKey] : '';
 
         if (!hash_equals($sessionToken, $submittedToken)) {
@@ -9231,8 +9343,8 @@ if (!function_exists('shopeeOmsHandleMoveToWafcWithReceivedDatePost')) {
 
         $orderIdField = isset($options['order_id_field']) && trim((string) $options['order_id_field']) !== '' ? trim((string) $options['order_id_field']) : 'force_wafc_id';
         $dateField = isset($options['date_field']) && trim((string) $options['date_field']) !== '' ? trim((string) $options['date_field']) : 'received_date';
-        $orderId = isset($_POST[$orderIdField]) ? (int) $_POST[$orderIdField] : 0;
-        $receivedDate = function_exists('postSpaceFilter') ? postSpaceFilter($dateField) : (isset($_POST[$dateField]) ? trim((string) $_POST[$dateField]) : '');
+        $orderId = (int) post($orderIdField);
+        $receivedDate = function_exists('postSpaceFilter') ? postSpaceFilter($dateField) : trim((string) post($dateField));
         $actorUserId = isset($options['actor_user_id']) ? (string) $options['actor_user_id'] : (defined('USER_ID') ? (string) USER_ID : '');
         $actorUserGroupId = isset($options['actor_user_group_id']) ? (int) $options['actor_user_group_id'] : (defined('USER_GROUP') ? (int) USER_GROUP : 0);
         $sourcePage = isset($options['source_page']) ? (string) $options['source_page'] : 'Shopee OMS';

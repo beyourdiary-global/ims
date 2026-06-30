@@ -109,8 +109,8 @@ if (!($dataId) && !($act)) {
 
 }
 
-if ($dataId && isset($_GET['open_order_id'])) {
-    $openOrderId = (int) $_GET['open_order_id'];
+if ($dataId && numberInput('open_order_id') !== '') {
+    $openOrderId = (int) numberInput('open_order_id');
     if ($openOrderId > 0) {
         $orderRst = getData('id,orderID', "id='$openOrderId'", 'LIMIT 1', SHOPEE_SG_ORDER_REQ, $finance_connect);
         if ($orderRst && $orderRst->num_rows > 0) {

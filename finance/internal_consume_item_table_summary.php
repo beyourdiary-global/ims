@@ -184,8 +184,8 @@ $result = getData('*', '', '', ITL_CSM_ITEM, $finance_connect);
                     </thead>
                     <tbody>
                         <?php while ($row = $result->fetch_assoc()) {
-                            if (isset($_GET['ids'])) {
-                                $ids = explode(',', $_GET['ids']);
+                            if (input('ids') !== '') {
+                                $ids = explode(',', input('ids'));
                                foreach ($ids as $id) {
                                 $decodedId = urldecode($id);
                             if (isset($row['id']) && !empty($row['id'])&& $row['id'] == $id) {

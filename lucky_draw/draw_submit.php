@@ -17,7 +17,7 @@ if (empty($readiness['success'])) {
     ), 503);
 }
 
-$csrfToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+$csrfToken = (string) post('csrf_token');
 if (!luckyDrawValidateCsrfToken($csrfToken)) {
     luckyDrawJsonResponse(array(
         'success' => false,
@@ -25,7 +25,7 @@ if (!luckyDrawValidateCsrfToken($csrfToken)) {
     ), 419);
 }
 
-$identityInput = luckyDrawNormalizeFullId(isset($_POST['member_identity']) ? $_POST['member_identity'] : '');
+$identityInput = luckyDrawNormalizeFullId(post('member_identity'));
 $submittedYymmdd = luckyDrawExtractYymmddFromId($identityInput);
 $remoteIp = luckyDrawGetRemoteIp();
 $ipHmac = luckyDrawIpHmac($remoteIp);
@@ -48,7 +48,7 @@ if (empty($rateLimit['success'])) {
     ), 429);
 }
 
-$recaptchaToken = trim((string) (isset($_POST['g-recaptcha-response']) ? $_POST['g-recaptcha-response'] : ''));
+$recaptchaToken = trim((string) post('g-recaptcha-response'));
 $recaptchaResult = luckyDrawValidateRecaptchaToken($recaptchaToken, $remoteIp);
 if (empty($recaptchaResult['success'])) {
     luckyDrawRecordRequestLog($connect, 'draw_attempt', $requestMemberHmac, $ipHmac, 'recaptcha_failed');

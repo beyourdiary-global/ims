@@ -315,7 +315,7 @@ if ($action === 'preview') {
         $importErrors = array_merge($importErrors, $previewErrors);
     }
 } elseif ($action === 'update') {
-    $postRows = isset($_POST['data']) && is_array($_POST['data']) ? $_POST['data'] : array();
+    $postRows = (array) post('data') ?: array();
     $hasValidationError = false;
 
     foreach ($postRows as $row) {

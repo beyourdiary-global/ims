@@ -8,14 +8,14 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['flow_action']) && $_POST['flow_action'] === 'save_shopee_flow_setting_ajax') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('flow_action') === 'save_shopee_flow_setting_ajax') {
     if ((int) USER_GROUP !== 1) {
         header('Content-Type: application/json');
         echo json_encode(array('ok' => 0, 'message' => 'Only Super Admin can update Flow Setting.'));
         exit;
     }
 
-    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    $submittedToken = (string) post('csrf_token');
     if (!hash_equals($_SESSION['csrf_token'], $submittedToken)) {
         header('Content-Type: application/json');
         echo json_encode(array('ok' => 0, 'message' => 'Invalid session token. Please refresh the page and try again.'));
@@ -103,6 +103,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['flow_action']) && $_P
     $permissionFieldLabels = array();
     $permissionOldVals = array();
     $permissionNewVals = array();
+    $postedPermissions = (array) post('perm') ?: array();
 
     shopeeOmsSetSetting($connect, 'shopee_oms_assignment_scope', $assignmentScope, 'OMS assignment scope.', USER_ID);
     shopeeOmsSetSetting($connect, 'shopee_oms_default_warehouse_id', (string) $defaultWarehouseId, 'Default warehouse id for OMS stock-out.', USER_ID);
@@ -142,7 +143,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['flow_action']) && $_P
                 continue;
             }
 
-            $isAllowed = isset($_POST['perm'][$transitionKey][$userGroupId]) ? 1 : 0;
+            $isAllowed = isset($postedPermissions[$transitionKey][$userGroupId]) ? 1 : 0;
             $safeTransitionKey = mysqli_real_escape_string($connect, $transitionKey);
             $safeFromStatus = mysqli_real_escape_string($connect, $fromStatus);
             $safeToStatus = mysqli_real_escape_string($connect, $toStatus);

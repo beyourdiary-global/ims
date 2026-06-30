@@ -282,9 +282,9 @@ if ($result instanceof mysqli_result) {
                         while ($row = $result->fetch_assoc()) {
                             $q1 = getData('*', "id='" . $row['shopee_acc'] . "'", '', SHOPEE_ACC, $finance_connect);
                             $acc = $q1->fetch_assoc();
-                            if (isset($_GET['ids'])) {
+                            if (input('ids') !== '') {
                           
-                            $ids = explode(',', $_GET['ids']);
+                            $ids = explode(',', input('ids'));
                             foreach ($ids as $id) {
                             $decodedId = urldecode($id);
                            

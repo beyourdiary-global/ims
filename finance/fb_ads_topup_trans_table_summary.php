@@ -196,8 +196,8 @@ $result2 = getData('*', '', '', FB_ADS_TOPUP, $finance_connect);
                 </thead>
                 <tbody>
                     <?php while ($row = $result->fetch_assoc()) {
-                      if (isset($_GET['ids'])) {
-                        $ids = explode(',', $_GET['ids']);
+                      if (input('ids') !== '') {
+                        $ids = explode(',', input('ids'));
                         foreach ($ids as $id) {
                             $decodedId = urldecode($id);
                             if (isset($row['transactionID'], $row['id']) && !empty($row['transactionID']) && $row['id'] == $id) {

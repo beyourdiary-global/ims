@@ -215,8 +215,11 @@ if (!function_exists('luckyDrawPrizeGenerateNextUniqueColor')) {
 $pinAccess = luckyDrawAdminPinAccess($connect);
 luckyDrawRequireAdminAction($connect, 'View', $pinAccess);
 
-$requestedPrizeId = isset($_GET['id']) ? (int) $_GET['id'] : (isset($_GET['prize_id']) ? (int) $_GET['prize_id'] : 0);
-$mode = strtoupper(trim((string) (isset($_GET['act']) ? $_GET['act'] : '')));
+$requestedPrizeId = (int) numberInput('id');
+if ($requestedPrizeId <= 0) {
+    $requestedPrizeId = (int) numberInput('prize_id');
+}
+$mode = strtoupper(trim((string) input('act')));
 if ($mode === 'A') {
     $mode = 'I';
 }
@@ -226,7 +229,7 @@ if ($mode === 'VI') {
     }
     exit;
 }
-$resultDialogAct = strtoupper(trim((string) ($_GET['result_act'] ?? '')));
+$resultDialogAct = strtoupper(trim((string) input('result_act')));
 if (!in_array($resultDialogAct, array('I', 'E', 'NC'), true)) {
     $resultDialogAct = '';
 }
@@ -270,27 +273,27 @@ if ($isView && !empty($editingPrize)) {
     ));
 }
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['save_prize'])) {
-    $prizeId = isset($_POST['prize_id']) ? (int) $_POST['prize_id'] : 0;
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('save_prize') !== '') {
+    $prizeId = (int) post('prize_id');
     $isEditSave = $prizeId > 0;
-    $saveMode = strtoupper(trim((string) (isset($_POST['form_mode']) ? $_POST['form_mode'] : ($isEditSave ? 'E' : 'I'))));
+    $saveMode = strtoupper(trim((string) (post('form_mode') !== '' ? post('form_mode') : ($isEditSave ? 'E' : 'I'))));
     luckyDrawRequireAdminAction($connect, $prizeId > 0 ? 'Edit' : 'Add', $pinAccess);
 
-    $prizeName = luckyDrawSafePublicText(isset($_POST['prize_name']) ? $_POST['prize_name'] : '', 190);
-    $prizeType = strtolower(trim((string) (isset($_POST['prize_type']) ? $_POST['prize_type'] : 'voucher')));
+    $prizeName = luckyDrawSafePublicText(post('prize_name'), 190);
+    $prizeType = strtolower(trim((string) (post('prize_type') !== '' ? post('prize_type') : 'voucher')));
     $prizeType = in_array($prizeType, array('voucher', 'physical'), true) ? $prizeType : 'voucher';
     $voucherCode = $prizeType === 'voucher'
-        ? luckyDrawSafePublicText(isset($_POST['voucher_code']) ? $_POST['voucher_code'] : '', 255)
+        ? luckyDrawSafePublicText(post('voucher_code'), 255)
         : '';
-    $rawWeightInput = isset($_POST['weight']) ? trim((string) $_POST['weight']) : '';
-    $weight = luckyDrawNormalizePositiveFloat(isset($_POST['weight']) ? $_POST['weight'] : 0, 0);
-    $displayOrder = max(0, luckyDrawNormalizePositiveInt(isset($_POST['display_order']) ? $_POST['display_order'] : 0, 0));
-    $totalStock = max(0, luckyDrawNormalizePositiveInt(isset($_POST['total_stock']) ? $_POST['total_stock'] : 0, 0));
-    $isEnabled = luckyDrawNormalizeFlag(isset($_POST['is_enabled']) ? $_POST['is_enabled'] : 'N');
-    $rawPriceInput = isset($_POST['price']) ? trim((string) $_POST['price']) : '';
-    $price = max(0, luckyDrawNormalizePositiveFloat(isset($_POST['price']) ? $_POST['price'] : 0, 0));
-    $labelColor = luckyDrawPrizeSanitizeHexColor(isset($_POST['label_color']) ? $_POST['label_color'] : '#4a11c9');
-    $remark = luckyDrawSafePublicText(isset($_POST['remark']) ? $_POST['remark'] : '', 1000);
+    $rawWeightInput = trim((string) post('weight'));
+    $weight = luckyDrawNormalizePositiveFloat(post('weight'), 0);
+    $displayOrder = max(0, luckyDrawNormalizePositiveInt(post('display_order'), 0));
+    $totalStock = max(0, luckyDrawNormalizePositiveInt(post('total_stock'), 0));
+    $isEnabled = luckyDrawNormalizeFlag(post('is_enabled'), 'N');
+    $rawPriceInput = trim((string) post('price'));
+    $price = max(0, luckyDrawNormalizePositiveFloat(post('price'), 0));
+    $labelColor = luckyDrawPrizeSanitizeHexColor(post('label_color') !== '' ? post('label_color') : '#4a11c9');
+    $remark = luckyDrawSafePublicText(post('remark'), 1000);
 
     if ($prizeName === '') {
         luckyDrawAdminRedirect(ROUTE_LUCKY_DRAW_ADMIN_PRIZES, luckyDrawPrizeCrudParams($saveMode, $prizeId), 'danger', 'Prize name is required.');
@@ -313,7 +316,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['save_prize'])
     }
 
     $physicalFields = array(
-        'package_id' => $prizeType === 'physical' ? (int) ($_POST['package_id'] ?? 0) : 0,
+        'package_id' => $prizeType === 'physical' ? (int) post('package_id') : 0,
         'country_id' => 0,
         'brand_id' => 0,
         'series_id' => 0,
@@ -322,7 +325,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['save_prize'])
         'pay_method_id' => 0,
         'sales_pic_user_id' => 0,
     );
-    $stockOutWarehouseId = $prizeType === 'physical' ? (int) ($_POST['stock_out_warehouse_id'] ?? 0) : 0;
+    $stockOutWarehouseId = $prizeType === 'physical' ? (int) post('stock_out_warehouse_id') : 0;
 
     if ($prizeType === 'physical' && $physicalFields['package_id'] <= 0) {
         luckyDrawAdminRedirect(ROUTE_LUCKY_DRAW_ADMIN_PRIZES, luckyDrawPrizeCrudParams($saveMode, $prizeId), 'danger', 'Package is required for physical prizes.');

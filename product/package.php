@@ -218,8 +218,6 @@ if (post('actionBtn')) {
             if (!empty($parentPackageRow)) {
                 $parent_package_name = isset($parentPackageRow['name']) ? (string) $parentPackageRow['name'] : $parent_package_name;
                 $parentPackageAuditValue = packageFormatRelationValue($parentPackageRow);
-                $_POST['parent_package_id'] = (string) $parent_package_id;
-                $_POST['parent_package_name'] = $parent_package_name;
             }
 
             if ($parent_package_name !== '' || $parent_package_id > 0) {
@@ -235,8 +233,6 @@ if (post('actionBtn')) {
                         $parentPackageRow = $parentValidation['parent_row'];
                         $parentPackageAuditValue = packageFormatRelationValue($parentPackageRow);
                         $parent_package_name = isset($parentPackageRow['name']) ? (string) $parentPackageRow['name'] : $parent_package_name;
-                        $_POST['parent_package_id'] = (string) $parent_package_id;
-                        $_POST['parent_package_name'] = $parent_package_name;
                     }
                 }
             }
@@ -532,8 +528,14 @@ if (isset($_SESSION['tempValConfirmBox'])) {
     echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
 }
 
-$parentPackageDisplayName = isset($_POST['parent_package_name']) ? trim((string) $_POST['parent_package_name']) : '';
-$parentPackageDisplayId = isset($_POST['parent_package_id']) ? trim((string) $_POST['parent_package_id']) : '';
+$parentPackageDisplayName = trim((string) post('parent_package_name'));
+$parentPackageDisplayId = trim((string) post('parent_package_id'));
+if (isset($parent_package_name)) {
+    $parentPackageDisplayName = trim((string) $parent_package_name);
+}
+if (isset($parent_package_id)) {
+    $parentPackageDisplayId = trim((string) $parent_package_id);
+}
 if ($parentPackageDisplayName === '' && isset($row['parent_package_id']) && (int) $row['parent_package_id'] > 0) {
     $parentPackageRows = commonPackageLoadRowsByIds($connect, array((int) $row['parent_package_id']), true);
     if (isset($parentPackageRows[(int) $row['parent_package_id']])) {
@@ -647,7 +649,7 @@ if (!empty($dataId) && ctype_digit((string) $dataId)) {
                                     Name<span
                                         class="requireRed">*</span></label>
                                 <input class="form-control" type="text" name="currentDataName" id="currentDataName"
-                                    value="<?php echo isset($_POST['currentDataName']) ? htmlspecialchars($_POST['currentDataName']) : (isset($row['name']) ? htmlspecialchars($row['name']) : ''); ?>"
+                                    value="<?php echo htmlspecialchars(post('actionBtn') ? post('currentDataName') : (isset($row['name']) ? $row['name'] : '')); ?>"
                                     <?php if ($act == '') echo 'readonly' ?> required autocomplete="off">
                                 <div id="err_msg">
                                     <span class="mt-n1" id="errorSpan"><?php if (isset($err)) echo $err; ?></span>
@@ -660,7 +662,7 @@ if (!empty($dataId) && ctype_digit((string) $dataId)) {
                                     <div class="form-group mb-3">
                                         <label class="form-label form_lbl" id="item_code_lbl" for="item_code">Item Code (SKU)<span class="requireRed">*</span></label>
                                         <input class="form-control" type="text" name="item_code" id="item_code" 
-                                            value="<?php echo isset($_POST['item_code']) ? htmlspecialchars($_POST['item_code']) : ((isset($row['item_code'])) ? htmlspecialchars($row['item_code']) : ''); ?>" 
+                                            value="<?php echo htmlspecialchars(post('actionBtn') ? post('item_code') : (isset($row['item_code']) ? $row['item_code'] : '')); ?>" 
                                             <?php if ($act == '') echo 'readonly' ?> required autocomplete="off">
                                     </div>
                                 </div>
@@ -675,7 +677,7 @@ if (!empty($dataId) && ctype_digit((string) $dataId)) {
                                             <?php } ?>
                                         </div>
                                         <input type="hidden" name="platform_item_id" id="platform_item_id"
-                                            value="<?php echo isset($_POST['platform_item_id']) ? htmlspecialchars($_POST['platform_item_id']) : ((isset($row['platform_item_id'])) ? htmlspecialchars($row['platform_item_id']) : ''); ?>">
+                                            value="<?php echo htmlspecialchars(post('actionBtn') ? post('platform_item_id') : (isset($row['platform_item_id']) ? $row['platform_item_id'] : '')); ?>">
                                         <small class="text-muted">Press Enter to add another platform item ID.</small>
                                     </div>
                                 </div>
@@ -684,7 +686,7 @@ if (!empty($dataId) && ctype_digit((string) $dataId)) {
                                     <div class="form-group mb-3">
                                         <label class="form-label form_lbl" id="item_description_lbl" for="item_description">Item Description<span class="requireRed">*</span></label>
                                         <input class="form-control" type="text" name="item_description" id="item_description" 
-                                            value="<?php echo isset($_POST['item_description']) ? htmlspecialchars($_POST['item_description']) : ((isset($row['item_description'])) ? htmlspecialchars($row['item_description']) : ''); ?>" 
+                                            value="<?php echo htmlspecialchars(post('actionBtn') ? post('item_description') : (isset($row['item_description']) ? $row['item_description'] : '')); ?>" 
                                             <?php if ($act == '') echo 'readonly' ?> required autocomplete="off">
                                     </div>
                                 </div>
@@ -694,7 +696,7 @@ if (!empty($dataId) && ctype_digit((string) $dataId)) {
                                 <label class="form-label form_lbl" id="price_lbl" for="price">Selling Price<span
                                         class="requireRed">*</span></label>
                                 <input class="form-control" type="number" name="price" id="price"
-                                    value="<?php echo isset($_POST['price']) ? htmlspecialchars($_POST['price']) : ((isset($row['price'])) ? htmlspecialchars($row['price']) : ''); ?>"
+                                    value="<?php echo htmlspecialchars(post('actionBtn') ? post('price') : (isset($row['price']) ? $row['price'] : '')); ?>"
                                     <?php if ($act == '') echo 'readonly' ?> required>
                                 <div id="err_msg">
                                     <span class="mt-n1"><?php if (isset($err2)) echo $err2; ?></span>
@@ -720,15 +722,15 @@ if (!empty($dataId) && ctype_digit((string) $dataId)) {
                                         $curUnitName = $product_info_row['unit'];
                                     }
                                 }
-                                if (isset($_POST['cur_unit'])) {
-                                    $curUnitName = $_POST['cur_unit'];
+                                if (post('actionBtn')) {
+                                    $curUnitName = post('cur_unit');
                                 }
                                 ?>
                                 <input class="form-control" type="text" name="cur_unit" id="cur_unit"
                                     value="<?php echo htmlspecialchars($curUnitName); ?>"
                                     <?php if ($act == '') echo 'readonly'; ?> required>
                                 <input type="hidden" name="cur_unit_hidden" id="cur_unit_hidden"
-                                    value="<?php echo isset($_POST['cur_unit_hidden']) ? htmlspecialchars($_POST['cur_unit_hidden']) : ((isset($row['currency_unit'])) ? htmlspecialchars($row['currency_unit']) : ''); ?>">
+                                    value="<?php echo htmlspecialchars(post('actionBtn') ? post('cur_unit_hidden') : (isset($row['currency_unit']) ? $row['currency_unit'] : '')); ?>">
                                 <div id="err_msg">
                                     <span class="mt-n1"><?php if (isset($err3)) echo $err3; ?></span>
                                 </div>
@@ -757,15 +759,15 @@ if (!empty($dataId) && ctype_digit((string) $dataId)) {
                                 }
                                 
                                 // --- FIX: Retain user input if validation fails ---
-                                if (isset($_POST['brand'])) {
-                                    $brandName = $_POST['brand'];
+                                if (post('actionBtn')) {
+                                    $brandName = post('brand');
                                 }
                                 ?>
                                 <input class="form-control" type="text" name="brand" id="brand"
                                     value="<?php echo htmlspecialchars($brandName, ENT_QUOTES, 'UTF-8'); ?>"
                                     <?php if ($act == '') echo 'readonly'; ?> required>
                                 <input type="hidden" name="brand_hidden" id="brand_hidden"
-                                    value="<?php echo isset($_POST['brand_hidden']) ? htmlspecialchars($_POST['brand_hidden'], ENT_QUOTES, 'UTF-8') : (isset($row['brand']) ? htmlspecialchars($row['brand'], ENT_QUOTES, 'UTF-8') : ''); ?>">
+                                    value="<?php echo htmlspecialchars(post('actionBtn') ? post('brand_hidden') : (isset($row['brand']) ? $row['brand'] : ''), ENT_QUOTES, 'UTF-8'); ?>">
                                 
                                 <?php if (isset($brand_err)) { ?>
                                     <div id="err_msg">
@@ -780,7 +782,7 @@ if (!empty($dataId) && ctype_digit((string) $dataId)) {
                                 <label class="form-label form_lbl" id="cost_lbl" for="package_cost">Cost<span
                                         class="requireRed">*</span></label>
                                 <input class="form-control" type="number" required step="0.01" name="package_cost" id="package_cost"
-                                    value="<?php echo isset($_POST['package_cost']) ? htmlspecialchars($_POST['package_cost']) : ((isset($row['cost'])) ? htmlspecialchars($row['cost']) : ''); ?>"
+                                    value="<?php echo htmlspecialchars(post('actionBtn') ? post('package_cost') : (isset($row['cost']) ? $row['cost'] : '')); ?>"
                                     <?php if ($act == '') echo 'readonly' ?>>
                                 <div id="err_msg">
                                     <span class="mt-n1"><?php if (isset($cost_err)) echo $cost_err; ?></span>
@@ -807,15 +809,15 @@ if (!empty($dataId) && ctype_digit((string) $dataId)) {
                                         $costUnitName = $cost_curr_row['unit'];
                                     }
                                 }
-                                if (isset($_POST['cost_curr'])) {
-                                    $costUnitName = $_POST['cost_curr'];
+                                if (post('actionBtn')) {
+                                    $costUnitName = post('cost_curr');
                                 }
                                 ?>
                                 <input class="form-control" type="text" name="cost_curr" id="cost_curr"
                                     value="<?php echo htmlspecialchars($costUnitName); ?>"
                                     <?php if ($act == '') echo 'readonly'; ?> required>
                                 <input type="hidden" name="cost_curr_hidden" id="cost_curr_hidden"
-                                    value="<?php echo isset($_POST['cost_curr_hidden']) ? htmlspecialchars($_POST['cost_curr_hidden']) : (isset($row['cost_curr']) ? htmlspecialchars($row['cost_curr']) : ''); ?>">
+                                    value="<?php echo htmlspecialchars(post('actionBtn') ? post('cost_curr_hidden') : (isset($row['cost_curr']) ? $row['cost_curr'] : '')); ?>">
                                 <div id="err_msg">
                                     <span class="mt-n1"><?php if (isset($cost_curr_err)) echo $cost_curr_err; ?></span>
                                 </div>
@@ -845,7 +847,7 @@ if (!empty($dataId) && ctype_digit((string) $dataId)) {
                             <div class="form-group mb-3">
                                 <label class="form-label form_lbl" for="agent_cost">Agent Cost (RM)<span class="requireRed">*</span></label>
                                 <input class="form-control" type="number" name="agent_cost" id="agent_cost" step="0.01"
-                                    value="<?php echo isset($_POST['agent_cost']) ? htmlspecialchars($_POST['agent_cost']) : ((isset($row['agent_cost'])) ? htmlspecialchars($row['agent_cost']) : ''); ?>"
+                                    value="<?php echo htmlspecialchars(post('actionBtn') ? post('agent_cost') : (isset($row['agent_cost']) ? $row['agent_cost'] : '')); ?>"
                                     <?php if ($act == '') echo 'readonly' ?> required>
                                 <div id="err_msg">
                                     <span class="mt-n1"><?php if (isset($agent_cost_err)) echo $agent_cost_err; ?></span>
@@ -880,9 +882,9 @@ if (!empty($dataId) && ctype_digit((string) $dataId)) {
                                     $echoVal = $row['product'];
                                 }
 
-                                if (isset($_POST['prod_name']) && is_array($_POST['prod_name'])) {
-                                    $postedProdNames = $_POST['prod_name'];
-                                    $postedProdVals = isset($_POST['prod_val']) && is_array($_POST['prod_val']) ? $_POST['prod_val'] : array();
+                                if (is_array(post('prod_name'))) {
+                                    $postedProdNames = postSpaceFilter('prod_name') ?: array();
+                                    $postedProdVals = postSpaceFilter('prod_val') ?: array();
                                     $rowCount = max(count($postedProdNames), count($postedProdVals));
                                     if ($rowCount < 1) {
                                         $rowCount = 1;
@@ -1075,15 +1077,15 @@ if (!empty($dataId) && ctype_digit((string) $dataId)) {
                                             if (isset($barcode_slot_total) && $barcode_slot_total != '')
                                                 echo $barcode_slot_total;
                                             else {
-                                                if (isset($_POST['barcode_slot_total_hidden']) && $_POST['barcode_slot_total_hidden'] !== '')
-                                                    echo htmlspecialchars($_POST['barcode_slot_total_hidden']);
+                                                if (post('barcode_slot_total_hidden') !== '')
+                                                    echo htmlspecialchars(post('barcode_slot_total_hidden'));
                                                 else if (isset($dataExisted) && isset($row['barcode_slot_total']))
                                                     echo $row['barcode_slot_total'];
                                                 else echo '0';
                                             }
                                             ?><input name="barcode_slot_total_hidden" id="barcode_slot_total_hidden"
                                                 type="hidden"
-                                                value="<?php echo isset($_POST['barcode_slot_total_hidden']) ? htmlspecialchars($_POST['barcode_slot_total_hidden']) : ((isset($row['barcode_slot_total'])) ? htmlspecialchars($row['barcode_slot_total']) : ''); ?>">
+                                                value="<?php echo htmlspecialchars(post('actionBtn') ? post('barcode_slot_total_hidden') : (isset($row['barcode_slot_total']) ? $row['barcode_slot_total'] : '')); ?>">
                                         </td>
                                         <td scope="col"></td>
                                     </tr>
@@ -1096,7 +1098,7 @@ if (!empty($dataId) && ctype_digit((string) $dataId)) {
                     <div class="form-group mb-3">
                         <label class="form-label" for="currentDataRemark"><?php echo $pageTitle ?> Remark</label>
                         <textarea class="form-control" name="currentDataRemark" id="currentDataRemark" rows="3"
-                            <?php if ($act == '') echo 'readonly' ?>><?php echo isset($_POST['currentDataRemark']) ? htmlspecialchars($_POST['currentDataRemark']) : (isset($row['remark']) ? htmlspecialchars($row['remark']) : ''); ?></textarea>
+                            <?php if ($act == '') echo 'readonly' ?>><?php echo htmlspecialchars(post('actionBtn') ? post('currentDataRemark') : (isset($row['remark']) ? $row['remark'] : '')); ?></textarea>
                     </div>
                     <?php if (!empty($linkedChildPackages)) { ?>
                         <div class="form-group mb-3">

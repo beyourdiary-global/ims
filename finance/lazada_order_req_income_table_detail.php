@@ -188,7 +188,7 @@ if (empty($_SESSION['csrf_token'])) {
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceivedDateBtn')) {
-    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    $submittedToken = (string) post('csrf_token');
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
         echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes(htmlspecialchars((string) $_SERVER['REQUEST_URI'], ENT_QUOTES, 'UTF-8')) . "');</script>";
         exit;
@@ -316,8 +316,8 @@ $result = getData('*', '', '', LAZADA_ORDER_REQ, $connect);
             </thead>
             <tbody>
                 <?php while ($row = $result->fetch_assoc()) {
-                    if (isset($_GET['ids'])) {             
-                    $ids = explode(',', $_GET['ids']);
+                    if (input('ids') !== '') {             
+                    $ids = explode(',', input('ids'));
                     foreach ($ids as $id) {
                     $decodedId = urldecode($id);
                     if (isset( $row['id']) && $row['id'] == $id) {

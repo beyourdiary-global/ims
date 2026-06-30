@@ -79,7 +79,7 @@ $allowedActions = ['parseShopeeOrderReq', 'insertShopeeOrderReq'];
 if ($action !== '' && !in_array($action, $allowedActions, true)) {
     $action = '';
 }
-if (isset($_POST['cancelImportBtn']) || $action === 'cancelImport') {
+if (post('cancelImportBtn') !== '' || $action === 'cancelImport') {
     echo '<script>location.href = "' . $SITEURL . '/import/shopee_order_import.php";</script>';
     exit;
 }
@@ -177,7 +177,7 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
                     $pdfUnicodeMapBundle = buildPdfUnicodeMapFromContent($rawContent);
                     $GLOBALS['sor_pdf_unicode_map'] = $pdfUnicodeMapBundle;
                     
-                    $clientPdfText = isset($_POST['client_pdf_text']) ? trim((string) $_POST['client_pdf_text']) : '';
+                    $clientPdfText = trim((string) post('client_pdf_text'));
 
                     $maxClientPdfTextBytes = 512 * 1024; // 256KB
                     if ($clientPdfText !== '') {
@@ -654,14 +654,14 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
     };
 
     $packageIdsStr = $resolveMultiIds(
-        isset($_POST['sor_pkg_hidden']) ? $_POST['sor_pkg_hidden'] : array(),
-        isset($_POST['sor_pkg']) ? $_POST['sor_pkg'] : array(),
+        (array) post('sor_pkg_hidden') ?: array(),
+        (array) post('sor_pkg') ?: array(),
         PKG
     );
 
     $brandIdsStr = $resolveMultiIds(
-        isset($_POST['sor_brand_hidden']) ? $_POST['sor_brand_hidden'] : array(),
-        isset($_POST['sor_brand']) ? $_POST['sor_brand'] : array(),
+        (array) post('sor_brand_hidden') ?: array(),
+        (array) post('sor_brand') ?: array(),
         BRAND
     );
     
@@ -677,8 +677,8 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
     $airbillAttachment = null;
     if (isset($_FILES["airbill_attachment"]) && $_FILES["airbill_attachment"]["size"] != 0) {
         $airbillAttachment = $_FILES["airbill_attachment"]["name"];
-    } elseif (isset($_POST['airbill_attachment_value'])) {
-        $airbillAttachment = $_POST['airbill_attachment_value'];
+    } elseif (filter_has_var(INPUT_POST, 'airbill_attachment_value')) {
+        $airbillAttachment = post('airbill_attachment_value');
     }
     $buyerInput = trim((string) postSpaceFilter('buyer'));
     $buyerHidden = postSpaceFilter('buyer_hidden');
@@ -693,8 +693,8 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
         'order_status' => $orderStatusVal,
         'order_status_val' => $orderStatusVal,
         'stock_out_warehouse_id' => $stockOutWarehouseId,
-        'sku' => postSpaceFilter('sku_matched') === 'yes' ? (isset($_POST['sku']) ? $_POST['sku'] : '') : '',
-        'detected_sku' => isset($_POST['detected_sku']) ? $_POST['detected_sku'] : '',
+        'sku' => postSpaceFilter('sku_matched') === 'yes' ? post('sku') : '',
+        'detected_sku' => post('detected_sku'),
         'sku_matched' => postSpaceFilter('sku_matched') === 'yes' ? 'yes' : 'no',
         'missing_sku' => empty($packageIdsStr),
         'shopee_acc' => postSpaceFilter('shopee_acc'),
@@ -843,8 +843,8 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
         ? $previewData['final_amt']
         : $calculatedFinalAmt;
     $packageQtySnapshot = shopeeOmsBuildPackageQtySnapshotFromInputs(
-        isset($_POST['sor_pkg_hidden']) ? $_POST['sor_pkg_hidden'] : array(),
-        isset($_POST['sor_pkg']) ? $_POST['sor_pkg'] : array(),
+        (array) post('sor_pkg_hidden') ?: array(),
+        (array) post('sor_pkg') ?: array(),
         $connect
     );
     $previewData['package_qty_json'] = !empty($packageQtySnapshot) ? json_encode($packageQtySnapshot) : '';

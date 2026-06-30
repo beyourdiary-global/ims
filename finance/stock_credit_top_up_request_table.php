@@ -21,6 +21,17 @@ if (!file_exists($tempAttachDir)) {
 }
 
 $checkboxValues = isset($_COOKIE['rowID']) ? $_COOKIE['rowID'] : '';
+$groupOption = input('group');
+$allowedGroups = array('merchant', 'currency', 'brand');
+if (!in_array($groupOption, $allowedGroups, true)) {
+    $groupOption = '';
+}
+$groupOption3 = input('timeRange');
+$groupOption4 = input('timeInterval');
+$allowedTimeIntervals = array('daily', 'weekly', 'monthly', 'yearly');
+if (!in_array($groupOption4, $allowedTimeIntervals, true)) {
+    $groupOption4 = '';
+}
 
 // Check if any checkboxes are checked
 if (!empty($checkboxValues)) {
@@ -216,7 +227,7 @@ $result = getData('*', '', '', $tblName, $finance_connect);
                 <table class="table table-striped" id="stock_credit_table">
                     <thead>
                         <tr>
-                        <?php if (!isset($_GET['group'])): ?>
+                        <?php if ($groupOption === ''): ?>
                             <th class="hideColumn" scope="col">ID</th>
                             <th class="text-center">
                                 <input type="checkbox" class="exportAll">
@@ -238,14 +249,12 @@ $result = getData('*', '', '', $tblName, $finance_connect);
                             <th scope="col" width="60px">S/N</th>      
                             <th id="group_header" scope="col">
                                 <?php 
-                                    if (isset($_GET['group'])) {
-                                        if ($_GET['group'] == 'merchant') {
+                                    if ($groupOption == 'merchant') {
                                             echo "Merchant";
-                                        } elseif ($_GET['group'] == 'currency') {
+                                        } elseif ($groupOption == 'currency') {
                                             echo "Currency Unit";
-                                        } elseif ($_GET['group'] == 'brand') {
+                                        } elseif ($groupOption == 'brand') {
                                             echo "Brand";
-                                        }
                                     }
                                 ?>
                             </th>
@@ -257,9 +266,6 @@ $result = getData('*', '', '', $tblName, $finance_connect);
                     <tbody>
 
                         <?php 
-                            $groupOption = isset($_GET['group']) ? $_GET['group'] : ''; 
-                            $groupOption3 = isset($_GET['timeRange']) ? $_GET['timeRange'] : ''; 
-                            $groupOption4 = isset($_GET['timeInterval']) ? $_GET['timeInterval'] : ''; 
                             $groupedRows = [];
                             $counters = 1;
             
@@ -439,7 +445,7 @@ $result = getData('*', '', '', $tblName, $finance_connect);
                 </tbody>
                 <tfoot>
                 <tr>
-                        <?php if (!isset($_GET['group'])): ?>
+                        <?php if ($groupOption === ''): ?>
                             <th class="hideColumn" scope="col">ID</th>
                             <th class="text-center">
                                 <input type="checkbox" class="exportAll">
@@ -461,14 +467,12 @@ $result = getData('*', '', '', $tblName, $finance_connect);
                             <th scope="col" width="60px">S/N</th>      
                             <th id="group_header" scope="col">
                                 <?php 
-                                    if (isset($_GET['group'])) {
-                                        if ($_GET['group'] == 'merchant') {
+                                    if ($groupOption == 'merchant') {
                                             echo "Merchant";
-                                        } elseif ($_GET['group'] == 'currency') {
+                                        } elseif ($groupOption == 'currency') {
                                             echo "Currency Unit";
-                                        } elseif ($_GET['group'] == 'brand') {
+                                        } elseif ($groupOption == 'brand') {
                                             echo "Brand";
-                                        }
                                     }
                                 ?>
                             </th>

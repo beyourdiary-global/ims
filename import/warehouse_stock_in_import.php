@@ -118,7 +118,7 @@ if ($actionBtn === 'cancelImport') {
 }
 
 if ($actionBtn === 'confirmImport') {
-    $rawRows = isset($_POST['rows']) && is_array($_POST['rows']) ? $_POST['rows'] : array();
+    $rawRows = (array) post('rows') ?: array();
     $postedRows = array();
     foreach ($rawRows as $idx => $row) {
         if (!is_array($row)) {

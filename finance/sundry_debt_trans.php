@@ -83,8 +83,8 @@ if (post('actionBtn')) {
 
     if (isset($_FILES["sdt_attach"]) && $_FILES["sdt_attach"]["size"] != 0) {
         $sdt_attach = $_FILES["sdt_attach"]["name"];
-    } elseif (isset($_POST['existing_attachment'])) {
-        $sdt_attach = $_POST['existing_attachment'];
+    } elseif (filter_has_var(INPUT_POST, 'existing_attachment')) {
+        $sdt_attach = post('existing_attachment');
     }
 
     switch ($action) {

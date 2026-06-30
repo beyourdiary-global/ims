@@ -57,11 +57,11 @@ if (!function_exists('shopeeOmsCronFlagEnabled')) {
 if (!function_exists('shopeeOmsFlowDailyEmailManualTriggerRequested')) {
     function shopeeOmsFlowDailyEmailManualTriggerRequested()
     {
-        if (isset($_GET['manual_trigger']) && shopeeOmsCronFlagEnabled($_GET['manual_trigger'])) {
+        if (input('manual_trigger') !== '' && shopeeOmsCronFlagEnabled(input('manual_trigger'))) {
             return true;
         }
 
-        if (isset($_POST['manual_trigger']) && shopeeOmsCronFlagEnabled($_POST['manual_trigger'])) {
+        if (post('manual_trigger') !== '' && shopeeOmsCronFlagEnabled(post('manual_trigger'))) {
             return true;
         }
 

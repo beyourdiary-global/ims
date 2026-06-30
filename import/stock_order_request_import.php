@@ -2174,7 +2174,7 @@ if ($action === 'checkDuplicateInvoiceImport') {
         header('Content-Type: application/json; charset=utf-8');
     }
 
-    $postedInvoiceJson = isset($_POST['invoice_nos']) ? (string) $_POST['invoice_nos'] : '';
+    $postedInvoiceJson = (string) post('invoice_nos');
     $postedInvoices = @json_decode($postedInvoiceJson, true);
     if (!is_array($postedInvoices)) {
         $postedInvoices = array();
@@ -2211,7 +2211,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'POST') {
     unset($_SESSION['sor_pdf_import_preview']);
 }
 
-if (isset($_POST['cancelImportBtn']) || $action === 'cancelImport') {
+if (post('cancelImportBtn') !== '' || $action === 'cancelImport') {
     unset($_SESSION['sor_pdf_import_preview']);
     if (!headers_sent()) {
         header('Location: ' . $SITEURL . '/import/stock_order_request_import.php');
@@ -2224,8 +2224,8 @@ if (isset($_POST['cancelImportBtn']) || $action === 'cancelImport') {
 if ($action === 'parseStockOrderPdf') {
     unset($_SESSION['sor_pdf_import_preview']);
 
-    $clientOcrText = isset($_POST['client_ocr_text']) ? trim((string) $_POST['client_ocr_text']) : '';
-    $clientOcrMapJson = isset($_POST['client_ocr_map']) ? trim((string) $_POST['client_ocr_map']) : '';
+    $clientOcrText = trim((string) post('client_ocr_text'));
+    $clientOcrMapJson = trim((string) post('client_ocr_map'));
     $clientOcrMap = array();
     if ($clientOcrMapJson !== '') {
         $decodedMap = @json_decode($clientOcrMapJson, true);
@@ -2278,7 +2278,7 @@ if ($action === 'parseStockOrderPdf') {
 }
 
 if ($action === 'insertStockOrderPdf') {
-    $postedRows = isset($_POST['rows']) && is_array($_POST['rows']) ? $_POST['rows'] : array();
+    $postedRows = (array) post('rows') ?: array();
     list($pkgNameMap, $pkgDescMap) = sorImpBuildPackageIndexes($packages);
 
     if (count($postedRows) === 0) {

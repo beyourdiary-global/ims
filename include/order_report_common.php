@@ -199,21 +199,11 @@ if (!function_exists('orderReportNormalizeReportType')) {
 if (!function_exists('orderReportReadArrayInput')) {
     function orderReportReadArrayInput($key)
     {
-        if (!isset($_GET[$key]) || !is_array($_GET[$key])) {
-            return array();
+        if (in_array($key, array('package', 'brand', 'warehouse', 'payment'), true)) {
+            return numberInputArray($key);
         }
 
-        $values = array();
-        foreach ((array) $_GET[$key] as $value) {
-            $value = trim(strip_tags((string) $value));
-            if ($value === '' || strlen($value) > 255 || isset($values[$value])) {
-                continue;
-            }
-
-            $values[$value] = $value;
-        }
-
-        return array_values($values);
+        return inputArray($key);
     }
 }
 
@@ -266,11 +256,11 @@ if (!function_exists('orderReportBuildState')) {
         $platform = preg_replace('/[^a-z0-9_]+/i', '_', strtolower(trim((string) $platform)));
         $sessionKey = 'order_report_filter_state_' . ($platform !== '' ? $platform : 'default');
 
-        if (isset($_GET['reset']) && (string) $_GET['reset'] === '1') {
+        if (input('reset') === '1') {
             unset($_SESSION[$sessionKey]);
         }
 
-        $hasSearchRequest = isset($_GET['search']) && (string) $_GET['search'] === '1';
+        $hasSearchRequest = input('search') === '1';
 
         if (!$hasSearchRequest && isset($_SESSION[$sessionKey]) && is_array($_SESSION[$sessionKey])) {
             return $_SESSION[$sessionKey];
@@ -1522,7 +1512,7 @@ if (!function_exists('orderReportBuildView')) {
         $orderConn = orderReportGetDbConnection($connect, $financeConnect, isset($platformConfig['db']) ? $platformConfig['db'] : 'finance');
         $referenceMaps = orderReportBuildReferenceMaps($connect, $financeConnect);
 
-        if (isset($_GET['order_report_option_sets']) && (string) $_GET['order_report_option_sets'] === '1') {
+        if (input('order_report_option_sets') === '1') {
             $requestState = orderReportBuildStateFromRequest($state);
             $requestOptionSets = orderReportBuildFilterOptionSetsForState($connect, $financeConnect, $platformConfig, $orderConn, $referenceMaps, $requestState);
 

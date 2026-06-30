@@ -570,7 +570,7 @@ if ($hasTaskManagementAccess) {
         $isTaskSheetsPage = strpos($taskCurrentPath, '/task/sheets.php') !== false;
         $isTaskProjectSettingsPage = strpos($taskCurrentPath, '/task/project_settings.php') !== false;
         $isTaskProjectUserAccessPage = strpos($taskCurrentPath, '/task/project_user_access.php') !== false;
-        $taskCurrentProjectId = taskResolveCurrentProjectId($connect, isset($_GET['project_id']) ? (int) $_GET['project_id'] : 0);
+        $taskCurrentProjectId = taskResolveCurrentProjectId($connect, (int) numberInput('project_id'));
 
         if ($isTaskSummaryPage) {
             $taskActiveMenuKey = 'summary';

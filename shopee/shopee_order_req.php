@@ -217,7 +217,7 @@ $sorWriteVerifyAuditLog = function ($queryRecord, $oldValue, $changeValue, $mess
     ));
 };
 $sorHandleConfirmReceiveWithFollowUp = function () use ($connect, $finance_connect, $dataId, $pageTitle, $cdate, $ctime, $tblName, $redirectPage, $sorIsAjaxRequest, $sorPrepareAjaxJsonResponse) {
-    $postedCsrfToken = isset($_POST['shopee_order_follow_up_csrf']) ? (string) $_POST['shopee_order_follow_up_csrf'] : '';
+    $postedCsrfToken = (string) post('shopee_order_follow_up_csrf');
     if (!hash_equals((string) $_SESSION['shopee_order_follow_up_csrf'], $postedCsrfToken)) {
         $message = 'Invalid follow-up session token. Please refresh and try again.';
         if ($sorIsAjaxRequest) {
@@ -357,7 +357,7 @@ $sorHandleVerifyWorkflowRequest = function () use (
     $sorPrepareAjaxJsonResponse();
     $verifyRedirectUrl = trim((string) post('sor_verify_redirect_url'));
 
-    $postedCsrfToken = isset($_POST['shopee_order_verify_pdf_csrf']) ? (string) $_POST['shopee_order_verify_pdf_csrf'] : '';
+    $postedCsrfToken = (string) post('shopee_order_verify_pdf_csrf');
     if (!hash_equals((string) $_SESSION['shopee_order_verify_pdf_csrf'], $postedCsrfToken)) {
         echo json_encode(array('success' => false, 'message' => 'Invalid verify session token. Please refresh and try again.'));
         exit;
@@ -429,7 +429,7 @@ $sorHandleVerifyWorkflowRequest = function () use (
     if ($verifyAction === 'finalize_pdf_verified' || $verifyAction === 'direct_verified') {
         $fieldUpdates = array();
         if ($verifyAction === 'finalize_pdf_verified') {
-            $finalValuesJson = isset($_POST['sor_verify_final_values']) ? (string) $_POST['sor_verify_final_values'] : '';
+            $finalValuesJson = (string) post('sor_verify_final_values');
             $finalValues = json_decode($finalValuesJson, true);
             if (!is_array($finalValues)) {
                 $finalValues = array();
@@ -540,12 +540,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $sorIsAjaxRequest && trim((string) 
     $sorHandleVerifyWorkflowRequest();
 }
 
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
-    $scr_username = trim((string) $_POST['scr_username']);
-    $scr_pic_name = trim((string) $_POST['scr_pic']);
-    $scr_country_name = trim((string) $_POST['scr_country']);
-    $scr_brand_name = trim((string) $_POST['scr_brand']);
-    $scr_series_name = trim((string) $_POST['scr_series']);
+if ($_SERVER["REQUEST_METHOD"] == "POST" && post('submit')) {
+    $scr_username = trim((string) post('scr_username'));
+    $scr_pic_name = trim((string) post('scr_pic'));
+    $scr_country_name = trim((string) post('scr_country'));
+    $scr_brand_name = trim((string) post('scr_brand'));
+    $scr_series_name = trim((string) post('scr_series'));
     $scr_resolve_lookup_id = function ($rawId, $displayValue, $tblName, $columnName) use ($connect) {
         $rawId = trim((string) $rawId);
         if ($rawId !== '' && ctype_digit($rawId) && (int) $rawId > 0) {
@@ -566,10 +566,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
 
         return '';
     };
-    $scr_pic = $scr_resolve_lookup_id(isset($_POST['scr_pic_hidden']) ? $_POST['scr_pic_hidden'] : '', $scr_pic_name, USR_USER, 'name');
-    $scr_country = $scr_resolve_lookup_id(isset($_POST['scr_country_hidden']) ? $_POST['scr_country_hidden'] : '', $scr_country_name, COUNTRIES, 'nicename');
-    $scr_brand = $scr_resolve_lookup_id(isset($_POST['scr_brand_hidden']) ? $_POST['scr_brand_hidden'] : '', $scr_brand_name, BRAND, 'name');
-    $scr_series = $scr_resolve_lookup_id(isset($_POST['scr_series_hidden']) ? $_POST['scr_series_hidden'] : '', $scr_series_name, BRD_SERIES, 'name');
+    $scr_pic = $scr_resolve_lookup_id(post('scr_pic_hidden'), $scr_pic_name, USR_USER, 'name');
+    $scr_country = $scr_resolve_lookup_id(post('scr_country_hidden'), $scr_country_name, COUNTRIES, 'nicename');
+    $scr_brand = $scr_resolve_lookup_id(post('scr_brand_hidden'), $scr_brand_name, BRAND, 'name');
+    $scr_series = $scr_resolve_lookup_id(post('scr_series_hidden'), $scr_series_name, BRD_SERIES, 'name');
     $duplicate_check_query = "SELECT * FROM shopee_customer_info WHERE buyer_username = '$scr_username'";
     $duplicate_result = mysqli_query($finance_connect, $duplicate_check_query);
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
@@ -786,14 +786,14 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
     $sor_date = postSpaceFilter('sor_date');
     $sor_time = postSpaceFilter('sor_time');
     $sor_pkg = $resolveMultiIds(
-        isset($_POST['sor_pkg_hidden']) ? $_POST['sor_pkg_hidden'] : array(),
-        isset($_POST['sor_pkg']) ? $_POST['sor_pkg'] : array(),
+        postSpaceFilter('sor_pkg_hidden') ?: array(),
+        postSpaceFilter('sor_pkg') ?: array(),
         PKG
     );
 
     $sor_brand = $resolveMultiIds(
-        isset($_POST['sor_brand_hidden']) ? $_POST['sor_brand_hidden'] : array(),
-        isset($_POST['sor_brand']) ? $_POST['sor_brand'] : array(),
+        postSpaceFilter('sor_brand_hidden') ?: array(),
+        postSpaceFilter('sor_brand') ?: array(),
         BRAND
     );
     $sor_user = postSpaceFilter('sor_user_hidden');
@@ -864,7 +864,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
         ? basename((string) $_FILES["sor_airbill_attachment"]["name"])
         : '';
     $sorExistingAirbillAttachmentValue = isset($row['airbill_attachment']) ? trim((string) $row['airbill_attachment']) : '';
-    $sorPostedAirbillAttachmentValue = isset($_POST['sor_airbill_attachment_value']) ? trim((string) $_POST['sor_airbill_attachment_value']) : '';
+    $sorPostedAirbillAttachmentValue = trim((string) post('sor_airbill_attachment_value'));
     $sor_airbill_attachment = '';
 
     if ($action === 'updRecord' && $sorExistingAirbillAttachmentValue !== '') {
@@ -879,8 +879,8 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
         $sor_airbill_attachment = $sorPostedAirbillAttachmentValue;
     }
     $packageQtySnapshot = shopeeOmsBuildPackageQtySnapshotFromInputs(
-        isset($_POST['sor_pkg_hidden']) ? $_POST['sor_pkg_hidden'] : array(),
-        isset($_POST['sor_pkg']) ? $_POST['sor_pkg'] : array(),
+        postSpaceFilter('sor_pkg_hidden') ?: array(),
+        postSpaceFilter('sor_pkg') ?: array(),
         $connect
     );
     $packageQtySnapshotJson = !empty($packageQtySnapshot) ? json_encode($packageQtySnapshot) : '';
@@ -2171,7 +2171,8 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                                     class="requireRed">*</span></label>
                             <?php
                             $selectedPkgIds = array();
-                            $postedPkgNames = (isset($_POST['sor_pkg']) && is_array($_POST['sor_pkg'])) ? $_POST['sor_pkg'] : array();
+                            $postedPkgNames = postSpaceFilter('sor_pkg') ?: array();
+                            $postedPkgIds = postSpaceFilter('sor_pkg_hidden') ?: array();
                             if (isset($sor_pkg) && $sor_pkg !== '') {
                                 $selectedPkgIds = array_filter(array_map('trim', explode(',', $sor_pkg)), 'strlen');
                             } else if (isset($row['package']) && $row['package'] !== '') {
@@ -2194,7 +2195,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                                 }
                             } else if (!empty($postedPkgNames)) {
                                 foreach ($postedPkgNames as $idx => $pkgName) {
-                                    $postedPkgId = (isset($_POST['sor_pkg_hidden'][$idx])) ? (int) $_POST['sor_pkg_hidden'][$idx] : 0;
+                                    $postedPkgId = isset($postedPkgIds[$idx]) ? (int) $postedPkgIds[$idx] : 0;
                                     $pkgRows[] = array('id' => $postedPkgId, 'name' => trim((string) $pkgName));
                                 }
                             }
@@ -2235,7 +2236,8 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                                     class="requireRed">*</span></label>
                             <?php
                             $selectedBrandIds = array();
-                            $postedBrandNames = (isset($_POST['sor_brand']) && is_array($_POST['sor_brand'])) ? $_POST['sor_brand'] : array();
+                            $postedBrandNames = postSpaceFilter('sor_brand') ?: array();
+                            $postedBrandIds = postSpaceFilter('sor_brand_hidden') ?: array();
                             if (isset($sor_brand) && $sor_brand !== '') {
                                 $selectedBrandIds = array_filter(array_map('trim', explode(',', $sor_brand)), 'strlen');
                             } else if (isset($row['brand']) && $row['brand'] !== '') {
@@ -2258,7 +2260,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                                 }
                             } else if (!empty($postedBrandNames)) {
                                 foreach ($postedBrandNames as $idx => $brandName) {
-                                    $postedBrandId = (isset($_POST['sor_brand_hidden'][$idx])) ? (int) $_POST['sor_brand_hidden'][$idx] : 0;
+                                    $postedBrandId = isset($postedBrandIds[$idx]) ? (int) $postedBrandIds[$idx] : 0;
                                     $brandRows[] = array('id' => $postedBrandId, 'name' => trim((string) $brandName));
                                 }
                             }

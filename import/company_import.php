@@ -370,7 +370,7 @@ if ($action === 'preview') {
     }
 }
 else if ($action === 'update') {
-    $postData = isset($_POST['data']) && is_array($_POST['data']) ? $_POST['data'] : array();
+    $postData = (array) post('data') ?: array();
     if (empty($postData)) {
         $importErrors[] = 'No preview data found to update. Please scan and preview your file again.';
     } else {

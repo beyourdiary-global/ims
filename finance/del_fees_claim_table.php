@@ -25,6 +25,17 @@ if (!file_exists($tempAttachDir)) {
 }
 
 $checkboxValues = isset($_COOKIE['rowID']) ? $_COOKIE['rowID'] : '';
+$groupOption = input('group');
+$allowedGroups = array('courier', 'currency');
+if (!in_array($groupOption, $allowedGroups, true)) {
+    $groupOption = '';
+}
+$groupOption3 = input('timeRange');
+$groupOption4 = input('timeInterval');
+$allowedTimeIntervals = array('daily', 'weekly', 'monthly', 'yearly');
+if (!in_array($groupOption4, $allowedTimeIntervals, true)) {
+    $groupOption4 = '';
+}
 
 // Check if any checkboxes are checked
 if (!empty($checkboxValues)) {
@@ -232,7 +243,7 @@ $tblName = DEL_FEES_CLAIM;
                 <table class="table table-striped" id="del_fees_claim_table">
                     <thead>
                         <tr>
-                        <?php if (!isset($_GET['group'])): ?>
+                        <?php if ($groupOption === ''): ?>
                             <th class="hideColumn" scope="col">ID</th>
                             <th class="text-center">
                             <input type="checkbox" class="exportAll">
@@ -252,7 +263,7 @@ $tblName = DEL_FEES_CLAIM;
                             <input type="checkbox" class="exportAll">
                             </th>
                             <th scope="col" width="60px">S/N</th>
-                            <th id="group_header" scope="col"><?php echo isset($_GET['group']) && $_GET['group'] == 'courier' ? "Courier" : "Currency"; ?></th>
+                            <th id="group_header" scope="col"><?php echo $groupOption == 'courier' ? "Courier" : "Currency"; ?></th>
                             <th scope="col">Total</th>
                             <?php endif; ?>
                         </tr>
@@ -260,9 +271,6 @@ $tblName = DEL_FEES_CLAIM;
                     <tbody>
 
                         <?php 
-                        $groupOption = isset($_GET['group']) ? $_GET['group'] : ''; 
-                        $groupOption3 = isset($_GET['timeRange']) ? $_GET['timeRange'] : ''; 
-                        $groupOption4 = isset($_GET['timeInterval']) ? $_GET['timeInterval'] : ''; 
                         $groupedRows = [];
                         $counters = 1;
         
@@ -520,7 +528,7 @@ $tblName = DEL_FEES_CLAIM;
                     </tbody>
                     <tfoot>
                         <tr>
-                            <?php if (!isset($_GET['group'])): ?>
+                            <?php if ($groupOption === ''): ?>
                             <th class="hideColumn" scope="col">ID</th>
                             <th class="text-center">
                             <input type="checkbox" class="exportAll">
@@ -540,7 +548,7 @@ $tblName = DEL_FEES_CLAIM;
                             <input type="checkbox" class="exportAll">
                             </th>
                             <th scope="col" width="60px">S/N</th>
-                            <th id="group_header" scope="col"><?php echo isset($_GET['group']) && $_GET['group'] == 'courier' ? "Courier" : "Currency"; ?></th>
+                            <th id="group_header" scope="col"><?php echo $groupOption == 'courier' ? "Courier" : "Currency"; ?></th>
                             <th scope="col">Total</th>
                             <?php endif; ?>
                         </tr>

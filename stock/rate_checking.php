@@ -14,6 +14,10 @@ if (!isActionAllowed('check', $pinAccess))
     echo $redirectLink;
 
 $country = input('country') ? input('country') : input('from');
+$fromFull = input('from_full');
+$toFull = input('to_full');
+$postcodeFrom = input('postcodefrom');
+$postcodeTo = input('postcodeto');
 $dispCountrySel = "";
 $dispDeliverOpt = "";
 $active_d = "active";
@@ -43,8 +47,8 @@ if (post('to') && post('from')) {
         $showActive_d = "";
         $showActive_i = "show active";
     }
-} else if (isset($_GET['to_full'], $_GET['from_full'])) {
-    if ($_GET['from_full'] != $_GET['to_full']) {
+} else if ($toFull !== '' && $fromFull !== '') {
+    if ($fromFull != $toFull) {
         $active_d = "";
         $active_i = "active";
         $selected_d = 'false';
@@ -155,7 +159,7 @@ if (post('to') && post('from')) {
                                                 </div>
 
                                                 <div class="col-6 col-md-6">
-                                                    <input class="form-control" type="text" id="postcode_from" name="postcode_from" placeholder="Postcode" style="line-height:30px;" value="<?php echo (($area == 'D') ? (isset($_GET['postcodefrom']) ? htmlspecialchars($_GET['postcodefrom']) : '') : ''); ?>">
+                                                    <input class="form-control" type="text" id="postcode_from" name="postcode_from" placeholder="Postcode" style="line-height:30px;" value="<?php echo (($area == 'D') ? htmlspecialchars($postcodeFrom, ENT_QUOTES, 'UTF-8') : ''); ?>">
                                                     <span id="errorMsg1"></span>
                                                 </div>
                                             </div>
@@ -171,7 +175,7 @@ if (post('to') && post('from')) {
                                                 </div>
 
                                                 <div class="col-6 col-md-6">
-                                                    <input class="form-control" type="text" id="postcode_to"  name="postcode_to" placeholder="Postcode" style=";line-height:30px;" value="<?php echo (($area == 'D') ? (isset($_GET['postcodeto']) ? htmlspecialchars($_GET['postcodeto']) : '') : ''); ?>">
+                                                    <input class="form-control" type="text" id="postcode_to"  name="postcode_to" placeholder="Postcode" style=";line-height:30px;" value="<?php echo (($area == 'D') ? htmlspecialchars($postcodeTo, ENT_QUOTES, 'UTF-8') : ''); ?>">
                                                     <span id="errorMsg2"></span>
                                                 </div>
                                             </div>
@@ -205,7 +209,7 @@ if (post('to') && post('from')) {
                                                 </div>
 
                                                 <div class="col-6 col-md-6">
-                                                    <input class="form-control" type="text" id="international_postcode_from" name="postcode_from" placeholder="Postcode" style="line-height:30px;" value="<?php echo (($area == 'I') ? (isset($_GET['postcodefrom']) ? htmlspecialchars($_GET['postcodefrom']) : '') : ''); ?>">
+                                                    <input class="form-control" type="text" id="international_postcode_from" name="postcode_from" placeholder="Postcode" style="line-height:30px;" value="<?php echo (($area == 'I') ? htmlspecialchars($postcodeFrom, ENT_QUOTES, 'UTF-8') : ''); ?>">
                                                     <span id="errorMsg4"></span>
                                                 </div>
                                             </div>
@@ -228,8 +232,8 @@ if (post('to') && post('from')) {
                                                             if (isset($data['to'])) {
                                                                 if ($data['to'] == $key)
                                                                     $selected = "selected";
-                                                            } else if (isset($_GET['to_full'])) {
-                                                                if ($_GET['to_full'] == $val) {
+                                                            } else if ($toFull !== '') {
+                                                                if ($toFull == $val) {
                                                                     $selected = "selected";
                                                                 }
                                                             }
@@ -241,7 +245,7 @@ if (post('to') && post('from')) {
                                                 </div>
 
                                                 <div class="col-6 col-md-6">
-                                                    <input class="form-control" type="text" id="international_postcode_to" name="postcode_to" placeholder="Postcode" style="line-height:30px;" value="<?php echo (($area == 'I') ? (isset($_GET['postcodeto']) ? htmlspecialchars($_GET['postcodeto']) : '') : ''); ?>">
+                                                    <input class="form-control" type="text" id="international_postcode_to" name="postcode_to" placeholder="Postcode" style="line-height:30px;" value="<?php echo (($area == 'I') ? htmlspecialchars($postcodeTo, ENT_QUOTES, 'UTF-8') : ''); ?>">
                                                     <span id="errorMsg5"></span>
                                                 </div>
                                             </div>

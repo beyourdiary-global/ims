@@ -78,8 +78,8 @@ if (post('actionBtn')) {
     $cba_attach = null;
     if (isset($_FILES["cba_attach"]) && $_FILES["cba_attach"]["size"] != 0) {
         $cba_attach = $_FILES["cba_attach"]["name"];
-    } elseif (isset($_POST['existing_attachment'])) {
-        $cba_attach = $_POST['existing_attachment'];
+    } elseif (filter_has_var(INPUT_POST, 'existing_attachment')) {
+        $cba_attach = post('existing_attachment');
     }
 
     $cba_prev_amt = 0;

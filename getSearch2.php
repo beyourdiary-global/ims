@@ -7,9 +7,9 @@ $searchText = mysqli_real_escape_string($connect,post('searchText'));
 $searchType = post('searchType');
 $tblname = postSpaceFilter('tblname');
 $path = "./data/" . "$tblname.json";
-$prod_id = $_POST['pkg'];
-$whse_id = $_POST['whse'];
-$usr_id = $_POST['usr'];
+$prod_id = post('pkg');
+$whse_id = post('whse');
+$usr_id = post('usr');
 
 $f = fopen($path, 'r');
 $c = fread($f, filesize($path));

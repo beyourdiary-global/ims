@@ -33,22 +33,13 @@ if ($returnLabelInput !== '') {
     $returnLabelInput = trim((string) $_SESSION['urbanism_member_return_label']);
 }
 
-if ((isset($_GET['return_page']) || isset($_GET['return_label'])) && $dataId !== '' && $act !== '') {
+if ((filter_has_var(INPUT_GET, 'return_page') || filter_has_var(INPUT_GET, 'return_label')) && $dataId !== '' && $act !== '') {
     $cleanParams = array(
         'id' => $dataId,
         'act' => $act,
     );
 
-    foreach ($_GET as $paramKey => $paramValue) {
-        if (in_array($paramKey, array('id', 'act', 'return_page', 'return_label'), true) || is_array($paramValue)) {
-            continue;
-        }
-
-        $cleanParamValue = input($paramKey);
-        if ($cleanParamValue !== '') {
-            $cleanParams[$paramKey] = $cleanParamValue;
-        }
-    }
+    $cleanParams = array_merge($cleanParams, commonSafeQueryParams(array('id', 'act', 'return_page', 'return_label')));
 
     $cleanUrl = $SITEURL . '/customer/urb_cust_reg.php?' . http_build_query($cleanParams);
     echo '<script>window.location.replace(' . json_encode($cleanUrl) . ');</script>';
@@ -182,8 +173,8 @@ if ($urbanismSeedFbLink === '' && $urbanismSeedName !== '') {
     }
 }
 
-if ($dataId && isset($_GET['open_order_id'])) {
-    $openOrderId = (int) $_GET['open_order_id'];
+if ($dataId && numberInput('open_order_id') !== '') {
+    $openOrderId = (int) numberInput('open_order_id');
     if ($openOrderId > 0) {
         $orderWhere = "id='" . $openOrderId . "' AND status='A'";
         if ($urbanismSeedName !== '') {
@@ -234,8 +225,8 @@ if (post('actionBtn')) {
 
     if (isset($_FILES["umr_attach"]) && $_FILES["umr_attach"]["size"] != 0) {
         $umr_attach = $_FILES["umr_attach"]["name"];
-    } elseif (isset($_POST['umr_attachmentValue'])) {
-        $umr_attach = $_POST['umr_attachmentValue'];
+    } elseif (filter_has_var(INPUT_POST, 'umr_attachmentValue')) {
+        $umr_attach = post('umr_attachmentValue');
     }
 
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();

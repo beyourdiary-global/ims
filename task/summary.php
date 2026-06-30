@@ -29,7 +29,7 @@ if (!function_exists('taskBoardAuditLog')) {
 }
 
 /* ───── AJAX POST handler ───── */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['summary_action'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('summary_action') !== '') {
     include_once '../include/connection.php';
     include_once ROOT . '/include/common.php';
     include_once ROOT . '/include/common_variable.php';
@@ -40,7 +40,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['summary_action'])) {
     if (empty($_SESSION['csrf_token'])) {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     }
-    $submittedToken = isset($_POST['csrf_token']) ? $_POST['csrf_token'] : '';
+    $submittedToken = post('csrf_token');
     if (!hash_equals($_SESSION['csrf_token'], $submittedToken)) {
         header('Content-Type: application/json');
         echo json_encode(array('ok' => 0, 'message' => 'Invalid session token.'));
@@ -54,7 +54,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['summary_action'])) {
         exit;
     }
 
-    $action = trim((string) $_POST['summary_action']);
+    $action = trim((string) post('summary_action'));
     $currentProjectId = taskResolveCurrentProjectId($connect, 0);
     if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $taskPermissionPin)) {
         header('Content-Type: application/json');
@@ -63,23 +63,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['summary_action'])) {
     }
 
     $filters = array();
-    if (!empty($_POST['filters_json'])) {
-        $decodedFilters = json_decode((string) $_POST['filters_json'], true);
+    if (post('filters_json') !== '') {
+        $decodedFilters = json_decode((string) post('filters_json'), true);
         if (is_array($decodedFilters)) {
             $filters = $decodedFilters;
         }
     }
 
     if ($action === 'get_activity') {
-        $page = isset($_POST['page']) ? max(1, (int) $_POST['page']) : 1;
-        $perPageRaw = isset($_POST['per_page']) ? trim((string) $_POST['per_page']) : '10';
+        $page = max(1, (int) post('page'));
+        $perPageRaw = trim((string) post('per_page'));
+        if ($perPageRaw === '') {
+            $perPageRaw = '10';
+        }
         $maxPerPage = 1000;
         $perPage = strtolower($perPageRaw) === 'all' ? $maxPerPage : max(1, min($maxPerPage, (int) $perPageRaw));
-        if (!empty($_POST['assignee_id'])) {
-            $filters['assignee_id'] = (int) $_POST['assignee_id'];
+        if ((int) post('assignee_id') > 0) {
+            $filters['assignee_id'] = (int) post('assignee_id');
         }
-        if (isset($_POST['search']) && trim((string) $_POST['search']) !== '') {
-            $filters['search'] = trim((string) $_POST['search']);
+        if (trim((string) post('search')) !== '') {
+            $filters['search'] = trim((string) post('search'));
         }
         $result = taskGetGlobalActivity($connect, $page, $perPage, $filters, $currentProjectId);
         header('Content-Type: application/json');
@@ -88,8 +91,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['summary_action'])) {
     }
 
     if ($action === 'get_stats') {
-        if (!empty($_POST['assignee_id'])) {
-            $filters['assignee_id'] = (int) $_POST['assignee_id'];
+        if ((int) post('assignee_id') > 0) {
+            $filters['assignee_id'] = (int) post('assignee_id');
         }
         $stats = taskGetSummaryStats($connect, $filters, $currentProjectId);
         $activity = taskGetGlobalActivity($connect, 1, 10, $filters, $currentProjectId);

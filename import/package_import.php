@@ -666,7 +666,7 @@ if ($action === 'preview') {
 } 
 // Step 2: Save the Data to the Database
 else if ($action === 'update') {
-    $postData = isset($_POST['data']) ? $_POST['data'] : [];
+    $postData = (array) post('data') ?: [];
     $previewData = [];
     $preparedUpdateRows = [];
     $hasValidationError = false;
