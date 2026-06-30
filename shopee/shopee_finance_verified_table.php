@@ -7,9 +7,10 @@ include_once '../include/list_page_header.php';
 
 
 $verifyMessage = ''; // declare message holder
+$verifyId = (int) numberInput('verify_id');
 
-if (isset($_GET['verify_id'])) {
-    $orderId = intval($_GET['verify_id']);
+if ($verifyId > 0) {
+    $orderId = $verifyId;
 
     // Step 1: Check current order status
     $checkSql = "SELECT order_status FROM " . SHOPEE_SG_ORDER_REQ . " WHERE id = $orderId";

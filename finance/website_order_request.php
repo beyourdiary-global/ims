@@ -137,7 +137,7 @@ $orderDeleteApprovalPanelHtml = orderDeleteApprovalHandlePageFlow(array(
     'delete_callback' => $worExecuteDeleteOrder,
 ));
 
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
+if ($_SERVER["REQUEST_METHOD"] == "POST" && post('submit') !== '') {
     $customer_id = postSpaceFilter('customer_id');
     $customer_name = postSpaceFilter('customer_name');
     $customer_email = postSpaceFilter('customer_email');

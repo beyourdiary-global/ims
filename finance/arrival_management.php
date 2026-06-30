@@ -55,8 +55,8 @@ if ($activePlatform === '') {
 
 $statusMessage = '';
 $statusClass = 'success';
-$selectedMonth = isset($_GET['month']) ? trim((string) $_GET['month']) : date('m');
-$selectedYear = isset($_GET['year']) ? trim((string) $_GET['year']) : date('Y');
+$selectedMonth = trim((string) input('month'));
+$selectedYear = trim((string) input('year'));
 $selectedDate = trim((string) input('date'));
 $currentYear = date('Y');
 $selectedMonth = ($selectedMonth === '' || preg_match('/^(0[1-9]|1[0-2])$/', $selectedMonth)) ? $selectedMonth : date('m');
@@ -128,7 +128,7 @@ $parseOrderPlatformRef = function ($value) {
 };
 
 if (post('bulkAssignBtn')) {
-    $selectedOrderRefs = isset($_POST['selected_order_refs']) && is_array($_POST['selected_order_refs']) ? $_POST['selected_order_refs'] : array();
+    $selectedOrderRefs = (array) post('selected_order_refs') ?: array();
     $estimatedDate = postSpaceFilter('bulk_estimated_received_date');
     $successCount = 0;
     $failedMessages = array();
@@ -200,7 +200,7 @@ if (post('saveEstimatedDateBtn')) {
 }
 
 if (post('confirmReceiveFollowUpBtn')) {
-    $postedCsrfToken = isset($_POST['arrival_follow_up_csrf']) ? (string) $_POST['arrival_follow_up_csrf'] : '';
+    $postedCsrfToken = (string) post('arrival_follow_up_csrf');
     if (!hash_equals((string) $_SESSION['arrival_follow_up_csrf'], $postedCsrfToken)) {
         $statusClass = 'danger';
         $statusMessage = 'Invalid follow-up session token. Please refresh and try again.';

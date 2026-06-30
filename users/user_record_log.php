@@ -13,8 +13,9 @@ if (!in_array($requestedCustomerColumn, $allowedCustomerColumns, true)) {
 }
 
 $returnUrlParams = array();
-if (!empty($_GET['customer_id'])) {
-    $returnUrlParams['customer_id'] = (int) $_GET['customer_id'];
+$requestedCustomerId = numberInput('customer_id');
+if ($requestedCustomerId !== '') {
+    $returnUrlParams['customer_id'] = (int) $requestedCustomerId;
 }
 if ($requestedCustomerColumn !== '') {
     $returnUrlParams['customer_column'] = $requestedCustomerColumn;

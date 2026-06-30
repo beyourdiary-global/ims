@@ -22,6 +22,22 @@ if (!file_exists($tempAttachDir)) {
 }
 
 $checkboxValues = isset($_COOKIE['rowID']) ? $_COOKIE['rowID'] : '';
+$groupOption = input('group');
+$allowedGroups = array('status', 'shopee_acc', 'currency', 'package', 'brand', 'buyer', 'person');
+if (!in_array($groupOption, $allowedGroups, true)) {
+    $groupOption = '';
+}
+$groupOption2 = input('group2');
+if (!in_array($groupOption2, array_merge(array(''), $allowedGroups), true)) {
+    $groupOption2 = '';
+}
+$groupOption3 = input('timeRange');
+$groupOption4 = input('timeInterval');
+$allowedTimeIntervals = array('daily', 'weekly', 'monthly', 'yearly');
+if (!in_array($groupOption4, $allowedTimeIntervals, true)) {
+    $groupOption4 = '';
+}
+$idsParam = input('ids');
 
 // Check if any checkboxes are checked
 if (!empty($checkboxValues)) {
@@ -308,42 +324,40 @@ $result = getData('*', '', '', SHOPEE_SG_ORDER_REQ, $finance_connect);
                             <th scope="col">S/N</th>
                             <th id="group_header" scope="col">
                             <?php 
-                                    if (isset($_GET['group'])) {
-                                        if ($_GET['group'] == 'status') {
+                                    if ($groupOption == 'status') {
                                             echo "Order Status";
-                                        } else if ($_GET['group'] == 'shopee_acc') {
+                                        } else if ($groupOption == 'shopee_acc') {
                                             echo "Shopee Account";
-                                        } else if ($_GET['group'] == 'currency') {
+                                        } else if ($groupOption == 'currency') {
                                             echo "Currency";
-                                        } else if ($_GET['group'] == 'package') {
+                                        } else if ($groupOption == 'package') {
                                             echo "Package";
-                                        } else if ($_GET['group'] == 'brand') {
+                                        } else if ($groupOption == 'brand') {
                                             echo "Brand";
-                                        } else if ($_GET['group'] == 'buyer') {
+                                        } else if ($groupOption == 'buyer') {
                                             echo "Shopee Buyer Username";
-                                        } else if ($_GET['group'] == 'person') {
+                                        } else if ($groupOption == 'person') {
                                             echo "Person In Charge";
-                                        }
                                     }
                                 ?>
                             </th>
                             <?php 
-                                  if (isset($_GET['group2'])) {
+                                  if ($groupOption2 != '') {
                                     echo '<th id="group_header" scope="col">';
                                 
-                                    if ($_GET['group2'] == 'status') {
+                                    if ($groupOption2 == 'status') {
                                         echo "Order Status";
-                                    } else if ($_GET['group2'] == 'shopee_acc') {
+                                    } else if ($groupOption2 == 'shopee_acc') {
                                         echo "Shopee Account";
-                                    } else if ($_GET['group2'] == 'currency') {
+                                    } else if ($groupOption2 == 'currency') {
                                         echo "Currency";
-                                    } else if ($_GET['group2'] == 'package') {
+                                    } else if ($groupOption2 == 'package') {
                                         echo "Package";
-                                    } else if ($_GET['group2'] == 'brand') {
+                                    } else if ($groupOption2 == 'brand') {
                                         echo "Brand";
-                                    } else if ($_GET['group2'] == 'buyer') {
+                                    } else if ($groupOption2 == 'buyer') {
                                         echo "Shopee Buyer Username";
-                                    } else if ($_GET['group2'] == 'person') {
+                                    } else if ($groupOption2 == 'person') {
                                         echo "Person In Charge";
                                     }
                                     echo '</th>';
@@ -354,10 +368,6 @@ $result = getData('*', '', '', SHOPEE_SG_ORDER_REQ, $finance_connect);
                     </thead>
                     <tbody>
                     <?php 
-                         $groupOption = isset($_GET['group']) ? $_GET['group'] : ''; 
-                         $groupOption2 = isset($_GET['group2']) ? $_GET['group2'] : ''; 
-                         $groupOption3 = isset($_GET['timeRange']) ? $_GET['timeRange'] : ''; 
-                         $groupOption4 = isset($_GET['timeInterval']) ? $_GET['timeInterval'] : ''; 
                          $groupedRows = [];
                          $counters = 1;
                      
@@ -453,8 +463,8 @@ $result = getData('*', '', '', SHOPEE_SG_ORDER_REQ, $finance_connect);
                                 }
                                 if (($groupOption === 'status' || $groupOption === 'shopee_acc' || $groupOption === 'currency' || $groupOption === 'package' || $groupOption === 'brand' || $groupOption === 'buyer' || $groupOption === 'person') && $groupOption4 === 'daily') {
                                     if ($groupOption3 === $createdate) {
-                                    if ((isset($_GET['ids']))&& $groupOption2 == '') {
-                                        $ids = explode(',', $_GET['ids']);
+                                    if ($idsParam !== '' && $groupOption2 == '') {
+                                        $ids = explode(',', $idsParam);
                                         
                                         foreach ($ids as $id) {
                                             $decodedId = urldecode($id);
@@ -505,8 +515,8 @@ $result = getData('*', '', '', SHOPEE_SG_ORDER_REQ, $finance_connect);
                               
                                   if ($createdTimestamp >= $startDate && $createdTimestamp <= $endDate) {
                                    
-                                    if ((isset($_GET['ids']))&& $groupOption2 == '') {
-                                        $ids = explode(',', $_GET['ids']);
+                                    if ($idsParam !== '' && $groupOption2 == '') {
+                                        $ids = explode(',', $idsParam);
                                         
                                     foreach ($ids as $id) {
                                             $decodedId = urldecode($id);
@@ -642,42 +652,40 @@ $result = getData('*', '', '', SHOPEE_SG_ORDER_REQ, $finance_connect);
                             <th id="group_header" scope="col">
                             
                             <?php 
-                                    if (isset($_GET['group'])) {
-                                        if ($_GET['group'] == 'status') {
+                                    if ($groupOption == 'status') {
                                             echo "Order Status";
-                                        } else if ($_GET['group'] == 'shopee_acc') {
+                                        } else if ($groupOption == 'shopee_acc') {
                                             echo "Shopee Account";
-                                        } else if ($_GET['group'] == 'currency') {
+                                        } else if ($groupOption == 'currency') {
                                             echo "Currency";
-                                        } else if ($_GET['group'] == 'package') {
+                                        } else if ($groupOption == 'package') {
                                             echo "Package";
-                                        } else if ($_GET['group'] == 'brand') {
+                                        } else if ($groupOption == 'brand') {
                                             echo "Brand";
-                                        } else if ($_GET['group'] == 'buyer') {
+                                        } else if ($groupOption == 'buyer') {
                                             echo "Shopee Buyer Username";
-                                        } else if ($_GET['group'] == 'person') {
+                                        } else if ($groupOption == 'person') {
                                             echo "Person In Charge";
-                                        }
                                     }
                                 ?>
                             </th>
                             <?php 
-                                  if (isset($_GET['group2'])) {
+                                  if ($groupOption2 != '') {
                                     echo '<th id="group_header" scope="col">';
                                 
-                                    if ($_GET['group2'] == 'status') {
+                                    if ($groupOption2 == 'status') {
                                         echo "Order Status";
-                                    } else if ($_GET['group2'] == 'shopee_acc') {
+                                    } else if ($groupOption2 == 'shopee_acc') {
                                         echo "Shopee Account";
-                                    } else if ($_GET['group2'] == 'currency') {
+                                    } else if ($groupOption2 == 'currency') {
                                         echo "Currency";
-                                    } else if ($_GET['group2'] == 'package') {
+                                    } else if ($groupOption2 == 'package') {
                                         echo "Package";
-                                    } else if ($_GET['group2'] == 'brand') {
+                                    } else if ($groupOption2 == 'brand') {
                                         echo "Brand";
-                                    } else if ($_GET['group2'] == 'buyer') {
+                                    } else if ($groupOption2 == 'buyer') {
                                         echo "Shopee Buyer Username";
-                                    } else if ($_GET['group2'] == 'person') {
+                                    } else if ($groupOption2 == 'person') {
                                         echo "Person In Charge";
                                     }
                                     echo '</th>';

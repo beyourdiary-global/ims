@@ -242,17 +242,17 @@ if (post('actionBtn')) {
     $total_gst = trim((string) postSpaceFilter('total_gst'));
     $total_amount = trim((string) postSpaceFilter('total_amount'));
 
-    $serviceTypeArr = isset($_POST['service_type']) ? postSpaceFilter('service_type') : array();
-    $shipmentsCountArr = isset($_POST['shipments_count']) ? postSpaceFilter('shipments_count') : array();
-    $totalWeightKgArr = isset($_POST['total_weight_kg']) ? postSpaceFilter('total_weight_kg') : array();
-    $standardChargeArr = isset($_POST['standard_charge']) ? postSpaceFilter('standard_charge') : array();
-    $extraChargesArr = isset($_POST['extra_charges']) ? postSpaceFilter('extra_charges') : array();
-    $nettChargeArr = isset($_POST['nett_charge']) ? postSpaceFilter('nett_charge') : array();
+    $serviceTypeArr = postSpaceFilter('service_type') ?: array();
+    $shipmentsCountArr = postSpaceFilter('shipments_count') ?: array();
+    $totalWeightKgArr = postSpaceFilter('total_weight_kg') ?: array();
+    $standardChargeArr = postSpaceFilter('standard_charge') ?: array();
+    $extraChargesArr = postSpaceFilter('extra_charges') ?: array();
+    $nettChargeArr = postSpaceFilter('nett_charge') ?: array();
 
-    $gstTypeArr = isset($_POST['gst_type']) ? postSpaceFilter('gst_type') : array();
-    $gstRateArr = isset($_POST['gst_rate']) ? postSpaceFilter('gst_rate') : array();
-    $gstAmountArr = isset($_POST['gst_amount']) ? postSpaceFilter('gst_amount') : array();
-    $gstPaidArr = isset($_POST['gst_paid']) ? postSpaceFilter('gst_paid') : array();
+    $gstTypeArr = postSpaceFilter('gst_type') ?: array();
+    $gstRateArr = postSpaceFilter('gst_rate') ?: array();
+    $gstAmountArr = postSpaceFilter('gst_amount') ?: array();
+    $gstPaidArr = postSpaceFilter('gst_paid') ?: array();
 
     if (!is_array($serviceTypeArr)) {
         $serviceTypeArr = array();
@@ -353,8 +353,8 @@ if (post('actionBtn')) {
     $jt_attach = null;
     if (isset($_FILES["jt_attach"]) && $_FILES["jt_attach"]["size"] != 0) {
         $jt_attach = $_FILES["jt_attach"]["name"];
-    } elseif (isset($_POST['jt_attachmentValue'])) {
-        $jt_attach = $_POST['jt_attachmentValue'];
+    } elseif (filter_has_var(INPUT_POST, 'jt_attachmentValue')) {
+        $jt_attach = post('jt_attachmentValue');
     }
 
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();

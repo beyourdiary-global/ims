@@ -179,8 +179,8 @@ $result = getData('*', '', '', SHOPEE_ADS_TOPUP, $finance_connect);
                 </thead>
                 <tbody>
                     <?php while ($row = $result->fetch_assoc()) {
-                         if (isset($_GET['ids'])) {
-                            $ids = explode(',', $_GET['ids']);
+                         if (input('ids') !== '') {
+                            $ids = explode(',', input('ids'));
                            foreach ($ids as $id) {
                            $decodedId = urldecode($id);
                         if (isset($row['orderID'], $row['id']) && !empty($row['orderID'] && $row['id'] == $id)) {

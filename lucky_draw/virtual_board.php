@@ -10,12 +10,12 @@ include_once ROOT . '/include/lucky_draw_admin_common.php';
 $pinAccess = luckyDrawAdminPinAccess($connect);
 luckyDrawRequireAdminAction($connect, 'View', $pinAccess);
 
-$boardRowId = isset($_GET['id']) ? (int) $_GET['id'] : 0;
-$mode = strtoupper(trim((string) (isset($_GET['act']) ? $_GET['act'] : '')));
+$boardRowId = (int) numberInput('id');
+$mode = strtoupper(trim((string) input('act')));
 if ($mode === 'A') {
     $mode = 'I';
 }
-$resultDialogAct = strtoupper(trim((string) ($_GET['result_act'] ?? '')));
+$resultDialogAct = strtoupper(trim((string) input('result_act')));
 if (!in_array($resultDialogAct, array('I', 'E', 'NC'), true)) {
     $resultDialogAct = '';
 }
@@ -59,15 +59,15 @@ if ($isView && !empty($editingRow)) {
     ));
 }
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['save_board_row'])) {
-    $postRowId = isset($_POST['board_row_id']) ? (int) $_POST['board_row_id'] : 0;
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('save_board_row') !== '') {
+    $postRowId = (int) post('board_row_id');
     $isEditSave = $postRowId > 0;
-    $formMode = strtoupper(trim((string) (isset($_POST['form_mode']) ? $_POST['form_mode'] : ($isEditSave ? 'E' : 'I'))));
+    $formMode = strtoupper(trim((string) (post('form_mode') !== '' ? post('form_mode') : ($isEditSave ? 'E' : 'I'))));
     luckyDrawRequireAdminAction($connect, $postRowId > 0 ? 'Edit' : 'Add', $pinAccess);
 
-    $displayName = luckyDrawSafePublicText(isset($_POST['display_name']) ? $_POST['display_name'] : '', 190);
-    $displayPrize = luckyDrawSafePublicText(isset($_POST['display_prize']) ? $_POST['display_prize'] : '', 190);
-    $isEnabled = luckyDrawNormalizeFlag(isset($_POST['is_enabled']) ? $_POST['is_enabled'] : 'N', 'N');
+    $displayName = luckyDrawSafePublicText(post('display_name'), 190);
+    $displayPrize = luckyDrawSafePublicText(post('display_prize'), 190);
+    $isEnabled = luckyDrawNormalizeFlag(post('is_enabled'), 'N');
     $safeActor = mysqli_real_escape_string($connect, (string) USER_ID);
 
     if ($displayName === '' || $displayPrize === '') {

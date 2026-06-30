@@ -74,8 +74,8 @@ if (post('actionBtn')) {
     $initca_attach = null;
     if (isset($_FILES["initca_attach"]) && $_FILES["initca_attach"]["size"] != 0) {
         $initca_attach = $_FILES["initca_attach"]["name"];
-    } elseif (isset($_POST['existing_attachment'])) {
-        $initca_attach = $_POST['existing_attachment'];
+    } elseif (filter_has_var(INPUT_POST, 'existing_attachment')) {
+        $initca_attach = post('existing_attachment');
     }
     $initca_remark = postSpaceFilter('initca_remark');
 

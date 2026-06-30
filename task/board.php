@@ -28,7 +28,7 @@ if (!function_exists('taskBoardAuditLog')) {
     }
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('task_action') !== '') {
     include_once '../include/connection.php';
     include_once ROOT . '/include/common.php';
     include_once ROOT . '/include/common_variable.php';
@@ -47,7 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     }
 
     // Validate CSRF token for all state-changing actions
-    $submittedToken = isset($_POST['csrf_token']) ? $_POST['csrf_token'] : '';
+    $submittedToken = post('csrf_token');
     if (!hash_equals($_SESSION['csrf_token'], $submittedToken)) {
         taskJsonResponse(array('ok' => 0, 'message' => 'Invalid session token. Please refresh the page and try again.'));
     }
@@ -60,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     if ($currentProjectId > 0) {
         taskEnsureDefaultWorkTypes($connect, $currentProjectId, $currentUserId, $cdate, $ctime);
     }
-    $taskAction = isset($_POST['task_action']) ? trim((string) $_POST['task_action']) : '';
+    $taskAction = trim((string) post('task_action'));
     $safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
     $safePageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
 
@@ -136,7 +136,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskCreateProject(
             $connect,
-            isset($_POST['project_name']) ? $_POST['project_name'] : '',
+            post('project_name'),
             $currentUserId,
             $cdate,
             $ctime
@@ -247,22 +247,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     }
 
     if ($taskAction === 'set_item_work_type' && !$projectHasFullAccess) {
-        $targetWorkTypeId = isset($_POST['work_type_id']) ? (int) $_POST['work_type_id'] : 0;
+        $targetWorkTypeId = (int) post('work_type_id');
         if ($targetWorkTypeId <= 0 || empty($projectAllowedWorkTypeIds) || !in_array($targetWorkTypeId, $projectAllowedWorkTypeIds, true)) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have access to this task type in the current project.'));
         }
     }
 
     if (($taskAction === 'change_item_status' || $taskAction === 'move_item_drop') && !$projectHasFullAccess) {
-        $targetColumnId = isset($_POST['target_column_id']) ? (int) $_POST['target_column_id'] : 0;
+        $targetColumnId = (int) post('target_column_id');
         if ($targetColumnId <= 0 || empty($projectAllowedStatusIds) || !in_array($targetColumnId, $projectAllowedStatusIds, true)) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have access to move work items into that status.'));
         }
     }
 
     if ($taskAction === 'create_item' && !$projectHasFullAccess) {
-        $targetColumnId = isset($_POST['column_id']) ? (int) $_POST['column_id'] : 0;
-        $targetWorkTypeId = isset($_POST['work_type_id']) ? (int) $_POST['work_type_id'] : 0;
+        $targetColumnId = (int) post('column_id');
+        $targetWorkTypeId = (int) post('work_type_id');
         if ($targetColumnId <= 0 || empty($projectAllowedStatusIds) || !in_array($targetColumnId, $projectAllowedStatusIds, true)) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have access to create work items in that status.'));
         }
@@ -272,7 +272,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     }
 
     if ($taskAction === 'create_child_work_item' && !$projectHasFullAccess) {
-        $targetWorkTypeId = isset($_POST['work_type_id']) ? (int) $_POST['work_type_id'] : 0;
+        $targetWorkTypeId = (int) post('work_type_id');
         if ($targetWorkTypeId > 0 && (empty($projectAllowedWorkTypeIds) || !in_array($targetWorkTypeId, $projectAllowedWorkTypeIds, true))) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have access to use that task type in this project.'));
         }
@@ -283,7 +283,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to create statuses.'));
         }
 
-        $result = taskCreateColumn($connect, $currentProjectId, isset($_POST['column_name']) ? $_POST['column_name'] : '', $currentUserId, $cdate, $ctime);
+        $result = taskCreateColumn($connect, $currentProjectId, post('column_name'), $currentUserId, $cdate, $ctime);
         if (!empty($result['ok'])) {
             $statusName = isset($result['column']['name']) ? htmlspecialchars((string) $result['column']['name'], ENT_QUOTES, 'UTF-8') : '';
             $viewActMsg = $safeUserName . " added new status <b>" . $statusName . "</b> on <b>" . $safePageTitle . "</b>.";
@@ -300,14 +300,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         $result = taskRenameColumn(
             $connect,
             $currentProjectId,
-            isset($_POST['column_id']) ? (int) $_POST['column_id'] : 0,
-            isset($_POST['column_name']) ? $_POST['column_name'] : '',
+            (int) post('column_id'),
+            post('column_name'),
             $currentUserId,
             $cdate,
             $ctime
         );
         if (!empty($result['ok'])) {
-            $statusName = isset($result['column_name']) ? htmlspecialchars((string) $result['column_name'], ENT_QUOTES, 'UTF-8') : htmlspecialchars((string) ($_POST['column_name'] ?? ''), ENT_QUOTES, 'UTF-8');
+            $statusName = isset($result['column_name']) ? htmlspecialchars((string) $result['column_name'], ENT_QUOTES, 'UTF-8') : htmlspecialchars((string) post('column_name'), ENT_QUOTES, 'UTF-8');
             $viewActMsg = $safeUserName . " edited status <b>" . $statusName . "</b> on <b>" . $safePageTitle . "</b>.";
             taskBoardAuditLog($connect, $pageTitle, 'Edit', $viewActMsg, $cdate, $ctime);
         }
@@ -322,8 +322,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         $result = taskMoveColumn(
             $connect,
             $currentProjectId,
-            isset($_POST['column_id']) ? (int) $_POST['column_id'] : 0,
-            isset($_POST['direction']) ? $_POST['direction'] : ''
+            (int) post('column_id'),
+            post('direction')
         );
         taskJsonResponse($result);
     }
@@ -336,7 +336,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         $result = taskDeleteColumn(
             $connect,
             $currentProjectId,
-            isset($_POST['column_id']) ? (int) $_POST['column_id'] : 0,
+            (int) post('column_id'),
             $currentUserId,
             $cdate,
             $ctime
@@ -357,9 +357,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         $result = taskCreateWorkType(
             $connect,
             $currentProjectId,
-            isset($_POST['work_type_name']) ? $_POST['work_type_name'] : '',
-            isset($_POST['work_type_remark']) ? $_POST['work_type_remark'] : '',
-            isset($_POST['work_type_svg_icon']) ? $_POST['work_type_svg_icon'] : '',
+            post('work_type_name'),
+            post('work_type_remark'),
+            post('work_type_svg_icon'),
             $currentUserId,
             $cdate,
             $ctime
@@ -378,10 +378,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         $result = taskUpdateWorkType(
             $connect,
             $currentProjectId,
-            isset($_POST['work_type_id']) ? (int) $_POST['work_type_id'] : 0,
-            isset($_POST['work_type_name']) ? $_POST['work_type_name'] : '',
-            isset($_POST['work_type_remark']) ? $_POST['work_type_remark'] : '',
-            isset($_POST['work_type_svg_icon']) ? $_POST['work_type_svg_icon'] : '',
+            (int) post('work_type_id'),
+            post('work_type_name'),
+            post('work_type_remark'),
+            post('work_type_svg_icon'),
             $currentUserId,
             $cdate,
             $ctime
@@ -401,11 +401,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         $result = taskCreateItem(
             $connect,
             $currentProjectId,
-            isset($_POST['column_id']) ? (int) $_POST['column_id'] : 0,
-            isset($_POST['title']) ? $_POST['title'] : '',
-            isset($_POST['work_type_id']) ? (int) $_POST['work_type_id'] : 0,
-            isset($_POST['assignee_user_id']) ? (int) $_POST['assignee_user_id'] : 0,
-            isset($_POST['due_date']) ? $_POST['due_date'] : '',
+            (int) post('column_id'),
+            post('title'),
+            (int) post('work_type_id'),
+            (int) post('assignee_user_id'),
+            post('due_date'),
             $currentUserId,
             $cdate,
             $ctime
@@ -421,8 +421,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskMoveItem(
             $connect,
-            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
-            isset($_POST['move_to']) ? $_POST['move_to'] : ''
+            (int) post('item_id'),
+            post('move_to')
         );
         taskJsonResponse($result);
     }
@@ -434,8 +434,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskChangeItemStatus(
             $connect,
-            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
-            isset($_POST['target_column_id']) ? (int) $_POST['target_column_id'] : 0,
+            (int) post('item_id'),
+            (int) post('target_column_id'),
             $currentUserId,
             $cdate,
             $ctime
@@ -450,9 +450,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskMoveItemByDrop(
             $connect,
-            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
-            isset($_POST['target_column_id']) ? (int) $_POST['target_column_id'] : 0,
-            isset($_POST['target_index']) ? (int) $_POST['target_index'] : 0,
+            (int) post('item_id'),
+            (int) post('target_column_id'),
+            (int) post('target_index'),
             $currentUserId,
             $cdate,
             $ctime
@@ -465,9 +465,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to set assignee.'));
         }
 
-        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $itemId = (int) post('item_id');
         $detail = $loadItemDetailForPermission($itemId);
-        $assigneeUserId = isset($_POST['assignee_user_id']) ? (int) $_POST['assignee_user_id'] : 0;
+        $assigneeUserId = (int) post('assignee_user_id');
         $requireColumnTransition('assignee_name', isset($detail['assignee_user_id']) ? (int) $detail['assignee_user_id'] : 0, $assigneeUserId);
 
         $result = taskSetItemAssignee(
@@ -488,8 +488,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskSetItemWorkType(
             $connect,
-            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
-            isset($_POST['work_type_id']) ? (int) $_POST['work_type_id'] : 0,
+            (int) post('item_id'),
+            (int) post('work_type_id'),
             $currentUserId,
             $cdate,
             $ctime
@@ -505,7 +505,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         $result = taskSaveProjectKeySetting(
             $connect,
             $currentProjectId,
-            isset($_POST['project_key']) ? $_POST['project_key'] : '',
+            post('project_key'),
             $currentUserId,
             $cdate,
             $ctime
@@ -520,13 +520,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskUpdateItemCore(
             $connect,
-            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
-            isset($_POST['title']) ? $_POST['title'] : '',
-            isset($_POST['description']) ? $_POST['description'] : null,
+            (int) post('item_id'),
+            post('title'),
+            filter_has_var(INPUT_POST, 'description') ? post('description') : null,
             $currentUserId,
             $cdate,
             $ctime,
-            isset($_POST['description_attachment_paths']) ? $_POST['description_attachment_paths'] : ''
+            post('description_attachment_paths')
         );
         taskJsonResponse($result);
     }
@@ -534,7 +534,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     if ($taskAction === 'get_item_detail') {
         $result = taskGetItemDetail(
             $connect,
-            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0
+            (int) post('item_id')
         );
         taskJsonResponse($result);
     }
@@ -544,14 +544,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to search child work items.'));
         }
 
-        $parentItemId = isset($_POST['parent_item_id']) ? (int) $_POST['parent_item_id'] : 0;
+        $parentItemId = (int) post('parent_item_id');
         taskJsonResponse(array(
             'ok' => 1,
             'items' => taskSearchChildWorkItems(
                 $connect,
                 $currentProjectId,
                 $parentItemId,
-                isset($_POST['keyword']) ? $_POST['keyword'] : ''
+                post('keyword')
             ),
         ));
     }
@@ -561,13 +561,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to create work item.'));
         }
 
-        $parentItemId = isset($_POST['parent_item_id']) ? (int) $_POST['parent_item_id'] : 0;
+        $parentItemId = (int) post('parent_item_id');
         $result = taskCreateChildWorkItem(
             $connect,
             $currentProjectId,
             $parentItemId,
-            isset($_POST['title']) ? $_POST['title'] : '',
-            isset($_POST['work_type_id']) ? (int) $_POST['work_type_id'] : 0,
+            post('title'),
+            (int) post('work_type_id'),
             $currentUserId
         );
 
@@ -586,10 +586,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to link child work items.'));
         }
 
-        $parentItemId = isset($_POST['parent_item_id']) ? (int) $_POST['parent_item_id'] : 0;
-        $childItemId = isset($_POST['child_item_id']) ? (int) $_POST['child_item_id'] : 0;
-        if ($childItemId <= 0 && isset($_POST['child_value']) && trim((string) $_POST['child_value']) !== '') {
-            $resolvedChild = taskResolveWorkItemFromUrlOrKey($connect, $currentProjectId, isset($_POST['child_value']) ? $_POST['child_value'] : '');
+        $parentItemId = (int) post('parent_item_id');
+        $childItemId = (int) post('child_item_id');
+        if ($childItemId <= 0 && trim((string) post('child_value')) !== '') {
+            $resolvedChild = taskResolveWorkItemFromUrlOrKey($connect, $currentProjectId, post('child_value'));
             $childItemId = isset($resolvedChild['id']) ? (int) $resolvedChild['id'] : 0;
         }
 
@@ -612,7 +612,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     }
 
     if ($taskAction === 'get_item_history') {
-        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $itemId = (int) post('item_id');
         taskJsonResponse(array(
             'ok' => 1,
             'history' => taskGetItemHistory($connect, $itemId, 150),
@@ -620,7 +620,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     }
 
     if ($taskAction === 'get_item_comments') {
-        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $itemId = (int) post('item_id');
         taskJsonResponse(array(
             'ok' => 1,
             'comments' => taskGetItemComments($connect, $itemId, 200),
@@ -628,7 +628,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     }
 
     if ($taskAction === 'get_item_worklogs') {
-        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $itemId = (int) post('item_id');
         if ($itemId <= 0 || taskGetItemProjectId($connect, $itemId) !== $currentProjectId) {
             taskJsonResponse(array('ok' => 0, 'message' => 'Work item not found.'));
         }
@@ -646,12 +646,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskCreateItemComment(
             $connect,
-            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
-            isset($_POST['comment_html']) ? $_POST['comment_html'] : '',
+            (int) post('item_id'),
+            post('comment_html'),
             $currentUserId,
             $cdate,
             $ctime,
-            isset($_POST['comment_attachment_paths']) ? $_POST['comment_attachment_paths'] : ''
+            post('comment_attachment_paths')
         );
         taskJsonResponse($result);
     }
@@ -663,13 +663,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskCreateItemCommentReply(
             $connect,
-            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
-            isset($_POST['comment_id']) ? (int) $_POST['comment_id'] : 0,
-            isset($_POST['reply_html']) ? $_POST['reply_html'] : '',
+            (int) post('item_id'),
+            (int) post('comment_id'),
+            post('reply_html'),
             $currentUserId,
             $cdate,
             $ctime,
-            isset($_POST['reply_attachment_paths']) ? $_POST['reply_attachment_paths'] : ''
+            post('reply_attachment_paths')
         );
         taskJsonResponse($result);
     }
@@ -681,13 +681,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskUpdateItemComment(
             $connect,
-            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
-            isset($_POST['comment_id']) ? (int) $_POST['comment_id'] : 0,
-            isset($_POST['comment_html']) ? $_POST['comment_html'] : '',
+            (int) post('item_id'),
+            (int) post('comment_id'),
+            post('comment_html'),
             $currentUserId,
             $cdate,
             $ctime,
-            isset($_POST['comment_attachment_paths']) ? $_POST['comment_attachment_paths'] : ''
+            post('comment_attachment_paths')
         );
         taskJsonResponse($result);
     }
@@ -699,13 +699,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskUpdateItemCommentReply(
             $connect,
-            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
-            isset($_POST['reply_id']) ? (int) $_POST['reply_id'] : 0,
-            isset($_POST['reply_html']) ? $_POST['reply_html'] : '',
+            (int) post('item_id'),
+            (int) post('reply_id'),
+            post('reply_html'),
             $currentUserId,
             $cdate,
             $ctime,
-            isset($_POST['reply_attachment_paths']) ? $_POST['reply_attachment_paths'] : ''
+            post('reply_attachment_paths')
         );
         taskJsonResponse($result);
     }
@@ -717,8 +717,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskDeleteItemComment(
             $connect,
-            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
-            isset($_POST['comment_id']) ? (int) $_POST['comment_id'] : 0,
+            (int) post('item_id'),
+            (int) post('comment_id'),
             $currentUserId,
             $cdate,
             $ctime
@@ -733,8 +733,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskDeleteItemCommentReply(
             $connect,
-            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
-            isset($_POST['reply_id']) ? (int) $_POST['reply_id'] : 0,
+            (int) post('item_id'),
+            (int) post('reply_id'),
             $currentUserId,
             $cdate,
             $ctime
@@ -747,7 +747,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to upload comment attachment.'));
         }
 
-        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $itemId = (int) post('item_id');
         $file = isset($_FILES['attachment']) ? $_FILES['attachment'] : null;
 
         $validateTaskAttachmentUpload($file, 50 * 1024 * 1024, '50MB');
@@ -769,7 +769,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to upload description attachment.'));
         }
 
-        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $itemId = (int) post('item_id');
         $file = isset($_FILES['attachment']) ? $_FILES['attachment'] : null;
 
         $validateTaskAttachmentUpload($file, 50 * 1024 * 1024, '50MB');
@@ -791,7 +791,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to upload reply attachment.'));
         }
 
-        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $itemId = (int) post('item_id');
         $file = isset($_FILES['attachment']) ? $_FILES['attachment'] : null;
 
         $validateTaskAttachmentUpload($file, 50 * 1024 * 1024, '50MB');
@@ -813,20 +813,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to update work item details.'));
         }
 
-        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $itemId = (int) post('item_id');
         $detail = $loadItemDetailForPermission($itemId);
-        $assigneeUserId = isset($_POST['assignee_user_id']) ? (int) $_POST['assignee_user_id'] : 0;
-        $reporterUserId = isset($_POST['reporter_user_id']) ? (int) $_POST['reporter_user_id'] : 0;
-        $priority = isset($_POST['priority']) ? $_POST['priority'] : 'Medium';
-        $originalEstimateValue = isset($_POST['original_estimate_value']) ? (int) $_POST['original_estimate_value'] : 0;
-        $originalEstimateUnit = isset($_POST['original_estimate_unit']) ? $_POST['original_estimate_unit'] : 'minutes';
-        $taskStatusLabelIds = isset($_POST['task_status_label_ids']) ? $_POST['task_status_label_ids'] : '';
-        $startDate = isset($_POST['start_date']) ? $_POST['start_date'] : '';
-        $dueDate = isset($_POST['due_date']) ? $_POST['due_date'] : '';
-        $amendementDate = isset($_POST['amendement_date']) ? $_POST['amendement_date'] : '';
-        $amendementTimeMinutes = isset($_POST['amendement_time_minutes']) ? (int) $_POST['amendement_time_minutes'] : 0;
-        $secondAmendementDate = isset($_POST['second_amendement_date']) ? $_POST['second_amendement_date'] : '';
-        $secondAmendementTimeMinutes = isset($_POST['second_amendement_time_minutes']) ? (int) $_POST['second_amendement_time_minutes'] : 0;
+        $assigneeUserId = (int) post('assignee_user_id');
+        $reporterUserId = (int) post('reporter_user_id');
+        $priority = filter_has_var(INPUT_POST, 'priority') ? post('priority') : 'Medium';
+        $originalEstimateValue = (int) post('original_estimate_value');
+        $originalEstimateUnit = filter_has_var(INPUT_POST, 'original_estimate_unit') ? post('original_estimate_unit') : 'minutes';
+        $taskStatusLabelIds = post('task_status_label_ids');
+        $startDate = post('start_date');
+        $dueDate = post('due_date');
+        $amendementDate = post('amendement_date');
+        $amendementTimeMinutes = (int) post('amendement_time_minutes');
+        $secondAmendementDate = post('second_amendement_date');
+        $secondAmendementTimeMinutes = (int) post('second_amendement_time_minutes');
 
         $requireColumnTransition('assignee_name', isset($detail['assignee_user_id']) ? (int) $detail['assignee_user_id'] : 0, $assigneeUserId);
         $requireColumnTransition('reporter_name', isset($detail['reporter_user_id']) ? (int) $detail['reporter_user_id'] : 0, $reporterUserId);
@@ -898,9 +898,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to save worklog.'));
         }
 
-        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $itemId = (int) post('item_id');
         $detail = $loadItemDetailForPermission($itemId);
-        $durationSeconds = isset($_POST['duration_seconds']) ? (int) $_POST['duration_seconds'] : 0;
+        $durationSeconds = (int) post('duration_seconds');
         $oldSeconds = isset($detail['own_time_tracking_seconds']) ? (int) $detail['own_time_tracking_seconds'] : 0;
         $requireColumnTransition('time_tracking', $oldSeconds, max(0, $oldSeconds + $durationSeconds));
 
@@ -912,10 +912,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             $cdate,
             $ctime,
             array(
-                'started_date' => isset($_POST['started_date']) ? $_POST['started_date'] : '',
-                'started_time' => isset($_POST['started_time']) ? $_POST['started_time'] : '',
-                'work_description_html' => isset($_POST['work_description_html']) ? $_POST['work_description_html'] : '',
-                'remaining_seconds' => isset($_POST['remaining_seconds']) ? (int) $_POST['remaining_seconds'] : null,
+                'started_date' => post('started_date'),
+                'started_time' => post('started_time'),
+                'work_description_html' => post('work_description_html'),
+                'remaining_seconds' => post('remaining_seconds') !== '' ? (int) post('remaining_seconds') : null,
             )
         );
 
@@ -927,10 +927,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to edit worklog.'));
         }
 
-        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
-        $worklogId = isset($_POST['worklog_id']) ? (int) $_POST['worklog_id'] : 0;
+        $itemId = (int) post('item_id');
+        $worklogId = (int) post('worklog_id');
         $detail = $loadItemDetailForPermission($itemId);
-        $durationSeconds = isset($_POST['duration_seconds']) ? (int) $_POST['duration_seconds'] : 0;
+        $durationSeconds = (int) post('duration_seconds');
         $oldSeconds = isset($detail['own_time_tracking_seconds']) ? (int) $detail['own_time_tracking_seconds'] : 0;
         $oldWorklogSeconds = 0;
         if (defined('TASK_ITEM_WORKLOG')) {
@@ -953,10 +953,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             $cdate,
             $ctime,
             array(
-                'started_date' => isset($_POST['started_date']) ? $_POST['started_date'] : '',
-                'started_time' => isset($_POST['started_time']) ? $_POST['started_time'] : '',
-                'work_description_html' => isset($_POST['work_description_html']) ? $_POST['work_description_html'] : '',
-                'remaining_seconds' => isset($_POST['remaining_seconds']) ? (int) $_POST['remaining_seconds'] : null,
+                'started_date' => post('started_date'),
+                'started_time' => post('started_time'),
+                'work_description_html' => post('work_description_html'),
+                'remaining_seconds' => post('remaining_seconds') !== '' ? (int) post('remaining_seconds') : null,
             )
         );
 
@@ -968,8 +968,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to delete worklog.'));
         }
 
-        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
-        $worklogId = isset($_POST['worklog_id']) ? (int) $_POST['worklog_id'] : 0;
+        $itemId = (int) post('item_id');
+        $worklogId = (int) post('worklog_id');
         $detail = $loadItemDetailForPermission($itemId);
         $oldSeconds = isset($detail['own_time_tracking_seconds']) ? (int) $detail['own_time_tracking_seconds'] : 0;
         $deletedWorklogSeconds = 0;
@@ -988,8 +988,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             $connect,
             $itemId,
             $worklogId,
-            isset($_POST['adjust_remaining']) ? (int) $_POST['adjust_remaining'] : 1,
-            isset($_POST['remaining_seconds']) ? (int) $_POST['remaining_seconds'] : 0,
+            post('adjust_remaining') !== '' ? (int) post('adjust_remaining') : 1,
+            (int) post('remaining_seconds'),
             $currentUserId,
             $cdate,
             $ctime
@@ -1003,8 +1003,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to link parent.'));
         }
 
-        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
-        $parentItemId = isset($_POST['parent_item_id']) ? (int) $_POST['parent_item_id'] : 0;
+        $itemId = (int) post('item_id');
+        $parentItemId = (int) post('parent_item_id');
         $detail = $loadItemDetailForPermission($itemId);
         $requireColumnTransition('parent_display', isset($detail['parent_item_id']) ? (int) $detail['parent_item_id'] : 0, $parentItemId);
 
@@ -1031,12 +1031,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to add web links.'));
         }
 
-        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $itemId = (int) post('item_id');
         $result = taskCreateItemUrl(
             $connect,
             $itemId,
-            isset($_POST['url']) ? $_POST['url'] : '',
-            isset($_POST['link_text']) ? $_POST['link_text'] : '',
+            post('url'),
+            post('link_text'),
             $currentUserId,
             $cdate,
             $ctime
@@ -1054,15 +1054,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to search linked work items.'));
         }
 
-        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $itemId = (int) post('item_id');
         taskJsonResponse(array(
             'ok' => 1,
             'items' => taskSearchLinkWorkItems(
                 $connect,
                 $currentProjectId,
                 $itemId,
-                isset($_POST['keyword']) ? $_POST['keyword'] : '',
-                isset($_POST['relation_type']) ? $_POST['relation_type'] : ''
+                post('keyword'),
+                post('relation_type')
             ),
         ));
     }
@@ -1072,10 +1072,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to add linked work items.'));
         }
 
-        $sourceItemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
-        $targetItemId = isset($_POST['target_item_id']) ? (int) $_POST['target_item_id'] : 0;
-        if ($targetItemId <= 0 && isset($_POST['target_value']) && trim((string) $_POST['target_value']) !== '') {
-            $resolvedTarget = taskResolveWorkItemFromUrlOrKey($connect, $currentProjectId, isset($_POST['target_value']) ? $_POST['target_value'] : '');
+        $sourceItemId = (int) post('item_id');
+        $targetItemId = (int) post('target_item_id');
+        if ($targetItemId <= 0 && trim((string) post('target_value')) !== '') {
+            $resolvedTarget = taskResolveWorkItemFromUrlOrKey($connect, $currentProjectId, post('target_value'));
             $targetItemId = isset($resolvedTarget['id']) ? (int) $resolvedTarget['id'] : 0;
         }
 
@@ -1084,7 +1084,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             $currentProjectId,
             $sourceItemId,
             $targetItemId,
-            isset($_POST['relation_type']) ? $_POST['relation_type'] : '',
+            post('relation_type'),
             $currentUserId
         );
 
@@ -1104,11 +1104,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to remove linked work items.'));
         }
 
-        $currentItemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $currentItemId = (int) post('item_id');
         $result = taskDeleteItemLink(
             $connect,
             $currentProjectId,
-            isset($_POST['link_id']) ? (int) $_POST['link_id'] : 0,
+            (int) post('link_id'),
             $currentUserId
         );
 
@@ -1124,7 +1124,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     }
 
     if ($taskAction === 'get_item_links') {
-        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $itemId = (int) post('item_id');
         taskJsonResponse(array(
             'ok' => 1,
             'itemLinks' => taskGetItemLinks($connect, $currentProjectId, $itemId),
@@ -1138,7 +1138,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskDeleteItemUrl(
             $connect,
-            isset($_POST['url_id']) ? (int) $_POST['url_id'] : 0,
+            (int) post('url_id'),
             $currentUserId,
             $cdate,
             $ctime
@@ -1159,7 +1159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskDeleteStatusLabel(
             $connect,
-            isset($_POST['status_label_id']) ? (int) $_POST['status_label_id'] : 0,
+            (int) post('status_label_id'),
             $currentUserId,
             $cdate,
             $ctime
@@ -1179,7 +1179,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskCreateStatusLabel(
             $connect,
-            isset($_POST['status_label_name']) ? $_POST['status_label_name'] : '',
+            post('status_label_name'),
             $currentUserId,
             $cdate,
             $ctime
@@ -1193,7 +1193,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     }
 
     if ($taskAction === 'get_item_attachments') {
-        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $itemId = (int) post('item_id');
         taskJsonResponse(array(
             'ok' => 1,
             'attachments' => taskGetItemAttachments($connect, $itemId),
@@ -1211,7 +1211,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskUploadItemAttachment(
             $connect,
-            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
+            (int) post('item_id'),
             $file,
             $currentUserId,
             $cdate,
@@ -1219,7 +1219,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         );
 
         if (!empty($result['ok'])) {
-            $result['attachments'] = taskGetItemAttachments($connect, isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0);
+            $result['attachments'] = taskGetItemAttachments($connect, (int) post('item_id'));
         }
 
         taskJsonResponse($result);
@@ -1232,7 +1232,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskDeleteItemAttachment(
             $connect,
-            isset($_POST['attachment_id']) ? (int) $_POST['attachment_id'] : 0,
+            (int) post('attachment_id'),
             $currentUserId,
             $cdate,
             $ctime
@@ -1251,7 +1251,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to delete attachments.'));
         }
 
-        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $itemId = (int) post('item_id');
         $result = taskDeleteAllItemAttachments(
             $connect,
             $itemId,
@@ -1274,7 +1274,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskCreateLabel(
             $connect,
-            isset($_POST['label_name']) ? $_POST['label_name'] : '',
+            post('label_name'),
             $currentUserId,
             $cdate,
             $ctime
@@ -1294,7 +1294,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskDeleteLabel(
             $connect,
-            isset($_POST['label_id']) ? (int) $_POST['label_id'] : 0,
+            (int) post('label_id'),
             $currentUserId,
             $cdate,
             $ctime
@@ -1312,9 +1312,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to set labels.'));
         }
 
-        $itemId = isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0;
+        $itemId = (int) post('item_id');
         $detail = $loadItemDetailForPermission($itemId);
-        $labelIdsCsv = isset($_POST['label_ids']) ? trim((string) $_POST['label_ids']) : '';
+        $labelIdsCsv = trim((string) post('label_ids'));
         $labelIds = array();
         if ($labelIdsCsv !== '') {
             foreach (explode(',', $labelIdsCsv) as $labelId) {
@@ -1349,7 +1349,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
 
         $result = taskDeleteItem(
             $connect,
-            isset($_POST['item_id']) ? (int) $_POST['item_id'] : 0,
+            (int) post('item_id'),
             $currentUserId,
             $cdate,
             $ctime

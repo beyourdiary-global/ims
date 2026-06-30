@@ -1339,10 +1339,10 @@ function migrationEnsureTableEngineInnoDb($conn, $dbName, $tblName, $options = a
     if ($requireFlag) {
         $flagValue = '';
         if ($flagName !== '') {
-            if (isset($_GET[$flagName])) {
-                $flagValue = $_GET[$flagName];
-            } else if (isset($_POST[$flagName])) {
-                $flagValue = $_POST[$flagName];
+            if (input($flagName) !== '') {
+                $flagValue = input($flagName);
+            } else if (filter_has_var(INPUT_POST, $flagName)) {
+                $flagValue = post($flagName);
             }
         }
 

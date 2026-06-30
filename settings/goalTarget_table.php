@@ -11,8 +11,8 @@ $redirectPage = $SITEURL . '/settings/goalTarget.php';
 $deleteRedirectPage = $SITEURL . '/settings/goalTarget_table.php';
 
 $result = getData(' year,sum(total_goal) as goal ', '  status = "A" group by year ', '', $tblName, $connect);
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && $_POST['action'] === 'delete') {
-    $year = $_POST['year'];
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('action') === 'delete') {
+    $year = post('year');
     $deleteQuery = "DELETE FROM $tblName WHERE year = ?";
     $stmt = $connect->prepare($deleteQuery);
     $stmt->bind_param('i', $year);

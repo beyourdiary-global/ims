@@ -191,10 +191,10 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
     $for_attach = null;
     if (isset($_FILES["for_attach"]) && $_FILES["for_attach"]["size"] != 0) {
         $for_attach = $_FILES["for_attach"]["name"];
-    } elseif (isset($_POST['for_attachmentValue'])) {
-        $for_attach = $_POST['for_attachmentValue'];
-    } elseif (isset($_POST['existing_attachment'])) {
-        $for_attach = $_POST['existing_attachment'];
+    } elseif (filter_has_var(INPUT_POST, 'for_attachmentValue')) {
+        $for_attach = post('for_attachmentValue');
+    } elseif (filter_has_var(INPUT_POST, 'existing_attachment')) {
+        $for_attach = post('existing_attachment');
     }
 
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();

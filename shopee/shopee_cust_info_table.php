@@ -7,7 +7,15 @@ include_once ROOT . '/include/customer_tag.php';
 
 $redirectPage = $SITEURL . '/shopee/shopee_cust_info.php';
 $deleteRedirectPage = $SITEURL . '/shopee/shopee_cust_info_table.php';
-$tableDataset = shopeeCustomerRecordGetListDataset($connect, $finance_connect, array_merge((array) $_GET, (array) $_POST));
+$tableRequestParams = array();
+$tableGetParams = array();
+parse_str((string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_QUERY), $tableGetParams);
+foreach ($tableGetParams as $paramKey => $paramValue) {
+    if (!is_array($paramValue)) {
+        $tableRequestParams[$paramKey] = input($paramKey);
+    }
+}
+$tableDataset = shopeeCustomerRecordGetListDataset($connect, $finance_connect, $tableRequestParams);
 $tableRows = isset($tableDataset['rows']) ? $tableDataset['rows'] : array();
 $customerLabelMap = isset($tableDataset['label_map']) ? $tableDataset['label_map'] : array();
 $customerTagMap = isset($tableDataset['tag_map']) ? $tableDataset['tag_map'] : array();

@@ -657,12 +657,12 @@ if (!function_exists('urlBuildListHtml')) {
     {
         $dbConnect = $financeConnect instanceof mysqli ? $financeConnect : $connect;
         $uploadWebDir = urlGetUserRecordLogUploadWebDir();
-        $keyword = isset($_POST['keyword']) ? trim((string) $_POST['keyword']) : '';
-        $filterDate = isset($_POST['filter_date']) ? trim((string) $_POST['filter_date']) : '';
-        $filterUser = isset($_POST['filter_user']) ? trim((string) $_POST['filter_user']) : '';
-        $filterAttachment = isset($_POST['filter_attachment']) ? trim((string) $_POST['filter_attachment']) : '';
-        $page = isset($_POST['page']) ? (int) $_POST['page'] : 1;
-        $pageSize = isset($_POST['page_size']) ? (int) $_POST['page_size'] : 10;
+        $keyword = trim((string) post('keyword'));
+        $filterDate = trim((string) post('filter_date'));
+        $filterUser = trim((string) post('filter_user'));
+        $filterAttachment = trim((string) post('filter_attachment'));
+        $page = (int) post('page');
+        $pageSize = (int) post('page_size');
         $customerId = isset($context['customer_id']) ? (int) $context['customer_id'] : 0;
         $customerColumn = isset($context['customer_column']) ? trim((string) $context['customer_column']) : 'cust_id';
         if ($customerColumn === '') {
@@ -849,9 +849,9 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
         $urlAction = '';
         $urlIsFallback = false;
 
-        if (isset($_POST['url_action'])) {
-            $urlAction = trim((string) $_POST['url_action']);
-        } else if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['content'])) {
+        if (post('url_action') !== '') {
+            $urlAction = trim((string) post('url_action'));
+        } else if ($_SERVER['REQUEST_METHOD'] === 'POST' && filter_has_var(INPUT_POST, 'content')) {
             $urlAction = 'save';
             $urlIsFallback = true;
         }
@@ -885,8 +885,8 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
             urlJsonResponse(array('ok' => 0, 'message' => 'Invalid action.'));
         }
 
-        $recordId = isset($_POST['record_id']) ? (int) $_POST['record_id'] : 0;
-        $content = urlNormalizeSubmittedUserRecordLogContent(isset($_POST['content']) ? (string) $_POST['content'] : '');
+        $recordId = (int) post('record_id');
+        $content = urlNormalizeSubmittedUserRecordLogContent((string) post('content'));
         if (urlGetUserRecordLogContentPlainText($content) === '') {
             if ($urlIsFallback) {
                 urlFallbackResponse('Content is required.', false, $context['return_url']);
@@ -895,10 +895,10 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
         }
 
         $submittedAttachments = array();
-        if (isset($_POST['existing_attachments'])) {
-            $submittedAttachments = urlDecodeUserRecordLogAttachmentList('', (string) $_POST['existing_attachments']);
-        } else if (isset($_POST['existing_attachment'])) {
-            $submittedAttachments = urlNormalizeUserRecordLogAttachmentList($_POST['existing_attachment']);
+        if (filter_has_var(INPUT_POST, 'existing_attachments')) {
+            $submittedAttachments = urlDecodeUserRecordLogAttachmentList('', (string) post('existing_attachments'));
+        } else if (filter_has_var(INPUT_POST, 'existing_attachment')) {
+            $submittedAttachments = urlNormalizeUserRecordLogAttachmentList(post('existing_attachment'));
         }
 
         $uploadedAttachments = array();
@@ -1021,7 +1021,7 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
                 urlJsonResponse(array('ok' => 0, 'message' => 'This record can no longer be edited (more than 3 days).'));
             }
 
-            if (isset($_POST['existing_attachments'])) {
+            if (filter_has_var(INPUT_POST, 'existing_attachments')) {
                 $attachmentNames = $submittedAttachments;
             } else {
                 $attachmentNames = urlDecodeUserRecordLogAttachmentList(isset($currentRow['attachment']) ? $currentRow['attachment'] : '');

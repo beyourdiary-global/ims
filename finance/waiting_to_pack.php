@@ -54,7 +54,7 @@ $statusMessage = '';
 $statusClass = 'success';
 
 if (post('scanOrderBtn')) {
-    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    $submittedToken = (string) post('csrf_token');
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
         $statusClass = 'danger';
         $statusMessage = 'Invalid session token. Please refresh the page and try again.';

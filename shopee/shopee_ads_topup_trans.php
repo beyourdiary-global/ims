@@ -128,8 +128,8 @@ if (post('actionBtn')) {
             $attach_err = $uploadErr;
             $satAttachUploadFailed = true;
         }
-    } else if (isset($_POST['existing_attachment'])) {
-        $sat_attach = trim((string) $_POST['existing_attachment']);
+    } else if (post('existing_attachment') !== '') {
+        $sat_attach = trim((string) post('existing_attachment'));
     }
 
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();

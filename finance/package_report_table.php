@@ -17,6 +17,17 @@ $result2 = getData('*', '', '', FB_ORDER_REQ,$finance_connect
 );
 $result3 = getData('*', '', '', WEB_ORDER_REQ ,$finance_connect);
 $result4 = getData('*', '', '', SHOPEE_SG_ORDER_REQ ,$finance_connect);
+$groupOption = input('group');
+$allowedGroups = array('package', 'platform');
+if (!in_array($groupOption, $allowedGroups, true)) {
+    $groupOption = '';
+}
+$groupOption3 = input('timeRange');
+$groupOption4 = input('timeInterval');
+$allowedTimeIntervals = array('daily', 'weekly', 'monthly', 'yearly');
+if (!in_array($groupOption4, $allowedTimeIntervals, true)) {
+    $groupOption4 = '';
+}
 ?>
 
 <!DOCTYPE html>
@@ -112,12 +123,10 @@ $result4 = getData('*', '', '', SHOPEE_SG_ORDER_REQ ,$finance_connect);
                     <th scope="col">S/N</th>
                     <th id="group_header" scope="col">
                         <?php
-                        if (isset($_GET['group'])) {
-                            if ($_GET['group'] == 'package') {
-                                echo "Package";
-                            }else if ($_GET['group'] == 'platform') {
-                                echo "Platform";
-                            }
+                        if ($groupOption == 'package') {
+                            echo "Package";
+                        } else if ($groupOption == 'platform') {
+                            echo "Platform";
                         }
                         ?>
                     </th>
@@ -127,9 +136,6 @@ $result4 = getData('*', '', '', SHOPEE_SG_ORDER_REQ ,$finance_connect);
            
             <tbody>
                 <?php 
-                   $groupOption = isset($_GET['group']) ? $_GET['group'] : ''; 
-                   $groupOption3 = isset($_GET['timeRange']) ? $_GET['timeRange'] : ''; 
-                   $groupOption4 = isset($_GET['timeInterval']) ? $_GET['timeInterval'] : ''; 
                    $groupedRows = [];
                    $counters = 1;
                   $resultSets = array();
@@ -342,12 +348,10 @@ $result4 = getData('*', '', '', SHOPEE_SG_ORDER_REQ ,$finance_connect);
                     <th scope="col">S/N</th>
                     <th id="group_header" scope="col">
                         <?php
-                        if (isset($_GET['group'])) {
-                            if ($_GET['group'] == 'package') {
-                                echo "Package";
-                            }else if ($_GET['group'] == 'platform') {
-                                echo "Platform";
-                            }
+                        if ($groupOption == 'package') {
+                            echo "Package";
+                        } else if ($groupOption == 'platform') {
+                            echo "Platform";
                         }
                         ?>
                     </th>

@@ -489,12 +489,12 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action']) && $_POST['task_action'] === 'save_project_user_access_ajax') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('task_action') === 'save_project_user_access_ajax') {
     if ($currentProjectId <= 0) {
         taskJsonResponse(array('ok' => 0, 'message' => 'Project not found.'));
     }
 
-    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    $submittedToken = (string) post('csrf_token');
     if (!hash_equals($_SESSION['csrf_token'], $submittedToken)) {
         taskJsonResponse(array('ok' => 0, 'message' => 'Invalid session token. Please refresh the page and try again.'));
     }
@@ -516,7 +516,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action']) && $_P
     );
 
     $userRows = array();
-    $postedUsers = isset($_POST['access_user_ids']) && is_array($_POST['access_user_ids']) ? $_POST['access_user_ids'] : array();
+    $postedUsers = (array) post('access_user_ids') ?: array();
+    $workItemAddRows = (array) post('work_item_add') ?: array();
+    $workItemEditRows = (array) post('work_item_edit') ?: array();
+    $workItemDeleteRows = (array) post('work_item_delete') ?: array();
+    $allowedWorkTypeRows = (array) post('allowed_work_type_ids') ?: array();
+    $allowedStatusRows = (array) post('allowed_status_ids') ?: array();
+    $columnPermissionRows = (array) post('column_permissions') ?: array();
 
     foreach ($postedUsers as $rawUserId) {
         $userId = (int) $rawUserId;
@@ -525,12 +531,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action']) && $_P
         }
 
         $userRows[$userId] = array(
-            'work_item_add' => isset($_POST['work_item_add'][$userId]) ? 1 : 0,
-            'work_item_edit' => isset($_POST['work_item_edit'][$userId]) ? 1 : 0,
-            'work_item_delete' => isset($_POST['work_item_delete'][$userId]) ? 1 : 0,
-            'allowed_work_type_ids' => isset($_POST['allowed_work_type_ids'][$userId]) && is_array($_POST['allowed_work_type_ids'][$userId]) ? $_POST['allowed_work_type_ids'][$userId] : array(),
-            'allowed_status_ids' => isset($_POST['allowed_status_ids'][$userId]) && is_array($_POST['allowed_status_ids'][$userId]) ? $_POST['allowed_status_ids'][$userId] : array(),
-            'column_permissions' => isset($_POST['column_permissions'][$userId]) && is_array($_POST['column_permissions'][$userId]) ? $_POST['column_permissions'][$userId] : array(),
+            'work_item_add' => isset($workItemAddRows[$userId]) ? 1 : 0,
+            'work_item_edit' => isset($workItemEditRows[$userId]) ? 1 : 0,
+            'work_item_delete' => isset($workItemDeleteRows[$userId]) ? 1 : 0,
+            'allowed_work_type_ids' => isset($allowedWorkTypeRows[$userId]) && is_array($allowedWorkTypeRows[$userId]) ? $allowedWorkTypeRows[$userId] : array(),
+            'allowed_status_ids' => isset($allowedStatusRows[$userId]) && is_array($allowedStatusRows[$userId]) ? $allowedStatusRows[$userId] : array(),
+            'column_permissions' => isset($columnPermissionRows[$userId]) && is_array($columnPermissionRows[$userId]) ? $columnPermissionRows[$userId] : array(),
         );
     }
 

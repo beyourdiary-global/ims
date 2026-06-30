@@ -27,8 +27,8 @@ if(isset($_SESSION['userid']))
     audit_log($log);
 
    
-    if(isset($_GET['redirect'])) {
-        echo ("<script>location.href = '".$_GET['redirect']."';</script>");
+    if(input('redirect') !== '') {
+        echo ("<script>location.href = '".input('redirect')."';</script>");
     } else {
         echo ("<script>location.href = 'index.php';</script>");
     }

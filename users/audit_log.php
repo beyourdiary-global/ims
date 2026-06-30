@@ -11,10 +11,18 @@ $tblName = AUDIT_LOG;
 
 $num = 1;   // numbering
 
-$selectedMonth = $_GET['month'] ?? date('m');
-$selectedYear = $_GET['year'] ?? date('Y');
-$selectedAction = $_GET['action'] ?? '';
-$selectedScreen = $_GET['screen_type'] ?? '';
+$selectedMonth = numberInput('month');
+$selectedYear = numberInput('year');
+$selectedAction = input('action');
+$selectedScreen = input('screen_type');
+
+if ($selectedMonth === '') {
+    $selectedMonth = date('m');
+}
+
+if ($selectedYear === '') {
+    $selectedYear = date('Y');
+}
 
 $query = "SELECT *, concat(create_date,' ',create_time) as datetimes FROM " . AUDIT_LOG . " WHERE 1=1";
 

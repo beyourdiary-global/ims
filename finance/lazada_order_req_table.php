@@ -16,15 +16,25 @@ if (empty($_SESSION['csrf_token'])) {
 }
 
 $currentTablePath = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
-$currentTableQuery = $_GET;
-unset($currentTableQuery['verify_id'], $currentTableQuery['complete_id']);
+$currentTableQuery = array();
+$currentTableRawQuery = array();
+parse_str((string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_QUERY), $currentTableRawQuery);
+unset($currentTableRawQuery['verify_id'], $currentTableRawQuery['complete_id']);
+foreach ($currentTableRawQuery as $queryKey => $queryValue) {
+    if (!is_array($queryValue)) {
+        $currentTableQuery[$queryKey] = input($queryKey);
+    }
+}
 $currentTableRedirect = $currentTablePath !== '' ? $currentTablePath : '/finance/lazada_order_req_table.php';
 if (!empty($currentTableQuery)) {
     $currentTableRedirect .= '?' . http_build_query($currentTableQuery);
 }
 
+$verifyId = (int) numberInput('verify_id');
+$completeId = (int) numberInput('complete_id');
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceivedDateBtn')) {
-    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    $submittedToken = (string) post('csrf_token');
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
         echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes(htmlspecialchars((string) $_SERVER['REQUEST_URI'], ENT_QUOTES, 'UTF-8')) . "');</script>";
         exit;
@@ -71,7 +81,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceiv
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('moveToPackBtn')) {
-    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    $submittedToken = (string) post('csrf_token');
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
         echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes(htmlspecialchars((string) $_SERVER['REQUEST_URI'], ENT_QUOTES, 'UTF-8')) . "');</script>";
         exit;
@@ -91,8 +101,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('moveToPackBtn')) {
     exit;
 }
 
-if (isset($_GET['verify_id'])) {
-    $orderId = (int) $_GET['verify_id'];
+if ($verifyId > 0) {
+    $orderId = $verifyId;
     $verifyResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'V', array(
         'actor_user_id' => USER_ID,
         'actor_user_group_id' => USER_GROUP,
@@ -104,8 +114,8 @@ if (isset($_GET['verify_id'])) {
     exit;
 }
 
-if (isset($_GET['complete_id'])) {
-    $orderId = (int) $_GET['complete_id'];
+if ($completeId > 0) {
+    $orderId = $completeId;
     $completeResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'C', array(
         'actor_user_id' => USER_ID,
         'actor_user_group_id' => USER_GROUP,
@@ -117,14 +127,14 @@ if (isset($_GET['complete_id'])) {
     exit;
 }
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['force_wafc_id']) && !isset($_POST['move_to_wafc_with_received_date_btn'])) {
-    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('force_wafc_id') !== '' && post('move_to_wafc_with_received_date_btn') === '') {
+    $submittedToken = (string) post('csrf_token');
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
         echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
         exit;
     }
 
-    $orderId = (int) $_POST['force_wafc_id'];
+    $orderId = (int) post('force_wafc_id');
     $wafcResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'WAFC', array(
         'actor_user_id' => USER_ID,
         'actor_user_group_id' => USER_GROUP,
@@ -149,14 +159,14 @@ shopeeOmsHandleMoveToWafcWithReceivedDatePost($connect, $finance_connect, array(
     'query_table' => LAZADA_ORDER_REQ,
 ));
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['return_id'])) {
-    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('return_id') !== '') {
+    $submittedToken = (string) post('csrf_token');
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
         echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
         exit;
     }
 
-    $orderId = (int) $_POST['return_id'];
+    $orderId = (int) post('return_id');
     $returnResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'R', array(
         'actor_user_id' => USER_ID,
         'actor_user_group_id' => USER_GROUP,

@@ -2,11 +2,11 @@
 include "include/common.php";
 include "include/connection.php";
 
-if (isset($_POST['ids'])) {
+if (filter_has_var(INPUT_POST, 'ids')) {
     try {
        
-        $ids = $_POST['ids'];
-        $tblName = $_POST['tblName'];
+        $ids = post('ids');
+        $tblName = post('tblName');
         echo($ids);
         $log = [
             'log_act' => 'export',
@@ -20,8 +20,8 @@ if (isset($_POST['ids'])) {
 
         audit_log($log);
 
-        if(isset($_GET['redirect'])) {
-            echo ("<script>location.href = '".$_GET['redirect']."';</script>");
+        if(input('redirect') !== '') {
+            echo ("<script>location.href = '".input('redirect')."';</script>");
         } else {
             echo ("<script>location.href = 'index.php';</script>");
         }

@@ -457,7 +457,7 @@ if ($action === 'preview') {
         }
     }
 } else if ($action === 'update') {
-    $postData = isset($_POST['data']) ? $_POST['data'] : array();
+    $postData = (array) post('data') ?: array();
     $previewData = array();
     $hasValidationError = false;
 

@@ -123,14 +123,14 @@ if ($checkboxValues !== '') {
     exit;
 }
 
-$deleteRequested = post('act') === 'D' || (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['delete_prize_id']));
+$deleteRequested = post('act') === 'D' || (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('delete_prize_id') !== '');
 if ($deleteRequested) {
     luckyDrawRequireAdminAction($connect, 'Delete', $pinAccess);
     $deletePrizeId = 0;
     if (post('act') === 'D') {
         $deletePrizeId = (int) post('id');
-    } elseif (isset($_POST['delete_prize_id'])) {
-        $deletePrizeId = (int) $_POST['delete_prize_id'];
+    } elseif (post('delete_prize_id') !== '') {
+        $deletePrizeId = (int) post('delete_prize_id');
     }
     $deleteSucceeded = false;
     if ($deletePrizeId > 0) {

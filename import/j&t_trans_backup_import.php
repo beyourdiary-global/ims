@@ -472,8 +472,8 @@ if (post('actionBtn')) {
     }
 
     if ($action === 'parseJtBackupPdf') {
-        $clientOcrText = isset($_POST['client_ocr_text']) ? trim((string) $_POST['client_ocr_text']) : '';
-        $clientOcrMapJson = isset($_POST['client_ocr_map']) ? trim((string) $_POST['client_ocr_map']) : '';
+        $clientOcrText = trim((string) post('client_ocr_text'));
+        $clientOcrMapJson = trim((string) post('client_ocr_map'));
 
         if (!isset($_FILES['import_file']) || (int) $_FILES['import_file']['size'] <= 0) {
             $importErrors[] = 'Please select a PDF or ZIP file.';
@@ -543,7 +543,7 @@ if (post('actionBtn')) {
     }
 
     if ($action === 'insertJtBackupPdf') {
-        $postedRecords = isset($_POST['records']) && is_array($_POST['records']) ? $_POST['records'] : array();
+        $postedRecords = (array) post('records') ?: array();
         if (count($postedRecords) === 0) {
             $importErrors[] = 'No preview records available for import.';
         }

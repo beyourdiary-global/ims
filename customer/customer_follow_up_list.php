@@ -5,7 +5,7 @@ if (ob_get_level() === 0) {
 
 $customerFollowUpBootstrapIsAjax = (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST')
     && (
-        (isset($_POST['customer_follow_up_ajax']) && (string) $_POST['customer_follow_up_ajax'] === '1')
+        (filter_input(INPUT_POST, 'customer_follow_up_ajax') === '1')
         || (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower(trim((string) $_SERVER['HTTP_X_REQUESTED_WITH'])) === 'xmlhttprequest')
         || (isset($_SERVER['HTTP_ACCEPT']) && strpos(strtolower((string) $_SERVER['HTTP_ACCEPT']), 'application/json') !== false)
     );
@@ -87,7 +87,7 @@ if (!function_exists('customerFollowUpPageIsAjaxRequest')) {
             return false;
         }
 
-        if (isset($_POST['customer_follow_up_ajax']) && (string) $_POST['customer_follow_up_ajax'] === '1') {
+        if (post('customer_follow_up_ajax') === '1') {
             return true;
         }
 
@@ -168,26 +168,11 @@ if (!function_exists('customerFollowUpPagePlatformLabel')) {
 if (!function_exists('customerFollowUpPageReadRequestValues')) {
     function customerFollowUpPageReadRequestValues($key)
     {
-        if (!isset($_GET[$key])) {
-            return array();
+        if ($key === 'assigned_user_id') {
+            return numberInputArray($key);
         }
 
-        $rawValues = $_GET[$key];
-        if (!is_array($rawValues)) {
-            $rawValues = array($rawValues);
-        }
-
-        $values = array();
-        foreach ($rawValues as $rawValue) {
-            $value = trim((string) $rawValue);
-            if ($value === '') {
-                continue;
-            }
-
-            $values[$value] = $value;
-        }
-
-        return array_values($values);
+        return inputArray($key);
     }
 }
 
@@ -277,8 +262,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
     ));
 }
 
-$selectedMonth = isset($_GET['month']) ? trim((string) $_GET['month']) : date('m');
-$selectedYear = isset($_GET['year']) ? trim((string) $_GET['year']) : date('Y');
+$selectedMonth = trim((string) input('month'));
+$selectedYear = trim((string) input('year'));
 $selectedDate = trim((string) input('date'));
 $currentYear = date('Y');
 $selectedMonth = ($selectedMonth === '' || preg_match('/^(0[1-9]|1[0-2])$/', $selectedMonth)) ? $selectedMonth : date('m');
@@ -330,7 +315,7 @@ $missedOnlyFilter = trim((string) input('missed_only')) === '1';
 $lostOnlyFilter = trim((string) input('lost_only')) === '1';
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
-    $postedCsrfToken = isset($_POST['customer_follow_up_csrf']) ? (string) $_POST['customer_follow_up_csrf'] : '';
+    $postedCsrfToken = (string) post('customer_follow_up_csrf');
     if (!hash_equals((string) $_SESSION['customer_follow_up_csrf'], $postedCsrfToken)) {
         customerFollowUpPageFinishResponse(array(
             'success' => false,
@@ -359,7 +344,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $result = customerFollowUpApproveRound(
                 $connect,
                 $followUpId,
-                isset($_POST['approval_comment']) ? $_POST['approval_comment'] : '',
+                post('approval_comment'),
                 USER_ID,
                 USER_GROUP,
                 isset($finance_connect) ? $finance_connect : null

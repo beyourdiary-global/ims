@@ -28,10 +28,10 @@ if (!file_exists($tempAttachDir)) {
 
 $checkboxValues = isset($_COOKIE['rowID']) ? $_COOKIE['rowID'] : '';
 
-$groupOption = isset($_GET['group']) ? input('group') : 'brand';
-$groupOption2 = isset($_GET['group2']) ? input('group2') : '';
-$groupOption3 = isset($_GET['timeRange']) ? input('timeRange') : date("Y-m-d");
-$groupOption4 = isset($_GET['timeInterval']) ? input('timeInterval') : 'daily';
+$groupOption = input('group') !== '' ? input('group') : 'brand';
+$groupOption2 = input('group2');
+$groupOption3 = input('timeRange') !== '' ? input('timeRange') : date("Y-m-d");
+$groupOption4 = input('timeInterval') !== '' ? input('timeInterval') : 'daily';
 $sqlNode = 'create_date';
 
 $sqlQuery = generateDateQuery($groupOption3, $groupOption4, $sqlNode);

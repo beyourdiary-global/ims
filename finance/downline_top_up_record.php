@@ -73,8 +73,8 @@ if (post('actionBtn')) {
             if (isset($_FILES["dtur_attach"]) && $_FILES["dtur_attach"]["size"] != 0) {
             
                 $dtur_attach = $_FILES["dtur_attach"]["name"];
-            } else if (isset($_POST['existing_attachment'])) {
-                $dtur_attach = $_POST['existing_attachment'];
+            } else if (filter_has_var(INPUT_POST, 'existing_attachment')) {
+                $dtur_attach = post('existing_attachment');
             }
 
             $dtur_remark = postSpaceFilter('dtur_remark');

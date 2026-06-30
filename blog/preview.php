@@ -1,11 +1,10 @@
 <?php
-if (!isset($_GET['blog'])) {
+$shorten_key = filter_input(INPUT_GET, 'blog', FILTER_UNSAFE_RAW);
+if (!is_string($shorten_key) || trim($shorten_key) === '') {
     http_response_code(400);
     echo "Missing shorten key.";
     exit;
 }
-
-$shorten_key = $_GET['blog'];
 
 $pdo = new PDO('mysql:host=127.0.0.1:3306;dbname=beyourdi_cms', 'beyourdi_cms', 'Byd1234@Global');
 $stmt = $pdo->prepare("SELECT * FROM shorten WHERE shorten_key = ?");

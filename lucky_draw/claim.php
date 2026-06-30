@@ -43,7 +43,7 @@ $websiteName = trim((string) (isset($projectRow['project_title']) ? $projectRow[
 $logoBaseUrl = rtrim((string) $SITEURL, '/') . '/' . trim((string) img_server, '/') . '/themes/';
 $faviconUrl = !empty($projectRow['meta_logo']) ? ($logoBaseUrl . rawurlencode((string) $projectRow['meta_logo'])) : ($SITEURL . '/image/logo2.png');
 
-$token = isset($_GET['token']) ? trim((string) $_GET['token']) : '';
+$token = trim((string) input('token'));
 $claimRow = $token !== '' ? luckyDrawFindClaimByToken($connect, $token) : array();
 $csrfToken = luckyDrawGetCsrfToken('lucky_draw_claim_csrf');
 $statusMessage = '';
@@ -54,13 +54,15 @@ $formValues = array(
 );
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
-    $token = isset($_POST['token']) ? trim((string) $_POST['token']) : '';
-    $formValues['email'] = trim((string) (isset($_POST['email']) ? $_POST['email'] : ''));
-    if (!luckyDrawValidateCsrfToken(isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '', 'lucky_draw_claim_csrf')) {
+    $token = trim((string) post('token'));
+    $formValues['email'] = trim((string) post('email'));
+    if (!luckyDrawValidateCsrfToken((string) post('csrf_token'), 'lucky_draw_claim_csrf')) {
         $statusType = 'danger';
         $statusMessage = 'Your session expired. Please refresh the claim page and try again.';
     } else {
-        $submitResult = luckyDrawSubmitClaim($connect, $finance_connect, $token, $_POST);
+        $submitResult = luckyDrawSubmitClaim($connect, $finance_connect, $token, array(
+            'email' => post('email'),
+        ));
         $statusType = !empty($submitResult['success']) ? 'success' : 'danger';
         $statusMessage = isset($submitResult['message']) ? (string) $submitResult['message'] : 'Unable to submit the claim.';
         $fieldErrors = isset($submitResult['field_errors']) && is_array($submitResult['field_errors']) ? $submitResult['field_errors'] : array();

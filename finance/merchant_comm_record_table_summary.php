@@ -187,8 +187,8 @@ $result = getData('*', '', '', MRCHT_COMM, $finance_connect);
                     <tbody>
                         <?php 
                         while ($row = $result->fetch_assoc()) {
-                            if (isset($_GET['ids'])) {
-                                $ids = explode(',', $_GET['ids']);
+                            if (input('ids') !== '') {
+                                $ids = explode(',', input('ids'));
                                 foreach ($ids as $id) {
                                 $decodedId = urldecode($id);   
                             if (isset($row['merchantID'], $row['id']) && !empty($row['merchantID'] && $row['id'] == $id)) {

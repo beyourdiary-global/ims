@@ -83,8 +83,8 @@ if (post('actionBtn')) {
 
     if (isset($_FILES["ocr_attach"]) && $_FILES["ocr_attach"]["size"] != 0) {
         $ocr_attach = $_FILES["ocr_attach"]["name"];
-    } elseif (isset($_POST['existing_attachment'])) {
-        $ocr_attach = $_POST['existing_attachment'];
+    } elseif (filter_has_var(INPUT_POST, 'existing_attachment')) {
+        $ocr_attach = post('existing_attachment');
     }
 
     switch ($action) {

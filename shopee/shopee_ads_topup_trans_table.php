@@ -22,11 +22,12 @@ if (!file_exists($tempAttachDir)) {
     mkdir($tempAttachDir, 0777, true);
 }
 
-$checkboxValues = isset($_GET['export_ids']) ? $_GET['export_ids'] : (isset($_COOKIE['rowID']) ? $_COOKIE['rowID'] : '');
+$exportIdsParam = input('export_ids');
+$checkboxValues = $exportIdsParam !== '' ? $exportIdsParam : (isset($_COOKIE['rowID']) ? $_COOKIE['rowID'] : '');
 $checkboxValues = preg_replace('/[^0-9,]/', '', (string) $checkboxValues);
 
-if (isset($_GET['export_ids'])) {
-    error_log('[shopee_ads_topup_export] raw_export_ids=' . $_GET['export_ids'] . ' sanitized=' . $checkboxValues);
+if ($exportIdsParam !== '') {
+    error_log('[shopee_ads_topup_export] raw_export_ids=' . $exportIdsParam . ' sanitized=' . $checkboxValues);
 }
 
 // Check if any checkboxes are checked
@@ -200,16 +201,17 @@ $totalTopupAmount = 0;
 $totalSubtotal = 0;
 $totalGST = 0;
 
-$timeInterval = isset($_GET['timeInterval']) ? strtolower(trim((string) $_GET['timeInterval'])) : 'daily';
+$timeInterval = strtolower(trim((string) input('timeInterval')));
+$timeInterval = $timeInterval !== '' ? $timeInterval : 'daily';
 $allowedIntervals = array('daily', 'weekly', 'monthly', 'yearly');
 if (!in_array($timeInterval, $allowedIntervals, true)) {
     $timeInterval = 'daily';
 }
 
-$dateFilter = isset($_GET['date']) ? trim((string) $_GET['date']) : '';
-$rangeStart = isset($_GET['start']) ? trim((string) $_GET['start']) : '';
-$rangeEnd = isset($_GET['end']) ? trim((string) $_GET['end']) : '';
-$groupOption = isset($_GET['group']) ? strtolower(trim((string) $_GET['group'])) : '';
+$dateFilter = trim((string) input('date'));
+$rangeStart = trim((string) input('start'));
+$rangeEnd = trim((string) input('end'));
+$groupOption = strtolower(trim((string) input('group')));
 $allowedGroups = array('', 'shopee', 'currency', 'method');
 if (!in_array($groupOption, $allowedGroups, true)) {
     $groupOption = '';
@@ -519,14 +521,12 @@ if ($isTimeReportMode || $groupOption !== '') {
                         <th scope="col" width="60px">S/N</th>                       
                         <th id="group_header" scope="col">
                             <?php 
-                                if (isset($_GET['group'])) {
-                                    if ($_GET['group'] == 'shopee') {
+                                if ($groupOption == 'shopee') {
                                         echo "Shopee Account";
-                                    } elseif ($_GET['group'] == 'currency') {
+                                    } elseif ($groupOption == 'currency') {
                                         echo "Currency";
-                                    } elseif ($_GET['group'] == 'method') {
+                                    } elseif ($groupOption == 'method') {
                                         echo "Payment Method";
-                                    }
                                 }
                             ?>
                         </th>
