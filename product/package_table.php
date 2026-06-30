@@ -16,6 +16,44 @@ $tblName = PKG;
 $redirectPage = $SITEURL . '/product/package.php';
 $deleteRedirectPage = $SITEURL . '/product/package_table.php';
 
+if (!function_exists('packageTableBuildRelationMaps')) {
+    function packageTableBuildRelationMaps($connect)
+    {
+        $packageLabelMap = array();
+        $childPackageMap = array();
+
+        if (!($connect instanceof mysqli)) {
+            return array($packageLabelMap, $childPackageMap);
+        }
+
+        $result = mysqli_query($connect, "SELECT id, name, item_code, parent_package_id FROM `" . PKG . "` WHERE status = 'A' ORDER BY name ASC, id ASC");
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $packageId = isset($row['id']) ? (int) $row['id'] : 0;
+                if ($packageId <= 0) {
+                    continue;
+                }
+
+                $packageName = isset($row['name']) ? (string) $row['name'] : '';
+                $itemCode = trim((string) (isset($row['item_code']) ? $row['item_code'] : ''));
+                $packageLabelMap[$packageId] = $itemCode !== '' ? $itemCode : $packageName;
+
+                $parentPackageId = isset($row['parent_package_id']) ? (int) $row['parent_package_id'] : 0;
+                if ($parentPackageId > 0) {
+                    if (!isset($childPackageMap[$parentPackageId])) {
+                        $childPackageMap[$parentPackageId] = array();
+                    }
+                    $childPackageMap[$parentPackageId][] = $packageLabelMap[$packageId];
+                }
+            }
+        }
+
+        return array($packageLabelMap, $childPackageMap);
+    }
+}
+
+list($packageRelationLabelMap, $packageChildMap) = packageTableBuildRelationMaps($connect);
+
 $checkboxValues = isset($_COOKIE['rowID']) ? $_COOKIE['rowID'] : '';
 if (!empty($checkboxValues)) {
     $checkboxValues = preg_replace('/[^0-9,]/', '', (string) $checkboxValues);
@@ -79,6 +117,8 @@ if (!empty($checkboxValues)) {
             $exportKeys[] = $fieldName;
             if (strtolower($fieldName) === 'id') {
                 $header[] = 'S/N';
+            } else if (strtolower($fieldName) === 'parent_package_id') {
+                $header[] = 'PARENT SKU';
             } else {
                 $header[] = strtoupper(str_replace('_', ' ', $fieldName));
             }
@@ -104,6 +144,9 @@ if (!empty($checkboxValues)) {
                         }
                     }
                     $value = implode(',', $productNames);
+                } else if ($key === 'parent_package_id') {
+                    $id = (int) $value;
+                    $value = isset($packageRelationLabelMap[$id]) ? $packageRelationLabelMap[$id] : '';
                 } else if ($key === 'create_by' || $key === 'update_by') {
                     $id = (int) $value;
                     $value = isset($userMap[$id]) ? $userMap[$id] : $value;
@@ -217,6 +260,8 @@ if (!$result) {
                                 <th>Brand</th>
                                 <th>Cost</th>
                                 <th>Agent Cost</th>
+                                <th>Parent SKU</th>
+                                <th>Child SKU</th>
                                 <th>Product Quantity</th>
                                 <th>Remark</th>
                             </tr>
@@ -276,6 +321,28 @@ if (!$result) {
                                         ?>
                                     </td>
                                     <td>
+                                        <?php
+                                        $parentPackageId = isset($row['parent_package_id']) ? (int) $row['parent_package_id'] : 0;
+                                        if ($parentPackageId > 0 && isset($packageRelationLabelMap[$parentPackageId])) {
+                                            echo '<span class="badge bg-light text-dark border me-1 mb-1">' . htmlspecialchars($packageRelationLabelMap[$parentPackageId], ENT_QUOTES, 'UTF-8') . '</span>';
+                                        } else {
+                                            echo '-';
+                                        }
+                                        ?>
+                                    </td>
+                                    <td>
+                                        <?php
+                                        $childPackageLabels = isset($packageChildMap[(int) $row['id']]) ? $packageChildMap[(int) $row['id']] : array();
+                                        if (!empty($childPackageLabels)) {
+                                            foreach ($childPackageLabels as $childPackageLabel) {
+                                                echo '<span class="badge bg-light text-dark border me-1 mb-1">' . htmlspecialchars((string) $childPackageLabel, ENT_QUOTES, 'UTF-8') . '</span>';
+                                            }
+                                        } else {
+                                            echo '-';
+                                        }
+                                        ?>
+                                    </td>
+                                    <td>
                                         <?= isset($row['product']) ? count(explode(",", $row['product'])) : '0' ?>
                                     </td>
                                     <td width="25%">
@@ -301,6 +368,8 @@ if (!$result) {
                                 <th>Brand</th>
                                 <th>Cost</th>
                                 <th>Agent Cost</th>
+                                <th>Parent SKU</th>
+                                <th>Child SKU</th>
                                 <th>Product Quantity</th>
                                 <th>Remark</th>
                             </tr>

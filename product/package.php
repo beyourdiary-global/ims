@@ -30,6 +30,64 @@ if (!function_exists('packageNormalizePlatformItemIdCsv')) {
     }
 }
 
+if (!function_exists('packageFindActivePackageByReference')) {
+    function packageFindActivePackageByReference($connect, $referenceValue)
+    {
+        $referenceValue = trim((string) $referenceValue);
+        if (!($connect instanceof mysqli) || $referenceValue === '') {
+            return array();
+        }
+
+        $safeReferenceValue = mysqli_real_escape_string($connect, $referenceValue);
+        $result = mysqli_query(
+            $connect,
+            "SELECT id, name, item_code, parent_package_id, status
+             FROM `" . PKG . "`
+             WHERE status = 'A' AND (name = '" . $safeReferenceValue . "' OR item_code = '" . $safeReferenceValue . "')
+             ORDER BY id DESC
+             LIMIT 1"
+        );
+
+        if (!$result || mysqli_num_rows($result) === 0) {
+            return array();
+        }
+
+        $row = mysqli_fetch_assoc($result);
+        return is_array($row) ? $row : array();
+    }
+}
+
+if (!function_exists('packageFormatRelationValue')) {
+    function packageFormatRelationValue($packageRow)
+    {
+        if (!is_array($packageRow)) {
+            return 'Empty Value';
+        }
+
+        $packageName = trim((string) (isset($packageRow['name']) ? $packageRow['name'] : ''));
+        $itemCode = trim((string) (isset($packageRow['item_code']) ? $packageRow['item_code'] : ''));
+        if ($packageName === '' && $itemCode === '') {
+            return 'Empty Value';
+        }
+
+        return $itemCode !== '' ? $itemCode : $packageName;
+    }
+}
+
+if (!function_exists('packageFormatRelationDisplayName')) {
+    function packageFormatRelationDisplayName($packageRow)
+    {
+        if (!is_array($packageRow)) {
+            return '';
+        }
+
+        $packageName = trim((string) (isset($packageRow['name']) ? $packageRow['name'] : ''));
+        $itemCode = trim((string) (isset($packageRow['item_code']) ? $packageRow['item_code'] : ''));
+
+        return $packageName !== '' ? $packageName : $itemCode;
+    }
+}
+
 //Current Page Action And Data ID
 $dataId = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
@@ -105,6 +163,10 @@ if (post('actionBtn')) {
             $item_description = postSpaceFilter('item_description'); // NEW
             $pkg_price = postSpaceFilter('price');
             $cur_unit = postSpaceFilter('cur_unit_hidden');
+            $parent_package_id = postSpaceFilter('parent_package_id');
+            $parent_package_name = postSpaceFilter('parent_package_name');
+            $parentPackageRow = array();
+            $parentPackageAuditValue = 'Empty Value';
             
             $brand = postSpaceFilter('brand_hidden');
             $brand_text = postSpaceFilter('brand'); 
@@ -139,6 +201,44 @@ if (post('actionBtn')) {
             } else if (!$brand_exists) {
                 $brand_err = "Brand does not exist! Please select a valid brand from the list.";
                 $error = 1;
+            }
+
+            if ($parent_package_id !== '' && ctype_digit((string) $parent_package_id)) {
+                $parentPackageRows = commonPackageLoadRowsByIds($connect, array((int) $parent_package_id), true);
+                if (isset($parentPackageRows[(int) $parent_package_id]) && strtoupper(trim((string) $parentPackageRows[(int) $parent_package_id]['status'])) === 'A') {
+                    $parentPackageRow = $parentPackageRows[(int) $parent_package_id];
+                }
+            }
+
+            if (empty($parentPackageRow) && $parent_package_name !== '') {
+                $parentPackageRow = packageFindActivePackageByReference($connect, $parent_package_name);
+            }
+
+            $parent_package_id = !empty($parentPackageRow) && isset($parentPackageRow['id']) ? (int) $parentPackageRow['id'] : 0;
+            if (!empty($parentPackageRow)) {
+                $parent_package_name = isset($parentPackageRow['name']) ? (string) $parentPackageRow['name'] : $parent_package_name;
+                $parentPackageAuditValue = packageFormatRelationValue($parentPackageRow);
+                $_POST['parent_package_id'] = (string) $parent_package_id;
+                $_POST['parent_package_name'] = $parent_package_name;
+            }
+
+            if ($parent_package_name !== '' || $parent_package_id > 0) {
+                if (empty($parentPackageRow)) {
+                    $parent_package_err = "Parent SKU package was not found or is not active.";
+                    $error = 1;
+                } else {
+                    $parentValidation = commonValidatePackageParentRelation($connect, (int) $dataId, $parent_package_id);
+                    if (empty($parentValidation['success'])) {
+                        $parent_package_err = isset($parentValidation['message']) ? (string) $parentValidation['message'] : "Invalid Parent SKU package.";
+                        $error = 1;
+                    } else if (!empty($parentValidation['parent_row'])) {
+                        $parentPackageRow = $parentValidation['parent_row'];
+                        $parentPackageAuditValue = packageFormatRelationValue($parentPackageRow);
+                        $parent_package_name = isset($parentPackageRow['name']) ? (string) $parentPackageRow['name'] : $parent_package_name;
+                        $_POST['parent_package_id'] = (string) $parent_package_id;
+                        $_POST['parent_package_name'] = $parent_package_name;
+                    }
+                }
             }
             
             if ($error == 1) {
@@ -217,6 +317,10 @@ if (post('actionBtn')) {
                         array_push($newvalarr, $prod_list);
                         array_push($datafield, 'product');
                     }
+                    if ($parent_package_id > 0) {
+                        array_push($newvalarr, $parentPackageAuditValue);
+                        array_push($datafield, 'parent sku');
+                    }
 
                     if ($barcode_slot_total) {
                         array_push($newvalarr, $barcode_slot_total);
@@ -239,10 +343,11 @@ if (post('actionBtn')) {
                     $safePkgPrice = mysqli_real_escape_string($connect, (string) $pkg_price);
                     $safeCurUnit = mysqli_real_escape_string($connect, (string) $cur_unit);
                     $safeProdList = mysqli_real_escape_string($connect, (string) $prod_list);
+                    $safeParentPackageValue = $parent_package_id > 0 ? (string) ((int) $parent_package_id) : 'NULL';
                     $safeBarcodeSlotTotal = mysqli_real_escape_string($connect, (string) $barcode_slot_total);
                     $safeDataRemark = mysqli_real_escape_string($connect, (string) $dataRemark);
 
-                    $query = "INSERT INTO " . $tblName . "(name,item_code,platform_item_id,item_description,brand,cost,cost_curr,agent_cost,price,currency_unit,product,barcode_slot_total,remark,create_by,create_date,create_time) VALUES ('$safeCurrentDataName','$safeItemCode','$safePlatformItemId','$safeItemDescription','$safeBrand','$safeCost', '$safeCostCurr','$safeAgentCost','$safePkgPrice','$safeCurUnit','$safeProdList','$safeBarcodeSlotTotal','$safeDataRemark','" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . "(name,item_code,platform_item_id,item_description,brand,cost,cost_curr,agent_cost,price,currency_unit,product,parent_package_id,barcode_slot_total,remark,create_by,create_date,create_time) VALUES ('$safeCurrentDataName','$safeItemCode','$safePlatformItemId','$safeItemDescription','$safeBrand','$safeCost', '$safeCostCurr','$safeAgentCost','$safePkgPrice','$safeCurUnit','$safeProdList'," . $safeParentPackageValue . ",'$safeBarcodeSlotTotal','$safeDataRemark','" . USER_ID . "',curdate(),curtime())";
                     $returnData = mysqli_query($connect, $query);
                     if ($returnData) {
                         $dataId = $connect->insert_id;
@@ -325,6 +430,17 @@ if (post('actionBtn')) {
                         array_push($datafield, 'product');
                     }
 
+                    $currentParentPackageId = isset($row['parent_package_id']) ? (int) $row['parent_package_id'] : 0;
+                    if ($currentParentPackageId !== (int) $parent_package_id) {
+                        $currentParentRows = $currentParentPackageId > 0 ? commonPackageLoadRowsByIds($connect, array($currentParentPackageId), true) : array();
+                        $currentParentAuditValue = ($currentParentPackageId > 0 && isset($currentParentRows[$currentParentPackageId]))
+                            ? packageFormatRelationValue($currentParentRows[$currentParentPackageId])
+                            : 'Empty Value';
+                        array_push($oldvalarr, $currentParentAuditValue);
+                        array_push($chgvalarr, $parent_package_id > 0 ? $parentPackageAuditValue : 'Empty Value');
+                        array_push($datafield, 'parent sku');
+                    }
+
                     if ($row['barcode_slot_total'] != $barcode_slot_total) {
                         array_push($oldvalarr, $row['barcode_slot_total']);
                         array_push($chgvalarr, $barcode_slot_total);
@@ -351,11 +467,12 @@ if (post('actionBtn')) {
                         $safePkgPrice = mysqli_real_escape_string($connect, (string) $pkg_price);
                         $safeCurUnit = mysqli_real_escape_string($connect, (string) $cur_unit);
                         $safeProdList = mysqli_real_escape_string($connect, (string) $prod_list);
+                        $safeParentPackageValue = $parent_package_id > 0 ? (string) ((int) $parent_package_id) : 'NULL';
                         $safeBarcodeSlotTotal = mysqli_real_escape_string($connect, (string) $barcode_slot_total);
                         $safeDataRemark = mysqli_real_escape_string($connect, (string) $dataRemark);
                         $safeDataId = (int) $dataId;
 
-                        $query = "UPDATE " . $tblName . " SET name ='$safeCurrentDataName', item_code='$safeItemCode', platform_item_id='$safePlatformItemId', item_description='$safeItemDescription', brand='$safeBrand',cost='$safeCost',cost_curr='$safeCostCurr',agent_cost='$safeAgentCost',price ='$safePkgPrice', currency_unit ='$safeCurUnit', product ='$safeProdList', barcode_slot_total ='$safeBarcodeSlotTotal', remark ='$safeDataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$safeDataId'";
+                        $query = "UPDATE " . $tblName . " SET name ='$safeCurrentDataName', item_code='$safeItemCode', platform_item_id='$safePlatformItemId', item_description='$safeItemDescription', brand='$safeBrand',cost='$safeCost',cost_curr='$safeCostCurr',agent_cost='$safeAgentCost',price ='$safePkgPrice', currency_unit ='$safeCurUnit', product ='$safeProdList', parent_package_id =" . $safeParentPackageValue . ", barcode_slot_total ='$safeBarcodeSlotTotal', remark ='$safeDataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$safeDataId'";
                         $returnData = mysqli_query($connect, $query);
                         if (!$returnData) {
                             $errorMsg = mysqli_error($connect);
@@ -413,6 +530,29 @@ if (isset($_SESSION['tempValConfirmBox'])) {
     unset($_SESSION['tempValConfirmBox']);
     echo $clearLocalStorage;
     echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
+}
+
+$parentPackageDisplayName = isset($_POST['parent_package_name']) ? trim((string) $_POST['parent_package_name']) : '';
+$parentPackageDisplayId = isset($_POST['parent_package_id']) ? trim((string) $_POST['parent_package_id']) : '';
+if ($parentPackageDisplayName === '' && isset($row['parent_package_id']) && (int) $row['parent_package_id'] > 0) {
+    $parentPackageRows = commonPackageLoadRowsByIds($connect, array((int) $row['parent_package_id']), true);
+    if (isset($parentPackageRows[(int) $row['parent_package_id']])) {
+        $parentPackageDisplayName = packageFormatRelationDisplayName($parentPackageRows[(int) $row['parent_package_id']]);
+        $parentPackageDisplayId = (string) ((int) $row['parent_package_id']);
+    }
+}
+
+$linkedChildPackages = array();
+if (!empty($dataId) && ctype_digit((string) $dataId)) {
+    $linkedChildResult = mysqli_query(
+        $connect,
+        "SELECT id, name, item_code FROM `" . PKG . "` WHERE status = 'A' AND parent_package_id = " . (int) $dataId . " ORDER BY name ASC, id ASC"
+    );
+    if ($linkedChildResult) {
+        while ($linkedChildRow = mysqli_fetch_assoc($linkedChildResult)) {
+            $linkedChildPackages[] = $linkedChildRow;
+        }
+    }
 }
 
 ?>
@@ -683,14 +823,33 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                         </div>
 
                     </div>
-                    <div class="col-12 col-md-4">
-                        <div class="form-group mb-3">
-                            <label class="form-label form_lbl" for="agent_cost">Agent Cost (RM)<span class="requireRed">*</span></label>
-                            <input class="form-control" type="number" name="agent_cost" id="agent_cost" step="0.01"
-                                value="<?php echo isset($_POST['agent_cost']) ? htmlspecialchars($_POST['agent_cost']) : ((isset($row['agent_cost'])) ? htmlspecialchars($row['agent_cost']) : ''); ?>"
-                                <?php if ($act == '') echo 'readonly' ?> required>
-                            <div id="err_msg">
-                                <span class="mt-n1"><?php if (isset($agent_cost_err)) echo $agent_cost_err; ?></span>
+                    <div class="row">
+                        <div class="col-12 col-md-4">
+                            <div class="form-group autocomplete mb-3">
+                                <label class="form-label form_lbl" for="parent_package_name">Parent SKU / Warehouse SKU</label>
+                                <input class="form-control" type="text" name="parent_package_name" id="parent_package_name"
+                                    value="<?php echo htmlspecialchars($parentPackageDisplayName, ENT_QUOTES, 'UTF-8'); ?>"
+                                    <?php if ($act == '') echo 'readonly'; ?> autocomplete="off">
+                                <input type="hidden" name="parent_package_id" id="parent_package_id"
+                                    value="<?php echo htmlspecialchars($parentPackageDisplayId, ENT_QUOTES, 'UTF-8'); ?>">
+                                <?php if (isset($parent_package_err)) { ?>
+                                    <div id="err_msg">
+                                        <span class="mt-n1"><?php echo htmlspecialchars($parent_package_err, ENT_QUOTES, 'UTF-8'); ?></span>
+                                    </div>
+                                <?php } ?>
+                                <small class="text-muted">Warehouse will use parent SKU package and product stock for stock-out.</small>
+                            </div>
+                        </div>
+
+                        <div class="col-12 col-md-4">
+                            <div class="form-group mb-3">
+                                <label class="form-label form_lbl" for="agent_cost">Agent Cost (RM)<span class="requireRed">*</span></label>
+                                <input class="form-control" type="number" name="agent_cost" id="agent_cost" step="0.01"
+                                    value="<?php echo isset($_POST['agent_cost']) ? htmlspecialchars($_POST['agent_cost']) : ((isset($row['agent_cost'])) ? htmlspecialchars($row['agent_cost']) : ''); ?>"
+                                    <?php if ($act == '') echo 'readonly' ?> required>
+                                <div id="err_msg">
+                                    <span class="mt-n1"><?php if (isset($agent_cost_err)) echo $agent_cost_err; ?></span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -939,6 +1098,18 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                         <textarea class="form-control" name="currentDataRemark" id="currentDataRemark" rows="3"
                             <?php if ($act == '') echo 'readonly' ?>><?php echo isset($_POST['currentDataRemark']) ? htmlspecialchars($_POST['currentDataRemark']) : (isset($row['remark']) ? htmlspecialchars($row['remark']) : ''); ?></textarea>
                     </div>
+                    <?php if (!empty($linkedChildPackages)) { ?>
+                        <div class="form-group mb-3">
+                            <label class="form-label">Linked Child SKUs</label>
+                            <div class="form-control" style="min-height: 38px; background-color: #f8f9fa;">
+                                <?php foreach ($linkedChildPackages as $linkedChildPackage) {
+                                    $linkedChildLabel = packageFormatRelationDisplayName($linkedChildPackage);
+                                ?>
+                                    <span class="badge bg-light text-dark border me-1 mb-1"><?php echo htmlspecialchars($linkedChildLabel, ENT_QUOTES, 'UTF-8'); ?></span>
+                                <?php } ?>
+                            </div>
+                        </div>
+                    <?php } ?>
                     <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
 
                     <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">

@@ -296,6 +296,23 @@ $(document).ready(function () {
       }
     });
   }
+  if (!$("#parent_package_name").attr("readonly")) {
+    $("#parent_package_name").keyup(function () {
+      var param = {
+        search: $(this).val(),
+        searchType: "name",
+        elementID: $(this).attr("id"),
+        hiddenElementID: "parent_package_id",
+        dbTable: "<?= PKG ?>",
+      };
+      searchInput(param, "<?= $SITEURL ?>");
+    });
+    $("#parent_package_name").change(function () {
+      if ($(this).val() == "") {
+        $("#parent_package_id").val("");
+      }
+    });
+  }
   if (!$("#cost_curr").attr("readonly")) {
     $("#cost_curr").keyup(function () {
       var param = {
