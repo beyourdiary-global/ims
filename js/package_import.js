@@ -103,6 +103,12 @@
       requiredMessage: "Cost Currency Unit field is required!",
       invalidMessage: "Cost currency not found in database.",
     },
+    parent_sku: {
+      names: [],
+      ids: [],
+      altValues: [],
+      invalidMessage: "Parent SKU package not found in database.",
+    },
     product_names: {
       names: [],
       ids: [],
@@ -119,7 +125,15 @@
     (meta.names || []).forEach(function (name) {
       byName[norm(name)] = true;
     });
-    return !!byName[norm(value)];
+    if (byName[norm(value)]) {
+      return true;
+    }
+
+    var byAltValue = {};
+    (meta.altValues || []).forEach(function (altValue) {
+      byAltValue[norm(altValue)] = true;
+    });
+    return !!byAltValue[norm(value)];
   }
 
   function multiValid(field, raw) {

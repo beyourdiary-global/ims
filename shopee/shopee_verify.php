@@ -202,6 +202,46 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['verify_id']))
     exit;
 }
 
+if (isset($_GET['complete_id'])) {
+    $orderId = intval($_GET['complete_id']);
+    $completeResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'C', array(
+        'actor_user_id' => USER_ID,
+        'actor_user_group_id' => USER_GROUP,
+        'source_page' => $pageTitle,
+        'remark' => 'Completed from verify order list.',
+    ));
+    $completeMessage = (string) (isset($completeResult['message']) ? $completeResult['message'] : 'Unable to complete order.');
+    renderNotificationScript($completeMessage, resolveNotificationType($completeMessage, 'info'), 'shopee_verify.php', 1200, true);
+    exit;
+}
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['move_to_pack_id'])) {
+    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
+        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', 'shopee_verify.php', 1200, true);
+        exit;
+    }
+
+    $orderId = intval($_POST['move_to_pack_id']);
+    $warehouseCustomerName = trim((string) postSpaceFilter('warehouse_customer_name'));
+    if ($warehouseCustomerName !== '') {
+        shopeeOmsRememberWarehouseDeliveryInfo('shopee', $orderId, array(
+            'customer_name' => $warehouseCustomerName,
+        ));
+    }
+    $moveToPackResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'TP', array(
+        'actor_user_id' => USER_ID,
+        'actor_user_group_id' => USER_GROUP,
+        'source_page' => $pageTitle,
+        'remark' => 'Moved to To Pack from verify order list.',
+        'action' => 'move_to_pack',
+        'platform' => 'shopee',
+    ));
+    $moveToPackMessage = (string) (isset($moveToPackResult['message']) ? $moveToPackResult['message'] : 'Unable to move order to To Pack.');
+    renderNotificationScript($moveToPackMessage, resolveNotificationType($moveToPackMessage, 'info'), 'shopee_verify.php', 1200, true);
+    exit;
+}
+
 shopeeOmsHandleMoveToWafcWithReceivedDatePost($connect, $finance_connect, array(
     'redirect_url' => 'shopee_verify.php',
     'source_page' => $pageTitle,
@@ -654,10 +694,29 @@ if ($result instanceof mysqli_result) {
                                 <?php renderViewEditButtonByPin("2", $redirectPage, $row, $accessActionKey, $act_2); ?>
                                 <?php renderDeleteButtonByPin($accessActionKey, $row['id'], $row['orderID'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage); ?> 
                                 <?php
+                                $statusCode = shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '');
+                                $canMoveToPackThisOrder = shopeeOmsHasTransitionPermission($connect, $statusCode, 'TP', USER_GROUP, $row, USER_ID);
+                                $canVerifyThisOrder = shopeeOmsHasTransitionPermission($connect, $statusCode, 'V', USER_GROUP, $row, USER_ID);
+                                $canCompleteThisOrder = shopeeOmsHasTransitionPermission($connect, $statusCode, 'C', USER_GROUP, $row, USER_ID);
                                 $estimatedDateRange = function_exists('shopeeOmsGetEstimatedReceivedDateRange')
                                     ? shopeeOmsGetEstimatedReceivedDateRange($row)
                                     : array('min_date' => $estimatedDateMin, 'max_date' => $estimatedDateMax);
                                 ?>
+                                <?php if ($statusCode === 'P' && $canMoveToPackThisOrder) { ?>
+                                 <form method="post" class="d-inline shopee-move-to-pack-form" data-order-id="<?= (int) $row['id'] ?>" onsubmit="return confirm('Move this order to To Pack?')">
+                                     <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
+                                     <input type="hidden" name="move_to_pack_id" value="<?= (int) $row['id'] ?>">
+                                     <input type="hidden" name="warehouse_customer_name" value="">
+                                     <button type="submit" class="btn btn-sm btn-rounded btn-info" title="Move to To Pack">
+                                         <i class="fas fa-box-open"></i>
+                                     </button>
+                                 </form>
+                                <?php } ?>
+                                <?php if ($statusCode === 'TP') { ?>
+                                 <a class="btn btn-sm btn-rounded btn-primary" href="<?= htmlspecialchars((string) shopeeOmsGetOrderSourceInfoUrl('shopee', (int) $row['id']), ENT_QUOTES, 'UTF-8') ?>" title="Open QR Info">
+                                     <i class="fa-solid fa-qrcode"></i>
+                                 </a>
+                                <?php } ?>
                                 <?php if (shouldShowEstimatedReceivedDateButton($row) && $canAssignEstimatedReceivedDate) { ?>
                                  <button
                                      type="button"
@@ -668,11 +727,6 @@ if ($result instanceof mysqli_result) {
                                      data-max-date="<?= htmlspecialchars((string) $estimatedDateRange['max_date'], ENT_QUOTES, 'UTF-8') ?>"
                                      title="Assign Estimate Received Date"><i class="fa-solid fa-calendar-days"></i></button>
                                 <?php } ?>
-                                <?php
-                                $statusCode = shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '');
-                                $canVerifyThisOrder = shopeeOmsHasTransitionPermission($connect, $statusCode, 'V', USER_GROUP, $row, USER_ID);
-                                ?>
-
                                 <?php if (in_array($statusCode, array('OC', 'WAFC'), true) && $canVerifyAction && $canVerifyThisOrder) { ?>
                                 <button
                                     type="button"
@@ -681,6 +735,9 @@ if ($result instanceof mysqli_result) {
                                     data-order-code="<?= htmlspecialchars((string) (isset($row['orderID']) ? $row['orderID'] : ''), ENT_QUOTES, 'UTF-8') ?>"
                                     data-existing-pdf-path="<?= htmlspecialchars((string) (isset($row['order_detail_pdf']) ? $row['order_detail_pdf'] : ''), ENT_QUOTES, 'UTF-8') ?>"
                                 >Verified</button>
+                                <?php } ?>
+                                <?php if ($statusCode === 'V' && $canCompleteThisOrder) { ?>
+                                 <a href="?complete_id=<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>" class="btn btn-sm btn-dark btn-verified" onclick="return confirm('Mark this order as complete?')">Complete</a>
                                 <?php } ?>
                                 <?php if ($statusCode === 'PR') { ?>
                                 <button
@@ -692,7 +749,7 @@ if ($result instanceof mysqli_result) {
                                      <i class="fas fa-forward"></i>
                                 </button>
                                 <?php } ?>
-                                <?php if (in_array($statusCode, array('SP', 'WAERD', 'WR', 'PR', 'WAFC', 'V', 'C'), true)) { ?>
+                                <?php if (in_array($statusCode, array('SP', 'WAERD', 'WR', 'PD', 'PR', 'WAFC', 'V', 'C'), true)) { ?>
                                  <form method="post" class="d-inline" onsubmit="return confirm('Mark this order as Return?')">
                                      <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
                                      <input type="hidden" name="return_id" value="<?= (int) $row['id'] ?>">
@@ -784,6 +841,34 @@ if ($result instanceof mysqli_result) {
     dropdownMenuDispFix();
     datatableAlignment('shopee_order_req_table');
     keepDataTableControlsVisible('shopee_order_req_table');
+
+    (function bindShopeeMoveToPackCustomerName() {
+        var moveForms = document.querySelectorAll('.shopee-move-to-pack-form');
+        if (!moveForms.length) {
+            return;
+        }
+
+        moveForms.forEach(function (form) {
+            var orderId = String(form.getAttribute('data-order-id') || '').trim();
+            var customerNameField = form.querySelector('input[name="warehouse_customer_name"]');
+            if (!orderId || !customerNameField || typeof window.localStorage === 'undefined') {
+                return;
+            }
+
+            try {
+                var rawData = window.localStorage.getItem('shopee_airbill_delivery_info_' + orderId);
+                if (!rawData) {
+                    return;
+                }
+
+                var parsedData = JSON.parse(rawData);
+                if (parsedData && typeof parsedData.customerName === 'string' && parsedData.customerName.trim() !== '') {
+                    customerNameField.value = parsedData.customerName.trim();
+                }
+            } catch (error) {
+            }
+        });
+    })();
 </script>
 <?php shopeeOmsRenderReceivedDateModalScript(); ?>
 <?php

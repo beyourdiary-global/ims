@@ -222,11 +222,52 @@ function insertTableEnsureOrderReportPins($cmsConn)
     }
 }
 
+function insertTableEnsureLuckyDrawPins($cmsConn)
+{
+    $pinGroupSql = "INSERT INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+        (159, 'Lucky Draw', '1,2,3,4,5,6', 'Lucky Draw admin management', '1', CURDATE(), CURTIME(), 'A')
+        ON DUPLICATE KEY UPDATE
+            `name` = VALUES(`name`),
+            `pins` = VALUES(`pins`),
+            `remark` = VALUES(`remark`),
+            `status` = 'A'";
+
+    if ($cmsConn->query($pinGroupSql)) {
+        echo "<p style='color:green;'><strong>Lucky Draw pin setup:</strong> Verified pin group 159 for Lucky Draw.</p>";
+    } else {
+        echo "<p style='color:red;'><strong>Lucky Draw pin setup:</strong> Failed creating pin group 159: " . htmlspecialchars($cmsConn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+    }
+
+    foreach (array(1, 2) as $groupId) {
+        $userGroupResult = $cmsConn->query("SELECT `pins` FROM `user_group` WHERE `id` = " . (int) $groupId . " LIMIT 1");
+        if (!$userGroupResult || $userGroupResult->num_rows === 0) {
+            echo "<p style='color:orange;'>Lucky Draw pin setup skipped `user_group` id " . (int) $groupId . " because the group was not found.</p>";
+            continue;
+        }
+
+        $userGroupRow = $userGroupResult->fetch_assoc();
+        $currentPins = isset($userGroupRow['pins']) ? (string) $userGroupRow['pins'] : '';
+        $updatedPins = addAccessToPinBlock($currentPins, 159, array(1, 2, 3, 4, 5, 6));
+
+        if ($updatedPins !== $currentPins) {
+            $safePins = $cmsConn->real_escape_string($updatedPins);
+            if ($cmsConn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $groupId)) {
+                echo "<p style='color:green;'>Lucky Draw pin setup granted access for pin group 159 to `user_group` id " . (int) $groupId . ".</p>";
+            } else {
+                echo "<p style='color:red;'>Lucky Draw pin setup failed updating `user_group` id " . (int) $groupId . ": " . htmlspecialchars($cmsConn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+            }
+        } else {
+            echo "<p style='color:green;'>Lucky Draw pin setup verified access already exists for `user_group` id " . (int) $groupId . ".</p>";
+        }
+    }
+}
+
 $cmsConn = new mysqli($dbhost, $dbUser, $dbpwd, $db_cms, $dbport);
 if ($cmsConn->connect_error) {
     echo "<p style='color:red;'><strong>Order Report pin setup:</strong> Failed connecting to CMS database `" . htmlspecialchars($db_cms, ENT_QUOTES, 'UTF-8') . "`: " . htmlspecialchars($cmsConn->connect_error, ENT_QUOTES, 'UTF-8') . "</p>";
 } else {
     insertTableEnsureOrderReportPins($cmsConn);
+    insertTableEnsureLuckyDrawPins($cmsConn);
 }
 
 function indexExists($conn, $dbName, $tblName, $indexName)
@@ -1232,6 +1273,90 @@ function migrationEnsureIndex($conn, $dbName, $tblName, $indexName, $alterSql, $
         } else {
             echo "<p style='color:red;'>Failed altering `" . $tblName . "` for index `" . $indexName . "`: " . $conn->error . "</p>";
         }
+    }
+}
+
+function migrationGetTableEngine($conn, $dbName, $tblName)
+{
+    $safeDb = $conn->real_escape_string($dbName);
+    $safeTable = $conn->real_escape_string($tblName);
+    $sql = "SELECT ENGINE FROM information_schema.tables WHERE table_schema='" . $safeDb . "' AND table_name='" . $safeTable . "' LIMIT 1";
+    $result = $conn->query($sql);
+
+    if (!$result || $result->num_rows === 0) {
+        return '';
+    }
+
+    $row = $result->fetch_assoc();
+    return isset($row['ENGINE']) ? strtoupper((string) $row['ENGINE']) : '';
+}
+
+function migrationGetTableRowCount($conn, $dbName, $tblName)
+{
+    if (!migrationTableExists($conn, $dbName, $tblName)) {
+        return 0;
+    }
+
+    $sql = "SELECT COUNT(*) AS total_count FROM `" . $dbName . "`.`" . $tblName . "`";
+    $result = $conn->query($sql);
+    if ($result && ($row = $result->fetch_assoc())) {
+        return isset($row['total_count']) ? (int) $row['total_count'] : 0;
+    }
+
+    return 0;
+}
+
+function migrationFlagEnabled($value)
+{
+    $value = strtolower(trim((string) $value));
+    return in_array($value, array('1', 'true', 'yes', 'y', 'on'), true);
+}
+
+function migrationEnsureTableEngineInnoDb($conn, $dbName, $tblName, $options = array())
+{
+    $options = is_array($options) ? $options : array();
+    $allowConvert = !empty($options['allow_convert']);
+    $requireFlag = !empty($options['require_flag']);
+    $flagName = isset($options['flag_name']) ? trim((string) $options['flag_name']) : '';
+    $warningLabel = isset($options['warning_label']) ? trim((string) $options['warning_label']) : $tblName;
+
+    if (!migrationTableExists($conn, $dbName, $tblName)) {
+        echo "<p style='color:orange;'>Skipped ENGINE check for `" . $tblName . "` because the table does not exist yet.</p>";
+        return;
+    }
+
+    $engine = migrationGetTableEngine($conn, $dbName, $tblName);
+    if ($engine === 'INNODB') {
+        echo "<p style='color:green;'>Verified `" . $tblName . "` ENGINE=InnoDB.</p>";
+        return;
+    }
+
+    if (!$allowConvert) {
+        echo "<p style='color:orange;'>`" . $tblName . "` is currently `" . htmlspecialchars($engine !== '' ? $engine : 'UNKNOWN', ENT_QUOTES, 'UTF-8') . "`. Manual InnoDB conversion is still required for Lucky Draw transactions.</p>";
+        return;
+    }
+
+    if ($requireFlag) {
+        $flagValue = '';
+        if ($flagName !== '') {
+            if (isset($_GET[$flagName])) {
+                $flagValue = $_GET[$flagName];
+            } else if (isset($_POST[$flagName])) {
+                $flagValue = $_POST[$flagName];
+            }
+        }
+
+        if (!migrationFlagEnabled($flagValue)) {
+            $rowCount = migrationGetTableRowCount($conn, $dbName, $tblName);
+            echo "<p style='color:orange;'>" . htmlspecialchars($warningLabel, ENT_QUOTES, 'UTF-8') . " remains `" . htmlspecialchars($engine !== '' ? $engine : 'UNKNOWN', ENT_QUOTES, 'UTF-8') . "` with " . $rowCount . " row(s). To convert intentionally, rerun insert_table.php with `" . htmlspecialchars($flagName, ENT_QUOTES, 'UTF-8') . "=1` after live verification.</p>";
+            return;
+        }
+    }
+
+    if ($conn->query("ALTER TABLE `" . $dbName . "`.`" . $tblName . "` ENGINE=InnoDB")) {
+        echo "<p style='color:green;'>Verified `" . $tblName . "` converted to ENGINE=InnoDB.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed converting `" . $tblName . "` to InnoDB: " . $conn->error . "</p>";
     }
 }
 
@@ -2261,7 +2386,7 @@ if ($conn->select_db($db_cms)) {
         `project_id` INT DEFAULT NULL,
         `name` VARCHAR(150) NOT NULL,
         `color` VARCHAR(20) NOT NULL DEFAULT '#dfe1e6',
-        `sort_order` INT NOT NULL DEFAULT 0,
+        `is_enabled` CHAR(1) NOT NULL DEFAULT 'Y',
         `remark` VARCHAR(255) DEFAULT NULL,
         `create_by` VARCHAR(30) DEFAULT NULL,
         `create_date` DATE DEFAULT NULL,
@@ -2424,7 +2549,7 @@ if ($conn->select_db($db_cms)) {
         `amendement_time` TIME DEFAULT NULL,
         `second_amendement_date` DATE DEFAULT NULL,
         `second_amendement_time` TIME DEFAULT NULL,
-        `sort_order` INT NOT NULL DEFAULT 0,
+        `is_enabled` CHAR(1) NOT NULL DEFAULT 'Y',
         `remark` TEXT DEFAULT NULL,
         `create_by` VARCHAR(30) DEFAULT NULL,
         `create_date` DATE DEFAULT NULL,
@@ -2452,7 +2577,7 @@ if ($conn->select_db($db_cms)) {
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `name` VARCHAR(120) NOT NULL,
         `color` VARCHAR(7) NOT NULL DEFAULT '#DCE8FF',
-        `sort_order` INT NOT NULL DEFAULT 0,
+        `is_enabled` CHAR(1) NOT NULL DEFAULT 'Y',
         `remark` VARCHAR(255) DEFAULT NULL,
         `create_by` VARCHAR(30) DEFAULT NULL,
         `create_date` DATE DEFAULT NULL,
@@ -2484,7 +2609,7 @@ if ($conn->select_db($db_cms)) {
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `name` VARCHAR(120) NOT NULL,
         `color` VARCHAR(7) NOT NULL DEFAULT '#DCE8FF',
-        `sort_order` INT NOT NULL DEFAULT 0,
+        `is_enabled` CHAR(1) NOT NULL DEFAULT 'Y',
         `remark` VARCHAR(255) DEFAULT NULL,
         `create_by` VARCHAR(30) DEFAULT NULL,
         `create_date` DATE DEFAULT NULL,
@@ -2882,7 +3007,7 @@ if ($conn->select_db($db_cms)) {
         `project_id` INT DEFAULT NULL,
         `user_id` INT NOT NULL,
         `column_key` VARCHAR(120) NOT NULL,
-        `sort_order` INT NOT NULL DEFAULT 0,
+        `is_enabled` CHAR(1) NOT NULL DEFAULT 'Y',
         `create_by` VARCHAR(30) DEFAULT NULL,
         `create_date` DATE DEFAULT NULL,
         `create_time` TIME DEFAULT NULL,
@@ -3964,12 +4089,150 @@ if ($conn->select_db($db_fin)) {
     migrationEnsureIndex($conn, $db_fin, WEB_ORDER_REQ, 'idx_web_order_code', "ALTER TABLE `" . WEB_ORDER_REQ . "` ADD INDEX `idx_web_order_code` (`order_id`)", "Verified `" . WEB_ORDER_REQ . "` order code index.");
     migrationEnsureIndex($conn, $db_fin, WEB_ORDER_REQ, 'idx_web_order_airbill', "ALTER TABLE `" . WEB_ORDER_REQ . "` ADD INDEX `idx_web_order_airbill` (`airbill_no`)", "Verified `" . WEB_ORDER_REQ . "` airbill index.");
 
+    $createLuckyDrawPrizeSql = "CREATE TABLE IF NOT EXISTS `" . $db_cms . "`.`" . LUCKY_DRAW_PRIZE . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `prize_name` VARCHAR(190) NOT NULL,
+        `prize_type` VARCHAR(30) NOT NULL DEFAULT 'voucher',
+        `voucher_code` VARCHAR(255) DEFAULT NULL,
+        `prize_image` VARCHAR(255) DEFAULT NULL,
+        `weight` DECIMAL(12,4) NOT NULL DEFAULT 1.0000,
+        `total_stock` INT NOT NULL DEFAULT 0,
+        `reserved_stock` INT NOT NULL DEFAULT 0,
+        `assigned_stock` INT NOT NULL DEFAULT 0,
+        `display_order` INT NOT NULL DEFAULT 0,
+        `is_enabled` CHAR(1) NOT NULL DEFAULT 'Y',
+        `label_color` CHAR(7) DEFAULT NULL,
+        `package_id` INT DEFAULT NULL,
+        `country_id` INT DEFAULT NULL,
+        `brand_id` INT DEFAULT NULL,
+        `series_id` INT DEFAULT NULL,
+        `fb_page_id` INT DEFAULT NULL,
+        `channel_id` INT DEFAULT NULL,
+        `pay_method_id` INT DEFAULT NULL,
+        `stock_out_warehouse_id` INT DEFAULT NULL,
+        `sales_pic_user_id` INT DEFAULT NULL,
+        `price` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        `remark` TEXT DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_lucky_draw_prize_enabled` (`is_enabled`, `status`),
+        KEY `idx_lucky_draw_prize_label_color` (`label_color`, `status`),
+        KEY `idx_lucky_draw_prize_package` (`package_id`, `stock_out_warehouse_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    if ($conn->query($createLuckyDrawPrizeSql)) {
+        echo "<p style='color:green;'>Verified table `" . LUCKY_DRAW_PRIZE . "` for Lucky Draw prizes.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . LUCKY_DRAW_PRIZE . "`: " . $conn->error . "</p>";
+    }
+
+    migrationEnsureColumn($conn, $db_cms, LUCKY_DRAW_PRIZE, 'voucher_code', "ALTER TABLE `" . LUCKY_DRAW_PRIZE . "` ADD COLUMN `voucher_code` VARCHAR(255) DEFAULT NULL AFTER `prize_type`", "Verified `" . LUCKY_DRAW_PRIZE . "` includes `voucher_code`.");
+
+    $createLuckyDrawLogSql = "CREATE TABLE IF NOT EXISTS `" . $db_cms . "`.`" . LUCKY_DRAW_DRAW_LOG . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `member_id_hmac` CHAR(64) NOT NULL,
+        `member_display_name` VARCHAR(190) DEFAULT NULL,
+        `birthday_yymmdd` CHAR(6) DEFAULT NULL,
+        `ip_hmac` CHAR(64) DEFAULT NULL,
+        `prize_id` INT NOT NULL,
+        `prize_name_snapshot` VARCHAR(255) DEFAULT NULL,
+        `prize_type_snapshot` VARCHAR(30) DEFAULT NULL,
+        `facebook_order_request_id` INT DEFAULT NULL,
+        `redeem_reference` VARCHAR(60) DEFAULT NULL,
+        `draw_state` VARCHAR(30) NOT NULL DEFAULT 'won',
+        `claim_state` VARCHAR(30) NOT NULL DEFAULT 'awaiting_claim',
+        `email_state` VARCHAR(30) NOT NULL DEFAULT 'awaiting_claim',
+        `claim_token_hash` CHAR(64) DEFAULT NULL,
+        `claim_email` VARCHAR(190) DEFAULT NULL,
+        `reservation_expires_at` DATETIME DEFAULT NULL,
+        `email_locked_at` DATETIME DEFAULT NULL,
+        `email_lock_token` VARCHAR(64) DEFAULT NULL,
+        `sent_at` DATETIME DEFAULT NULL,
+        `retry_count` INT NOT NULL DEFAULT 0,
+        `failure_message` VARCHAR(255) DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        UNIQUE KEY `uniq_lucky_draw_member` (`member_id_hmac`),
+        KEY `idx_lucky_draw_claim_token` (`claim_token_hash`, `status`),
+        KEY `idx_lucky_draw_prize_state` (`claim_state`, `email_state`, `status`),
+        KEY `idx_lucky_draw_reservation_expiry` (`reservation_expires_at`, `status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    if ($conn->query($createLuckyDrawLogSql)) {
+        echo "<p style='color:green;'>Verified table `" . LUCKY_DRAW_DRAW_LOG . "` for Lucky Draw draw logs.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . LUCKY_DRAW_DRAW_LOG . "`: " . $conn->error . "</p>";
+    }
+
+    $createLuckyDrawVirtualWinnerSql = "CREATE TABLE IF NOT EXISTS `" . $db_cms . "`.`" . LUCKY_DRAW_VIRTUAL_WINNER . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `display_name` VARCHAR(190) DEFAULT NULL,
+        `display_prize` VARCHAR(190) DEFAULT NULL,
+        `is_enabled` CHAR(1) NOT NULL DEFAULT 'Y',
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_lucky_draw_virtual_board` (`is_enabled`, `status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    if ($conn->query($createLuckyDrawVirtualWinnerSql)) {
+        echo "<p style='color:green;'>Verified table `" . LUCKY_DRAW_VIRTUAL_WINNER . "` for Lucky Draw virtual board.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . LUCKY_DRAW_VIRTUAL_WINNER . "`: " . $conn->error . "</p>";
+    }
+    migrationEnsureColumn($conn, $db_cms, LUCKY_DRAW_VIRTUAL_WINNER, 'is_enabled', "ALTER TABLE `" . LUCKY_DRAW_VIRTUAL_WINNER . "` ADD COLUMN `is_enabled` CHAR(1) NOT NULL DEFAULT 'Y' AFTER `display_prize`", "Verified `" . LUCKY_DRAW_VIRTUAL_WINNER . "` includes `is_enabled`.");
+    migrationEnsureIndex($conn, $db_cms, LUCKY_DRAW_VIRTUAL_WINNER, 'idx_lucky_draw_virtual_board', "ALTER TABLE `" . LUCKY_DRAW_VIRTUAL_WINNER . "` ADD INDEX `idx_lucky_draw_virtual_board` (`is_enabled`, `status`)", "Verified `" . LUCKY_DRAW_VIRTUAL_WINNER . "` enabled/status index.");
+
+    $createLuckyDrawRequestLogSql = "CREATE TABLE IF NOT EXISTS `" . $db_cms . "`.`" . LUCKY_DRAW_REQUEST_LOG . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `request_type` VARCHAR(30) DEFAULT NULL,
+        `member_id_hmac` CHAR(64) DEFAULT NULL,
+        `ip_hmac` CHAR(64) DEFAULT NULL,
+        `request_state` VARCHAR(30) DEFAULT NULL,
+        `created_at` DATETIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_lucky_draw_request_window` (`request_type`, `created_at`, `status`),
+        KEY `idx_lucky_draw_request_member` (`member_id_hmac`, `created_at`),
+        KEY `idx_lucky_draw_request_ip` (`ip_hmac`, `created_at`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    if ($conn->query($createLuckyDrawRequestLogSql)) {
+        echo "<p style='color:green;'>Verified table `" . LUCKY_DRAW_REQUEST_LOG . "` for Lucky Draw request logs.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . LUCKY_DRAW_REQUEST_LOG . "`: " . $conn->error . "</p>";
+    }
+    migrationEnsureColumn($conn, $db_fin, FB_ORDER_REQ, 'lucky_draw_log_id', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD COLUMN `lucky_draw_log_id` INT DEFAULT NULL AFTER `airbill_attachment`", "Verified `" . FB_ORDER_REQ . "` includes `lucky_draw_log_id`.");
+    migrationEnsureColumn($conn, $db_fin, FB_ORDER_REQ, 'redeem_source', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD COLUMN `redeem_source` VARCHAR(60) DEFAULT NULL AFTER `lucky_draw_log_id`", "Verified `" . FB_ORDER_REQ . "` includes `redeem_source`.");
+    migrationEnsureColumn($conn, $db_fin, FB_ORDER_REQ, 'redeem_reference', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD COLUMN `redeem_reference` VARCHAR(80) DEFAULT NULL AFTER `redeem_source`", "Verified `" . FB_ORDER_REQ . "` includes `redeem_reference`.");
+    migrationEnsureColumn($conn, $db_fin, FB_ORDER_REQ, 'claim_email', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD COLUMN `claim_email` VARCHAR(190) DEFAULT NULL AFTER `redeem_reference`", "Verified `" . FB_ORDER_REQ . "` includes `claim_email`.");
+    migrationEnsureIndex($conn, $db_fin, FB_ORDER_REQ, 'uniq_fb_order_lucky_draw_log_id', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD UNIQUE KEY `uniq_fb_order_lucky_draw_log_id` (`lucky_draw_log_id`)", "Verified `" . FB_ORDER_REQ . "` duplicate Lucky Draw order protection.");
+    migrationEnsureIndex($conn, $db_fin, FB_ORDER_REQ, 'idx_fb_order_redeem_reference', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD INDEX `idx_fb_order_redeem_reference` (`redeem_source`, `redeem_reference`)", "Verified `" . FB_ORDER_REQ . "` redeem reference index.");
+
+    migrationEnsureTableEngineInnoDb($conn, $db_fin, FB_ORDER_REQ, array(
+        'allow_convert' => true,
+        'require_flag' => true,
+        'flag_name' => 'lucky_draw_fb_order_innodb',
+        'warning_label' => 'facebook_order_request',
+    ));
+
 } else {
     echo "<p style='color:red;'>Failed selecting finance database for OMS migration.</p>";
 }
 
 if ($conn->select_db($db_cms)) {
     migrationEnsureColumn($conn, $db_cms, 'package', 'platform_item_id', "ALTER TABLE `package` ADD COLUMN `platform_item_id` TEXT DEFAULT NULL AFTER `item_code`", "Verified `package` includes `platform_item_id`.");
+    migrationEnsureColumn($conn, $db_cms, 'package', 'parent_package_id', "ALTER TABLE `package` ADD COLUMN `parent_package_id` INT DEFAULT NULL AFTER `product`", "Verified `package` includes `parent_package_id`.");
+    migrationEnsureIndex($conn, $db_cms, 'package', 'idx_package_parent_package_id', "ALTER TABLE `package` ADD INDEX `idx_package_parent_package_id` (`parent_package_id`)", "Verified `package` parent SKU lookup index.");
     migrationEnsureColumn($conn, $db_cms, LAZADA_ORDER_REQ, 'airbill_no', "ALTER TABLE `" . LAZADA_ORDER_REQ . "` ADD COLUMN `airbill_no` VARCHAR(150) DEFAULT NULL AFTER `order_status`", "Verified `" . LAZADA_ORDER_REQ . "` includes `airbill_no`.");
     migrationEnsureColumn($conn, $db_cms, LAZADA_ORDER_REQ, 'airbill_attachment', "ALTER TABLE `" . LAZADA_ORDER_REQ . "` ADD COLUMN `airbill_attachment` TEXT DEFAULT NULL AFTER `airbill_no`", "Verified `" . LAZADA_ORDER_REQ . "` includes `airbill_attachment`.");
     migrationEnsureColumn($conn, $db_cms, LAZADA_ORDER_REQ, 'stock_out_warehouse_id', "ALTER TABLE `" . LAZADA_ORDER_REQ . "` ADD COLUMN `stock_out_warehouse_id` INT DEFAULT NULL AFTER `airbill_attachment`", "Verified `" . LAZADA_ORDER_REQ . "` includes `stock_out_warehouse_id`.");

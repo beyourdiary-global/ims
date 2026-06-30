@@ -419,7 +419,9 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
                             <h4>Warehouse Package</h4>
                             <div><span class="k">Package:</span></div>
                             <div><span class="v"><?php
-                                $omsPackageSummaryRows = isset($omsSummary['package_summary_rows']) && is_array($omsSummary['package_summary_rows']) ? $omsSummary['package_summary_rows'] : array();
+                                $omsPackageSummaryRows = isset($omsSummary['warehouse_package_summary_rows']) && is_array($omsSummary['warehouse_package_summary_rows']) && !empty($omsSummary['warehouse_package_summary_rows'])
+                                    ? $omsSummary['warehouse_package_summary_rows']
+                                    : (isset($omsSummary['package_summary_rows']) && is_array($omsSummary['package_summary_rows']) ? $omsSummary['package_summary_rows'] : array());
                                 if (!empty($omsPackageSummaryRows)) {
                                     $omsPackageParts = array();
                                     foreach ($omsPackageSummaryRows as $omsPackageIndex => $omsPackageRow) {
@@ -437,7 +439,8 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
                                     }
                                     echo implode('<br>', $omsPackageParts);
                                 } else {
-                                    echo htmlspecialchars(!empty($omsSummary['bundle_name']) ? $omsSummary['bundle_name'] : '-', ENT_QUOTES, 'UTF-8');
+                                    $omsWarehouseBundleName = !empty($omsSummary['warehouse_bundle_name']) ? (string) $omsSummary['warehouse_bundle_name'] : '';
+                                    echo htmlspecialchars($omsWarehouseBundleName !== '' ? $omsWarehouseBundleName : (!empty($omsSummary['bundle_name']) ? $omsSummary['bundle_name'] : '-'), ENT_QUOTES, 'UTF-8');
                                 }
                             ?></span></div>
                             <div><span class="k">Products:</span> <span class="v"><?php
