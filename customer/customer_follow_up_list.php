@@ -18,12 +18,16 @@ $disablePinGroupPageTitleSync = true;
 include_once '../include/connection.php';
 include_once '../include/common.php';
 include_once '../include/common_variable.php';
-include_once '../checkCurrentPagePin.php';
 include_once ROOT . '/include/customer_follow_up_common.php';
 
 if (!$customerFollowUpBootstrapIsAjax) {
+    if (ob_get_length() > 0) {
+        ob_clean();
+    }
     include_once '../menuHeader.php';
 }
+
+include_once '../checkCurrentPagePin.php';
 
 if (!function_exists('customerFollowUpPageGetAllowedPinIds')) {
     function customerFollowUpPageGetAllowedPinIds($connect, $pinGroupId)
@@ -131,9 +135,16 @@ if (!function_exists('customerFollowUpPageFinishResponse')) {
         $success = !empty($result['success']);
         $type = $success ? 'success' : 'danger';
         $message = isset($result['message']) ? (string) $result['message'] : 'Action is invalid.';
+        $extra = array();
+        if (isset($result['field_errors']) && is_array($result['field_errors'])) {
+            $extra['field_errors'] = $result['field_errors'];
+            if (!$success && !empty($result['field_errors'])) {
+                $message = '';
+            }
+        }
 
         if (customerFollowUpPageIsAjaxRequest()) {
-            customerFollowUpPageJsonResponse($type, $message);
+            customerFollowUpPageJsonResponse($type, $message, $extra);
         }
 
         customerFollowUpPageFlashSet($type, $message);
@@ -333,6 +344,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 'message_shortcut_id' => postSpaceFilter('message_shortcut_id'),
                 'next_follow_up_date' => postSpaceFilter('next_follow_up_date'),
                 'contact_no' => postSpaceFilter('contact_no'),
+                'submit_mode' => postSpaceFilter('submit_mode'),
+                'appeal_tag_ids' => isset($_POST['appeal_tag_ids']) && is_array($_POST['appeal_tag_ids']) ? $_POST['appeal_tag_ids'] : array(),
+                'appeal_new_tag_name' => postSpaceFilter('appeal_new_tag_name'),
+                'appeal_user_record_log' => post('appeal_user_record_log'),
             ), isset($_FILES['attachment']) ? $_FILES['attachment'] : array(), USER_ID, USER_GROUP);
             break;
 
@@ -363,8 +378,16 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $result = customerFollowUpCompleteCurrentRound($connect, $followUpId, USER_ID, USER_GROUP);
             break;
 
+        case 'reschedule_first_round_date':
+            $result = customerFollowUpRescheduleFirstRoundDate($connect, $followUpId, postSpaceFilter('rescheduled_next_follow_up_date'), USER_ID, USER_GROUP);
+            break;
+
         case 'request_postponement':
             $result = customerFollowUpRequestPostponement($connect, $followUpId, postSpaceFilter('postpone_reason'), postSpaceFilter('requested_next_follow_up_date'), USER_ID, USER_GROUP);
+            break;
+
+        case 'submit_missing_next_follow_up_date':
+            $result = customerFollowUpSubmitMissingNextFollowUpDate($connect, $followUpId, postSpaceFilter('submitted_missing_next_follow_up_date'), USER_ID, USER_GROUP);
             break;
 
         case 'approve_postponement':
@@ -384,7 +407,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             break;
 
         case 'save_delay_reason':
-            $result = customerFollowUpSaveDelayReason($connect, $followUpId, postSpaceFilter('delay_reason'), USER_ID, USER_GROUP);
+            $result = customerFollowUpSaveDelayReason($connect, $followUpId, postSpaceFilter('delay_reason'), USER_ID, USER_GROUP, postSpaceFilter('delay_next_follow_up_date'));
             break;
     }
 
@@ -402,6 +425,9 @@ foreach ($messageShortcutOptions as $shortcutRow) {
         $messageShortcutMap[$shortcutId] = $shortcutRow;
     }
 }
+$customerTagOptions = function_exists('customerTagGetActiveTagOptions')
+    ? (array) customerTagGetActiveTagOptions($connect)
+    : array();
 
 $assignedUsers = array();
 $assignedUserLabelsById = array();
@@ -528,7 +554,7 @@ if ($listResult) {
 
 $userMetaMap = customerFollowUpGetUserMetaMap($connect, $userIds);
 $actionLogMap = array();
-if ($canViewLogsPermission) {
+if (!empty($rows)) {
     foreach ($rows as $row) {
         $followUpId = isset($row['id']) ? (int) $row['id'] : 0;
         if ($followUpId > 0 && !isset($actionLogMap[$followUpId])) {
@@ -564,11 +590,6 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
         : array();
 }
 ?>
-<!DOCTYPE html>
-<html>
-
-<head>
-    <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
     <style>
         .customer-follow-up-page .btn {
             padding: 0.2rem 0.5rem;
@@ -898,6 +919,31 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
             display: block;
         }
 
+        .customer-follow-up-checkbox-list {
+            display: grid;
+            gap: 0.55rem;
+            max-height: 180px;
+            overflow-y: auto;
+            padding: 0.85rem 1rem;
+            border: 1px solid #dcdfe5;
+            border-radius: 0.5rem;
+            background-color: #fff;
+        }
+
+        .customer-follow-up-checkbox-item {
+            display: flex;
+            align-items: center;
+            gap: 0.55rem;
+            margin: 0;
+            font-weight: 400;
+            cursor: pointer;
+        }
+
+        .customer-follow-up-checkbox-item input[type="checkbox"] {
+            margin-top: 0;
+            flex: 0 0 auto;
+        }
+
         .customer-follow-up-page .filter-check-wrap {
             display: flex;
             align-items: center;
@@ -948,13 +994,7 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
         }
 
 
-
     </style>
-</head>
-
-
-<body class="customer-follow-up-page">
-    
 
     <div class="page-load-cover customer-follow-up-page">
         <div class="container-fluid d-flex justify-content-center mt-3">
@@ -1192,6 +1232,10 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                                             $postponeReason = trim((string) (isset($row['postpone_reason']) ? $row['postpone_reason'] : ''));
                                             $postponeRejectReason = trim((string) (isset($row['postpone_reject_reason']) ? $row['postpone_reject_reason'] : ''));
                                             $logRows = isset($actionLogMap[$followUpId]) ? $actionLogMap[$followUpId] : array();
+                                            $latestAppealLog = $roundId > 0 ? customerFollowUpFindLatestRoundActionLog($logRows, $roundId, 'resubmit_rejected_follow_up') : array();
+                                            $latestAppealPayload = isset($latestAppealLog['new_value_decoded']) && is_array($latestAppealLog['new_value_decoded'])
+                                                ? $latestAppealLog['new_value_decoded']
+                                                : array();
                                             $rowPlatform = customerFollowUpNormalizePlatform(isset($row['platform']) ? $row['platform'] : '');
                                             $rowCustomerId = isset($row['customer_id']) ? (int) $row['customer_id'] : 0;
                                             $customerLabelMeta = isset($customerLabelMapByPlatform[$rowPlatform][$rowCustomerId]) ? $customerLabelMapByPlatform[$rowPlatform][$rowCustomerId] : array();
@@ -1200,14 +1244,56 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                                             $customerDetailUrl = customerFollowUpPageBuildCustomerDetailUrl($connect, isset($finance_connect) ? $finance_connect : null, $rowPlatform, $rowCustomerId);
                                             $orderDisplayValue = (string) (isset($row['order_no']) && $row['order_no'] !== '' ? $row['order_no'] : $row['order_id']);
                                             $customerUsername = (string) (isset($row['customer_username']) ? $row['customer_username'] : '');
+                                            $appealAttachmentPath = trim((string) (isset($latestAppealPayload['attachment_path']) ? $latestAppealPayload['attachment_path'] : (isset($row['attachment']) ? $row['attachment'] : '')));
+                                            $appealAttachmentUrl = customerFollowUpBuildAttachmentUrl($appealAttachmentPath);
+                                            $appealMessageShortcutId = isset($latestAppealPayload['message_shortcut_id']) ? (int) $latestAppealPayload['message_shortcut_id'] : (isset($row['message_shortcut_id']) ? (int) $row['message_shortcut_id'] : 0);
+                                            $appealNextFollowUpDate = trim((string) (isset($latestAppealPayload['next_follow_up_date']) ? $latestAppealPayload['next_follow_up_date'] : $displayNextFollowUpDate));
+                                            $appealContactNo = trim((string) (isset($latestAppealPayload['contact_no']) ? $latestAppealPayload['contact_no'] : $effectiveContactNo));
+                                            $appealRejectReason = trim((string) (isset($latestAppealPayload['reject_reason']) ? $latestAppealPayload['reject_reason'] : (isset($row['reject_reason']) ? $row['reject_reason'] : '')));
+                                            $appealExistingTagItems = array();
+                                            if (isset($latestAppealPayload['appeal_existing_tag_ids']) && is_array($latestAppealPayload['appeal_existing_tag_ids'])) {
+                                                $appealExistingTagLabels = isset($latestAppealPayload['appeal_existing_tag_labels']) && is_array($latestAppealPayload['appeal_existing_tag_labels'])
+                                                    ? array_values($latestAppealPayload['appeal_existing_tag_labels'])
+                                                    : array();
+                                                foreach (array_values($latestAppealPayload['appeal_existing_tag_ids']) as $appealExistingTagIndex => $appealExistingTagIdValue) {
+                                                    $appealExistingTagIdValue = (int) $appealExistingTagIdValue;
+                                                    if ($appealExistingTagIdValue <= 0) {
+                                                        continue;
+                                                    }
+
+                                                    $appealExistingTagItems[] = array(
+                                                        'id' => $appealExistingTagIdValue,
+                                                        'label' => isset($appealExistingTagLabels[$appealExistingTagIndex]) ? trim((string) $appealExistingTagLabels[$appealExistingTagIndex]) : '',
+                                                    );
+                                                }
+                                            } else {
+                                                $appealExistingTagIdValue = isset($latestAppealPayload['appeal_existing_tag_id']) ? (int) $latestAppealPayload['appeal_existing_tag_id'] : 0;
+                                                if ($appealExistingTagIdValue > 0) {
+                                                    $appealExistingTagItems[] = array(
+                                                        'id' => $appealExistingTagIdValue,
+                                                        'label' => trim((string) (isset($latestAppealPayload['appeal_existing_tag_label']) ? $latestAppealPayload['appeal_existing_tag_label'] : '')),
+                                                    );
+                                                }
+                                            }
+                                            $appealNewTagName = trim((string) (isset($latestAppealPayload['appeal_new_tag_name']) ? $latestAppealPayload['appeal_new_tag_name'] : ''));
+                                            $appealUserRecordLog = (string) (isset($latestAppealPayload['appeal_user_record_log']) ? $latestAppealPayload['appeal_user_record_log'] : '');
 
                                             $canManageOwnCase = customerFollowUpCanUserManageCase($row, USER_ID, USER_GROUP, $connect);
-                                            $canSubmit = $canManageOwnCase
-                                                && !in_array($roundStatus, array('Pending Approval', 'Approved', 'Postponed', 'Missed Follow-Up', 'Done', 'Lost'), true)
+                                            $hasMissingNextFollowUpDate = customerFollowUpIsEmptyDateValue(isset($row['next_follow_up_date']) ? $row['next_follow_up_date'] : '');
+                                            $canAppeal = $canManageOwnCase && $roundStatus === 'Rejected' && $roundNo <= 6;
+                                            $canViewAppeal = !empty($latestAppealLog);
+                                            $canSubmit = !$canAppeal
+                                                && $canManageOwnCase
+                                                && !in_array($roundStatus, array('Pending Approval', 'Approved', 'Postponed', 'Missed Follow-Up', 'Done', 'Lost', 'Rejected'), true)
                                                 && $roundNo <= 6;
                                             $canSaveDelayReason = $canManageOwnCase && customerFollowUpRequiresDelayReasonBeforeMissedAction($row);
                                             $canComplete = $canManageOwnCase && customerFollowUpCanCompleteRound($row);
-                                            $canRequestPostpone = $canManageOwnCase && customerFollowUpCanRequestPostponement($row);
+                                            $canRescheduleFirstRound = $canManageOwnCase
+                                                && $roundId > 0
+                                                && $normalizedPostponeStatus !== 'pending'
+                                                && !in_array($roundStatus, array('Done', 'Lost'), true);
+                                            $canRequestPostpone = $canManageOwnCase && !in_array($roundStatus, array('Done', 'Lost'), true) && customerFollowUpCanRequestPostponement($row);
+                                            $canSubmitMissingNextFollowUpDate = $canManageOwnCase && $hasMissingNextFollowUpDate && !in_array($roundStatus, array('Done', 'Lost'), true);
                                             $canApprove = $canApprovePermission && $customerType === 'new' && $roundStatus === 'Pending Approval';
                                             $canReject = $canRejectPermission && $customerType === 'new' && $roundStatus === 'Pending Approval';
                                             $canApprovePostpone = $canApprovePermission && $normalizedPostponeStatus === 'pending';
@@ -1221,14 +1307,48 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                                                 <td><?= $index + 1 ?></td>
                                                 <td class="btn-container action-col">
                                                     <div class="btn-action-row">
-                                                    <?php if ($canSubmit) { ?>
+                                                    <?php if ($canViewAppeal) { ?>
                                                         <button
                                                             type="button"
-                                                            class="btn btn-sm btn-rounded btn-primary"
-                                                            title="<?= htmlspecialchars($roundStatus === 'Rejected' ? 'Resubmit Follow-Up' : 'Submit Follow-Up', ENT_QUOTES, 'UTF-8') ?>"
-                                                            aria-label="<?= htmlspecialchars($roundStatus === 'Rejected' ? 'Resubmit Follow-Up' : 'Submit Follow-Up', ENT_QUOTES, 'UTF-8') ?>"
+                                                            class="btn btn-sm btn-rounded btn-outline-danger"
+                                                            title="View Appeal"
+                                                            aria-label="View Appeal"
                                                             data-bs-toggle="modal"
                                                             data-bs-target="#submitFollowUpModal"
+                                                            data-submit-mode="view_appeal"
+                                                            data-follow-up-id="<?= $followUpId ?>"
+                                                            data-order-no="<?= htmlspecialchars((string) (isset($row['order_no']) ? $row['order_no'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-customer-name="<?= htmlspecialchars((string) (isset($row['customer_name']) ? $row['customer_name'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-customer-username="<?= htmlspecialchars((string) (isset($row['customer_username']) ? $row['customer_username'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-package-name="<?= htmlspecialchars((string) (isset($row['package_name']) ? $row['package_name'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-received-date="<?= htmlspecialchars((string) (isset($row['received_date']) ? $row['received_date'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-purchase-count="<?= (int) (isset($row['purchase_count_snapshot']) ? $row['purchase_count_snapshot'] : 0) ?>"
+                                                            data-customer-type="<?= htmlspecialchars($customerType, ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-round-no="<?= $roundNo ?>"
+                                                            data-message-shortcut-id="<?= $appealMessageShortcutId ?>"
+                                                            data-next-follow-up-date="<?= htmlspecialchars($appealNextFollowUpDate, ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-contact-no="<?= htmlspecialchars($appealContactNo, ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-existing-attachment-path="<?= htmlspecialchars($appealAttachmentPath, ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-existing-attachment-url="<?= htmlspecialchars((string) $appealAttachmentUrl, ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-max-date="<?= htmlspecialchars((string) (isset($maxDateInfo['max_date']) ? $maxDateInfo['max_date'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-rule-label="<?= htmlspecialchars((string) (isset($maxDateInfo['rule_label']) ? $maxDateInfo['rule_label'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-reject-reason="<?= htmlspecialchars($appealRejectReason, ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-appeal-existing-tag-items="<?= htmlspecialchars((string) json_encode($appealExistingTagItems), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-appeal-new-tag-name="<?= htmlspecialchars($appealNewTagName, ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-appeal-user-record-log="<?= htmlspecialchars($appealUserRecordLog, ENT_QUOTES, 'UTF-8') ?>">
+                                                            <i class="fa-solid fa-eye"></i><span class="ms-1">View Appeal</span>
+                                                        </button>
+                                                    <?php } ?>
+
+                                                    <?php if ($canAppeal) { ?>
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-sm btn-rounded btn-danger"
+                                                            title="Appeal"
+                                                            aria-label="Appeal"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#submitFollowUpModal"
+                                                            data-submit-mode="appeal"
                                                             data-follow-up-id="<?= $followUpId ?>"
                                                             data-order-no="<?= htmlspecialchars((string) (isset($row['order_no']) ? $row['order_no'] : ''), ENT_QUOTES, 'UTF-8') ?>"
                                                             data-customer-name="<?= htmlspecialchars((string) (isset($row['customer_name']) ? $row['customer_name'] : ''), ENT_QUOTES, 'UTF-8') ?>"
@@ -1244,8 +1364,62 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                                                             data-existing-attachment-path="<?= htmlspecialchars((string) (isset($row['attachment']) ? $row['attachment'] : ''), ENT_QUOTES, 'UTF-8') ?>"
                                                             data-existing-attachment-url="<?= htmlspecialchars((string) customerFollowUpBuildAttachmentUrl(isset($row['attachment']) ? $row['attachment'] : ''), ENT_QUOTES, 'UTF-8') ?>"
                                                             data-max-date="<?= htmlspecialchars((string) (isset($maxDateInfo['max_date']) ? $maxDateInfo['max_date'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-rule-label="<?= htmlspecialchars((string) (isset($maxDateInfo['rule_label']) ? $maxDateInfo['rule_label'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-reject-reason="<?= htmlspecialchars((string) (isset($row['reject_reason']) ? $row['reject_reason'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-appeal-existing-tag-items="[]"
+                                                            data-appeal-new-tag-name=""
+                                                            data-appeal-user-record-log="">
+                                                            <i class="fa-solid fa-gavel"></i><span class="ms-1">Appeal</span>
+                                                        </button>
+                                                    <?php } ?>
+
+                                                    <?php if ($canSubmit) { ?>
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-sm btn-rounded btn-primary"
+                                                            title="Submit Follow-Up"
+                                                            aria-label="Submit Follow-Up"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#submitFollowUpModal"
+                                                            data-submit-mode="submit"
+                                                            data-follow-up-id="<?= $followUpId ?>"
+                                                            data-order-no="<?= htmlspecialchars((string) (isset($row['order_no']) ? $row['order_no'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-customer-name="<?= htmlspecialchars((string) (isset($row['customer_name']) ? $row['customer_name'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-customer-username="<?= htmlspecialchars((string) (isset($row['customer_username']) ? $row['customer_username'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-package-name="<?= htmlspecialchars((string) (isset($row['package_name']) ? $row['package_name'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-received-date="<?= htmlspecialchars((string) (isset($row['received_date']) ? $row['received_date'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-purchase-count="<?= (int) (isset($row['purchase_count_snapshot']) ? $row['purchase_count_snapshot'] : 0) ?>"
+                                                            data-customer-type="<?= htmlspecialchars($customerType, ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-round-no="<?= $roundNo ?>"
+                                                            data-message-shortcut-id="<?= isset($row['message_shortcut_id']) ? (int) $row['message_shortcut_id'] : 0 ?>"
+                                                            data-next-follow-up-date="<?= htmlspecialchars($displayNextFollowUpDate, ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-contact-no="<?= htmlspecialchars($effectiveContactNo, ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-existing-attachment-path="<?= htmlspecialchars((string) (isset($row['attachment']) ? $row['attachment'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-existing-attachment-url="<?= htmlspecialchars((string) customerFollowUpBuildAttachmentUrl(isset($row['attachment']) ? $row['attachment'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-max-date="<?= htmlspecialchars((string) (isset($maxDateInfo['max_date']) ? $maxDateInfo['max_date'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-rule-label="<?= htmlspecialchars((string) (isset($maxDateInfo['rule_label']) ? $maxDateInfo['rule_label'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-reject-reason=""
+                                                            data-appeal-existing-tag-items="[]"
+                                                            data-appeal-new-tag-name=""
+                                                            data-appeal-user-record-log="">
+                                                            <i class="fa-solid fa-paper-plane"></i>
+                                                        </button>
+                                                    <?php } ?>
+
+                                                    <?php if ($canSubmitMissingNextFollowUpDate && !$canSaveDelayReason) { ?>
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-sm btn-rounded btn-outline-primary"
+                                                            title="Submit Next Follow-Up Date"
+                                                            aria-label="Submit Next Follow-Up Date"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#missingNextFollowUpDateModal"
+                                                            data-follow-up-id="<?= $followUpId ?>"
+                                                            data-round-no="<?= $roundNo ?>"
+                                                            data-order-no="<?= htmlspecialchars($orderDisplayValue, ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-max-date="<?= htmlspecialchars((string) (isset($maxDateInfo['max_date']) ? $maxDateInfo['max_date'] : ''), ENT_QUOTES, 'UTF-8') ?>"
                                                             data-rule-label="<?= htmlspecialchars((string) (isset($maxDateInfo['rule_label']) ? $maxDateInfo['rule_label'] : ''), ENT_QUOTES, 'UTF-8') ?>">
-                                                            <i class="fa-solid <?= $roundStatus === 'Rejected' ? 'fa-rotate-right' : 'fa-paper-plane' ?>"></i>
+                                                            <i class="fa-solid fa-calendar-day"></i>
                                                         </button>
                                                     <?php } ?>
 
@@ -1268,8 +1442,12 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                                                             data-bs-target="#delayReasonModal"
                                                             data-follow-up-id="<?= $followUpId ?>"
                                                             data-round-no="<?= $roundNo ?>"
+                                                            data-order-no="<?= htmlspecialchars($orderDisplayValue, ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-current-next-follow-up-date="<?= htmlspecialchars($displayNextFollowUpDate, ENT_QUOTES, 'UTF-8') ?>"
                                                             data-missed-original-date="<?= htmlspecialchars($missedOriginalDate, ENT_QUOTES, 'UTF-8') ?>"
-                                                            data-delay-reason="<?= htmlspecialchars($delayReason, ENT_QUOTES, 'UTF-8') ?>">
+                                                            data-delay-reason="<?= htmlspecialchars($delayReason, ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-max-date="<?= htmlspecialchars((string) (isset($maxDateInfo['max_date']) ? $maxDateInfo['max_date'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-rule-label="<?= htmlspecialchars((string) (isset($maxDateInfo['rule_label']) ? $maxDateInfo['rule_label'] : ''), ENT_QUOTES, 'UTF-8') ?>">
                                                             <i class="fa-solid fa-hourglass-half"></i>
                                                         </button>
                                                     <?php } ?>
@@ -1278,15 +1456,29 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                                                         <button
                                                             type="button"
                                                             class="btn btn-sm btn-rounded btn-warning"
-                                                            title="Request Postpone"
-                                                            aria-label="Request Postpone"
+                                                            title="Request Postponement"
+                                                            aria-label="Request Postponement"
                                                             data-bs-toggle="modal"
                                                             data-bs-target="#postponeFollowUpModal"
                                                             data-follow-up-id="<?= $followUpId ?>"
                                                             data-round-no="<?= $roundNo ?>"
-                                                            data-current-date="<?= htmlspecialchars($displayNextFollowUpDate, ENT_QUOTES, 'UTF-8') ?>"
                                                             data-max-date="<?= htmlspecialchars((string) (isset($maxDateInfo['max_date']) ? $maxDateInfo['max_date'] : ''), ENT_QUOTES, 'UTF-8') ?>"
                                                             data-rule-label="<?= htmlspecialchars((string) (isset($maxDateInfo['rule_label']) ? $maxDateInfo['rule_label'] : ''), ENT_QUOTES, 'UTF-8') ?>">
+                                                            <i class="fa-solid fa-calendar-plus"></i>
+                                                        </button>
+                                                    <?php } ?>
+
+                                                    <?php if ($canRescheduleFirstRound) { ?>
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-sm btn-rounded btn-dark text-white"
+                                                            title="Reschedule Follow-Up Date"
+                                                            aria-label="Reschedule Follow-Up Date"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#rescheduleFirstRoundModal"
+                                                            data-follow-up-id="<?= $followUpId ?>"
+                                                            data-round-no="<?= $roundNo ?>"
+                                                            data-current-date="<?= htmlspecialchars($displayNextFollowUpDate, ENT_QUOTES, 'UTF-8') ?>">
                                                             <i class="fa-solid fa-calendar-plus"></i>
                                                         </button>
                                                     <?php } ?>
@@ -1523,10 +1715,21 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                         <input type="hidden" name="customer_follow_up_csrf" value="<?= htmlspecialchars((string) $_SESSION['customer_follow_up_csrf'], ENT_QUOTES, 'UTF-8') ?>">
                         <input type="hidden" name="cfu_action" value="save_delay_reason">
                         <input type="hidden" name="follow_up_id" id="delay_reason_follow_up_id" value="">
+
                         <div class="mb-2 text-muted small" id="delay_reason_missed_date_text"></div>
+                        <div class="mb-2 text-muted small" id="delay_reason_context_text"></div>
+
                         <div class="mb-3">
                             <label class="form-label" for="delay_reason">Delay Reason</label>
                             <textarea class="form-control" id="delay_reason" name="delay_reason" rows="4" required></textarea>
+                        </div>
+
+                        <div class="mb-3 d-none" id="delay_next_follow_up_date_wrap">
+                            <label class="form-label" for="delay_next_follow_up_date">
+                                Next Follow-Up Date<span class="customer-follow-up-required-star">*</span>
+                            </label>
+                            <input type="date" class="form-control" id="delay_next_follow_up_date" name="delay_next_follow_up_date">
+                            <small class="text-muted" id="delay_next_follow_up_date_hint"></small>
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -1581,6 +1784,7 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                     <div class="modal-body">
                         <input type="hidden" name="customer_follow_up_csrf" value="<?= htmlspecialchars((string) $_SESSION['customer_follow_up_csrf'], ENT_QUOTES, 'UTF-8') ?>">
                         <input type="hidden" name="cfu_action" value="submit_follow_up">
+                        <input type="hidden" name="submit_mode" id="submit_mode" value="submit">
                         <input type="hidden" name="follow_up_id" id="submit_follow_up_id" value="">
 
                         <div class="arrival-follow-up-summary">
@@ -1637,12 +1841,20 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                             <div class="customer-follow-up-field-error" id="submit_message_shortcut_error">Message Shortcut is required.</div>
                         </div>
                         <div class="mb-3">
+                            <label class="form-label" for="submit_previous_next_follow_up_date">Previous Next Follow-Up Date</label>
+                            <input type="text" class="form-control" id="submit_previous_next_follow_up_date" value="" readonly>
+                        </div>
+                        <div class="mb-3">
                             <label class="form-label" for="submit_next_follow_up_date">
-                                Next Follow-Up Date<span class="customer-follow-up-required-star">*</span>
+                                New Next Follow-Up Date<span class="customer-follow-up-required-star">*</span>
                             </label>
                             <input type="date" class="form-control" id="submit_next_follow_up_date" name="next_follow_up_date" required>
-                            <div class="customer-follow-up-field-error" id="submit_next_follow_up_date_error">Next Follow-Up Date is required.</div>
+                            <div class="customer-follow-up-field-error" id="submit_next_follow_up_date_error">New Next Follow-Up Date is required.</div>
                             <small class="text-muted" id="submit_next_follow_up_hint"></small>
+                        </div>
+                        <div class="mb-3 d-none" id="submit_reject_reason_wrap">
+                            <label class="form-label">Reject Reason</label>
+                            <div class="border rounded p-3 bg-light" id="submit_reject_reason_text">-</div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label">WhatsApp / Contact Number</label>
@@ -1656,9 +1868,39 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                                 <input type="text" class="form-control" id="submit_contact_no" name="contact_no" placeholder="Enter Contact Number">
                             </div>
                         </div>
+                        <div id="appeal_extra_fields" class="d-none">
+                            <div class="mb-3">
+                                <label class="form-label">Assign Existing Tag</label>
+                                <div class="customer-follow-up-checkbox-list" id="appeal_tag_checkbox_list">
+                                    <?php foreach ($customerTagOptions as $tagOption) {
+                                        $tagOptionId = isset($tagOption['id']) ? (int) $tagOption['id'] : 0;
+                                        if ($tagOptionId <= 0) {
+                                            continue;
+                                        }
+                                        $tagOptionName = trim((string) (isset($tagOption['name']) ? $tagOption['name'] : ''));
+                                        ?>
+                                        <label class="customer-follow-up-checkbox-item">
+                                            <input type="checkbox" class="form-check-input" name="appeal_tag_ids[]" value="<?= $tagOptionId ?>">
+                                            <span><?= htmlspecialchars($tagOptionName !== '' ? $tagOptionName : ('Tag #' . $tagOptionId), ENT_QUOTES, 'UTF-8') ?></span>
+                                        </label>
+                                    <?php } ?>
+                                </div>
+                                <small class="text-muted">Select one or more existing tags to assign.</small>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label" for="appeal_new_tag_name">Create New Tag</label>
+                                <input type="text" class="form-control" id="appeal_new_tag_name" name="appeal_new_tag_name" maxlength="120" placeholder="Enter new tag name">
+                                <div class="customer-follow-up-field-error" id="appeal_new_tag_name_error">This tag name already exists. Please select it from Assign Existing Tag.</div>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label" for="appeal_user_record_log">Optional User Record Log</label>
+                                <textarea class="form-control" id="appeal_user_record_log" name="appeal_user_record_log" rows="6"></textarea>
+                                <small class="text-muted">Optional manual note to save into User Record Log for this customer.</small>
+                            </div>
+                        </div>
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" style="text-transform: none !important;">Cancel</button>
+                        <button type="button" class="btn btn-outline-secondary" id="submit_follow_up_close_btn" data-bs-dismiss="modal" style="text-transform: none !important;">Cancel</button>
                         <button type="submit" class="btn btn-primary" id="submit_follow_up_submit_btn" style="text-transform: none !important;">Submit</button>
                     </div>
                 </form>
@@ -1750,6 +1992,66 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
         </div>
     </div>
 
+    <div class="modal fade" id="rescheduleFirstRoundModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="post" class="customer-follow-up-action-form">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="rescheduleFirstRoundModalTitle">Reschedule Follow-Up Date</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" name="customer_follow_up_csrf" value="<?= htmlspecialchars((string) $_SESSION['customer_follow_up_csrf'], ENT_QUOTES, 'UTF-8') ?>">
+                        <input type="hidden" name="cfu_action" value="reschedule_first_round_date">
+                        <input type="hidden" name="follow_up_id" id="reschedule_first_round_follow_up_id" value="">
+                        <div class="mb-3">
+                            <label class="form-label" for="reschedule_first_round_current_date">Current Next Follow-Up Date</label>
+                            <input type="text" class="form-control" id="reschedule_first_round_current_date" value="" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="rescheduled_next_follow_up_date">New Next Follow-Up Date</label>
+                            <input type="date" class="form-control" id="rescheduled_next_follow_up_date" name="rescheduled_next_follow_up_date" required>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" style="text-transform: none !important;">Cancel</button>
+                        <button type="submit" class="btn btn-info text-white" style="text-transform: none !important;">Submit Reschedule</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="missingNextFollowUpDateModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="post" class="customer-follow-up-action-form" id="missing_next_follow_up_date_form">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="missingNextFollowUpDateModalTitle">Submit Next Follow-Up Date</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" name="customer_follow_up_csrf" value="<?= htmlspecialchars((string) $_SESSION['customer_follow_up_csrf'], ENT_QUOTES, 'UTF-8') ?>">
+                        <input type="hidden" name="cfu_action" value="submit_missing_next_follow_up_date">
+                        <input type="hidden" name="follow_up_id" id="missing_next_follow_up_id" value="">
+                        <div class="mb-2 text-muted small" id="missing_next_follow_up_context_text"></div>
+                        <div class="mb-3">
+                            <label class="form-label" for="submitted_missing_next_follow_up_date">
+                                Next Follow-Up Date<span class="customer-follow-up-required-star">*</span>
+                            </label>
+                            <input type="date" class="form-control" id="submitted_missing_next_follow_up_date" name="submitted_missing_next_follow_up_date" required>
+                            <small class="text-muted" id="missing_next_follow_up_hint"></small>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" style="text-transform: none !important;">Cancel</button>
+                        <button type="submit" class="btn btn-primary" style="text-transform: none !important;">Submit Next Follow-Up Date</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
     <div class="modal fade" id="rejectPostponeModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -1777,6 +2079,7 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
         </div>
     </div>
 
+    <script src="<?= htmlspecialchars($SITEURL . '/header/tinymce/tinymce.min.js?v=' . @filemtime(ROOT . '/header/tinymce/tinymce.min.js'), ENT_QUOTES, 'UTF-8') ?>"></script>
     <script>
         var customerFollowUpInitialFlash = <?= json_encode(array(
             'type' => isset($flashMessage['type']) ? (string) $flashMessage['type'] : '',
@@ -1791,6 +2094,26 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
 
             var modalInstance = bootstrap.Modal.getInstance(modalElement) || bootstrap.Modal.getOrCreateInstance(modalElement);
             modalInstance.hide();
+        }
+
+        function customerFollowUpCleanupBootstrapModalState() {
+            document.querySelectorAll('.modal-backdrop').forEach(function (backdrop) {
+                backdrop.remove();
+            });
+
+            document.querySelectorAll('.modal.show').forEach(function (modalElement) {
+                modalElement.classList.remove('show');
+                modalElement.style.display = 'none';
+                modalElement.setAttribute('aria-hidden', 'true');
+                modalElement.removeAttribute('aria-modal');
+                modalElement.removeAttribute('role');
+            });
+
+            if (document.body) {
+                document.body.classList.remove('modal-open');
+                document.body.style.removeProperty('overflow');
+                document.body.style.removeProperty('padding-right');
+            }
         }
 
         function customerFollowUpShowResultPopup(message, onContinue) {
@@ -1843,7 +2166,18 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
             });
 
             popupElement.addEventListener('hidden.bs.modal', function () {
+                var popupInstance = bootstrap.Modal.getInstance(popupElement);
+                if (popupInstance) {
+                    popupInstance.dispose();
+                }
+
                 popupElement.remove();
+                customerFollowUpCleanupBootstrapModalState();
+
+                window.setTimeout(function () {
+                    customerFollowUpCleanupBootstrapModalState();
+                }, 80);
+
                 if (typeof onContinue === 'function') {
                     onContinue();
                 }
@@ -1860,6 +2194,7 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
             var modalInstance = bootstrap.Modal.getInstance(modalElement) || bootstrap.Modal.getOrCreateInstance(modalElement);
             modalElement.addEventListener('hidden.bs.modal', function handleModalHidden() {
                 modalElement.removeEventListener('hidden.bs.modal', handleModalHidden);
+                customerFollowUpCleanupBootstrapModalState();
                 customerFollowUpShowResultPopup(message, onContinue);
             });
             modalInstance.hide();
@@ -2042,8 +2377,10 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                         throw new Error('Unable to refresh the follow-up list.');
                     }
 
+                    customerFollowUpCleanupBootstrapModalState();
                     tableSection.innerHTML = newTableSection.innerHTML;
                     customerFollowUpInitializeTableSection();
+                    customerFollowUpCleanupBootstrapModalState();
                 });
         }
 
@@ -2064,6 +2401,314 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
             setCustomerFollowUpFieldError('submit_attachment', 'submit_attachment_error', false);
             setCustomerFollowUpFieldError('submit_message_shortcut_id', 'submit_message_shortcut_error', false);
             setCustomerFollowUpFieldError('submit_next_follow_up_date', 'submit_next_follow_up_date_error', false);
+            setCustomerFollowUpFieldError('appeal_new_tag_name', 'appeal_new_tag_name_error', false);
+        }
+
+        var appealUserRecordLogEditorPromise = null;
+
+        function customerFollowUpValidateYmdDate(value) {
+            return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '').trim());
+        }
+
+        function customerFollowUpFormatYmdDateForDisplay(value) {
+            var normalizedValue = String(value || '').trim();
+            if (!customerFollowUpValidateYmdDate(normalizedValue)) {
+                return normalizedValue;
+            }
+
+            var parts = normalizedValue.split('-');
+            return parts[2] + '/' + parts[1] + '/' + parts[0];
+        }
+
+        function customerFollowUpGetAppealUserRecordLogEditor() {
+            if (!window.tinymce || typeof window.tinymce.get !== 'function') {
+                return null;
+            }
+
+            return window.tinymce.get('appeal_user_record_log');
+        }
+
+        function customerFollowUpSetAppealUserRecordLogContent(html) {
+            var normalizedHtml = String(html || '');
+            var editor = customerFollowUpGetAppealUserRecordLogEditor();
+            if (editor) {
+                editor.setContent(normalizedHtml);
+                return;
+            }
+
+            var textarea = document.getElementById('appeal_user_record_log');
+            if (textarea) {
+                textarea.value = normalizedHtml;
+            }
+        }
+
+        function customerFollowUpSetAppealUserRecordLogReadOnly(isReadOnly) {
+            var editor = customerFollowUpGetAppealUserRecordLogEditor();
+            if (editor) {
+                if (editor.mode && typeof editor.mode.set === 'function') {
+                    editor.mode.set(isReadOnly ? 'readonly' : 'design');
+                } else if (typeof editor.setMode === 'function') {
+                    editor.setMode(isReadOnly ? 'readonly' : 'design');
+                }
+            }
+
+            var textarea = document.getElementById('appeal_user_record_log');
+            if (textarea) {
+                textarea.readOnly = !!isReadOnly;
+                textarea.disabled = !!isReadOnly;
+            }
+        }
+
+        function customerFollowUpParseJsonAttribute(value, fallback) {
+            var normalizedFallback = typeof fallback === 'undefined' ? [] : fallback;
+            if (typeof value !== 'string' || value.trim() === '') {
+                return normalizedFallback;
+            }
+
+            try {
+                var parsed = JSON.parse(value);
+                return Array.isArray(parsed) ? parsed : normalizedFallback;
+            } catch (error) {
+                return normalizedFallback;
+            }
+        }
+
+        function customerFollowUpResetAppealTagSelections() {
+            var checkboxList = document.getElementById('appeal_tag_checkbox_list');
+            if (!checkboxList) {
+                return;
+            }
+
+            Array.prototype.slice.call(checkboxList.querySelectorAll('input[name="appeal_tag_ids[]"]')).forEach(function (checkbox) {
+                checkbox.checked = false;
+            });
+
+            Array.prototype.slice.call(checkboxList.querySelectorAll('[data-temp-checkbox-item="1"]')).forEach(function (item) {
+                item.remove();
+            });
+        }
+
+        function customerFollowUpSetAppealTagSelections(tagItems) {
+            var checkboxList = document.getElementById('appeal_tag_checkbox_list');
+            if (!checkboxList) {
+                return;
+            }
+
+            customerFollowUpResetAppealTagSelections();
+
+            customerFollowUpNormalizeAppealTagItems(tagItems).forEach(function (tagItem) {
+                var tagId = String(tagItem && typeof tagItem.id !== 'undefined' ? tagItem.id : '').trim();
+                var tagLabel = String(tagItem && typeof tagItem.label !== 'undefined' ? tagItem.label : '').trim();
+                if (tagId === '') {
+                    return;
+                }
+
+                var matchingCheckbox = checkboxList.querySelector('input[name="appeal_tag_ids[]"][value="' + customerFollowUpCssEscape(tagId) + '"]');
+                if (matchingCheckbox) {
+                    matchingCheckbox.checked = true;
+                    return;
+                }
+
+                var tempLabel = document.createElement('label');
+                tempLabel.className = 'customer-follow-up-checkbox-item';
+                tempLabel.setAttribute('data-temp-checkbox-item', '1');
+
+                var tempCheckbox = document.createElement('input');
+                tempCheckbox.type = 'checkbox';
+                tempCheckbox.className = 'form-check-input';
+                tempCheckbox.name = 'appeal_tag_ids[]';
+                tempCheckbox.value = tagId;
+                tempCheckbox.checked = true;
+                tempLabel.appendChild(tempCheckbox);
+
+                var tempText = document.createElement('span');
+                tempText.textContent = tagLabel || ('Tag #' + tagId);
+                tempLabel.appendChild(tempText);
+
+                checkboxList.appendChild(tempLabel);
+            });
+        }
+
+        function customerFollowUpSetAppealTagReadOnly(isReadOnly) {
+            var checkboxList = document.getElementById('appeal_tag_checkbox_list');
+            if (!checkboxList) {
+                return;
+            }
+
+            Array.prototype.slice.call(checkboxList.querySelectorAll('input[name="appeal_tag_ids[]"]')).forEach(function (checkbox) {
+                checkbox.disabled = !!isReadOnly;
+            });
+        }
+
+        function customerFollowUpApplySubmitFollowUpFieldErrors(fieldErrors) {
+            if (!fieldErrors || typeof fieldErrors !== 'object') {
+                return false;
+            }
+
+            var hasFieldError = false;
+            if (fieldErrors.appeal_new_tag_name) {
+                var errorNode = document.getElementById('appeal_new_tag_name_error');
+                if (errorNode) {
+                    errorNode.textContent = String(fieldErrors.appeal_new_tag_name);
+                }
+                setCustomerFollowUpFieldError('appeal_new_tag_name', 'appeal_new_tag_name_error', true);
+                hasFieldError = true;
+            }
+
+            if (hasFieldError) {
+                var newTagField = document.getElementById('appeal_new_tag_name');
+                if (newTagField) {
+                    newTagField.focus();
+                }
+            }
+
+            return hasFieldError;
+        }
+
+        function customerFollowUpCssEscape(value) {
+            if (window.CSS && typeof window.CSS.escape === 'function') {
+                return window.CSS.escape(value);
+            }
+
+            return String(value).replace(/["\\]/g, '\\$&');
+        }
+
+        function customerFollowUpNormalizeAppealTagItems(tagItems) {
+            if (!Array.isArray(tagItems)) {
+                return [];
+            }
+
+            var normalizedItems = [];
+            tagItems.forEach(function (tagItem) {
+                var tagId = String(tagItem && typeof tagItem.id !== 'undefined' ? tagItem.id : '').trim();
+                var tagLabel = String(tagItem && typeof tagItem.label !== 'undefined' ? tagItem.label : '').trim();
+                if (tagId === '') {
+                    return;
+                }
+
+                normalizedItems.push({
+                    id: tagId,
+                    label: tagLabel
+                });
+            });
+
+            return normalizedItems;
+        }
+
+        function customerFollowUpSyncAppealUserRecordLogEditor() {
+            if (!window.tinymce || typeof window.tinymce.triggerSave !== 'function') {
+                return;
+            }
+
+            window.tinymce.triggerSave();
+
+            var textarea = document.getElementById('appeal_user_record_log');
+            if (!textarea) {
+                return;
+            }
+
+            var normalizedText = String(textarea.value || '')
+                .replace(/<br\s*\/?>/gi, ' ')
+                .replace(/&nbsp;/gi, ' ')
+                .replace(/<[^>]*>/g, ' ')
+                .trim();
+
+            if (normalizedText === '') {
+                textarea.value = '';
+            }
+        }
+
+        function customerFollowUpEnsureAppealUserRecordLogEditor() {
+            var textarea = document.getElementById('appeal_user_record_log');
+            if (!textarea || !window.tinymce || typeof window.tinymce.init !== 'function') {
+                return Promise.resolve(null);
+            }
+
+            var editor = customerFollowUpGetAppealUserRecordLogEditor();
+            if (editor) {
+                return Promise.resolve(editor);
+            }
+
+            if (appealUserRecordLogEditorPromise) {
+                return appealUserRecordLogEditorPromise;
+            }
+
+            appealUserRecordLogEditorPromise = window.tinymce.init({
+                selector: '#appeal_user_record_log',
+                base_url: <?= json_encode(rtrim((string) $SITEURL, '/') . '/header/tinymce') ?>,
+                license_key: 'gpl',
+                menubar: false,
+                branding: false,
+                promotion: false,
+                statusbar: false,
+                height: 220,
+                plugins: 'lists link autoresize',
+                toolbar: 'undo redo | bold italic underline | bullist numlist | link | removeformat',
+                autoresize_bottom_margin: 12,
+                content_style: 'body { font-family: Open Sans, sans-serif; font-size: 14px; }',
+                setup: function (instance) {
+                    instance.on('init', function () {
+                        instance.setContent(textarea.value || '');
+                    });
+                }
+            }).then(function () {
+                return customerFollowUpGetAppealUserRecordLogEditor();
+            }).catch(function (error) {
+                console.warn('Failed to initialize the appeal user record log editor.', error);
+                return null;
+            }).finally(function () {
+                appealUserRecordLogEditorPromise = null;
+            });
+
+            return appealUserRecordLogEditorPromise;
+        }
+
+        function customerFollowUpSetSubmitFollowUpModalReadOnly(isReadOnly) {
+            ['submit_attachment', 'submit_message_shortcut_id', 'submit_next_follow_up_date', 'submit_contact_no', 'appeal_new_tag_name'].forEach(function (fieldId) {
+                var field = document.getElementById(fieldId);
+                if (!field) {
+                    return;
+                }
+
+                if (fieldId === 'submit_contact_no' || fieldId === 'appeal_new_tag_name') {
+                    field.readOnly = !!isReadOnly;
+                }
+                field.disabled = !!isReadOnly;
+            });
+
+            customerFollowUpSetAppealTagReadOnly(isReadOnly);
+
+            var closeBtn = document.getElementById('submit_follow_up_close_btn');
+            if (closeBtn) {
+                closeBtn.textContent = isReadOnly ? 'Close' : 'Cancel';
+            }
+
+            var submitBtn = document.getElementById('submit_follow_up_submit_btn');
+            if (submitBtn) {
+                submitBtn.disabled = !!isReadOnly;
+                submitBtn.classList.toggle('d-none', !!isReadOnly);
+            }
+
+            var contactEditBtn = document.getElementById('submit_contact_edit_btn');
+            if (contactEditBtn) {
+                contactEditBtn.disabled = !!isReadOnly;
+                contactEditBtn.classList.toggle('d-none', !!isReadOnly);
+            }
+
+            customerFollowUpSetAppealUserRecordLogReadOnly(isReadOnly);
+        }
+
+        function validateMissingNextFollowUpDateForm() {
+            var dateInput = document.getElementById('submitted_missing_next_follow_up_date');
+            if (!dateInput || !customerFollowUpValidateYmdDate(dateInput.value)) {
+                if (dateInput) {
+                    dateInput.focus();
+                }
+                customerFollowUpShowResultPopup('Next Follow-Up Date is required in YYYY-MM-DD format.');
+                return false;
+            }
+
+            return true;
         }
 
         function validateSubmitFollowUpRequiredFields() {
@@ -2080,7 +2725,11 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
             setCustomerFollowUpFieldError('submit_message_shortcut_id', 'submit_message_shortcut_error', shortcutMissing);
             setCustomerFollowUpFieldError('submit_next_follow_up_date', 'submit_next_follow_up_date_error', nextDateMissing);
 
-            if (attachmentMissing || shortcutMissing || nextDateMissing) {
+            if (attachmentMissing || shortcutMissing || nextDateMissing || !customerFollowUpValidateYmdDate(nextDateInput ? nextDateInput.value : '')) {
+                var nextDateInvalid = !nextDateMissing && !customerFollowUpValidateYmdDate(nextDateInput ? nextDateInput.value : '');
+                if (nextDateInvalid) {
+                    setCustomerFollowUpFieldError('submit_next_follow_up_date', 'submit_next_follow_up_date_error', true);
+                }
                 var firstInvalidField = attachmentMissing
                     ? attachmentInput
                     : (shortcutMissing ? shortcutInput : nextDateInput);
@@ -2105,8 +2754,18 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                 form.addEventListener('submit', function (event) {
                     event.preventDefault();
 
-                    if (form.id === 'submit_follow_up_form' && !validateSubmitFollowUpRequiredFields()) {
-                        return;
+                    if (form.id === 'submit_follow_up_form') {
+                        if (!validateSubmitFollowUpRequiredFields()) {
+                            return;
+                        }
+                        customerFollowUpSyncAppealUserRecordLogEditor();
+                    } else {
+                        if (typeof form.reportValidity === 'function' && !form.reportValidity()) {
+                            return;
+                        }
+                        if (form.id === 'missing_next_follow_up_date_form' && !validateMissingNextFollowUpDateForm()) {
+                            return;
+                        }
                     }
 
                     var confirmMessage = form.getAttribute('data-confirm-message') || '';
@@ -2157,6 +2816,15 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                         })
                         .then(function (payload) {
                             var wasSuccessful = !!payload.success;
+                            var fieldErrors = payload && payload.field_errors && typeof payload.field_errors === 'object'
+                                ? payload.field_errors
+                                : {};
+
+                            if (!wasSuccessful && form.id === 'submit_follow_up_form' && Object.keys(fieldErrors).length > 0) {
+                                customerFollowUpApplySubmitFollowUpFieldErrors(fieldErrors);
+                                return;
+                            }
+
                             var popupMessage = payload.message || (wasSuccessful ? 'Action completed successfully.' : 'Unable to complete the action.');
 
                             if (wasSuccessful) {
@@ -2341,6 +3009,13 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
             });
         });
 
+        var appealNewTagNameField = document.getElementById('appeal_new_tag_name');
+        if (appealNewTagNameField) {
+            appealNewTagNameField.addEventListener('input', function () {
+                setCustomerFollowUpFieldError('appeal_new_tag_name', 'appeal_new_tag_name_error', false);
+            });
+        }
+
         var submitFollowUpModal = document.getElementById('submitFollowUpModal');
         if (submitFollowUpModal) {
             submitFollowUpModal.addEventListener('show.bs.modal', function (event) {
@@ -2359,12 +3034,18 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                 var existingAttachmentUrl = button.getAttribute('data-existing-attachment-url') || '';
                 var maxDate = button.getAttribute('data-max-date') || '';
                 var ruleLabel = button.getAttribute('data-rule-label') || '';
-                var actionText = (button.textContent || '').trim().toLowerCase();
-                var isResubmit = actionText === 'resubmit';
+                var submitMode = (button.getAttribute('data-submit-mode') || 'submit').toLowerCase();
+                var isAppeal = submitMode === 'appeal';
+                var isViewAppeal = submitMode === 'view_appeal';
+                var isAppealContext = isAppeal || isViewAppeal;
+                var rejectReason = button.getAttribute('data-reject-reason') || '';
+                var appealExistingTagItems = customerFollowUpParseJsonAttribute(button.getAttribute('data-appeal-existing-tag-items') || '[]', []);
+                var appealNewTagName = button.getAttribute('data-appeal-new-tag-name') || '';
+                var appealUserRecordLog = button.getAttribute('data-appeal-user-record-log') || '';
 
                 document.getElementById('submit_follow_up_id').value = followUpId;
-                document.getElementById('submitFollowUpModalTitle').textContent =
-                    (isResubmit ? 'Resubmit Customer Follow-Up - ' : 'Customer Follow-Up - ') + (orderNo || '');
+                document.getElementById('submit_mode').value = isAppeal ? 'appeal' : 'submit';
+                document.getElementById('submitFollowUpModalTitle').textContent = isViewAppeal ? 'View Appeal' : (isAppeal ? 'Appeal Rejected Follow-Up' : 'Submit Follow-Up');
                 document.getElementById('submit_follow_up_order_code_text').textContent = orderNo || '-';
                 document.getElementById('submit_follow_up_customer_text').textContent = button.getAttribute('data-customer-username') || button.getAttribute('data-customer-name') || '-';
                 document.getElementById('submit_follow_up_package_text').textContent = button.getAttribute('data-package-name') || '-';
@@ -2374,18 +3055,28 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                         ? 'Return Customer (' + (button.getAttribute('data-purchase-count') || '0') + ' previous purchase)'
                         : 'New Customer';
                 document.getElementById('submit_message_shortcut_id').value = messageShortcutId;
+                document.getElementById('submit_previous_next_follow_up_date').value = customerFollowUpFormatYmdDateForDisplay(nextFollowUpDate);
                 document.getElementById('submit_next_follow_up_date').value = nextFollowUpDate;
                 document.getElementById('submit_next_follow_up_date').max = maxDate;
                 document.getElementById('submit_next_follow_up_hint').textContent = ruleLabel;
-                document.getElementById('submit_follow_up_submit_btn').textContent = isResubmit ? 'Resubmit' : 'Submit';
+                document.getElementById('submit_follow_up_submit_btn').textContent = isAppeal ? 'Submit Appeal' : 'Submit';
+                document.getElementById('submit_reject_reason_text').textContent = rejectReason || 'No reject reason recorded.';
+                document.getElementById('submit_reject_reason_wrap').classList.toggle('d-none', !isAppealContext);
+                document.getElementById('appeal_extra_fields').classList.toggle('d-none', !isAppealContext);
+                customerFollowUpSetAppealTagSelections(isAppealContext ? appealExistingTagItems : []);
+                document.getElementById('appeal_new_tag_name').value = isAppealContext ? appealNewTagName : '';
+                customerFollowUpSetAppealUserRecordLogContent(isAppealContext ? appealUserRecordLog : '');
+                var appealEditorReadyPromise = null;
+                if (isAppealContext) {
+                    appealEditorReadyPromise = customerFollowUpEnsureAppealUserRecordLogEditor();
+                }
 
                 var submitAttachmentInput = document.getElementById('submit_attachment');
                 submitAttachmentInput.value = '';
                 submitAttachmentInput.setAttribute('data-existing-path', existingAttachmentPath);
                 submitAttachmentInput.setAttribute('data-existing-url', existingAttachmentUrl);
 
-                /* Resubmit must display previous submitted attachment and allow user to keep it. */
-                submitAttachmentInput.required = !(isResubmit && existingAttachmentPath);
+                submitAttachmentInput.required = !isViewAppeal && !(isAppeal && existingAttachmentPath);
 
                 clearSubmitFollowUpRequiredErrors();
 
@@ -2408,6 +3099,25 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                     submitAttachmentPreviewHelper.clearPreview();
                     submitAttachmentPreviewHelper.showExistingAttachment();
                 }
+
+                customerFollowUpSetSubmitFollowUpModalReadOnly(isViewAppeal);
+                if (appealEditorReadyPromise && typeof appealEditorReadyPromise.then === 'function') {
+                    appealEditorReadyPromise.then(function () {
+                        customerFollowUpSetAppealUserRecordLogContent(appealUserRecordLog);
+                        customerFollowUpSetAppealUserRecordLogReadOnly(isViewAppeal);
+                    });
+                }
+            });
+
+            submitFollowUpModal.addEventListener('hidden.bs.modal', function () {
+                document.getElementById('submit_mode').value = 'submit';
+                document.getElementById('submit_reject_reason_wrap').classList.add('d-none');
+                document.getElementById('appeal_extra_fields').classList.add('d-none');
+                customerFollowUpResetAppealTagSelections();
+                document.getElementById('appeal_new_tag_name').value = '';
+                customerFollowUpSetAppealUserRecordLogContent('');
+                customerFollowUpSetSubmitFollowUpModalReadOnly(false);
+                setCustomerFollowUpFieldError('appeal_new_tag_name', 'appeal_new_tag_name_error', false);
             });
         }
 
@@ -2424,11 +3134,35 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
         if (delayReasonModal) {
             delayReasonModal.addEventListener('show.bs.modal', function (event) {
                 var button = event.relatedTarget;
-                document.getElementById('delay_reason_follow_up_id').value = button.getAttribute('data-follow-up-id') || '';
-                document.getElementById('delay_reason').value = button.getAttribute('data-delay-reason') || '';
-                document.getElementById('delayReasonModalTitle').textContent = 'Save Delay Reason - Round ' + (button.getAttribute('data-round-no') || '');
-                var missedOriginalDate = button.getAttribute('data-missed-original-date') || '';
+                var roundNo = button ? (button.getAttribute('data-round-no') || '') : '';
+                var orderNo = button ? (button.getAttribute('data-order-no') || '') : '';
+                var currentNextFollowUpDate = button ? (button.getAttribute('data-current-next-follow-up-date') || '') : '';
+                var missedOriginalDate = button ? (button.getAttribute('data-missed-original-date') || '') : '';
+                var maxDate = button ? (button.getAttribute('data-max-date') || '') : '';
+                var ruleLabel = button ? (button.getAttribute('data-rule-label') || '') : '';
+                var dateWrap = document.getElementById('delay_next_follow_up_date_wrap');
+                var dateInput = document.getElementById('delay_next_follow_up_date');
+                var dateHint = document.getElementById('delay_next_follow_up_date_hint');
+
+                document.getElementById('delay_reason_follow_up_id').value = button ? (button.getAttribute('data-follow-up-id') || '') : '';
+                document.getElementById('delay_reason').value = button ? (button.getAttribute('data-delay-reason') || '') : '';
+                document.getElementById('delayReasonModalTitle').textContent = 'Save Delay Reason - Round ' + roundNo;
                 document.getElementById('delay_reason_missed_date_text').textContent = missedOriginalDate ? 'Missed Original Date: ' + missedOriginalDate : '';
+                document.getElementById('delay_reason_context_text').textContent = orderNo !== ''
+                    ? ('Order ID: ' + orderNo + (roundNo !== '' ? (' | Round ' + roundNo) : ''))
+                    : '';
+
+                if (dateWrap && dateInput) {
+                    dateInput.value = currentNextFollowUpDate;
+                    dateInput.max = maxDate;
+                    dateInput.required = true;
+
+                    if (dateHint) {
+                        dateHint.textContent = ruleLabel;
+                    }
+
+                    dateWrap.classList.remove('d-none');
+                }
             });
         }
 
@@ -2507,6 +3241,50 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
             });
         }
 
+        var rescheduleFirstRoundModal = document.getElementById('rescheduleFirstRoundModal');
+        if (rescheduleFirstRoundModal) {
+            rescheduleFirstRoundModal.addEventListener('show.bs.modal', function (event) {
+                var button = event.relatedTarget;
+                var followUpId = button.getAttribute('data-follow-up-id') || '';
+                var roundNo = button.getAttribute('data-round-no') || '';
+                var currentDate = button.getAttribute('data-current-date') || '';
+                var dateInput = document.getElementById('rescheduled_next_follow_up_date');
+
+                document.getElementById('reschedule_first_round_follow_up_id').value = followUpId;
+                document.getElementById('reschedule_first_round_current_date').value = currentDate || '-';
+                dateInput.value = '';
+                dateInput.removeAttribute('max');
+                document.getElementById('rescheduleFirstRoundModalTitle').textContent = 'Reschedule Follow-Up Date - Round ' + roundNo;
+            });
+        }
+
+        var missingNextFollowUpDateModal = document.getElementById('missingNextFollowUpDateModal');
+        if (missingNextFollowUpDateModal) {
+            missingNextFollowUpDateModal.addEventListener('show.bs.modal', function (event) {
+                var button = event.relatedTarget;
+                var roundNo = button ? (button.getAttribute('data-round-no') || '') : '';
+                var orderNo = button ? (button.getAttribute('data-order-no') || '') : '';
+                var maxDate = button ? (button.getAttribute('data-max-date') || '') : '';
+                var ruleLabel = button ? (button.getAttribute('data-rule-label') || '') : '';
+
+                document.getElementById('missing_next_follow_up_id').value = button ? (button.getAttribute('data-follow-up-id') || '') : '';
+                document.getElementById('submitted_missing_next_follow_up_date').value = '';
+                document.getElementById('submitted_missing_next_follow_up_date').max = maxDate;
+                document.getElementById('missing_next_follow_up_hint').textContent = ruleLabel;
+                document.getElementById('missingNextFollowUpDateModalTitle').textContent = 'Submit Next Follow-Up Date';
+                document.getElementById('missing_next_follow_up_context_text').textContent = orderNo !== ''
+                    ? ('Order ID: ' + orderNo + (roundNo !== '' ? (' | Round ' + roundNo) : ''))
+                    : (roundNo !== '' ? ('Round ' + roundNo) : '');
+            });
+
+            missingNextFollowUpDateModal.addEventListener('shown.bs.modal', function () {
+                var field = document.getElementById('submitted_missing_next_follow_up_date');
+                if (field) {
+                    field.focus();
+                }
+            });
+        }
+
         var rejectPostponeModal = document.getElementById('rejectPostponeModal');
         if (rejectPostponeModal) {
             rejectPostponeModal.addEventListener('show.bs.modal', function (event) {
@@ -2528,6 +3306,3 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
             customerFollowUpShowResultPopup(customerFollowUpInitialFlash.message);
         }
     </script>
-</body>
-
-</html>
