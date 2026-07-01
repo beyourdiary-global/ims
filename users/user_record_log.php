@@ -1,6 +1,15 @@
 <?php
+if (ob_get_level() === 0) {
+    ob_start();
+}
+
 $currentPagePin = 0;
 $pageTitle = 'User Record Log';
+
+include_once '../include/connection.php';
+include_once ROOT . '/include/common.php';
+include_once ROOT . '/include/common_variable.php';
+include_once ROOT . '/include/user_record_log.php';
 
 $requestedCustomerColumn = '';
 if (isset($_REQUEST['customer_column'])) {
@@ -26,29 +35,30 @@ if (!empty($returnUrlParams)) {
     $returnUrl .= '?' . http_build_query($returnUrlParams);
 }
 
+if (isset($finance_connect) && ($finance_connect instanceof mysqli)) {
+    $customerLookupConnect = $finance_connect;
+} else {
+    $customerLookupConnect = $connect;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    include_once '../include/connection.php';
-    include_once ROOT . '/include/common.php';
-    include_once ROOT . '/include/common_variable.php';
-    include_once ROOT . '/include/user_record_log.php';
     urlHandleUserRecordLogRequest($connect, $connect, array(
         'table_name' => USER_RECORD_LOG,
         'page_title' => $pageTitle,
         'customer_column' => $requestedCustomerColumn,
-        'customer_lookup_connect' => $finance_connect,
+        'customer_lookup_connect' => $customerLookupConnect,
     ));
     exit;
 }
 
 include_once '../menuHeader.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
-include_once ROOT . '/include/user_record_log.php';
 
 $context = urlResolveUserRecordLogContext($connect, $connect, array(
     'return_url' => $returnUrl,
     'ajax_url' => $SITEURL . '/users/user_record_log.php',
     'customer_column' => $requestedCustomerColumn,
-    'customer_lookup_connect' => $finance_connect,
+    'customer_lookup_connect' => $customerLookupConnect,
 ));
 
 $pageHeading = $pageTitle;

@@ -3,6 +3,7 @@
 if (defined('ROOT')) {
     include_once ROOT . '/include/customer_tag.php';
     include_once ROOT . '/include/system_alert_common.php';
+    include_once ROOT . '/include/user_record_log.php';
 }
 
 if (!function_exists('customerFollowUpEscape')) {
@@ -286,6 +287,54 @@ if (!function_exists('customerFollowUpCleanText')) {
         $value = preg_replace('/[ \t]*\n[ \t]*/', "\n", (string) $value);
 
         return trim((string) $value);
+    }
+}
+
+if (!function_exists('customerFollowUpIsEmptyDateValue')) {
+    function customerFollowUpIsEmptyDateValue($value)
+    {
+        $value = trim((string) $value);
+        return $value === '' || $value === '0000-00-00';
+    }
+}
+
+if (!function_exists('customerFollowUpIsValidDateString')) {
+    function customerFollowUpIsValidDateString($value)
+    {
+        $value = trim((string) $value);
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+            return false;
+        }
+
+        $timestamp = strtotime($value);
+        return $timestamp !== false && date('Y-m-d', $timestamp) === $value;
+    }
+}
+
+if (!function_exists('customerFollowUpNormalizeOptionalUserRecordLogContent')) {
+    function customerFollowUpNormalizeOptionalUserRecordLogContent($content)
+    {
+        $content = trim((string) $content);
+        if ($content === '') {
+            return '';
+        }
+
+        $normalizedContent = '';
+        if (function_exists('urlNormalizeSubmittedUserRecordLogContent')) {
+            $normalizedContent = (string) urlNormalizeSubmittedUserRecordLogContent($content);
+        } else {
+            $normalizedContent = preg_replace('/\r\n|\r|\n/', '<br>', htmlspecialchars(strip_tags($content), ENT_QUOTES, 'UTF-8'));
+        }
+
+        $plainText = trim(html_entity_decode(strip_tags((string) $normalizedContent), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        $plainText = str_replace("\xC2\xA0", ' ', $plainText);
+        $plainText = trim($plainText);
+
+        if ($plainText === '') {
+            return '';
+        }
+
+        return $normalizedContent;
     }
 }
 
@@ -858,7 +907,7 @@ if (!function_exists('customerFollowUpResolveRoundDisplayDate')) {
     function customerFollowUpResolveRoundDisplayDate($roundRow = array())
     {
         $nextFollowUpDate = trim((string) (isset($roundRow['next_follow_up_date']) ? $roundRow['next_follow_up_date'] : ''));
-        if ($nextFollowUpDate !== '') {
+        if (!customerFollowUpIsEmptyDateValue($nextFollowUpDate)) {
             return $nextFollowUpDate;
         }
 
@@ -1016,24 +1065,27 @@ if (!function_exists('customerFollowUpCreateNotificationRow')) {
         $notificationType = trim((string) (isset($data['notification_type']) ? $data['notification_type'] : ''));
         $createDate = trim((string) (isset($data['create_date']) ? $data['create_date'] : customerFollowUpNowDate()));
         $createTime = trim((string) (isset($data['create_time']) ? $data['create_time'] : customerFollowUpNowTime()));
+        $allowDuplicate = !empty($data['allow_duplicate']);
 
-        $existingSql = "SELECT `id`
-                        FROM `" . CUSTOMER_FOLLOW_UP_NOTIFICATION . "`
-                        WHERE `follow_up_id` = " . $followUpId . "
-                          AND IFNULL(`round_id`, 0) = " . $roundId . "
-                          AND `notify_user_id` = " . $notifyUserId . "
-                          AND `notification_type` = '" . customerFollowUpEscape($connect, $notificationType) . "'
-                          AND IFNULL(`create_date`, '') = '" . customerFollowUpEscape($connect, $createDate) . "'
-                          AND `status` = 'A'
-                        ORDER BY `id` DESC
-                        LIMIT 1";
-        $existingResult = mysqli_query($connect, $existingSql);
-        if ($existingResult && $existingResult->num_rows > 0) {
-            $existingRow = mysqli_fetch_assoc($existingResult);
-            $notificationId = isset($existingRow['id']) ? (int) $existingRow['id'] : 0;
-            if ($notificationId > 0) {
-                customerFollowUpSyncNotificationToSystemAlert($connect, $notificationId);
-                return $notificationId;
+        if (!$allowDuplicate) {
+            $existingSql = "SELECT `id`
+                            FROM `" . CUSTOMER_FOLLOW_UP_NOTIFICATION . "`
+                            WHERE `follow_up_id` = " . $followUpId . "
+                              AND IFNULL(`round_id`, 0) = " . $roundId . "
+                              AND `notify_user_id` = " . $notifyUserId . "
+                              AND `notification_type` = '" . customerFollowUpEscape($connect, $notificationType) . "'
+                              AND IFNULL(`create_date`, '') = '" . customerFollowUpEscape($connect, $createDate) . "'
+                              AND `status` = 'A'
+                            ORDER BY `id` DESC
+                            LIMIT 1";
+            $existingResult = mysqli_query($connect, $existingSql);
+            if ($existingResult && $existingResult->num_rows > 0) {
+                $existingRow = mysqli_fetch_assoc($existingResult);
+                $notificationId = isset($existingRow['id']) ? (int) $existingRow['id'] : 0;
+                if ($notificationId > 0) {
+                    customerFollowUpSyncNotificationToSystemAlert($connect, $notificationId);
+                    return $notificationId;
+                }
             }
         }
 
@@ -1378,6 +1430,7 @@ if (!function_exists('customerFollowUpBuildReadableLogMessage')) {
         $contactNo = trim((string) (isset($newValue['contact_no']) && $newValue['contact_no'] !== '' ? $newValue['contact_no'] : (isset($roundRow['contact_no']) && $roundRow['contact_no'] !== '' ? $roundRow['contact_no'] : (isset($followUpRow['contact_no']) ? $followUpRow['contact_no'] : ''))));
         $nextFollowUpDate = trim((string) (isset($newValue['next_follow_up_date']) && $newValue['next_follow_up_date'] !== '' ? $newValue['next_follow_up_date'] : (isset($roundRow['next_follow_up_date']) ? $roundRow['next_follow_up_date'] : '')));
         $requestedNextFollowUpDate = trim((string) (isset($newValue['requested_next_follow_up_date']) ? $newValue['requested_next_follow_up_date'] : ''));
+        $currentAssignedNextFollowUpDate = trim((string) (isset($newValue['current_next_follow_up_date']) && $newValue['current_next_follow_up_date'] !== '' ? $newValue['current_next_follow_up_date'] : (isset($newValue['old_next_follow_up_date']) ? $newValue['old_next_follow_up_date'] : '')));
         $approvedNextFollowUpDate = trim((string) (isset($newValue['approved_next_follow_up_date']) && $newValue['approved_next_follow_up_date'] !== '' ? $newValue['approved_next_follow_up_date'] : (strtolower($actionType) === 'approve_postponement' ? $nextFollowUpDate : '')));
         if (strtolower($actionType) === 'approve_postponement' && $approvedNextFollowUpDate !== '' && $approvedNextFollowUpDate === $nextFollowUpDate) {
             $nextFollowUpDate = '';
@@ -1452,8 +1505,13 @@ if (!function_exists('customerFollowUpBuildReadableLogMessage')) {
             $appendLine($detailLines, 'Comment', $remark);
         }
         if (strtolower($actionType) === 'request_postponement') {
+            $appendLine($detailLines, 'Current Assigned Follow-Up Date', $currentAssignedNextFollowUpDate);
             $appendLine($detailLines, 'Postpone Reason', $postponeReason);
             $appendLine($detailLines, 'Requested New Follow-Up Date', $requestedNextFollowUpDate);
+        }
+        if (strtolower($actionType) === 'reschedule_first_round_date') {
+            $appendLine($detailLines, 'Previous Next Follow-Up Date', $currentAssignedNextFollowUpDate);
+            $appendLine($detailLines, 'Updated Next Follow-Up Date', $nextFollowUpDate);
         }
         if (strtolower($actionType) === 'approve_postponement') {
             $appendLine($detailLines, 'Approved New Follow-Up Date', $approvedNextFollowUpDate);
@@ -1895,6 +1953,137 @@ if (!function_exists('customerFollowUpApplyCustomerTypeTags')) {
     }
 }
 
+if (!function_exists('customerFollowUpProcessAppealExtras')) {
+    function customerFollowUpProcessAppealExtras($connect, $followUpRow, $roundRow, $formData, $actorUserId, $attachmentPath = '')
+    {
+        $existingTagIds = array();
+        if (isset($formData['appeal_tag_ids']) && is_array($formData['appeal_tag_ids'])) {
+            foreach ($formData['appeal_tag_ids'] as $existingTagIdValue) {
+                $existingTagIdValue = (int) $existingTagIdValue;
+                if ($existingTagIdValue > 0 && !in_array($existingTagIdValue, $existingTagIds, true)) {
+                    $existingTagIds[] = $existingTagIdValue;
+                }
+            }
+        } else {
+            $legacyExistingTagId = (int) (isset($formData['appeal_tag_id']) ? $formData['appeal_tag_id'] : 0);
+            if ($legacyExistingTagId > 0) {
+                $existingTagIds[] = $legacyExistingTagId;
+            }
+        }
+
+        $newTagName = trim((string) (isset($formData['appeal_new_tag_name']) ? $formData['appeal_new_tag_name'] : ''));
+        $manualUserRecordLog = customerFollowUpNormalizeOptionalUserRecordLogContent(
+            isset($formData['appeal_user_record_log']) ? $formData['appeal_user_record_log'] : ''
+        );
+        $resultDetails = array(
+            'appeal_existing_tag_id' => !empty($existingTagIds) ? (int) $existingTagIds[0] : 0,
+            'appeal_existing_tag_label' => '',
+            'appeal_existing_tag_ids' => $existingTagIds,
+            'appeal_existing_tag_labels' => array(),
+            'appeal_new_tag_name' => $newTagName,
+            'appeal_user_record_log' => $manualUserRecordLog,
+        );
+
+        if (empty($existingTagIds) && $newTagName === '' && $manualUserRecordLog === '') {
+            return array('success' => true, 'message' => '', 'details' => $resultDetails);
+        }
+
+        $platform = customerFollowUpNormalizePlatform(isset($followUpRow['platform']) ? $followUpRow['platform'] : '');
+        $customerId = isset($followUpRow['customer_id']) ? (int) $followUpRow['customer_id'] : 0;
+        $followUpId = isset($followUpRow['id']) ? (int) $followUpRow['id'] : 0;
+        $roundId = isset($roundRow['id']) ? (int) $roundRow['id'] : 0;
+        if (!($connect instanceof mysqli) || $platform === '' || $customerId <= 0 || $followUpId <= 0) {
+            return array('success' => false, 'message' => 'Customer context is invalid for appeal.');
+        }
+
+        foreach ($existingTagIds as $existingTagId) {
+            $existingTagRow = customerFollowUpReadTagRow($connect, $existingTagId);
+            if (empty($existingTagRow) || strtoupper(trim((string) (isset($existingTagRow['status']) ? $existingTagRow['status'] : 'A'))) !== 'A') {
+                return array('success' => false, 'message' => 'Selected appeal tag is not available.');
+            }
+
+            $assignExistingResult = customerFollowUpAssignTagById($connect, $platform, $customerId, $existingTagId, 'customer_follow_up', $followUpId, $actorUserId);
+            if (empty($assignExistingResult['success'])) {
+                return array('success' => false, 'message' => 'Failed to assign the selected appeal tag.');
+            }
+
+            if (!empty($assignExistingResult['changed'])) {
+                $existingTagName = trim((string) (isset($existingTagRow['name']) ? $existingTagRow['name'] : ''));
+                customerFollowUpLogTagChange(
+                    $connect,
+                    $followUpId,
+                    $roundId,
+                    $platform,
+                    $customerId,
+                    $existingTagId,
+                    'assign_tag_follow_up_appeal',
+                    (string) $actorUserId,
+                    $existingTagName !== '' ? ('Appeal assigned tag: ' . $existingTagName) : 'Appeal assigned existing tag.'
+                );
+            }
+
+            $existingTagName = trim((string) (isset($existingTagRow['name']) ? $existingTagRow['name'] : ''));
+            if ($resultDetails['appeal_existing_tag_label'] === '') {
+                $resultDetails['appeal_existing_tag_label'] = $existingTagName;
+            }
+            $resultDetails['appeal_existing_tag_labels'][] = $existingTagName;
+        }
+
+        if ($newTagName !== '') {
+            $existingNamedTagRow = function_exists('customerTagFindTagByName') ? customerTagFindTagByName($connect, $newTagName) : null;
+            if ($existingNamedTagRow && isset($existingNamedTagRow['id']) && (int) $existingNamedTagRow['id'] > 0) {
+                return array(
+                    'success' => false,
+                    'message' => '',
+                    'field_errors' => array(
+                        'appeal_new_tag_name' => 'This tag name already exists. Please select it from Assign Existing Tag.',
+                    ),
+                );
+            }
+
+            $createdTagId = customerFollowUpFindOrCreateTagId($connect, $newTagName, (string) $actorUserId);
+            if ($createdTagId <= 0) {
+                return array('success' => false, 'message' => 'Failed to create the new appeal tag.');
+            }
+
+            $assignNewResult = customerFollowUpAssignTagById($connect, $platform, $customerId, $createdTagId, 'customer_follow_up', $followUpId, $actorUserId);
+            if (empty($assignNewResult['success'])) {
+                return array('success' => false, 'message' => 'Failed to assign the new appeal tag.');
+            }
+
+            if (!empty($assignNewResult['changed'])) {
+                customerFollowUpLogTagChange(
+                    $connect,
+                    $followUpId,
+                    $roundId,
+                    $platform,
+                    $customerId,
+                    $createdTagId,
+                    'create_tag_follow_up_appeal',
+                    (string) $actorUserId,
+                    'Appeal created and assigned tag: ' . $newTagName
+                );
+            }
+        }
+
+        if ($manualUserRecordLog !== '') {
+            $userRecordLogId = customerFollowUpInsertReadableUserRecordLog($connect, array(
+                'platform' => $platform,
+                'customer_id' => $customerId,
+                'content' => $manualUserRecordLog,
+                'attachment' => trim((string) $attachmentPath),
+                'created_by' => (string) $actorUserId,
+            ));
+
+            if ($userRecordLogId <= 0) {
+                return array('success' => false, 'message' => 'Failed to save the appeal user record log.');
+            }
+        }
+
+        return array('success' => true, 'message' => '', 'details' => $resultDetails);
+    }
+}
+
 if (!function_exists('customerFollowUpBuildNotificationActionUrl')) {
     function customerFollowUpBuildNotificationActionUrl($followUpId, $roundId = 0, $notificationType = '')
     {
@@ -1950,6 +2139,21 @@ if (!function_exists('customerFollowUpCanRequestPostponement')) {
     }
 }
 
+if (!function_exists('customerFollowUpCanRescheduleFirstRoundDirectly')) {
+    function customerFollowUpCanRescheduleFirstRoundDirectly($roundRow)
+    {
+        $roundNo = isset($roundRow['round_no']) ? (int) $roundRow['round_no'] : 0;
+        $roundStatus = customerFollowUpNormalizeStatus(isset($roundRow['round_status']) ? $roundRow['round_status'] : '');
+        $nextFollowUpDate = trim((string) (isset($roundRow['next_follow_up_date']) ? $roundRow['next_follow_up_date'] : ''));
+        $postponeStatus = strtolower(trim((string) (isset($roundRow['postpone_status']) ? $roundRow['postpone_status'] : 'none')));
+
+        return $roundNo === 1
+            && $nextFollowUpDate !== ''
+            && $postponeStatus !== 'pending'
+            && in_array($roundStatus, array('Approved', 'Postponed'), true);
+    }
+}
+
 if (!function_exists('customerFollowUpFetchActionLogRows')) {
     function customerFollowUpFetchActionLogRows($connect, $followUpId, $limit = 20)
     {
@@ -1974,6 +2178,52 @@ if (!function_exists('customerFollowUpFetchActionLogRows')) {
         }
 
         return $rows;
+    }
+}
+
+if (!function_exists('customerFollowUpDecodeActionLogPayload')) {
+    function customerFollowUpDecodeActionLogPayload($payload)
+    {
+        if (is_array($payload)) {
+            return $payload;
+        }
+
+        $payload = trim((string) $payload);
+        if ($payload === '') {
+            return array();
+        }
+
+        $decoded = json_decode($payload, true);
+        return is_array($decoded) ? $decoded : array();
+    }
+}
+
+if (!function_exists('customerFollowUpFindLatestRoundActionLog')) {
+    function customerFollowUpFindLatestRoundActionLog($actionLogRows, $roundId, $actionType = '')
+    {
+        $roundId = (int) $roundId;
+        $actionType = strtolower(trim((string) $actionType));
+        if ($roundId <= 0 || !is_array($actionLogRows)) {
+            return array();
+        }
+
+        foreach ($actionLogRows as $row) {
+            $rowRoundId = isset($row['round_id']) ? (int) $row['round_id'] : 0;
+            if ($rowRoundId !== $roundId) {
+                continue;
+            }
+
+            $rowActionType = strtolower(trim((string) (isset($row['action_type']) ? $row['action_type'] : '')));
+            if ($actionType !== '' && $rowActionType !== $actionType) {
+                continue;
+            }
+
+            $row['old_value_decoded'] = customerFollowUpDecodeActionLogPayload(isset($row['old_value']) ? $row['old_value'] : '');
+            $row['new_value_decoded'] = customerFollowUpDecodeActionLogPayload(isset($row['new_value']) ? $row['new_value'] : '');
+            return $row;
+        }
+
+        return array();
     }
 }
 
@@ -2053,6 +2303,8 @@ if (!function_exists('customerFollowUpSubmitRound')) {
         }
 
         $isResubmit = strtolower(trim((string) (isset($roundRow['round_status']) ? $roundRow['round_status'] : ''))) === 'rejected';
+        $submitMode = strtolower(trim((string) (isset($formData['submit_mode']) ? $formData['submit_mode'] : '')));
+        $isAppeal = $isResubmit && $submitMode === 'appeal';
         $existingAttachmentPath = trim((string) (isset($roundRow['attachment']) ? $roundRow['attachment'] : ''));
         $uploadContext = array();
         $financeConnect = isset($GLOBALS['finance_connect']) && $GLOBALS['finance_connect'] instanceof mysqli ? $GLOBALS['finance_connect'] : $connect;
@@ -2069,10 +2321,15 @@ if (!function_exists('customerFollowUpSubmitRound')) {
                 return array('success' => false, 'message' => isset($uploadResult['message']) ? $uploadResult['message'] : 'Attachment is required.');
             }
         }
+        $uploadedAttachmentPath = isset($uploadResult['path']) ? (string) $uploadResult['path'] : '';
+        $uploadedNewAttachment = empty($uploadResult['reused']) && $uploadedAttachmentPath !== '';
 
         $messageShortcutId = (int) (isset($formData['message_shortcut_id']) ? $formData['message_shortcut_id'] : 0);
         $messageShortcutRow = customerFollowUpGetMessageShortcutById($connect, $messageShortcutId);
         if (empty($messageShortcutRow)) {
+            if ($uploadedNewAttachment) {
+                customerFollowUpDeleteAttachmentFile($uploadedAttachmentPath);
+            }
             return array('success' => false, 'message' => 'Message Shortcut is required.');
         }
 
@@ -2091,11 +2348,17 @@ if (!function_exists('customerFollowUpSubmitRound')) {
             'next_follow_up_date' => $nextFollowUpDate,
         ));
         if (!empty($requiredErrors)) {
+            if ($uploadedNewAttachment) {
+                customerFollowUpDeleteAttachmentFile($uploadedAttachmentPath);
+            }
             return array('success' => false, 'message' => implode(' ', $requiredErrors));
         }
 
         $dateValidation = customerFollowUpValidateNextFollowUpDateLimit($followUpRow, $roundRow, $nextFollowUpDate);
         if (empty($dateValidation['success'])) {
+            if ($uploadedNewAttachment) {
+                customerFollowUpDeleteAttachmentFile($uploadedAttachmentPath);
+            }
             return $dateValidation;
         }
 
@@ -2145,15 +2408,66 @@ if (!function_exists('customerFollowUpSubmitRound')) {
         $caseUpdated = customerFollowUpUpdateCaseRecord($connect, $followUpId, $caseUpdateFields);
         if (!$roundUpdated || !$caseUpdated) {
             mysqli_rollback($connect);
+            if ($uploadedNewAttachment) {
+                customerFollowUpDeleteAttachmentFile($uploadedAttachmentPath);
+            }
             return array('success' => false, 'message' => 'Failed to submit follow-up.');
         }
 
         $updatedRoundRow = customerFollowUpFetchRoundById($connect, isset($roundRow['id']) ? (int) $roundRow['id'] : 0);
         $updatedFollowUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+        $appealExtraLogData = array();
+        if ($isAppeal) {
+            $appealExtraResult = customerFollowUpProcessAppealExtras(
+                $connect,
+                $updatedFollowUpRow,
+                $updatedRoundRow,
+                $formData,
+                (string) $actorUserId,
+                isset($uploadResult['path']) ? $uploadResult['path'] : ''
+            );
+            if (empty($appealExtraResult['success'])) {
+                mysqli_rollback($connect);
+                if ($uploadedNewAttachment) {
+                    customerFollowUpDeleteAttachmentFile($uploadedAttachmentPath);
+                }
+                $failureResult = array(
+                    'success' => false,
+                    'message' => isset($appealExtraResult['message']) ? $appealExtraResult['message'] : 'Failed to submit appeal.',
+                );
+                if (isset($appealExtraResult['field_errors']) && is_array($appealExtraResult['field_errors'])) {
+                    $failureResult['field_errors'] = $appealExtraResult['field_errors'];
+                }
+                return $failureResult;
+            }
+
+            $appealExtraLogData = isset($appealExtraResult['details']) && is_array($appealExtraResult['details'])
+                ? $appealExtraResult['details']
+                : array();
+        }
 
         $actionType = $isResubmit ? 'resubmit_rejected_follow_up' : 'submit_follow_up';
-        $actionLabel = $isResubmit ? 'Resubmitted rejected follow-up' : 'Submitted follow-up';
+        $actionLabel = $isAppeal ? 'Submitted follow-up appeal' : ($isResubmit ? 'Resubmitted rejected follow-up' : 'Submitted follow-up');
         $previousContactNo = trim((string) (isset($oldRoundState['contact_no']) && $oldRoundState['contact_no'] !== '' ? $oldRoundState['contact_no'] : (isset($oldFollowUpState['contact_no']) ? $oldFollowUpState['contact_no'] : '')));
+        $actionNewValue = array(
+            'next_follow_up_date' => $nextFollowUpDate,
+            'contact_no' => $contactNo,
+            'message_shortcut_id' => $messageShortcutId,
+            'message_shortcut_label' => isset($messageShortcutRow['shortcuts_tag']) ? $messageShortcutRow['shortcuts_tag'] : '',
+            'message_shortcut_text' => isset($messageShortcutRow['shortcuts_message_text']) ? $messageShortcutRow['shortcuts_message_text'] : '',
+            'approval_status' => $approvalStatus,
+            'round_status' => $roundStatus,
+            'reject_reason' => $isAppeal ? trim((string) (isset($oldRoundState['reject_reason']) ? $oldRoundState['reject_reason'] : '')) : '',
+            'attachment_path' => isset($uploadResult['path']) ? (string) $uploadResult['path'] : '',
+        );
+        if ($isAppeal) {
+            $actionNewValue['appeal_existing_tag_id'] = isset($appealExtraLogData['appeal_existing_tag_id']) ? (int) $appealExtraLogData['appeal_existing_tag_id'] : 0;
+            $actionNewValue['appeal_existing_tag_label'] = isset($appealExtraLogData['appeal_existing_tag_label']) ? (string) $appealExtraLogData['appeal_existing_tag_label'] : '';
+            $actionNewValue['appeal_existing_tag_ids'] = isset($appealExtraLogData['appeal_existing_tag_ids']) && is_array($appealExtraLogData['appeal_existing_tag_ids']) ? array_values($appealExtraLogData['appeal_existing_tag_ids']) : array();
+            $actionNewValue['appeal_existing_tag_labels'] = isset($appealExtraLogData['appeal_existing_tag_labels']) && is_array($appealExtraLogData['appeal_existing_tag_labels']) ? array_values($appealExtraLogData['appeal_existing_tag_labels']) : array();
+            $actionNewValue['appeal_new_tag_name'] = isset($appealExtraLogData['appeal_new_tag_name']) ? (string) $appealExtraLogData['appeal_new_tag_name'] : '';
+            $actionNewValue['appeal_user_record_log'] = isset($appealExtraLogData['appeal_user_record_log']) ? (string) $appealExtraLogData['appeal_user_record_log'] : '';
+        }
         customerFollowUpCreateActionArtifacts(
             $connect,
             $updatedFollowUpRow,
@@ -2161,15 +2475,7 @@ if (!function_exists('customerFollowUpSubmitRound')) {
             $actionType,
             $actionLabel,
             $oldRoundState,
-            array(
-                'next_follow_up_date' => $nextFollowUpDate,
-                'contact_no' => $contactNo,
-                'message_shortcut_id' => $messageShortcutId,
-                'message_shortcut_label' => isset($messageShortcutRow['shortcuts_tag']) ? $messageShortcutRow['shortcuts_tag'] : '',
-                'message_shortcut_text' => isset($messageShortcutRow['shortcuts_message_text']) ? $messageShortcutRow['shortcuts_message_text'] : '',
-                'approval_status' => $approvalStatus,
-                'round_status' => $roundStatus,
-            ),
+            $actionNewValue,
             '',
             isset($uploadResult['path']) ? $uploadResult['path'] : ''
         );
@@ -2195,8 +2501,9 @@ if (!function_exists('customerFollowUpSubmitRound')) {
                     'notify_user_id' => isset($adminUser['id']) ? (int) $adminUser['id'] : 0,
                     'notify_role' => 'admin',
                     'notification_type' => $actionType,
-                    'title' => 'Follow-Up Pending Approval',
-                    'message' => 'Follow-up round ' . (int) $updatedRoundRow['round_no'] . ' for order ' . trim((string) (isset($updatedFollowUpRow['order_no']) ? $updatedFollowUpRow['order_no'] : '')) . ' is pending approval.',
+                    'allow_duplicate' => $isAppeal,
+                    'title' => $isAppeal ? 'Follow-Up Appeal Pending Approval' : 'Follow-Up Pending Approval',
+                    'message' => ($isAppeal ? 'Follow-up appeal for round ' : 'Follow-up round ') . (int) $updatedRoundRow['round_no'] . ' for order ' . trim((string) (isset($updatedFollowUpRow['order_no']) ? $updatedFollowUpRow['order_no'] : '')) . ' is pending approval.',
                 ));
             }
         }
@@ -2206,7 +2513,7 @@ if (!function_exists('customerFollowUpSubmitRound')) {
         }
 
         mysqli_commit($connect);
-        return array('success' => true, 'message' => $isResubmit ? 'Rejected follow-up resubmitted successfully.' : 'Follow-up submitted successfully.');
+        return array('success' => true, 'message' => $isAppeal ? 'Rejected follow-up appeal submitted successfully.' : ($isResubmit ? 'Rejected follow-up resubmitted successfully.' : 'Follow-up submitted successfully.'));
     }
 }
 
@@ -2298,6 +2605,7 @@ if (!function_exists('customerFollowUpApproveRound')) {
             'notify_user_id' => isset($updatedFollowUpRow['assigned_user_id']) ? (int) $updatedFollowUpRow['assigned_user_id'] : 0,
             'notify_role' => 'basic_user',
             'notification_type' => 'approve_follow_up',
+            'allow_duplicate' => true,
             'title' => 'Follow-Up Approved',
             'message' => 'Follow-up round ' . (int) $updatedRoundRow['round_no'] . ' for order ' . trim((string) (isset($updatedFollowUpRow['order_no']) ? $updatedFollowUpRow['order_no'] : '')) . ' has been approved.',
         ));
@@ -2387,6 +2695,7 @@ if (!function_exists('customerFollowUpRejectRound')) {
             'notify_user_id' => isset($updatedFollowUpRow['assigned_user_id']) ? (int) $updatedFollowUpRow['assigned_user_id'] : 0,
             'notify_role' => 'basic_user',
             'notification_type' => 'reject_follow_up',
+            'allow_duplicate' => true,
             'title' => 'Follow-Up Rejected',
             'message' => 'Follow-up round ' . (int) $updatedRoundRow['round_no'] . ' for order ' . trim((string) (isset($updatedFollowUpRow['order_no']) ? $updatedFollowUpRow['order_no'] : '')) . ' was rejected. Reason: ' . $rejectReason,
         ));
@@ -2541,6 +2850,72 @@ if (!function_exists('customerFollowUpGetLatestPendingPostponeRequest')) {
     }
 }
 
+if (!function_exists('customerFollowUpSubmitMissingNextFollowUpDate')) {
+    function customerFollowUpSubmitMissingNextFollowUpDate($connect, $followUpId, $nextFollowUpDate, $actorUserId, $actorUserGroupId)
+    {
+        $followUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+        $roundRow = customerFollowUpFetchCurrentRound($connect, $followUpId);
+        if (empty($followUpRow) || empty($roundRow)) {
+            return array('success' => false, 'message' => 'Follow-up round not found.');
+        }
+
+        if (!customerFollowUpCanUserManageCase($followUpRow, $actorUserId, $actorUserGroupId, $connect)) {
+            return array('success' => false, 'message' => 'You do not have permission to submit the next follow-up date.');
+        }
+
+        $roundStatus = customerFollowUpNormalizeStatus(isset($roundRow['round_status']) ? $roundRow['round_status'] : '');
+        if (in_array($roundStatus, array('Done', 'Lost'), true)) {
+            return array('success' => false, 'message' => 'This follow-up round is already completed.');
+        }
+
+        if (!customerFollowUpIsEmptyDateValue(isset($roundRow['next_follow_up_date']) ? $roundRow['next_follow_up_date'] : '')) {
+            return array('success' => false, 'message' => 'This round already has a next follow-up date.');
+        }
+
+        $nextFollowUpDate = trim((string) $nextFollowUpDate);
+        if (!customerFollowUpIsValidDateString($nextFollowUpDate)) {
+            return array('success' => false, 'message' => 'Next Follow-Up Date is invalid.');
+        }
+
+        $dateValidation = customerFollowUpValidateNextFollowUpDateLimit($followUpRow, $roundRow, $nextFollowUpDate);
+        if (empty($dateValidation['success'])) {
+            return $dateValidation;
+        }
+
+        mysqli_begin_transaction($connect);
+
+        $oldRoundState = $roundRow;
+        $roundUpdated = customerFollowUpUpdateRoundRecord($connect, (int) $roundRow['id'], array(
+            'next_follow_up_date' => $nextFollowUpDate,
+            'update_by' => (string) $actorUserId,
+            'update_date' => customerFollowUpNowDate(),
+            'update_time' => customerFollowUpNowTime(),
+        ));
+
+        if (!$roundUpdated) {
+            mysqli_rollback($connect);
+            return array('success' => false, 'message' => 'Failed to save the next follow-up date.');
+        }
+
+        $updatedRoundRow = customerFollowUpFetchRoundById($connect, (int) $roundRow['id']);
+        $updatedFollowUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+        customerFollowUpCreateActionArtifacts(
+            $connect,
+            $updatedFollowUpRow,
+            $updatedRoundRow,
+            'submit_missing_next_follow_up_date',
+            'Submitted missing next follow-up date',
+            $oldRoundState,
+            array(
+                'next_follow_up_date' => $nextFollowUpDate,
+            )
+        );
+
+        mysqli_commit($connect);
+        return array('success' => true, 'message' => 'Next follow-up date submitted successfully.');
+    }
+}
+
 if (!function_exists('customerFollowUpRequestPostponement')) {
     function customerFollowUpRequestPostponement($connect, $followUpId, $postponeReason, $requestedNextDate, $actorUserId, $actorUserGroupId)
     {
@@ -2601,6 +2976,7 @@ if (!function_exists('customerFollowUpRequestPostponement')) {
             'Requested postponement',
             $oldRoundState,
             array(
+                'current_next_follow_up_date' => isset($oldRoundState['next_follow_up_date']) ? $oldRoundState['next_follow_up_date'] : '',
                 'requested_next_follow_up_date' => $requestedNextDate,
                 'postpone_reason' => $postponeReason,
             ),
@@ -2622,6 +2998,73 @@ if (!function_exists('customerFollowUpRequestPostponement')) {
 
         mysqli_commit($connect);
         return array('success' => true, 'message' => 'Postponement request submitted successfully.');
+    }
+}
+
+if (!function_exists('customerFollowUpRescheduleFirstRoundDate')) {
+    function customerFollowUpRescheduleFirstRoundDate($connect, $followUpId, $requestedNextDate, $actorUserId, $actorUserGroupId)
+    {
+        $followUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+        $roundRow = customerFollowUpFetchCurrentRound($connect, $followUpId);
+        if (empty($followUpRow) || empty($roundRow)) {
+            return array('success' => false, 'message' => 'Follow-up round not found.');
+        }
+
+        if (!customerFollowUpCanUserManageCase($followUpRow, $actorUserId, $actorUserGroupId, $connect)) {
+            return array('success' => false, 'message' => 'You do not have permission to reschedule this first-round follow-up date.');
+        }
+
+        if (!customerFollowUpCanRescheduleFirstRoundDirectly($roundRow)) {
+            return array('success' => false, 'message' => 'This follow-up round is not available for direct first-round reschedule.');
+        }
+
+        $dateValidation = customerFollowUpValidateNextFollowUpDateLimit($followUpRow, $roundRow, $requestedNextDate);
+        if (empty($dateValidation['success'])) {
+            return $dateValidation;
+        }
+
+        $currentNextDate = trim((string) (isset($roundRow['next_follow_up_date']) ? $roundRow['next_follow_up_date'] : ''));
+        if ($currentNextDate === $requestedNextDate) {
+            return array('success' => false, 'message' => 'New Next Follow-Up Date must be different from the current date.');
+        }
+
+        mysqli_begin_transaction($connect);
+
+        $oldRoundState = $roundRow;
+        $roundUpdated = customerFollowUpUpdateRoundRecord($connect, (int) $roundRow['id'], array(
+            'next_follow_up_date' => $requestedNextDate,
+            'update_by' => (string) $actorUserId,
+            'update_date' => customerFollowUpNowDate(),
+            'update_time' => customerFollowUpNowTime(),
+        ));
+        $caseUpdated = customerFollowUpUpdateCaseRecord($connect, $followUpId, array(
+            'update_by' => (string) $actorUserId,
+            'update_date' => customerFollowUpNowDate(),
+            'update_time' => customerFollowUpNowTime(),
+        ));
+
+        if (!$roundUpdated || !$caseUpdated) {
+            mysqli_rollback($connect);
+            return array('success' => false, 'message' => 'Failed to reschedule the first-round follow-up date.');
+        }
+
+        $updatedRoundRow = customerFollowUpFetchRoundById($connect, (int) $roundRow['id']);
+        $updatedFollowUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+        customerFollowUpCreateActionArtifacts(
+            $connect,
+            $updatedFollowUpRow,
+            $updatedRoundRow,
+            'reschedule_first_round_date',
+            'Rescheduled first-round follow-up date',
+            $oldRoundState,
+            array(
+                'current_next_follow_up_date' => $currentNextDate,
+                'next_follow_up_date' => $requestedNextDate,
+            )
+        );
+
+        mysqli_commit($connect);
+        return array('success' => true, 'message' => 'First-round follow-up date rescheduled successfully.');
     }
 }
 
@@ -2790,7 +3233,7 @@ if (!function_exists('customerFollowUpRejectPostponement')) {
 }
 
 if (!function_exists('customerFollowUpSaveDelayReason')) {
-    function customerFollowUpSaveDelayReason($connect, $followUpId, $delayReason, $actorUserId, $actorUserGroupId)
+    function customerFollowUpSaveDelayReason($connect, $followUpId, $delayReason, $actorUserId, $actorUserGroupId, $nextFollowUpDate = '')
     {
         $followUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
         $roundRow = customerFollowUpFetchCurrentRound($connect, $followUpId);
@@ -2811,14 +3254,35 @@ if (!function_exists('customerFollowUpSaveDelayReason')) {
             return array('success' => false, 'message' => 'Delay reason is required.');
         }
 
+        $nextFollowUpDate = trim((string) $nextFollowUpDate);
+
+        if (!customerFollowUpIsValidDateString($nextFollowUpDate)) {
+            return array('success' => false, 'message' => 'Next Follow-Up Date is invalid.');
+        }
+
+        $dateValidation = customerFollowUpValidateNextFollowUpDateLimit($followUpRow, $roundRow, $nextFollowUpDate);
+        if (empty($dateValidation['success'])) {
+            return $dateValidation;
+        }
+
         mysqli_begin_transaction($connect);
         $oldRoundState = $roundRow;
-        $roundUpdated = customerFollowUpUpdateRoundRecord($connect, (int) $roundRow['id'], array(
+
+        $roundUpdateData = array(
             'delay_reason' => $delayReason,
             'update_by' => (string) $actorUserId,
             'update_date' => customerFollowUpNowDate(),
             'update_time' => customerFollowUpNowTime(),
-        ));
+        );
+
+        $roundUpdateData['next_follow_up_date'] = $nextFollowUpDate;
+
+        $newValue = array(
+            'delay_reason' => $delayReason,
+            'next_follow_up_date' => $nextFollowUpDate,
+        );
+
+        $roundUpdated = customerFollowUpUpdateRoundRecord($connect, (int) $roundRow['id'], $roundUpdateData);
 
         if (!$roundUpdated) {
             mysqli_rollback($connect);
@@ -2832,16 +3296,20 @@ if (!function_exists('customerFollowUpSaveDelayReason')) {
             $updatedFollowUpRow,
             $updatedRoundRow,
             'save_delay_reason',
-            'Saved delay reason',
+            'Saved delay reason and next follow-up date',
             $oldRoundState,
-            array('delay_reason' => $delayReason),
+            $newValue,
             $delayReason,
             '',
             $actorUserId
         );
 
         mysqli_commit($connect);
-        return array('success' => true, 'message' => 'Delay reason saved successfully.');
+
+        return array(
+            'success' => true,
+            'message' => 'Delay reason and next follow-up date saved successfully.',
+        );
     }
 }
 
