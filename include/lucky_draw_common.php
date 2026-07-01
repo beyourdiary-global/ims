@@ -1525,6 +1525,8 @@ if (!function_exists('luckyDrawSubmitClaim')) {
                         email_state = 'pending',
                         email_locked_at = NULL,
                         email_lock_token = '',
+                        sent_at = NULL,
+                        failure_message = '',
                         update_by = '" . $safeActor . "',
                         update_date = CURDATE(),
                         update_time = CURTIME()
@@ -1532,10 +1534,14 @@ if (!function_exists('luckyDrawSubmitClaim')) {
                     LIMIT 1");
 
                 mysqli_commit($connect);
+                $emailSendResult = luckyDrawSendClaimEmailNow($connect, (int) $drawRow['id'], 'PUBLIC');
                 return array(
                     'success' => true,
-                    'message' => 'Your voucher claim has been received. We will send the claim confirmation to your email shortly.',
+                    'message' => !empty($emailSendResult['success'])
+                        ? 'Your voucher claim has been submitted and the email has been sent.'
+                        : 'Your voucher claim has been submitted, but we could not send the email right now. Please contact support if you do not receive it.',
                     'type' => 'voucher',
+                    'email_sent' => !empty($emailSendResult['success']),
                 );
             }
 
@@ -1565,7 +1571,11 @@ if (!function_exists('luckyDrawSubmitClaim')) {
             mysqli_query($connect, "UPDATE `" . LUCKY_DRAW_DRAW_LOG . "`
                 SET claim_email = '" . $safeEmail . "',
                     claim_state = 'claimed',
-                    email_state = 'not_applicable',
+                    email_state = 'pending',
+                    email_locked_at = NULL,
+                    email_lock_token = '',
+                    sent_at = NULL,
+                    failure_message = '',
                     facebook_order_request_id = " . $facebookOrderRequestId . ",
                     update_by = '" . $safeActor . "',
                     update_date = CURDATE(),
@@ -1574,11 +1584,15 @@ if (!function_exists('luckyDrawSubmitClaim')) {
                 LIMIT 1");
 
             mysqli_commit($connect);
+            $emailSendResult = luckyDrawSendClaimEmailNow($connect, (int) $drawRow['id'], 'PUBLIC');
             return array(
                 'success' => true,
-                'message' => 'Your claim has been submitted successfully. A Facebook order request has been created for fulfillment.',
+                'message' => !empty($emailSendResult['success'])
+                    ? 'Your claim has been submitted successfully and the email has been sent.'
+                    : 'Your claim has been submitted successfully, but we could not send the email right now. Please contact support if you do not receive it.',
                 'type' => 'physical',
                 'facebook_order_request_id' => $facebookOrderRequestId,
+                'email_sent' => !empty($emailSendResult['success']),
             );
         } catch (Exception $exception) {
             mysqli_rollback($connect);
@@ -1700,6 +1714,146 @@ if (!function_exists('luckyDrawBuildVoucherEmailContent')) {
     }
 }
 
+if (!function_exists('luckyDrawBuildPhysicalEmailContent')) {
+    function luckyDrawBuildPhysicalEmailContent($drawRow)
+    {
+        $prizeName = luckyDrawSafePublicText(isset($drawRow['prize_name_snapshot']) ? $drawRow['prize_name_snapshot'] : 'Your Prize', 255);
+        $redeemReference = luckyDrawSafePublicText(isset($drawRow['redeem_reference']) ? $drawRow['redeem_reference'] : '', 60);
+        $subject = 'Lucky Draw Claim Confirmation - ' . $prizeName;
+        $message = '<html><body style="font-family:Arial,sans-serif;background:#f6f3ea;padding:24px;">'
+            . '<div style="max-width:640px;margin:0 auto;background:#ffffff;border-radius:18px;padding:28px;">'
+            . '<h2 style="margin-top:0;">Claim Received</h2>'
+            . '<p>Your Lucky Draw claim has been submitted successfully.</p>'
+            . '<p><strong>Prize:</strong> ' . htmlspecialchars($prizeName, ENT_QUOTES, 'UTF-8') . '</p>'
+            . '<p><strong>Reference:</strong> ' . htmlspecialchars($redeemReference, ENT_QUOTES, 'UTF-8') . '</p>'
+            . '<p>Our team will follow up on the prize fulfillment using this email if needed.</p>'
+            . '<p>Please keep this email for your records.</p>'
+            . '</div></body></html>';
+
+        return array(
+            'subject' => $subject,
+            'message' => $message,
+        );
+    }
+}
+
+if (!function_exists('luckyDrawSendClaimEmailNow')) {
+    function luckyDrawSendClaimEmailNow($connect, $drawLogId, $actorUserId = 'SYSTEM', $allowedPrizeTypes = array())
+    {
+        $drawLogId = (int) $drawLogId;
+        $allowedPrizeTypes = is_array($allowedPrizeTypes) ? $allowedPrizeTypes : array();
+        if (!($connect instanceof mysqli) || $drawLogId <= 0) {
+            return array('success' => false, 'message' => 'Unable to send the Lucky Draw email right now.');
+        }
+
+        $normalizedAllowedPrizeTypes = array();
+        foreach ($allowedPrizeTypes as $allowedPrizeType) {
+            $allowedPrizeType = strtolower(trim((string) $allowedPrizeType));
+            if ($allowedPrizeType !== '') {
+                $normalizedAllowedPrizeTypes[] = $allowedPrizeType;
+            }
+        }
+
+        mysqli_begin_transaction($connect);
+
+        try {
+            $lockToken = bin2hex(random_bytes(16));
+            $sql = "SELECT dl.*, p.prize_name, p.prize_type, p.voucher_code
+                FROM `" . LUCKY_DRAW_DRAW_LOG . "` dl
+                INNER JOIN `" . LUCKY_DRAW_PRIZE . "` p ON p.id = dl.prize_id AND p.status = 'A'
+                WHERE dl.id = " . $drawLogId . "
+                  AND dl.status = 'A'
+                LIMIT 1
+                FOR UPDATE";
+            $result = mysqli_query($connect, $sql);
+            if (!$result || !($drawRow = mysqli_fetch_assoc($result))) {
+                throw new Exception('Lucky Draw email record not found.');
+            }
+
+            $prizeType = strtolower(trim((string) ($drawRow['prize_type_snapshot'] ?? $drawRow['prize_type'] ?? '')));
+            if (!in_array($prizeType, array('voucher', 'physical'), true)) {
+                throw new Exception('This Lucky Draw prize type does not support claim email sending.');
+            }
+
+            if (!empty($normalizedAllowedPrizeTypes) && !in_array($prizeType, $normalizedAllowedPrizeTypes, true)) {
+                throw new Exception('This Lucky Draw email action is not allowed for the selected prize type.');
+            }
+
+            if (trim((string) ($drawRow['claim_state'] ?? '')) !== 'claimed') {
+                throw new Exception('Only claimed Lucky Draw records can send email.');
+            }
+
+            $claimEmail = trim((string) ($drawRow['claim_email'] ?? ''));
+            if (!filter_var($claimEmail, FILTER_VALIDATE_EMAIL)) {
+                throw new Exception('A valid claim email is required before sending.');
+            }
+
+            $emailState = strtolower(trim((string) ($drawRow['email_state'] ?? '')));
+            $emailLockedAt = trim((string) ($drawRow['email_locked_at'] ?? ''));
+            $sendingLockIsFresh = $emailState === 'sending'
+                && $emailLockedAt !== ''
+                && strtotime($emailLockedAt) >= strtotime('-15 minutes');
+            if ($sendingLockIsFresh) {
+                throw new Exception('This Lucky Draw email is already being sent.');
+            }
+
+            $safeActor = mysqli_real_escape_string($connect, luckyDrawSafePublicText($actorUserId, 30));
+            $safeLockToken = mysqli_real_escape_string($connect, $lockToken);
+            if (!mysqli_query($connect, "UPDATE `" . LUCKY_DRAW_DRAW_LOG . "`
+                SET email_state = 'sending',
+                    email_locked_at = NOW(),
+                    email_lock_token = '" . $safeLockToken . "',
+                    failure_message = '',
+                    update_by = '" . $safeActor . "',
+                    update_date = CURDATE(),
+                    update_time = CURTIME()
+                WHERE id = " . $drawLogId . "
+                LIMIT 1")) {
+                throw new Exception('Unable to lock this Lucky Draw email send.');
+            }
+
+            mysqli_commit($connect);
+
+            if ($prizeType === 'voucher') {
+                $voucherCode = luckyDrawSafePublicText(isset($drawRow['voucher_code']) ? $drawRow['voucher_code'] : '', 255);
+                if ($voucherCode === '') {
+                    luckyDrawMarkEmailSendResult($connect, $drawLogId, $lockToken, false, 'Voucher code is missing for this prize.');
+                    return array(
+                        'success' => false,
+                        'message' => 'Voucher code is missing for this prize.',
+                        'type' => 'voucher',
+                        'email' => $claimEmail,
+                    );
+                }
+
+                $emailContent = luckyDrawBuildVoucherEmailContent($drawRow, $voucherCode);
+            } else {
+                $emailContent = luckyDrawBuildPhysicalEmailContent($drawRow);
+            }
+
+            $sent = commonSendSystemEmail($connect, $claimEmail, $emailContent['subject'], $emailContent['message'], array(
+                'auto_submitted' => true,
+            ));
+
+            $failureMessage = $sent ? '' : ('Failed to send ' . $prizeType . ' claim email.');
+            luckyDrawMarkEmailSendResult($connect, $drawLogId, $lockToken, $sent, $failureMessage);
+
+            return array(
+                'success' => $sent,
+                'message' => $sent ? 'Lucky Draw email sent successfully.' : 'Failed to send the Lucky Draw email.',
+                'type' => $prizeType,
+                'email' => $claimEmail,
+            );
+        } catch (Exception $exception) {
+            mysqli_rollback($connect);
+            return array(
+                'success' => false,
+                'message' => $exception->getMessage(),
+            );
+        }
+    }
+}
+
 if (!function_exists('luckyDrawSendVoucherQueueBatch')) {
     function luckyDrawSendVoucherQueueBatch($connect, $financeConnect, $limit = 10, $lockMinutes = 15)
     {
@@ -1751,77 +1905,12 @@ if (!function_exists('luckyDrawResendVoucherEmailNow')) {
             return array('success' => false, 'message' => 'Unable to resend the voucher email right now.');
         }
 
-        mysqli_begin_transaction($connect);
-
-        try {
-            $lockToken = bin2hex(random_bytes(16));
-            $sql = "SELECT dl.*, p.prize_name, p.prize_type, p.voucher_code
-                FROM `" . LUCKY_DRAW_DRAW_LOG . "` dl
-                INNER JOIN `" . LUCKY_DRAW_PRIZE . "` p ON p.id = dl.prize_id AND p.status = 'A'
-                WHERE dl.id = " . $drawLogId . "
-                  AND dl.status = 'A'
-                  AND dl.prize_type_snapshot = 'voucher'
-                LIMIT 1
-                FOR UPDATE";
-            $result = mysqli_query($connect, $sql);
-            if (!$result || !($drawRow = mysqli_fetch_assoc($result))) {
-                throw new Exception('Voucher email record not found.');
-            }
-
-            if (trim((string) ($drawRow['claim_state'] ?? '')) !== 'claimed') {
-                throw new Exception('Only claimed voucher records can resend email.');
-            }
-
-            $claimEmail = trim((string) ($drawRow['claim_email'] ?? ''));
-            if (!filter_var($claimEmail, FILTER_VALIDATE_EMAIL)) {
-                throw new Exception('A valid claim email is required before resending.');
-            }
-
-            $safeActor = mysqli_real_escape_string($connect, luckyDrawSafePublicText($actorUserId, 30));
-            $safeLockToken = mysqli_real_escape_string($connect, $lockToken);
-            if (!mysqli_query($connect, "UPDATE `" . LUCKY_DRAW_DRAW_LOG . "`
-                SET email_state = 'sending',
-                    email_locked_at = NOW(),
-                    email_lock_token = '" . $safeLockToken . "',
-                    failure_message = '',
-                    update_by = '" . $safeActor . "',
-                    update_date = CURDATE(),
-                    update_time = CURTIME()
-                WHERE id = " . $drawLogId . "
-                LIMIT 1")) {
-                throw new Exception('Unable to lock this voucher email resend.');
-            }
-
-            mysqli_commit($connect);
-
-            $voucherCode = luckyDrawSafePublicText(isset($drawRow['voucher_code']) ? $drawRow['voucher_code'] : '', 255);
-            if ($voucherCode === '') {
-                luckyDrawMarkEmailSendResult($connect, $drawLogId, $lockToken, false, 'Voucher code is missing for this prize.');
-                return array(
-                    'success' => false,
-                    'message' => 'Voucher code is missing for this prize.',
-                );
-            }
-
-            $emailContent = luckyDrawBuildVoucherEmailContent($drawRow, $voucherCode);
-            $sent = commonSendSystemEmail($connect, $claimEmail, $emailContent['subject'], $emailContent['message'], array(
-                'auto_submitted' => true,
-            ));
-
-            luckyDrawMarkEmailSendResult($connect, $drawLogId, $lockToken, $sent, $sent ? '' : 'Failed to send voucher email.');
-
-            return array(
-                'success' => $sent,
-                'message' => $sent ? 'Voucher email resent successfully.' : 'Failed to resend the voucher email.',
-                'email' => $claimEmail,
-            );
-        } catch (Exception $exception) {
-            mysqli_rollback($connect);
-            return array(
-                'success' => false,
-                'message' => $exception->getMessage(),
-            );
-        }
+        $sendResult = luckyDrawSendClaimEmailNow($connect, $drawLogId, $actorUserId, array('voucher'));
+        return array(
+            'success' => !empty($sendResult['success']),
+            'message' => !empty($sendResult['success']) ? 'Voucher email resent successfully.' : (isset($sendResult['message']) ? (string) $sendResult['message'] : 'Failed to resend the voucher email.'),
+            'email' => isset($sendResult['email']) ? (string) $sendResult['email'] : '',
+        );
     }
 }
 
