@@ -162,7 +162,7 @@ $importPinIds = getImportPinIdsForMenu($connect);
 $pinGroupAllowedPinMap = getPinGroupAllowedPinMapForMenu($connect, is_array(GlobalPin) ? GlobalPin : array());
 
 if (!empty($importPinIds)) {
-    foreach (array(77, 50, 21, 125, 20, 126, 88, 127, 135) as $importCardPinGroupId) {
+    foreach (array(77, 50, 21, 125, 20, 126, 88, 127, 135, 93) as $importCardPinGroupId) {
         if (hasImportActionForPinGroupForMenu($importCardPinGroupId, $userPinGroupMap, $pinGroupAllowedPinMap, $importPinIds)) {
             $hasAnyImportAccess = true;
             break;

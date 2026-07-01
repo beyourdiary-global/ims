@@ -1796,6 +1796,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
 <head>
     <link rel="stylesheet" href="../css/main.css">
     <script src="../finance/header/js/pdf.min.js"></script>
+    <script src="../finance/header/js/tesseract.min.js"></script>
     <script src="../js/pdf_airbill_parser.js"></script>
     <style>
         .shopee-airbill-row {

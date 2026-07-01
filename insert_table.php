@@ -262,12 +262,68 @@ function insertTableEnsureLuckyDrawPins($cmsConn)
     }
 }
 
+function insertTableEnsureLazadaImportPin($cmsConn)
+{
+    $pinGroupId = 93;
+
+    $pinGroupResult = $cmsConn->query("SELECT `pins` FROM `pin_group` WHERE `id` = " . (int) $pinGroupId . " LIMIT 1");
+    if ($pinGroupResult && $pinGroupResult->num_rows > 0) {
+        $pinGroupRow = $pinGroupResult->fetch_assoc();
+        $currentPins = isset($pinGroupRow['pins']) ? (string) $pinGroupRow['pins'] : '';
+        $updatedPins = addPinAccessIds($currentPins, array(5));
+
+        if ($updatedPins !== $currentPins) {
+            $safePins = $cmsConn->real_escape_string($updatedPins);
+            if ($cmsConn->query("UPDATE `pin_group` SET `pins` = '" . $safePins . "', `status` = 'A' WHERE `id` = " . (int) $pinGroupId)) {
+                echo "<p style='color:green;'>Lazada Import pin setup verified Import access for pin group 93.</p>";
+            } else {
+                echo "<p style='color:red;'>Lazada Import pin setup failed updating pin group 93: " . htmlspecialchars($cmsConn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+            }
+        } else {
+            echo "<p style='color:green;'>Lazada Import pin setup verified pin group 93 already has Import access.</p>";
+        }
+    } else {
+        $pinGroupSql = "INSERT INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+            (93, 'Lazada Order Request', '1,2,3,4,5', 'Lazada order request access with import', '1', CURDATE(), CURTIME(), 'A')";
+
+        if ($cmsConn->query($pinGroupSql)) {
+            echo "<p style='color:green;'>Lazada Import pin setup created pin group 93 with Import access.</p>";
+        } else {
+            echo "<p style='color:red;'>Lazada Import pin setup failed creating pin group 93: " . htmlspecialchars($cmsConn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+        }
+    }
+
+    foreach (array(1, 2) as $groupId) {
+        $userGroupResult = $cmsConn->query("SELECT `pins` FROM `user_group` WHERE `id` = " . (int) $groupId . " LIMIT 1");
+        if (!$userGroupResult || $userGroupResult->num_rows === 0) {
+            echo "<p style='color:orange;'>Lazada Import pin setup skipped `user_group` id " . (int) $groupId . " because the group was not found.</p>";
+            continue;
+        }
+
+        $userGroupRow = $userGroupResult->fetch_assoc();
+        $currentPins = isset($userGroupRow['pins']) ? (string) $userGroupRow['pins'] : '';
+        $updatedPins = addAccessToPinBlock($currentPins, 93, array(5));
+
+        if ($updatedPins !== $currentPins) {
+            $safePins = $cmsConn->real_escape_string($updatedPins);
+            if ($cmsConn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $groupId)) {
+                echo "<p style='color:green;'>Lazada Import pin setup granted Import access for pin group 93 to `user_group` id " . (int) $groupId . ".</p>";
+            } else {
+                echo "<p style='color:red;'>Lazada Import pin setup failed updating `user_group` id " . (int) $groupId . ": " . htmlspecialchars($cmsConn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+            }
+        } else {
+            echo "<p style='color:green;'>Lazada Import pin setup verified Import access already exists for `user_group` id " . (int) $groupId . ".</p>";
+        }
+    }
+}
+
 $cmsConn = new mysqli($dbhost, $dbUser, $dbpwd, $db_cms, $dbport);
 if ($cmsConn->connect_error) {
     echo "<p style='color:red;'><strong>Order Report pin setup:</strong> Failed connecting to CMS database `" . htmlspecialchars($db_cms, ENT_QUOTES, 'UTF-8') . "`: " . htmlspecialchars($cmsConn->connect_error, ENT_QUOTES, 'UTF-8') . "</p>";
 } else {
     insertTableEnsureOrderReportPins($cmsConn);
     insertTableEnsureLuckyDrawPins($cmsConn);
+    insertTableEnsureLazadaImportPin($cmsConn);
 }
 
 function indexExists($conn, $dbName, $tblName, $indexName)
