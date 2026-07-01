@@ -1289,10 +1289,9 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                                             $canSaveDelayReason = $canManageOwnCase && customerFollowUpRequiresDelayReasonBeforeMissedAction($row);
                                             $canComplete = $canManageOwnCase && customerFollowUpCanCompleteRound($row);
                                             $canRescheduleFirstRound = $canManageOwnCase
-                                                && $roundNo === 1
-                                                && !$hasMissingNextFollowUpDate
+                                                && $roundId > 0
                                                 && $normalizedPostponeStatus !== 'pending'
-                                                && in_array($roundStatus, array('Approved', 'Postponed'), true);
+                                                && !in_array($roundStatus, array('Done', 'Lost'), true);
                                             $canRequestPostpone = $canManageOwnCase && !in_array($roundStatus, array('Done', 'Lost'), true) && customerFollowUpCanRequestPostponement($row);
                                             $canSubmitMissingNextFollowUpDate = $canManageOwnCase && $hasMissingNextFollowUpDate && !in_array($roundStatus, array('Done', 'Lost'), true);
                                             $canApprove = $canApprovePermission && $customerType === 'new' && $roundStatus === 'Pending Approval';
@@ -1473,15 +1472,13 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                                                         <button
                                                             type="button"
                                                             class="btn btn-sm btn-rounded btn-dark text-white"
-                                                            title="Reschedule First Round Date"
-                                                            aria-label="Reschedule First Round Date"
+                                                            title="Reschedule Follow-Up Date"
+                                                            aria-label="Reschedule Follow-Up Date"
                                                             data-bs-toggle="modal"
                                                             data-bs-target="#rescheduleFirstRoundModal"
                                                             data-follow-up-id="<?= $followUpId ?>"
                                                             data-round-no="<?= $roundNo ?>"
-                                                            data-current-date="<?= htmlspecialchars($displayNextFollowUpDate, ENT_QUOTES, 'UTF-8') ?>"
-                                                            data-max-date="<?= htmlspecialchars((string) (isset($maxDateInfo['max_date']) ? $maxDateInfo['max_date'] : ''), ENT_QUOTES, 'UTF-8') ?>"
-                                                            data-rule-label="<?= htmlspecialchars((string) (isset($maxDateInfo['rule_label']) ? $maxDateInfo['rule_label'] : ''), ENT_QUOTES, 'UTF-8') ?>">
+                                                            data-current-date="<?= htmlspecialchars($displayNextFollowUpDate, ENT_QUOTES, 'UTF-8') ?>">
                                                             <i class="fa-solid fa-calendar-plus"></i>
                                                         </button>
                                                     <?php } ?>
@@ -2000,7 +1997,7 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
             <div class="modal-content">
                 <form method="post" class="customer-follow-up-action-form">
                     <div class="modal-header">
-                        <h5 class="modal-title" id="rescheduleFirstRoundModalTitle">Reschedule First Round Date</h5>
+                        <h5 class="modal-title" id="rescheduleFirstRoundModalTitle">Reschedule Follow-Up Date</h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
                     <div class="modal-body">
@@ -2014,7 +2011,6 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                         <div class="mb-3">
                             <label class="form-label" for="rescheduled_next_follow_up_date">New Next Follow-Up Date</label>
                             <input type="date" class="form-control" id="rescheduled_next_follow_up_date" name="rescheduled_next_follow_up_date" required>
-                            <small class="text-muted" id="reschedule_first_round_hint"></small>
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -3252,15 +3248,13 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                 var followUpId = button.getAttribute('data-follow-up-id') || '';
                 var roundNo = button.getAttribute('data-round-no') || '';
                 var currentDate = button.getAttribute('data-current-date') || '';
-                var maxDate = button.getAttribute('data-max-date') || '';
-                var ruleLabel = button.getAttribute('data-rule-label') || '';
+                var dateInput = document.getElementById('rescheduled_next_follow_up_date');
 
                 document.getElementById('reschedule_first_round_follow_up_id').value = followUpId;
                 document.getElementById('reschedule_first_round_current_date').value = currentDate || '-';
-                document.getElementById('rescheduled_next_follow_up_date').value = '';
-                document.getElementById('rescheduled_next_follow_up_date').max = maxDate;
-                document.getElementById('reschedule_first_round_hint').textContent = ruleLabel;
-                document.getElementById('rescheduleFirstRoundModalTitle').textContent = 'Reschedule First Round Date - Round ' + roundNo;
+                dateInput.value = '';
+                dateInput.removeAttribute('max');
+                document.getElementById('rescheduleFirstRoundModalTitle').textContent = 'Reschedule Follow-Up Date - Round ' + roundNo;
             });
         }
 

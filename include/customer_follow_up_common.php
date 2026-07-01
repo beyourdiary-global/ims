@@ -2142,15 +2142,13 @@ if (!function_exists('customerFollowUpCanRequestPostponement')) {
 if (!function_exists('customerFollowUpCanRescheduleFirstRoundDirectly')) {
     function customerFollowUpCanRescheduleFirstRoundDirectly($roundRow)
     {
-        $roundNo = isset($roundRow['round_no']) ? (int) $roundRow['round_no'] : 0;
+        $roundId = isset($roundRow['id']) ? (int) $roundRow['id'] : 0;
         $roundStatus = customerFollowUpNormalizeStatus(isset($roundRow['round_status']) ? $roundRow['round_status'] : '');
-        $nextFollowUpDate = trim((string) (isset($roundRow['next_follow_up_date']) ? $roundRow['next_follow_up_date'] : ''));
         $postponeStatus = strtolower(trim((string) (isset($roundRow['postpone_status']) ? $roundRow['postpone_status'] : 'none')));
 
-        return $roundNo === 1
-            && $nextFollowUpDate !== ''
+        return $roundId > 0
             && $postponeStatus !== 'pending'
-            && in_array($roundStatus, array('Approved', 'Postponed'), true);
+            && !in_array($roundStatus, array('Done', 'Lost'), true);
     }
 }
 
@@ -3011,16 +3009,16 @@ if (!function_exists('customerFollowUpRescheduleFirstRoundDate')) {
         }
 
         if (!customerFollowUpCanUserManageCase($followUpRow, $actorUserId, $actorUserGroupId, $connect)) {
-            return array('success' => false, 'message' => 'You do not have permission to reschedule this first-round follow-up date.');
+            return array('success' => false, 'message' => 'You do not have permission to reschedule this follow-up date.');
         }
 
         if (!customerFollowUpCanRescheduleFirstRoundDirectly($roundRow)) {
-            return array('success' => false, 'message' => 'This follow-up round is not available for direct first-round reschedule.');
+            return array('success' => false, 'message' => 'This follow-up round is not available for direct reschedule.');
         }
 
-        $dateValidation = customerFollowUpValidateNextFollowUpDateLimit($followUpRow, $roundRow, $requestedNextDate);
-        if (empty($dateValidation['success'])) {
-            return $dateValidation;
+        $requestedNextDate = trim((string) $requestedNextDate);
+        if (!customerFollowUpIsValidDateString($requestedNextDate)) {
+            return array('success' => false, 'message' => 'New Next Follow-Up Date is invalid.');
         }
 
         $currentNextDate = trim((string) (isset($roundRow['next_follow_up_date']) ? $roundRow['next_follow_up_date'] : ''));
@@ -3045,7 +3043,7 @@ if (!function_exists('customerFollowUpRescheduleFirstRoundDate')) {
 
         if (!$roundUpdated || !$caseUpdated) {
             mysqli_rollback($connect);
-            return array('success' => false, 'message' => 'Failed to reschedule the first-round follow-up date.');
+            return array('success' => false, 'message' => 'Failed to reschedule the follow-up date.');
         }
 
         $updatedRoundRow = customerFollowUpFetchRoundById($connect, (int) $roundRow['id']);
@@ -3054,8 +3052,8 @@ if (!function_exists('customerFollowUpRescheduleFirstRoundDate')) {
             $connect,
             $updatedFollowUpRow,
             $updatedRoundRow,
-            'reschedule_first_round_date',
-            'Rescheduled first-round follow-up date',
+            'reschedule_follow_up_date',
+            'Rescheduled follow-up date',
             $oldRoundState,
             array(
                 'current_next_follow_up_date' => $currentNextDate,
@@ -3064,7 +3062,7 @@ if (!function_exists('customerFollowUpRescheduleFirstRoundDate')) {
         );
 
         mysqli_commit($connect);
-        return array('success' => true, 'message' => 'First-round follow-up date rescheduled successfully.');
+        return array('success' => true, 'message' => 'Follow-up date rescheduled successfully.');
     }
 }
 
