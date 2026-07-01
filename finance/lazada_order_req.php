@@ -807,8 +807,9 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
 
 <head>
     <link rel="stylesheet" href="../css/main.css">
-    <script src="header/js/pdf.min.js"></script>
-    <script src="../js/pdf_airbill_parser.js"></script>
+    <script src="<?= $SITEURL ?>/finance/header/js/pdf.min.js"></script>
+    <script src="<?= $SITEURL ?>/js/pdf_airbill_parser.js"></script>
+    <script src="<?= $SITEURL ?>/finance/header/js/tesseract.min.js"></script>
     <style>
         .shopee-airbill-row {
             align-items: flex-start;
@@ -2084,9 +2085,10 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                 window.shopeeOmsAirbillPdfAutofill.bind({
                     fileInputSelector: '#lor_airbill_attachment',
                     airbillNoSelector: '#lor_airbill_no',
+                    customerNameSelector: '#lor_ship_rec_name',
                     customerAddressSelector: '#lor_ship_rec_address',
                     statusSelector: '#lor_airbill_extract_status',
-                    workerSrc: 'header/js/pdf.worker.min.js',
+                    workerSrc: '<?= $SITEURL ?>/finance/header/js/pdf.worker.min.js',
                     errorClass: 'is-error'
                 });
             }

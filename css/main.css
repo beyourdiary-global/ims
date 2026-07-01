@@ -760,7 +760,7 @@ body.task-global-sidebar-open #dispTable {
 #backBtn {
   box-shadow: 0 0 !important;
   font-weight: bold;
-  font-size: 12px;
+  font-size: 18px;
   text-transform: none !important;
   /* white-space: nowrap; */
   /* prevent word wrap on button */
@@ -879,7 +879,7 @@ body.task-global-sidebar-open #dispTable {
   background-color: #888888;
   box-shadow: 0 0 !important;
   font-weight: bold;
-  font-size: 12px;
+  font-size: 18px;
   text-transform: none !important;
 }
 
@@ -1664,7 +1664,7 @@ td.btn-container.mobile-action-open-left .mobile-action-menu {
 .mobile-sticky-form-actions-source .btn,
 .mobile-sticky-form-actions-source a.btn {
   margin: 0 !important;
-  font-size: 12px !important;
+  font-size: 18px !important;
   line-height: 1.2 !important;
 }
 
@@ -2426,7 +2426,7 @@ td.btn-container.mobile-action-open-left .mobile-action-menu {
 #dispTable #actionBtn.btn,
 #dispTable #importBtn.btn,
 #dispTable .btn[name="actionBtn"] {
-  font-size: 12px !important;
+  font-size: 18px !important;
   line-height: 1.2 !important;
 }
 
@@ -2436,7 +2436,7 @@ td.btn-container.mobile-action-open-left .mobile-action-menu {
 
 .mobile-sticky-form-actions-source .btn,
 .mobile-sticky-form-actions-source a.btn {
-  font-size: 12px !important;
+  font-size: 18px !important;
   line-height: 1.2 !important;
 }
 
@@ -2550,7 +2550,7 @@ td.btn-container.mobile-action-open-left .mobile-action-menu {
   .mobile-sticky-form-actions a.btn,
   .mobile-sticky-form-actions .mobile-sticky-form-overlay-btn,
   .mobile-sticky-form-actions .mobile-sticky-form-actions-toggle {
-    font-size: 12px !important;
+    font-size: 18px !important;
     line-height: 1.2 !important;
   }
 }

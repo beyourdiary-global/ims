@@ -198,6 +198,7 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
 
 <head>
     <link rel="stylesheet" href="../css/main.css">
+    <link rel="stylesheet" href="../css/shopeeOrderRequest.css">
 </head>
 
 <body>
@@ -219,11 +220,16 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
                         <h2>
                             <?php echo $pageTitle ?>
                         </h2>
-                        <div class="mt-auto mb-auto">
+                        <div class="mt-auto mb-auto d-flex gap-2 flex-wrap">
                             <?php if (isActionAllowed("Add", $pinAccess)): ?>
-                                <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
+                                <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="addBtn" id="addBtn"
                                     href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                     Record </a>
+                            <?php endif; ?>
+
+                            <?php if (isActionAllowed("Import", $pinAccess)): ?>
+                                <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="importBtn" id="importBtn"
+                                    href="<?= $SITEURL ?>/import/lazada_order_import.php"><i class="fa-solid fa-file-import"></i> Import </a>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -269,30 +275,40 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
                         </tr>
                     </thead>
                     <tbody>
+                        <?php
+                        $fetchLookupRow = function ($result) {
+                            if (!$result || !is_object($result) || !method_exists($result, 'fetch_assoc')) {
+                                return array();
+                            }
+
+                            $row = $result->fetch_assoc();
+                            return is_array($row) ? $row : array();
+                        };
+                        ?>
                         <?php while ($row = $result->fetch_assoc()) {
                             $q1 = getData('name', "id='" . $row['lazada_acc'] . "'", '', LAZADA_ACC, $finance_connect);
-                            $lazada_acc = $q1->fetch_assoc();
+                            $lazada_acc = $fetchLookupRow($q1);
 
                             $q2 = getData('nicename', "id='" . $row['country'] . "'", '', COUNTRIES, $connect);
-                            $country = $q2->fetch_assoc();
+                            $country = $fetchLookupRow($q2);
 
                             $q3 = getData('name', "id='" . $row['brand'] . "'", '', BRAND, $connect);
-                            $brand = $q3->fetch_assoc();
+                            $brand = $fetchLookupRow($q3);
 
                             $q4 = getData('name', "id='" . $row['series'] . "'", '', BRD_SERIES, $connect);
-                            $series = $q4->fetch_assoc();
+                            $series = $fetchLookupRow($q4);
 
                             $q5 = getData('unit', "id='" . $row['curr_unit'] . "'", '', CUR_UNIT, $connect);
-                            $curr_unit = $q5->fetch_assoc();
+                            $curr_unit = $fetchLookupRow($q5);
 
                             $q6 = getData('name', "id='" . $row['series'] . "'", '', BRD_SERIES, $connect);
-                            $series = $q6->fetch_assoc();
+                            $series = $fetchLookupRow($q6);
 
                             $q7 = getData('name', "id='" . $row['pay_meth'] . "'", '', FIN_PAY_METH, $finance_connect);
-                            $pay_meth = $q7->fetch_assoc();
+                            $pay_meth = $fetchLookupRow($q7);
 
                             $q8 = getData('name', "id='" . $row['pkg'] . "'", '', PKG, $connect);
-                            $package = $q8->fetch_assoc();
+                            $package = $fetchLookupRow($q8);
                             ?>
 
                             <tr>
@@ -387,7 +403,7 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
                                 <td scope="row"><?= htmlspecialchars((string) $row['other_discount'], ENT_QUOTES, 'UTF-8') ?></td>
                                 <td scope="row"><?= htmlspecialchars((string) $row['pay_fee'], ENT_QUOTES, 'UTF-8') ?></td>
                                 <td scope="row"><?= htmlspecialchars((string) $row['final_income'], ENT_QUOTES, 'UTF-8') ?></td>
-                                <td scope="row"><?= isset($pay_meth['name']) ? $pay_meth['name'] : '' ?></td>
+                                <td scope="row"><?= isset($pay_meth['name']) ? $pay_meth['name'] : htmlspecialchars((string) $row['pay_meth'], ENT_QUOTES, 'UTF-8') ?></td>
                                 <td scope="row"><?= htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') ?></td>
                             </tr>
                         <?php } ?>
