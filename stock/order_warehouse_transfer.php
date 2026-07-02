@@ -366,8 +366,8 @@ if (isset($_SESSION['order_warehouse_transfer_flash']) && is_array($_SESSION['or
     }
 }
 
-$searchOrderCode = isset($_GET['order_code']) ? trim((string) $_GET['order_code']) : '';
-$searchPlatform = isset($_GET['platform']) ? shopeeOmsNormalizePlatformKey($_GET['platform'], true) : 'all';
+$searchOrderCode = searchInput('order_code');
+$searchPlatform = input('platform') !== '' ? shopeeOmsNormalizePlatformKey(input('platform'), true) : 'all';
 if ($searchPlatform === '') {
     $searchPlatform = 'all';
 }

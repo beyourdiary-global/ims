@@ -24,8 +24,8 @@ $listPageSkipNumbering = true;
 
 
 include_once '../include/list_page_header.php';
-$msg = isset($_GET['msg']) ? trim((string) $_GET['msg']) : '';
-$err = isset($_GET['err']) ? trim((string) $_GET['err']) : '';
+$msg = trim((string) input('msg'));
+$err = trim((string) input('err'));
 
 if (!function_exists('siFetchAssocRows')) {
     function siFetchAssocRows($financeConnect, $cmsConnect, $orderTable, $itemTable, $warehouseNameMap, $productNameMap, $packageNameMap, $selectedOrderIds = array())
@@ -357,7 +357,7 @@ if (!function_exists('siAuditExportAction')) {
     }
 }
 
-$exportIdsParam = isset($_GET['ids']) ? preg_replace('/[^0-9,]/', '', (string) $_GET['ids']) : '';
+$exportIdsParam = preg_replace('/[^0-9,]/', '', (string) input('ids'));
 $exportIds = array();
 if ($exportIdsParam !== '') {
     $exportIds = array_filter(array_map('intval', explode(',', $exportIdsParam)), function ($v) {

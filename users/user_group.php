@@ -404,8 +404,8 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 
 $defaultBadgeIconClass = 'fa-solid fa-user-group';
 $selectedBadgeIconClass = $defaultBadgeIconClass;
-if (isset($_POST['badgeIconClass'])) {
-    $selectedBadgeIconClass = trim((string) $_POST['badgeIconClass']);
+if (filter_has_var(INPUT_POST, 'badgeIconClass')) {
+    $selectedBadgeIconClass = trim((string) post('badgeIconClass'));
 } else if (isset($row['badge_icon_class']) && trim((string) $row['badge_icon_class']) !== '') {
     $selectedBadgeIconClass = trim((string) $row['badge_icon_class']);
 }
@@ -736,8 +736,8 @@ if (!$selectedBadgeIconExists) {
                         <div class="col-12 col-md-4 mb-3">
                             <label class="form-label" for="badgeColor">Badge Color</label>
                             <input class="form-control form-control-color badge-color-input" type="color" name="badgeColor" id="badgeColor" value="<?php
-                                if (isset($_POST['badgeColor'])) {
-                                    echo htmlspecialchars($_POST['badgeColor']);
+                                if (filter_has_var(INPUT_POST, 'badgeColor')) {
+                                    echo htmlspecialchars((string) post('badgeColor'));
                                 } else if (isset($row['badge_color']) && trim((string) $row['badge_color']) !== '') {
                                     echo htmlspecialchars($row['badge_color']);
                                 } else {

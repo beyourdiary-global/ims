@@ -370,7 +370,7 @@ if ($action === 'preview') {
     }
 }
 else if ($action === 'update') {
-    $postData = isset($_POST['data']) && is_array($_POST['data']) ? $_POST['data'] : array();
+    $postData = (array) post('data') ?: array();
     if (empty($postData)) {
         $importErrors[] = 'No preview data found to update. Please scan and preview your file again.';
     } else {
@@ -555,9 +555,9 @@ else if ($action === 'update') {
                                 </div>
                             <?php } ?>
 
-                            <div class="d-flex justify-content-center gap-2 flex-wrap mt-4">
-                                <a href="<?= $SITEURL ?>/import/common_import.php" class="btn btn-sm btn-rounded btn-secondary">Cancel</a>
-                                <button class="btn btn-sm btn-rounded btn-success" type="submit" name="actionBtn" value="update"><i class="fa-solid fa-cloud-arrow-up"></i> Execute Bulk Import & Update</button>
+                            <div class="import-preview-actions mt-4">
+                                <button class="btn btn-sm btn-rounded btn-success import-preview-primary" type="submit" name="actionBtn" value="update"><i class="fa-solid fa-cloud-arrow-up"></i> Import <?= htmlspecialchars($parentPageTitle, ENT_QUOTES, 'UTF-8') ?></button>
+                                <a href="<?= $SITEURL ?>/import/common_import.php" class="btn btn-sm btn-rounded btn-secondary import-preview-cancel">Cancel</a>
                             </div>
                         </form>
                     </div>

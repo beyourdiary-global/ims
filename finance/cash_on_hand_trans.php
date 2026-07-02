@@ -81,8 +81,8 @@ if (post('actionBtn')) {
     $coh_attach = null;
     if (isset($_FILES["coh_attach"]) && $_FILES["coh_attach"]["size"] != 0) {
         $coh_attach = $_FILES["coh_attach"]["name"];
-    } elseif (isset($_POST['existing_attachment'])) {
-        $coh_attach = $_POST['existing_attachment'];
+    } elseif (filter_has_var(INPUT_POST, 'existing_attachment')) {
+        $coh_attach = post('existing_attachment');
     }
 
 

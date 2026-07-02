@@ -118,7 +118,7 @@ if ($actionBtn === 'cancelImport') {
 }
 
 if ($actionBtn === 'confirmImport') {
-    $rawRows = isset($_POST['rows']) && is_array($_POST['rows']) ? $_POST['rows'] : array();
+    $rawRows = (array) post('rows') ?: array();
     $postedRows = array();
     foreach ($rawRows as $idx => $row) {
         if (!is_array($row)) {
@@ -812,11 +812,11 @@ $previewData = isset($_SESSION['si_import_preview']) ? $_SESSION['si_import_prev
                                     </div>
                                 </div>
                             <?php } ?>
-                            <div class="d-flex justify-content-center gap-2 flex-wrap mt-4">
-                                <a class="btn btn-lg btn-rounded btn-secondary px-4" href="<?= $importPage ?>">Cancel</a>
-                                <button class="btn btn-lg btn-rounded btn-success px-4" name="actionBtn" value="confirmImport" type="submit">
-                                    <i class="fa-solid fa-cloud-arrow-up"></i> Execute Bulk Import &amp; Update
+                            <div class="import-preview-actions mt-4">
+                                <button class="btn btn-lg btn-rounded btn-success px-4 import-preview-primary" name="actionBtn" value="confirmImport" type="submit">
+                                    <i class="fa-solid fa-cloud-arrow-up"></i> Import <?= htmlspecialchars($parentPageTitle, ENT_QUOTES, 'UTF-8') ?>
                                 </button>
+                                <a class="btn btn-lg btn-rounded btn-secondary px-4 import-preview-cancel" href="<?= $importPage ?>">Cancel</a>
                             </div>
                         </form>
                     </div>

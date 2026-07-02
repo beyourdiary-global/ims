@@ -238,6 +238,9 @@ function buildHeaderIndexMap($headerRow)
         'AGENTCOST' => 'AGENT_COST',
         'PRODUCT' => 'PRODUCT',
         'PRODUCTSINCLUDED' => 'PRODUCT',
+        'PARENTSKU' => 'PARENT_SKU',
+        'WAREHOUSESKU' => 'PARENT_SKU',
+        'PARENTSKUWAREHOUSESKU' => 'PARENT_SKU',
         'BARCODESLOTTOTAL' => 'BARCODE_SLOT_TOTAL',
         'REMARK' => 'REMARK',
     );
@@ -280,12 +283,162 @@ function normalizeNumericString($value, $decimals = 2)
     return number_format((float) $value, $decimals, '.', '');
 }
 
+function normalizePackageReferenceKey($value)
+{
+    return strtolower(normalizeCellText((string) $value));
+}
+
+function buildPackageReferenceLookup($connect)
+{
+    $lookup = array(
+        'rows_by_id' => array(),
+        'active_name_to_id' => array(),
+        'active_item_code_to_id' => array(),
+        'display_name_by_id' => array(),
+        'active_names' => array(),
+        'active_item_codes' => array(),
+    );
+
+    $result = mysqli_query($connect, "SELECT id, name, item_code, parent_package_id, status FROM `" . PKG . "`");
+    if ($result) {
+        while ($row = mysqli_fetch_assoc($result)) {
+            $packageId = isset($row['id']) ? (int) $row['id'] : 0;
+            if ($packageId <= 0) {
+                continue;
+            }
+
+            $packageName = normalizeCellText(isset($row['name']) ? $row['name'] : '');
+            $itemCode = normalizeCellText(isset($row['item_code']) ? $row['item_code'] : '');
+            $status = isset($row['status']) ? (string) $row['status'] : '';
+
+            $lookup['rows_by_id'][$packageId] = array(
+                'id' => $packageId,
+                'name' => $packageName,
+                'item_code' => $itemCode,
+                'parent_package_id' => isset($row['parent_package_id']) ? (int) $row['parent_package_id'] : 0,
+                'status' => $status,
+            );
+            $lookup['display_name_by_id'][$packageId] = $packageName;
+
+            if (strtoupper(trim($status)) !== 'A') {
+                continue;
+            }
+
+            if ($packageName !== '') {
+                $lookup['active_name_to_id'][normalizePackageReferenceKey($packageName)] = $packageId;
+                $lookup['active_names'][] = $packageName;
+            }
+            if ($itemCode !== '') {
+                $lookup['active_item_code_to_id'][normalizePackageReferenceKey($itemCode)] = $packageId;
+                $lookup['active_item_codes'][] = $itemCode;
+            }
+        }
+    }
+
+    $lookup['active_names'] = array_values(array_unique($lookup['active_names']));
+    $lookup['active_item_codes'] = array_values(array_unique($lookup['active_item_codes']));
+    return $lookup;
+}
+
+function resolvePackageReferenceId($rawValue, $packageLookup)
+{
+    $rawValue = normalizeCellText((string) $rawValue);
+    if ($rawValue === '') {
+        return 0;
+    }
+
+    if (ctype_digit($rawValue)) {
+        $packageId = (int) $rawValue;
+        if (isset($packageLookup['rows_by_id'][$packageId]) && strtoupper(trim((string) $packageLookup['rows_by_id'][$packageId]['status'])) === 'A') {
+            return $packageId;
+        }
+    }
+
+    $lookupKey = normalizePackageReferenceKey($rawValue);
+    if (isset($packageLookup['active_name_to_id'][$lookupKey])) {
+        return (int) $packageLookup['active_name_to_id'][$lookupKey];
+    }
+    if (isset($packageLookup['active_item_code_to_id'][$lookupKey])) {
+        return (int) $packageLookup['active_item_code_to_id'][$lookupKey];
+    }
+
+    return 0;
+}
+
+function getPackageDisplayNameById($packageId, $packageLookup)
+{
+    $packageId = (int) $packageId;
+    if ($packageId <= 0) {
+        return '';
+    }
+
+    if (isset($packageLookup['rows_by_id'][$packageId])) {
+        $itemCode = normalizeCellText(isset($packageLookup['rows_by_id'][$packageId]['item_code']) ? $packageLookup['rows_by_id'][$packageId]['item_code'] : '');
+        if ($itemCode !== '') {
+            return $itemCode;
+        }
+    }
+
+    return isset($packageLookup['display_name_by_id'][$packageId]) ? (string) $packageLookup['display_name_by_id'][$packageId] : '';
+}
+
+function buildPackageParentMap($existingPackages, $preparedRows)
+{
+    $parentMap = array();
+
+    foreach ((array) $existingPackages as $existingPackageId => $existingPackageRow) {
+        $existingPackageId = (int) $existingPackageId;
+        if ($existingPackageId <= 0) {
+            continue;
+        }
+        $parentMap[$existingPackageId] = isset($existingPackageRow['parent_package_id']) ? (int) $existingPackageRow['parent_package_id'] : 0;
+    }
+
+    foreach ((array) $preparedRows as $preparedRow) {
+        $currentPackageId = isset($preparedRow['existing_id']) ? (int) $preparedRow['existing_id'] : 0;
+        if ($currentPackageId <= 0) {
+            continue;
+        }
+        $parentMap[$currentPackageId] = isset($preparedRow['resolved_parent_package_id']) ? (int) $preparedRow['resolved_parent_package_id'] : 0;
+    }
+
+    return $parentMap;
+}
+
+function packageImportWouldCreateCircularRelation($packageId, $parentPackageId, $parentMap)
+{
+    $packageId = (int) $packageId;
+    $parentPackageId = (int) $parentPackageId;
+    $parentMap = is_array($parentMap) ? $parentMap : array();
+
+    if ($packageId <= 0 || $parentPackageId <= 0) {
+        return false;
+    }
+
+    $visited = array();
+    $currentPackageId = $parentPackageId;
+    while ($currentPackageId > 0) {
+        if ($currentPackageId === $packageId) {
+            return true;
+        }
+        if (isset($visited[$currentPackageId])) {
+            return true;
+        }
+
+        $visited[$currentPackageId] = true;
+        $currentPackageId = isset($parentMap[$currentPackageId]) ? (int) $parentMap[$currentPackageId] : 0;
+    }
+
+    return false;
+}
+
 $brandRevMap = getReverseMapping($connect, BRAND, 'id', 'name');
 $currencyRevMap = getReverseMapping($connect, CUR_UNIT, 'id', 'unit');
 $productRevMap = getReverseMapping($connect, PROD, 'id', 'name');
 $brandNameMap = getIdNameMapping($connect, BRAND, 'id', 'name');
 $currencyNameMap = getIdNameMapping($connect, CUR_UNIT, 'id', 'unit');
 $productNameMap = getIdNameMapping($connect, PROD, 'id', 'name');
+$packageLookup = buildPackageReferenceLookup($connect);
 
 // Fetch Current Database State for Comparison
 $existingPackages = [];
@@ -315,8 +468,12 @@ if ($action === 'preview') {
                 }, isset($parsedRows[0]) ? $parsedRows[0] : array());
                 $indexMap = buildHeaderIndexMap($headers);
 
+                $preparedPreviewRows = array();
+
                 foreach ($parsedRows as $rowIndex => $data) {
-                    if ($rowIndex === 0) continue; // Skip header row
+                    if ($rowIndex === 0) {
+                        continue;
+                    }
 
                     $idRaw = getColByKey($data, $indexMap, 'ID', '');
                     $id = '';
@@ -328,143 +485,171 @@ if ($action === 'preview') {
                     }
                     $name = getColByKey($data, $indexMap, 'NAME', '');
 
-                    // Only process rows that have at least a Name or an ID (Allows new records to be added at the bottom!)
-                    if (!empty($id) || !empty($name)) { 
-                        
-                        $isNew = empty($id) || !isset($existingPackages[$id]);
-                        
-                        $csvBrand = getColByKey($data, $indexMap, 'BRAND', '');
-                        $csvPriceCurr = getColByKey($data, $indexMap, 'CURRENCY_UNIT', '');
-                        $csvCostCurr = getColByKey($data, $indexMap, 'COST_CURR', '');
-                        $csvProducts = getColByKey($data, $indexMap, 'PRODUCT', '');
+                    if (empty($id) && empty($name)) {
+                        continue;
+                    }
 
-                        $dbBrandId = resolveMapValue($csvBrand, $brandRevMap);
-                        $dbPriceCurrId = resolveMapValue($csvPriceCurr, $currencyRevMap);
-                        $dbCostCurrId = resolveMapValue($csvCostCurr, $currencyRevMap);
-                        $fieldErrors = [];
+                    $isNew = empty($id) || !isset($existingPackages[$id]);
+                    $csvBrand = getColByKey($data, $indexMap, 'BRAND', '');
+                    $csvPriceCurr = getColByKey($data, $indexMap, 'CURRENCY_UNIT', '');
+                    $csvCostCurr = getColByKey($data, $indexMap, 'COST_CURR', '');
+                    $csvProducts = getColByKey($data, $indexMap, 'PRODUCT', '');
+                    $csvParentSku = getColByKey($data, $indexMap, 'PARENT_SKU', '');
 
-                        if ($csvBrand !== '' && $dbBrandId === '') {
-                            $fieldErrors['brand_name'] = 'Brand not found in database.';
-                        }
-                        if ($csvPriceCurr !== '' && $dbPriceCurrId === '') {
-                            $fieldErrors['price_curr_name'] = 'Price currency not found in database.';
-                        }
-                        if ($csvCostCurr !== '' && $dbCostCurrId === '') {
-                            $fieldErrors['cost_curr_name'] = 'Cost currency not found in database.';
-                        }
+                    $dbBrandId = resolveMapValue($csvBrand, $brandRevMap);
+                    $dbPriceCurrId = resolveMapValue($csvPriceCurr, $currencyRevMap);
+                    $dbCostCurrId = resolveMapValue($csvCostCurr, $currencyRevMap);
+                    $resolvedParentPackageId = resolvePackageReferenceId($csvParentSku, $packageLookup);
+                    $fieldErrors = array();
 
-                        $brandDisplay = $csvBrand;
-                        if ($dbBrandId !== '' && isset($brandNameMap[(int)$dbBrandId])) {
-                            $brandDisplay = (string) $brandNameMap[(int)$dbBrandId];
-                        }
-                        $priceCurrDisplay = $csvPriceCurr;
-                        if ($dbPriceCurrId !== '' && isset($currencyNameMap[(int)$dbPriceCurrId])) {
-                            $priceCurrDisplay = (string) $currencyNameMap[(int)$dbPriceCurrId];
-                        }
-                        $costCurrDisplay = $csvCostCurr;
-                        if ($dbCostCurrId !== '' && isset($currencyNameMap[(int)$dbCostCurrId])) {
-                            $costCurrDisplay = (string) $currencyNameMap[(int)$dbCostCurrId];
-                        }
+                    if ($csvBrand !== '' && $dbBrandId === '') {
+                        $fieldErrors['brand_name'] = 'Brand not found in database.';
+                    }
+                    if ($csvPriceCurr !== '' && $dbPriceCurrId === '') {
+                        $fieldErrors['price_curr_name'] = 'Price currency not found in database.';
+                    }
+                    if ($csvCostCurr !== '' && $dbCostCurrId === '') {
+                        $fieldErrors['cost_curr_name'] = 'Cost currency not found in database.';
+                    }
+                    if ($csvParentSku !== '' && $resolvedParentPackageId <= 0) {
+                        $fieldErrors['parent_sku'] = 'Parent SKU package not found in database.';
+                    }
 
-                        // Reverse lookup product IDs
-                        $dbProductIds = [];
-                        $productDisplayNames = [];
-                        $hasUnknownProduct = false;
-                        if (!empty($csvProducts)) {
-                            $prodNames = array_map('trim', explode(',', $csvProducts));
-                            foreach ($prodNames as $pn) {
-                                if ($pn === '') {
-                                    continue;
-                                }
-                                if (ctype_digit($pn)) {
-                                    $pid = (int) $pn;
-                                    $dbProductIds[] = $pid;
-                                    $productDisplayNames[] = isset($productNameMap[$pid]) ? $productNameMap[$pid] : $pn;
-                                } else if (isset($productRevMap[strtolower($pn)])) {
-                                    $pid = (int) $productRevMap[strtolower($pn)];
+                    $brandDisplay = $csvBrand;
+                    if ($dbBrandId !== '' && isset($brandNameMap[(int) $dbBrandId])) {
+                        $brandDisplay = (string) $brandNameMap[(int) $dbBrandId];
+                    }
+                    $priceCurrDisplay = $csvPriceCurr;
+                    if ($dbPriceCurrId !== '' && isset($currencyNameMap[(int) $dbPriceCurrId])) {
+                        $priceCurrDisplay = (string) $currencyNameMap[(int) $dbPriceCurrId];
+                    }
+                    $costCurrDisplay = $csvCostCurr;
+                    if ($dbCostCurrId !== '' && isset($currencyNameMap[(int) $dbCostCurrId])) {
+                        $costCurrDisplay = (string) $currencyNameMap[(int) $dbCostCurrId];
+                    }
+                    $parentSkuDisplay = $csvParentSku !== '' ? $csvParentSku : '';
+                    if ($resolvedParentPackageId > 0) {
+                        $resolvedParentPackageName = getPackageDisplayNameById($resolvedParentPackageId, $packageLookup);
+                        if ($resolvedParentPackageName !== '') {
+                            $parentSkuDisplay = $resolvedParentPackageName;
+                        }
+                    }
+
+                    $dbProductIds = array();
+                    $productDisplayNames = array();
+                    $hasUnknownProduct = false;
+                    if (!empty($csvProducts)) {
+                        $prodNames = array_map('trim', explode(',', $csvProducts));
+                        foreach ($prodNames as $pn) {
+                            if ($pn === '') {
+                                continue;
+                            }
+                            if (ctype_digit($pn)) {
+                                $pid = (int) $pn;
+                                $dbProductIds[] = $pid;
+                                $productDisplayNames[] = isset($productNameMap[$pid]) ? $productNameMap[$pid] : $pn;
+                            } else {
+                                $resolvedProductId = resolveMapValue($pn, $productRevMap);
+                                if ($resolvedProductId !== '') {
+                                    $pid = (int) $resolvedProductId;
                                     $dbProductIds[] = $pid;
                                     $productDisplayNames[] = isset($productNameMap[$pid]) ? $productNameMap[$pid] : $pn;
                                 } else {
-                                    // Ignore unknown product names for diff-only preview.
                                     $hasUnknownProduct = true;
                                 }
                             }
                         }
-                        $dbProductIds = array_values(array_unique($dbProductIds));
-                        sort($dbProductIds); // Standardize array order for comparison
-                        $dbProductString = implode(',', $dbProductIds);
+                    }
+                    $dbProductIds = array_values(array_unique($dbProductIds));
+                    sort($dbProductIds);
+                    $dbProductString = implode(',', $dbProductIds);
 
-                        // Variables to check
-                        $item_code = getColByKey($data, $indexMap, 'ITEM_CODE', '');
-                        $platform_item_id = normalizePlatformItemIdCsv(getColByKey($data, $indexMap, 'PLATFORM_ITEM_ID', ''));
-                        $item_description = getColByKey($data, $indexMap, 'ITEM_DESCRIPTION', '');
-                        $price = normalizeNumericString(getColByKey($data, $indexMap, 'PRICE', '0.00'), 2);
-                        $cost = normalizeNumericString(getColByKey($data, $indexMap, 'COST', '0.00'), 2);
-                        $agent_cost = normalizeNumericString(getColByKey($data, $indexMap, 'AGENT_COST', '0.00'), 2);
-                        $barcode_slot_total = (string) ((int) normalizeNumericString(getColByKey($data, $indexMap, 'BARCODE_SLOT_TOTAL', '0'), 0));
-                        $remark = getColByKey($data, $indexMap, 'REMARK', '');
+                    $item_code = getColByKey($data, $indexMap, 'ITEM_CODE', '');
+                    $platform_item_id = normalizePlatformItemIdCsv(getColByKey($data, $indexMap, 'PLATFORM_ITEM_ID', ''));
+                    $item_description = getColByKey($data, $indexMap, 'ITEM_DESCRIPTION', '');
+                    $price = normalizeNumericString(getColByKey($data, $indexMap, 'PRICE', '0.00'), 2);
+                    $cost = normalizeNumericString(getColByKey($data, $indexMap, 'COST', '0.00'), 2);
+                    $agent_cost = normalizeNumericString(getColByKey($data, $indexMap, 'AGENT_COST', '0.00'), 2);
+                    $barcode_slot_total = (string) ((int) normalizeNumericString(getColByKey($data, $indexMap, 'BARCODE_SLOT_TOTAL', '0'), 0));
+                    $remark = getColByKey($data, $indexMap, 'REMARK', '');
 
-                        // ----- COMPARISON ENGINE -----
-                        $changes = [];
-                        if (!$isNew) {
-                            $ex = $existingPackages[$id];
-                            
-                            if (normalizeCellText((string) $ex['name']) !== normalizeCellText($name)) $changes['name'] = true;
-                            if (normalizeCellText((string) ($ex['item_code'] ?? '')) !== normalizeCellText($item_code)) $changes['item_code'] = true;
-                            if (normalizeCellText((string) ($ex['platform_item_id'] ?? '')) !== normalizeCellText($platform_item_id)) $changes['platform_item_id'] = true;
-                            if (normalizeCellText((string) ($ex['item_description'] ?? '')) !== normalizeCellText($item_description)) $changes['item_description'] = true;
-                            if ((float) $ex['price'] !== (float) $price) $changes['price'] = true;
-                            if ((float) $ex['cost'] !== (float) $cost) $changes['cost'] = true;
-                            if ((float) $ex['agent_cost'] !== (float) $agent_cost) $changes['agent_cost'] = true;
-                            if ((string)$ex['brand'] !== (string)$dbBrandId) $changes['brand'] = true;
-                            if ((string)$ex['currency_unit'] !== (string)$dbPriceCurrId) $changes['price_curr'] = true;
-                            if ((string)$ex['cost_curr'] !== (string)$dbCostCurrId) $changes['cost_curr'] = true;
-                            
-                            // Check product changes with normalized ID lists (trim, numeric only, unique, sorted).
-                            $exProductsRaw = array_map('trim', explode(',', (string) ($ex['product'] ?? '')));
-                            $exProductIds = array();
-                            foreach ($exProductsRaw as $exProd) {
-                                if ($exProd === '' || !ctype_digit($exProd)) {
-                                    continue;
-                                }
-                                $exProductIds[] = (int) $exProd;
+                    $changes = array();
+                    if (!$isNew) {
+                        $ex = $existingPackages[$id];
+
+                        if (normalizeCellText((string) $ex['name']) !== normalizeCellText($name)) $changes['name'] = true;
+                        if (normalizeCellText((string) ($ex['item_code'] ?? '')) !== normalizeCellText($item_code)) $changes['item_code'] = true;
+                        if (normalizeCellText((string) ($ex['platform_item_id'] ?? '')) !== normalizeCellText($platform_item_id)) $changes['platform_item_id'] = true;
+                        if (normalizeCellText((string) ($ex['item_description'] ?? '')) !== normalizeCellText($item_description)) $changes['item_description'] = true;
+                        if ((float) $ex['price'] !== (float) $price) $changes['price'] = true;
+                        if ((float) $ex['cost'] !== (float) $cost) $changes['cost'] = true;
+                        if ((float) $ex['agent_cost'] !== (float) $agent_cost) $changes['agent_cost'] = true;
+                        if ((string) $ex['brand'] !== (string) $dbBrandId) $changes['brand'] = true;
+                        if ((string) $ex['currency_unit'] !== (string) $dbPriceCurrId) $changes['price_curr'] = true;
+                        if ((string) $ex['cost_curr'] !== (string) $dbCostCurrId) $changes['cost_curr'] = true;
+                        if ((int) ($ex['parent_package_id'] ?? 0) !== (int) $resolvedParentPackageId) $changes['parent_sku'] = true;
+
+                        $exProductsRaw = array_map('trim', explode(',', (string) ($ex['product'] ?? '')));
+                        $exProductIds = array();
+                        foreach ($exProductsRaw as $exProd) {
+                            if ($exProd === '' || !ctype_digit($exProd)) {
+                                continue;
                             }
-                            $exProductIds = array_values(array_unique($exProductIds));
-                            sort($exProductIds);
-                            // If unknown product names are present from uploaded file, ignore product diff.
-                            if (!$hasUnknownProduct && implode(',', $exProductIds) !== $dbProductString) $changes['products'] = true;
-
-                            if ((string) ((int) ($ex['barcode_slot_total'] ?? 0)) !== (string) ((int) $barcode_slot_total)) $changes['barcode_slot_total'] = true;
-                            if (normalizeCellText((string) $ex['remark']) !== normalizeCellText($remark)) $changes['remark'] = true;
+                            $exProductIds[] = (int) $exProd;
                         }
+                        $exProductIds = array_values(array_unique($exProductIds));
+                        sort($exProductIds);
+                        if (!$hasUnknownProduct && implode(',', $exProductIds) !== $dbProductString) $changes['products'] = true;
 
-                        // Only add to preview if it's NEW or if something actually CHANGED
-                        if ($isNew || count($changes) > 0) {
-                            $previewData[] = [
-                                'is_new' => $isNew,
-                                'changes' => $changes,
-                                'field_errors' => $fieldErrors,
-                                'id' => $id,
-                                'name' => $name,
-                                'item_code' => $item_code,
-                                'platform_item_id' => $platform_item_id,
-                                'item_description' => $item_description,
-                                'price' => $price,
-                                'brand_name' => $brandDisplay,
-                                'brand_id' => $dbBrandId,
-                                'cost' => $cost,
-                                'cost_curr_name' => $costCurrDisplay,
-                                'cost_curr_id' => $dbCostCurrId,
-                                'price_curr_name' => $priceCurrDisplay,
-                                'price_curr_id' => $dbPriceCurrId,
-                                'agent_cost' => $agent_cost,
-                                'product_names' => implode(', ', $productDisplayNames),
-                                'product_ids' => $dbProductString,
-                                'barcode_slot_total' => $barcode_slot_total,
-                                'remark' => $remark
-                            ];
+                        if ((string) ((int) ($ex['barcode_slot_total'] ?? 0)) !== (string) ((int) $barcode_slot_total)) $changes['barcode_slot_total'] = true;
+                        if (normalizeCellText((string) $ex['remark']) !== normalizeCellText($remark)) $changes['remark'] = true;
+                    }
+
+                    if ($isNew || count($changes) > 0) {
+                        $preparedPreviewRows[] = array(
+                            'is_new' => $isNew,
+                            'existing_id' => !$isNew ? (int) $id : 0,
+                            'resolved_parent_package_id' => $resolvedParentPackageId,
+                            'changes' => $changes,
+                            'field_errors' => $fieldErrors,
+                            'id' => $id,
+                            'name' => $name,
+                            'item_code' => $item_code,
+                            'platform_item_id' => $platform_item_id,
+                            'item_description' => $item_description,
+                            'price' => $price,
+                            'brand_name' => $brandDisplay,
+                            'brand_id' => $dbBrandId,
+                            'cost' => $cost,
+                            'cost_curr_name' => $costCurrDisplay,
+                            'cost_curr_id' => $dbCostCurrId,
+                            'price_curr_name' => $priceCurrDisplay,
+                            'price_curr_id' => $dbPriceCurrId,
+                            'agent_cost' => $agent_cost,
+                            'product_names' => implode(', ', $productDisplayNames),
+                            'product_ids' => $dbProductString,
+                            'parent_sku' => $parentSkuDisplay,
+                            'parent_package_id' => $resolvedParentPackageId,
+                            'barcode_slot_total' => $barcode_slot_total,
+                            'remark' => $remark,
+                        );
+                    }
+                }
+
+                $previewParentMap = buildPackageParentMap($existingPackages, $preparedPreviewRows);
+                foreach ($preparedPreviewRows as $preparedRow) {
+                    $currentPackageId = isset($preparedRow['existing_id']) ? (int) $preparedRow['existing_id'] : 0;
+                    $resolvedParentPackageId = isset($preparedRow['resolved_parent_package_id']) ? (int) $preparedRow['resolved_parent_package_id'] : 0;
+
+                    if ($resolvedParentPackageId > 0 && $currentPackageId > 0) {
+                        if ($currentPackageId === $resolvedParentPackageId) {
+                            $preparedRow['field_errors']['parent_sku'] = 'Parent SKU cannot be the same package.';
+                        } else if (packageImportWouldCreateCircularRelation($currentPackageId, $resolvedParentPackageId, $previewParentMap)) {
+                            $preparedRow['field_errors']['parent_sku'] = 'Circular parent SKU relationship is not allowed.';
                         }
                     }
+
+                    $previewData[] = $preparedRow;
                 }
                 
                 if (empty($previewData) && empty($importErrors)) {
@@ -481,8 +666,9 @@ if ($action === 'preview') {
 } 
 // Step 2: Save the Data to the Database
 else if ($action === 'update') {
-    $postData = isset($_POST['data']) ? $_POST['data'] : [];
+    $postData = (array) post('data') ?: [];
     $previewData = [];
+    $preparedUpdateRows = [];
     $hasValidationError = false;
     $successCount = 0;
     $insertCount = 0;
@@ -501,10 +687,12 @@ else if ($action === 'update') {
         $costRaw = normalizeCellText((string) (isset($row['cost']) ? $row['cost'] : ''));
         $agentCostRaw = normalizeCellText((string) (isset($row['agent_cost']) ? $row['agent_cost'] : ''));
         $productsRaw = normalizeCellText((string) (isset($row['product_names']) ? $row['product_names'] : ''));
+        $parentSkuRaw = normalizeCellText((string) (isset($row['parent_sku']) ? $row['parent_sku'] : ''));
 
         $brandResolved = resolveMapValue($brandRaw, $brandRevMap);
         $priceCurrResolved = resolveMapValue($priceCurrRaw, $currencyRevMap);
         $costCurrResolved = resolveMapValue($costCurrRaw, $currencyRevMap);
+        $resolvedParentPackageId = resolvePackageReferenceId($parentSkuRaw, $packageLookup);
 
         if ($nameRaw === '') {
             $fieldErrors['name'] = 'Package Name field is required!';
@@ -539,6 +727,9 @@ else if ($action === 'update') {
         if ($agentCostRaw === '') {
             $fieldErrors['agent_cost'] = 'Agent Cost field is required!';
         }
+        if ($parentSkuRaw !== '' && $resolvedParentPackageId <= 0) {
+            $fieldErrors['parent_sku'] = 'Parent SKU package not found in database.';
+        }
 
         // Ignore unknown product names. Product field should not block update/preview.
 
@@ -546,10 +737,39 @@ else if ($action === 'update') {
             $hasValidationError = true;
         }
 
+        $row['parent_sku'] = $resolvedParentPackageId > 0
+            ? getPackageDisplayNameById($resolvedParentPackageId, $packageLookup)
+            : $parentSkuRaw;
+        $row['parent_package_id'] = $resolvedParentPackageId;
         $row['field_errors'] = $fieldErrors;
         $row['is_new'] = (isset($row['is_new']) && $row['is_new'] == '1') ? true : false;
         $row['changes'] = isset($row['changes']) && is_array($row['changes']) ? $row['changes'] : array();
         $previewData[] = $row;
+        $preparedUpdateRows[] = array(
+            'row' => $row,
+            'existing_id' => ($row['is_new'] ? 0 : (int) (isset($row['id']) ? $row['id'] : 0)),
+            'resolved_parent_package_id' => $resolvedParentPackageId,
+        );
+    }
+
+    $updateParentMap = buildPackageParentMap($existingPackages, $preparedUpdateRows);
+    foreach ($preparedUpdateRows as $idx => $preparedRow) {
+        $currentPackageId = isset($preparedRow['existing_id']) ? (int) $preparedRow['existing_id'] : 0;
+        $resolvedParentPackageId = isset($preparedRow['resolved_parent_package_id']) ? (int) $preparedRow['resolved_parent_package_id'] : 0;
+        if ($resolvedParentPackageId <= 0 || $currentPackageId <= 0) {
+            continue;
+        }
+
+        if ($currentPackageId === $resolvedParentPackageId) {
+            $previewData[$idx]['field_errors']['parent_sku'] = 'Parent SKU cannot be the same package.';
+            $hasValidationError = true;
+            continue;
+        }
+
+        if (packageImportWouldCreateCircularRelation($currentPackageId, $resolvedParentPackageId, $updateParentMap)) {
+            $previewData[$idx]['field_errors']['parent_sku'] = 'Circular parent SKU relationship is not allowed.';
+            $hasValidationError = true;
+        }
     }
 
     if ($hasValidationError) {
@@ -557,7 +777,7 @@ else if ($action === 'update') {
         $action = 'preview';
     } else {
 
-    foreach ($postData as $row) {
+    foreach ($previewData as $row) {
         $id = mysqli_real_escape_string($connect, $row['id']);
         $is_new = ($row['is_new'] == '1');
         
@@ -575,10 +795,12 @@ else if ($action === 'update') {
         $priceCurrRaw = normalizeCellText((string) (isset($row['price_curr_name']) ? $row['price_curr_name'] : ''));
         $costCurrRaw = normalizeCellText((string) (isset($row['cost_curr_name']) ? $row['cost_curr_name'] : ''));
         $productsRaw = normalizeCellText((string) (isset($row['product_names']) ? $row['product_names'] : ''));
+        $parentSkuRaw = normalizeCellText((string) (isset($row['parent_sku']) ? $row['parent_sku'] : ''));
 
         $brandRaw = resolveMapValue($brandRaw, $brandRevMap);
         $priceCurrRaw = resolveMapValue($priceCurrRaw, $currencyRevMap);
         $costCurrRaw = resolveMapValue($costCurrRaw, $currencyRevMap);
+        $parentPackageId = resolvePackageReferenceId($parentSkuRaw, $packageLookup);
 
         if ($brandRaw !== '' && !ctype_digit($brandRaw)) {
             $brandRaw = '0';
@@ -593,6 +815,7 @@ else if ($action === 'update') {
         $brand_id = $brandRaw !== '' ? mysqli_real_escape_string($connect, $brandRaw) : '0';
         $price_curr_id = $priceCurrRaw !== '' ? mysqli_real_escape_string($connect, $priceCurrRaw) : '0';
         $cost_curr_id = $costCurrRaw !== '' ? mysqli_real_escape_string($connect, $costCurrRaw) : '0';
+        $parent_package_sql = $parentPackageId > 0 ? (string) $parentPackageId : 'NULL';
 
         $productIdsList = array();
         $hasUnknownProductInput = false;
@@ -627,9 +850,9 @@ else if ($action === 'update') {
         if ($is_new) {
             // INSERT QUERY (Ignores provided ID to avoid conflicts)
             $query = "INSERT INTO " . PKG . " 
-                      (name, item_code, platform_item_id, item_description, price, currency_unit, brand, cost, cost_curr, agent_cost, product, barcode_slot_total, remark, create_by, create_date, create_time, status) 
+                      (name, item_code, platform_item_id, item_description, price, currency_unit, brand, cost, cost_curr, agent_cost, product, parent_package_id, barcode_slot_total, remark, create_by, create_date, create_time, status) 
                       VALUES 
-                      ('$name', '$item_code', '$platform_item_id', '$item_description', '$price', '$price_curr_id', '$brand_id', '$cost', '$cost_curr_id', '$agent_cost', '$product_ids', '$barcode_slot', '$remark', '" . USER_ID . "', curdate(), curtime(), 'A')";
+                      ('$name', '$item_code', '$platform_item_id', '$item_description', '$price', '$price_curr_id', '$brand_id', '$cost', '$cost_curr_id', '$agent_cost', '$product_ids', " . $parent_package_sql . ", '$barcode_slot', '$remark', '" . USER_ID . "', curdate(), curtime(), 'A')";
             
             if (mysqli_query($connect, $query)) {
                 $insertCount++;
@@ -648,6 +871,7 @@ else if ($action === 'update') {
                       cost_curr='$cost_curr_id', 
                       agent_cost='$agent_cost', 
                       product='$product_ids',
+                      parent_package_id=" . $parent_package_sql . ",
                       barcode_slot_total='$barcode_slot',
                       remark='$remark', 
                       update_by='" . USER_ID . "', 
@@ -805,6 +1029,15 @@ else if ($action === 'update') {
                                                     <input type="number" step="0.01" class="form-control <?= isset($chg['agent_cost']) ? 'highlight-change' : '' ?> js-required-field" data-required-field="agent_cost" data-required-message="Agent Cost field is required!" name="data[<?= $index ?>][agent_cost]" value="<?= htmlspecialchars($row['agent_cost']) ?>" required>
                                                     <?php if (isset($ferr['agent_cost'])) { ?><div class="field-error" data-field="agent_cost"><?= htmlspecialchars($ferr['agent_cost']) ?></div><?php } ?>
                                                 </div>
+                                                <div class="col-md-4">
+                                                    <label class="form-label">Parent SKU / Warehouse SKU</label>
+                                                    <div class="autocomplete">
+                                                        <input type="text" id="pkgi_parent_sku_<?= $index ?>" class="form-control <?= isset($chg['parent_sku']) ? 'highlight-change' : '' ?> js-lookup-single js-live-search" data-lookup-field="parent_sku" data-search-type="name" data-db-table="<?= PKG ?>" name="data[<?= $index ?>][parent_sku]" value="<?= htmlspecialchars(isset($row['parent_sku']) ? $row['parent_sku'] : '') ?>">
+                                                        <input type="hidden" id="pkgi_parent_sku_<?= $index ?>_hidden" value="">
+                                                    </div>
+                                                    <?php if (isset($ferr['parent_sku'])) { ?><div class="field-error" data-field="parent_sku"><?= htmlspecialchars($ferr['parent_sku']) ?></div><?php } ?>
+                                                    <small class="text-muted">Match exact active package name or item code. Leave empty for no parent SKU.</small>
+                                                </div>
                                                 <div class="col-md-6">
                                                     <label class="form-label">Products Included</label>
                                                     <input type="text" class="form-control <?= isset($chg['products']) ? 'highlight-change' : '' ?> js-lookup-multi" list="packageImportProductList" data-lookup-field="product_names" name="data[<?= $index ?>][product_names]" value="<?= htmlspecialchars($row['product_names']) ?>">
@@ -829,11 +1062,11 @@ else if ($action === 'update') {
                                         <option value="<?= htmlspecialchars($optName) ?>"></option>
                                     <?php } ?>
                                 </datalist>
-                                <div class="d-flex justify-content-center gap-2 flex-wrap mt-4">
-                                    <a href="package_import.php" class="btn btn-lg btn-rounded btn-secondary px-4">Cancel</a>
-                                    <button class="btn btn-lg btn-rounded btn-success px-4" type="submit" name="actionBtn" value="update">
-                                        <i class="fa-solid fa-cloud-arrow-up"></i> Execute Bulk Import & Update
+                                <div class="import-preview-actions mt-4">
+                                    <button class="btn btn-lg btn-rounded btn-success px-4 import-preview-primary" type="submit" name="actionBtn" value="update">
+                                        <i class="fa-solid fa-cloud-arrow-up"></i> Import <?= htmlspecialchars($parentPageTitle, ENT_QUOTES, 'UTF-8') ?>
                                     </button>
+                                    <a href="package_import.php" class="btn btn-lg btn-rounded btn-secondary px-4 import-preview-cancel">Cancel</a>
                                 </div>
                             </form>
                         </div>
@@ -881,6 +1114,11 @@ else if ($action === 'update') {
              cost_curr_name: {
                  names: <?= json_encode(isset($currencyNameMap) ? array_values($currencyNameMap) : []) ?>,
                  ids: <?= json_encode(isset($currencyNameMap) ? array_map('strval', array_keys($currencyNameMap)) : []) ?>
+             },
+             parent_sku: {
+                 names: <?= json_encode(isset($packageLookup['active_names']) ? array_values($packageLookup['active_names']) : []) ?>,
+                 ids: <?= json_encode(isset($packageLookup['rows_by_id']) ? array_map('strval', array_keys($packageLookup['rows_by_id'])) : []) ?>,
+                 altValues: <?= json_encode(isset($packageLookup['active_item_codes']) ? array_values($packageLookup['active_item_codes']) : []) ?>
              },
              product_names: {
                  names: <?= json_encode(isset($productNameMap) ? array_values($productNameMap) : []) ?>,

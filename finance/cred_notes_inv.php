@@ -117,10 +117,10 @@ if (post('actionBtn')) {
             $cni_pay = postSpaceFilter('cni_pay');
             $cni_pay_details = postSpaceFilter('cni_pay_details');
 
-            $descriptions = isset($_POST['prod_desc']) ? $_POST['prod_desc'] : array();
-            $prices = isset($_POST['price']) ? $_POST['price'] : array();
-            $quantities = isset($_POST['quantity']) ? $_POST['quantity'] : array();
-            $amounts = isset($_POST['amount']) ? $_POST['amount'] : array();
+            $descriptions = (array) postSpaceFilter('prod_desc') ?: array();
+            $prices = (array) postSpaceFilter('price') ?: array();
+            $quantities = (array) postSpaceFilter('quantity') ?: array();
+            $amounts = (array) postSpaceFilter('amount') ?: array();
 
             if (!is_array($descriptions)) {
                 $descriptions = array($descriptions);

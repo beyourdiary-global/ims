@@ -587,7 +587,7 @@ function parseFacebookImportFiles($sourceFiles, $metaAccounts)
 function getFacebookPreviewRecordsFromPost()
 {
     $records = [];
-    $postedRecords = isset($_POST['fb_records']) && is_array($_POST['fb_records']) ? $_POST['fb_records'] : [];
+    $postedRecords = (array) post('fb_records') ?: [];
 
     foreach ($postedRecords as $record) {
         $records[] = [
@@ -611,10 +611,11 @@ function getFacebookPreviewRecordsFromPost()
 
 function getFacebookImportSummaryFromPost()
 {
+    $summaryRows = (array) post('fb_import_summary') ?: [];
     return [
-        'processed_files' => (int) (isset($_POST['fb_import_summary']['processed_files']) ? $_POST['fb_import_summary']['processed_files'] : 0),
-        'preview_records' => (int) (isset($_POST['fb_import_summary']['preview_records']) ? $_POST['fb_import_summary']['preview_records'] : 0),
-        'skipped_files' => (int) (isset($_POST['fb_import_summary']['skipped_files']) ? $_POST['fb_import_summary']['skipped_files'] : 0),
+        'processed_files' => (int) (isset($summaryRows['processed_files']) ? $summaryRows['processed_files'] : 0),
+        'preview_records' => (int) (isset($summaryRows['preview_records']) ? $summaryRows['preview_records'] : 0),
+        'skipped_files' => (int) (isset($summaryRows['skipped_files']) ? $summaryRows['skipped_files'] : 0),
     ];
 }
 

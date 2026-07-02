@@ -71,9 +71,9 @@ $retainFormInput = ($_SERVER['REQUEST_METHOD'] === 'POST' && post('actionBtn') !
 $selectedCompanyId = isset($row['company']) ? $row['company'] : '';
 $selectedCompanyLabel = $selectedCompanyName;
 if ($retainFormInput) {
-    $selectedCompanyName = isset($_POST['companyName']) ? trim((string)$_POST['companyName']) : $selectedCompanyName;
-    $selectedCompanyId = isset($_POST['company']) ? trim((string)$_POST['company']) : '';
-    $selectedCompanyLabel = isset($_POST['company_selected_name']) ? trim((string)$_POST['company_selected_name']) : '';
+    $selectedCompanyName = trim((string) post('companyName'));
+    $selectedCompanyId = trim((string) post('company'));
+    $selectedCompanyLabel = trim((string) post('company_selected_name'));
 
     // Always prefer the selected option label when a valid company ID is posted.
     if ($selectedCompanyId !== '' && ctype_digit((string)$selectedCompanyId)) {
@@ -141,8 +141,8 @@ if (post('actionBtn')) {
             $dataRemark = postSpaceFilter('currentDataRemark');
             $hasValidationError = false;
 
-            $isBrandNameEmpty = !isset($_POST['currentDataName']) || trim((string)$currentDataName) === '';
-            $isCompanyNameEmpty = !isset($_POST['companyName']) || trim((string)$companyName) === '';
+            $isBrandNameEmpty = trim((string) post('currentDataName')) === '';
+            $isCompanyNameEmpty = trim((string) post('companyName')) === '';
 
             if ($isBrandNameEmpty) {
                 $name_err = 'Brand Name is required!';
@@ -348,7 +348,7 @@ if ($submittedForSave) {
 
                     <div class="form-group mb-3">
                         <label class="form-label form_lbl" for="currentDataName"><?php echo $pageTitle ?> Name<span class="requireRed">*</span></label>
-                        <input class="form-control" type="text" name="currentDataName" id="currentDataName" value="<?= htmlspecialchars($retainFormInput ? (isset($_POST['currentDataName']) ? trim((string)$_POST['currentDataName']) : '') : (isset($row['name']) ? $row['name'] : ''), ENT_QUOTES, 'UTF-8') ?>" <?php if ($act == '') echo 'readonly' ?> required autocomplete="off">
+                        <input class="form-control" type="text" name="currentDataName" id="currentDataName" value="<?= htmlspecialchars($retainFormInput ? trim((string) post('currentDataName')) : (isset($row['name']) ? $row['name'] : ''), ENT_QUOTES, 'UTF-8') ?>" <?php if ($act == '') echo 'readonly' ?> required autocomplete="off">
                         <div id="err_msg">
                             <span class="mt-n1" id="errorSpan"><?php if (isset($name_err)) echo $name_err; else if (isset($err)) echo $err; ?></span>
                         </div>
@@ -366,7 +366,7 @@ if ($submittedForSave) {
 
                     <div class="form-group mb-3">
                         <label class="form-label" for="currentDataRemark"><?php echo $pageTitle ?> Remark</label>
-                        <textarea class="form-control" name="currentDataRemark" id="currentDataRemark" rows="3" <?php if ($act == '') echo 'readonly' ?>><?= htmlspecialchars($retainFormInput ? (isset($_POST['currentDataRemark']) ? trim((string)$_POST['currentDataRemark']) : '') : (isset($row['remark']) ? $row['remark'] : ''), ENT_QUOTES, 'UTF-8') ?></textarea>
+                        <textarea class="form-control" name="currentDataRemark" id="currentDataRemark" rows="3" <?php if ($act == '') echo 'readonly' ?>><?= htmlspecialchars($retainFormInput ? trim((string) post('currentDataRemark')) : (isset($row['remark']) ? $row['remark'] : ''), ENT_QUOTES, 'UTF-8') ?></textarea>
                     </div>
                     <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
 

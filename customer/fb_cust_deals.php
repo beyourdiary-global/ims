@@ -43,8 +43,8 @@ if (!($dataId) && !($act)) {
 
 }
 
-if ($dataId && isset($_GET['open_order_id'])) {
-    $openOrderId = (int) $_GET['open_order_id'];
+if ($dataId && numberInput('open_order_id') !== '') {
+    $openOrderId = (int) numberInput('open_order_id');
     if ($openOrderId > 0) {
         $customerName = isset($row['name']) ? trim((string) $row['name']) : '';
         $customerFbLink = isset($row['fb_link']) ? trim((string) $row['fb_link']) : '';

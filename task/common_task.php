@@ -1855,10 +1855,10 @@ if (!function_exists('taskResolveCurrentProjectId')) {
     {
         $projectId = (int) $requestedProjectId;
         if ($projectId <= 0) {
-            $projectId = isset($_GET['project_id']) ? (int) $_GET['project_id'] : 0;
+            $projectId = (int) numberInput('project_id');
         }
         if ($projectId <= 0) {
-            $projectId = isset($_POST['project_id']) ? (int) $_POST['project_id'] : 0;
+            $projectId = (int) post('project_id');
         }
 
         if ($projectId > 0 && defined('TASK_PROJECT')) {

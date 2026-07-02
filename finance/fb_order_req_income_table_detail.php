@@ -155,7 +155,7 @@ if (empty($_SESSION['csrf_token'])) {
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceivedDateBtn')) {
-    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    $submittedToken = (string) post('csrf_token');
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
         renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', (string) $_SERVER['REQUEST_URI'], 1200, true);
         exit;
@@ -279,8 +279,8 @@ $result = getData('*', '', '', FB_ORDER_REQ, $finance_connect);
                     <tbody>
                         <?php 
                         while ($row = $result->fetch_assoc()) {
-                            if (isset($_GET['ids'])) {
-                            $ids = explode(',', $_GET['ids']);
+                            if (input('ids') !== '') {
+                            $ids = explode(',', input('ids'));
                             foreach ($ids as $id) {
                             $decodedId = urldecode($id);
                             if (isset($row['name'], $row['id']) && !empty($row['name']) && $row['id'] == $id) {

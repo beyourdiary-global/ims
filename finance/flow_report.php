@@ -30,8 +30,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
     audit_log($log);
 }
 
-$selectedMonth = isset($_GET['month']) ? trim((string) $_GET['month']) : date('m');
-$selectedYear = isset($_GET['year']) ? trim((string) $_GET['year']) : date('Y');
+$selectedMonth = trim((string) input('month'));
+$selectedYear = trim((string) input('year'));
 $selectedDate = trim((string) input('date'));
 $selectedUserId = (int) input('user_id');
 $currentYear = date('Y');

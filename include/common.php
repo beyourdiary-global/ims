@@ -2,6 +2,7 @@
 
 use PgSql\Lob;
 
+// Intentional raw POST access lives here so the rest of the codebase can reuse these helpers.
 function post($key)
 {
 	return isset($_POST[$key]) ? $_POST[$key] : '';
@@ -18,6 +19,7 @@ function postSpaceFilter($key)
 	}
 }
 
+// Intentional raw GET access lives here so the rest of the codebase can reuse these helpers.
 function input($key)
 {
 	$results = '';
@@ -43,6 +45,115 @@ function numberInput($key)
 {
 	$val = input($key);
 	return isNumber($val) ? $val : '';
+}
+
+if (!function_exists('inputArray')) {
+	function inputArray($key)
+	{
+		if (!isset($_GET[$key])) {
+			return array();
+		}
+
+		if (!is_array($_GET[$key])) {
+			$value = input($key);
+			return $value !== '' ? array($value) : array();
+		}
+
+		$values = array();
+		foreach ((array) $_GET[$key] as $value) {
+			if (is_array($value)) {
+				continue;
+			}
+
+			$value = trim((string) $value);
+			if ($value === '' || strlen($value) > 256) {
+				continue;
+			}
+
+			$value = xssFilter($value);
+			if ($value === '') {
+				continue;
+			}
+
+			$values[] = $value;
+		}
+
+		return $values;
+	}
+}
+
+if (!function_exists('numberInputArray')) {
+	function numberInputArray($key)
+	{
+		$values = array();
+		foreach (inputArray($key) as $value) {
+			$value = trim((string) $value);
+			if ($value !== '' && isNumber($value)) {
+				$values[] = $value;
+			}
+		}
+
+		return $values;
+	}
+}
+
+if (!function_exists('searchInputArray')) {
+	function searchInputArray($key)
+	{
+		$values = array();
+		foreach (inputArray($key) as $value) {
+			if (preg_match("/<script(.*?)>(.*?)<\/script>/is", $value) || preg_match("/<script(.*?)>/is", $value)) {
+				continue;
+			}
+
+			$value = strip_tags((string) $value);
+			$value = trim(preg_replace('/[^(a-zA-Z0-9.()\-,\/)\&\'\"]+/i', ' ', $value));
+			if ($value !== '') {
+				$values[] = $value;
+			}
+		}
+
+		return $values;
+	}
+}
+
+if (!function_exists('commonSafeQueryParams')) {
+	function commonSafeQueryParams($excludeKeys = array())
+	{
+		$excluded = array();
+		foreach ((array) $excludeKeys as $excludeKey) {
+			$excludeKey = trim((string) $excludeKey);
+			if ($excludeKey !== '') {
+				$excluded[$excludeKey] = true;
+			}
+		}
+
+		$params = array();
+		foreach ((array) $_GET as $paramKey => $paramValue) {
+			$paramKey = trim((string) $paramKey);
+			if ($paramKey === '' || isset($excluded[$paramKey]) || !preg_match('/^[A-Za-z0-9_-]+$/', $paramKey)) {
+				continue;
+			}
+
+			if (is_array($paramValue)) {
+				continue;
+			}
+
+			$paramValue = trim((string) $paramValue);
+			if ($paramValue === '' || strlen($paramValue) > 256) {
+				continue;
+			}
+
+			$paramValue = xssFilter($paramValue);
+			if ($paramValue === '' || preg_match('/^\s*(?:javascript|data|vbscript)\s*:/i', $paramValue)) {
+				continue;
+			}
+
+			$params[$paramKey] = $paramValue;
+		}
+
+		return $params;
+	}
 }
 
 
@@ -4966,7 +5077,8 @@ if (!function_exists('shopeeCustomerRecordGetListDataset')) {
     function shopeeCustomerRecordGetListDataset($connect, $financeConnect, $params = array())
     {
         if (empty($params)) {
-            $params = array_merge((array) $_GET, (array) $_POST);
+            // Intentionally keep the full raw GET payload here for cache-key parity, including scalar and array query parameters.
+            $params = (array) $_GET;
         }
 
         $cachedDataset = shopeeCustomerRecordReadListCache($params);
@@ -6171,6 +6283,206 @@ if (!function_exists('shopeeOmsGetPackageNameMap')) {
     }
 }
 
+if (!function_exists('commonPackageLoadRowsByIds')) {
+    function commonPackageLoadRowsByIds($connect, $packageIds, $includeInactive = true)
+    {
+        $rows = array();
+        if (!($connect instanceof mysqli) || !is_array($packageIds) || empty($packageIds)) {
+            return $rows;
+        }
+
+        $safeIds = array();
+        foreach ($packageIds as $packageId) {
+            $packageId = (int) $packageId;
+            if ($packageId > 0) {
+                $safeIds[$packageId] = $packageId;
+            }
+        }
+
+        if (empty($safeIds)) {
+            return $rows;
+        }
+
+        $whereSql = "id IN (" . implode(',', $safeIds) . ")";
+        if (!$includeInactive) {
+            $whereSql .= " AND status = 'A'";
+        }
+
+        $result = mysqli_query(
+            $connect,
+            "SELECT id, name, item_code, product, parent_package_id, status FROM `" . PKG . "` WHERE " . $whereSql
+        );
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $rowId = isset($row['id']) ? (int) $row['id'] : 0;
+                if ($rowId > 0) {
+                    $rows[$rowId] = array(
+                        'id' => $rowId,
+                        'name' => isset($row['name']) ? (string) $row['name'] : '',
+                        'item_code' => isset($row['item_code']) ? (string) $row['item_code'] : '',
+                        'product' => isset($row['product']) ? (string) $row['product'] : '',
+                        'parent_package_id' => isset($row['parent_package_id']) ? (int) $row['parent_package_id'] : 0,
+                        'status' => isset($row['status']) ? (string) $row['status'] : '',
+                    );
+                }
+            }
+        }
+
+        return $rows;
+    }
+}
+
+if (!function_exists('commonPackageWouldCreateCircularRelation')) {
+    function commonPackageWouldCreateCircularRelation($packageId, $parentPackageId, $parentMap)
+    {
+        $packageId = (int) $packageId;
+        $parentPackageId = (int) $parentPackageId;
+        $parentMap = is_array($parentMap) ? $parentMap : array();
+
+        if ($packageId <= 0 || $parentPackageId <= 0) {
+            return false;
+        }
+
+        $visited = array();
+        $currentPackageId = $parentPackageId;
+        while ($currentPackageId > 0) {
+            if ($currentPackageId === $packageId) {
+                return true;
+            }
+
+            if (isset($visited[$currentPackageId])) {
+                return true;
+            }
+
+            $visited[$currentPackageId] = true;
+            $currentPackageId = isset($parentMap[$currentPackageId]) ? (int) $parentMap[$currentPackageId] : 0;
+        }
+
+        return false;
+    }
+}
+
+if (!function_exists('commonValidatePackageParentRelation')) {
+    function commonValidatePackageParentRelation($connect, $packageId, $parentPackageId)
+    {
+        $packageId = (int) $packageId;
+        $parentPackageId = (int) $parentPackageId;
+
+        $result = array(
+            'success' => true,
+            'message' => '',
+            'parent_package_id' => $parentPackageId,
+            'parent_row' => array(),
+        );
+
+        if ($parentPackageId <= 0) {
+            return $result;
+        }
+
+        if (!($connect instanceof mysqli)) {
+            $result['success'] = false;
+            $result['message'] = 'Unable to validate parent SKU package.';
+            return $result;
+        }
+
+        if ($packageId > 0 && $packageId === $parentPackageId) {
+            $result['success'] = false;
+            $result['message'] = 'Parent SKU cannot be the same package.';
+            return $result;
+        }
+
+        $packageRows = commonPackageLoadRowsByIds($connect, array($parentPackageId), true);
+        if (!isset($packageRows[$parentPackageId]) || strtoupper(trim((string) $packageRows[$parentPackageId]['status'])) !== 'A') {
+            $result['success'] = false;
+            $result['message'] = 'Parent SKU package was not found or is not active.';
+            return $result;
+        }
+
+        $parentMap = array();
+        $parentResult = mysqli_query($connect, "SELECT id, parent_package_id FROM `" . PKG . "`");
+        if ($parentResult) {
+            while ($parentRow = mysqli_fetch_assoc($parentResult)) {
+                $currentPackageId = isset($parentRow['id']) ? (int) $parentRow['id'] : 0;
+                if ($currentPackageId > 0) {
+                    $parentMap[$currentPackageId] = isset($parentRow['parent_package_id']) ? (int) $parentRow['parent_package_id'] : 0;
+                }
+            }
+        }
+
+        if (commonPackageWouldCreateCircularRelation($packageId, $parentPackageId, $parentMap)) {
+            $result['success'] = false;
+            $result['message'] = 'Circular parent SKU relationship is not allowed.';
+            return $result;
+        }
+
+        $result['parent_row'] = $packageRows[$parentPackageId];
+        return $result;
+    }
+}
+
+if (!function_exists('commonResolveWarehousePackage')) {
+    function commonResolveWarehousePackage($connect, $packageId, $packageRowMap = null)
+    {
+        $packageId = (int) $packageId;
+        $packageRowMap = is_array($packageRowMap) ? $packageRowMap : array();
+
+        $resolution = array(
+            'requested_package_id' => $packageId,
+            'requested_package_name' => '',
+            'requested_product' => '',
+            'parent_package_id' => 0,
+            'warehouse_package_id' => $packageId,
+            'warehouse_package_name' => '',
+            'warehouse_product' => '',
+            'uses_parent' => false,
+        );
+
+        if ($packageId <= 0) {
+            return $resolution;
+        }
+
+        if (!isset($packageRowMap[$packageId])) {
+            $loadedRows = commonPackageLoadRowsByIds($connect, array($packageId), true);
+            if (isset($loadedRows[$packageId])) {
+                $packageRowMap[$packageId] = $loadedRows[$packageId];
+            }
+        }
+
+        $requestedRow = isset($packageRowMap[$packageId]) ? $packageRowMap[$packageId] : array();
+        if (!empty($requestedRow)) {
+            $resolution['requested_package_name'] = isset($requestedRow['name']) ? (string) $requestedRow['name'] : '';
+            $resolution['requested_product'] = isset($requestedRow['product']) ? (string) $requestedRow['product'] : '';
+            $resolution['parent_package_id'] = isset($requestedRow['parent_package_id']) ? (int) $requestedRow['parent_package_id'] : 0;
+            $resolution['warehouse_package_name'] = $resolution['requested_package_name'];
+            $resolution['warehouse_product'] = $resolution['requested_product'];
+        }
+
+        $parentPackageId = (int) $resolution['parent_package_id'];
+        if ($parentPackageId <= 0) {
+            return $resolution;
+        }
+
+        if (!isset($packageRowMap[$parentPackageId])) {
+            $loadedRows = commonPackageLoadRowsByIds($connect, array($parentPackageId), true);
+            if (isset($loadedRows[$parentPackageId])) {
+                $packageRowMap[$parentPackageId] = $loadedRows[$parentPackageId];
+            }
+        }
+
+        $parentRow = isset($packageRowMap[$parentPackageId]) ? $packageRowMap[$parentPackageId] : array();
+        if (empty($parentRow) || strtoupper(trim((string) (isset($parentRow['status']) ? $parentRow['status'] : ''))) !== 'A') {
+            return $resolution;
+        }
+
+        $resolution['warehouse_package_id'] = $parentPackageId;
+        $resolution['warehouse_package_name'] = isset($parentRow['name']) ? (string) $parentRow['name'] : $resolution['warehouse_package_name'];
+        $resolution['warehouse_product'] = isset($parentRow['product']) ? (string) $parentRow['product'] : $resolution['warehouse_product'];
+        $resolution['uses_parent'] = true;
+
+        return $resolution;
+    }
+}
+
 if (!function_exists('shopeeOmsResolveOrderPackageRows')) {
     function shopeeOmsResolveOrderPackageRows($connect, $orderRow)
     {
@@ -6244,45 +6556,22 @@ if (!function_exists('shopeeOmsBuildOrderProductSummaryBySource')) {
         $sourceConfig = shopeeOmsResolveOrderSourceConfig($source, shopeeOmsGetOrderSourcePlatform($orderRow, 'shopee'));
         $platform = isset($sourceConfig['platform']) ? (string) $sourceConfig['platform'] : 'shopee';
         $packageRows = shopeeOmsResolveOrderPackageRowsBySource($connect, $orderRow, $sourceConfig);
-        $packageSummary = array();
+        $soldPackageSummary = array();
         $productQtyMap = array();
         $packageIds = array();
         foreach ($packageRows as $packageRow) {
             $packageId = isset($packageRow['package_id']) ? (int) $packageRow['package_id'] : 0;
-            $packageName = trim((string) (isset($packageRow['package_name']) ? $packageRow['package_name'] : ''));
-            $qty = isset($packageRow['qty']) ? (int) $packageRow['qty'] : 1;
-            if ($qty <= 0) {
-                $qty = 1;
-            }
-
-            if ($packageName !== '') {
-                $packageSummary[] = $packageName . ' x' . $qty;
-            }
             if ($packageId > 0) {
                 $packageIds[$packageId] = $packageId;
             }
         }
 
-        $packageProductMap = array();
-        if (!empty($packageIds) && ($connect instanceof mysqli)) {
-            $result = mysqli_query($connect, "SELECT id, name, product FROM `" . PKG . "` WHERE id IN (" . implode(',', $packageIds) . ")");
-            if ($result) {
-                while ($row = mysqli_fetch_assoc($result)) {
-                    $packageId = isset($row['id']) ? (int) $row['id'] : 0;
-                    if ($packageId > 0) {
-                        $packageProductMap[$packageId] = array(
-                            'name' => isset($row['name']) ? (string) $row['name'] : '',
-                            'product' => isset($row['product']) ? (string) $row['product'] : '',
-                        );
-                    }
-                }
-            }
-        }
+        $packageDetailMap = commonPackageLoadRowsByIds($connect, array_values($packageIds), true);
 
         if ($platform === 'shopee') {
             $missingPackageIds = array();
             foreach ($packageIds as $packageId) {
-                if (!isset($packageProductMap[$packageId]) || trim((string) $packageProductMap[$packageId]['product']) === '') {
+                if (!isset($packageDetailMap[$packageId]) || trim((string) $packageDetailMap[$packageId]['product']) === '') {
                     $missingPackageIds[$packageId] = $packageId;
                 }
             }
@@ -6291,11 +6580,33 @@ if (!function_exists('shopeeOmsBuildOrderProductSummaryBySource')) {
                 $packageSnapshotMap = shopeeOmsGetPackageSnapshotMap($missingPackageIds);
                 foreach ($missingPackageIds as $packageId) {
                     if (isset($packageSnapshotMap[$packageId])) {
-                        $packageProductMap[$packageId] = $packageSnapshotMap[$packageId];
+                        if (!isset($packageDetailMap[$packageId])) {
+                            $packageDetailMap[$packageId] = array(
+                                'id' => $packageId,
+                                'name' => '',
+                                'item_code' => '',
+                                'product' => '',
+                                'parent_package_id' => 0,
+                                'status' => '',
+                            );
+                        }
+                        if (trim((string) $packageDetailMap[$packageId]['name']) === '') {
+                            $packageDetailMap[$packageId]['name'] = isset($packageSnapshotMap[$packageId]['name']) ? (string) $packageSnapshotMap[$packageId]['name'] : '';
+                        }
+                        if (trim((string) $packageDetailMap[$packageId]['product']) === '') {
+                            $packageDetailMap[$packageId]['product'] = isset($packageSnapshotMap[$packageId]['product']) ? (string) $packageSnapshotMap[$packageId]['product'] : '';
+                        }
                     }
                 }
             }
         }
+
+        $soldPackageSummaryRows = array();
+        $warehousePackageSummary = array();
+        $warehousePackageSummaryRows = array();
+        $warehousePackageQtyMap = array();
+        $productContextMap = array();
+        $skuResolutionNotes = array();
 
         foreach ($packageRows as $packageRow) {
             $packageId = isset($packageRow['package_id']) ? (int) $packageRow['package_id'] : 0;
@@ -6303,11 +6614,54 @@ if (!function_exists('shopeeOmsBuildOrderProductSummaryBySource')) {
             if ($qty <= 0) {
                 $qty = 1;
             }
-            if ($packageId <= 0 || !isset($packageProductMap[$packageId])) {
-                continue;
+
+            $soldPackageName = trim((string) (isset($packageRow['package_name']) ? $packageRow['package_name'] : ''));
+            if ($soldPackageName === '' && isset($packageDetailMap[$packageId]['name'])) {
+                $soldPackageName = trim((string) $packageDetailMap[$packageId]['name']);
+            }
+            if ($soldPackageName === '') {
+                $soldPackageName = $packageId > 0 ? ('Package #' . $packageId) : '';
             }
 
-            $productIds = array_filter(array_map('trim', explode(',', (string) $packageProductMap[$packageId]['product'])), 'strlen');
+            if ($soldPackageName !== '') {
+                $soldPackageSummary[] = $soldPackageName . ' x' . $qty;
+                $soldPackageSummaryRows[] = array(
+                    'package_id' => $packageId,
+                    'label' => $soldPackageName . ' x' . $qty,
+                    'package_name' => $soldPackageName,
+                    'qty' => $qty,
+                );
+            }
+
+            $warehouseResolution = commonResolveWarehousePackage($connect, $packageId, $packageDetailMap);
+            $warehousePackageId = isset($warehouseResolution['warehouse_package_id']) ? (int) $warehouseResolution['warehouse_package_id'] : $packageId;
+            $warehousePackageName = trim((string) (isset($warehouseResolution['warehouse_package_name']) ? $warehouseResolution['warehouse_package_name'] : ''));
+            if ($warehousePackageName === '') {
+                $warehousePackageName = $soldPackageName;
+            }
+
+            $warehouseProductCsv = trim((string) (isset($warehouseResolution['warehouse_product']) ? $warehouseResolution['warehouse_product'] : ''));
+            if ($warehouseProductCsv === '' && isset($packageDetailMap[$packageId]['product'])) {
+                $warehouseProductCsv = trim((string) $packageDetailMap[$packageId]['product']);
+            }
+
+            $warehousePackageKey = $warehousePackageId > 0
+                ? 'id:' . $warehousePackageId
+                : 'name:' . strtolower(trim((string) $warehousePackageName));
+            if (!isset($warehousePackageQtyMap[$warehousePackageKey])) {
+                $warehousePackageQtyMap[$warehousePackageKey] = array(
+                    'package_id' => $warehousePackageId,
+                    'package_name' => $warehousePackageName,
+                    'qty' => 0,
+                );
+            }
+            $warehousePackageQtyMap[$warehousePackageKey]['qty'] += $qty;
+
+            if (!empty($warehouseResolution['uses_parent']) && $soldPackageName !== '' && $warehousePackageName !== '' && $soldPackageName !== $warehousePackageName) {
+                $skuResolutionNotes[] = 'Sold SKU: ' . $soldPackageName . '. Warehouse SKU: ' . $warehousePackageName . '.';
+            }
+
+            $productIds = array_filter(array_map('trim', explode(',', $warehouseProductCsv)), 'strlen');
             foreach ($productIds as $productIdRaw) {
                 $productId = (int) $productIdRaw;
                 if ($productId <= 0) {
@@ -6317,6 +6671,16 @@ if (!function_exists('shopeeOmsBuildOrderProductSummaryBySource')) {
                     $productQtyMap[$productId] = 0;
                 }
                 $productQtyMap[$productId] += $qty;
+
+                if (!isset($productContextMap[$productId])) {
+                    $productContextMap[$productId] = array(
+                        'product_id' => $productId,
+                        'package_names' => array(),
+                    );
+                }
+                if ($warehousePackageName !== '') {
+                    $productContextMap[$productId]['package_names'][$warehousePackageName] = true;
+                }
             }
         }
 
@@ -6355,31 +6719,71 @@ if (!function_exists('shopeeOmsBuildOrderProductSummaryBySource')) {
         $productSummary = array();
         $productSummaryRows = array();
         foreach ($productQtyMap as $productId => $qty) {
-            $productLabel = (isset($productNameMap[$productId]) ? $productNameMap[$productId] : ('Product #' . $productId)) . ' x' . (int) $qty . ' boxes';
+            $productName = isset($productNameMap[$productId]) ? $productNameMap[$productId] : ('Product #' . $productId);
+            $packageNames = isset($productContextMap[$productId]['package_names']) && is_array($productContextMap[$productId]['package_names'])
+                ? array_values(array_keys($productContextMap[$productId]['package_names']))
+                : array();
+            $shortageLabel = $productName;
+            if (!empty($packageNames)) {
+                $shortageLabel = implode(' / ', $packageNames) . ' / ' . $productName;
+            }
+
+            $productLabel = $productName . ' x' . (int) $qty . ' boxes';
             $productSummary[] = $productLabel;
             $productSummaryRows[] = array(
                 'product_id' => (int) $productId,
                 'label' => $productLabel,
+                'product_name' => $productName,
+                'package_names' => $packageNames,
+                'shortage_label' => $shortageLabel,
             );
+            $productContextMap[$productId]['product_name'] = $productName;
+            $productContextMap[$productId]['package_names'] = $packageNames;
+            $productContextMap[$productId]['shortage_label'] = $shortageLabel;
         }
 
-        $packageSummaryRows = array();
-        foreach ($packageRows as $idx => $packageRow) {
-            $packageSummaryRows[] = array(
-                'package_id' => isset($packageRow['package_id']) ? (int) $packageRow['package_id'] : 0,
-                'label' => isset($packageSummary[$idx]) ? (string) $packageSummary[$idx] : '',
+        foreach ($warehousePackageQtyMap as $warehousePackageData) {
+            $warehousePackageName = trim((string) (isset($warehousePackageData['package_name']) ? $warehousePackageData['package_name'] : ''));
+            $warehouseQty = isset($warehousePackageData['qty']) ? (int) $warehousePackageData['qty'] : 0;
+            if ($warehouseQty <= 0) {
+                $warehouseQty = 1;
+            }
+            if ($warehousePackageName === '') {
+                $warehousePackageName = isset($warehousePackageData['package_id']) && (int) $warehousePackageData['package_id'] > 0
+                    ? ('Package #' . (int) $warehousePackageData['package_id'])
+                    : '';
+            }
+            if ($warehousePackageName === '') {
+                continue;
+            }
+
+            $warehouseLabel = $warehousePackageName . ' x' . $warehouseQty;
+            $warehousePackageSummary[] = $warehouseLabel;
+            $warehousePackageSummaryRows[] = array(
+                'package_id' => isset($warehousePackageData['package_id']) ? (int) $warehousePackageData['package_id'] : 0,
+                'label' => $warehouseLabel,
+                'package_name' => $warehousePackageName,
+                'qty' => $warehouseQty,
             );
         }
 
         return array(
             'package_rows' => $packageRows,
-            'package_summary' => implode(', ', $packageSummary),
-            'package_lines' => $packageSummary,
-            'package_summary_rows' => $packageSummaryRows,
+            'package_summary' => implode(', ', $soldPackageSummary),
+            'package_lines' => $soldPackageSummary,
+            'package_summary_rows' => $soldPackageSummaryRows,
+            'sold_package_lines' => $soldPackageSummary,
+            'sold_package_summary_rows' => $soldPackageSummaryRows,
+            'warehouse_package_lines' => $warehousePackageSummary,
+            'warehouse_package_summary_rows' => $warehousePackageSummaryRows,
+            'warehouse_bundle_name' => implode(', ', $warehousePackageSummary),
             'product_lines' => $productSummary,
             'product_summary_rows' => $productSummaryRows,
             'product_qty_map' => $productQtyMap,
-            'bundle_name' => implode(', ', $packageSummary),
+            'product_context_map' => $productContextMap,
+            'sku_resolution_notes' => array_values(array_unique($skuResolutionNotes)),
+            'has_parent_sku_resolution' => !empty($skuResolutionNotes),
+            'bundle_name' => implode(', ', $soldPackageSummary),
         );
     }
 }
@@ -7296,7 +7700,7 @@ if (!function_exists('shopeeOmsBuildWarehouseMessage')) {
         $deliveryInfo = $platform === 'shopee' ? shopeeOmsExtractAirbillDeliveryInfoFromAttachment($airbillAttachment) : array();
         $rememberedDeliveryInfo = shopeeOmsGetRememberedWarehouseDeliveryInfo($platform, isset($orderRow['id']) ? $orderRow['id'] : 0);
         $deliveryCustomerName = isset($orderRow['customer_name']) ? trim((string) $orderRow['customer_name']) : '';
-        // Intentionally avoid reading from $_POST here to keep message generation deterministic.
+        // Intentionally avoid reading from request-body state here to keep message generation deterministic.
         if ($deliveryCustomerName === '' && isset($rememberedDeliveryInfo['customer_name'])) {
             $deliveryCustomerName = trim((string) $rememberedDeliveryInfo['customer_name']);
         }
@@ -8920,7 +9324,7 @@ if (!function_exists('shopeeOmsHandleMoveToWafcWithReceivedDatePost')) {
     {
         $options = is_array($options) ? $options : array();
         $buttonName = isset($options['button_name']) && trim((string) $options['button_name']) !== '' ? trim((string) $options['button_name']) : 'move_to_wafc_with_received_date_btn';
-        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !isset($_POST[$buttonName])) {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST' || !filter_has_var(INPUT_POST, $buttonName)) {
             return false;
         }
 
@@ -8929,7 +9333,7 @@ if (!function_exists('shopeeOmsHandleMoveToWafcWithReceivedDatePost')) {
             : (string) ($_SERVER['REQUEST_URI'] ?? '');
         $csrfFieldName = isset($options['csrf_field_name']) && trim((string) $options['csrf_field_name']) !== '' ? trim((string) $options['csrf_field_name']) : 'csrf_token';
         $csrfSessionKey = isset($options['csrf_session_key']) && trim((string) $options['csrf_session_key']) !== '' ? trim((string) $options['csrf_session_key']) : 'csrf_token';
-        $submittedToken = isset($_POST[$csrfFieldName]) ? (string) $_POST[$csrfFieldName] : '';
+        $submittedToken = (string) post($csrfFieldName);
         $sessionToken = isset($_SESSION[$csrfSessionKey]) ? (string) $_SESSION[$csrfSessionKey] : '';
 
         if (!hash_equals($sessionToken, $submittedToken)) {
@@ -8939,8 +9343,8 @@ if (!function_exists('shopeeOmsHandleMoveToWafcWithReceivedDatePost')) {
 
         $orderIdField = isset($options['order_id_field']) && trim((string) $options['order_id_field']) !== '' ? trim((string) $options['order_id_field']) : 'force_wafc_id';
         $dateField = isset($options['date_field']) && trim((string) $options['date_field']) !== '' ? trim((string) $options['date_field']) : 'received_date';
-        $orderId = isset($_POST[$orderIdField]) ? (int) $_POST[$orderIdField] : 0;
-        $receivedDate = function_exists('postSpaceFilter') ? postSpaceFilter($dateField) : (isset($_POST[$dateField]) ? trim((string) $_POST[$dateField]) : '');
+        $orderId = (int) post($orderIdField);
+        $receivedDate = function_exists('postSpaceFilter') ? postSpaceFilter($dateField) : trim((string) post($dateField));
         $actorUserId = isset($options['actor_user_id']) ? (string) $options['actor_user_id'] : (defined('USER_ID') ? (string) USER_ID : '');
         $actorUserGroupId = isset($options['actor_user_group_id']) ? (int) $options['actor_user_group_id'] : (defined('USER_GROUP') ? (int) USER_GROUP : 0);
         $sourcePage = isset($options['source_page']) ? (string) $options['source_page'] : 'Shopee OMS';
@@ -9722,9 +10126,15 @@ if (!function_exists('shopeeOmsBuildWarehouseStockShortageMessage')) {
             }
 
             $productLabel = trim((string) (isset($shortage['product_label']) ? $shortage['product_label'] : ''));
+            $packageLabels = isset($shortage['package_labels']) && is_array($shortage['package_labels'])
+                ? array_values(array_filter(array_map('trim', $shortage['package_labels']), 'strlen'))
+                : array();
             $productId = isset($shortage['product_id']) ? (int) $shortage['product_id'] : 0;
             if ($productLabel === '') {
                 $productLabel = $productId > 0 ? ('Product #' . $productId) : 'this product';
+            }
+            if (!empty($packageLabels)) {
+                $productLabel = implode(' / ', array_values(array_unique($packageLabels))) . ' / ' . $productLabel;
             }
 
             $requiredQty = isset($shortage['required_qty']) ? (int) $shortage['required_qty'] : 0;
@@ -9761,6 +10171,9 @@ if (!function_exists('shopeeOmsValidateWarehouseStockForOrder')) {
         $productSummary = shopeeOmsBuildOrderProductSummaryBySource($cmsConnect, $orderRow, $sourceConfig);
         $productQtyMap = isset($productSummary['product_qty_map']) && is_array($productSummary['product_qty_map'])
             ? $productSummary['product_qty_map']
+            : array();
+        $productContextMap = isset($productSummary['product_context_map']) && is_array($productSummary['product_context_map'])
+            ? $productSummary['product_context_map']
             : array();
         if (empty($productQtyMap)) {
             return array('success' => false, 'message' => 'No product item found for this order package.');
@@ -9804,6 +10217,16 @@ if (!function_exists('shopeeOmsValidateWarehouseStockForOrder')) {
                 continue;
             }
 
+            $productContext = isset($productContextMap[$productId]) && is_array($productContextMap[$productId])
+                ? $productContextMap[$productId]
+                : array();
+            $productLabel = trim((string) (isset($productContext['product_name']) ? $productContext['product_name'] : ''));
+            if ($productLabel === '') {
+                $productLabel = isset($productNameMap[$productId]) && $productNameMap[$productId] !== ''
+                    ? $productNameMap[$productId]
+                    : ('Product #' . $productId);
+            }
+
             $availableQty = 0;
             $batches = siGetAvailableFifoStockInBatches($financeConnect, $warehouseId, $productId, 0, 0);
             foreach ($batches as $batch) {
@@ -9813,9 +10236,10 @@ if (!function_exists('shopeeOmsValidateWarehouseStockForOrder')) {
             if ($availableQty < $requiredQty) {
                 $shortages[] = array(
                     'product_id' => $productId,
-                    'product_label' => isset($productNameMap[$productId]) && $productNameMap[$productId] !== ''
-                        ? $productNameMap[$productId]
-                        : ('Product #' . $productId),
+                    'product_label' => $productLabel,
+                    'package_labels' => isset($productContext['package_names']) && is_array($productContext['package_names'])
+                        ? $productContext['package_names']
+                        : array(),
                     'required_qty' => $requiredQty,
                     'available_qty' => $availableQty,
                 );
@@ -9852,6 +10276,9 @@ if (!function_exists('shopeeOmsDeductInventoryForOrder')) {
         $sourceConfig = shopeeOmsResolveOrderSourceConfig(shopeeOmsGetOrderSourcePlatform($orderRow, 'shopee'));
         $productSummary = shopeeOmsBuildOrderProductSummaryBySource($cmsConnect, $orderRow, $sourceConfig);
         $productQtyMap = isset($productSummary['product_qty_map']) && is_array($productSummary['product_qty_map']) ? $productSummary['product_qty_map'] : array();
+        $productContextMap = isset($productSummary['product_context_map']) && is_array($productSummary['product_context_map'])
+            ? $productSummary['product_context_map']
+            : array();
         if (empty($productQtyMap)) {
             return array('success' => false, 'message' => 'No product item found for this order package.');
         }
@@ -9896,9 +10323,15 @@ if (!function_exists('shopeeOmsDeductInventoryForOrder')) {
                     continue;
                 }
 
-                $productLabel = isset($productNameMap[$productId]) && $productNameMap[$productId] !== ''
-                    ? $productNameMap[$productId]
-                    : ('product #' . $productId);
+                $productContext = isset($productContextMap[$productId]) && is_array($productContextMap[$productId])
+                    ? $productContextMap[$productId]
+                    : array();
+                $productLabel = trim((string) (isset($productContext['shortage_label']) ? $productContext['shortage_label'] : ''));
+                if ($productLabel === '') {
+                    $productLabel = isset($productNameMap[$productId]) && $productNameMap[$productId] !== ''
+                        ? $productNameMap[$productId]
+                        : ('product #' . $productId);
+                }
                 $allocationsByProduct[$productId] = siAllocateStockOutQuantityAcrossFifoBatches(
                     $financeConnect,
                     $warehouseId,
@@ -13561,4 +13994,8 @@ if (!function_exists('orderDeleteApprovalHandlePageFlow')) {
 
         return $panelHtml;
     }
+}
+
+if (defined('ROOT')) {
+    include_once ROOT . '/include/lucky_draw_common.php';
 }

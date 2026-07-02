@@ -3,8 +3,8 @@ $currentPagePin = 0;
 include_once '../../menuHeader.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['id'])) {
-    $orderId = intval($_POST['id']);
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && (int) post('id') > 0) {
+    $orderId = (int) post('id');
 
     // Update the order status
     $updateSql = "UPDATE " . SHOPEE_SG_ORDER_REQ . " SET order_status = 'C' WHERE id = $orderId";

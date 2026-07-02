@@ -231,8 +231,8 @@ if (!function_exists('shopeeOmsFormatWarehousePackageDisplayLabel')) {
     }
 }
 
-$submittedOmsToken = isset($_POST['scan_token']) ? trim((string) $_POST['scan_token']) : '';
-$omsToken = $submittedOmsToken !== '' ? $submittedOmsToken : (isset($_GET['t']) ? trim((string) $_GET['t']) : '');
+$submittedOmsToken = trim((string) post('scan_token'));
+$omsToken = $submittedOmsToken !== '' ? $submittedOmsToken : trim((string) input('t'));
 if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
     $safeOmsToken = mysqli_real_escape_string($finance_connect, $omsToken);
     $omsTokenSql = "SELECT * FROM `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` WHERE token = '" . $safeOmsToken . "' AND token_type = 'stock_out' AND status = 'A' ORDER BY id DESC LIMIT 1";
@@ -261,7 +261,7 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
             'country' => ($omsCountryCode === '' ? 'Unknown' : $omsCountryCode),
         ));
         $omsPersistedAttachments = scanFilterTrustedAttachmentList(trim((string) postSpaceFilter('current_attachment')));
-        $omsScanSubmit = (strtolower((string) $_SERVER['REQUEST_METHOD']) === 'post' && isset($_POST['actionBtn']) && (string) $_POST['actionBtn'] === 'submitOmsStockOut');
+        $omsScanSubmit = (strtolower((string) $_SERVER['REQUEST_METHOD']) === 'post' && post('actionBtn') === 'submitOmsStockOut');
         $omsStatusTitle = 'Warehouse Stock-out Ready';
         $omsStatusClass = 'warning';
         $omsMessage = 'Review the order details below, then submit the warehouse stock-out scan to move this order to Shipped.';
@@ -419,7 +419,9 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
                             <h4>Warehouse Package</h4>
                             <div><span class="k">Package:</span></div>
                             <div><span class="v"><?php
-                                $omsPackageSummaryRows = isset($omsSummary['package_summary_rows']) && is_array($omsSummary['package_summary_rows']) ? $omsSummary['package_summary_rows'] : array();
+                                $omsPackageSummaryRows = isset($omsSummary['warehouse_package_summary_rows']) && is_array($omsSummary['warehouse_package_summary_rows']) && !empty($omsSummary['warehouse_package_summary_rows'])
+                                    ? $omsSummary['warehouse_package_summary_rows']
+                                    : (isset($omsSummary['package_summary_rows']) && is_array($omsSummary['package_summary_rows']) ? $omsSummary['package_summary_rows'] : array());
                                 if (!empty($omsPackageSummaryRows)) {
                                     $omsPackageParts = array();
                                     foreach ($omsPackageSummaryRows as $omsPackageIndex => $omsPackageRow) {
@@ -437,7 +439,8 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
                                     }
                                     echo implode('<br>', $omsPackageParts);
                                 } else {
-                                    echo htmlspecialchars(!empty($omsSummary['bundle_name']) ? $omsSummary['bundle_name'] : '-', ENT_QUOTES, 'UTF-8');
+                                    $omsWarehouseBundleName = !empty($omsSummary['warehouse_bundle_name']) ? (string) $omsSummary['warehouse_bundle_name'] : '';
+                                    echo htmlspecialchars($omsWarehouseBundleName !== '' ? $omsWarehouseBundleName : (!empty($omsSummary['bundle_name']) ? $omsSummary['bundle_name'] : '-'), ENT_QUOTES, 'UTF-8');
                                 }
                             ?></span></div>
                             <div><span class="k">Products:</span> <span class="v"><?php
@@ -1126,9 +1129,9 @@ $packageProductMap = siBuildPackageProductMap($packages);
 list($warehouseNameMap, $warehouseNameToId) = siBuildNameMaps($warehouses);
 list($productNameMap, $productNameToId) = siBuildNameMaps($products);
 
-$isSubmit = (strtolower((string) $_SERVER['REQUEST_METHOD']) === 'post' && isset($_POST['actionBtn']) && (string) $_POST['actionBtn'] === 'submitStockIn');
-$submittedToken = isset($_POST['scan_token']) ? trim((string) $_POST['scan_token']) : '';
-$token = $submittedToken !== '' ? $submittedToken : (isset($_GET['t']) ? trim((string) $_GET['t']) : '');
+$isSubmit = (strtolower((string) $_SERVER['REQUEST_METHOD']) === 'post' && post('actionBtn') === 'submitStockIn');
+$submittedToken = trim((string) post('scan_token'));
+$token = $submittedToken !== '' ? $submittedToken : trim((string) input('t'));
 $persistedAttachments = scanFilterTrustedAttachmentList(trim((string) postSpaceFilter('current_attachment')));
 $statusClass = 'danger';
 $statusTitle = 'Stock In Failed';

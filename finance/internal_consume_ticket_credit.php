@@ -107,8 +107,8 @@ if (post('actionBtn')) {
                 $img_ext_lc = strtolower($img_ext);
                 $imgExist = true;
                 move_uploaded_file($attachment_tmp_name, $img_path . $attach);
-            } else if (isset($_POST['existing_attachment'])) {
-                $attach = $_POST['existing_attachment'];
+            } else if (filter_has_var(INPUT_POST, 'existing_attachment')) {
+                $attach = post('existing_attachment');
             }
 
             $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();

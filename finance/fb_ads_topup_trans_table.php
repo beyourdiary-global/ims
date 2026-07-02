@@ -19,6 +19,17 @@ if (!file_exists($tempAttachDir)) {
 }
 
 $checkboxValues = isset($_COOKIE['rowID']) ? $_COOKIE['rowID'] : '';
+$groupOption = input('group');
+$allowedGroups = array('metaaccount', 'invoice');
+if (!in_array($groupOption, $allowedGroups, true)) {
+    $groupOption = '';
+}
+$groupOption3 = input('timeRange');
+$groupOption4 = input('timeInterval');
+$allowedTimeIntervals = array('daily', 'weekly', 'monthly', 'yearly');
+if (!in_array($groupOption4, $allowedTimeIntervals, true)) {
+    $groupOption4 = '';
+}
 
 // Sanitize to a comma-separated list of integer IDs
  if (!empty($checkboxValues)) {
@@ -282,7 +293,7 @@ $tblName = FB_ADS_TOPUP;
             <table class="table table-striped" id="fb_ads_topup_trans_table">
                 <thead>
                 <tr>
-                <?php if (!isset($_GET['group'])): ?>
+                <?php if ($groupOption === ''): ?>
                     <th class="hideColumn" scope="col">ID</th>
                     <th class="text-center">
                         <input type="checkbox" class="exportAll">
@@ -302,7 +313,7 @@ $tblName = FB_ADS_TOPUP;
                             <input type="checkbox" class="exportAll">
                     </th>
                     <th scope="col" width="60px">S/N</th>                       
-                    <th id="group_header" scope="col"><?php echo isset($_GET['group']) && $_GET['group'] == 'metaaccount' ? "Meta Account" : "Invoice/Payment Date"; ?></th>
+                    <th id="group_header" scope="col"><?php echo $groupOption == 'metaaccount' ? "Meta Account" : "Invoice/Payment Date"; ?></th>
                     <th scope="col">Total Top-up Amount</th>
                     <?php endif; ?>
                 </tr>
@@ -312,13 +323,6 @@ $tblName = FB_ADS_TOPUP;
                 <tbody>
                 <?php
 
-                $groupOption = isset($_GET['group']) ? $_GET['group'] : ''; 
-           
-                $groupOption3 = isset($_GET['timeRange']) ? $_GET['timeRange'] : ''; 
-                $groupOption4 = isset($_GET['timeInterval']) ? $_GET['timeInterval'] : ''; 
-
-
-                
                 $groupedRows = [];
                 $counters = 1;
                 $totalTopupAmount = 0;
@@ -581,7 +585,7 @@ $tblName = FB_ADS_TOPUP;
    
                 <tfoot>
                     <tr>
-                    <?php if (!isset($_GET['group'])): ?>
+                    <?php if ($groupOption === ''): ?>
                         <th class="hideColumn" scope="col"></th>
                         <th scope="col"></th>
                         <th scope="col"></th>

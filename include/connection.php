@@ -8,6 +8,7 @@ $login_url = $SITEURL."/index.php";
 $currentPage = $path[sizeof($path) - 1];
 $isForgotPasswordPage = ($currentPage === 'forgotPassword.php');
 $isLoginProcessPage = ($currentPage === 'login.php');
+// Intentional raw GET access here: connection bootstrap runs before common.php helpers are guaranteed to be available.
 $isTokenResetPage = (
     $currentPage === 'changePassword.php'
     && isset($_GET['token'])

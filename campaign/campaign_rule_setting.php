@@ -100,7 +100,7 @@ if (post('actionBtnHidden') === 'estimateCustomerTargetRules') {
     }
 
     $existingConditionJson = trim((string) post('customer_condition_existing_json'));
-    $conditionJson = campaignRuleConditionBuildJsonFromPost($_POST, $existingConditionJson);
+    $conditionJson = campaignRuleConditionBuildJsonFromPost(null, $existingConditionJson);
     $count = campaignRuleEstimateMatchedCustomers($connect, $finance_connect, $conditionJson);
     echo campaignRuleSettingJsonEncode(array('success' => true, 'count' => $count));
     exit();
@@ -188,7 +188,7 @@ if (post('actionBtn') === 'saveRule') {
     $formValues['generate_day'] = campaignNormalizeTextValue(post('generate_day'), 50);
     $formValues['campaign_name_template'] = campaignNormalizeTextValue(post('campaign_name_template'), 255);
     $formValues['campaign_period_rule'] = campaignNormalizeTextValue(post('campaign_period_rule'), 100);
-    $formValues['customer_condition_json'] = campaignRuleConditionBuildJsonFromPost($_POST, $existingConditionJson);
+    $formValues['customer_condition_json'] = campaignRuleConditionBuildJsonFromPost(null, $existingConditionJson);
     $formValues['rule_status'] = campaignNormalizeTextValue(post('rule_status'), 30);
     $formValues['remark'] = campaignNormalizeTextValue(post('remark'), 65535);
     $targetCustomPeriodDays = max(0, (int) post('custom_period_days'));

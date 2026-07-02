@@ -64,8 +64,8 @@ if (post('actionBtn')) {
     $btb_attach = null;
     if (isset($_FILES["btb_attach"]) && $_FILES["btb_attach"]["size"] != 0) {
         $btb_attach = $_FILES["btb_attach"]["name"];
-    } elseif (isset($_POST['btb_attachmentValue'])) {
-        $btb_attach = $_POST['btb_attachmentValue'];
+    } elseif (filter_has_var(INPUT_POST, 'btb_attachmentValue')) {
+        $btb_attach = post('btb_attachmentValue');
     }
 
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();

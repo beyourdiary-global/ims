@@ -17,15 +17,25 @@ if (empty($_SESSION['csrf_token'])) {
 }
 
 $currentTablePath = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
-$currentTableQuery = $_GET;
-unset($currentTableQuery['verify_id'], $currentTableQuery['complete_id']);
+$currentTableQuery = array();
+$currentTableRawQuery = array();
+parse_str((string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_QUERY), $currentTableRawQuery);
+unset($currentTableRawQuery['verify_id'], $currentTableRawQuery['complete_id']);
+foreach ($currentTableRawQuery as $queryKey => $queryValue) {
+    if (!is_array($queryValue)) {
+        $currentTableQuery[$queryKey] = input($queryKey);
+    }
+}
 $currentTableRedirect = $currentTablePath !== '' ? $currentTablePath : '/finance/fb_order_req_table.php';
 if (!empty($currentTableQuery)) {
     $currentTableRedirect .= '?' . http_build_query($currentTableQuery);
 }
 
+$verifyId = (int) numberInput('verify_id');
+$completeId = (int) numberInput('complete_id');
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceivedDateBtn')) {
-    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    $submittedToken = (string) post('csrf_token');
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
         renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', (string) $_SERVER['REQUEST_URI'], 1200, true);
         exit;
@@ -73,7 +83,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceiv
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('moveToPackBtn')) {
-    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    $submittedToken = (string) post('csrf_token');
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
         renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', (string) $_SERVER['REQUEST_URI'], 1200, true);
         exit;
@@ -94,8 +104,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('moveToPackBtn')) {
     exit;
 }
 
-if (isset($_GET['verify_id'])) {
-    $orderId = (int) $_GET['verify_id'];
+if ($verifyId > 0) {
+    $orderId = $verifyId;
     $verifyResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'V', array(
         'actor_user_id' => USER_ID,
         'actor_user_group_id' => USER_GROUP,
@@ -108,8 +118,8 @@ if (isset($_GET['verify_id'])) {
     exit;
 }
 
-if (isset($_GET['complete_id'])) {
-    $orderId = (int) $_GET['complete_id'];
+if ($completeId > 0) {
+    $orderId = $completeId;
     $completeResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'C', array(
         'actor_user_id' => USER_ID,
         'actor_user_group_id' => USER_GROUP,
@@ -122,14 +132,14 @@ if (isset($_GET['complete_id'])) {
     exit;
 }
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['force_wafc_id']) && !isset($_POST['move_to_wafc_with_received_date_btn'])) {
-    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('force_wafc_id') !== '' && post('move_to_wafc_with_received_date_btn') === '') {
+    $submittedToken = (string) post('csrf_token');
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
         renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', $currentTableRedirect, 1200, true);
         exit;
     }
 
-    $orderId = (int) $_POST['force_wafc_id'];
+    $orderId = (int) post('force_wafc_id');
     $wafcResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'WAFC', array(
         'actor_user_id' => USER_ID,
         'actor_user_group_id' => USER_GROUP,
@@ -155,14 +165,14 @@ shopeeOmsHandleMoveToWafcWithReceivedDatePost($connect, $finance_connect, array(
     'query_table' => FB_ORDER_REQ,
 ));
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['return_id'])) {
-    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('return_id') !== '') {
+    $submittedToken = (string) post('csrf_token');
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
         renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', $currentTableRedirect, 1200, true);
         exit;
     }
 
-    $orderId = (int) $_POST['return_id'];
+    $orderId = (int) post('return_id');
     $returnResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'R', array(
         'actor_user_id' => USER_ID,
         'actor_user_group_id' => USER_GROUP,
@@ -263,6 +273,7 @@ function fbReqFetchAssoc($result)
                             <th scope="col" id="action_col">Action</th>
                             <th scope="col">Order Status</th>
                             <th scope="col">Estimate Received Date</th>
+                            <th scope="col">Redeem</th>
                             <th scope="col">Name</th>
                             <th scope="col">Facebook Link</th>
                             <th scope="col">Contact</th>
@@ -402,6 +413,13 @@ function fbReqFetchAssoc($result)
                                 <td><?= getMarketplaceRequestStatusLabel(isset($row['order_status']) ? $row['order_status'] : '') ?></td>
                                 <td><?= isset($row['estimated_received_date']) && !empty($row['estimated_received_date']) ? htmlspecialchars((string) $row['estimated_received_date'], ENT_QUOTES, 'UTF-8') : '' ?></td>
                                 <td scope="row">
+                                    <?php if (trim((string) ($row['redeem_source'] ?? '')) !== '') { ?>
+                                        <div><span class="badge bg-info text-dark"><?= htmlspecialchars((string) $row['redeem_source'], ENT_QUOTES, 'UTF-8') ?></span></div>
+                                        <small class="text-muted d-block"><?= htmlspecialchars((string) ($row['redeem_reference'] ?? ''), ENT_QUOTES, 'UTF-8') ?></small>
+                                        <small class="text-muted d-block"><?= htmlspecialchars((string) ($row['claim_email'] ?? ''), ENT_QUOTES, 'UTF-8') ?></small>
+                                    <?php } ?>
+                                </td>
+                                <td scope="row">
                                     <?= htmlspecialchars((string) ($row['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
@@ -462,6 +480,7 @@ function fbReqFetchAssoc($result)
                             <th scope="col" id="action_col">Action</th>
                             <th scope="col">Order Status</th>
                             <th scope="col">Estimate Received Date</th>
+                            <th scope="col">Redeem</th>
                             <th scope="col">Name</th>
                             <th scope="col">Facebook Link</th>
                             <th scope="col">Contact</th>

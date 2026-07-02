@@ -71,11 +71,37 @@ $estimatedDateToday = new DateTimeImmutable('today');
 $estimatedDateMin = $estimatedDateToday->modify('+1 day')->format('Y-m-d');
 $estimatedDateMax = $estimatedDateToday->modify('+7 days')->format('Y-m-d');
 $num = $default_currency_id = 1; 
+$bulkSyncShippedOrders = numberInput('bulk_sync_shipped_orders');
+$verifyId = (int) numberInput('verify_id');
+$completeId = (int) numberInput('complete_id');
+$monthInput = input('month');
+if ($monthInput === 'All') {
+    $monthFilter = '';
+} else if ($monthInput !== '' && preg_match('/^\d{4}-\d{2}$/', $monthInput)) {
+    $monthFilter = $monthInput;
+} else {
+    $monthFilter = date('Y-m');
+}
+$statusFilter = input('status');
+$brandFilter = numberInput('brand');
+$pkgFilter = numberInput('pkg');
+$accFilter = numberInput('acc');
+$monthGroupInput = input('month_gb');
+if ($monthGroupInput === 'All') {
+    $monthGroup = 'All';
+} else if ($monthGroupInput !== '' && preg_match('/^\d{4}-\d{2}$/', $monthGroupInput)) {
+    $monthGroup = $monthGroupInput;
+} else {
+    $monthGroup = '';
+}
+$statusGroup = input('status_gb');
+$brandGroup = numberInput('brand_gb');
+$pkgGroup = numberInput('pkg_gb');
+$accGroup = numberInput('acc_gb');
 
 if (
     ($_SERVER['REQUEST_METHOD'] ?? '') === 'GET'
-    && isset($_GET['bulk_sync_shipped_orders'])
-    && $_GET['bulk_sync_shipped_orders'] === '1'
+    && $bulkSyncShippedOrders === '1'
     && $canBulkSyncShippedOrders
     && function_exists('shopeeOmsBulkMoveCurrentShippedOrdersToWaerd')
 ) {
@@ -123,8 +149,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceiv
     exit;
 }
 
-if (isset($_GET['verify_id'])) {
-    $orderId = intval($_GET['verify_id']);
+if ($verifyId > 0) {
+    $orderId = $verifyId;
     $verifyResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'V', array(
         'actor_user_id' => USER_ID,
         'actor_user_group_id' => USER_GROUP,
@@ -136,8 +162,8 @@ if (isset($_GET['verify_id'])) {
     exit;
 }
 
-if (isset($_GET['complete_id'])) {
-    $orderId = intval($_GET['complete_id']);
+if ($completeId > 0) {
+    $orderId = $completeId;
     $completeResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'C', array(
         'actor_user_id' => USER_ID,
         'actor_user_group_id' => USER_GROUP,
@@ -149,14 +175,14 @@ if (isset($_GET['complete_id'])) {
     exit;
 }
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['move_to_pack_id'])) {
-    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('move_to_pack_id') !== '') {
+    $submittedToken = (string) post('csrf_token');
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
         renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', 'shopee_order_req_table.php', 1200, true);
         exit;
     }
 
-    $orderId = intval($_POST['move_to_pack_id']);
+    $orderId = (int) post('move_to_pack_id');
     $warehouseCustomerName = trim((string) postSpaceFilter('warehouse_customer_name'));
     if ($warehouseCustomerName !== '') {
         shopeeOmsRememberWarehouseDeliveryInfo('shopee', $orderId, array(
@@ -176,15 +202,15 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['move_to_pack_
     exit;
 }
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['force_wafc_id']) && !isset($_POST['move_to_wafc_with_received_date_btn'])) {
-    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('force_wafc_id') !== '' && post('move_to_wafc_with_received_date_btn') === '') {
+    $submittedToken = (string) post('csrf_token');
 
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
         renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', 'shopee_order_req_table.php', 1200, true);
         exit;
     }
 
-    $orderId = intval($_POST['force_wafc_id']);
+    $orderId = (int) post('force_wafc_id');
 
     $wafcResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'WAFC', array(
         'actor_user_id' => USER_ID,
@@ -231,15 +257,15 @@ shopeeOmsHandleMoveToWafcWithReceivedDatePost($connect, $finance_connect, array(
     'query_table' => SHOPEE_SG_ORDER_REQ,
 ));
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['return_id'])) {
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('return_id') !== '') {
 
-    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    $submittedToken = (string) post('csrf_token');
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
         renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', 'shopee_order_req_table.php', 1200, true);
         exit;
     }
 
-    $orderId = intval($_POST['return_id']);
+    $orderId = (int) post('return_id');
     $returnResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'R', array(
         'actor_user_id' => USER_ID,
         'actor_user_group_id' => USER_GROUP,
@@ -251,12 +277,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['return_id']))
     renderNotificationScript($returnMessage, resolveNotificationType($returnMessage, 'info'), 'shopee_order_req_table.php', 1200, true);
     exit;
 }
-
-$monthFilter = isset($_GET['month']) && $_GET['month'] !== '' ? ($_GET['month'] !=='All'?$_GET['month']:"") : date('Y-m');
-$statusFilter = isset($_GET['status']) ? $_GET['status'] : '';
-$brandFilter = isset($_GET['brand']) ? $_GET['brand'] : '';
-$pkgFilter = isset($_GET['pkg']) ? $_GET['pkg'] : '';
-$accFilter = isset($_GET['acc']) ? $_GET['acc'] : '';
 
 $whereConditions = [];
 
@@ -274,11 +294,6 @@ if (!empty($brandFilter)) { $whereConditions[] = "FIND_IN_SET('" . mysqli_real_e
 if (!empty($pkgFilter)) { $whereConditions[] = "FIND_IN_SET('" . mysqli_real_escape_string($finance_connect, $pkgFilter) . "', package) > 0"; }
 if (!empty($accFilter)) { $whereConditions[] = "shopee_acc = '" . mysqli_real_escape_string($finance_connect, $accFilter) . "'"; }
 
-$monthGroup = isset($_GET['month_gb']) ? $_GET['month_gb'] : '';
-$statusGroup = isset($_GET['status_gb']) ? $_GET['status_gb'] : '';
-$brandGroup = isset($_GET['brand_gb']) ? $_GET['brand_gb'] : '';
-$pkgGroup = isset($_GET['pkg_gb']) ? $_GET['pkg_gb'] : '';
-$accGroup = isset($_GET['acc_gb']) ? $_GET['acc_gb'] : '';
 $groupByFields = [];
 
 if (!empty($monthGroup) && $monthGroup !== 'All') { $groupByFields[] = "DATE_FORMAT(date, '%Y-%m')"; }

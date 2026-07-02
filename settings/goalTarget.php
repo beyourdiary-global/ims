@@ -8,26 +8,26 @@ $redirectPage = $SITEURL . '/settings/goalTarget_table.php';
 
 // Get the `act` parameter (I for Insert, E for Edit)
 // Get the `act` parameter (I for Insert, E for Edit)
-$action = isset($_GET['act']) ? $_GET['act'] : null; // Get action parameter
+$action = input('act') !== '' ? input('act') : null; // Get action parameter
 $pageAction = getPageAction($action); // Use $act instead of undefined $action
-$id = isset($_GET['id']) ? intval($_GET['id']) : null; // Get year from URL
+$id = numberInput('id') !== '' ? (int) numberInput('id') : null; // Get year from URL
 $goals = [];
 $isReadOnly = is_null($action); // Determine if fields should be readonly
 
 $pageActionTitle = $pageAction . " " . $pageTitle;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $year = $_POST['year'];
+    $year = post('year');
     $months = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"];
 
     if ($action === 'I') {
         // Insert Mode
         foreach ($months as $month) {
-            $shopee_my_goal = isset($_POST["shopee_my_goal_$month"]) ? floatval($_POST["shopee_my_goal_$month"]) : 0;
-            $shopee_sg_goal = isset($_POST["shopee_sg_goal_$month"]) ? floatval($_POST["shopee_sg_goal_$month"]) : 0;
-            $lazada_goal = isset($_POST["lazada_goal_$month"]) ? floatval($_POST["lazada_goal_$month"]) : 0;
-            $facebook_goal = isset($_POST["facebook_goal_$month"]) ? floatval($_POST["facebook_goal_$month"]) : 0;
-            $website_goal = isset($_POST["website_goal_$month"]) ? floatval($_POST["website_goal_$month"]) : 0;
+            $shopee_my_goal = (float) post("shopee_my_goal_$month");
+            $shopee_sg_goal = (float) post("shopee_sg_goal_$month");
+            $lazada_goal = (float) post("lazada_goal_$month");
+            $facebook_goal = (float) post("facebook_goal_$month");
+            $website_goal = (float) post("website_goal_$month");
 
             // Prepare and execute the SQL statement
             $stmt = $connect->prepare("
@@ -55,11 +55,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } elseif ($action === 'E') {
         // Edit Mode
         foreach ($months as $month) {
-            $shopee_my_goal = isset($_POST["shopee_my_goal_$month"]) ? floatval($_POST["shopee_my_goal_$month"]) : 0;
-            $shopee_sg_goal = isset($_POST["shopee_sg_goal_$month"]) ? floatval($_POST["shopee_sg_goal_$month"]) : 0;
-            $lazada_goal = isset($_POST["lazada_goal_$month"]) ? floatval($_POST["lazada_goal_$month"]) : 0;
-            $facebook_goal = isset($_POST["facebook_goal_$month"]) ? floatval($_POST["facebook_goal_$month"]) : 0;
-            $website_goal = isset($_POST["website_goal_$month"]) ? floatval($_POST["website_goal_$month"]) : 0;
+            $shopee_my_goal = (float) post("shopee_my_goal_$month");
+            $shopee_sg_goal = (float) post("shopee_sg_goal_$month");
+            $lazada_goal = (float) post("lazada_goal_$month");
+            $facebook_goal = (float) post("facebook_goal_$month");
+            $website_goal = (float) post("website_goal_$month");
 
             // Prepare and execute the SQL statement for update
             $stmt = $connect->prepare("
@@ -116,7 +116,7 @@ function generateYearlyGoalForm($goals = [], $isReadOnly = false)
     echo '<div class="form-group mb-3 ">
             <label for="year">Year:</label>
             <div class="row">
-            <div class="col-6"><input type="tel" class="form-control" id="year" name="year" maxlength="4" required value="' . (isset($_GET['id']) ? $_GET['id'] : '') . '"' . $readonlyAttr . '></div>
+            <div class="col-6"><input type="tel" class="form-control" id="year" name="year" maxlength="4" required value="' . htmlspecialchars((string) numberInput('id'), ENT_QUOTES, 'UTF-8') . '"' . $readonlyAttr . '></div>
             <div class="col-6"><input type="tel" class="form-control" id="Totalyear" name="Totalyear" placeholder="Total Goal" required readonly value="' . $totalYearGoal . '"></div>
             </div>
           </div>';

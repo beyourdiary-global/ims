@@ -6,7 +6,7 @@ $pageTitle = 'Sheets';
 $taskParentTitle = 'Project Task';
 $taskPermissionPin = $taskParentPin;
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('task_action') !== '') {
     include_once '../include/connection.php';
     include_once ROOT . '/include/common.php';
     include_once ROOT . '/include/common_variable.php';
@@ -17,7 +17,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
     if (empty($_SESSION['csrf_token'])) {
         $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
     }
-    $submittedToken = isset($_POST['csrf_token']) ? $_POST['csrf_token'] : '';
+    $submittedToken = post('csrf_token');
     if (!hash_equals($_SESSION['csrf_token'], $submittedToken)) {
         header('Content-Type: application/json');
         echo json_encode(array('ok' => 0, 'message' => 'Invalid session token. Please refresh the page and try again.'));
@@ -38,7 +38,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         echo json_encode(array('ok' => 0, 'message' => 'You do not have access to this project sheets.'));
         exit;
     }
-    $taskAction    = trim((string) $_POST['task_action']);
+    $taskAction    = trim((string) post('task_action'));
     $safeUserName  = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
 
     if ($taskAction === 'sheets_get_data') {
@@ -82,7 +82,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action'])) {
         $prevCols = taskGetSheetsColumns($connect, $currentUserId, $currentProjectId);
         $prevKeys = array_column($prevCols, 'column_key');
 
-        $columnsJson = isset($_POST['columns_json']) ? $_POST['columns_json'] : '[]';
+        $columnsJson = filter_has_var(INPUT_POST, 'columns_json') ? post('columns_json') : '[]';
         $requestedCols = json_decode($columnsJson, true);
         if (!is_array($requestedCols)) {
             header('Content-Type: application/json');

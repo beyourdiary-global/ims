@@ -460,9 +460,9 @@ if (!is_array($pinAccess)) {
     $pinAccess = array();
 }
 
-$action = isset($_POST['action']) ? trim((string) $_POST['action']) : '';
-$searchOrderCode = isset($_POST['search_order_code']) ? trim((string) $_POST['search_order_code']) : (isset($_POST['order_code']) ? trim((string) $_POST['order_code']) : '');
-$searchPlatform = isset($_POST['search_platform']) ? shopeeOmsNormalizePlatformKey($_POST['search_platform'], true) : (isset($_POST['platform']) ? shopeeOmsNormalizePlatformKey($_POST['platform'], true) : 'all');
+$action = trim((string) post('action'));
+$searchOrderCode = trim((string) post('search_order_code')) !== '' ? trim((string) post('search_order_code')) : trim((string) post('order_code'));
+$searchPlatform = post('search_platform') !== '' ? shopeeOmsNormalizePlatformKey(post('search_platform'), true) : (post('platform') !== '' ? shopeeOmsNormalizePlatformKey(post('platform'), true) : 'all');
 if ($searchPlatform === '') {
     $searchPlatform = 'all';
 }
@@ -474,7 +474,7 @@ switch ($action) {
             owtpRedirectToPage($orderWarehouseTransferPageUrl);
         }
 
-        $postedSearchCsrf = isset($_POST['search_csrf']) ? (string) $_POST['search_csrf'] : '';
+        $postedSearchCsrf = (string) post('search_csrf');
         if (
             empty($_SESSION['order_warehouse_transfer_search_csrf'])
             || !hash_equals((string) $_SESSION['order_warehouse_transfer_search_csrf'], $postedSearchCsrf)
@@ -483,8 +483,8 @@ switch ($action) {
             owtpRedirectToPage($orderWarehouseTransferPageUrl);
         }
 
-        $orderCode = isset($_POST['order_code']) ? trim((string) $_POST['order_code']) : '';
-        $platform = isset($_POST['platform']) ? shopeeOmsNormalizePlatformKey($_POST['platform'], true) : 'all';
+        $orderCode = trim((string) post('order_code'));
+        $platform = post('platform') !== '' ? shopeeOmsNormalizePlatformKey(post('platform'), true) : 'all';
         if ($platform === '') {
             $platform = 'all';
         }
@@ -504,7 +504,7 @@ switch ($action) {
             owtpRedirectToPage($orderWarehouseTransferPageUrl, $searchOrderCode, $searchPlatform);
         }
 
-        $postedTransferCsrf = isset($_POST['transfer_csrf']) ? (string) $_POST['transfer_csrf'] : '';
+        $postedTransferCsrf = (string) post('transfer_csrf');
         if (
             empty($_SESSION['order_warehouse_transfer_submit_csrf'])
             || !hash_equals((string) $_SESSION['order_warehouse_transfer_submit_csrf'], $postedTransferCsrf)
@@ -513,11 +513,11 @@ switch ($action) {
             owtpRedirectToPage($orderWarehouseTransferPageUrl, $searchOrderCode, $searchPlatform);
         }
 
-        $orderId = isset($_POST['order_id']) ? (int) $_POST['order_id'] : 0;
-        $platform = isset($_POST['platform']) ? shopeeOmsNormalizePlatformKey($_POST['platform']) : '';
-        $newWarehouseId = isset($_POST['new_warehouse_id']) ? (int) $_POST['new_warehouse_id'] : 0;
+        $orderId = (int) post('order_id');
+        $platform = post('platform') !== '' ? shopeeOmsNormalizePlatformKey(post('platform')) : '';
+        $newWarehouseId = (int) post('new_warehouse_id');
         $transferNote = '';
-        $idempotencyKey = trim((string) (isset($_POST['idempotency_key']) ? $_POST['idempotency_key'] : ''));
+        $idempotencyKey = trim((string) post('idempotency_key'));
 
         if ($orderId <= 0) {
             owtpSetFlash('danger', 'Invalid order selected for transfer.');

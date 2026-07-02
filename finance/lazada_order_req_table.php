@@ -16,15 +16,25 @@ if (empty($_SESSION['csrf_token'])) {
 }
 
 $currentTablePath = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
-$currentTableQuery = $_GET;
-unset($currentTableQuery['verify_id'], $currentTableQuery['complete_id']);
+$currentTableQuery = array();
+$currentTableRawQuery = array();
+parse_str((string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_QUERY), $currentTableRawQuery);
+unset($currentTableRawQuery['verify_id'], $currentTableRawQuery['complete_id']);
+foreach ($currentTableRawQuery as $queryKey => $queryValue) {
+    if (!is_array($queryValue)) {
+        $currentTableQuery[$queryKey] = input($queryKey);
+    }
+}
 $currentTableRedirect = $currentTablePath !== '' ? $currentTablePath : '/finance/lazada_order_req_table.php';
 if (!empty($currentTableQuery)) {
     $currentTableRedirect .= '?' . http_build_query($currentTableQuery);
 }
 
+$verifyId = (int) numberInput('verify_id');
+$completeId = (int) numberInput('complete_id');
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceivedDateBtn')) {
-    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    $submittedToken = (string) post('csrf_token');
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
         echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes(htmlspecialchars((string) $_SERVER['REQUEST_URI'], ENT_QUOTES, 'UTF-8')) . "');</script>";
         exit;
@@ -71,7 +81,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceiv
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('moveToPackBtn')) {
-    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    $submittedToken = (string) post('csrf_token');
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
         echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes(htmlspecialchars((string) $_SERVER['REQUEST_URI'], ENT_QUOTES, 'UTF-8')) . "');</script>";
         exit;
@@ -91,8 +101,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('moveToPackBtn')) {
     exit;
 }
 
-if (isset($_GET['verify_id'])) {
-    $orderId = (int) $_GET['verify_id'];
+if ($verifyId > 0) {
+    $orderId = $verifyId;
     $verifyResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'V', array(
         'actor_user_id' => USER_ID,
         'actor_user_group_id' => USER_GROUP,
@@ -104,8 +114,8 @@ if (isset($_GET['verify_id'])) {
     exit;
 }
 
-if (isset($_GET['complete_id'])) {
-    $orderId = (int) $_GET['complete_id'];
+if ($completeId > 0) {
+    $orderId = $completeId;
     $completeResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'C', array(
         'actor_user_id' => USER_ID,
         'actor_user_group_id' => USER_GROUP,
@@ -117,14 +127,14 @@ if (isset($_GET['complete_id'])) {
     exit;
 }
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['force_wafc_id']) && !isset($_POST['move_to_wafc_with_received_date_btn'])) {
-    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('force_wafc_id') !== '' && post('move_to_wafc_with_received_date_btn') === '') {
+    $submittedToken = (string) post('csrf_token');
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
         echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
         exit;
     }
 
-    $orderId = (int) $_POST['force_wafc_id'];
+    $orderId = (int) post('force_wafc_id');
     $wafcResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'WAFC', array(
         'actor_user_id' => USER_ID,
         'actor_user_group_id' => USER_GROUP,
@@ -149,14 +159,14 @@ shopeeOmsHandleMoveToWafcWithReceivedDatePost($connect, $finance_connect, array(
     'query_table' => LAZADA_ORDER_REQ,
 ));
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && isset($_POST['return_id'])) {
-    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('return_id') !== '') {
+    $submittedToken = (string) post('csrf_token');
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
         echo "<script>alert('Invalid session token. Please refresh the page and try again.'); location.replace('" . addslashes($currentTableRedirect) . "');</script>";
         exit;
     }
 
-    $orderId = (int) $_POST['return_id'];
+    $orderId = (int) post('return_id');
     $returnResult = shopeeOmsExecuteTransition($connect, $finance_connect, $orderId, 'R', array(
         'actor_user_id' => USER_ID,
         'actor_user_group_id' => USER_GROUP,
@@ -188,6 +198,7 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
 
 <head>
     <link rel="stylesheet" href="../css/main.css">
+    <link rel="stylesheet" href="../css/shopeeOrderRequest.css">
 </head>
 
 <body>
@@ -209,11 +220,16 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
                         <h2>
                             <?php echo $pageTitle ?>
                         </h2>
-                        <div class="mt-auto mb-auto">
+                        <div class="mt-auto mb-auto d-flex gap-2 flex-wrap">
                             <?php if (isActionAllowed("Add", $pinAccess)): ?>
-                                <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
+                                <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="addBtn" id="addBtn"
                                     href="<?= $redirectPage . "?act=" . $act_1 ?>"><i class="fa-solid fa-plus"></i> Add
                                     Record </a>
+                            <?php endif; ?>
+
+                            <?php if (isActionAllowed("Import", $pinAccess)): ?>
+                                <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="importBtn" id="importBtn"
+                                    href="<?= $SITEURL ?>/import/lazada_order_import.php"><i class="fa-solid fa-file-import"></i> Import </a>
                             <?php endif; ?>
                         </div>
                     </div>
@@ -259,30 +275,40 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
                         </tr>
                     </thead>
                     <tbody>
+                        <?php
+                        $fetchLookupRow = function ($result) {
+                            if (!$result || !is_object($result) || !method_exists($result, 'fetch_assoc')) {
+                                return array();
+                            }
+
+                            $row = $result->fetch_assoc();
+                            return is_array($row) ? $row : array();
+                        };
+                        ?>
                         <?php while ($row = $result->fetch_assoc()) {
                             $q1 = getData('name', "id='" . $row['lazada_acc'] . "'", '', LAZADA_ACC, $finance_connect);
-                            $lazada_acc = $q1->fetch_assoc();
+                            $lazada_acc = $fetchLookupRow($q1);
 
                             $q2 = getData('nicename', "id='" . $row['country'] . "'", '', COUNTRIES, $connect);
-                            $country = $q2->fetch_assoc();
+                            $country = $fetchLookupRow($q2);
 
                             $q3 = getData('name', "id='" . $row['brand'] . "'", '', BRAND, $connect);
-                            $brand = $q3->fetch_assoc();
+                            $brand = $fetchLookupRow($q3);
 
                             $q4 = getData('name', "id='" . $row['series'] . "'", '', BRD_SERIES, $connect);
-                            $series = $q4->fetch_assoc();
+                            $series = $fetchLookupRow($q4);
 
                             $q5 = getData('unit', "id='" . $row['curr_unit'] . "'", '', CUR_UNIT, $connect);
-                            $curr_unit = $q5->fetch_assoc();
+                            $curr_unit = $fetchLookupRow($q5);
 
                             $q6 = getData('name', "id='" . $row['series'] . "'", '', BRD_SERIES, $connect);
-                            $series = $q6->fetch_assoc();
+                            $series = $fetchLookupRow($q6);
 
                             $q7 = getData('name', "id='" . $row['pay_meth'] . "'", '', FIN_PAY_METH, $finance_connect);
-                            $pay_meth = $q7->fetch_assoc();
+                            $pay_meth = $fetchLookupRow($q7);
 
                             $q8 = getData('name', "id='" . $row['pkg'] . "'", '', PKG, $connect);
-                            $package = $q8->fetch_assoc();
+                            $package = $fetchLookupRow($q8);
                             ?>
 
                             <tr>
@@ -377,7 +403,7 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
                                 <td scope="row"><?= htmlspecialchars((string) $row['other_discount'], ENT_QUOTES, 'UTF-8') ?></td>
                                 <td scope="row"><?= htmlspecialchars((string) $row['pay_fee'], ENT_QUOTES, 'UTF-8') ?></td>
                                 <td scope="row"><?= htmlspecialchars((string) $row['final_income'], ENT_QUOTES, 'UTF-8') ?></td>
-                                <td scope="row"><?= isset($pay_meth['name']) ? $pay_meth['name'] : '' ?></td>
+                                <td scope="row"><?= isset($pay_meth['name']) ? htmlspecialchars((string) $pay_meth['name'], ENT_QUOTES, 'UTF-8') : '' ?></td>
                                 <td scope="row"><?= htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') ?></td>
                             </tr>
                         <?php } ?>

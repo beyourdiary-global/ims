@@ -382,20 +382,20 @@ if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action']) && $_POST['task_action'] === 'save_project_settings_ajax') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('task_action') === 'save_project_settings_ajax') {
     if (!$canEdit) {
         taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to edit project settings.'));
     }
 
-    $submittedToken = isset($_POST['csrf_token']) ? (string) $_POST['csrf_token'] : '';
+    $submittedToken = (string) post('csrf_token');
     if (!hash_equals($_SESSION['csrf_token'], $submittedToken)) {
         taskJsonResponse(array('ok' => 0, 'message' => 'Invalid session token. Please refresh the page and try again.'));
     }
 
         $statusRows = array();
-        $statusIds = isset($_POST['status_ids']) && is_array($_POST['status_ids']) ? $_POST['status_ids'] : array();
-        $statusNames = isset($_POST['status_names']) && is_array($_POST['status_names']) ? $_POST['status_names'] : array();
-        $statusColors = isset($_POST['status_colors']) && is_array($_POST['status_colors']) ? $_POST['status_colors'] : array();
+        $statusIds = (array) post('status_ids') ?: array();
+        $statusNames = (array) post('status_names') ?: array();
+        $statusColors = (array) post('status_colors') ?: array();
         $statusCount = max(count($statusIds), count($statusNames), count($statusColors));
         for ($i = 0; $i < $statusCount; $i++) {
             $statusRows[] = array(
@@ -406,9 +406,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action']) && $_P
         }
 
         $workTypeRows = array();
-        $workTypeIds = isset($_POST['work_type_ids']) && is_array($_POST['work_type_ids']) ? $_POST['work_type_ids'] : array();
-        $workTypeNames = isset($_POST['work_type_names']) && is_array($_POST['work_type_names']) ? $_POST['work_type_names'] : array();
-        $workTypeIcons = isset($_POST['work_type_icons']) && is_array($_POST['work_type_icons']) ? $_POST['work_type_icons'] : array();
+        $workTypeIds = (array) post('work_type_ids') ?: array();
+        $workTypeNames = (array) post('work_type_names') ?: array();
+        $workTypeIcons = (array) post('work_type_icons') ?: array();
         $workTypeCount = max(count($workTypeIds), count($workTypeNames), count($workTypeIcons));
         for ($i = 0; $i < $workTypeCount; $i++) {
             $workTypeRows[] = array(
@@ -419,9 +419,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action']) && $_P
         }
 
         $labelRows = array();
-        $labelIds = isset($_POST['label_ids']) && is_array($_POST['label_ids']) ? $_POST['label_ids'] : array();
-        $labelNames = isset($_POST['label_names']) && is_array($_POST['label_names']) ? $_POST['label_names'] : array();
-        $labelColors = isset($_POST['label_colors']) && is_array($_POST['label_colors']) ? $_POST['label_colors'] : array();
+        $labelIds = (array) post('label_ids') ?: array();
+        $labelNames = (array) post('label_names') ?: array();
+        $labelColors = (array) post('label_colors') ?: array();
         $labelCount = max(count($labelIds), count($labelNames), count($labelColors));
         for ($i = 0; $i < $labelCount; $i++) {
             $labelRows[] = array(
@@ -432,9 +432,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action']) && $_P
         }
 
         $statusLabelRows = array();
-        $statusLabelIds = isset($_POST['status_label_ids']) && is_array($_POST['status_label_ids']) ? $_POST['status_label_ids'] : array();
-        $statusLabelNames = isset($_POST['status_label_names']) && is_array($_POST['status_label_names']) ? $_POST['status_label_names'] : array();
-        $statusLabelColors = isset($_POST['status_label_colors']) && is_array($_POST['status_label_colors']) ? $_POST['status_label_colors'] : array();
+        $statusLabelIds = (array) post('status_label_ids') ?: array();
+        $statusLabelNames = (array) post('status_label_names') ?: array();
+        $statusLabelColors = (array) post('status_label_colors') ?: array();
         $statusLabelCount = max(count($statusLabelIds), count($statusLabelNames), count($statusLabelColors));
         for ($i = 0; $i < $statusLabelCount; $i++) {
             $statusLabelRows[] = array(
@@ -444,10 +444,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action']) && $_P
             );
         }
 
-        $statusDeleteIds = isset($_POST['status_delete_ids']) && is_array($_POST['status_delete_ids']) ? $_POST['status_delete_ids'] : array();
-        $workTypeDeleteIds = isset($_POST['work_type_delete_ids']) && is_array($_POST['work_type_delete_ids']) ? $_POST['work_type_delete_ids'] : array();
-        $labelDeleteIds = isset($_POST['label_delete_ids']) && is_array($_POST['label_delete_ids']) ? $_POST['label_delete_ids'] : array();
-        $statusLabelDeleteIds = isset($_POST['status_label_delete_ids']) && is_array($_POST['status_label_delete_ids']) ? $_POST['status_label_delete_ids'] : array();
+        $statusDeleteIds = (array) post('status_delete_ids') ?: array();
+        $workTypeDeleteIds = (array) post('work_type_delete_ids') ?: array();
+        $labelDeleteIds = (array) post('label_delete_ids') ?: array();
+        $statusLabelDeleteIds = (array) post('status_label_delete_ids') ?: array();
 
         $oldSettingsAuditSnapshot = taskProjectSettingsAuditSnapshot($connect, $currentProjectId);
         $auditProjectName = isset($currentProject['name']) ? (string) $currentProject['name'] : ('Project #' . $currentProjectId);
@@ -455,9 +455,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['task_action']) && $_P
         $result = taskSaveProjectSettings(
             $connect,
             $currentProjectId,
-            isset($_POST['project_name']) ? $_POST['project_name'] : '',
-            isset($_POST['project_key']) ? $_POST['project_key'] : '',
-            isset($_POST['board_background_color']) ? $_POST['board_background_color'] : '',
+            post('project_name'),
+            post('project_key'),
+            post('board_background_color'),
             $statusRows,
             $statusDeleteIds,
             $workTypeRows,

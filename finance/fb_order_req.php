@@ -191,10 +191,10 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
     $for_attach = null;
     if (isset($_FILES["for_attach"]) && $_FILES["for_attach"]["size"] != 0) {
         $for_attach = $_FILES["for_attach"]["name"];
-    } elseif (isset($_POST['for_attachmentValue'])) {
-        $for_attach = $_POST['for_attachmentValue'];
-    } elseif (isset($_POST['existing_attachment'])) {
-        $for_attach = $_POST['existing_attachment'];
+    } elseif (filter_has_var(INPUT_POST, 'for_attachmentValue')) {
+        $for_attach = post('for_attachmentValue');
+    } elseif (filter_has_var(INPUT_POST, 'existing_attachment')) {
+        $for_attach = post('existing_attachment');
     }
 
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
@@ -838,8 +838,9 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
 
 <head>
     <link rel="stylesheet" href="../css/main.css">
-    <script src="header/js/pdf.min.js"></script>
-    <script src="../js/pdf_airbill_parser.js"></script>
+    <script src="<?= $SITEURL ?>/finance/header/js/pdf.min.js"></script>
+    <script src="<?= $SITEURL ?>/js/pdf_airbill_parser.js"></script>
+    <script src="<?= $SITEURL ?>/finance/header/js/tesseract.min.js"></script>
     <style>
         .shopee-airbill-toggle-col {
             display: flex;
@@ -1609,6 +1610,25 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                         </div>
                     </div>
                 </fieldset>
+                <fieldset class="border p-2 mb-3" style="border-radius: 3px;">
+                    <legend class="float-none w-auto p-2">Redeem Details</legend>
+                    <div class="form-group">
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label form_lbl" for="redeem_source_display">Redeem Source</label>
+                                <input class="form-control" type="text" id="redeem_source_display" value="<?= htmlspecialchars((string) ($row['redeem_source'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" disabled>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label form_lbl" for="redeem_reference_display">Redeem Reference</label>
+                                <input class="form-control" type="text" id="redeem_reference_display" value="<?= htmlspecialchars((string) ($row['redeem_reference'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" disabled>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label form_lbl" for="claim_email_display">Claim Email</label>
+                                <input class="form-control" type="text" id="claim_email_display" value="<?= htmlspecialchars((string) ($row['claim_email'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" disabled>
+                            </div>
+                        </div>
+                    </div>
+                </fieldset>
 
                 <div class="form-group mb-3">
                     <label class="form-label form_lbl" id="for_remark_lbl" for="for_remark">Remark</label>
@@ -1772,8 +1792,16 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                         </div>
                     </div>
                 <?php } }?>
-                <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
+                <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column mobile-sticky-form-actions-target shopee-order-action-row">
                     <?php
+                    if ($act === 'E' && isset($row['order_status'])) {
+                        $statusCode = shopeeOmsNormalizeStatusCode($row['order_status']);
+                        $canMoveToPack = shopeeOmsHasTransitionPermission($connect, $statusCode, 'TP', USER_GROUP, $row, USER_ID);
+                        if ($statusCode === 'P' && $canMoveToPack) {
+                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" value="TP" formnovalidate>MOVE TO TO PACK</button>';
+                        }
+                    }
+
                     switch ($act) {
                         case 'I':
                             echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="addRecord">Add Record</button>';
@@ -1781,13 +1809,6 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                         case 'E':
                             echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="updRecord">Edit Record</button>';
                             break;
-                    }
-                    if ($act === 'E' && isset($row['order_status'])) {
-                        $statusCode = shopeeOmsNormalizeStatusCode($row['order_status']);
-                        $canMoveToPack = shopeeOmsHasTransitionPermission($connect, $statusCode, 'TP', USER_GROUP, $row, USER_ID);
-                        if ($statusCode === 'P' && $canMoveToPack) {
-                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" value="TP" formnovalidate>MOVE TO TO PACK</button>';
-                        }
                     }
                     ?>
                     <button type="button" class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="backBtn" id="backBtn"

@@ -405,12 +405,12 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                 ?>
                                 <?php 
                                 // Retain user input if validation fails
-                                if (isset($_POST['prod_brand'])) {
-                                    $brand_name_display = $_POST['prod_brand'];
+                                if (filter_has_var(INPUT_POST, 'prod_brand')) {
+                                    $brand_name_display = post('prod_brand');
                                 }
                                 ?>
                                 <input class="form-control" type="text" name="prod_brand" id="prod_brand" <?php if ($act == '') echo 'readonly' ?> value="<?php echo !empty($brand_name_display) ? htmlspecialchars($brand_name_display, ENT_QUOTES, 'UTF-8') : '' ?>" required>
-                                <input type="hidden" name="prod_brand_hidden" id="prod_brand_hidden" value="<?php echo isset($_POST['prod_brand_hidden']) ? htmlspecialchars($_POST['prod_brand_hidden'], ENT_QUOTES, 'UTF-8') : (isset($row['brand']) ? htmlspecialchars($row['brand'], ENT_QUOTES, 'UTF-8') : ''); ?>">
+                                <input type="hidden" name="prod_brand_hidden" id="prod_brand_hidden" value="<?php echo filter_has_var(INPUT_POST, 'prod_brand_hidden') ? htmlspecialchars((string) post('prod_brand_hidden'), ENT_QUOTES, 'UTF-8') : (isset($row['brand']) ? htmlspecialchars($row['brand'], ENT_QUOTES, 'UTF-8') : ''); ?>">
                                 
                                 <?php if (isset($brand_err)) { ?>
                                     <div id="err_msg">

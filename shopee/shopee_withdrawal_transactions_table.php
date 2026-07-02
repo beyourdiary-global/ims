@@ -22,6 +22,17 @@ if (!file_exists($tempAttachDir)) {
 }
 
 $checkboxValues = isset($_COOKIE['rowID']) ? $_COOKIE['rowID'] : '';
+$groupOption = input('group');
+$allowedGroups = array('currency', 'person', 'currencynperson');
+if (!in_array($groupOption, $allowedGroups, true)) {
+    $groupOption = '';
+}
+$groupOption3 = input('timeRange');
+$groupOption4 = input('timeInterval');
+$allowedTimeIntervals = array('daily', 'weekly', 'monthly', 'yearly');
+if (!in_array($groupOption4, $allowedTimeIntervals, true)) {
+    $groupOption4 = '';
+}
 
 // Check if any checkboxes are checked
 if (!empty($checkboxValues)) {
@@ -214,7 +225,7 @@ $tblName = SHOPEE_WDL_TRANS;
                 <table class="table table-striped" id="swt_table">
                     <thead>
                         <tr>
-                        <?php if (!isset($_GET['group'])): ?>
+                        <?php if ($groupOption === ''): ?>
                             <th class="hideColumn" scope="col">ID</th>
                             <th class="text-center">
                             <input type="checkbox" class="exportAll">
@@ -237,19 +248,17 @@ $tblName = SHOPEE_WDL_TRANS;
                             <th scope="col" width="60px">S/N</th>
                             <th id="group_header" scope="col"> 
                                 <?php 
-                                    if (isset($_GET['group'])) {
-                                        if ($_GET['group'] == 'currency') {
+                                    if ($groupOption == 'currency') {
                                             echo "Currency Unit";
-                                        }elseif ($_GET['group'] == 'person') {
+                                        }elseif ($groupOption == 'person') {
                                             echo "Person In Charge";
-                                        }elseif ($_GET['group'] == 'currencynperson') {
+                                        }elseif ($groupOption == 'currencynperson') {
                                             echo "Currency Unit";
-                                        }
                                     }
                                 ?>
                                 </th>
                                 <?php
-                                if ($_GET['group'] == 'currencynperson') {
+                                if ($groupOption == 'currencynperson') {
                                     echo '<th id="person_header" scope="col">Person In Charge</th>';
                                 }else{
                                     echo '<th class="hideColumn" id="person_header" scope="col"></th>';
@@ -263,9 +272,6 @@ $tblName = SHOPEE_WDL_TRANS;
                     <tbody>
 
                         <?php 
-                         $groupOption = isset($_GET['group']) ? $_GET['group'] : ''; 
-                         $groupOption3 = isset($_GET['timeRange']) ? $_GET['timeRange'] : ''; 
-                         $groupOption4 = isset($_GET['timeInterval']) ? $_GET['timeInterval'] : ''; 
                          $groupedRows = [];
                          $counters = 1;
          
@@ -471,7 +477,7 @@ $tblName = SHOPEE_WDL_TRANS;
                 </tbody>
                 <tfoot>
                 <tr>
-                        <?php if (!isset($_GET['group'])): ?>
+                        <?php if ($groupOption === ''): ?>
                             <th class="hideColumn" scope="col">ID</th>
                             <th class="text-center">
                             <input type="checkbox" class="exportAll">
@@ -494,19 +500,17 @@ $tblName = SHOPEE_WDL_TRANS;
                             <th scope="col" width="60px">S/N</th>
                             <th id="group_header" scope="col"> 
                                 <?php 
-                                    if (isset($_GET['group'])) {
-                                        if ($_GET['group'] == 'currency') {
+                                    if ($groupOption == 'currency') {
                                             echo "Currency Unit";
-                                        }elseif ($_GET['group'] == 'person') {
+                                        }elseif ($groupOption == 'person') {
                                             echo "Person In Charge";
-                                        }elseif ($_GET['group'] == 'currencynperson') {
+                                        }elseif ($groupOption == 'currencynperson') {
                                             echo "Currency Unit";
-                                        }
                                     }
                                 ?>
                                 </th>
                                 <?php
-                                if ($_GET['group'] == 'currencynperson') {
+                                if ($groupOption == 'currencynperson') {
                                     echo '<th id="person_header" scope="col">Person In Charge</th>';
                                 }else{
                                     echo '<th class="hideColumn" id="person_header" scope="col"></th>';

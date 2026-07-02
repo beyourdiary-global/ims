@@ -411,17 +411,17 @@ if (post('actionBtn')) {
         $sor_total_price = postSpaceFilter('sor_total_price');
         $sor_remark = postSpaceFilter('sor_remark');
 
-        $prodIdArr = isset($_POST['sor_item_prod_id']) ? postSpaceFilter('sor_item_prod_id') : array();
-        $itemIdArr = isset($_POST['sor_item_id']) ? postSpaceFilter('sor_item_id') : array();
-        $rowRoleArr = isset($_POST['sor_item_row_role']) ? postSpaceFilter('sor_item_row_role') : array();
-        $prodNameArr = isset($_POST['sor_item_prod_name']) ? postSpaceFilter('sor_item_prod_name') : array();
-        $pkgIdArr = isset($_POST['sor_item_pkg_id']) ? postSpaceFilter('sor_item_pkg_id') : array();
-        $pkgNameArr = isset($_POST['sor_item_pkg_name']) ? postSpaceFilter('sor_item_pkg_name') : array();
-        $pkgDescArr = isset($_POST['sor_item_desc']) ? postSpaceFilter('sor_item_desc') : array();
-        $pkgQtyArr = isset($_POST['sor_item_package_qty']) ? postSpaceFilter('sor_item_package_qty') : array();
-        $productQtyArr = isset($_POST['sor_item_product_qty']) ? postSpaceFilter('sor_item_product_qty') : array();
-        $packageGroupKeyArr = isset($_POST['sor_item_group_key']) ? postSpaceFilter('sor_item_group_key') : array();
-        $packagePriceArr = isset($_POST['sor_item_package_price']) ? postSpaceFilter('sor_item_package_price') : array();
+        $prodIdArr = postSpaceFilter('sor_item_prod_id') ?: array();
+        $itemIdArr = postSpaceFilter('sor_item_id') ?: array();
+        $rowRoleArr = postSpaceFilter('sor_item_row_role') ?: array();
+        $prodNameArr = postSpaceFilter('sor_item_prod_name') ?: array();
+        $pkgIdArr = postSpaceFilter('sor_item_pkg_id') ?: array();
+        $pkgNameArr = postSpaceFilter('sor_item_pkg_name') ?: array();
+        $pkgDescArr = postSpaceFilter('sor_item_desc') ?: array();
+        $pkgQtyArr = postSpaceFilter('sor_item_package_qty') ?: array();
+        $productQtyArr = postSpaceFilter('sor_item_product_qty') ?: array();
+        $packageGroupKeyArr = postSpaceFilter('sor_item_group_key') ?: array();
+        $packagePriceArr = postSpaceFilter('sor_item_package_price') ?: array();
 
         if (!is_array($prodIdArr)) $prodIdArr = array();
         if (!is_array($itemIdArr)) $itemIdArr = array();
@@ -1534,19 +1534,19 @@ function sorAttachmentUrl($relativePath, $siteUrl)
                         <div class="col-md-4 mb-3">
                             <label class="form-label form_lbl" for="sor_warehouse">Warehouse<span class="requireRed">*</span></label>
                             <div class="autocomplete">
-                                <input class="form-control" type="text" id="sor_warehouse_name" name="sor_warehouse_name" value="<?= sorEcho(isset($_POST['sor_warehouse_name']) ? $_POST['sor_warehouse_name'] : (isset($warehouseNameMap[(int) (isset($row['warehouse_id']) ? $row['warehouse_id'] : 0)]) ? $warehouseNameMap[(int) $row['warehouse_id']] : '')) ?>" placeholder="Select Warehouse" <?= ($act == '') ? 'readonly' : '' ?>>
-                                <input type="hidden" id="sor_warehouse" name="sor_warehouse" value="<?= sorEcho(isset($_POST['sor_warehouse']) ? $_POST['sor_warehouse'] : (isset($row['warehouse_id']) ? $row['warehouse_id'] : '')) ?>">
+                                <input class="form-control" type="text" id="sor_warehouse_name" name="sor_warehouse_name" value="<?= sorEcho(post('actionBtn') ? post('sor_warehouse_name') : (isset($warehouseNameMap[(int) (isset($row['warehouse_id']) ? $row['warehouse_id'] : 0)]) ? $warehouseNameMap[(int) $row['warehouse_id']] : '')) ?>" placeholder="Select Warehouse" <?= ($act == '') ? 'readonly' : '' ?>>
+                                <input type="hidden" id="sor_warehouse" name="sor_warehouse" value="<?= sorEcho(post('actionBtn') ? post('sor_warehouse') : (isset($row['warehouse_id']) ? $row['warehouse_id'] : '')) ?>">
                             </div>
                             <div class="sor-field-error" id="sor_warehouse_err"></div>
                         </div>
                         <div class="col-md-4 mb-3">
                             <label class="form-label form_lbl" for="sor_invoice_no">Invoice<span class="requireRed">*</span></label>
-                            <textarea class="form-control" id="sor_invoice_no" name="sor_invoice_no" rows="1" <?= ($act == '') ? 'readonly' : '' ?>><?= sorEcho(isset($_POST['sor_invoice_no']) ? $_POST['sor_invoice_no'] : (isset($row['invoice_no']) ? $row['invoice_no'] : '')) ?></textarea>
+                            <textarea class="form-control" id="sor_invoice_no" name="sor_invoice_no" rows="1" <?= ($act == '') ? 'readonly' : '' ?>><?= sorEcho(post('actionBtn') ? post('sor_invoice_no') : (isset($row['invoice_no']) ? $row['invoice_no'] : '')) ?></textarea>
                             <div class="sor-field-error" id="sor_invoice_no_err"<?= isset($invoice_no_err) ? ' style="display:block;"' : '' ?>><?= isset($invoice_no_err) ? sorEcho($invoice_no_err) : '' ?></div>
                         </div>
                         <div class="col-md-4 mb-3">
                             <label class="form-label form_lbl" for="sor_invoice_date">Invoices Date<span class="requireRed">*</span></label>
-                            <input class="form-control" type="date" id="sor_invoice_date" name="sor_invoice_date" value="<?= sorEcho(isset($_POST['sor_invoice_date']) ? $_POST['sor_invoice_date'] : (($act === 'I') ? '' : (isset($row['invoice_date']) ? $row['invoice_date'] : ''))) ?>" <?= ($act == '') ? 'readonly' : '' ?>>
+                            <input class="form-control" type="date" id="sor_invoice_date" name="sor_invoice_date" value="<?= sorEcho(post('actionBtn') ? post('sor_invoice_date') : (($act === 'I') ? '' : (isset($row['invoice_date']) ? $row['invoice_date'] : ''))) ?>" <?= ($act == '') ? 'readonly' : '' ?>>
                             <div class="sor-field-error" id="sor_invoice_date_err"></div>
                         </div>
                     </div>
@@ -1554,19 +1554,19 @@ function sorAttachmentUrl($relativePath, $siteUrl)
                     <div class="row">
                         <div class="col-md-4 mb-3">
                             <label class="form-label form_lbl" for="sor_request_date">Request Date<span class="requireRed">*</span></label>
-                            <input class="form-control" type="date" id="sor_request_date" name="sor_request_date" value="<?= sorEcho(isset($_POST['sor_request_date']) ? $_POST['sor_request_date'] : (($act === 'I') ? '' : (isset($row['request_date']) ? $row['request_date'] : ''))) ?>" <?= ($act == '') ? 'readonly' : '' ?>>
+                            <input class="form-control" type="date" id="sor_request_date" name="sor_request_date" value="<?= sorEcho(post('actionBtn') ? post('sor_request_date') : (($act === 'I') ? '' : (isset($row['request_date']) ? $row['request_date'] : ''))) ?>" <?= ($act == '') ? 'readonly' : '' ?>>
                             <div class="sor-field-error" id="sor_request_date_err"></div>
                         </div>
                         <div class="col-md-4 mb-3">
                             <label class="form-label form_lbl" for="sor_courier">Courier</label>
                             <div class="autocomplete">
-                                <input class="form-control" type="text" id="sor_courier_name" name="sor_courier_name" value="<?= sorEcho(isset($_POST['sor_courier_name']) ? $_POST['sor_courier_name'] : (($act === 'I') ? '' : (isset($courierNameMap[(string) (isset($row['courier_id']) ? $row['courier_id'] : '')]) ? $courierNameMap[(string) $row['courier_id']] : ''))) ?>" placeholder="Select Courier" <?= ($act == '') ? 'readonly' : '' ?> autocomplete="off">
-                                <input type="hidden" id="sor_courier" name="sor_courier" value="<?= sorEcho(isset($_POST['sor_courier']) ? $_POST['sor_courier'] : (($act === 'I') ? '' : (isset($row['courier_id']) ? $row['courier_id'] : ''))) ?>">
+                                <input class="form-control" type="text" id="sor_courier_name" name="sor_courier_name" value="<?= sorEcho(post('actionBtn') ? post('sor_courier_name') : (($act === 'I') ? '' : (isset($courierNameMap[(string) (isset($row['courier_id']) ? $row['courier_id'] : '')]) ? $courierNameMap[(string) $row['courier_id']] : ''))) ?>" placeholder="Select Courier" <?= ($act == '') ? 'readonly' : '' ?> autocomplete="off">
+                                <input type="hidden" id="sor_courier" name="sor_courier" value="<?= sorEcho(post('actionBtn') ? post('sor_courier') : (($act === 'I') ? '' : (isset($row['courier_id']) ? $row['courier_id'] : ''))) ?>">
                             </div>
                         </div>
                         <div class="col-md-4 mb-3">
                             <label class="form-label form_lbl" for="sor_tracking_no">Tracking Number</label>
-                            <input class="form-control" type="text" id="sor_tracking_no" name="sor_tracking_no" value="<?= sorEcho(isset($_POST['sor_tracking_no']) ? $_POST['sor_tracking_no'] : (($act === 'I') ? '' : (isset($row['tracking_no']) ? $row['tracking_no'] : ''))) ?>" <?= ($act == '') ? 'readonly' : '' ?> autocomplete="off">
+                            <input class="form-control" type="text" id="sor_tracking_no" name="sor_tracking_no" value="<?= sorEcho(post('actionBtn') ? post('sor_tracking_no') : (($act === 'I') ? '' : (isset($row['tracking_no']) ? $row['tracking_no'] : ''))) ?>" <?= ($act == '') ? 'readonly' : '' ?> autocomplete="off">
                         </div>
                     </div>
 
@@ -1810,7 +1810,7 @@ function sorAttachmentUrl($relativePath, $siteUrl)
                     <div class="row">
                         <div class="col-md-12 mb-3">
                             <label class="form-label form_lbl" for="sor_remark">Remark</label>
-                            <textarea class="form-control" id="sor_remark" name="sor_remark" rows="3" <?= ($act == '') ? 'readonly' : '' ?> autocomplete="off"><?= sorEcho(isset($_POST['sor_remark']) ? $_POST['sor_remark'] : (($act === 'I') ? '' : (isset($row['remark']) ? $row['remark'] : ''))) ?></textarea>
+                            <textarea class="form-control" id="sor_remark" name="sor_remark" rows="3" <?= ($act == '') ? 'readonly' : '' ?> autocomplete="off"><?= sorEcho(post('actionBtn') ? post('sor_remark') : (($act === 'I') ? '' : (isset($row['remark']) ? $row['remark'] : ''))) ?></textarea>
                         </div>
                         <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
                     </div>

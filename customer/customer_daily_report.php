@@ -35,8 +35,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
     ));
 }
 
-$selectedMonth = isset($_GET['month']) ? trim((string) $_GET['month']) : date('m');
-$selectedYear = isset($_GET['year']) ? trim((string) $_GET['year']) : date('Y');
+$selectedMonth = trim((string) input('month'));
+$selectedYear = trim((string) input('year'));
 $selectedDate = trim((string) input('date'));
 $currentYear = date('Y');
 $selectedMonth = ($selectedMonth === '' || preg_match('/^(0[1-9]|1[0-2])$/', $selectedMonth)) ? $selectedMonth : date('m');

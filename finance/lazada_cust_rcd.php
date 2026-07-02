@@ -42,8 +42,8 @@ if (!($dataId) && !($act)) {
 
 }
 
-if ($dataId && isset($_GET['open_order_id'])) {
-    $openOrderId = (int) $_GET['open_order_id'];
+if ($dataId && numberInput('open_order_id') !== '') {
+    $openOrderId = (int) numberInput('open_order_id');
     if ($openOrderId > 0) {
         $customerRowId = (int) $dataId;
         $customerCode = (isset($row['lcr_id']) ? trim((string) $row['lcr_id']) : '');

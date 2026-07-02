@@ -137,7 +137,7 @@ $orderDeleteApprovalPanelHtml = orderDeleteApprovalHandlePageFlow(array(
     'delete_callback' => $worExecuteDeleteOrder,
 ));
 
-if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['submit'])) {
+if ($_SERVER["REQUEST_METHOD"] == "POST" && post('submit') !== '') {
     $customer_id = postSpaceFilter('customer_id');
     $customer_name = postSpaceFilter('customer_name');
     $customer_email = postSpaceFilter('customer_email');
@@ -885,8 +885,9 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
 
 <head>
     <link rel="stylesheet" href="../css/main.css">
-    <script src="header/js/pdf.min.js"></script>
-    <script src="../js/pdf_airbill_parser.js"></script>
+    <script src="<?= $SITEURL ?>/finance/header/js/pdf.min.js"></script>
+    <script src="<?= $SITEURL ?>/js/pdf_airbill_parser.js"></script>
+    <script src="<?= $SITEURL ?>/finance/header/js/tesseract.min.js"></script>
     <style>
         .shopee-airbill-toggle-col {
             display: flex;
@@ -1753,8 +1754,16 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                     </div>
                 </div>
                 <?php }} ?>
-                <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
+                <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column mobile-sticky-form-actions-target shopee-order-action-row">
                     <?php
+                    if ($act === 'E' && isset($row['order_status'])) {
+                        $statusCode = shopeeOmsNormalizeStatusCode($row['order_status']);
+                        $canMoveToPack = shopeeOmsHasTransitionPermission($connect, $statusCode, 'TP', USER_GROUP, $row, USER_ID);
+                        if ($statusCode === 'P' && $canMoveToPack) {
+                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" value="TP" formnovalidate>MOVE TO TO PACK</button>';
+                        }
+                    }
+
                     switch ($act) {
                         case 'I':
                             echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="addRecord">Add Record</button>';
@@ -1762,13 +1771,6 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                         case 'E':
                             echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" name="actionBtn" id="actionBtn" value="updRecord">Edit Record</button>';
                             break;
-                    }
-                    if ($act === 'E' && isset($row['order_status'])) {
-                        $statusCode = shopeeOmsNormalizeStatusCode($row['order_status']);
-                        $canMoveToPack = shopeeOmsHasTransitionPermission($connect, $statusCode, 'TP', USER_GROUP, $row, USER_ID);
-                        if ($statusCode === 'P' && $canMoveToPack) {
-                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn p-2" name="updateStatusBtn" value="TP" formnovalidate>MOVE TO TO PACK</button>';
-                        }
                     }
                     ?>
                     <button type="button" class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" name="backBtn" id="backBtn"

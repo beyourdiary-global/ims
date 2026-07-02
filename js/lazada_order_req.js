@@ -517,7 +517,6 @@ $(".submitBtn").on("click", function (event) {
 
   if (
     $("#lor_commision").val() == "" ||
-    $("#lor_commision").val() == "0" ||
     $("#lor_commision").val() === null ||
     $("#lor_commision").val() === undefined
   ) {
@@ -532,7 +531,6 @@ $(".submitBtn").on("click", function (event) {
 
   if (
     $("#lor_other_discount").val() == "" ||
-    $("#lor_other_discount").val() == "0" ||
     $("#lor_other_discount").val() === null ||
     $("#lor_other_discount").val() === undefined
   ) {
@@ -547,7 +545,6 @@ $(".submitBtn").on("click", function (event) {
 
   if (
     $("#lor_pay_fee").val() == "" ||
-    $("#lor_pay_fee").val() == "0" ||
     $("#lor_pay_fee").val() === null ||
     $("#lor_pay_fee").val() === undefined
   ) {

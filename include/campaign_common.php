@@ -1368,15 +1368,16 @@ if (!function_exists('campaignRuleSettingJsonEncode')) {
 if (!function_exists('campaignRuleSettingReadSelectedIds')) {
     function campaignRuleSettingReadSelectedIds($name, $source = null)
     {
-        if (!is_array($source)) {
-            $source = $_POST;
+        $values = array();
+        if (is_array($source)) {
+            if (!isset($source[$name])) {
+                return array();
+            }
+            $values = is_array($source[$name]) ? $source[$name] : array($source[$name]);
+        } else {
+            $values = (array) post($name) ?: array();
         }
 
-        if (!isset($source[$name])) {
-            return array();
-        }
-
-        $values = is_array($source[$name]) ? $source[$name] : array($source[$name]);
         $ids = array();
         foreach ($values as $value) {
             $id = (int) $value;
@@ -1522,15 +1523,16 @@ if (!function_exists('campaignRuleConditionSanitizeIdList')) {
 if (!function_exists('campaignRuleConditionReadPostedValues')) {
     function campaignRuleConditionReadPostedValues($name, $source = null)
     {
-        if (!is_array($source)) {
-            $source = $_POST;
+        $values = array();
+        if (is_array($source)) {
+            if (!isset($source[$name])) {
+                return array();
+            }
+            $values = is_array($source[$name]) ? $source[$name] : array($source[$name]);
+        } else {
+            $values = (array) post($name) ?: array();
         }
 
-        if (!isset($source[$name])) {
-            return array();
-        }
-
-        $values = is_array($source[$name]) ? $source[$name] : array($source[$name]);
         $clean = array();
         foreach ($values as $value) {
             $clean[] = trim((string) $value);
@@ -1652,7 +1654,14 @@ if (!function_exists('campaignRuleConditionBuildJsonFromPost')) {
     function campaignRuleConditionBuildJsonFromPost($source = null, $existingRawJson = '')
     {
         if (!is_array($source)) {
-            $source = $_POST;
+            $source = array(
+                'target_platforms' => (array) post('target_platforms') ?: array(),
+                'target_tags' => (array) post('target_tags') ?: array(),
+                'target_brands' => (array) post('target_brands') ?: array(),
+                'target_last_order' => post('target_last_order'),
+                'campaign_period_rule' => post('campaign_period_rule'),
+                'custom_period_days' => post('custom_period_days'),
+            );
         }
 
         return campaignRuleConditionBuildJsonFromExisting($existingRawJson, array(

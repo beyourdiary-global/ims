@@ -162,7 +162,7 @@ $importPinIds = getImportPinIdsForMenu($connect);
 $pinGroupAllowedPinMap = getPinGroupAllowedPinMapForMenu($connect, is_array(GlobalPin) ? GlobalPin : array());
 
 if (!empty($importPinIds)) {
-    foreach (array(77, 50, 21, 125, 20, 126, 88, 127, 135) as $importCardPinGroupId) {
+    foreach (array(77, 50, 21, 125, 20, 126, 88, 127, 135, 93) as $importCardPinGroupId) {
         if (hasImportActionForPinGroupForMenu($importCardPinGroupId, $userPinGroupMap, $pinGroupAllowedPinMap, $importPinIds)) {
             $hasAnyImportAccess = true;
             break;
@@ -245,6 +245,19 @@ $menuList = array(
             array('Customer Daily Report', 'mdi mdi-file-chart-outline', $SITEURL . '/customer/customer_daily_report.php', '150'),
             array('Campaign', 'mdi mdi-bullhorn-outline', $SITEURL . '/campaign/campaign_table.php', '153'),
             array(
+                'Lucky Draw',
+                'mdi mdi-gift-outline',
+                'javascript:void(0)',
+                'y',
+                'expand' => array(
+                    array('Lucky Draw Dashboard', 'mdi mdi-view-dashboard-outline', $SITEURL . '/lucky_draw/dashboard.php', '159', true),
+                    array('Prize Management', 'mdi mdi-gift-outline', $SITEURL . '/lucky_draw/prizes_table.php', '159', true),
+                    array('Lucky Draw Logs', 'mdi mdi-file-document-outline', $SITEURL . '/lucky_draw/logs.php', '159', true),
+                    array('Virtual Board', 'mdi mdi-format-list-bulleted', $SITEURL . '/lucky_draw/virtual_board_table.php', '159', true),
+                ),
+                'pin' => array('159'),
+            ),
+            array(
                 'Setting',
                 'mdi mdi-cog',
                 'javascript:void(0)',
@@ -260,7 +273,7 @@ $menuList = array(
                 'pin' => array('29', '142', '143', '144', '35', '154'),
             ),
         ),
-        'pin' => array('85', '91', '75', '84', '38', '150', '151', '153', '29', '142', '143', '144', '35', '154')
+        'pin' => array('85', '91', '75', '84', '38', '150', '151', '153', '159', '29', '142', '143', '144', '35', '154')
     ),
     array(
         'Order',
@@ -557,7 +570,7 @@ if ($hasTaskManagementAccess) {
         $isTaskSheetsPage = strpos($taskCurrentPath, '/task/sheets.php') !== false;
         $isTaskProjectSettingsPage = strpos($taskCurrentPath, '/task/project_settings.php') !== false;
         $isTaskProjectUserAccessPage = strpos($taskCurrentPath, '/task/project_user_access.php') !== false;
-        $taskCurrentProjectId = taskResolveCurrentProjectId($connect, isset($_GET['project_id']) ? (int) $_GET['project_id'] : 0);
+        $taskCurrentProjectId = taskResolveCurrentProjectId($connect, (int) numberInput('project_id'));
 
         if ($isTaskSummaryPage) {
             $taskActiveMenuKey = 'summary';
@@ -628,7 +641,7 @@ if ($hasTaskManagementAccess) {
 
                                 foreach ($url['expand'] as $url2) {
                                     if (in_array($url2[3], GlobalPin)) {
-                                        $url2Title = getMenuTitleByPinGroupId($connect, $url2[0], $url2[3]);
+                                        $url2Title = !empty($url2[4]) ? $url2[0] : getMenuTitleByPinGroupId($connect, $url2[0], $url2[3]);
                                         echo "<li><a class=\"dropdown-item\" href=\"$url2[2]\">$url2Title</a></li>";
                                     }
                                 }
@@ -638,7 +651,7 @@ if ($hasTaskManagementAccess) {
                             }
                         } else {
                             if (in_array($url[3], GlobalPin)) {
-                                $urlTitle = getMenuTitleByPinGroupId($connect, $url[0], $url[3]);
+                                $urlTitle = !empty($url[4]) ? $url[0] : getMenuTitleByPinGroupId($connect, $url[0], $url[3]);
                                 echo "<li><a class=\"dropdown-item\" href=\"$url[2]\">$urlTitle</a></li>";
                             }
                         }
@@ -719,7 +732,7 @@ if ($hasTaskManagementAccess) {
 
                                     foreach ($url['expand'] as $url2) {
                                         if (in_array($url2[3], GlobalPin)) {
-                                            $url2Title = getMenuTitleByPinGroupId($connect, $url2[0], $url2[3]);
+                                            $url2Title = !empty($url2[4]) ? $url2[0] : getMenuTitleByPinGroupId($connect, $url2[0], $url2[3]);
                                             echo "<li><a class=\"nav-link\" href=\"$url2[2]\"><i class=\"$url2[1]\"></i><span> $url2Title<span></a></li>";
                                         }
                                     }
@@ -730,7 +743,7 @@ if ($hasTaskManagementAccess) {
                                 }
                             } else {
                                 if (in_array($url[3], GlobalPin)) {
-                                    $urlTitle = $isTaskManagementMenu ? $url[0] : getMenuTitleByPinGroupId($connect, $url[0], $url[3]);
+                                    $urlTitle = ($isTaskManagementMenu || !empty($url[4])) ? $url[0] : getMenuTitleByPinGroupId($connect, $url[0], $url[3]);
                                     echo "<li><a class=\"nav-link\" href=\"$url[2]\"><i class=\"$url[1]\"></i><span> $urlTitle<span></a></li>";
                                 }
                             }
