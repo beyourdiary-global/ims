@@ -3680,16 +3680,17 @@ if ($conn->select_db($db_cms)) {
         (148, 'Daily Flow Report', '1', 'OMS daily flow reporting', '1', CURDATE(), CURTIME(), 'A'),
         (149, 'Flow Setting', '1,2,3,4', 'OMS flow setting management', '1', CURDATE(), CURTIME(), 'A'),
         (150, 'Customer Daily Report', '1', 'Customer daily edit activity reporting', '1', CURDATE(), CURTIME(), 'A'),
-        (151, 'Customer Follow-Up', '1,11,12', 'Customer follow-up approval and log access', '1', CURDATE(), CURTIME(), 'A')
+        (151, 'Customer Follow-Up', '1,11,12', 'Customer follow-up approval and log access', '1', CURDATE(), CURTIME(), 'A'),
+        (160, 'Customer Dashboard', '1', 'Customer Dashboard view access', '1', CURDATE(), CURTIME(), 'A')
         ON DUPLICATE KEY UPDATE
             `name` = VALUES(`name`),
             `pins` = VALUES(`pins`),
             `remark` = VALUES(`remark`),
             `status` = 'A'";
     if ($conn->query($taskPinGroupSql)) {
-        echo "<p style='color:green;'>Verified pin groups 136-151 for task, customer, product label, and OMS page management.</p>";
+        echo "<p style='color:green;'>Verified pin groups 136-151 and 160 for task, customer, product label, OMS page management, and Customer Dashboard access.</p>";
     } else {
-        echo "<p style='color:red;'>Failed creating pin groups 136-151: " . $conn->error . "</p>";
+        echo "<p style='color:red;'>Failed creating pin groups 136-151 and 160: " . $conn->error . "</p>";
     }
 
     $omsPagePinGroupUpdateSql = "UPDATE `pin_group`
@@ -3700,6 +3701,7 @@ if ($conn->select_db($db_cms)) {
                 WHEN 149 THEN 'Flow Setting'
                 WHEN 150 THEN 'Customer Daily Report'
                 WHEN 151 THEN 'Customer Follow-Up'
+                WHEN 160 THEN 'Customer Dashboard'
                 ELSE `name`
             END,
             `remark` = CASE `id`
@@ -3709,12 +3711,13 @@ if ($conn->select_db($db_cms)) {
                 WHEN 149 THEN 'OMS flow setting management'
                 WHEN 150 THEN 'Customer daily edit activity reporting'
                 WHEN 151 THEN 'Customer follow-up approval and log access'
+                WHEN 160 THEN 'Customer Dashboard view access'
                 ELSE `remark`
             END,
             `status` = 'A'
-        WHERE `id` IN (146,147,148,149,150,151)";
+        WHERE `id` IN (146,147,148,149,150,151,160)";
     if ($conn->query($omsPagePinGroupUpdateSql)) {
-        echo "<p style='color:green;'>Verified pin group names for Waiting To Pack, Arrival Management, Daily Flow Report, Flow Setting, Customer Daily Report, and Customer Follow-Up.</p>";
+        echo "<p style='color:green;'>Verified pin group names for Waiting To Pack, Arrival Management, Daily Flow Report, Flow Setting, Customer Daily Report, Customer Follow-Up, and Customer Dashboard.</p>";
     } else {
         echo "<p style='color:red;'>Failed updating OMS pin group names: " . $conn->error . "</p>";
     }
@@ -3745,6 +3748,7 @@ if ($conn->select_db($db_cms)) {
             $updatedPins = addAccessToPinBlock($updatedPins, 147, array(1, 2, 3, 4));
             $updatedPins = addAccessToPinBlock($updatedPins, 148, array(1));
             $updatedPins = addAccessToPinBlock($updatedPins, 150, array(1));
+            $updatedPins = addAccessToPinBlock($updatedPins, 160, array(1));
         }
 
         if ($groupId === 1) {
