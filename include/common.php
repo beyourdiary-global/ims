@@ -2391,6 +2391,539 @@ if (!function_exists('customerDailyReportResolveDbConnect')) {
     }
 }
 
+if (!function_exists('customerAnalysisGetPlatformConfigs')) {
+    function customerAnalysisGetPlatformConfigs()
+    {
+        $labelConfigs = function_exists('customerLabelGetPlatformConfigs') ? customerLabelGetPlatformConfigs() : array();
+        $orderConfigs = function_exists('shopeeOmsGetOrderSourceConfigs') ? shopeeOmsGetOrderSourceConfigs() : array();
+
+        return array(
+            'shopee' => array(
+                'platform' => 'shopee',
+                'label' => 'Shopee',
+                'customer_table' => isset($labelConfigs['shopee']['customer_table']) ? (string) $labelConfigs['shopee']['customer_table'] : SHOPEE_CUST_INFO,
+                'customer_db' => isset($labelConfigs['shopee']['customer_db']) ? (string) $labelConfigs['shopee']['customer_db'] : 'finance',
+                'order_table' => isset($labelConfigs['shopee']['order_table']) ? (string) $labelConfigs['shopee']['order_table'] : SHOPEE_SG_ORDER_REQ,
+                'order_db' => isset($labelConfigs['shopee']['order_db']) ? (string) $labelConfigs['shopee']['order_db'] : 'finance',
+                'order_date_field' => isset($orderConfigs['shopee']['date_field']) ? (string) $orderConfigs['shopee']['date_field'] : 'date',
+                'customer_fields' => array('id', 'create_date', 'buyer_username'),
+                'order_fields' => array('id', 'status', 'order_status', 'buyer', 'date'),
+            ),
+            'lazada' => array(
+                'platform' => 'lazada',
+                'label' => 'Lazada',
+                'customer_table' => isset($labelConfigs['lazada']['customer_table']) ? (string) $labelConfigs['lazada']['customer_table'] : LAZADA_CUST_RCD,
+                'customer_db' => isset($labelConfigs['lazada']['customer_db']) ? (string) $labelConfigs['lazada']['customer_db'] : 'cms',
+                'order_table' => isset($labelConfigs['lazada']['order_table']) ? (string) $labelConfigs['lazada']['order_table'] : LAZADA_ORDER_REQ,
+                'order_db' => isset($labelConfigs['lazada']['order_db']) ? (string) $labelConfigs['lazada']['order_db'] : 'cms',
+                'order_date_field' => isset($orderConfigs['lazada']['date_field']) ? (string) $orderConfigs['lazada']['date_field'] : 'create_date',
+                'customer_fields' => array('id', 'create_date', 'lcr_id'),
+                'order_fields' => array('id', 'status', 'order_status', 'cust_id', 'create_date'),
+            ),
+            'facebook' => array(
+                'platform' => 'facebook',
+                'label' => 'Facebook',
+                'customer_table' => isset($labelConfigs['facebook']['customer_table']) ? (string) $labelConfigs['facebook']['customer_table'] : FB_CUST_DEALS,
+                'customer_db' => isset($labelConfigs['facebook']['customer_db']) ? (string) $labelConfigs['facebook']['customer_db'] : 'cms',
+                'order_table' => isset($labelConfigs['facebook']['order_table']) ? (string) $labelConfigs['facebook']['order_table'] : FB_ORDER_REQ,
+                'order_db' => isset($labelConfigs['facebook']['order_db']) ? (string) $labelConfigs['facebook']['order_db'] : 'finance',
+                'order_date_field' => isset($orderConfigs['facebook']['date_field']) ? (string) $orderConfigs['facebook']['date_field'] : 'create_date',
+                'customer_fields' => array('id', 'create_date', 'name', 'fb_link'),
+                'order_fields' => array('id', 'status', 'order_status', 'name', 'fb_link', 'create_date'),
+            ),
+            'website' => array(
+                'platform' => 'website',
+                'label' => 'Website',
+                'customer_table' => isset($labelConfigs['website']['customer_table']) ? (string) $labelConfigs['website']['customer_table'] : WEB_CUST_RCD,
+                'customer_db' => isset($labelConfigs['website']['customer_db']) ? (string) $labelConfigs['website']['customer_db'] : 'cms',
+                'order_table' => isset($labelConfigs['website']['order_table']) ? (string) $labelConfigs['website']['order_table'] : WEB_ORDER_REQ,
+                'order_db' => isset($labelConfigs['website']['order_db']) ? (string) $labelConfigs['website']['order_db'] : 'finance',
+                'order_date_field' => isset($orderConfigs['website']['date_field']) ? (string) $orderConfigs['website']['date_field'] : 'create_date',
+                'customer_fields' => array('id', 'create_date', 'cust_id'),
+                'order_fields' => array('id', 'status', 'order_status', 'cust_id', 'create_date'),
+            ),
+        );
+    }
+}
+
+if (!function_exists('customerAnalysisResolveDbConnect')) {
+    function customerAnalysisResolveDbConnect($connect, $financeConnect, $dbKey)
+    {
+        return $dbKey === 'finance' ? $financeConnect : $connect;
+    }
+}
+
+if (!function_exists('customerAnalysisNormalizeYear')) {
+    function customerAnalysisNormalizeYear($year)
+    {
+        $currentYear = (int) date('Y');
+        $year = (int) $year;
+
+        if ($year < 2000 || $year > ($currentYear + 5)) {
+            return $currentYear;
+        }
+
+        return $year;
+    }
+}
+
+if (!function_exists('customerAnalysisNormalizeMonth')) {
+    function customerAnalysisNormalizeMonth($month)
+    {
+        $currentMonth = (int) date('n');
+        $month = (int) $month;
+
+        if ($month < 1 || $month > 12) {
+            return $currentMonth;
+        }
+
+        return $month;
+    }
+}
+
+if (!function_exists('customerAnalysisNormalizeDateValue')) {
+    function customerAnalysisNormalizeDateValue($value)
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return '';
+        }
+
+        $candidate = preg_match('/^\d{4}-\d{2}-\d{2}/', $value) ? substr($value, 0, 10) : $value;
+        $parsed = DateTimeImmutable::createFromFormat('Y-m-d', $candidate);
+        $errors = DateTimeImmutable::getLastErrors();
+        $hasParseErrors = !empty($errors['warning_count']) || !empty($errors['error_count']);
+
+        if (!($parsed instanceof DateTimeImmutable) || $hasParseErrors || $parsed->format('Y-m-d') !== $candidate) {
+            return '';
+        }
+
+        return $candidate;
+    }
+}
+
+if (!function_exists('customerAnalysisGetMonthDateRange')) {
+    function customerAnalysisGetMonthDateRange($year, $month)
+    {
+        $year = customerAnalysisNormalizeYear($year);
+        $month = customerAnalysisNormalizeMonth($month);
+        $startDate = DateTimeImmutable::createFromFormat('Y-n-j', $year . '-' . $month . '-1');
+
+        if (!($startDate instanceof DateTimeImmutable)) {
+            $startDate = new DateTimeImmutable(date('Y-m-01'));
+        }
+
+        $endDate = $startDate->modify('last day of this month');
+
+        return array(
+            'start_date' => $startDate->format('Y-m-d'),
+            'end_date' => $endDate->format('Y-m-d'),
+            'days_in_month' => (int) $endDate->format('j'),
+            'label' => $startDate->format('F Y'),
+        );
+    }
+}
+
+if (!function_exists('customerAnalysisResolveWeekNumber')) {
+    function customerAnalysisResolveWeekNumber($dayOfMonth)
+    {
+        $dayOfMonth = (int) $dayOfMonth;
+        if ($dayOfMonth <= 7) {
+            return 1;
+        }
+        if ($dayOfMonth <= 14) {
+            return 2;
+        }
+        if ($dayOfMonth <= 21) {
+            return 3;
+        }
+
+        return 4;
+    }
+}
+
+if (!function_exists('customerAnalysisGetWeekRanges')) {
+    function customerAnalysisGetWeekRanges($year, $month)
+    {
+        $monthRange = customerAnalysisGetMonthDateRange($year, $month);
+        $daysInMonth = isset($monthRange['days_in_month']) ? (int) $monthRange['days_in_month'] : 31;
+        $weekStarts = array(1, 8, 15, 22);
+        $ranges = array();
+        $today = new DateTimeImmutable('today');
+        $currentMonthKey = $today->format('Y-m');
+
+        foreach ($weekStarts as $index => $startDay) {
+            if ($startDay > $daysInMonth) {
+                continue;
+            }
+
+            $endDay = $index < 3 ? min($startDay + 6, $daysInMonth) : $daysInMonth;
+            $startDate = sprintf('%04d-%02d-%02d', (int) $year, (int) $month, (int) $startDay);
+            $endDate = sprintf('%04d-%02d-%02d', (int) $year, (int) $month, (int) $endDay);
+            $isCurrentMonth = $currentMonthKey === sprintf('%04d-%02d', (int) $year, (int) $month);
+            $currentDay = (int) $today->format('j');
+
+            $ranges[] = array(
+                'week_number' => $index + 1,
+                'label' => 'Day ' . $startDay . ' to ' . ($endDay === $daysInMonth && $startDay >= 22 ? 'end of month' : $endDay),
+                'start_date' => $startDate,
+                'end_date' => $endDate,
+                'is_current' => $isCurrentMonth && $currentDay >= $startDay && $currentDay <= $endDay,
+            );
+        }
+
+        return $ranges;
+    }
+}
+
+if (!function_exists('customerAnalysisBuildFieldList')) {
+    function customerAnalysisBuildFieldList($fields)
+    {
+        $safeFields = array();
+        foreach ((array) $fields as $field) {
+            $field = trim((string) $field);
+            if ($field === '' || !preg_match('/^[A-Za-z0-9_]+$/', $field)) {
+                continue;
+            }
+
+            if (!in_array($field, $safeFields, true)) {
+                $safeFields[] = $field;
+            }
+        }
+
+        if (empty($safeFields)) {
+            return '*';
+        }
+
+        return '`' . implode('`,`', $safeFields) . '`';
+    }
+}
+
+if (!function_exists('customerAnalysisBuildPlaceholderMetrics')) {
+    function customerAnalysisBuildPlaceholderMetrics($orderCountsByCustomer)
+    {
+        unset($orderCountsByCustomer);
+
+        // Existing business rules do not clearly define these segments yet.
+        return array(
+            'estimated_repeat_order_total' => null,
+            'success_repeat_order_total' => null,
+            'lost_customer_total' => null,
+            'loyal_customer_total' => null,
+        );
+    }
+}
+
+if (!function_exists('customerAnalysisBuildPeriodMetrics')) {
+    function customerAnalysisBuildPeriodMetrics($activity, $startDate, $endDate)
+    {
+        $startDate = customerAnalysisNormalizeDateValue($startDate);
+        $endDate = customerAnalysisNormalizeDateValue($endDate);
+        $metrics = array(
+            'new_customer_total' => 0,
+            'returning_customer_total' => 0,
+            'estimated_repeat_order_total' => null,
+            'success_repeat_order_total' => null,
+            'lost_customer_total' => null,
+            'loyal_customer_total' => null,
+        );
+
+        if ($startDate === '' || $endDate === '' || $startDate > $endDate) {
+            return $metrics;
+        }
+
+        $orderCountsByCustomer = array();
+        foreach ((array) (isset($activity['orders']) ? $activity['orders'] : array()) as $orderRow) {
+            $orderDate = customerAnalysisNormalizeDateValue(isset($orderRow['order_date']) ? $orderRow['order_date'] : '');
+            if ($orderDate === '' || $orderDate < $startDate || $orderDate > $endDate) {
+                continue;
+            }
+
+            $customerKey = isset($orderRow['customer_key']) ? (string) $orderRow['customer_key'] : '';
+            if ($customerKey === '') {
+                continue;
+            }
+
+            if (!isset($orderCountsByCustomer[$customerKey])) {
+                $orderCountsByCustomer[$customerKey] = 0;
+            }
+            $orderCountsByCustomer[$customerKey]++;
+        }
+
+        foreach ($orderCountsByCustomer as $customerKey => $orderCount) {
+            unset($orderCount);
+
+            $customerMeta = isset($activity['customers'][$customerKey]) ? $activity['customers'][$customerKey] : array();
+            $createdDate = customerAnalysisNormalizeDateValue(isset($customerMeta['create_date']) ? $customerMeta['create_date'] : '');
+            if ($createdDate === '') {
+                continue;
+            }
+
+            if ($createdDate >= $startDate && $createdDate <= $endDate) {
+                $metrics['new_customer_total']++;
+            } else if ($createdDate < $startDate) {
+                $metrics['returning_customer_total']++;
+            }
+        }
+
+        return array_merge($metrics, customerAnalysisBuildPlaceholderMetrics($orderCountsByCustomer));
+    }
+}
+
+if (!function_exists('customerAnalysisFetchCustomerOrderActivity')) {
+    function customerAnalysisFetchCustomerOrderActivity($connect, $financeConnect, $startDate, $endDate)
+    {
+        $startDate = customerAnalysisNormalizeDateValue($startDate);
+        $endDate = customerAnalysisNormalizeDateValue($endDate);
+        $activity = array(
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+            'customers' => array(),
+            'orders' => array(),
+        );
+
+        if ($startDate === '' || $endDate === '' || $startDate > $endDate) {
+            return $activity;
+        }
+
+        foreach (customerAnalysisGetPlatformConfigs() as $platformKey => $platformConfig) {
+            $customerConnect = customerAnalysisResolveDbConnect(
+                $connect,
+                $financeConnect,
+                isset($platformConfig['customer_db']) ? (string) $platformConfig['customer_db'] : 'cms'
+            );
+            $orderConnect = customerAnalysisResolveDbConnect(
+                $connect,
+                $financeConnect,
+                isset($platformConfig['order_db']) ? (string) $platformConfig['order_db'] : 'cms'
+            );
+
+            if (!($customerConnect instanceof mysqli) || !($orderConnect instanceof mysqli)) {
+                continue;
+            }
+
+            $customerTable = isset($platformConfig['customer_table']) ? (string) $platformConfig['customer_table'] : '';
+            $orderTable = isset($platformConfig['order_table']) ? (string) $platformConfig['order_table'] : '';
+            $orderDateField = isset($platformConfig['order_date_field']) ? trim((string) $platformConfig['order_date_field']) : '';
+
+            if ($customerTable === '' || $orderTable === '' || $orderDateField === '' || !preg_match('/^[A-Za-z0-9_]+$/', $orderDateField)) {
+                continue;
+            }
+
+            $customerFields = customerAnalysisBuildFieldList(array_merge(array('id', 'create_date'), (array) ($platformConfig['customer_fields'] ?? array())));
+            $orderFields = customerAnalysisBuildFieldList(array_merge(array('id', 'status', 'order_status', $orderDateField), (array) ($platformConfig['order_fields'] ?? array())));
+
+            $customerRows = customerLabelFetchActiveRows($customerConnect, $customerTable, $customerFields);
+            if (empty($customerRows)) {
+                continue;
+            }
+
+            $customerIndexes = customerLabelBuildCustomerIndexes($platformKey, $customerRows, array());
+            if (empty($customerIndexes['rows_by_id'])) {
+                continue;
+            }
+
+            foreach ($customerIndexes['rows_by_id'] as $customerId => $customerRow) {
+                $customerKey = $platformKey . ':' . (int) $customerId;
+                $activity['customers'][$customerKey] = array(
+                    'platform' => $platformKey,
+                    'customer_id' => (int) $customerId,
+                    'create_date' => customerAnalysisNormalizeDateValue(isset($customerRow['create_date']) ? $customerRow['create_date'] : ''),
+                );
+            }
+
+            $safeStartDate = mysqli_real_escape_string($orderConnect, $startDate);
+            $safeEndDate = mysqli_real_escape_string($orderConnect, $endDate);
+            $extraWhere = "DATE(`" . $orderDateField . "`) >= '" . $safeStartDate . "' AND DATE(`" . $orderDateField . "`) <= '" . $safeEndDate . "'";
+            $orderRows = customerLabelFetchActiveRows(
+                $orderConnect,
+                $orderTable,
+                $orderFields,
+                $extraWhere,
+                "ORDER BY `" . $orderDateField . "` ASC, `id` ASC"
+            );
+
+            foreach ($orderRows as $orderRow) {
+                if (customerLabelIsExcludedOrder($orderRow)) {
+                    continue;
+                }
+
+                $customerId = customerLabelResolveOrderCustomerId($platformKey, $orderRow, $customerIndexes);
+                if ($customerId <= 0) {
+                    continue;
+                }
+
+                $orderDate = customerAnalysisNormalizeDateValue(isset($orderRow[$orderDateField]) ? $orderRow[$orderDateField] : '');
+                if ($orderDate === '' || $orderDate < $startDate || $orderDate > $endDate) {
+                    continue;
+                }
+
+                $activity['orders'][] = array(
+                    'platform' => $platformKey,
+                    'customer_key' => $platformKey . ':' . $customerId,
+                    'customer_id' => (int) $customerId,
+                    'order_date' => $orderDate,
+                );
+            }
+        }
+
+        return $activity;
+    }
+}
+
+if (!function_exists('customerAnalysisBuildDailyRows')) {
+    function customerAnalysisBuildDailyRows($connect, $financeConnect, $year, $month)
+    {
+        $monthRange = customerAnalysisGetMonthDateRange($year, $month);
+        $activity = customerAnalysisFetchCustomerOrderActivity(
+            $connect,
+            $financeConnect,
+            $monthRange['start_date'],
+            $monthRange['end_date']
+        );
+        $rows = array();
+        $labels = array();
+        $newTotals = array();
+        $returningTotals = array();
+        $cumulativeNewTotal = 0;
+        $cumulativeReturningTotal = 0;
+        $cursor = new DateTimeImmutable($monthRange['start_date']);
+        $endDate = new DateTimeImmutable($monthRange['end_date']);
+
+        while ($cursor <= $endDate) {
+            $dateValue = $cursor->format('Y-m-d');
+            $metrics = customerAnalysisBuildPeriodMetrics($activity, $dateValue, $dateValue);
+            $cumulativeNewTotal += (int) ($metrics['new_customer_total'] ?? 0);
+            $cumulativeReturningTotal += (int) ($metrics['returning_customer_total'] ?? 0);
+
+            $rows[] = array(
+                'date' => $dateValue,
+                'date_label' => $cursor->format('d M Y'),
+                'new_customer_total' => (int) ($metrics['new_customer_total'] ?? 0),
+                'cumulative_new_customer_total' => $cumulativeNewTotal,
+                'returning_customer_total' => (int) ($metrics['returning_customer_total'] ?? 0),
+                'cumulative_returning_customer_total' => $cumulativeReturningTotal,
+            );
+            $labels[] = $cursor->format('d');
+            $newTotals[] = (int) ($metrics['new_customer_total'] ?? 0);
+            $returningTotals[] = (int) ($metrics['returning_customer_total'] ?? 0);
+
+            $cursor = $cursor->modify('+1 day');
+        }
+
+        return array(
+            'year' => customerAnalysisNormalizeYear($year),
+            'month' => customerAnalysisNormalizeMonth($month),
+            'label' => isset($monthRange['label']) ? (string) $monthRange['label'] : '',
+            'rows' => $rows,
+            'chart' => array(
+                'labels' => $labels,
+                'new_customer_totals' => $newTotals,
+                'returning_customer_totals' => $returningTotals,
+            ),
+        );
+    }
+}
+
+if (!function_exists('customerAnalysisBuildMonthlyRows')) {
+    function customerAnalysisBuildMonthlyRows($connect, $financeConnect, $year)
+    {
+        $year = customerAnalysisNormalizeYear($year);
+        $activity = customerAnalysisFetchCustomerOrderActivity(
+            $connect,
+            $financeConnect,
+            sprintf('%04d-01-01', $year),
+            sprintf('%04d-12-31', $year)
+        );
+        $rows = array();
+        $labels = array();
+        $newTotals = array();
+        $returningTotals = array();
+
+        for ($month = 1; $month <= 12; $month++) {
+            $monthRange = customerAnalysisGetMonthDateRange($year, $month);
+            $metrics = customerAnalysisBuildPeriodMetrics($activity, $monthRange['start_date'], $monthRange['end_date']);
+
+            $rows[] = array(
+                'month_number' => $month,
+                'month_label' => (new DateTimeImmutable($monthRange['start_date']))->format('M'),
+                'new_customer_total' => (int) ($metrics['new_customer_total'] ?? 0),
+                'returning_customer_total' => (int) ($metrics['returning_customer_total'] ?? 0),
+                'estimated_repeat_order_total' => $metrics['estimated_repeat_order_total'] ?? null,
+                'success_repeat_order_total' => $metrics['success_repeat_order_total'] ?? null,
+                'lost_customer_total' => $metrics['lost_customer_total'] ?? null,
+                'loyal_customer_total' => $metrics['loyal_customer_total'] ?? null,
+            );
+            $labels[] = (new DateTimeImmutable($monthRange['start_date']))->format('M');
+            $newTotals[] = (int) ($metrics['new_customer_total'] ?? 0);
+            $returningTotals[] = (int) ($metrics['returning_customer_total'] ?? 0);
+        }
+
+        return array(
+            'year' => $year,
+            'rows' => $rows,
+            'chart' => array(
+                'labels' => $labels,
+                'new_customer_totals' => $newTotals,
+                'returning_customer_totals' => $returningTotals,
+            ),
+        );
+    }
+}
+
+if (!function_exists('customerAnalysisBuildWeeklyRows')) {
+    function customerAnalysisBuildWeeklyRows($connect, $financeConnect, $year, $month)
+    {
+        $monthRange = customerAnalysisGetMonthDateRange($year, $month);
+        $activity = customerAnalysisFetchCustomerOrderActivity(
+            $connect,
+            $financeConnect,
+            $monthRange['start_date'],
+            $monthRange['end_date']
+        );
+        $weekRanges = customerAnalysisGetWeekRanges($year, $month);
+        $rows = array();
+        $labels = array();
+        $newTotals = array();
+        $returningTotals = array();
+
+        foreach ($weekRanges as $weekRange) {
+            $metrics = customerAnalysisBuildPeriodMetrics(
+                $activity,
+                isset($weekRange['start_date']) ? (string) $weekRange['start_date'] : '',
+                isset($weekRange['end_date']) ? (string) $weekRange['end_date'] : ''
+            );
+
+            $rows[] = array(
+                'week_number' => isset($weekRange['week_number']) ? (int) $weekRange['week_number'] : 0,
+                'week_label' => isset($weekRange['label']) ? (string) $weekRange['label'] : '',
+                'start_date' => isset($weekRange['start_date']) ? (string) $weekRange['start_date'] : '',
+                'end_date' => isset($weekRange['end_date']) ? (string) $weekRange['end_date'] : '',
+                'is_current' => !empty($weekRange['is_current']),
+                'new_customer_total' => (int) ($metrics['new_customer_total'] ?? 0),
+                'returning_customer_total' => (int) ($metrics['returning_customer_total'] ?? 0),
+                'estimated_repeat_order_total' => $metrics['estimated_repeat_order_total'] ?? null,
+                'success_repeat_order_total' => $metrics['success_repeat_order_total'] ?? null,
+            );
+            $labels[] = 'Week ' . (int) ($weekRange['week_number'] ?? 0);
+            $newTotals[] = (int) ($metrics['new_customer_total'] ?? 0);
+            $returningTotals[] = (int) ($metrics['returning_customer_total'] ?? 0);
+        }
+
+        return array(
+            'year' => customerAnalysisNormalizeYear($year),
+            'month' => customerAnalysisNormalizeMonth($month),
+            'label' => isset($monthRange['label']) ? (string) $monthRange['label'] : '',
+            'rows' => $rows,
+            'chart' => array(
+                'labels' => $labels,
+                'new_customer_totals' => $newTotals,
+                'returning_customer_totals' => $returningTotals,
+            ),
+        );
+    }
+}
+
 if (!function_exists('customerDailyReportGetPlatformConfigByTable')) {
     function customerDailyReportGetPlatformConfigByTable($tblName)
     {
