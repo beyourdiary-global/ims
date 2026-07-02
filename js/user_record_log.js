@@ -308,9 +308,23 @@
       });
     }
 
+    function normalizeUserRecordLogEditorContent(content) {
+      var html = String(content || "");
+
+      if (html === "") {
+        return "";
+      }
+
+      if (/<\s*(p|br|div|span|strong|b|em|i|u|ul|ol|li|blockquote|h[1-4])\b/i.test(html)) {
+        return html;
+      }
+
+      return escHtml(html).replace(/\r\n|\r|\n/g, "<br>");
+    }
+
     function setEditorContent(content) {
       var editor = getEditor();
-      var html = String(content || "");
+      var html = normalizeUserRecordLogEditorContent(content);
       if (editor) {
         editor.setContent(html);
         editor.save();

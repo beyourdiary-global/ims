@@ -809,7 +809,7 @@ if (!function_exists('urlBuildListHtml')) {
                 $html .= '      <div class="url-attachment-action ms-auto"><div class="url-attachment-title">Attachment</div>' . $attachmentPreviewHtml . '</div>';
             }
             $html .= '    </div>';
-            $html .= '    <textarea class="url-edit-content d-none">' . htmlspecialchars((string) $content, ENT_QUOTES, 'UTF-8') . '</textarea>';
+            $html .= '    <textarea class="url-edit-content d-none">' . htmlspecialchars(urlRenderUserRecordLogContentHtml($content), ENT_QUOTES, 'UTF-8') . '</textarea>';
             $html .= '    <textarea class="url-edit-attachments d-none">' . htmlspecialchars(urlEncodeUserRecordLogAttachmentList($attachmentList), ENT_QUOTES, 'UTF-8') . '</textarea>';
             $html .= '  </div>';
             $html .= '</div>';
